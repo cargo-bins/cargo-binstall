@@ -64,7 +64,7 @@ jobs:
 
     - name: Copy / Rename utility
       run: |
-        cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}-${{ matrix.target }}
+        cp target/${{ matrix.target }}/release/${{ matrix.output }} cargo-binstall-${{ matrix.target }}
         tar -czvf cargo-binstall-${{ matrix.target }}.tgz ${{ matrix.output }}-${{ matrix.target }}
 
     - name: Upload artifacts
