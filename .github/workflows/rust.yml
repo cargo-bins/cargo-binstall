@@ -56,6 +56,30 @@ jobs:
           ${{ env.HOME }}/.cargo"
           target
 
+    - name: Install openssl (apt armv7)
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+      run: |
+        sudo dpkg add-architecture armhf
+        sudo apt update
+        sudo apt install openssl-dev:armhf
+
+    - name: Install openssl (vcpkg)
+      if: ${{ matrix.os == 'windows-latest' }}
+      run: |
+        vcpkg integrate install
+        vcpkg install openssl:x64-windows-static
+        echo "OPENSSL_DIR=C:/vcpkg/installed/x64-windows-static/" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
+        echo "OPENSSL_ROOT_DIR=C:/vcpkg/installed/x64-windows-static/" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
+        echo "OPENSSL_STATIC=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
+
+    - name: Cache vcpkg
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: actions/cache@v2
+      with:
+        key: ${{ matrix.os }}-${{ matrix.target }}
+        path: $VCPKG_DIRECTORY
+
+
     - name: Build release
       uses: actions-rs/cargo@v1
       with:
@@ -82,7 +106,6 @@ jobs:
         asset_name: cargo-binstall-${{ matrix.target }}.tgz
         tag: ${{ github.ref }}
         overwrite: true
-
 
   release:
     name: Upload firmware artifacts to release
