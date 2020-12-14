@@ -50,6 +50,8 @@ jobs:
     
     - name: Configure caching 
       uses: actions/cache@v2
+      if: ${{ matrix.os != 'macos-latest' }}
+      # Caching disabled on macos due to https://github.com/actions/cache/issues/403
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
         path: |
@@ -77,8 +79,7 @@ jobs:
       uses: actions/cache@v2
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
-        path: $VCPKG_DIRECTORY
-
+        path: C:/vcpkg/installed
 
     - name: Build release
       uses: actions-rs/cargo@v1
@@ -88,14 +89,14 @@ jobs:
 
     - name: Copy / Rename utility
       run: |
-        cp target/${{ matrix.target }}/release/${{ matrix.output }} cargo-binstall-${{ matrix.target }}
-        tar -czvf cargo-binstall-${{ matrix.target }}.tgz ${{ matrix.output }}-${{ matrix.target }}
+        cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
+        tar -czvf cargo-binstall-${{ matrix.target }}.tgz ${{ matrix.output }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
-        name: cargo-binstall-${{ matrix.target }}
-        path: cargo-binstall-${{ matrix.target }}
+        name: cargo-binstall-${{ matrix.target }}.tgz
+        path: cargo-binstall-${{ matrix.target }}.tgz
 
     - name: Upload binary to release
       if: ${{ startsWith(github.ref, 'refs/tags/v') }}
