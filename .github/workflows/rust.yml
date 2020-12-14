@@ -1,0 +1,102 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            output: cargo-binstall
+            experimental: false
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            output: cargo-binstall
+            experimental: false
+          - target: armv7-unknown-linux-gnueabihf 
+            os: ubuntu-latest
+            output: cargo-binstall
+            experimental: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            output: cargo-binstall.exe
+            experimental: true
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: FranzDiebold/github-env-vars-action@v1.2.1
+      
+    - name: Configure toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        target:  ${{ matrix.target }}
+        override: true
+    
+    - name: Configure caching 
+      uses: actions/cache@v2
+      with:
+        key: ${{ matrix.os }}-${{ matrix.target }}
+        path: |
+          ${{ env.HOME }}/.cargo"
+          target
+
+    - name: Build release
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --target ${{ matrix.target }} --release
+
+    - name: Copy / Rename utility
+      run: |
+        cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}-${{ matrix.target }}
+        tar -czvf cargo-binstall-${{ matrix.target }}.tgz ${{ matrix.output }}-${{ matrix.target }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: cargo-binstall-${{ matrix.target }}
+        path: cargo-binstall-${{ matrix.target }}
+
+    - name: Upload binary to release
+      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: cargo-binstall-${{ matrix.target }}.tgz
+        asset_name: cargo-binstall-${{ matrix.target }}.tgz
+        tag: ${{ github.ref }}
+        overwrite: true
+
+
+  release:
+    name: Upload firmware artifacts to release
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: Release ${{ github.ref }}
+
