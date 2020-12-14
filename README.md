@@ -1,6 +1,6 @@
 # Cargo B(inary) Install
 
-A helper for distributing / installing pre-built rust binaries in a pseudo-distributed and maybe-one-day secure manner. 
+A helper for distributing / installing CI built rust binaries in a pseudo-distributed and maybe-one-day secure manner.
 This is part experiment, part solving a personal problem, and part hope that we can solve / never re-visit this. Good luck!
 
 ## Status
@@ -13,7 +13,7 @@ This is part experiment, part solving a personal problem, and part hope that we 
 
 ## Getting Started
 
-First you'll need to install `cargo-binstall` either via `cargo install cargo-binstall` (and it'll have to compile, sorry...), or by grabbing a pre-compiled version from the [releases](https://github.com/ryankurte/cargo-binstall/releases) page and putting that on your path. It's like there's a problem we're trying to solve?
+First you'll need to install `cargo-binstall` either via `cargo install cargo-binstall` (and it'll have to compile, sorry...), or by grabbing a pre-compiled version from the [releases](https://github.com/ryankurte/cargo-binstall/releases) page and putting that somewhere on your path. It's like there's a problem we're trying to solve?
 
 If a project supports `binstall` you can then install binaries via `cargo binstall NAME` where `NAME` is the name of the crate. We hope the defaults will work without configuration in _some_ cases, however, different projects have wildly different configurations. You may need to add some cargo metadata to support `binstall` in your project, see [Usage](#Usage) for details.
 
