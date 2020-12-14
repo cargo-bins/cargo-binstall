@@ -59,7 +59,7 @@ jobs:
     - name: Install openssl (apt armv7)
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: |
-        sudo dpkg add-architecture armhf
+        sudo dpkg --add-architecture armhf
         sudo apt update
         sudo apt install openssl-dev:armhf
 
