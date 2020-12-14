@@ -9,7 +9,6 @@ A helper for distributing / installing pre-built binaries in a pseudo-distribute
 [![GitHub tag](https://img.shields.io/github/tag/ryankurte/cargo-binstall.svg)](https://github.com/ryankurte/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
 [![Docs.rs](https://docs.rs/cargo-binstall/badge.svg)](https://docs.rs/cargo-binstall)
-[Open Issues](https://github.com/ryankurte/cargo-binstall/issues)
 
 
 ## Getting Started
