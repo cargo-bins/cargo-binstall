@@ -131,6 +131,7 @@ dependencies = [
  "log",
  "reqwest",
  "serde",
+ "serde_derive",
  "simplelog",
  "structopt",
  "strum",
