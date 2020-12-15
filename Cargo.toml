@@ -17,7 +17,7 @@ log = "0.4.11"
 structopt = "0.3.21"
 simplelog = "0.8.0"
 anyhow = "1.0.35"
-reqwest = { version = "0.10.9" } 
+reqwest = { version = "0.10.10" } 
 tempdir = "0.3.7"
 flate2 = "1.0.19"
 tar = "0.4.30"
