@@ -16,7 +16,7 @@ tokio = { version = "0.2.24", features = [ "macros" ] }
 log = "0.4.11"
 structopt = "0.3.21"
 simplelog = "0.8.0"
-anyhow = "1.0.35"
+anyhow = "1.0.36"
 reqwest = { version = "0.10.9" } 
 tempdir = "0.3.7"
 flate2 = "1.0.19"
