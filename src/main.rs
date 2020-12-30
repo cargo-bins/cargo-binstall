@@ -19,7 +19,7 @@ struct Options {
     #[structopt()]
     name: String,
 
-    /// Package version to instal
+    /// Package version to install
     #[structopt(long)]
     version: Option<String>,
 
@@ -31,9 +31,6 @@ struct Options {
     /// Defaults to `$HOME/.cargo/bin`
     #[structopt(long)]
     install_path: Option<String>,
-
-    #[structopt(flatten)]
-    overrides: Overrides,
 
     /// Do not cleanup temporary files on success
     #[structopt(long)]
@@ -47,40 +44,17 @@ struct Options {
     #[structopt(long)]
     no_symlinks: bool,
 
+    /// Override manifest source.
+    /// This skips searching crates.io for a manifest and uses
+    /// the specified path directly, useful for debugging and 
+    /// when adding `binstall` support.
+    #[structopt(long)]
+    manifest_path: Option<PathBuf>,
+
     /// Utility log level
     #[structopt(long, default_value = "info")]
     log_level: LevelFilter,
 }
-
-#[derive(Debug, StructOpt)]
-pub struct Overrides {
-
-    /// Override the package name. 
-    /// This is only useful for diagnostics when using the default `pkg_url`
-    /// as you can otherwise customise this in the path.
-    /// Defaults to the crate name.
-    #[structopt(long)]
-    pkg_name: Option<String>,
-
-    /// Override the package path template.
-    /// If no `metadata.pkg_url` key is set or `--pkg-url` argument provided, this
-    /// defaults to `{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.tgz`
-    #[structopt(long)]
-    pkg_url: Option<String>,
-
-    /// Override format for binary file download.
-    /// Defaults to `tgz`
-    #[structopt(long)]
-    pkg_fmt: Option<PkgFmt>,
-
-    /// Override manifest source.
-    /// This skips searching crates.io for a manifest and uses
-    /// the specified path directly, useful for debugging
-    #[structopt(long)]
-    manifest_path: Option<PathBuf>,
-}
-
-
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -106,11 +80,18 @@ async fn main() -> Result<(), anyhow::Error> {
     // Create a temporary directory for downloads etc.
     let temp_dir = TempDir::new("cargo-binstall")?;
 
+    info!("Installing package: '{}'", opts.name);
+
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
-    let crate_path = match opts.overrides.manifest_path {
-        Some(p) => p,
-        None => fetch_crate_cratesio(&opts.name, opts.version.as_deref(), temp_dir.path()).await?,
+    // TODO: support git-based fetches (whole repo name rather than just crate name)
+    let crate_path = match opts.manifest_path {
+        Some(p) => {
+            p
+        },
+        None => {
+            fetch_crate_cratesio(&opts.name, opts.version.as_deref(), temp_dir.path()).await?
+        },
     };
 
     // Read cargo manifest
@@ -129,37 +110,31 @@ async fn main() -> Result<(), anyhow::Error> {
     debug!("Retrieved metadata: {:?}", meta);
 
     // Select which package path to use
-    let pkg_url = match (opts.overrides.pkg_url, meta.as_ref().map(|m| m.pkg_url.clone() ).flatten()) {
-        (Some(p), _) => {
-            info!("Using package url override: '{}'", p);
-            p
-        },
-        (_, Some(m)) => {
-            info!("Using package url: '{}'", &m);
+    let pkg_url = match meta.as_ref().map(|m| m.pkg_url.clone() ).flatten() {
+        Some(m) => {
+            debug!("Using package url: '{}'", &m);
             m
         },
         _ => {
-            info!("No `pkg-url` key found in Cargo.toml or `--pkg-url` argument provided");
-            info!("Using default url: {}", DEFAULT_PKG_PATH);
+            debug!("No `pkg-url` key found in Cargo.toml or `--pkg-url` argument provided");
+            debug!("Using default url: {}", DEFAULT_PKG_PATH);
             DEFAULT_PKG_PATH.to_string()
         },
     };
 
     // Select bin format to use
-    let pkg_fmt = match (opts.overrides.pkg_fmt, meta.as_ref().map(|m| m.pkg_fmt.clone() ).flatten()) {
-        (Some(o), _) => o,
-        (_, Some(m)) => m.clone(),
+    let pkg_fmt = match meta.as_ref().map(|m| m.pkg_fmt.clone() ).flatten() {
+        Some(m) => m.clone(),
         _ => PkgFmt::Tgz,
     };
 
     // Override package name if required
-    let pkg_name = match (&opts.overrides.pkg_name, meta.as_ref().map(|m| m.pkg_name.clone() ).flatten()) {
-        (Some(o), _) => o.clone(),
-        (_, Some(m)) => m,
+    let pkg_name = match meta.as_ref().map(|m| m.pkg_name.clone() ).flatten() {
+        Some(m) => m,
         _ => opts.name.clone(),
     };
 
-    // Generate context for interpolation
+    // Generate context for URL interpolation
     let ctx = Context { 
         name: pkg_name.to_string(), 
         repo: package.repository, 
@@ -190,26 +165,29 @@ async fn main() -> Result<(), anyhow::Error> {
     let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", pkg_name, pkg_fmt));
     download(&rendered, pkg_path.to_str().unwrap()).await?;
 
-    // Fetch and check package signature if available
-    if let Some(pub_key) = meta.as_ref().map(|m| m.pkg_pub_key.clone() ).flatten() {
-        debug!("Found public key: {}", pub_key);
+    #[cfg(incomplete)]
+    {
+        // Fetch and check package signature if available
+        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone() ).flatten() {
+            debug!("Found public key: {}", pub_key);
 
-        // Generate signature file URL
-        let mut sig_ctx = ctx.clone();
-        sig_ctx.format = "sig".to_string();
-        let sig_url = sig_ctx.render(&pkg_url)?;
+            // Generate signature file URL
+            let mut sig_ctx = ctx.clone();
+            sig_ctx.format = "sig".to_string();
+            let sig_url = sig_ctx.render(&pkg_url)?;
 
-        debug!("Fetching signature file: {}", sig_url);
+            debug!("Fetching signature file: {}", sig_url);
 
-        // Download signature file
-        let sig_path = temp_dir.path().join(format!("{}.sig", pkg_name));
-        download(&sig_url, &sig_path).await?;
+            // Download signature file
+            let sig_path = temp_dir.path().join(format!("{}.sig", pkg_name));
+            download(&sig_url, &sig_path).await?;
 
-        // TODO: do the signature check
-        unimplemented!()
+            // TODO: do the signature check
+            unimplemented!()
 
-    } else {
-        warn!("No public key found, package signature could not be validated");
+        } else {
+            warn!("No public key found, package signature could not be validated");
+        }
     }
 
     // Extract files
@@ -230,7 +208,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let name = source.file_name().map(|v| v.to_str()).flatten().unwrap().to_string();
 
         // Trim target and version from name if included in binary file name
-        let base_name = name.replace(&format!("-{}", ctx.target), "")
+        let base_name = name.replace(&format!("-{}", TARGET), "")
                 .replace(&format!("-v{}", ctx.version), "")
                 .replace(&format!("-{}", ctx.version), "");
 
@@ -261,6 +239,8 @@ async fn main() -> Result<(), anyhow::Error> {
         warn!("Installation cancelled");
         return Ok(())
     }
+
+    info!("Installing binaries...");
 
     // Install binaries
     for (_name, source, dest, _link) in &bin_files {

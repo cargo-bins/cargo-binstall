@@ -35,6 +35,11 @@ pub enum PkgFmt {
     Bin,
 }
 
+impl Default for PkgFmt {
+    fn default() -> Self {
+        Self::Tgz
+    }
+}
 
 /// Metadata for binary installation use.
 /// 
@@ -49,6 +54,7 @@ pub struct Meta {
     pub pkg_name: Option<String>,
 
     /// Format override for package downloads
+    #[serde(default)]
     pub pkg_fmt: Option<PkgFmt>,
 
     #[serde(default)]
@@ -56,7 +62,7 @@ pub struct Meta {
     pub pkg_bins: Vec<String>,
 
     /// Public key for package verification (base64 encoded)
-    pub pkg_pub_key: Option<String>,
+    pub pub_key: Option<String>,
 }
 
 /// Template for constructing download paths

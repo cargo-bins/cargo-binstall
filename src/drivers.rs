@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use log::{debug, error};
 
 use crates_io_api::AsyncClient;
-use semver::Version;
 
 use crate::PkgFmt;
 use crate::helpers::*;
@@ -13,7 +12,6 @@ use crate::helpers::*;
 /// Fetch a crate by name and version from crates.io
 pub async fn fetch_crate_cratesio(name: &str, version: Option<&str>, temp_dir: &Path) -> Result<PathBuf, anyhow::Error> {
     // Build crates.io api client and fetch info
-    // TODO: support git-based fetches (whole repo name rather than just crate name)
     let api_client = AsyncClient::new("cargo-binstall (https://github.com/ryankurte/cargo-binstall)", Duration::from_millis(100))?;
 
     debug!("Fetching information for crate: '{}'", name);
@@ -34,15 +32,9 @@ pub async fn fetch_crate_cratesio(name: &str, version: Option<&str>, temp_dir: &
     };
 
     // Fetch crates.io information for the specified version
-    // TODO: Filter by semver matches instead of literal match
-    let mut versions = info.versions.clone();
-    versions.sort_by(|a, b| {
-        let ver_a = Version::parse(&a.num).unwrap();
-        let ver_b = Version::parse(&b.num).unwrap();
-
-        ver_a.partial_cmp(&ver_b).unwrap()
-    } );    
-
+    // Note it is not viable to use a semver match here as crates.io
+    // appears to elide alpha and yanked versions in the generic response...
+    let versions = info.versions.clone();
     let version = match versions.iter().find(|v| v.num == version_num) {
         Some(v) => v,
         None => {
@@ -78,3 +70,4 @@ pub async fn fetch_crate_gh_releases(_name: &str, _version: Option<&str>, _temp_
 
     unimplemented!();
 }
+
