@@ -125,13 +125,11 @@ dependencies = [
  "anyhow",
  "cargo_metadata",
  "cargo_toml",
- "clt",
  "crates_io_api",
  "dirs",
  "flate2",
  "log",
  "reqwest",
- "semver",
  "serde",
  "serde_derive",
  "simplelog",
@@ -212,17 +210,6 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
-]
-
-[[package]]
-name = "clt"
-version = "0.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ada85b237ebf9bfe564adaded2ec1786e75deb71f215f59323b26a5c70d6afa0"
-dependencies = [
- "getopts",
- "libc",
- "tempdir",
 ]
 
 [[package]]
@@ -517,15 +504,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c68f0274ae0e023facc3c97b2e00f076be70e254bc851d972503b328db79b2ec"
 dependencies = [
  "typenum",
-]
-
-[[package]]
-name = "getopts"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
-dependencies = [
- "unicode-width",
 ]
 
 [[package]]
