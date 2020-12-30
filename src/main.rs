@@ -1,61 +1,56 @@
-use std::time::Duration;
-use std::path::{PathBuf, Path};
+use std::path::{PathBuf};
 
 use log::{debug, info, error, LevelFilter};
 use simplelog::{TermLogger, ConfigBuilder, TerminalMode};
 
 use structopt::StructOpt;
-use serde::{Serialize, Deserialize};
 
-use crates_io_api::AsyncClient;
 use cargo_toml::Manifest;
 
 use tempdir::TempDir;
-use flate2::read::GzDecoder;
-use tar::Archive;
 
-use tinytemplate::TinyTemplate;
+use cargo_binstall::*;
 
-/// Compiled target triple, used as default for binary fetching
-const TARGET: &'static str = env!("TARGET");
-
-/// Default binary path for use if no path is specified
-const DEFAULT_BIN_PATH: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
-
-/// Binary format enumeration
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(strum_macros::Display, strum_macros::EnumString, strum_macros::EnumVariantNames)]
-#[strum(serialize_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum PkgFmt {
-    /// Download format is TAR (uncompressed)
-    Tar,
-    /// Download format is TGZ (TAR + GZip)
-    Tgz,
-    /// Download format is raw / binary
-    Bin,
-}
 
 #[derive(Debug, StructOpt)]
 struct Options {
-    /// Crate name to install
+    /// Package name or URL for installation
+    /// This must be either a crates.io package name or github or gitlab url
     #[structopt()]
     name: String,
 
-    /// Crate version to install
+    /// Package version to instal
     #[structopt(long)]
     version: Option<String>,
 
-    /// Override the package path template.
-    /// If no `metadata.pkg_url` key is set or `--pkg-url` argument provided, this
-    /// defaults to `{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.tgz`
-    #[structopt(long)]
-    pkg_url: Option<String>,
+    /// Override binary target, ignoring compiled version
+    #[structopt(long, default_value = TARGET)]
+    target: String,
 
     /// Override format for binary file download.
     /// Defaults to `tgz`
     #[structopt(long)]
     pkg_fmt: Option<PkgFmt>,
+
+    /// Override install path for downloaded binary.
+    /// Defaults to `$HOME/.cargo/bin`
+    #[structopt(long)]
+    install_path: Option<String>,
+
+    #[structopt(flatten)]
+    overrides: Overrides,
+
+    /// Do not cleanup temporary files on success
+    #[structopt(long)]
+    no_cleanup: bool,
+
+    /// Utility log level
+    #[structopt(long, default_value = "info")]
+    log_level: LevelFilter,
+}
+
+#[derive(Debug, StructOpt)]
+pub struct Overrides {
 
     /// Override the package name. 
     /// This is only useful for diagnostics when using the default `pkg_url`
@@ -64,52 +59,19 @@ struct Options {
     #[structopt(long)]
     pkg_name: Option<String>,
 
-    /// Override install path for downloaded binary.
-    /// Defaults to `$HOME/.cargo/bin`
+    /// Override the package path template.
+    /// If no `metadata.pkg_url` key is set or `--pkg-url` argument provided, this
+    /// defaults to `{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.tgz`
     #[structopt(long)]
-    install_path: Option<String>,
-
-    /// Override binary target, ignoring compiled version
-    #[structopt(long, default_value = TARGET)]
-    target: String,
+    pkg_url: Option<String>,
 
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
     /// the specified path directly, useful for debugging
     #[structopt(long)]
     manifest_path: Option<PathBuf>,
-
-    /// Utility log level
-    #[structopt(long, default_value = "info")]
-    log_level: LevelFilter,
-
-    /// Do not cleanup temporary files on success
-    #[structopt(long)]
-    no_cleanup: bool,
 }
 
-
-/// Metadata for cargo-binstall exposed via cargo.toml
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct Meta {
-    /// Path template override for binary downloads
-    pub pkg_url: Option<String>,
-    /// Package name override for binary downloads
-    pub pkg_name: Option<String>,
-    /// Format override for binary downloads
-    pub pkg_fmt: Option<PkgFmt>,
-}
-
-/// Template for constructing download paths
-#[derive(Clone, Debug, Serialize)]
-pub struct Context {
-    name: String,
-    repo: Option<String>,
-    target: String,
-    version: String,
-    format: PkgFmt,
-}
 
 
 #[tokio::main]
@@ -138,7 +100,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
-    let crate_path = match opts.manifest_path {
+    let crate_path = match opts.overrides.manifest_path {
         Some(p) => p,
         None => fetch_crate_cratesio(&opts.name, opts.version.as_deref(), temp_dir.path()).await?,
     };
@@ -158,8 +120,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let meta = package.metadata;
     debug!("Retrieved metadata: {:?}", meta);
 
-    // Select which binary path to use
-    let pkg_url = match (opts.pkg_url, meta.as_ref().map(|m| m.pkg_url.clone() ).flatten()) {
+    // Select which package path to use
+    let pkg_url = match (opts.overrides.pkg_url, meta.as_ref().map(|m| m.pkg_url.clone() ).flatten()) {
         (Some(p), _) => {
             info!("Using package url override: '{}'", p);
             p
@@ -170,8 +132,8 @@ async fn main() -> Result<(), anyhow::Error> {
         },
         _ => {
             info!("No `pkg-url` key found in Cargo.toml or `--pkg-url` argument provided");
-            info!("Using default url: {}", DEFAULT_BIN_PATH);
-            DEFAULT_BIN_PATH.to_string()
+            info!("Using default url: {}", DEFAULT_PKG_PATH);
+            DEFAULT_PKG_PATH.to_string()
         },
     };
 
@@ -183,7 +145,7 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     // Override package name if required
-    let pkg_name = match (&opts.pkg_name, meta.as_ref().map(|m| m.pkg_name.clone() ).flatten()) {
+    let pkg_name = match (&opts.overrides.pkg_name, meta.as_ref().map(|m| m.pkg_name.clone() ).flatten()) {
         (Some(o), _) => o.clone(),
         (_, Some(m)) => m,
         _ => opts.name.clone(),
@@ -201,9 +163,7 @@ async fn main() -> Result<(), anyhow::Error> {
     debug!("Using context: {:?}", ctx);
     
     // Interpolate version / target / etc.
-    let mut tt = TinyTemplate::new();
-    tt.add_template("path", &pkg_url)?;
-    let rendered = tt.render("path", &ctx)?;
+    let rendered = ctx.render(&pkg_url)?;
 
     info!("Downloading package from: '{}'", rendered);
 
@@ -238,111 +198,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Download a file from the provided URL to the provided path
-async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::Error> {
 
-    debug!("Downloading from: '{}'", url);
-
-    let resp = reqwest::get(url).await?;
-
-    if !resp.status().is_success() {
-        error!("Download error: {}", resp.status());
-        return Err(anyhow::anyhow!(resp.status()));
-    }
-
-    let bytes = resp.bytes().await?;
-
-    debug!("Download OK, writing to file: '{:?}'", path.as_ref());
-
-    std::fs::write(&path, bytes)?;
-
-    Ok(())
-}
-
-fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) -> Result<(), anyhow::Error> {
-    match fmt {
-        PkgFmt::Tar => {
-            // Extract to install dir
-            debug!("Extracting from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
-
-            let dat = std::fs::File::open(source)?;
-            let mut tar = Archive::new(dat);
-
-            tar.unpack(path)?;
-        },
-        PkgFmt::Tgz => {
-            // Extract to install dir
-            debug!("Decompressing from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
-
-            let dat = std::fs::File::open(source)?;
-            let tar = GzDecoder::new(dat);
-            let mut tgz = Archive::new(tar);
-
-            tgz.unpack(path)?;
-        },
-        PkgFmt::Bin => {
-            debug!("Copying data from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
-            // Copy to install dir
-            std::fs::copy(source, path)?;
-        },
-    };
-
-    Ok(())
-}
-
-/// Fetch a crate by name and version from crates.io
-async fn fetch_crate_cratesio(name: &str, version: Option<&str>, temp_dir: &Path) -> Result<PathBuf, anyhow::Error> {
-    // Build crates.io api client and fetch info
-    // TODO: support git-based fetches (whole repo name rather than just crate name)
-    let api_client = AsyncClient::new("cargo-binstall (https://github.com/ryankurte/cargo-binstall)", Duration::from_millis(100))?;
-
-    info!("Fetching information for crate: '{}'", name);
-
-    // Fetch overall crate info
-    let info = match api_client.get_crate(name.as_ref()).await {
-        Ok(i) => i,
-        Err(e) => {
-            error!("Error fetching information for crate {}: {}", name, e);
-            return Err(e.into())
-        }
-    };
-
-    // Use specified or latest version
-    let version_num = match version {
-        Some(v) => v.to_string(),
-        None => info.crate_data.max_version,
-    };
-
-    // Fetch crates.io information for the specified version
-    // TODO: could do a semver match and sort here?
-    let version = match info.versions.iter().find(|v| v.num == version_num) {
-        Some(v) => v,
-        None => {
-            error!("No crates.io information found for crate: '{}' version: '{}'", 
-                    name, version_num);
-            return Err(anyhow::anyhow!("No crate information found"));
-        }
-    };
-
-    info!("Found information for crate version: '{}'", version.num);
-    
-    // Download crate to temporary dir (crates.io or git?)
-    let crate_url = format!("https://crates.io/{}", version.dl_path);
-    let tgz_path = temp_dir.join(format!("{}.tgz", name));
-
-    debug!("Fetching crate from: {}", crate_url);    
-
-    // Download crate
-    download(&crate_url, &tgz_path).await?;
-
-    // Decompress downloaded tgz
-    debug!("Decompressing crate archive");
-    extract(&tgz_path, PkgFmt::Tgz, &temp_dir)?;
-    let crate_path = temp_dir.join(format!("{}-{}", name, version_num));
-
-    // Return crate directory
-    Ok(crate_path)
-}
 
 /// Fetch install path
 /// roughly follows https://doc.rust-lang.org/cargo/commands/cargo-install.html#description

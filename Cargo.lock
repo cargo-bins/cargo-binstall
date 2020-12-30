@@ -130,6 +130,7 @@ dependencies = [
  "flate2",
  "log",
  "reqwest",
+ "semver",
  "serde",
  "serde_derive",
  "simplelog",

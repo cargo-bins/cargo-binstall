@@ -38,7 +38,7 @@ Cargo metadata is used to avoid the need for an additional centralised index or 
 First you'll need to install `cargo-binstall` either via `cargo install cargo-binstall` (and it'll have to compile, sorry...), or by grabbing a pre-compiled version from the [releases](https://github.com/ryankurte/cargo-binstall/releases) page and putting that somewhere on your path. It's like there's a problem we're trying to solve?
 
 Once a project supports `binstall` you can then install binaries via `cargo binstall NAME` where `NAME` is the name of the crate. This will then fetch the metadata for the provided crate, lookup the associated binary file, and download this onto your system. 
-By default the latest version is installed, which can be overridden using the `--version` argument, and packages are installed to `$HOME/.cargo/bin` as is consistent with `cargo install`, which can be overridden via the `--install-path` argument. As always `--help` will show available options.
+By default the latest version from is installed, which can be overridden using the `--version` argument, and packages are installed to `$HOME/.cargo/bin` as is consistent with `cargo install`, which can be overridden via the `--install-path` argument. As always `--help` will show available options.
 
 We hope the defaults will work without configuration in _some_ cases, however, different projects have wildly different CI and build output configurations. You will likely need to add some cargo metadata to support `binstall` in your project, see [Supporting Binary Installation](#Supporting-Binary-Installation) for details.
 
