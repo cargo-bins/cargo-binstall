@@ -14,8 +14,11 @@ pub use drivers::*;
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &'static str = env!("TARGET");
 
-/// Default package path for use if no path is specified
+/// Default package path template (may be overridden in package Cargo.toml)
 pub const DEFAULT_PKG_PATH: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
+
+/// Default binary name template (may be overridden in package Cargo.toml)
+pub const DEFAULT_BIN_NAME: &'static str = "{ name }-{ target }-v{ version }";
 
 
 /// Binary format enumeration
@@ -39,14 +42,22 @@ pub enum PkgFmt {
 #[derive(Clone, Debug, StructOpt, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Meta {
-    /// Path template override for binary downloads
+    /// Path template override for package downloads
     pub pkg_url: Option<String>,
-    /// Package name override for binary downloads
-    pub pkg_name: Option<String>,
-    /// Format override for binary downloads
-    pub pkg_fmt: Option<PkgFmt>,
-}
 
+    /// Package name override for package downloads
+    pub pkg_name: Option<String>,
+
+    /// Format override for package downloads
+    pub pkg_fmt: Option<PkgFmt>,
+
+    #[serde(default)]
+    /// Filters for binary files allowed in the package
+    pub pkg_bins: Vec<String>,
+
+    /// Public key for package verification (base64 encoded)
+    pub pkg_pub_key: Option<String>,
+}
 
 /// Template for constructing download paths
 #[derive(Clone, Debug, Serialize)]
@@ -55,7 +66,7 @@ pub struct Context {
     pub repo: Option<String>,
     pub target: String,
     pub version: String,
-    pub format: PkgFmt,
+    pub format: String,
 }
 
 impl Context {
@@ -73,3 +84,4 @@ impl Context {
         Ok(rendered)
     }
 }
+

@@ -1,6 +1,6 @@
 use std::path::{PathBuf};
 
-use log::{debug, info, error, LevelFilter};
+use log::{debug, info, warn, error, LevelFilter};
 use simplelog::{TermLogger, ConfigBuilder, TerminalMode};
 
 use structopt::StructOpt;
@@ -27,11 +27,6 @@ struct Options {
     #[structopt(long, default_value = TARGET)]
     target: String,
 
-    /// Override format for binary file download.
-    /// Defaults to `tgz`
-    #[structopt(long)]
-    pkg_fmt: Option<PkgFmt>,
-
     /// Override install path for downloaded binary.
     /// Defaults to `$HOME/.cargo/bin`
     #[structopt(long)]
@@ -43,6 +38,14 @@ struct Options {
     /// Do not cleanup temporary files on success
     #[structopt(long)]
     no_cleanup: bool,
+
+    /// Disable interactive mode / confirmation
+    #[structopt(long)]
+    no_confirm: bool,
+
+    /// Disable symlinking / versioned updates
+    #[structopt(long)]
+    no_symlinks: bool,
 
     /// Utility log level
     #[structopt(long, default_value = "info")]
@@ -64,6 +67,11 @@ pub struct Overrides {
     /// defaults to `{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.tgz`
     #[structopt(long)]
     pkg_url: Option<String>,
+
+    /// Override format for binary file download.
+    /// Defaults to `tgz`
+    #[structopt(long)]
+    pkg_fmt: Option<PkgFmt>,
 
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
@@ -138,7 +146,7 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     // Select bin format to use
-    let pkg_fmt = match (opts.pkg_fmt, meta.as_ref().map(|m| m.pkg_fmt.clone() ).flatten()) {
+    let pkg_fmt = match (opts.overrides.pkg_fmt, meta.as_ref().map(|m| m.pkg_fmt.clone() ).flatten()) {
         (Some(o), _) => o,
         (_, Some(m)) => m.clone(),
         _ => PkgFmt::Tgz,
@@ -157,27 +165,13 @@ async fn main() -> Result<(), anyhow::Error> {
         repo: package.repository, 
         target: opts.target.clone(), 
         version: package.version.clone(),
-        format: pkg_fmt.clone(),
+        format: pkg_fmt.to_string(),
     };
 
     debug!("Using context: {:?}", ctx);
     
     // Interpolate version / target / etc.
     let rendered = ctx.render(&pkg_url)?;
-
-    info!("Downloading package from: '{}'", rendered);
-
-    // Download package
-    let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", pkg_name, pkg_fmt));
-    download(&rendered, pkg_path.to_str().unwrap()).await?;
-
-
-    if opts.no_cleanup {
-        // Do not delete temporary directory
-        let _ = temp_dir.into_path();
-    }
-
-    // TODO: check signature
 
     // Compute install directory
     let install_path = match get_install_path(opts.install_path) {
@@ -188,48 +182,110 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     };
 
-    // Install package
-    info!("Installing to: '{}'", install_path);
-    extract(&pkg_path, pkg_fmt, &install_path)?;
+    debug!("Using install path: {}", install_path.display());
 
+    info!("Downloading package from: '{}'", rendered);
+
+    // Download package
+    let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", pkg_name, pkg_fmt));
+    download(&rendered, pkg_path.to_str().unwrap()).await?;
+
+    // Fetch and check package signature if available
+    if let Some(pub_key) = meta.as_ref().map(|m| m.pkg_pub_key.clone() ).flatten() {
+        debug!("Found public key: {}", pub_key);
+
+        // Generate signature file URL
+        let mut sig_ctx = ctx.clone();
+        sig_ctx.format = "sig".to_string();
+        let sig_url = sig_ctx.render(&pkg_url)?;
+
+        debug!("Fetching signature file: {}", sig_url);
+
+        // Download signature file
+        let sig_path = temp_dir.path().join(format!("{}.sig", pkg_name));
+        download(&sig_url, &sig_path).await?;
+
+        // TODO: do the signature check
+        unimplemented!()
+
+    } else {
+        warn!("No public key found, package signature could not be validated");
+    }
+
+    // Extract files
+    let bin_path = temp_dir.path().join(format!("bin-{}", pkg_name));
+    extract(&pkg_path, pkg_fmt, &bin_path)?;
+
+    // Bypass cleanup if disabled
+    if opts.no_cleanup {
+        let _ = temp_dir.into_path();
+    }
+
+    // List files to be installed
+    // TODO: check extracted files are sensible / filter by allowed files
+    // TODO: this seems overcomplicated / should be able to be simplified?
+    let bin_files = std::fs::read_dir(&bin_path)?;
+    let bin_files: Vec<_> = bin_files.filter_map(|f| f.ok() ).map(|f| {
+        let source = f.path().to_owned();
+        let name = source.file_name().map(|v| v.to_str()).flatten().unwrap().to_string();
+
+        // Trim target and version from name if included in binary file name
+        let base_name = name.replace(&format!("-{}", ctx.target), "")
+                .replace(&format!("-v{}", ctx.version), "")
+                .replace(&format!("-{}", ctx.version), "");
+
+        // Generate install destination with version suffix
+        let dest = install_path.join(format!("{}-v{}", base_name, ctx.version));
+
+        // Generate symlink path from base name
+        let link = install_path.join(&base_name);
+
+        (base_name, source, dest, link)
+    }).collect();
+
+
+    // Prompt user for confirmation
+    info!("This will install the following files:");
+    for (name, source, dest, _link) in &bin_files {
+        info!("  - {} ({} -> {})", name, source.file_name().unwrap().to_string_lossy(), dest.display());
+    }
+
+    if !opts.no_symlinks {
+        info!("And create (or update) the following symlinks:");
+        for (name, _source, dest, link) in &bin_files {
+            info!("  - {} ({} -> {})", name, dest.display(), link.display());
+        }
+    }
+
+    if !opts.no_confirm && !confirm()? {
+        warn!("Installation cancelled");
+        return Ok(())
+    }
+
+    // Install binaries
+    for (_name, source, dest, _link) in &bin_files {
+        // TODO: check if file already exists
+        std::fs::copy(source, dest)?;
+    }
+
+    // Generate symlinks
+    if !opts.no_symlinks {
+        for (_name, _source, dest, link) in &bin_files {
+            // Remove existing symlink
+            // TODO: check if existing symlink is correct
+            if link.exists() {
+                std::fs::remove_file(&link)?;
+            }
+
+            #[cfg(target_family = "unix")]
+            std::os::unix::fs::symlink(dest, link)?;
+            #[cfg(target_family = "windows")]
+            std::os::windows::fs::symlink_file(dest, link)?;
+        }
+    }
     
-    info!("Installation done!");
+    info!("Installation complete!");
 
     Ok(())
 }
 
-
-
-/// Fetch install path
-/// roughly follows https://doc.rust-lang.org/cargo/commands/cargo-install.html#description
-fn get_install_path(opt: Option<String>) -> Option<String> {
-    // Command line override first first
-    if let Some(p) = opt {
-        return Some(p)
-    }
-
-    // Environmental variables
-    if let Ok(p) = std::env::var("CARGO_INSTALL_ROOT") {
-        return Some(format!("{}/bin", p))
-    }
-    if let Ok(p) = std::env::var("CARGO_HOME") {
-        return Some(format!("{}/bin", p))
-    }
-
-    // Standard $HOME/.cargo/bin
-    if let Some(mut d) = dirs::home_dir() {
-        d.push(".cargo/bin");
-        let p = d.as_path();
-
-        if p.exists() {
-            return Some(p.to_str().unwrap().to_owned());
-        }
-    }
-
-    // Local executable dir if no cargo is found
-    if let Some(d) = dirs::executable_dir() {
-        return Some(d.to_str().unwrap().to_owned());
-    }
-
-    None
-}

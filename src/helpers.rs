@@ -1,7 +1,7 @@
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use log::{debug, error};
+use log::{debug, info, error};
 
 use flate2::read::GzDecoder;
 use tar::Archive;
@@ -63,3 +63,58 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
     Ok(())
 }
 
+
+
+/// Fetch install path from environment
+/// roughly follows https://doc.rust-lang.org/cargo/commands/cargo-install.html#description
+pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathBuf> {
+    // Command line override first first
+    if let Some(p) = install_path {
+        return Some(PathBuf::from(p.as_ref()))
+    }
+
+    // Environmental variables
+    if let Ok(p) = std::env::var("CARGO_INSTALL_ROOT") {
+        debug!("using CARGO_INSTALL_ROOT ({})", p);
+        let b = PathBuf::from(p);
+        return Some(b.join("bin"));
+    }
+    if let Ok(p) = std::env::var("CARGO_HOME") {
+        debug!("using CARGO_HOME ({})", p);
+        let b = PathBuf::from(p);
+        return Some(b.join("bin"));
+    }
+
+    // Standard $HOME/.cargo/bin
+    if let Some(d) = dirs::home_dir() {
+        let d = d.join(".cargo/bin");
+        if d.exists() {
+            debug!("using $HOME/.cargo/bin");
+
+            return Some(d);
+        }
+    }
+
+    // Local executable dir if no cargo is found
+    if let Some(d) = dirs::executable_dir() {
+        debug!("Fallback to {}", d.display());
+        return Some(d.into());
+    }
+
+    None
+}
+
+pub fn confirm() -> Result<bool, anyhow::Error> {
+    info!("Do you wish to continue? yes/no");
+    
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+   
+    match input.as_str().trim() {
+        "yes" => Ok(true),
+        "no" => Ok(false),
+        _ => {
+            Err(anyhow::anyhow!("Valid options are 'yes', 'no', please try again"))
+        }
+    }
+}
