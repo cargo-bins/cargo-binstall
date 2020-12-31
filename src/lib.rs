@@ -14,7 +14,7 @@ pub use drivers::*;
 pub const TARGET: &'static str = env!("TARGET");
 
 /// Default package path template (may be overridden in package Cargo.toml)
-pub const DEFAULT_PKG_URL: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.tgz";
+pub const DEFAULT_PKG_URL: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
 
 /// Default binary name template (may be overridden in package Cargo.toml)
 pub const DEFAULT_BIN_PATH: &'static str = "{ name }-{ target }-v{ version }/{ bin }{ format }";
