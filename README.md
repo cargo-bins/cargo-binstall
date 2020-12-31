@@ -1,10 +1,10 @@
 # Cargo B(inary)Install
 
-A helper for distribution and installation of CI built rust binaries in a pseudo-distributed and maybe-one-day secure manner.
-This is part experiment, part solving a personal problem, and part hope that we can solve / never re-visit this. I hope you find it helpful and, good luck!
+A helper for distribution and installation of CI built rust binaries in a pseudo-distributed and maybe-one-day secure manner. This is part experiment, part solving a personal problem, and part hope that we can solve / never re-visit this. I hope you find it helpful and, good luck!
 
-To get started _using_ `cargo-binstall`, first install the binary (either via `cargo install cargo-binstall` or by downloading a precompiled [release](https://github.com/ryankurte/cargo-binstall/releases)).
-Once `cargo-binstall` is installed, supported packages can be installed using `cargo binstall NAME` where `NAME` is the crate.io package name.
+To get started _using_ `cargo-binstall`, first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/ryankurte/cargo-binstall/releases). Once you have installed this you can of course `cargo binstall cargo-binstall` to install further versions...
+
+Supported packages can be installed using `cargo binstall NAME` where `NAME` is the crate.io package name.
 Package versions and targets may be specified using the `--version` and `--target` arguments respectively, and install directory with `--install-dir` (this defaults to `$HOME/.cargo/bin`, with fall-backs to `$HOME/.bin` if unavailable). For additional options please see `cargo binstall --help`.
 
 To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate CI-produced binary package for a given version and target. See [Supporting Binary Installation](#Supporting-Binary-Installation) for instructions on how to support `binstall` in your projects.
@@ -14,7 +14,7 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 ![Build](https://github.com/ryankurte/cargo-binstall/workflows/Rust/badge.svg)
 [![GitHub tag](https://img.shields.io/github/tag/ryankurte/cargo-binstall.svg)](https://github.com/ryankurte/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
-[![Docs.rs](https://docs.rs/cargo-binstall/badge.svg)](https://docs.rs/cargo-binstal
+[![Docs.rs](https://docs.rs/cargo-binstall/badge.svg)](https://docs.rs/cargo-binstall)
 
 ## Features
 
