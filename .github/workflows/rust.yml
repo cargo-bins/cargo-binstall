@@ -12,9 +12,8 @@ env:
 
 jobs:
   build:
-
+    name: Build
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
 
     strategy:
       fail-fast: false
@@ -23,19 +22,15 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             output: cargo-binstall
-            experimental: false
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
-            experimental: false
           - target: armv7-unknown-linux-gnueabihf 
             os: ubuntu-20.04
             output: cargo-binstall
-            experimental: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
-            experimental: true
 
     steps:
     - uses: actions/checkout@v2
@@ -69,7 +64,7 @@ jobs:
       if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: sudo apt install gcc-arm-linux-gnueabihf
 
-    - name: Enable cross compilation
+    - name: Enable cross compilation (armv7)
       if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: |
         echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
@@ -89,7 +84,7 @@ jobs:
       uses: actions/cache@v2
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
-        path: C:/vcpkg/installed
+        path: C:/vcpkg
 
     - name: Build release
       uses: actions-rs/cargo@v1
@@ -118,9 +113,44 @@ jobs:
         tag: ${{ github.ref }}
         overwrite: true
 
+
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            output: cargo-binstall
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            output: cargo-binstall
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            output: cargo-binstall.exe
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: FranzDiebold/github-env-vars-action@v1.2.1
+    
+    - uses: actions/download-artifact@v2
+      with:
+        name: cargo-binstall-${{ matrix.target }}.tgz
+    
+    - name: "Extract build artifact"
+      run: tar -xvf cargo-binstall-${{ matrix.target }}.tgz
+    
+    - name: "Run binstall"
+      run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
+
+
   release:
     name: Upload firmware artifacts to release
     runs-on: ubuntu-latest
+    needs: test
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
 
@@ -133,4 +163,3 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
           body: Release ${{ github.ref }}
-
