@@ -19,9 +19,9 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 ## Features
 
 - Manifest discovery
-  - [x] Fetch crate/manifest via crates.io
-  - [ ] Fetch crate/manifest via git
-  - [x] Use local crate/manifest (`--manifest-path`)
+  - [x] Fetch crate / manifest via crates.io
+  - [ ] Fetch crate / manifest via git
+  - [x] Use local crate / manifest (`--manifest-path`)
 - Package formats
   - [x] Tgz
   - [x] Tar
@@ -38,6 +38,32 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 `binstall` works with existing CI-built binary outputs, with configuration via `[package.metadata.binstall]` keys in the relevant crate manifest. 
 When configuring `binstall` you can test against a local manifest with `--manifest-path=PATH` argument to use the crate and manifest at the provided `PATH`, skipping crate discovery and download.
 
+To get started, add a `[package.metadata.binstall]` section to your `Cargo.toml. As an example, the default configuration would be:
+
+```toml
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }"
+bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ format }"
+pkg-fmt = "tgz"
+```
+
+With the following configuration keys:
+
+- `pkg-url` specifies the package download URL for a given target/version, templated
+- `bin-path` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
+- `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`)
+
+
+`pkg-url` and `bin-path` are templated to support different names for different versions / architectures / etc.
+Template variables use the format `{ VAR }` where `VAR` is the name of the variable, with the following variables available:
+- `name` is the name of the crate / package
+- `version` is the crate version (per `--version` and the crate manifest)
+- `repo` is the repository linked in `Cargo.toml`
+- `bin` is the name of a specific binary, inferred from the crate configuration
+- `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required().
+
+
+### Defaults
 
 By default `binstall` is setup to work with github releases, and expects to find:
 
@@ -49,43 +75,11 @@ By default `binstall` is setup to work with github releases, and expects to find
   - so that prior binary files are not overwritten when manually executing `tar -xvf ...`
 - containing binary files in the form `{ bin }{ format }` (where `bin` is the cargo binary name and `format` is `.exe` on windows and empty on other platforms)
 
-
-These defaults can be overridden using the following configuration keys:
-
-- `pkg-url` specifies the binary package URL for a given target/version, templated (defaults to: `{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }`)
-- `bin-path` specifies the binary path within the package, templated (defaults to: `{ name }-{ target }-v{ version }/{ bin }` with a `.exe` suffix on windows)
-- `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`)
-
-
-Template variables use the format `{ VAR }` where `VAR` is the name of the variable, with the following variables available:
-- `name` is the name of the crate / package
-- `version` is the crate version (per `--version` and the crate manifest)
-- `repo` is the repository linked in `Cargo.toml`
-- `bin` is the name of a specific binary, inferred from the crate configuration
-- `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required().
-
-
-### Operation
-
-- Lookup a viable crate version (currently via `crates.io`, in future via git tags too)
-- Download crate snapshot (currently via `crates.io`)
-- Parse configuration metadata and binary information from the downloaded snapshot
-- Download and extract binary package using configured URL (`pkg-url`, `pkg-fmt`)
-- Install versioned binary files to the relevant install dir
-- Generate symlinks to versioned binaries
+If your package already uses this approach, you shouldn't need to set anything.
 
 ### Examples
 
-For example, the default configuration (if specified in `Cargo.toml`) would be:
-
-```toml
-[package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }"
-bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ format }"
-pkg-fmt = "tgz"
-```
-
-For a crate called `radio-sx128x` ( at version `v0.14.1-alpha.5` on x86_64 linux), this would be interpolated to:
+For example, the default configuration (as shown above) for a crate called `radio-sx128x` (version: `v0.14.1-alpha.5` on x86_64 linux) would be interpolated to:
 
 - A download URL of `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
 - Containing a single binary file `rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5/rust-radio-x86_64-unknown-linux-gnu`
@@ -94,7 +88,7 @@ For a crate called `radio-sx128x` ( at version `v0.14.1-alpha.5` on x86_64 linux
 
 ####  If the package name does not match the crate name 
 
-As is common with libraries / utilities (and the `radio-sx128x` example), this can be overridden by specifying:
+As is common with libraries / utilities (and the `radio-sx128x` example), this can be overridden by specifying the `pkg-url`:
 
 ```toml
 [package.metadata.binstall]
@@ -106,16 +100,14 @@ Which provides a download URL of: `https://github.com/rust-iot/rust-radio-sx128x
 
 ####  If the package structure differs from the default
 
-While it's nice to have the default format discussed above, often it's not the case...
-
-Were the package to contain binaries in the form `name-target[.exe]`, this could be specified as:
+Were the package to contain binaries in the form `name-target[.exe]`, this could be overridden using the `bin-dir` key:
 
 ```toml
 [package.metadata.binstall]
 bin-dir = "{ bin }-{ target }{ format }"
 ```
 
-Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]` (binary names are inferred from the crate, so long as cargo builds them this _should_ just work).
+Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so long as cargo builds them this _should_ just work.
 
 
 ---
