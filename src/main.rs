@@ -18,8 +18,8 @@ struct Options {
     name: String,
 
     /// Filter for package version to install
-    #[structopt(long)]
-    version: Option<String>,
+    #[structopt(long, default_value = "*")]
+    version: String,
 
     /// Override binary target, ignoring compiled version
     #[structopt(long, default_value = TARGET)]
@@ -30,14 +30,6 @@ struct Options {
     #[structopt(long)]
     install_path: Option<String>,
 
-    /// Do not cleanup temporary files on success
-    #[structopt(long)]
-    no_cleanup: bool,
-
-    /// Disable interactive mode / confirmation
-    #[structopt(long)]
-    no_confirm: bool,
-
     /// Disable symlinking / versioned updates
     #[structopt(long)]
     no_symlinks: bool,
@@ -45,6 +37,14 @@ struct Options {
     /// Dry run, fetch and show changes without installing binaries
     #[structopt(long)]
     dry_run: bool,
+
+    /// Disable interactive mode / confirmation
+    #[structopt(long)]
+    no_confirm: bool,
+
+    /// Do not cleanup temporary files on success
+    #[structopt(long)]
+    no_cleanup: bool,
 
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
@@ -57,7 +57,6 @@ struct Options {
     #[structopt(long, default_value = "info")]
     log_level: LevelFilter,
 }
-
 
 
 #[tokio::main]
@@ -91,7 +90,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // TODO: support git-based fetches (whole repo name rather than just crate name)
     let manifest_path = match opts.manifest_path.clone() {
         Some(p) => p,
-        None => fetch_crate_cratesio(&opts.name, opts.version.as_deref(), temp_dir.path()).await?,
+        None => fetch_crate_cratesio(&opts.name, &opts.version, temp_dir.path()).await?,
     };
     
     debug!("Reading manifest: {}", manifest_path.display());
