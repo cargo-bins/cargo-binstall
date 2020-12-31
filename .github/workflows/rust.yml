@@ -62,8 +62,8 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: |
         cat /etc/apt/sources.list{,.d/*.list}
-        sed -i'' -E 's/^deb http:\/\/(azure.archive|security).ubuntu.com/deb [arch=amd64,i386] http:\/\/\1.ubuntu.com/' /etc/apt/sources.list
-        sed -i'' -E 's/^deb http:\/\/(azure.archive|security).ubuntu.com/deb [arch=amd64,i386] http:\/\/\1.ubuntu.com/' /etc/apt/sources.list.d/*.list
+        sudo sed -i'' -E 's/^deb http:\/\/(azure.archive|security).ubuntu.com/deb [arch=amd64,i386] http:\/\/\1.ubuntu.com/' /etc/apt/sources.list
+        sudo sed -i'' -E 's/^deb http:\/\/(azure.archive|security).ubuntu.com/deb [arch=amd64,i386] http:\/\/\1.ubuntu.com/' /etc/apt/sources.list.d/*.list
         sudo dpkg --add-architecture armhf
         cat /etc/apt/sources.list{,.d/*.list}
         sudo apt-get update
