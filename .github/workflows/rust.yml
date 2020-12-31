@@ -61,7 +61,11 @@ jobs:
     - name: Install openssl (apt armv7)
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: |
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal main universe" | sudo tee /etc/apt/sources.list.d/armhf.list
+        cat /etc/apt/sources.list{,.d/*.list}
+        sed -i'' -E 's/^deb http:\/\/(azure.archive|security).ubuntu.com/deb [arch=amd64,i386] http:\/\/\1.ubuntu.com/' /etc/apt/sources.list
+        sed -i'' -E 's/^deb http:\/\/(azure.archive|security).ubuntu.com/deb [arch=amd64,i386] http:\/\/\1.ubuntu.com/' /etc/apt/sources.list.d/*.list
+        sudo dpkg --add-architecture armhf
+        cat /etc/apt/sources.list{,.d/*.list}
         sudo apt-get update
         sudo apt-get install -y libssl-dev:armhf libssl1.1:armgf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
         echo "PKG_CONFIG_ALLOW_CROSS=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
