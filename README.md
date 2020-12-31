@@ -1,13 +1,13 @@
 # Cargo B(inary)Install
 
-A helper for distribution and installation of CI built rust binaries in a pseudo-distributed and maybe-one-day secure manner. This is part experiment, part solving a personal problem, and part hope that we can solve / never re-visit this. I hope you find it helpful and, good luck!
+`cargo binstall` provides a low-complexity mechanism for installing rust binaries as an alternative to building from source (via `cargo install`) or manually downloading packages. This is intended to work with existing CI artifacts and infrastructure, and with minimal overhead for package maintainers.
+To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate binary package for a given version and target. See [Supporting Binary Installation](#Supporting-Binary-Installation) for instructions on how to support `binstall` in your projects.
 
-To get started _using_ `cargo-binstall`, first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/ryankurte/cargo-binstall/releases). Once you have installed this you can of course `cargo binstall cargo-binstall` to install further versions...
 
+To get started _using_ `cargo-binstall`, first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/ryankurte/cargo-binstall/releases).
 Supported packages can be installed using `cargo binstall NAME` where `NAME` is the crate.io package name.
 Package versions and targets may be specified using the `--version` and `--target` arguments respectively, and install directory with `--install-dir` (this defaults to `$HOME/.cargo/bin`, with fall-backs to `$HOME/.bin` if unavailable). For additional options please see `cargo binstall --help`.
 
-To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate CI-produced binary package for a given version and target. See [Supporting Binary Installation](#Supporting-Binary-Installation) for instructions on how to support `binstall` in your projects.
 
 ## Status
 
@@ -16,12 +16,13 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
 [![Docs.rs](https://docs.rs/cargo-binstall/badge.svg)](https://docs.rs/cargo-binstall)
 
-## Features
+### Features
 
 - Manifest discovery
   - [x] Fetch crate / manifest via crates.io
-  - [ ] Fetch crate / manifest via git
+  - [ ] Fetch crate / manifest via git (/ github / gitlab)
   - [x] Use local crate / manifest (`--manifest-path`)
+  - [ ] Unofficial packaging
 - Package formats
   - [x] Tgz
   - [x] Tar
@@ -32,6 +33,7 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 - Security
   - [ ] Package signing
   - [ ] Package verification
+
 
 ## Supporting Binary Installation
 
@@ -109,6 +111,21 @@ bin-dir = "{ bin }-{ target }{ format }"
 
 Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so long as cargo builds them this _should_ just work.
 
+## FAQ
+
+- Why use this?
+  - Because `wget`-ing releases is frustrating, `cargo install` takes a not inconsequential portion of forever on constrained devices,
+    and often putting together actual _packages_ is overkill.
+- Why use the cargo manifest?
+  - Crates already have these, and they already contain a significant portion of the required information. 
+    Also there's this great and woefully underused (imo) `[package.metadata]` field.
+- Why not use a binary repository instead?
+  - Then we'd need to _host_ a binary repository, and worry about publishing and all the other fun things that come with releasing software.
+    This way we can use existing CI infrastructure and build artifacts, and maintainers can choose how to distribute their packages.
+- Is this secure?
+  - Yes and also no? We're not (yet? #1) doing anything to verify the CI binaries are produced by the right person / organisation.
+    However, we're pulling data from crates.io and the cargo manifest, both of which are _already_ trusted entities, and this is
+    functionally a replacement for `curl ... | bash` or `wget`-ing the same files, so, things can be improved but it's also sorta moot
 
 ---
 
