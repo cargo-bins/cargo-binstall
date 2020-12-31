@@ -60,27 +60,15 @@ jobs:
 
     - name: Install openssl (apt armv7)
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      run: |
-        cat /etc/apt/sources.list{,.d/*.list}
-        # Patch azure sources to amd64/armhf
-        sudo sed -i'' -E 's/^(deb|deb-src) http:\/\/(azure.archive|security).ubuntu.com/\1 [arch=amd64,i386] http:\/\/\2.ubuntu.com/' /etc/apt/sources.list
-        # Add architecture / enable multiarch
-        sudo dpkg --add-architecture armhf
-
-        # Manually add an apt sources with armhf support
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal main restricted universe" | sudo tee /etc/apt/sources.list.d/armhf.list
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-updates main restricted universe" | sudo tee -a /etc/apt/sources.list.d/armhf.list
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-backports main restricted universe "| sudo tee -a /etc/apt/sources.list.d/armhf.list
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-security main restricted universe" | sudo tee -a /etc/apt/sources.list.d/armhf.list
-
-        # Run apt update
-        sudo apt-get update
-        # Install deps
-        sudo apt-get install -y libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
+      uses: ryankurte/action-apt@v0.3.0
+      with:
+        arch: armhf
+        packages: libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
 
     - name: Enable cross compilation
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      run: echo "PKG_CONFIG_ALLOW_CROSS=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
+      run: |
+        echo "PKG_CONFIG_ALLOW_CROSS=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
 
     - name: Install openssl (vcpkg)
       if: ${{ matrix.os == 'windows-latest' }}
