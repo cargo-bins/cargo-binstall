@@ -8,6 +8,20 @@ To get started _using_ `cargo-binstall`, first install the binary (either via `c
 Supported packages can be installed using `cargo binstall NAME` where `NAME` is the crate.io package name.
 Package versions and targets may be specified using the `--version` and `--target` arguments respectively, and install directory with `--install-dir` (this defaults to `$HOME/.cargo/bin`, with fall-backs to `$HOME/.bin` if unavailable). For additional options please see `cargo binstall --help`.
 
+```
+[garry] ➜  ~ cargo binstall radio-sx128x --version 0.14.1-alpha.5
+21:14:09 [INFO] Installing package: 'radio-sx128x'
+21:14:13 [INFO] Downloading package from: 'https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-apple-darwin.tgz'
+21:14:18 [INFO] This will install the following binaries:
+21:14:18 [INFO]   - sx128x-util (sx128x-util-x86_64-apple-darwin -> /Users/ryankurte/.cargo/bin/sx128x-util-v0.14.1-alpha.5)
+21:14:18 [INFO] And create (or update) the following symlinks:
+21:14:18 [INFO]   - sx128x-util (/Users/ryankurte/.cargo/bin/sx128x-util-v0.14.1-alpha.5 -> /Users/ryankurte/.cargo/bin/sx128x-util)
+21:14:18 [INFO] Do you wish to continue? yes/no
+yes
+21:15:30 [INFO] Installing binaries...
+21:15:30 [INFO] Installation complete!
+```
+
 
 ## Status
 
