@@ -66,12 +66,12 @@ jobs:
         sudo sed -i'' -E 's/^(deb|deb-src) http:\/\/(azure.archive|security).ubuntu.com/\1 [arch=amd64,i386] http:\/\/\2.ubuntu.com/' /etc/apt/sources.list
         # Add architecture / enable multiarch
         sudo dpkg --add-architecture armhf
-        
-        # Manually add an apt source with armhf support
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal main restricted universe"| sudo tee /etc/apt/sources.list.d/armhf.list
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-updates main restricted universe"| sudo tee /etc/apt/sources.list.d/armhf.list
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-backports main restricted universe"| sudo tee /etc/apt/sources.list.d/armhf.list
-        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-security main restricted universe"| sudo tee /etc/apt/sources.list.d/armhf.list
+
+        # Manually add an apt sources with armhf support
+        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal main restricted universe" | sudo tee /etc/apt/sources.list.d/armhf.list
+        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-updates main restricted universe" | sudo tee -a /etc/apt/sources.list.d/armhf.list
+        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-backports main restricted universe "| sudo tee -a /etc/apt/sources.list.d/armhf.list
+        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports/ focal-security main restricted universe" | sudo tee -a /etc/apt/sources.list.d/armhf.list
 
         # Run apt update
         sudo apt-get update
