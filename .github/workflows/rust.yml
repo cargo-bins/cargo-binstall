@@ -63,7 +63,8 @@ jobs:
       run: |
         echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal main universe" | sudo tee /etc/apt/sources.list.d/armhf.list
         sudo apt update
-        sudo apt install openssl-dev:armhf
+        sudo apt install libssl-dev:armhf zlib1g-dev:armhf
+        echo "PKG_CONFIG_ALLOW_CROSS=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
 
     - name: Install openssl (vcpkg)
       if: ${{ matrix.os == 'windows-latest' }}
