@@ -29,7 +29,7 @@ jobs:
             output: cargo-binstall
             experimental: false
           - target: armv7-unknown-linux-gnueabihf 
-            os: ubuntu-latest
+            os: ubuntu-20.04
             output: cargo-binstall
             experimental: true
           - target: x86_64-pc-windows-msvc
