@@ -61,7 +61,7 @@ jobs:
     - name: Install openssl (apt armv7)
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: |
-        sudo dpkg --add-architecture armhf
+        echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal main universe" | sudo tee /etc/apt/sources.list.d/armhf.list
         sudo apt update
         sudo apt install openssl-dev:armhf
 
