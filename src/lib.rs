@@ -1,4 +1,3 @@
-use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use strum_macros::{Display, EnumString, EnumVariantNames};
 use tinytemplate::TinyTemplate;
@@ -15,10 +14,10 @@ pub use drivers::*;
 pub const TARGET: &'static str = env!("TARGET");
 
 /// Default package path template (may be overridden in package Cargo.toml)
-pub const DEFAULT_PKG_PATH: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
+pub const DEFAULT_PKG_URL: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
 
 /// Default binary name template (may be overridden in package Cargo.toml)
-pub const DEFAULT_BIN_NAME: &'static str = "{ name }-{ target }-v{ version }";
+pub const DEFAULT_BIN_PATH: &'static str = "{ name }-{ target }-v{ version }/{ name }{ format }";
 
 
 /// Binary format enumeration
@@ -41,28 +40,52 @@ impl Default for PkgFmt {
     }
 }
 
+/// `binstall` metadata container
+///
+/// Required to nest metadata under `package.metadata.binstall`
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct Meta {
+    pub binstall: Option<PkgMeta>,
+}
+
 /// Metadata for binary installation use.
 /// 
 /// Exposed via `[package.metadata]` in `Cargo.toml`
-#[derive(Clone, Debug, StructOpt, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct Meta {
-    /// Path template override for package downloads
-    pub pkg_url: Option<String>,
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default)]
+pub struct PkgMeta {
+    /// URL template for package downloads
+    pub pkg_url: String,
 
-    /// Package name override for package downloads
-    pub pkg_name: Option<String>,
+    /// Format for package downloads
+    pub pkg_fmt: PkgFmt,
 
-    /// Format override for package downloads
-    #[serde(default)]
-    pub pkg_fmt: Option<PkgFmt>,
-
-    #[serde(default)]
-    /// Filters for binary files allowed in the package
-    pub pkg_bins: Vec<String>,
+    /// Path template for binary files in packages
+    pub bin_dir: String,
 
     /// Public key for package verification (base64 encoded)
     pub pub_key: Option<String>,
+}
+
+impl Default for PkgMeta {
+    fn default() -> Self {
+        Self {
+            pkg_url: DEFAULT_PKG_URL.to_string(),
+            pkg_fmt: PkgFmt::default(),
+            bin_dir: DEFAULT_BIN_PATH.to_string(),
+            pub_key: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct BinMeta {
+    /// Binary name
+    pub name: String,
+    /// Binary template path (within package)
+    pub path: String,
 }
 
 /// Template for constructing download paths
@@ -91,3 +114,44 @@ impl Context {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use crate::{load_manifest_path};
+
+    use cargo_toml::Product;
+
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[test]
+    fn parse_meta() {
+        init();
+
+        let mut manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        manifest_dir.push_str("/Cargo.toml");
+
+        let manifest = load_manifest_path(&manifest_dir).expect("Error parsing metadata");
+        let package = manifest.package.unwrap();
+        let meta = package.metadata.map(|m| m.binstall ).flatten().unwrap();
+
+        assert_eq!(&package.name, "cargo-binstall");
+
+        assert_eq!(
+            &meta.pkg_url,
+            "https://github.com/ryankurte/cargo-binstall/releases/download/v{ version }/cargo-binstall-{ target }.tgz"
+        );
+
+        assert_eq!(
+            manifest.bin.as_slice(),
+            &[
+                Product{ 
+                    name: Some("cargo-binstall".to_string()),
+                    path: Some("src/main.rs".to_string()),
+                    edition: Some(cargo_toml::Edition::E2018),
+                    ..Default::default()
+                },
+            ],
+        );
+    }
+}

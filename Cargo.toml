@@ -7,12 +7,19 @@ authors = ["ryan <ryan@kurte.nz>"]
 edition = "2018"
 license = "GPL-3.0"
 
+[package.metadata.binstall]
+pkg-url = "https://github.com/ryankurte/cargo-binstall/releases/download/v{ version }/cargo-binstall-{ target }.tgz"
+pkg-fmt = "tgz"
+
+[[pkg_bin]]
+name = "cargo-binstall"
+path = "cargo-binstall-{ target }"
 
 [dependencies]
 crates_io_api = "0.6.1"
 cargo_metadata = "0.12.1"
 tinytemplate = "1.1.0"
-tokio = { version = "1.0.1", features = [ "macros", "rt-multi-thread" ] }
+tokio = { version = "0.2.24", features = [ "macros" ] }
 log = "0.4.11"
 structopt = "0.3.21"
 simplelog = "0.8.0"
@@ -27,5 +34,10 @@ strum_macros = "0.20.1"
 strum = "0.20.0"
 dirs = "3.0.1"
 serde_derive = "1.0.118"
+
+[dev-dependencies]
+env_logger = "0.8.2"
 #github = "0.1.2"
 
+[patch.crates-io]
+#reqwest = { git = "https://github.com/seanmonstar/reqwest.git" }

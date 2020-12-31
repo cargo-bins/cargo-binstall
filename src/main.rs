@@ -5,8 +5,6 @@ use simplelog::{TermLogger, ConfigBuilder, TerminalMode};
 
 use structopt::StructOpt;
 
-use cargo_toml::Manifest;
-
 use tempdir::TempDir;
 
 use cargo_binstall::*;
@@ -19,7 +17,7 @@ struct Options {
     #[structopt()]
     name: String,
 
-    /// Package version to install
+    /// Filter for package version to install
     #[structopt(long)]
     version: Option<String>,
 
@@ -44,6 +42,10 @@ struct Options {
     #[structopt(long)]
     no_symlinks: bool,
 
+    /// Dry run, fetch and show changes without installing binaries
+    #[structopt(long)]
+    dry_run: bool,
+
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
     /// the specified path directly, useful for debugging and 
@@ -55,6 +57,8 @@ struct Options {
     #[structopt(long, default_value = "info")]
     log_level: LevelFilter,
 }
+
+
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -85,71 +89,36 @@ async fn main() -> Result<(), anyhow::Error> {
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
     // TODO: support git-based fetches (whole repo name rather than just crate name)
-    let crate_path = match opts.manifest_path {
-        Some(p) => {
-            p
-        },
-        None => {
-            fetch_crate_cratesio(&opts.name, opts.version.as_deref(), temp_dir.path()).await?
-        },
+    let manifest_path = match opts.manifest_path.clone() {
+        Some(p) => p,
+        None => fetch_crate_cratesio(&opts.name, opts.version.as_deref(), temp_dir.path()).await?,
     };
+    
+    debug!("Reading manifest: {}", manifest_path.display());
+    let manifest = load_manifest_path(manifest_path.join("Cargo.toml"))?;
+    let package = manifest.package.unwrap();
 
-    // Read cargo manifest
-    let manifest_path = crate_path.join("Cargo.toml");
-
-    debug!("Reading manifest: {}", manifest_path.to_str().unwrap());
-    let package = match Manifest::<Meta>::from_path_with_metadata(&manifest_path) {
-        Ok(m) => m.package.unwrap(),
-        Err(e) => {
-            error!("Error reading manifest '{}': {:?}", manifest_path.to_str().unwrap(), e);
-            return Err(e.into());
-        },
-    };
-
-    let meta = package.metadata;
-    debug!("Retrieved metadata: {:?}", meta);
-
-    // Select which package path to use
-    let pkg_url = match meta.as_ref().map(|m| m.pkg_url.clone() ).flatten() {
-        Some(m) => {
-            debug!("Using package url: '{}'", &m);
-            m
-        },
-        _ => {
-            debug!("No `pkg-url` key found in Cargo.toml or `--pkg-url` argument provided");
-            debug!("Using default url: {}", DEFAULT_PKG_PATH);
-            DEFAULT_PKG_PATH.to_string()
-        },
-    };
-
-    // Select bin format to use
-    let pkg_fmt = match meta.as_ref().map(|m| m.pkg_fmt.clone() ).flatten() {
-        Some(m) => m.clone(),
-        _ => PkgFmt::Tgz,
-    };
-
-    // Override package name if required
-    let pkg_name = match meta.as_ref().map(|m| m.pkg_name.clone() ).flatten() {
-        Some(m) => m,
-        _ => opts.name.clone(),
-    };
+    let (meta, binaries) = (
+        package.metadata.map(|m| m.binstall ).flatten().unwrap_or(PkgMeta::default()),
+        manifest.bin,
+    );
 
     // Generate context for URL interpolation
     let ctx = Context { 
-        name: pkg_name.to_string(), 
+        name: opts.name.clone(), 
         repo: package.repository, 
         target: opts.target.clone(), 
         version: package.version.clone(),
-        format: pkg_fmt.to_string(),
+        format: meta.pkg_fmt.to_string(),
     };
 
     debug!("Using context: {:?}", ctx);
     
     // Interpolate version / target / etc.
-    let rendered = ctx.render(&pkg_url)?;
+    let rendered = ctx.render(&meta.pkg_url)?;
 
     // Compute install directory
-    let install_path = match get_install_path(opts.install_path) {
+    let install_path = match get_install_path(opts.install_path.as_deref()) {
         Some(p) => p,
         None => {
             error!("No viable install path found of specified, try `--install-path`");
@@ -162,7 +131,7 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("Downloading package from: '{}'", rendered);
 
     // Download package
-    let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", pkg_name, pkg_fmt));
+    let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
     download(&rendered, pkg_path.to_str().unwrap()).await?;
 
     #[cfg(incomplete)]
@@ -191,39 +160,52 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     // Extract files
-    let bin_path = temp_dir.path().join(format!("bin-{}", pkg_name));
-    extract(&pkg_path, pkg_fmt, &bin_path)?;
+    let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
+    extract(&pkg_path, meta.pkg_fmt, &bin_path)?;
 
     // Bypass cleanup if disabled
     if opts.no_cleanup {
         let _ = temp_dir.into_path();
     }
 
+    if binaries.len() == 0 {
+        error!("No binaries specified (or inferred from file system)");
+        return Err(anyhow::anyhow!("No binaries specified (or inferred from file system)"));
+    }
+
     // List files to be installed
-    // TODO: check extracted files are sensible / filter by allowed files
-    // TODO: this seems overcomplicated / should be able to be simplified?
-    let bin_files = std::fs::read_dir(&bin_path)?;
-    let bin_files: Vec<_> = bin_files.filter_map(|f| f.ok() ).map(|f| {
-        let source = f.path().to_owned();
-        let name = source.file_name().map(|v| v.to_str()).flatten().unwrap().to_string();
+    // based on those found via Cargo.toml
+    let bin_files = binaries.iter().map(|p| {
+        // Fetch binary base name
+        let base_name = p.name.clone().unwrap();
 
-        // Trim target and version from name if included in binary file name
-        let base_name = name.replace(&format!("-{}", TARGET), "")
-                .replace(&format!("-v{}", ctx.version), "")
-                .replace(&format!("-{}", ctx.version), "");
+        // Generate binary path via interpolation
+        let mut bin_ctx = ctx.clone();
+        bin_ctx.name = base_name.clone();
+        
+        // Append .exe to windows binaries
+        bin_ctx.format = match &opts.target.clone().contains("windows") {
+            true => ".exe".to_string(),
+            false => "".to_string(),
+        };
 
-        // Generate install destination with version suffix
-        let dest = install_path.join(format!("{}-v{}", base_name, ctx.version));
+        // Generate install paths
+        // Source path is the download dir + the generated binary path
+        let source_file_path = bin_ctx.render(&meta.bin_dir)?;
+        let source = bin_path.join(&source_file_path);
 
-        // Generate symlink path from base name
+        // Destination path is the install dir + base-name-version{.format}
+        let dest_file_path = bin_ctx.render("{ name }-v{ version }{ format }")?; 
+        let dest = install_path.join(dest_file_path);
+
+        // Link at install dir + base name
         let link = install_path.join(&base_name);
 
-        (base_name, source, dest, link)
-    }).collect();
-
+        Ok((base_name, source, dest, link))
+    }).collect::<Result<Vec<_>, anyhow::Error>>()?;
 
     // Prompt user for confirmation
-    info!("This will install the following files:");
+    info!("This will install the following binaries:");
     for (name, source, dest, _link) in &bin_files {
         info!("  - {} ({} -> {})", name, source.file_name().unwrap().to_string_lossy(), dest.display());
     }

@@ -3,12 +3,25 @@ use std::path::{Path, PathBuf};
 
 use log::{debug, info, error};
 
+use cargo_toml::{Manifest};
 use flate2::read::GzDecoder;
 use tar::Archive;
 
 
+use crate::{Meta};
+
 use super::PkgFmt;
 
+/// Load binstall metadata from the crate `Cargo.toml` at the provided path
+pub fn load_manifest_path<P: AsRef<Path>>(manifest_path: P) -> Result<Manifest<Meta>, anyhow::Error> {
+    debug!("Reading manifest: {}", manifest_path.as_ref().display());
+
+    // Load and parse manifest (this checks file system for binary output names)
+    let manifest = Manifest::<Meta>::from_path_with_metadata(manifest_path)?;
+
+    // Return metadata
+    Ok(manifest)
+}
 
 /// Download a file from the provided URL to the provided path
 pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::Error> {
@@ -62,8 +75,6 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
 
     Ok(())
 }
-
-
 
 /// Fetch install path from environment
 /// roughly follows https://doc.rust-lang.org/cargo/commands/cargo-install.html#description
