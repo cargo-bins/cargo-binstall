@@ -1,87 +1,123 @@
 # Cargo B(inary)Install
 
-A helper for distributing / installing CI built rust binaries in a pseudo-distributed and maybe-one-day secure manner.
-This tool is not intended to manage the _building_ of rust binaries as CI can already readily manage this, but to provide a simple project-level mechanism for the distribution and consumption of rust binary packages.
+A helper for distribution and installation of CI built rust binaries in a pseudo-distributed and maybe-one-day secure manner.
+This is part experiment, part solving a personal problem, and part hope that we can solve / never re-visit this. I hope you find it helpful and, good luck!
 
-To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate CI-produced binary package for a given version and target. For further information on adding `binstall` support, see [Supporting Binary Installation](#Supporting-Binary-Installation) for further detail on supporting `binstall`.
+To get started _using_ `cargo-binstall`, first install the binary (either via `cargo install cargo-binstall` or by downloading a precompiled [release](https://github.com/ryankurte/cargo-binstall/releases)).
+Once `cargo-binstall` is installed, supported packages can be installed using `cargo binstall NAME` where `NAME` is the crate.io package name.
+Package versions and targets may be specified using the `--version` and `--target` arguments respectively, and install directory with `--install-dir` (this defaults to `$HOME/.cargo/bin`, with fall-backs to `$HOME/.bin` if unavailable). For additional options please see `cargo binstall --help`.
 
-For packages with `binstall` support, the command `cargo binstall PACKAGE` will then look-up the crate metadata for the specified (or latest) version, fetch the associated binary package, and install this to `$HOME/.cargo/bin` (or `$HOME/.bin` if this is unavailable). See [Installing Binaries](#Installing-Binaries) for further information on using `binstall`.
-
-Cargo metadata is used to avoid the need for an additional centralised index or binary repository, and to provide project maintainers with the maximum possible agency for binary distribution with no additional dependencies and minimal additional complexity. This is part experiment, part solving a personal problem, and part hope that we can solve / never re-visit this. I hope you find it helpful and, good luck!
+To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate CI-produced binary package for a given version and target. See [Supporting Binary Installation](#Supporting-Binary-Installation) for instructions on how to support `binstall` in your projects.
 
 ## Status
 
 ![Rust](https://github.com/ryankurte/cargo-binstall/workflows/Rust/badge.svg)
 [![GitHub tag](https://img.shields.io/github/tag/ryankurte/cargo-binstall.svg)](https://github.com/ryankurte/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
-[![Docs.rs](https://docs.rs/cargo-binstall/badge.svg)](https://docs.rs/cargo-binstall)
+[![Docs.rs](https://docs.rs/cargo-binstall/badge.svg)](https://docs.rs/cargo-binstal
 
 ## Features
 
 - Manifest discovery
-  - [x] Fetch manifest via crates.io
-  - [ ] Fetch manifest via git
-  - [x] Use local manifest (`--manifest-path`)
+  - [x] Fetch crate/manifest via crates.io
+  - [ ] Fetch crate/manifest via git
+  - [x] Use local crate/manifest (`--manifest-path`)
 - Package formats
   - [x] Tgz
   - [x] Tar
   - [x] Bin
 - Extraction / Transformation
-  - [ ] Extract from subdirectory in archive (ie. support archives with platform or target subdirectories)
-  - [ ] Extract specific files from archive (ie. support single archive with multiple platform binaries)
+  - [x] Extract from subdirectory in archive (ie. support archives with platform or target subdirectories)
+  - [x] Extract specific files from archive (ie. support single archive with multiple platform binaries)
 - Security
   - [ ] Package signing
   - [ ] Package verification
 
-## Installing Binaries
-
-First you'll need to install `cargo-binstall` either via `cargo install cargo-binstall` (and it'll have to compile, sorry...), or by grabbing a pre-compiled version from the [releases](https://github.com/ryankurte/cargo-binstall/releases) page and putting that somewhere on your path. It's like there's a problem we're trying to solve?
-
-Once a project supports `binstall` you can then install binaries via `cargo binstall NAME` where `NAME` is the name of the crate. This will then fetch the metadata for the provided crate, lookup the associated binary file, and download this onto your system. 
-By default the latest version is installed, which can be overridden using the `--version` argument, and packages are installed to `$HOME/.cargo/bin` as is consistent with `cargo install`, which can be overridden via the `--install-path` argument. As always `--help` will show available options.
-
-We hope the defaults will work without configuration in _some_ cases, however, different projects have wildly different CI and build output configurations. You will likely need to add some cargo metadata to support `binstall` in your project, see [Supporting Binary Installation](#Supporting-Binary-Installation) for details.
-
-
 ## Supporting Binary Installation
 
-`cargo-binstall` installs binary packages first by reading `[package.metadata]` values from the Cargo manifest (`Cargo.toml`) to discover a template URL, then by building a download path from this template, and finally by downloading and extracting the binary package onto the users path.
+`binstall` works with existing CI-built binary outputs, with configuration via `[package.metadata.binstall]` keys in the relevant crate manifest. 
+When configuring `binstall` you can test against a local manifest with `--manifest-path=PATH` argument to use the crate and manifest at the provided `PATH`, skipping crate discovery and download.
 
-To support `binstall` first you need working CI that places binary outputs at a reasonably deterministic location (github releases, S3 bucket, so long as it's internet accessible you're good to go), then to add configuration values to your Cargo manifest to specify a template string for `binstall` to use when downloading packages.
 
-By default `binstall` will look for pre-built packages using the following template:
+By default `binstall` is setup to work with github releases, and expects to find:
+
+- an archive named `{ name }-{ target }-v{ version }.tgz`
+  - so that this does not overwrite different targets or versions when manually downloaded
+- located at `{ repo }/releases/download/v{ version }/`
+  - compatible with github tags / releases
+- containing a folder named `{ name }-{ target }-v{ version }`
+  - so that prior binary files are not overwritten when manually executing `tar -xvf ...`
+- containing binary files in the form `{ bin }{ format }` (where `bin` is the cargo binary name and `format` is `.exe` on windows and empty on other platforms)
+
+
+These defaults can be overridden using the following configuration keys:
+
+- `pkg-url` specifies the binary package URL for a given target/version, templated (defaults to: `{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }`)
+- `bin-path` specifies the binary path within the package, templated (defaults to: `{ name }-{ target }-v{ version }/{ bin }` with a `.exe` suffix on windows)
+- `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`)
+
+
+Template variables use the format `{ VAR }` where `VAR` is the name of the variable, with the following variables available:
+- `name` is the name of the crate / package
+- `version` is the crate version (per `--version` and the crate manifest)
+- `repo` is the repository linked in `Cargo.toml`
+- `bin` is the name of a specific binary, inferred from the crate configuration
+- `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required().
+
+
+### Operation
+
+- Lookup a viable crate version (currently via `crates.io`, in future via git tags too)
+- Download crate snapshot (currently via `crates.io`)
+- Parse configuration metadata and binary information from the downloaded snapshot
+- Download and extract binary package using configured URL (`pkg-url`, `pkg-fmt`)
+- Install versioned binary files to the relevant install dir
+- Generate symlinks to versioned binaries
+
+### Examples
+
+For example, the default configuration (if specified in `Cargo.toml`) would be:
+
+```toml
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }"
+bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ format }"
+pkg-fmt = "tgz"
 ```
-{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }`, 
+
+For a crate called `radio-sx128x` ( at version `v0.14.1-alpha.5` on x86_64 linux), this would be interpolated to:
+
+- A download URL of `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
+- Containing a single binary file `rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5/rust-radio-x86_64-unknown-linux-gnu`
+- Installed to`$HOME/.cargo/bin/rust-radio-sx128x-v0.14.1-alpha.5`
+- With a symlink from `$HOME/.cargo/bin/rust-radio-sx128x`
+
+####  If the package name does not match the crate name 
+
+As is common with libraries / utilities (and the `radio-sx128x` example), this can be overridden by specifying:
+
+```toml
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }"
 ```
 
-Template variables use the format `{ NAME }` where `NAME` is the name of the variable.
-`repo`, `name`, and `version` are those specified in the crate manifest (`Cargo.toml`).
-`target` defaults to your (the machine calling `cargo binstall`) architecture, but can be overridden using the `--target` command line option if required.
-`format` defaults to `tgz` and can be specified via the `pkg-fmt` key under `[package.metadata]`. You may need this if you have sneaky `tgz` files that are actually not gzipped.
+Which provides a download URL of: `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
 
-For example, for the `radio-sx128x` crate at version `v0.14.1-alpha.5`, this would be interpolated to a download URL of:
-```
-https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
-```
 
-Custom template URLS may be specified using the `pkg-url` field under `[package.metadata]`, using the same keywords for interpolation as discussed above. Again for the `radio-sx128x` package this could be:
+####  If the package structure differs from the default
 
-```
-[package.metadata]
-pkg-url = "https://github.com/ryankurte/rust-radio-sx128x/releases/download/v{ version }/radio-sx128x-{ target }-v{ version }.tgz"
+While it's nice to have the default format discussed above, often it's not the case...
+
+Were the package to contain binaries in the form `name-target[.exe]`, this could be specified as:
+
+```toml
+[package.metadata.binstall]
+bin-dir = "{ bin }-{ target }{ format }"
 ```
 
-If you have separate crate and package names, you can specify a `pkg-name` under `[package.metadata]`, replacing _only_ the `{ name }` field in the default template.
-This is useful if you have a library crate with utilities, and the crate and binary package names differ, but can equally well be addressed via defining the `pkg-url` field as described above.
-For example, the real-world `ryankurte/radio-sx128x` crate produces a `sx128x-util` package, which can be configured using the following:
+Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]` (binary names are inferred from the crate, so long as cargo builds them this _should_ just work).
 
-```
-[package.metadata]
-pkg-name = "sx128x-util"
-```
-
-Once you've added a `pkg-name` or a `pkg-url` you should be good to go! For the purposes of testing this integration you may find it useful to manually specify the manifest path using the `--manifest-path=PATH` argument, this skips discovery of the crate manifest and uses the one at the provided `PATH`. For testing purposes you can also override a variety of configuration options on the command line, see `--help` for more details.
 
 ---
 
-If anything is not working the way you expect, add a `--log-level debug` to see debug information, and feel free to open an issue or PR.
+If you have ideas / contributions or anything is not working the way you expect (in which case, please include an output with `--log-level debug`) and feel free to open an issue or PR.
