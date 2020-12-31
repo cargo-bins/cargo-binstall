@@ -134,3 +134,40 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: Release ${{ github.ref }}
 
+  test:
+
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            output: cargo-binstall
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            output: cargo-binstall
+          - target: armv7-unknown-linux-gnueabihf 
+            os: ubuntu-20.04
+            output: cargo-binstall
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            output: cargo-binstall.exe
+
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: FranzDiebold/github-env-vars-action@v1.2.1
+    
+    - uses: actions/download-artifact@v2
+      with:
+        name: cargo-binstall-${{ matrix.target }}.tgz
+    
+    - name: "Extract build artifact"
+      run: tar -xvf cargo-binstall-${{ matrix.target }}.tgz
+    
+    - name: "Run binstall"
+      run: ${{ matrix.output }} cargo-binstall --manifest-path .
+
