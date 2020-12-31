@@ -140,7 +140,7 @@ mod test {
 
         assert_eq!(
             &meta.pkg_url,
-            "https://github.com/ryankurte/cargo-binstall/releases/download/v{ version }/cargo-binstall-{ target }.tgz"
+            "{ repo }/releases/download/v{ version }/{ name }-{ target }.tgz"
         );
 
         assert_eq!(
