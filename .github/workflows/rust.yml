@@ -77,8 +77,10 @@ jobs:
         sudo apt-get update
         # Install deps
         sudo apt-get install -y libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
-        # Allow cross compilation
-        echo "PKG_CONFIG_ALLOW_CROSS=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
+
+    - name: Enable cross compilation
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+      run: echo "PKG_CONFIG_ALLOW_CROSS=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
 
     - name: Install openssl (vcpkg)
       if: ${{ matrix.os == 'windows-latest' }}
