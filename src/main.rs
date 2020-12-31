@@ -110,6 +110,7 @@ async fn main() -> Result<(), anyhow::Error> {
         target: opts.target.clone(), 
         version: package.version.clone(),
         format: meta.pkg_fmt.to_string(),
+        bin: None,
     };
 
     debug!("Using context: {:?}", ctx);
@@ -181,7 +182,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         // Generate binary path via interpolation
         let mut bin_ctx = ctx.clone();
-        bin_ctx.name = base_name.clone();
+        bin_ctx.bin = Some(base_name.clone());
         
         // Append .exe to windows binaries
         bin_ctx.format = match &opts.target.clone().contains("windows") {
@@ -195,7 +196,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let source = bin_path.join(&source_file_path);
 
         // Destination path is the install dir + base-name-version{.format}
-        let dest_file_path = bin_ctx.render("{ name }-v{ version }{ format }")?; 
+        let dest_file_path = bin_ctx.render("{ bin }-v{ version }{ format }")?; 
         let dest = install_path.join(dest_file_path);
 
         // Link at install dir + base name
