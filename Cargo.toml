@@ -8,6 +8,9 @@ authors = ["ryan <ryan@kurte.nz>"]
 edition = "2018"
 license = "GPL-3.0"
 
+[[pkg_bin]]
+name = "cargo-binstall"
+path = "cargo-binstall-{ target }"
 
 [dependencies]
 crates_io_api = "0.6.1"
@@ -18,7 +21,7 @@ log = "0.4.11"
 structopt = "0.3.21"
 simplelog = "0.8.0"
 anyhow = "1.0.35"
-reqwest = { version = "0.10.9" } 
+reqwest = "0.10.10"
 tempdir = "0.3.7"
 flate2 = "1.0.19"
 tar = "0.4.30"
@@ -28,3 +31,8 @@ strum_macros = "0.20.1"
 strum = "0.20.0"
 dirs = "3.0.1"
 serde_derive = "1.0.118"
+crates-index = "0.16.2"
+semver = "0.11.0"
+
+[dev-dependencies]
+env_logger = "0.8.2"
