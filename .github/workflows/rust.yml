@@ -149,9 +149,6 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
-          - target: armv7-unknown-linux-gnueabihf 
-            os: ubuntu-20.04
-            output: cargo-binstall
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
