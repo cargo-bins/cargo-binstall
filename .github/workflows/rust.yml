@@ -43,15 +43,20 @@ jobs:
         target:  ${{ matrix.target }}
         override: true
     
-    - name: Configure caching 
+    - name: Configure cargo caching 
       uses: actions/cache@v2
-      # Caching disabled on macos due to https://github.com/actions/cache/issues/403
-      if: ${{ matrix.os != 'macos-latest' }}
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
         path: |
           ${{ env.HOME }}/.cargo"
           target
+
+    - name: Configure vcpkg caching
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: actions/cache@v2
+      with:
+        key: ${{ matrix.os }}-${{ matrix.target }}
+        path: C:/vcpkg
 
     - name: Install openssl (apt armv7)
       if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
@@ -78,13 +83,6 @@ jobs:
         echo "OPENSSL_DIR=C:/vcpkg/installed/x64-windows-static/" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
         echo "OPENSSL_ROOT_DIR=C:/vcpkg/installed/x64-windows-static/" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
         echo "OPENSSL_STATIC=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
-
-    - name: Cache vcpkg
-      if: ${{ matrix.os == 'windows-latest' }}
-      uses: actions/cache@v2
-      with:
-        key: ${{ matrix.os }}-${{ matrix.target }}
-        path: C:/vcpkg
 
     - name: Build release
       uses: actions-rs/cargo@v1
