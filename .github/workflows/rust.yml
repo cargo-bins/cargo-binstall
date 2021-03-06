@@ -25,7 +25,7 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
-          - target: armv7-unknown-linux-gnueabihf 
+          - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
           - target: x86_64-pc-windows-msvc
@@ -35,15 +35,15 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: FranzDiebold/github-env-vars-action@v1.2.1
-      
+
     - name: Configure toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: nightly
         target:  ${{ matrix.target }}
         override: true
-    
-    - name: Configure caching 
+
+    - name: Configure caching
       uses: actions/cache@v2
       # Caching disabled on macos due to https://github.com/actions/cache/issues/403
       if: ${{ matrix.os != 'macos-latest' }}
@@ -68,6 +68,7 @@ jobs:
       if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: |
         echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+        echo "LZMA_API_STATIC=1" >> $GITHUB_ENV
 
     - name: Install openssl (vcpkg)
       if: ${{ matrix.os == 'windows-latest' }}
@@ -135,13 +136,13 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: FranzDiebold/github-env-vars-action@v1.2.1
-    
+
     - uses: actions/download-artifact@v2
       with:
         name: cargo-binstall-${{ matrix.target }}.tgz
-    
+
     - name: "Extract build artifact"
       run: tar -xvf cargo-binstall-${{ matrix.target }}.tgz
-    
+
     - name: "Run binstall"
       run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm

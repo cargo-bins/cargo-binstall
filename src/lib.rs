@@ -30,6 +30,8 @@ pub enum PkgFmt {
     Tar,
     /// Download format is TGZ (TAR + GZip)
     Tgz,
+    /// Download format is TAR + XZ
+    Txz,
     /// Download format is raw / binary
     Bin,
 }
@@ -50,7 +52,7 @@ pub struct Meta {
 }
 
 /// Metadata for binary installation use.
-/// 
+///
 /// Exposed via `[package.metadata]` in `Cargo.toml`
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
@@ -146,7 +148,7 @@ mod test {
         assert_eq!(
             manifest.bin.as_slice(),
             &[
-                Product{ 
+                Product{
                     name: Some("cargo-binstall".to_string()),
                     path: Some("src/main.rs".to_string()),
                     edition: Some(cargo_toml::Edition::E2018),
