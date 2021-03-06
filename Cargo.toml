@@ -18,7 +18,7 @@ bin-dir = "{ bin }{ format }"
 crates_io_api = "0.6.1"
 cargo_metadata = "0.12.2"
 tinytemplate = "1.2.0"
-tokio = { version = "0.2.24", features = [ "macros" ] }
+tokio = { version = "1.2.0", features = [ "macros" ] }
 log = "0.4.13"
 structopt = "0.3.21"
 simplelog = "0.9.0"
