@@ -39,6 +39,7 @@ yes
   - [ ] Unofficial packaging
 - Package formats
   - [x] Tgz
+  - [x] Txz
   - [x] Tar
   - [x] Bin
 - Extraction / Transformation
@@ -51,7 +52,7 @@ yes
 
 ## Supporting Binary Installation
 
-`binstall` works with existing CI-built binary outputs, with configuration via `[package.metadata.binstall]` keys in the relevant crate manifest. 
+`binstall` works with existing CI-built binary outputs, with configuration via `[package.metadata.binstall]` keys in the relevant crate manifest.
 When configuring `binstall` you can test against a local manifest with `--manifest-path=PATH` argument to use the crate and manifest at the provided `PATH`, skipping crate discovery and download.
 
 To get started, add a `[package.metadata.binstall]` section to your `Cargo.toml. As an example, the default configuration would be:
@@ -102,7 +103,7 @@ For example, the default configuration (as shown above) for a crate called `radi
 - Installed to`$HOME/.cargo/bin/rust-radio-sx128x-v0.14.1-alpha.5`
 - With a symlink from `$HOME/.cargo/bin/rust-radio-sx128x`
 
-####  If the package name does not match the crate name 
+####  If the package name does not match the crate name
 
 As is common with libraries / utilities (and the `radio-sx128x` example), this can be overridden by specifying the `pkg-url`:
 
@@ -131,7 +132,7 @@ Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. I
   - Because `wget`-ing releases is frustrating, `cargo install` takes a not inconsequential portion of forever on constrained devices,
     and often putting together actual _packages_ is overkill.
 - Why use the cargo manifest?
-  - Crates already have these, and they already contain a significant portion of the required information. 
+  - Crates already have these, and they already contain a significant portion of the required information.
     Also there's this great and woefully underused (imo) `[package.metadata]` field.
 - Why not use a binary repository instead?
   - Then we'd need to _host_ a binary repository, and worry about publishing and all the other fun things that come with releasing software.

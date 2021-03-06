@@ -6,6 +6,7 @@ use log::{debug, info, error};
 use cargo_toml::{Manifest};
 use flate2::read::GzDecoder;
 use tar::Archive;
+use xz2::read::XzDecoder;
 
 
 use crate::{Meta};
@@ -66,6 +67,16 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
 
             tgz.unpack(path)?;
         },
+        PkgFmt::Txz => {
+            // Extract to install dir
+            debug!("Decompressing from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+
+            let dat = std::fs::File::open(source)?;
+            let tar = XzDecoder::new(dat);
+            let mut txz = Archive::new(tar);
+
+            txz.unpack(path)?;
+        },
         PkgFmt::Bin => {
             debug!("Copying data from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
             // Copy to install dir
@@ -117,10 +128,10 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
 
 pub fn confirm() -> Result<bool, anyhow::Error> {
     info!("Do you wish to continue? yes/no");
-    
+
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
-   
+
     match input.as_str().trim() {
         "yes" => Ok(true),
         "no" => Ok(false),
