@@ -15,7 +15,7 @@ bin-dir = "{ bin }{ format }"
 
 
 [dependencies]
-crates_io_api = "0.6.1"
+crates_io_api = "0.7.0"
 cargo_metadata = "0.12.2"
 tinytemplate = "1.2.0"
 tokio = { version = "0.2.24", features = [ "macros" ] }
