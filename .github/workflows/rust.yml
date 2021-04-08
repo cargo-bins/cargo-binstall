@@ -118,12 +118,15 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             output: cargo-binstall
+            archive: tgz
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
+            archive: tgz
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
+            archive: zip
 
     steps:
     - uses: actions/checkout@v2
@@ -131,10 +134,15 @@ jobs:
 
     - uses: actions/download-artifact@v2
       with:
-        name: cargo-binstall-${{ matrix.target }}.tgz
+        name: cargo-binstall-${{ matrix.target }}.${{ matrix.archive }}
 
-    - name: "Extract build artifact"
+    - name: "Extract build artifact (tgz)"
+      if: ${{ matrix.target != 'x86_64-pc-windows-msvc' }}
       run: tar -xvf cargo-binstall-${{ matrix.target }}.tgz
+
+    - name: "Extract build artifact (zip)"
+      if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+      run: tar.exe -xvf cargo-binstall-${{ matrix.target }}.zip
 
     - name: "Run binstall"
       run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
