@@ -46,6 +46,13 @@ jobs:
         toolchain: nightly
         target:  ${{ matrix.target }}
         override: true
+ 
+    - name: Install openssl (apt armv7)
+      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+      uses: ryankurte/action-apt@v0.3.0
+      with:
+        arch: armhf
+        packages: libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
 
     - name: Configure caching
       uses: actions/cache@v2
