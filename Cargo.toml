@@ -18,7 +18,7 @@ pkg-fmt = "zip"
 
 [dependencies]
 crates_io_api = "0.7.0"
-cargo_metadata = "0.12.2"
+cargo_metadata = "0.13.1"
 tinytemplate = "1.2.0"
 tokio = { version = "1.4.0", features = [ "full" ] }
 log = "0.4.14"
