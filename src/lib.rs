@@ -24,7 +24,6 @@ pub const DEFAULT_BIN_PATH: &'static str = "{ name }-{ target }-v{ version }/{ b
 
 
 /// Binary format enumeration
-/// This defaults to .zip on windows and .tgz on all other platforms
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[derive(Display, EnumString, EnumVariantNames)]
 #[strum(serialize_all = "snake_case")]
