@@ -80,7 +80,7 @@ Template variables use the format `{ VAR }` where `VAR` is the name of the varia
 - `bin` is the name of a specific binary, inferred from the crate configuration
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required().
 
-Package format can be overridden on a per-target basis, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this can be set via:
+`pkg-url`, `pkg-fmt` and `bin-path` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
 ```
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]

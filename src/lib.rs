@@ -93,8 +93,14 @@ impl Default for PkgMeta {
 impl PkgMeta {
     /// Merge configuration overrides into object
     pub fn merge(&mut self, pkg_override: &PkgOverride) {
-        if let Some(o) = pkg_override.pkg_fmt {
-            self.pkg_fmt = o;
+        if let Some(o) = &pkg_override.pkg_url {
+            self.pkg_url = o.clone();
+        }
+        if let Some(o) = &pkg_override.pkg_fmt {
+            self.pkg_fmt = *o;
+        }
+        if let Some(o) = &pkg_override.bin_dir {
+            self.bin_dir = o.clone();
         }
     }
 }
@@ -105,14 +111,22 @@ impl PkgMeta {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgOverride {
-    /// Format for package downloads
+    /// URL template override for package downloads
+    pub pkg_url: Option<String>,
+
+    /// Format override for package downloads
     pub pkg_fmt: Option<PkgFmt>,
+
+    /// Path template override for binary files in packages
+    pub bin_dir: Option<String>,
 }
 
 impl Default for PkgOverride {
     fn default() -> Self {
         Self {
+            pkg_url: None,
             pkg_fmt: None,
+            bin_dir: None,
         }
     }
 }
