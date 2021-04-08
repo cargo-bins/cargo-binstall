@@ -97,10 +97,17 @@ async fn main() -> Result<(), anyhow::Error> {
     let manifest = load_manifest_path(manifest_path.join("Cargo.toml"))?;
     let package = manifest.package.unwrap();
 
-    let (meta, binaries) = (
+    let (mut meta, binaries) = (
         package.metadata.map(|m| m.binstall ).flatten().unwrap_or(PkgMeta::default()),
         manifest.bin,
     );
+
+    // Merge any overrides
+    if let Some(o) = meta.overrides.remove(&opts.target) {
+        meta.merge(&o);
+    }
+
+    debug!("Found metadata: {:?}", meta);
 
     // Generate context for URL interpolation
     let ctx = Context { 

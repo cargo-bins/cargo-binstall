@@ -10,9 +10,11 @@ license = "GPL-3.0"
 
 
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tgz"
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ format }"
 bin-dir = "{ bin }{ format }"
 
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [dependencies]
 crates_io_api = "0.6.1"
@@ -25,7 +27,7 @@ simplelog = "0.9.0"
 anyhow = "1.0.40"
 reqwest = "0.10.10"
 tempdir = "0.3.7"
-flate2 = "1.0.19"
+flate2 = "1.0.14"
 tar = "0.4.30"
 cargo_toml = "0.8.1"
 serde = { version = "1.0.119", features = [ "derive" ] }
@@ -36,6 +38,7 @@ serde_derive = "1.0.118"
 crates-index = "0.16.2"
 semver = "0.11.0"
 xz2 = "0.1.6"
+zip = "0.5.11"
 
 [dev-dependencies]
 env_logger = "0.8.2"

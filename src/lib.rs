@@ -1,3 +1,6 @@
+
+use std::collections::HashMap;
+
 use serde::{Serialize, Deserialize};
 use strum_macros::{Display, EnumString, EnumVariantNames};
 use tinytemplate::TinyTemplate;
@@ -21,6 +24,7 @@ pub const DEFAULT_BIN_PATH: &'static str = "{ name }-{ target }-v{ version }/{ b
 
 
 /// Binary format enumeration
+/// This defaults to .zip on windows and .tgz on all other platforms
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[derive(Display, EnumString, EnumVariantNames)]
 #[strum(serialize_all = "snake_case")]
@@ -32,6 +36,8 @@ pub enum PkgFmt {
     Tgz,
     /// Download format is TAR + XZ
     Txz,
+    /// Download format is Zip
+    Zip,
     /// Download format is raw / binary
     Bin,
 }
@@ -68,6 +74,9 @@ pub struct PkgMeta {
 
     /// Public key for package verification (base64 encoded)
     pub pub_key: Option<String>,
+
+    /// Target specific overrides
+    pub overrides: HashMap<String, PkgOverride>,
 }
 
 impl Default for PkgMeta {
@@ -77,9 +86,38 @@ impl Default for PkgMeta {
             pkg_fmt: PkgFmt::default(),
             bin_dir: DEFAULT_BIN_PATH.to_string(),
             pub_key: None,
+            overrides: HashMap::new(),
         }
     }
 }
+
+impl PkgMeta {
+    /// Merge configuration overrides into object
+    pub fn merge(&mut self, pkg_override: &PkgOverride) {
+        if let Some(o) = pkg_override.pkg_fmt {
+            self.pkg_fmt = o;
+        }
+    }
+}
+
+/// Target specific overrides for binary installation
+///
+/// Exposed via `[package.metadata.TARGET]` in `Cargo.toml`
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default)]
+pub struct PkgOverride {
+    /// Format for package downloads
+    pub pkg_fmt: Option<PkgFmt>,
+}
+
+impl Default for PkgOverride {
+    fn default() -> Self {
+        Self {
+            pkg_fmt: None,
+        }
+    }
+}
+
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
