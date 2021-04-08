@@ -22,15 +22,19 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             output: cargo-binstall
+            archive: tgz
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
+            archive: tgz
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
+            archive: tgz
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
+            archive: zip
 
     steps:
     - uses: actions/checkout@v2
@@ -42,6 +46,13 @@ jobs:
         toolchain: nightly
         target:  ${{ matrix.target }}
         override: true
+ 
+    - name: Install openssl (apt armv7)
+      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+      uses: ryankurte/action-apt@v0.3.0
+      with:
+        arch: armhf
+        packages: libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
 
     - name: Configure caching
       uses: actions/cache@v2
@@ -53,13 +64,6 @@ jobs:
           ${{ env.HOME }}/.cargo"
           target
 
-    - name: Install openssl (apt armv7)
-      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      uses: ryankurte/action-apt@v0.3.0
-      with:
-        arch: armhf
-        packages: libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
-
     - name: Install cross toolchain (armv7)
       if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
       run: sudo apt install gcc-arm-linux-gnueabihf
@@ -70,50 +74,38 @@ jobs:
         echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
         echo "LZMA_API_STATIC=1" >> $GITHUB_ENV
 
-    - name: Install openssl (vcpkg)
-      if: ${{ matrix.os == 'windows-latest' }}
-      timeout-minutes: 30
-      run: |
-        vcpkg integrate install
-        vcpkg install openssl:x64-windows-static
-        echo "OPENSSL_DIR=C:/vcpkg/installed/x64-windows-static/" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
-        echo "OPENSSL_ROOT_DIR=C:/vcpkg/installed/x64-windows-static/" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
-        echo "OPENSSL_STATIC=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf-8 -Append
-
-    - name: Cache vcpkg
-      if: ${{ matrix.os == 'windows-latest' }}
-      uses: actions/cache@v2
-      with:
-        key: ${{ matrix.os }}-${{ matrix.target }}
-        path: C:/vcpkg
-
     - name: Build release
       uses: actions-rs/cargo@v1
       with:
         command: build
         args: --target ${{ matrix.target }} --release
 
-    - name: Copy / Rename utility
-      run: |
-        cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
-        tar -czvf cargo-binstall-${{ matrix.target }}.tgz ${{ matrix.output }}
+    - name: Copy and rename utility
+      run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
+
+    - name: Create archive (tgz)
+      if: ${{ matrix.target != 'x86_64-pc-windows-msvc' }}
+      run: tar -czvf cargo-binstall-${{ matrix.target }}.tgz ${{ matrix.output }}
+    
+    - name: Create archive (zip)
+      if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+      run: tar.exe -a -c -f cargo-binstall-${{ matrix.target }}.zip ${{ matrix.output }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
       with:
-        name: cargo-binstall-${{ matrix.target }}.tgz
-        path: cargo-binstall-${{ matrix.target }}.tgz
+        name: cargo-binstall-${{ matrix.target }}.${{ matrix.archive }}
+        path: cargo-binstall-${{ matrix.target }}.${{ matrix.archive }}
 
     - name: Upload binary to release
       if: ${{ startsWith(github.ref, 'refs/tags/v') }}
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: cargo-binstall-${{ matrix.target }}.tgz
-        asset_name: cargo-binstall-${{ matrix.target }}.tgz
+        file: cargo-binstall-${{ matrix.target }}.${{ matrix.archive }}
+        asset_name: cargo-binstall-${{ matrix.target }}.${{ matrix.archive }}
         tag: ${{ github.ref }}
         overwrite: true
-
 
   test:
     name: Test
@@ -126,12 +118,15 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             output: cargo-binstall
+            archive: tgz
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
+            archive: tgz
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
+            archive: zip
 
     steps:
     - uses: actions/checkout@v2
@@ -139,10 +134,15 @@ jobs:
 
     - uses: actions/download-artifact@v2
       with:
-        name: cargo-binstall-${{ matrix.target }}.tgz
+        name: cargo-binstall-${{ matrix.target }}.${{ matrix.archive }}
 
-    - name: "Extract build artifact"
+    - name: "Extract build artifact (tgz)"
+      if: ${{ matrix.target != 'x86_64-pc-windows-msvc' }}
       run: tar -xvf cargo-binstall-${{ matrix.target }}.tgz
+
+    - name: "Extract build artifact (zip)"
+      if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+      run: tar.exe -xvf cargo-binstall-${{ matrix.target }}.zip
 
     - name: "Run binstall"
       run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm

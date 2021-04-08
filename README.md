@@ -41,6 +41,7 @@ yes
   - [x] Tgz
   - [x] Txz
   - [x] Tar
+  - [x] Zip
   - [x] Bin
 - Extraction / Transformation
   - [x] Extract from subdirectory in archive (ie. support archives with platform or target subdirectories)
@@ -79,12 +80,18 @@ Template variables use the format `{ VAR }` where `VAR` is the name of the varia
 - `bin` is the name of a specific binary, inferred from the crate configuration
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required().
 
+`pkg-url`, `pkg-fmt` and `bin-path` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
+
+```
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+```
 
 ### Defaults
 
 By default `binstall` is setup to work with github releases, and expects to find:
 
-- an archive named `{ name }-{ target }-v{ version }.tgz`
+- an archive named `{ name }-{ target }-v{ version }.{ format }`
   - so that this does not overwrite different targets or versions when manually downloaded
 - located at `{ repo }/releases/download/v{ version }/`
   - compatible with github tags / releases

@@ -1,3 +1,6 @@
+
+use std::collections::HashMap;
+
 use serde::{Serialize, Deserialize};
 use strum_macros::{Display, EnumString, EnumVariantNames};
 use tinytemplate::TinyTemplate;
@@ -32,6 +35,8 @@ pub enum PkgFmt {
     Tgz,
     /// Download format is TAR + XZ
     Txz,
+    /// Download format is Zip
+    Zip,
     /// Download format is raw / binary
     Bin,
 }
@@ -68,6 +73,9 @@ pub struct PkgMeta {
 
     /// Public key for package verification (base64 encoded)
     pub pub_key: Option<String>,
+
+    /// Target specific overrides
+    pub overrides: HashMap<String, PkgOverride>,
 }
 
 impl Default for PkgMeta {
@@ -77,9 +85,52 @@ impl Default for PkgMeta {
             pkg_fmt: PkgFmt::default(),
             bin_dir: DEFAULT_BIN_PATH.to_string(),
             pub_key: None,
+            overrides: HashMap::new(),
         }
     }
 }
+
+impl PkgMeta {
+    /// Merge configuration overrides into object
+    pub fn merge(&mut self, pkg_override: &PkgOverride) {
+        if let Some(o) = &pkg_override.pkg_url {
+            self.pkg_url = o.clone();
+        }
+        if let Some(o) = &pkg_override.pkg_fmt {
+            self.pkg_fmt = *o;
+        }
+        if let Some(o) = &pkg_override.bin_dir {
+            self.bin_dir = o.clone();
+        }
+    }
+}
+
+/// Target specific overrides for binary installation
+///
+/// Exposed via `[package.metadata.TARGET]` in `Cargo.toml`
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default)]
+pub struct PkgOverride {
+    /// URL template override for package downloads
+    pub pkg_url: Option<String>,
+
+    /// Format override for package downloads
+    pub pkg_fmt: Option<PkgFmt>,
+
+    /// Path template override for binary files in packages
+    pub bin_dir: Option<String>,
+}
+
+impl Default for PkgOverride {
+    fn default() -> Self {
+        Self {
+            pkg_url: None,
+            pkg_fmt: None,
+            bin_dir: None,
+        }
+    }
+}
+
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
