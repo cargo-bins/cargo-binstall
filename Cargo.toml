@@ -17,15 +17,15 @@ bin-dir = "{ bin }{ format }"
 pkg-fmt = "zip"
 
 [dependencies]
-crates_io_api = "0.6.1"
+crates_io_api = "0.7.0"
 cargo_metadata = "0.12.2"
 tinytemplate = "1.2.0"
-tokio = { version = "0.2.24", features = [ "macros" ] }
+tokio = { version = "1.4.0", features = [ "full" ] }
 log = "0.4.14"
 structopt = "0.3.21"
 simplelog = "0.9.0"
 anyhow = "1.0.40"
-reqwest = "0.10.10"
+reqwest = { version = "0.11.2", features = [ "rustls-tls" ], default-features = false }
 tempdir = "0.3.7"
 flate2 = "1.0.14"
 tar = "0.4.30"
