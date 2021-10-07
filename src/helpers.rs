@@ -50,7 +50,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
     match fmt {
         PkgFmt::Tar => {
             // Extract to install dir
-            debug!("Extracting from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!("Extracting from tar archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
 
             let dat = std::fs::File::open(source)?;
             let mut tar = Archive::new(dat);
@@ -59,7 +59,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
         },
         PkgFmt::Tgz => {
             // Extract to install dir
-            debug!("Decompressing from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!("Decompressing from tgz archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
 
             let dat = std::fs::File::open(source)?;
             let tar = GzDecoder::new(dat);
@@ -69,7 +69,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
         },
         PkgFmt::Txz => {
             // Extract to install dir
-            debug!("Decompressing from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!("Decompressing from txz archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
 
             let dat = std::fs::File::open(source)?;
             let tar = XzDecoder::new(dat);
@@ -79,7 +79,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
         },
         PkgFmt::Zip => {
             // Extract to install dir
-            debug!("Decompressing from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!("Decompressing from zip archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
 
             let dat = std::fs::File::open(source)?;
             let mut zip = ZipArchive::new(dat)?;
@@ -87,7 +87,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
             zip.extract(path)?;
         },
         PkgFmt::Bin => {
-            debug!("Copying data from archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!("Copying binary '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
             // Copy to install dir
             std::fs::copy(source, path)?;
         },
