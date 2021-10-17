@@ -239,6 +239,12 @@ async fn main() -> Result<(), anyhow::Error> {
     for (_name, source, dest, _link) in &bin_files {
         // TODO: check if file already exists
         std::fs::copy(source, dest)?;
+
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755))?;
+        }
     }
 
     // Generate symlinks
