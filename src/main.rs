@@ -199,7 +199,11 @@ async fn main() -> Result<(), anyhow::Error> {
         // Generate install paths
         // Source path is the download dir + the generated binary path
         let source_file_path = bin_ctx.render(&meta.bin_dir)?;
-        let source = bin_path.join(&source_file_path);
+        let source = if meta.pkg_fmt == PkgFmt::Bin {
+            bin_path.clone()
+        } else {
+            bin_path.join(&source_file_path)
+        };
 
         // Destination path is the install dir + base-name-version{.format}
         let dest_file_path = bin_ctx.render("{ bin }-v{ version }{ format }")?; 
