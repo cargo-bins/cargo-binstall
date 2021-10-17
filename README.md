@@ -56,7 +56,7 @@ yes
 `binstall` works with existing CI-built binary outputs, with configuration via `[package.metadata.binstall]` keys in the relevant crate manifest.
 When configuring `binstall` you can test against a local manifest with `--manifest-path=PATH` argument to use the crate and manifest at the provided `PATH`, skipping crate discovery and download.
 
-To get started, add a `[package.metadata.binstall]` section to your `Cargo.toml. As an example, the default configuration would be:
+To get started, add a `[package.metadata.binstall]` section to your `Cargo.toml`. As an example, the default configuration would be:
 
 ```toml
 [package.metadata.binstall]
