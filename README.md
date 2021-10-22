@@ -3,9 +3,34 @@
 `cargo binstall` provides a low-complexity mechanism for installing rust binaries as an alternative to building from source (via `cargo install`) or manually downloading packages. This is intended to work with existing CI artifacts and infrastructure, and with minimal overhead for package maintainers.
 To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate binary package for a given version and target. See [Supporting Binary Installation](#Supporting-Binary-Installation) for instructions on how to support `binstall` in your projects.
 
+## Installing
 
 To get started _using_ `cargo-binstall`, first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/ryankurte/cargo-binstall/releases).
+
+linux x86_64:
+```
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz
+```
+
+linux armv7:
+```
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-gnueabihf.tgz
+```
+
+macos x86_64:
+```
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip
+```
+
+windows x86_64:
+```
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip
+```
+
+## Usage
+
 Supported packages can be installed using `cargo binstall NAME` where `NAME` is the crate.io package name.
+
 Package versions and targets may be specified using the `--version` and `--target` arguments respectively, and install directory with `--install-dir` (this defaults to `$HOME/.cargo/bin`, with fall-backs to `$HOME/.bin` if unavailable). For additional options please see `cargo binstall --help`.
 
 ```
