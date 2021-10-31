@@ -87,7 +87,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.clone(),
         pkg_fmt: opts.pkg_fmt,
-        bin_dir: opts.bin_dir.clone(),
+        bin_dir: opts.bin_path.clone(),
     };
 
     // Setup logging
