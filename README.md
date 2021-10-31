@@ -64,6 +64,7 @@ yes
   - [ ] Unofficial packaging
 - Package formats
   - [x] Tgz
+  - [x] TarGz
   - [x] Txz
   - [x] Tar
   - [x] Zip
@@ -107,7 +108,7 @@ Template variables use the format `{ VAR }` where `VAR` is the name of the varia
 
 `pkg-url`, `pkg-fmt` and `bin-path` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
-```
+```toml
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-fmt = "zip"
 ```
@@ -157,6 +158,23 @@ bin-dir = "{ bin }-{ target }{ format }"
 ```
 
 Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so long as cargo builds them this _should_ just work.
+
+## Installing unsupported crates
+
+If you would like to use this tool to download crates unsupported crates, you can override the following templates at the command line:
+
+- `pkg-url` templated specification for the package download URL for a given target/version
+- `bin-path` templated specification for the binary path within the package (`.exe` suffix added automatically on windows)
+- `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`)
+
+These values replace the template and are applied over any metadata supplied by the package. Once a package adds support, removing these overrides is best practice.
+
+### Examples
+
+This crate has no v on the version number, the version and target are switched, and uses tar.gz extension.
+```
+[garry] ➜  ~  binstall --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ format }" --pkg-fmt="tar.gz" crate_name
+```
 
 ## FAQ
 
