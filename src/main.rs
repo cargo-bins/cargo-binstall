@@ -56,6 +56,18 @@ struct Options {
     /// Utility log level
     #[structopt(long, default_value = "info")]
     log_level: LevelFilter,
+
+    /// Override Cargo.toml package manifest pkg-url.
+    #[structopt(long)]
+    pkg_url: Option<String>,
+
+    /// Override Cargo.toml package manifest pkg-fmt.
+    #[structopt(long)]
+    pkg_fmt: Option<PkgFmt>,
+
+    /// Override Cargo.toml package manifest bin-dir.
+    #[structopt(long)]
+    bin_dir: Option<String>,
 }
 
 
@@ -72,6 +84,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Load options
     let opts = Options::from_iter(args.iter());
+    let cli_overrides = PkgOverride {
+        pkg_url: opts.pkg_url.clone(),
+        pkg_fmt: opts.pkg_fmt,
+        bin_dir: opts.bin_dir.clone(),
+    };
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();
@@ -98,7 +115,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let package = manifest.package.unwrap();
 
     let (mut meta, binaries) = (
-        package.metadata.map(|m| m.binstall ).flatten().unwrap_or(PkgMeta::default()),
+        package.metadata.map(|m| m.binstall ).flatten().unwrap_or_default(),
         manifest.bin,
     );
 
@@ -106,8 +123,7 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(o) = meta.overrides.remove(&opts.target) {
         meta.merge(&o);
     }
-
-    debug!("Found metadata: {:?}", meta);
+    meta.merge(&cli_overrides);
 
     // Generate context for URL interpolation
     let ctx = Context { 
@@ -175,7 +191,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let _ = temp_dir.into_path();
     }
 
-    if binaries.len() == 0 {
+    if binaries.is_empty() {
         error!("No binaries specified (or inferred from file system)");
         return Err(anyhow::anyhow!("No binaries specified (or inferred from file system)"));
     }

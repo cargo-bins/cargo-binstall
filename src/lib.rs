@@ -14,13 +14,13 @@ pub use drivers::*;
 
 
 /// Compiled target triple, used as default for binary fetching
-pub const TARGET: &'static str = env!("TARGET");
+pub const TARGET: &str = env!("TARGET");
 
 /// Default package path template (may be overridden in package Cargo.toml)
-pub const DEFAULT_PKG_URL: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
+pub const DEFAULT_PKG_URL: &str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
 
 /// Default binary name template (may be overridden in package Cargo.toml)
-pub const DEFAULT_BIN_PATH: &'static str = "{ name }-{ target }-v{ version }/{ bin }{ format }";
+pub const DEFAULT_BIN_PATH: &str = "{ name }-{ target }-v{ version }/{ bin }{ format }";
 
 
 /// Binary format enumeration
@@ -33,6 +33,9 @@ pub enum PkgFmt {
     Tar,
     /// Download format is TGZ (TAR + GZip)
     Tgz,
+    /// Download format is TAR.GZ (TAR + GZip)
+    #[strum(serialize = "tar.gz")]
+    TarGz,
     /// Download format is TAR + XZ
     Txz,
     /// Download format is Zip
@@ -159,7 +162,7 @@ impl Context {
         let mut tt = TinyTemplate::new();
 
         // Add template to instance
-        tt.add_template("path", &template)?;
+        tt.add_template("path", template)?;
 
         // Render output
         let rendered = tt.render("path", self)?;

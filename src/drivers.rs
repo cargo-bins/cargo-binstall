@@ -18,7 +18,7 @@ fn find_version<'a, V: Iterator<Item=&'a str>>(requirement: &str, version_iter: 
     // Filter for matching versions
     let mut filtered: Vec<_> = version_iter.filter(|v| {
         // Remove leading `v` for git tags
-        let ver_str = match v.strip_prefix("s") {
+        let ver_str = match v.strip_prefix('s') {
             Some(v) => v,
             None => v,
         };

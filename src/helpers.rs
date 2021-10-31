@@ -57,7 +57,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
 
             tar.unpack(path)?;
         },
-        PkgFmt::Tgz => {
+        PkgFmt::Tgz | PkgFmt::TarGz => {
             // Extract to install dir
             debug!("Decompressing from tgz archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
 
@@ -129,7 +129,7 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
     // Local executable dir if no cargo is found
     if let Some(d) = dirs::executable_dir() {
         debug!("Fallback to {}", d.display());
-        return Some(d.into());
+        return Some(d);
     }
 
     None
