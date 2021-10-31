@@ -67,7 +67,7 @@ struct Options {
 
     /// Override Cargo.toml package manifest bin-dir.
     #[structopt(long)]
-    bin_dir: Option<String>,
+    bin_path: Option<String>,
 }
 
 
