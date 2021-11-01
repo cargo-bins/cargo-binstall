@@ -130,6 +130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52d74260d9bf6944e2208aa46841b4b8f0d7ffc0849a06837b2f510337f86b2b"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cargo-binstall"
 version = "0.4.1"
 dependencies = [
@@ -143,7 +152,7 @@ dependencies = [
  "flate2",
  "log",
  "reqwest",
- "semver",
+ "semver 0.11.0",
  "serde",
  "serde_derive",
  "simplelog",
@@ -169,13 +178,13 @@ dependencies = [
 
 [[package]]
 name = "cargo_metadata"
-version = "0.12.2"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11a47b6286279a9998588ef7050d1ebc2500c69892a557c90fe5d071c64415dc"
+checksum = "ba2ae6de944143141f6155a473a6b02f66c7c3f9f47316f802f80204ebfe6e12"
 dependencies = [
+ "camino",
  "cargo-platform",
- "semver",
- "semver-parser",
+ "semver 1.0.4",
  "serde",
  "serde_json",
 ]
@@ -274,7 +283,7 @@ dependencies = [
  "hex",
  "home",
  "memchr",
- "semver",
+ "semver 0.11.0",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1396,6 +1405,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f301af10236f6df4160f7c3f04eec6dbc70ace82d23326abad5edee88801c6b6"
 dependencies = [
  "semver-parser",
+]
+
+[[package]]
+name = "semver"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "568a8e6258aa33c13358f81fd834adb854c6f7c9468520910a9b1e8fac068012"
+dependencies = [
  "serde",
 ]
 
