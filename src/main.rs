@@ -1,7 +1,7 @@
 use std::path::{PathBuf};
 
 use log::{debug, info, warn, error, LevelFilter};
-use simplelog::{TermLogger, ConfigBuilder, TerminalMode};
+use simplelog::{TermLogger, ConfigBuilder, TerminalMode, ColorChoice};
 
 use structopt::StructOpt;
 
@@ -78,7 +78,7 @@ async fn main() -> Result<(), anyhow::Error> {
     log_config.add_filter_ignore("hyper".to_string());
     log_config.add_filter_ignore("reqwest".to_string());
     log_config.set_location_level(LevelFilter::Off);
-    TermLogger::init(opts.log_level, log_config.build(), TerminalMode::Mixed).unwrap();
+    TermLogger::init(opts.log_level, log_config.build(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
 
     // Create a temporary directory for downloads etc.
     let temp_dir = TempDir::new("cargo-binstall")?;
