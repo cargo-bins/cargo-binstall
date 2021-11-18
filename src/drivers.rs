@@ -57,8 +57,8 @@ pub async fn fetch_crate_cratesio(name: &str, version_req: &str, temp_dir: &Path
 
     // Fetch / update index
     debug!("Updating crates.io index");
-    let index = crates_index::Index::new_cargo_default();
-    index.retrieve_or_update()?;
+    let mut index = crates_index::Index::new_cargo_default()?;
+    index.update()?;
 
     // Lookup crate in index
     debug!("Looking up crate information");

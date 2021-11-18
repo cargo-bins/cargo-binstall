@@ -193,7 +193,7 @@ mod test {
 
         assert_eq!(
             &meta.pkg_url,
-            "{ repo }/releases/download/v{ version }/{ name }-{ target }.tgz"
+            "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ format }"
         );
 
         assert_eq!(
