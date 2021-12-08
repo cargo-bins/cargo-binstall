@@ -27,13 +27,13 @@ log = "0.4.14"
 structopt = "0.3.25"
 simplelog = "0.11.0"
 anyhow = "1.0.51"
-reqwest = { version = "0.11.6", features = [ "rustls-tls" ], default-features = false }
+reqwest = { version = "0.11.7", features = [ "rustls-tls" ], default-features = false }
 tempdir = "0.3.7"
 flate2 = "1.0.22"
 tar = "0.4.37"
-cargo_toml = "0.10.1"
+cargo_toml = "0.10.2"
 serde = { version = "1.0.130", features = [ "derive" ] }
-strum_macros = "0.23.0"
+strum_macros = "0.23.1"
 strum = "0.23.0"
 dirs = "4.0.0"
 serde_derive = "1.0.118"
