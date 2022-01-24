@@ -32,7 +32,7 @@ tempdir = "0.3.7"
 flate2 = "1.0.22"
 tar = "0.4.37"
 cargo_toml = "0.10.2"
-serde = { version = "1.0.130", features = [ "derive" ] }
+serde = { version = "1.0.135", features = [ "derive" ] }
 strum_macros = "0.23.1"
 strum = "0.23.0"
 dirs = "4.0.0"
