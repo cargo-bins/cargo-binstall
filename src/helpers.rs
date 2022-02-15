@@ -5,7 +5,9 @@ use log::{debug, info, error};
 
 use cargo_toml::{Manifest};
 use flate2::read::GzDecoder;
+use serde::Serialize;
 use tar::Archive;
+use tinytemplate::TinyTemplate;
 use xz2::read::XzDecoder;
 use zip::read::ZipArchive;
 
@@ -22,6 +24,11 @@ pub fn load_manifest_path<P: AsRef<Path>>(manifest_path: P) -> Result<Manifest<M
 
     // Return metadata
     Ok(manifest)
+}
+
+pub async fn head(url: &str) -> Result<bool, anyhow::Error> {
+    let req = reqwest::Client::new().head(url).send().await?;
+    Ok(req.status().is_success())
 }
 
 /// Download a file from the provided URL to the provided path
@@ -147,5 +154,19 @@ pub fn confirm() -> Result<bool, anyhow::Error> {
         _ => {
             Err(anyhow::anyhow!("Valid options are 'yes', 'no', please try again"))
         }
+    }
+}
+
+pub trait Template: Serialize {
+    fn render(&self, template: &str) -> Result<String, anyhow::Error>
+    where Self: Sized {
+        // Create template instance
+        let mut tt = TinyTemplate::new();
+
+        // Add template to instance
+        tt.add_template("path", &template)?;
+
+        // Render output
+        Ok(tt.render("path", self)?)
     }
 }

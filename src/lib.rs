@@ -3,14 +3,15 @@ use std::collections::HashMap;
 
 use serde::{Serialize, Deserialize};
 use strum_macros::{Display, EnumString, EnumVariantNames};
-use tinytemplate::TinyTemplate;
-
 
 pub mod helpers;
 pub use helpers::*;
 
 pub mod drivers;
 pub use drivers::*;
+
+pub mod bins;
+pub mod fetchers;
 
 
 /// Compiled target triple, used as default for binary fetching
@@ -139,33 +140,6 @@ pub struct BinMeta {
     pub name: String,
     /// Binary template path (within package)
     pub path: String,
-}
-
-/// Template for constructing download paths
-#[derive(Clone, Debug, Serialize)]
-pub struct Context {
-    pub name: String,
-    pub repo: Option<String>,
-    pub target: String,
-    pub version: String,
-    pub format: String,
-    pub bin: Option<String>,
-}
-
-impl Context {
-    /// Render the context into the provided template
-    pub fn render(&self, template: &str) -> Result<String, anyhow::Error> {
-        // Create template instance
-        let mut tt = TinyTemplate::new();
-
-        // Add template to instance
-        tt.add_template("path", &template)?;
-
-        // Render output
-        let rendered = tt.render("path", self)?;
-
-        Ok(rendered)
-    }
 }
 
 #[cfg(test)]

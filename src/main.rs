@@ -7,7 +7,7 @@ use structopt::StructOpt;
 
 use tempdir::TempDir;
 
-use cargo_binstall::*;
+use cargo_binstall::{*, fetchers::{GhRelease, Data, Fetcher}, bins};
 
 
 #[derive(Debug, StructOpt)]
@@ -109,37 +109,34 @@ async fn main() -> Result<(), anyhow::Error> {
 
     debug!("Found metadata: {:?}", meta);
 
-    // Generate context for URL interpolation
-    let ctx = Context { 
-        name: opts.name.clone(), 
-        repo: package.repository, 
-        target: opts.target.clone(), 
-        version: package.version.clone(),
-        format: meta.pkg_fmt.to_string(),
-        bin: None,
-    };
-
-    debug!("Using context: {:?}", ctx);
-    
-    // Interpolate version / target / etc.
-    let rendered = ctx.render(&meta.pkg_url)?;
-
     // Compute install directory
-    let install_path = match get_install_path(opts.install_path.as_deref()) {
-        Some(p) => p,
-        None => {
-            error!("No viable install path found of specified, try `--install-path`");
-            return Err(anyhow::anyhow!("No install path found or specified"));
-        }
-    };
-
+    let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
+        error!("No viable install path found of specified, try `--install-path`");
+        anyhow::anyhow!("No install path found or specified")
+    })?;
     debug!("Using install path: {}", install_path.display());
 
-    info!("Downloading package from: '{}'", rendered);
+    // Compute temporary directory for downloads
+    let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
+    debug!("Using temporary download path: {}", pkg_path.display());
+
+    let fetcher_data = Data {
+        name: package.name.clone(),
+        target: opts.target.clone(),
+        version: package.version.clone(),
+        repo: package.repository.clone(),
+        meta: meta.clone(),
+    };
+    
+    // Try github releases
+    let gh = GhRelease::new(&fetcher_data).await?;
+    if !gh.check().await? {
+        error!("No file found in github releases, cannot proceed");
+        return Err(anyhow::anyhow!("No viable remote package found"));
+    }
 
     // Download package
-    let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
-    download(&rendered, pkg_path.to_str().unwrap()).await?;
+    gh.fetch(&pkg_path).await?;
 
     #[cfg(incomplete)]
     {
@@ -182,49 +179,30 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // List files to be installed
     // based on those found via Cargo.toml
-    let bin_files = binaries.iter().map(|p| {
-        // Fetch binary base name
-        let base_name = p.name.clone().unwrap();
+    let bin_data = bins::Data {
+        name: package.name.clone(),
+        target: opts.target.clone(),
+        version: package.version.clone(),
+        repo: package.repository.clone(),
+        meta,
+        bin_path,
+        install_path,
+    };
 
-        // Generate binary path via interpolation
-        let mut bin_ctx = ctx.clone();
-        bin_ctx.bin = Some(base_name.clone());
-        
-        // Append .exe to windows binaries
-        bin_ctx.format = match &opts.target.clone().contains("windows") {
-            true => ".exe".to_string(),
-            false => "".to_string(),
-        };
-
-        // Generate install paths
-        // Source path is the download dir + the generated binary path
-        let source_file_path = bin_ctx.render(&meta.bin_dir)?;
-        let source = if meta.pkg_fmt == PkgFmt::Bin {
-            bin_path.clone()
-        } else {
-            bin_path.join(&source_file_path)
-        };
-
-        // Destination path is the install dir + base-name-version{.format}
-        let dest_file_path = bin_ctx.render("{ bin }-v{ version }{ format }")?; 
-        let dest = install_path.join(dest_file_path);
-
-        // Link at install dir + base name
-        let link = install_path.join(&base_name);
-
-        Ok((base_name, source, dest, link))
-    }).collect::<Result<Vec<_>, anyhow::Error>>()?;
+    let bin_files = binaries.iter()
+        .map(|p| bins::BinFile::from_product(&bin_data, p))
+        .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
     // Prompt user for confirmation
     info!("This will install the following binaries:");
-    for (name, source, dest, _link) in &bin_files {
-        info!("  - {} ({} -> {})", name, source.file_name().unwrap().to_string_lossy(), dest.display());
+    for file in &bin_files {
+        info!("  - {}", file.preview_bin());
     }
 
     if !opts.no_symlinks {
         info!("And create (or update) the following symlinks:");
-        for (name, _source, dest, link) in &bin_files {
-            info!("  - {} ({} -> {})", name, dest.display(), link.display());
+        for file in &bin_files {
+            info!("  - {}", file.preview_link());
         }
     }
 
@@ -234,37 +212,17 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     info!("Installing binaries...");
-
-    // Install binaries
-    for (_name, source, dest, _link) in &bin_files {
-        // TODO: check if file already exists
-        std::fs::copy(source, dest)?;
-
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755))?;
-        }
+    for file in &bin_files {
+        file.install_bin()?;
     }
 
     // Generate symlinks
     if !opts.no_symlinks {
-        for (_name, _source, dest, link) in &bin_files {
-            // Remove existing symlink
-            // TODO: check if existing symlink is correct
-            if link.exists() {
-                std::fs::remove_file(&link)?;
-            }
-
-            #[cfg(target_family = "unix")]
-            std::os::unix::fs::symlink(dest, link)?;
-            #[cfg(target_family = "windows")]
-            std::os::windows::fs::symlink_file(dest, link)?;
+        for file in &bin_files {
+            file.install_link()?;
         }
     }
     
     info!("Installation complete!");
-
     Ok(())
 }
-
