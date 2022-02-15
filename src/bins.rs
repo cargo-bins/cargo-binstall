@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use cargo_toml::Product;
 use serde::Serialize;
 
-use crate::{Template, PkgFmt, PkgMeta};
+use crate::{PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: String,
@@ -17,12 +17,16 @@ impl BinFile {
         let base_name = product.name.clone().unwrap();
 
         // Generate binary path via interpolation
-        let ctx = Context { 
+        let ctx = Context {
             name: &data.name,
             repo: data.repo.as_ref().map(|s| &s[..]),
-            target: &data.target, 
+            target: &data.target,
             version: &data.version,
-            format: if data.target.contains("windows") { ".exe" } else { "" },
+            format: if data.target.contains("windows") {
+                ".exe"
+            } else {
+                ""
+            },
             bin: &base_name,
         };
 
@@ -36,21 +40,36 @@ impl BinFile {
         };
 
         // Destination path is the install dir + base-name-version{.format}
-        let dest_file_path = ctx.render("{ bin }-v{ version }{ format }")?; 
+        let dest_file_path = ctx.render("{ bin }-v{ version }{ format }")?;
         let dest = data.install_path.join(dest_file_path);
 
         // Link at install dir + base name
         let link = data.install_path.join(&base_name);
 
-        Ok(Self { base_name, source, dest, link })
+        Ok(Self {
+            base_name,
+            source,
+            dest,
+            link,
+        })
     }
 
     pub fn preview_bin(&self) -> String {
-        format!("{} ({} -> {})", self.base_name, self.source.file_name().unwrap().to_string_lossy(), self.dest.display())
+        format!(
+            "{} ({} -> {})",
+            self.base_name,
+            self.source.file_name().unwrap().to_string_lossy(),
+            self.dest.display()
+        )
     }
 
     pub fn preview_link(&self) -> String {
-        format!("{} ({} -> {})", self.base_name, self.dest.display(), self.link.display())
+        format!(
+            "{} ({} -> {})",
+            self.base_name,
+            self.dest.display(),
+            self.link.display()
+        )
     }
 
     pub fn install_bin(&self) -> Result<(), anyhow::Error> {

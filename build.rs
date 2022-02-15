@@ -1,4 +1,3 @@
-
 // Fetch build target and define this for the compiler
 fn main() {
     println!(

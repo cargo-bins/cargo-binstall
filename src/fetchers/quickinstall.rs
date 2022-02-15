@@ -3,8 +3,8 @@ use std::path::Path;
 use log::info;
 use reqwest::Method;
 
-use crate::{download, remote_exists};
 use super::Data;
+use crate::{download, remote_exists};
 
 pub struct QuickInstall {
     url: String,

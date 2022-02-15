@@ -1,7 +1,6 @@
-
 use std::collections::HashMap;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, EnumVariantNames};
 
 pub mod helpers;
@@ -13,20 +12,20 @@ pub use drivers::*;
 pub mod bins;
 pub mod fetchers;
 
-
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &'static str = env!("TARGET");
 
 /// Default package path template (may be overridden in package Cargo.toml)
-pub const DEFAULT_PKG_URL: &'static str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
+pub const DEFAULT_PKG_URL: &'static str =
+    "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
 
 /// Default binary name template (may be overridden in package Cargo.toml)
 pub const DEFAULT_BIN_PATH: &'static str = "{ name }-{ target }-v{ version }/{ bin }{ format }";
 
-
 /// Binary format enumeration
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumVariantNames)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Serialize, Deserialize, Display, EnumString, EnumVariantNames,
+)]
 #[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum PkgFmt {
@@ -132,7 +131,6 @@ impl Default for PkgOverride {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct BinMeta {
@@ -144,7 +142,7 @@ pub struct BinMeta {
 
 #[cfg(test)]
 mod test {
-    use crate::{load_manifest_path};
+    use crate::load_manifest_path;
 
     use cargo_toml::Product;
 
@@ -161,7 +159,7 @@ mod test {
 
         let manifest = load_manifest_path(&manifest_dir).expect("Error parsing metadata");
         let package = manifest.package.unwrap();
-        let meta = package.metadata.map(|m| m.binstall ).flatten().unwrap();
+        let meta = package.metadata.map(|m| m.binstall).flatten().unwrap();
 
         assert_eq!(&package.name, "cargo-binstall");
 
@@ -172,14 +170,12 @@ mod test {
 
         assert_eq!(
             manifest.bin.as_slice(),
-            &[
-                Product{
-                    name: Some("cargo-binstall".to_string()),
-                    path: Some("src/main.rs".to_string()),
-                    edition: Some(cargo_toml::Edition::E2018),
-                    ..Default::default()
-                },
-            ],
+            &[Product {
+                name: Some("cargo-binstall".to_string()),
+                path: Some("src/main.rs".to_string()),
+                edition: Some(cargo_toml::Edition::E2018),
+                ..Default::default()
+            },],
         );
     }
 }

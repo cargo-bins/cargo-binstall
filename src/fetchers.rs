@@ -11,11 +11,13 @@ mod quickinstall;
 #[async_trait::async_trait]
 pub trait Fetcher {
     /// Create a new fetcher from some data
-    async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error> where Self: Sized;
+    async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error>
+    where
+        Self: Sized;
 
     /// Fetch a package
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error>;
-    
+
     /// Check if a package is available for download
     async fn check(&self) -> Result<bool, anyhow::Error>;
 }
@@ -46,7 +48,7 @@ impl MultiFetcher {
                 return Some(&**fetcher);
             }
         }
-        
+
         None
     }
 }

@@ -1,9 +1,8 @@
-
 use std::path::{Path, PathBuf};
 
-use log::{debug, info, error};
+use log::{debug, error, info};
 
-use cargo_toml::{Manifest};
+use cargo_toml::Manifest;
 use flate2::read::GzDecoder;
 use serde::Serialize;
 use tar::Archive;
@@ -11,12 +10,14 @@ use tinytemplate::TinyTemplate;
 use xz2::read::XzDecoder;
 use zip::read::ZipArchive;
 
-use crate::{Meta};
+use crate::Meta;
 
 use super::PkgFmt;
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
-pub fn load_manifest_path<P: AsRef<Path>>(manifest_path: P) -> Result<Manifest<Meta>, anyhow::Error> {
+pub fn load_manifest_path<P: AsRef<Path>>(
+    manifest_path: P,
+) -> Result<Manifest<Meta>, anyhow::Error> {
     debug!("Reading manifest: {}", manifest_path.as_ref().display());
 
     // Load and parse manifest (this checks file system for binary output names)
@@ -33,7 +34,6 @@ pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, a
 
 /// Download a file from the provided URL to the provided path
 pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::Error> {
-
     debug!("Downloading from: '{}'", url);
 
     let resp = reqwest::get(url).await?;
@@ -53,51 +53,75 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::
 }
 
 /// Extract files from the specified source onto the specified path
-pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) -> Result<(), anyhow::Error> {
+pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
+    source: S,
+    fmt: PkgFmt,
+    path: P,
+) -> Result<(), anyhow::Error> {
     match fmt {
         PkgFmt::Tar => {
             // Extract to install dir
-            debug!("Extracting from tar archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!(
+                "Extracting from tar archive '{:?}' to `{:?}`",
+                source.as_ref(),
+                path.as_ref()
+            );
 
             let dat = std::fs::File::open(source)?;
             let mut tar = Archive::new(dat);
 
             tar.unpack(path)?;
-        },
+        }
         PkgFmt::Tgz => {
             // Extract to install dir
-            debug!("Decompressing from tgz archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!(
+                "Decompressing from tgz archive '{:?}' to `{:?}`",
+                source.as_ref(),
+                path.as_ref()
+            );
 
             let dat = std::fs::File::open(source)?;
             let tar = GzDecoder::new(dat);
             let mut tgz = Archive::new(tar);
 
             tgz.unpack(path)?;
-        },
+        }
         PkgFmt::Txz => {
             // Extract to install dir
-            debug!("Decompressing from txz archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!(
+                "Decompressing from txz archive '{:?}' to `{:?}`",
+                source.as_ref(),
+                path.as_ref()
+            );
 
             let dat = std::fs::File::open(source)?;
             let tar = XzDecoder::new(dat);
             let mut txz = Archive::new(tar);
 
             txz.unpack(path)?;
-        },
+        }
         PkgFmt::Zip => {
             // Extract to install dir
-            debug!("Decompressing from zip archive '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!(
+                "Decompressing from zip archive '{:?}' to `{:?}`",
+                source.as_ref(),
+                path.as_ref()
+            );
 
             let dat = std::fs::File::open(source)?;
             let mut zip = ZipArchive::new(dat)?;
 
             zip.extract(path)?;
-        },
+        }
         PkgFmt::Bin => {
-            debug!("Copying binary '{:?}' to `{:?}`", source.as_ref(), path.as_ref());
+            debug!(
+                "Copying binary '{:?}' to `{:?}`",
+                source.as_ref(),
+                path.as_ref()
+            );
             // Copy to install dir
             std::fs::copy(source, path)?;
-        },
+        }
     };
 
     Ok(())
@@ -108,7 +132,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(source: S, fmt: PkgFmt, path: P) 
 pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathBuf> {
     // Command line override first first
     if let Some(p) = install_path {
-        return Some(PathBuf::from(p.as_ref()))
+        return Some(PathBuf::from(p.as_ref()));
     }
 
     // Environmental variables
@@ -151,15 +175,17 @@ pub fn confirm() -> Result<bool, anyhow::Error> {
     match input.as_str().trim() {
         "yes" => Ok(true),
         "no" => Ok(false),
-        _ => {
-            Err(anyhow::anyhow!("Valid options are 'yes', 'no', please try again"))
-        }
+        _ => Err(anyhow::anyhow!(
+            "Valid options are 'yes', 'no', please try again"
+        )),
     }
 }
 
 pub trait Template: Serialize {
     fn render(&self, template: &str) -> Result<String, anyhow::Error>
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         // Create template instance
         let mut tt = TinyTemplate::new();
 

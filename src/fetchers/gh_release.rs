@@ -4,8 +4,8 @@ use log::{debug, info};
 use reqwest::Method;
 use serde::Serialize;
 
-use crate::{download, remote_exists, Template};
 use super::Data;
+use crate::{download, remote_exists, Template};
 
 pub struct GhRelease {
     url: String,
@@ -15,16 +15,18 @@ pub struct GhRelease {
 impl super::Fetcher for GhRelease {
     async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error> {
         // Generate context for URL interpolation
-        let ctx = Context { 
+        let ctx = Context {
             name: &data.name,
             repo: data.repo.as_ref().map(|s| &s[..]),
-            target: &data.target, 
+            target: &data.target,
             version: &data.version,
             format: data.meta.pkg_fmt.to_string(),
         };
         debug!("Using context: {:?}", ctx);
 
-        Ok(Box::new(Self { url: ctx.render(&data.meta.pkg_url)? }))
+        Ok(Box::new(Self {
+            url: ctx.render(&data.meta.pkg_url)?,
+        }))
     }
 
     async fn check(&self) -> Result<bool, anyhow::Error> {

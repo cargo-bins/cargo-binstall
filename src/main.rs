@@ -1,14 +1,17 @@
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
-use log::{debug, info, warn, error, LevelFilter};
-use simplelog::{TermLogger, ConfigBuilder, TerminalMode, ColorChoice};
+use log::{debug, error, info, warn, LevelFilter};
+use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 
 use structopt::StructOpt;
 
 use tempdir::TempDir;
 
-use cargo_binstall::{*, fetchers::{GhRelease, Data, Fetcher, QuickInstall, MultiFetcher}, bins};
-
+use cargo_binstall::{
+    bins,
+    fetchers::{Data, Fetcher, GhRelease, MultiFetcher, QuickInstall},
+    *,
+};
 
 #[derive(Debug, StructOpt)]
 struct Options {
@@ -48,7 +51,7 @@ struct Options {
 
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
-    /// the specified path directly, useful for debugging and 
+    /// the specified path directly, useful for debugging and
     /// when adding `binstall` support.
     #[structopt(long)]
     manifest_path: Option<PathBuf>,
@@ -58,10 +61,8 @@ struct Options {
     log_level: LevelFilter,
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
@@ -78,7 +79,13 @@ async fn main() -> Result<(), anyhow::Error> {
     log_config.add_filter_ignore("hyper".to_string());
     log_config.add_filter_ignore("reqwest".to_string());
     log_config.set_location_level(LevelFilter::Off);
-    TermLogger::init(opts.log_level, log_config.build(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
+    TermLogger::init(
+        opts.log_level,
+        log_config.build(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )
+    .unwrap();
 
     // Create a temporary directory for downloads etc.
     let temp_dir = TempDir::new("cargo-binstall")?;
@@ -92,13 +99,17 @@ async fn main() -> Result<(), anyhow::Error> {
         Some(p) => p,
         None => fetch_crate_cratesio(&opts.name, &opts.version, temp_dir.path()).await?,
     };
-    
+
     debug!("Reading manifest: {}", manifest_path.display());
     let manifest = load_manifest_path(manifest_path.join("Cargo.toml"))?;
     let package = manifest.package.unwrap();
 
     let (mut meta, binaries) = (
-        package.metadata.map(|m| m.binstall ).flatten().unwrap_or(PkgMeta::default()),
+        package
+            .metadata
+            .map(|m| m.binstall)
+            .flatten()
+            .unwrap_or(PkgMeta::default()),
         manifest.bin,
     );
 
@@ -117,7 +128,9 @@ async fn main() -> Result<(), anyhow::Error> {
     debug!("Using install path: {}", install_path.display());
 
     // Compute temporary directory for downloads
-    let pkg_path = temp_dir.path().join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
+    let pkg_path = temp_dir
+        .path()
+        .join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
     debug!("Using temporary download path: {}", pkg_path.display());
 
     let fetcher_data = Data {
@@ -144,7 +157,7 @@ async fn main() -> Result<(), anyhow::Error> {
     #[cfg(incomplete)]
     {
         // Fetch and check package signature if available
-        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone() ).flatten() {
+        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
             debug!("Found public key: {}", pub_key);
 
             // Generate signature file URL
@@ -160,7 +173,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
             // TODO: do the signature check
             unimplemented!()
-
         } else {
             warn!("No public key found, package signature could not be validated");
         }
@@ -177,7 +189,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     if binaries.len() == 0 {
         error!("No binaries specified (or inferred from file system)");
-        return Err(anyhow::anyhow!("No binaries specified (or inferred from file system)"));
+        return Err(anyhow::anyhow!(
+            "No binaries specified (or inferred from file system)"
+        ));
     }
 
     // List files to be installed
@@ -192,7 +206,8 @@ async fn main() -> Result<(), anyhow::Error> {
         install_path,
     };
 
-    let bin_files = binaries.iter()
+    let bin_files = binaries
+        .iter()
         .map(|p| bins::BinFile::from_product(&bin_data, p))
         .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
@@ -211,7 +226,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     if !opts.no_confirm && !confirm()? {
         warn!("Installation cancelled");
-        return Ok(())
+        return Ok(());
     }
 
     info!("Installing binaries...");
@@ -225,7 +240,7 @@ async fn main() -> Result<(), anyhow::Error> {
             file.install_link()?;
         }
     }
-    
+
     info!("Installation complete!");
     Ok(())
 }
