@@ -21,7 +21,7 @@ impl super::Fetcher for QuickInstall {
 
     async fn check(&self) -> Result<bool, anyhow::Error> {
         info!("Checking for package at: '{}'", self.url);
-        remote_exists(&self.url, Method::OPTIONS).await
+        remote_exists(&self.url, Method::HEAD).await
     }
 
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
