@@ -61,6 +61,7 @@ yes
   - [x] Fetch crate / manifest via crates.io
   - [ ] Fetch crate / manifest via git (/ github / gitlab)
   - [x] Use local crate / manifest (`--manifest-path`)
+  - [x] Fetch build from the [quickinstall](https://github.com/alsuren/cargo-quickinstall) repository
   - [ ] Unofficial packaging
 - Package formats
   - [x] Tgz
@@ -126,6 +127,10 @@ By default `binstall` is setup to work with github releases, and expects to find
 
 If your package already uses this approach, you shouldn't need to set anything.
 
+### QuickInstall
+
+[QuickInstall](https://github.com/alsuren/cargo-quickinstall) is an unofficial repository of prebuilt binaries for Crates, and `binstall` has built-in support for it! If your crate is built by QuickInstall, it will already work with `binstall`. However, binaries as configured above take precedence when they exist.
+
 ### Examples
 
 For example, the default configuration (as shown above) for a crate called `radio-sx128x` (version: `v0.14.1-alpha.5` on x86_64 linux) would be interpolated to:
@@ -166,9 +171,6 @@ Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. I
 - Why use the cargo manifest?
   - Crates already have these, and they already contain a significant portion of the required information.
     Also there's this great and woefully underused (imo) `[package.metadata]` field.
-- Why not use a binary repository instead?
-  - Then we'd need to _host_ a binary repository, and worry about publishing and all the other fun things that come with releasing software.
-    This way we can use existing CI infrastructure and build artifacts, and maintainers can choose how to distribute their packages.
 - Is this secure?
   - Yes and also no? We're not (yet? #1) doing anything to verify the CI binaries are produced by the right person / organisation.
     However, we're pulling data from crates.io and the cargo manifest, both of which are _already_ trusted entities, and this is
