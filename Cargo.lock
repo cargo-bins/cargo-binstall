@@ -146,6 +146,7 @@ dependencies = [
  "tempdir",
  "tinytemplate",
  "tokio",
+ "url",
  "xz2",
  "zip",
 ]

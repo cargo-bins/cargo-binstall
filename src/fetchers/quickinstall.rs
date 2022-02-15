@@ -41,6 +41,13 @@ impl super::Fetcher for QuickInstall {
     fn pkg_fmt(&self) -> PkgFmt {
         PkgFmt::Tgz
     }
+
+    fn source_name(&self) -> String {
+        String::from("QuickInstall")
+    }
+    fn is_third_party(&self) -> bool {
+        true
+    }
 }
 
 impl QuickInstall {

@@ -23,6 +23,12 @@ pub trait Fetcher {
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
+
+    /// A short human-readable name or descriptor for the package source
+    fn source_name(&self) -> String;
+
+    /// Should return true if the remote is from a third-party source
+    fn is_third_party(&self) -> bool;
 }
 
 /// Data required to fetch a package

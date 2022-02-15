@@ -151,6 +151,23 @@ async fn main() -> Result<(), anyhow::Error> {
         anyhow::anyhow!("No viable remote package found")
     })?;
 
+    // Prompt user for third-party source
+    if fetcher.is_third_party() {
+        warn!(
+            "The package will be downloaded from third-party source {}",
+            fetcher.source_name()
+        );
+        if !opts.no_confirm && !confirm()? {
+            warn!("Installation cancelled");
+            return Ok(());
+        }
+    } else {
+        info!(
+            "The package will be downloaded from {}",
+            fetcher.source_name()
+        );
+    }
+
     // Download package
     fetcher.fetch(&pkg_path).await?;
 
