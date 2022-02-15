@@ -6,8 +6,11 @@ use reqwest::Method;
 use super::Data;
 use crate::{download, remote_exists, PkgFmt};
 
+const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
+const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
+
 pub struct QuickInstall {
-    url: String,
+    package: String,
 }
 
 #[async_trait::async_trait]
@@ -16,20 +19,49 @@ impl super::Fetcher for QuickInstall {
         let crate_name = &data.name;
         let version = &data.version;
         let target = &data.target;
-        Ok(Box::new(Self { url: format!("https://github.com/alsuren/cargo-quickinstall/releases/download/{crate_name}-{version}-{target}/{crate_name}-{version}-{target}.tar.gz") }))
+        Ok(Box::new(Self {
+            package: format!("{crate_name}-{version}-{target}"),
+        }))
     }
 
     async fn check(&self) -> Result<bool, anyhow::Error> {
-        info!("Checking for package at: '{}'", self.url);
-        remote_exists(&self.url, Method::HEAD).await
+        let url = self.package_url();
+        self.report().await?;
+        info!("Checking for package at: '{url}'");
+        remote_exists(&url, Method::HEAD).await
     }
 
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
-        info!("Downloading package from: '{}'", self.url);
-        download(&self.url, dst).await
+        let url = self.package_url();
+        info!("Downloading package from: '{url}'");
+        download(&url, dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
         PkgFmt::Tgz
+    }
+}
+
+impl QuickInstall {
+    fn package_url(&self) -> String {
+        format!(
+            "{base_url}/{package}/{package}.tar.gz",
+            base_url = BASE_URL,
+            package = self.package
+        )
+    }
+
+    fn stats_url(&self) -> String {
+        format!(
+            "{stats_url}/{package}.tar.gz",
+            stats_url = STATS_URL,
+            package = self.package
+        )
+    }
+
+    pub async fn report(&self) -> Result<(), anyhow::Error> {
+        info!("Sending installation report to quickinstall (anonymous)");
+        remote_exists(&self.stats_url(), Method::HEAD).await?;
+        Ok(())
     }
 }
