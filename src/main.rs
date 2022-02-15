@@ -180,7 +180,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Extract files
     let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
-    extract(&pkg_path, meta.pkg_fmt, &bin_path)?;
+    extract(&pkg_path, fetcher.pkg_fmt(), &bin_path)?;
 
     // Bypass cleanup if disabled
     if opts.no_cleanup {

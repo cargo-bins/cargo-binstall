@@ -3,7 +3,7 @@ use std::path::Path;
 pub use gh_release::*;
 pub use quickinstall::*;
 
-use crate::PkgMeta;
+use crate::{PkgFmt, PkgMeta};
 
 mod gh_release;
 mod quickinstall;
@@ -20,6 +20,9 @@ pub trait Fetcher {
 
     /// Check if a package is available for download
     async fn check(&self) -> Result<bool, anyhow::Error>;
+
+    /// Return the package format
+    fn pkg_fmt(&self) -> PkgFmt;
 }
 
 /// Data required to fetch a package

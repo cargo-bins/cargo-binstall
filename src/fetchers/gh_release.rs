@@ -5,10 +5,11 @@ use reqwest::Method;
 use serde::Serialize;
 
 use super::Data;
-use crate::{download, remote_exists, Template};
+use crate::{download, remote_exists, PkgFmt, Template};
 
 pub struct GhRelease {
     url: String,
+    pkg_fmt: PkgFmt,
 }
 
 #[async_trait::async_trait]
@@ -26,6 +27,7 @@ impl super::Fetcher for GhRelease {
 
         Ok(Box::new(Self {
             url: ctx.render(&data.meta.pkg_url)?,
+            pkg_fmt: data.meta.pkg_fmt,
         }))
     }
 
@@ -37,6 +39,10 @@ impl super::Fetcher for GhRelease {
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
         info!("Downloading package from: '{}'", self.url);
         download(&self.url, dst).await
+    }
+
+    fn pkg_fmt(&self) -> PkgFmt {
+        self.pkg_fmt
     }
 }
 

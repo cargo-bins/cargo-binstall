@@ -4,7 +4,7 @@ use log::info;
 use reqwest::Method;
 
 use super::Data;
-use crate::{download, remote_exists};
+use crate::{download, remote_exists, PkgFmt};
 
 pub struct QuickInstall {
     url: String,
@@ -27,5 +27,9 @@ impl super::Fetcher for QuickInstall {
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
         info!("Downloading package from: '{}'", self.url);
         download(&self.url, dst).await
+    }
+
+    fn pkg_fmt(&self) -> PkgFmt {
+        PkgFmt::Tgz
     }
 }
