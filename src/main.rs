@@ -7,7 +7,7 @@ use structopt::StructOpt;
 
 use tempdir::TempDir;
 
-use cargo_binstall::{*, fetchers::{GhRelease, Data, Fetcher}, bins};
+use cargo_binstall::{*, fetchers::{GhRelease, Data, Fetcher, QuickInstall, MultiFetcher}, bins};
 
 
 #[derive(Debug, StructOpt)]
@@ -127,16 +127,19 @@ async fn main() -> Result<(), anyhow::Error> {
         repo: package.repository.clone(),
         meta: meta.clone(),
     };
-    
-    // Try github releases
-    let gh = GhRelease::new(&fetcher_data).await?;
-    if !gh.check().await? {
-        error!("No file found in github releases, cannot proceed");
-        return Err(anyhow::anyhow!("No viable remote package found"));
-    }
+
+    // Try github releases, then quickinstall
+    let mut fetchers = MultiFetcher::default();
+    fetchers.add(GhRelease::new(&fetcher_data).await?);
+    fetchers.add(QuickInstall::new(&fetcher_data).await?);
+
+    let fetcher = fetchers.first_available().await.ok_or_else(|| {
+        error!("File does not exist remotely, cannot proceed");
+        anyhow::anyhow!("No viable remote package found")
+    })?;
 
     // Download package
-    gh.fetch(&pkg_path).await?;
+    fetcher.fetch(&pkg_path).await?;
 
     #[cfg(incomplete)]
     {

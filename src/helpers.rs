@@ -26,8 +26,8 @@ pub fn load_manifest_path<P: AsRef<Path>>(manifest_path: P) -> Result<Manifest<M
     Ok(manifest)
 }
 
-pub async fn head(url: &str) -> Result<bool, anyhow::Error> {
-    let req = reqwest::Client::new().head(url).send().await?;
+pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, anyhow::Error> {
+    let req = reqwest::Client::new().request(method, url).send().await?;
     Ok(req.status().is_success())
 }
 

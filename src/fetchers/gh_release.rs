@@ -1,9 +1,10 @@
 use std::path::Path;
 
 use log::{debug, info};
+use reqwest::Method;
 use serde::Serialize;
 
-use crate::{download, head, Template};
+use crate::{download, remote_exists, Template};
 use super::Data;
 
 pub struct GhRelease {
@@ -12,7 +13,7 @@ pub struct GhRelease {
 
 #[async_trait::async_trait]
 impl super::Fetcher for GhRelease {
-    async fn new(data: &Data) -> Result<Self, anyhow::Error> {
+    async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error> {
         // Generate context for URL interpolation
         let ctx = Context { 
             name: &data.name,
@@ -23,12 +24,12 @@ impl super::Fetcher for GhRelease {
         };
         debug!("Using context: {:?}", ctx);
 
-        Ok(Self { url: ctx.render(&data.meta.pkg_url)? })
+        Ok(Box::new(Self { url: ctx.render(&data.meta.pkg_url)? }))
     }
 
     async fn check(&self) -> Result<bool, anyhow::Error> {
         info!("Checking for package at: '{}'", self.url);
-        head(&self.url).await
+        remote_exists(&self.url, Method::OPTIONS).await
     }
 
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
