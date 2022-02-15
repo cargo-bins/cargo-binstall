@@ -8,6 +8,7 @@ use crate::{download, remote_exists, PkgFmt};
 
 const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
+const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 pub struct QuickInstall {
     package: String,
@@ -61,7 +62,12 @@ impl QuickInstall {
 
     pub async fn report(&self) -> Result<(), anyhow::Error> {
         info!("Sending installation report to quickinstall (anonymous)");
-        remote_exists(&self.stats_url(), Method::HEAD).await?;
+        reqwest::Client::builder()
+            .user_agent(USER_AGENT)
+            .build()?
+            .request(Method::HEAD, &self.stats_url())
+            .send()
+            .await?;
         Ok(())
     }
 }
