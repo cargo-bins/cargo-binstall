@@ -7,13 +7,13 @@ use serde::Serialize;
 use super::Data;
 use crate::{download, remote_exists, PkgFmt, Template};
 
-pub struct GhRelease {
+pub struct GhCrateMeta {
     url: String,
     pkg_fmt: PkgFmt,
 }
 
 #[async_trait::async_trait]
-impl super::Fetcher for GhRelease {
+impl super::Fetcher for GhCrateMeta {
     async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error> {
         // Generate context for URL interpolation
         let ctx = Context {

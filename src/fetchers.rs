@@ -1,11 +1,11 @@
 use std::path::Path;
 
-pub use gh_release::*;
+pub use gh_crate_meta::*;
 pub use quickinstall::*;
 
 use crate::{PkgFmt, PkgMeta};
 
-mod gh_release;
+mod gh_crate_meta;
 mod quickinstall;
 
 #[async_trait::async_trait]
