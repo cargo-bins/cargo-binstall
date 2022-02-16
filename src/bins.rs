@@ -16,18 +16,20 @@ impl BinFile {
     pub fn from_product(data: &Data, product: &Product) -> Result<Self, anyhow::Error> {
         let base_name = product.name.clone().unwrap();
 
-        // Generate binary path via interpolation
+        let binary_ext = if data.target.contains("windows") {
+            ".exe"
+        } else {
+            ""
+        };
+
         let ctx = Context {
             name: &data.name,
             repo: data.repo.as_ref().map(|s| &s[..]),
             target: &data.target,
             version: &data.version,
-            format: if data.target.contains("windows") {
-                ".exe"
-            } else {
-                ""
-            },
             bin: &base_name,
+            format: binary_ext,
+            binary_ext,
         };
 
         // Generate install paths
@@ -39,8 +41,8 @@ impl BinFile {
             data.bin_path.join(&source_file_path)
         };
 
-        // Destination path is the install dir + base-name-version{.format}
-        let dest_file_path = ctx.render("{ bin }-v{ version }{ format }")?;
+        // Destination path is the install dir + base-name-version{.extension}
+        let dest_file_path = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
         let dest = data.install_path.join(dest_file_path);
 
         // Link at install dir + base name
@@ -118,8 +120,14 @@ struct Context<'c> {
     pub repo: Option<&'c str>,
     pub target: &'c str,
     pub version: &'c str,
-    pub format: &'c str,
     pub bin: &'c str,
+
+    /// Soft-deprecated alias for binary-ext
+    pub format: &'c str,
+
+    /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
+    #[serde(rename = "binary-ext")]
+    pub binary_ext: &'c str,
 }
 
 impl<'c> Template for Context<'c> {}

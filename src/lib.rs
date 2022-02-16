@@ -17,10 +17,10 @@ pub const TARGET: &'static str = env!("TARGET");
 
 /// Default package path template (may be overridden in package Cargo.toml)
 pub const DEFAULT_PKG_URL: &'static str =
-    "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }";
+    "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }";
 
 /// Default binary name template (may be overridden in package Cargo.toml)
-pub const DEFAULT_BIN_PATH: &'static str = "{ name }-{ target }-v{ version }/{ bin }{ format }";
+pub const DEFAULT_BIN_DIR: &'static str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
 
 /// Binary format enumeration
 #[derive(
@@ -83,7 +83,7 @@ impl Default for PkgMeta {
         Self {
             pkg_url: DEFAULT_PKG_URL.to_string(),
             pkg_fmt: PkgFmt::default(),
-            bin_dir: DEFAULT_BIN_PATH.to_string(),
+            bin_dir: DEFAULT_BIN_DIR.to_string(),
             pub_key: None,
             overrides: HashMap::new(),
         }
@@ -165,7 +165,7 @@ mod test {
 
         assert_eq!(
             &meta.pkg_url,
-            "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ format }"
+            "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
         );
 
         assert_eq!(
