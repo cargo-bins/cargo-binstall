@@ -33,6 +33,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94a45b455c14666b85fc40a019e8ab9eb75e3a124e05494f5397122bc9eb06e0"
 
 [[package]]
+name = "async-trait"
+version = "0.1.52"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "061a7acccaa286c011ddc30970520b98fa40e00c9d644633fb26b5fc63a265e3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -114,6 +125,7 @@ name = "cargo-binstall"
 version = "0.5.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "cargo_metadata",
  "cargo_toml",
  "crates-index",
@@ -133,6 +145,7 @@ dependencies = [
  "tempdir",
  "tinytemplate",
  "tokio",
+ "url",
  "xz2",
  "zip",
 ]
