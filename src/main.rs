@@ -157,7 +157,7 @@ async fn main() -> Result<(), anyhow::Error> {
             "The package will be downloaded from third-party source {}",
             fetcher.source_name()
         );
-        if !opts.no_confirm && !confirm()? {
+        if !opts.no_confirm && !opts.dry_run && !confirm()? {
             warn!("Installation cancelled");
             return Ok(());
         }
@@ -169,7 +169,11 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     // Download package
-    fetcher.fetch(&pkg_path).await?;
+    if opts.dry_run {
+        info!("Dry run, not downloading package");
+    } else {
+        fetcher.fetch(&pkg_path).await?;
+    }
 
     #[cfg(incomplete)]
     {
@@ -195,20 +199,24 @@ async fn main() -> Result<(), anyhow::Error> {
         }
     }
 
-    // Extract files
     let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
-    extract(&pkg_path, fetcher.pkg_fmt(), &bin_path)?;
+    debug!("Using temporary binary path: {}", bin_path.display());
 
-    // Bypass cleanup if disabled
-    if opts.no_cleanup {
-        let _ = temp_dir.into_path();
-    }
+    if !opts.dry_run {
+        // Extract files
+        extract(&pkg_path, fetcher.pkg_fmt(), &bin_path)?;
 
-    if binaries.len() == 0 {
-        error!("No binaries specified (or inferred from file system)");
-        return Err(anyhow::anyhow!(
-            "No binaries specified (or inferred from file system)"
-        ));
+        // Bypass cleanup if disabled
+        if opts.no_cleanup {
+            let _ = temp_dir.into_path();
+        }
+
+        if binaries.is_empty() {
+            error!("No binaries specified (or inferred from file system)");
+            return Err(anyhow::anyhow!(
+                "No binaries specified (or inferred from file system)"
+            ));
+        }
     }
 
     // List files to be installed
@@ -239,6 +247,11 @@ async fn main() -> Result<(), anyhow::Error> {
         for file in &bin_files {
             info!("  - {}", file.preview_link());
         }
+    }
+
+    if opts.dry_run {
+        info!("Dry run, not proceeding");
+        return Ok(());
     }
 
     if !opts.no_confirm && !confirm()? {
