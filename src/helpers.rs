@@ -45,8 +45,10 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::
 
     let bytes = resp.bytes().await?;
 
-    debug!("Download OK, writing to file: '{:?}'", path.as_ref());
+    let path = path.as_ref();
+    debug!("Download OK, writing to file: '{}'", path.display());
 
+    std::fs::create_dir_all(path.parent().unwrap())?;
     std::fs::write(&path, bytes)?;
 
     Ok(())

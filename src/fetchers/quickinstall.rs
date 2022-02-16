@@ -35,7 +35,7 @@ impl super::Fetcher for QuickInstall {
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
         let url = self.package_url();
         info!("Downloading package from: '{url}'");
-        download(&url, dst).await
+        download(&url, &dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
@@ -45,6 +45,7 @@ impl super::Fetcher for QuickInstall {
     fn source_name(&self) -> String {
         String::from("QuickInstall")
     }
+
     fn is_third_party(&self) -> bool {
         true
     }

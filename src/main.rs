@@ -168,6 +168,11 @@ async fn main() -> Result<(), anyhow::Error> {
         );
     }
 
+    if fetcher.source_name() == "QuickInstall" {
+        // TODO: less of a hack?
+        meta.bin_dir = "{ bin }{ binary-ext }".to_string();
+    }
+
     // Download package
     if opts.dry_run {
         info!("Dry run, not downloading package");

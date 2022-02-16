@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use cargo_toml::Product;
+use log::debug;
 use serde::Serialize;
 
 use crate::{PkgFmt, PkgMeta, Template};
@@ -76,11 +77,17 @@ impl BinFile {
 
     pub fn install_bin(&self) -> Result<(), anyhow::Error> {
         // TODO: check if file already exists
+        debug!(
+            "Copy file from '{}' to '{}'",
+            self.source.display(),
+            self.dest.display()
+        );
         std::fs::copy(&self.source, &self.dest)?;
 
         #[cfg(target_family = "unix")]
         {
             use std::os::unix::fs::PermissionsExt;
+            debug!("Set permissions 755 on '{}'", self.dest.display());
             std::fs::set_permissions(&self.dest, std::fs::Permissions::from_mode(0o755))?;
         }
 
@@ -91,9 +98,15 @@ impl BinFile {
         // Remove existing symlink
         // TODO: check if existing symlink is correct
         if self.link.exists() {
+            debug!("Remove link '{}'", self.link.display());
             std::fs::remove_file(&self.link)?;
         }
 
+        debug!(
+            "Create link '{}' pointing to '{}'",
+            self.link.display(),
+            self.dest.display()
+        );
         #[cfg(target_family = "unix")]
         std::os::unix::fs::symlink(&self.dest, &self.link)?;
         #[cfg(target_family = "windows")]
