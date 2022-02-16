@@ -86,27 +86,30 @@ To get started, add a `[package.metadata.binstall]` section to your `Cargo.toml`
 
 ```toml
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ format }"
-bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ format }"
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }"
+bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
 pkg-fmt = "tgz"
 ```
 
 With the following configuration keys:
 
 - `pkg-url` specifies the package download URL for a given target/version, templated
-- `bin-path` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
+- `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
 - `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`)
 
 
-`pkg-url` and `bin-path` are templated to support different names for different versions / architectures / etc.
+`pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
 Template variables use the format `{ VAR }` where `VAR` is the name of the variable, with the following variables available:
 - `name` is the name of the crate / package
 - `version` is the crate version (per `--version` and the crate manifest)
 - `repo` is the repository linked in `Cargo.toml`
 - `bin` is the name of a specific binary, inferred from the crate configuration
-- `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required().
+- `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required()
+- `archive-format` is the filename extension of the package archive format
+- `binary-ext` is the string `.exe` if the `target` is for Windows, or the empty string otherwise
+- `format` is a soft-deprecated alias for `archive-format` in `pkg-url`, and for `binary-ext` in `bin-dir`; in the future this may warn at install time.
 
-`pkg-url`, `pkg-fmt` and `bin-path` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
+`pkg-url`, `pkg-fmt` and `bin-dir` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
 ```
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
@@ -117,13 +120,13 @@ pkg-fmt = "zip"
 
 By default `binstall` is setup to work with github releases, and expects to find:
 
-- an archive named `{ name }-{ target }-v{ version }.{ format }`
+- an archive named `{ name }-{ target }-v{ version }.{ archive-format }`
   - so that this does not overwrite different targets or versions when manually downloaded
 - located at `{ repo }/releases/download/v{ version }/`
   - compatible with github tags / releases
 - containing a folder named `{ name }-{ target }-v{ version }`
   - so that prior binary files are not overwritten when manually executing `tar -xvf ...`
-- containing binary files in the form `{ bin }{ format }` (where `bin` is the cargo binary name and `format` is `.exe` on windows and empty on other platforms)
+- containing binary files in the form `{ bin }{ binary-ext }` (where `bin` is the cargo binary name and `binary-ext` is `.exe` on windows and empty on other platforms)
 
 If your package already uses this approach, you shouldn't need to set anything.
 
@@ -146,7 +149,7 @@ As is common with libraries / utilities (and the `radio-sx128x` example), this c
 
 ```toml
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }"
+pkg-url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }"
 ```
 
 Which provides a download URL of: `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
@@ -158,7 +161,7 @@ Were the package to contain binaries in the form `name-target[.exe]`, this could
 
 ```toml
 [package.metadata.binstall]
-bin-dir = "{ bin }-{ target }{ format }"
+bin-dir = "{ bin }-{ target }{ binary-ext }"
 ```
 
 Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so long as cargo builds them this _should_ just work.
