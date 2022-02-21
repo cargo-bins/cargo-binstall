@@ -26,7 +26,7 @@ tokio = { version = "1.16.1", features = [ "full" ] }
 log = "0.4.14"
 structopt = "0.3.26"
 simplelog = "0.11.2"
-anyhow = "1.0.53"
+anyhow = "1.0.54"
 reqwest = { version = "0.11.9", features = [ "rustls-tls" ], default-features = false }
 tempdir = "0.3.7"
 flate2 = "1.0.22"
