@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+#[cfg(target_family = "unix")]
+use std::path::Path;
 
 use cargo_toml::Product;
 use log::debug;
@@ -102,15 +104,19 @@ impl BinFile {
             std::fs::remove_file(&self.link)?;
         }
 
+        #[cfg(target_family = "unix")]
+        let dest = &Path::new(self.dest.file_name().unwrap());
+        #[cfg(target_family = "windows")]
+        let dest = &self.dest;
         debug!(
             "Create link '{}' pointing to '{}'",
             self.link.display(),
-            self.dest.display()
+            dest.display()
         );
         #[cfg(target_family = "unix")]
-        std::os::unix::fs::symlink(&self.dest, &self.link)?;
+        std::os::unix::fs::symlink(dest, &self.link)?;
         #[cfg(target_family = "windows")]
-        std::os::windows::fs::symlink_file(&self.dest, &self.link)?;
+        std::os::windows::fs::symlink_file(dest, &self.link)?;
 
         Ok(())
     }
