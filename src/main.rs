@@ -20,7 +20,8 @@ struct Options {
     #[structopt()]
     name: String,
 
-    /// Filter for package version to install
+    /// Filter for package version to install, in Cargo.toml format.
+    /// Use `=1.2.3` to install a specific version.
     #[structopt(long, default_value = "*")]
     version: String,
 
