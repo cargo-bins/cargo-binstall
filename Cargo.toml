@@ -42,6 +42,7 @@ xz2 = "0.1.6"
 zip = "0.5.13"
 async-trait = "0.1.52"
 url = "2.2.2"
+regex = "1.5.5"
 
 [dev-dependencies]
 env_logger = "0.9.0"
