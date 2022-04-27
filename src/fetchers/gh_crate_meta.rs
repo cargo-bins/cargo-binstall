@@ -9,44 +9,51 @@ use super::Data;
 use crate::{download, remote_exists, PkgFmt, Template};
 
 pub struct GhCrateMeta {
-    url: Url,
-    pkg_fmt: PkgFmt,
+    data: Data,
+}
+
+impl GhCrateMeta {
+    fn url(&self) -> Result<Url, anyhow::Error> {
+        let ctx = Context::from_data(&self.data);
+        debug!("Using context: {:?}", ctx);
+        Ok(ctx.render_url(&self.data.meta.pkg_url)?)
+    }
 }
 
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
-    async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error> {
-        let ctx = Context::from_data(data);
-        debug!("Using context: {:?}", ctx);
-
-        Ok(Box::new(Self {
-            url: ctx.render_url(&data.meta.pkg_url)?,
-            pkg_fmt: data.meta.pkg_fmt,
-        }))
+    async fn new(data: &Data) -> Box<Self> {
+        Box::new(Self { data: data.clone() })
     }
 
     async fn check(&self) -> Result<bool, anyhow::Error> {
-        info!("Checking for package at: '{}'", self.url);
-        remote_exists(self.url.as_str(), Method::HEAD).await
+        let url = self.url()?;
+        info!("Checking for package at: '{url}'");
+        remote_exists(url.as_str(), Method::HEAD).await
     }
 
     async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
-        info!("Downloading package from: '{}'", self.url);
-        download(self.url.as_str(), dst).await
+        let url = self.url()?;
+        info!("Downloading package from: '{url}'");
+        download(url.as_str(), dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
-        self.pkg_fmt
+        self.data.meta.pkg_fmt
     }
 
     fn source_name(&self) -> String {
-        if let Some(domain) = self.url.domain() {
-            domain.to_string()
-        } else if let Some(host) = self.url.host_str() {
-            host.to_string()
-        } else {
-            self.url.to_string()
-        }
+        self.url()
+            .map(|url| {
+                if let Some(domain) = url.domain() {
+                    domain.to_string()
+                } else if let Some(host) = url.host_str() {
+                    host.to_string()
+                } else {
+                    url.to_string()
+                }
+            })
+            .unwrap_or_else(|_| "invalid url template".to_string())
     }
 
     fn is_third_party(&self) -> bool {
