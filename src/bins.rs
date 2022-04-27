@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use cargo_toml::Product;
 use log::debug;
@@ -111,16 +111,20 @@ impl BinFile {
         #[cfg(target_family = "unix")]
         std::os::unix::fs::symlink(dest, &self.link)?;
         #[cfg(target_family = "windows")]
-        std::os::windows::fs::symlink_file(dest, &self.link)?;
+        std::fs::copy(dest, &self.link)?;
 
         Ok(())
     }
 
     fn link_dest(&self) -> &Path {
         #[cfg(target_family = "unix")]
-        { Path::new(self.dest.file_name().unwrap()) }
+        {
+            Path::new(self.dest.file_name().unwrap())
+        }
         #[cfg(target_family = "windows")]
-        { &self.dest }
+        {
+            &self.dest
+        }
     }
 }
 
