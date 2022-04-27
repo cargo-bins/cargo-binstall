@@ -1,11 +1,11 @@
 use std::{path::PathBuf, str::FromStr};
 
+use cargo_toml::{Package, Product};
 use log::{debug, error, info, warn, LevelFilter};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
-
 use structopt::StructOpt;
-
 use tempdir::TempDir;
+use tokio::process::Command;
 
 use cargo_binstall::{
     bins,
@@ -121,7 +121,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let (mut meta, binaries) = (
         package
             .metadata
-            .map(|m| m.binstall)
+            .as_ref()
+            .map(|m| m.binstall.clone())
             .flatten()
             .unwrap_or(PkgMeta::default()),
         manifest.bin,
@@ -160,11 +161,34 @@ async fn main() -> Result<(), anyhow::Error> {
     fetchers.add(GhCrateMeta::new(&fetcher_data).await);
     fetchers.add(QuickInstall::new(&fetcher_data).await);
 
-    let fetcher = fetchers.first_available().await.ok_or_else(|| {
-        error!("File does not exist remotely, cannot proceed");
-        anyhow::anyhow!("No viable remote package found")
-    })?;
+    match fetchers.first_available().await {
+        Some(fetcher) => {
+            install_from_package(
+                binaries,
+                fetcher,
+                install_path,
+                meta,
+                opts,
+                package,
+                pkg_path,
+                temp_dir,
+            )
+            .await
+        }
+        None => install_from_source(opts, package).await,
+    }
+}
 
+async fn install_from_package(
+    binaries: Vec<Product>,
+    fetcher: &dyn Fetcher,
+    install_path: PathBuf,
+    mut meta: PkgMeta,
+    opts: Options,
+    package: Package<Meta>,
+    pkg_path: PathBuf,
+    temp_dir: TempDir,
+) -> Result<(), anyhow::Error> {
     // Prompt user for third-party source
     if fetcher.is_third_party() {
         warn!(
@@ -292,4 +316,42 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Installation complete!");
     Ok(())
+}
+
+async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<(), anyhow::Error> {
+    // Prompt user for source install
+    warn!("The package will be installed from source (with cargo)",);
+    if !opts.no_confirm && !opts.dry_run && !confirm()? {
+        warn!("Installation cancelled");
+        return Ok(());
+    }
+
+    if opts.dry_run {
+        info!(
+            "Dry-run: running `cargo install {} --version {}`",
+            package.name, package.version
+        );
+        Ok(())
+    } else {
+        debug!(
+            "Running `cargo install {} --version {}`",
+            package.name, package.version
+        );
+        let mut child = Command::new("cargo")
+            .arg("install")
+            .arg(package.name)
+            .arg("--version")
+            .arg(package.version)
+            .spawn()?;
+        debug!("Spawned command pid={:?}", child.id());
+
+        let status = child.wait().await?;
+        if status.success() {
+            info!("Cargo finished successfully");
+            Ok(())
+        } else {
+            error!("Cargo errored! {:?}", status);
+            Err(anyhow::anyhow!("Cargo install error"))
+        }
+    }
 }
