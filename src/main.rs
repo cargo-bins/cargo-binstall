@@ -328,20 +328,22 @@ async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<()
 
     if opts.dry_run {
         info!(
-            "Dry-run: running `cargo install {} --version {}`",
-            package.name, package.version
+            "Dry-run: running `cargo install {} --version {} --target {}`",
+            package.name, package.version, opts.target
         );
         Ok(())
     } else {
         debug!(
-            "Running `cargo install {} --version {}`",
-            package.name, package.version
+            "Running `cargo install {} --version {} --target {}`",
+            package.name, package.version, opts.target
         );
         let mut child = Command::new("cargo")
             .arg("install")
             .arg(package.name)
             .arg("--version")
             .arg(package.version)
+            .arg("--target")
+            .arg(opts.target)
             .spawn()?;
         debug!("Spawned command pid={:?}", child.id());
 
