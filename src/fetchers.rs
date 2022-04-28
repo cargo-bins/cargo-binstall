@@ -1,6 +1,7 @@
 use std::path::Path;
 
 pub use gh_crate_meta::*;
+pub use log::debug;
 pub use quickinstall::*;
 
 use crate::{PkgFmt, PkgMeta};
@@ -11,7 +12,7 @@ mod quickinstall;
 #[async_trait::async_trait]
 pub trait Fetcher {
     /// Create a new fetcher from some data
-    async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error>
+    async fn new(data: &Data) -> Box<Self>
     where
         Self: Sized;
 
@@ -32,7 +33,7 @@ pub trait Fetcher {
 }
 
 /// Data required to fetch a package
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Data {
     pub name: String,
     pub target: String,
@@ -53,7 +54,14 @@ impl MultiFetcher {
 
     pub async fn first_available(&self) -> Option<&dyn Fetcher> {
         for fetcher in &self.fetchers {
-            if fetcher.check().await.unwrap_or(false) {
+            if fetcher.check().await.unwrap_or_else(|err| {
+                debug!(
+                    "Error while checking fetcher {}: {}",
+                    fetcher.source_name(),
+                    err
+                );
+                false
+            }) {
                 return Some(&**fetcher);
             }
         }

@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use cargo_toml::Product;
 use log::debug;
@@ -118,9 +118,13 @@ impl BinFile {
 
     fn link_dest(&self) -> &Path {
         #[cfg(target_family = "unix")]
-        { Path::new(self.dest.file_name().unwrap()) }
+        {
+            Path::new(self.dest.file_name().unwrap())
+        }
         #[cfg(target_family = "windows")]
-        { &self.dest }
+        {
+            &self.dest
+        }
     }
 }
 

@@ -16,13 +16,13 @@ pub struct QuickInstall {
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    async fn new(data: &Data) -> Result<Box<Self>, anyhow::Error> {
+    async fn new(data: &Data) -> Box<Self> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = &data.target;
-        Ok(Box::new(Self {
+        Box::new(Self {
             package: format!("{crate_name}-{version}-{target}"),
-        }))
+        })
     }
 
     async fn check(&self) -> Result<bool, anyhow::Error> {

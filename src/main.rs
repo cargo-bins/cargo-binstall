@@ -143,8 +143,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Try github releases, then quickinstall
     let mut fetchers = MultiFetcher::default();
-    fetchers.add(GhCrateMeta::new(&fetcher_data).await?);
-    fetchers.add(QuickInstall::new(&fetcher_data).await?);
+    fetchers.add(GhCrateMeta::new(&fetcher_data).await);
+    fetchers.add(QuickInstall::new(&fetcher_data).await);
 
     let fetcher = fetchers.first_available().await.ok_or_else(|| {
         error!("File does not exist remotely, cannot proceed");
