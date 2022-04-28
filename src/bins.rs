@@ -46,8 +46,8 @@ impl BinFile {
         let dest_file_path = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
         let dest = data.install_path.join(dest_file_path);
 
-        // Link at install dir + base name
-        let link = data.install_path.join(&base_name);
+        // Link at install dir + base-name{.extension}
+        let link = data.install_path.join(&ctx.render("{ bin }{ binary-ext }")?);
 
         Ok(Self {
             base_name,
