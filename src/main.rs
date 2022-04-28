@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use log::{debug, error, info, warn, LevelFilter};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
@@ -20,7 +20,8 @@ struct Options {
     #[structopt()]
     name: String,
 
-    /// Filter for package version to install
+    /// Filter for package version to install, in Cargo.toml format.
+    /// Use `=1.2.3` to install a specific version.
     #[structopt(long, default_value = "*")]
     version: String,
 
@@ -103,6 +104,19 @@ async fn main() -> Result<(), anyhow::Error> {
     debug!("Reading manifest: {}", manifest_path.display());
     let manifest = load_manifest_path(manifest_path.join("Cargo.toml"))?;
     let package = manifest.package.unwrap();
+
+    let is_plain_version = semver::Version::from_str(&opts.version).is_ok();
+    if is_plain_version && package.version != opts.version {
+        warn!(
+            "You specified `--version {o}` but the package resolved that to '{p}', use `={o}` if you want an exact match",
+            o=opts.version, p=package.version
+        );
+
+        if !opts.no_confirm && !opts.dry_run && !confirm()? {
+            warn!("Installation cancelled");
+            return Ok(());
+        }
+    }
 
     let (mut meta, binaries) = (
         package
