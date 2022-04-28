@@ -19,29 +19,29 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-crates_io_api = "0.8.0"
-cargo_metadata = "0.14.1"
-tinytemplate = "1.2.1"
-tokio = { version = "1.16.1", features = [ "full" ] }
-log = "0.4.14"
-structopt = "0.3.26"
-simplelog = "0.11.2"
-anyhow = "1.0.53"
-reqwest = { version = "0.11.9", features = [ "rustls-tls" ], default-features = false }
-tempdir = "0.3.7"
-flate2 = "1.0.22"
-tar = "0.4.38"
-cargo_toml = "0.11.4"
-serde = { version = "1.0.136", features = [ "derive" ] }
-strum_macros = "0.23.1"
-strum = "0.23.0"
-dirs = "4.0.0"
-crates-index = "0.18.5"
-semver = "1.0.7"
-xz2 = "0.1.6"
-zip = "0.5.13"
+anyhow = "1.0.57"
 async-trait = "0.1.52"
+cargo_metadata = "0.14.2"
+cargo_toml = "0.11.4"
+crates-index = "0.18.7"
+crates_io_api = "0.8.0"
+dirs = "4.0.0"
+flate2 = "1.0.22"
+log = "0.4.14"
+reqwest = { version = "0.11.10", features = [ "rustls-tls" ], default-features = false }
+semver = "1.0.7"
+serde = { version = "1.0.136", features = [ "derive" ] }
+simplelog = "0.12.0"
+structopt = "0.3.26"
+strum = "0.24.0"
+strum_macros = "0.24.0"
+tar = "0.4.38"
+tempdir = "0.3.7"
+tinytemplate = "1.2.1"
+tokio = { version = "1.18.0", features = [ "full" ] }
 url = "2.2.2"
+xz2 = "0.1.6"
+zip = "0.6.2"
 
 [dev-dependencies]
 env_logger = "0.9.0"
