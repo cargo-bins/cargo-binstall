@@ -62,10 +62,10 @@ yes
   - [ ] Fetch crate / manifest via git (/ github / gitlab)
   - [x] Use local crate / manifest (`--manifest-path`)
   - [x] Fetch build from the [quickinstall](https://github.com/alsuren/cargo-quickinstall) repository
-  - [ ] Unofficial packaging
 - Package formats
   - [x] Tgz
   - [x] Txz
+  - [ ] Tar.zst
   - [x] Tar
   - [x] Zip
   - [x] Bin
@@ -75,6 +75,7 @@ yes
 - Security
   - [ ] Package signing
   - [ ] Package verification
+- [x] Fallback to installing from source
 
 
 ## Supporting Binary Installation
