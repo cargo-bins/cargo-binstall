@@ -36,7 +36,7 @@ serde = { version = "1.0.136", features = [ "derive" ] }
 strum_macros = "0.23.1"
 strum = "0.23.0"
 dirs = "4.0.0"
-crates-index = "0.18.5"
+crates-index = "0.18.7"
 semver = "1.0.7"
 xz2 = "0.1.6"
 zip = "0.5.13"
