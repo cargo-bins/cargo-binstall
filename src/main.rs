@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use log::{debug, error, info, warn, LevelFilter};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
@@ -105,8 +105,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let manifest = load_manifest_path(manifest_path.join("Cargo.toml"))?;
     let package = manifest.package.unwrap();
 
-    let plain_version_rx = regex::Regex::new(r"^\d+[.]\d+[.]\d+(-\w+([.]\d+)?)?$").unwrap();
-    if plain_version_rx.is_match(&opts.version) && package.version != opts.version {
+    let is_plain_version = semver::Version::from_str(&opts.version).is_ok();
+    if is_plain_version && package.version != opts.version {
         warn!(
             "You specified `--version {o}` but the package resolved that to '{p}', use `={o}` if you want an exact match",
             o=opts.version, p=package.version
