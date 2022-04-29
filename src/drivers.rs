@@ -83,7 +83,13 @@ pub async fn fetch_crate_cratesio(
     };
 
     // Locate matching version
-    let version_iter = base_info.versions().iter().map(|v| v.version());
+    let version_iter = base_info.versions().iter().filter_map(|v| {
+        if !v.is_yanked() {
+            Some(v.version())
+        } else {
+            None
+        }
+    });
     let version_name = find_version(version_req, version_iter)?;
 
     // Build crates.io api client
