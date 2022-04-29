@@ -18,6 +18,12 @@ pkg-fmt = "zip"
 [package.metadata.binstall.overrides.x86_64-apple-darwin]
 pkg-fmt = "zip"
 
+# makes sure release builds are well optimized
+[profile.release]
+lto = "fat"
+codegen-units = 1
+debug = true
+
 [dependencies]
 anyhow = "1.0.57"
 async-trait = "0.1.52"
