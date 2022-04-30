@@ -23,7 +23,6 @@ anyhow = "1.0.57"
 async-trait = "0.1.52"
 cargo_metadata = "0.14.2"
 cargo_toml = "0.11.4"
-crates-index = "0.18.7"
 crates_io_api = { version = "0.8.0", default-features = false, features = ["rustls"] }
 dirs = "4.0.0"
 flate2 = "1.0.22"
