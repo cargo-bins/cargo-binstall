@@ -23,18 +23,32 @@ jobs:
             os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
+            cross: false
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            output: cargo-binstall
+            archive: tgz
+            cross: true
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             archive: zip
+            cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            output: cargo-binstall
+            archive: zip
+            cross: false
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
             archive: tgz
+            cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
             archive: zip
+            cross: false
 
     steps:
     - uses: actions/checkout@v2
@@ -43,17 +57,10 @@ jobs:
     - name: Configure toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly
+        toolchain: stable
         target:  ${{ matrix.target }}
         override: true
  
-    - name: Install openssl (apt armv7)
-      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      uses: ryankurte/action-apt@v0.3.0
-      with:
-        arch: armhf
-        packages: libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
-
     - name: Configure caching
       uses: actions/cache@v2
       # Caching disabled on macos due to https://github.com/actions/cache/issues/403
@@ -64,22 +71,13 @@ jobs:
           ${{ env.HOME }}/.cargo"
           target
 
-    - name: Install cross toolchain (armv7)
-      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      run: sudo apt install gcc-arm-linux-gnueabihf
-
-    - name: Enable cross compilation (armv7)
-      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      run: |
-        echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
-        echo "LZMA_API_STATIC=1" >> $GITHUB_ENV
-
-    - name: Build release
+    - name: Build binary
       uses: actions-rs/cargo@v1
       with:
         command: build
         args: --target ${{ matrix.target }} --release
-
+        use-cross: ${{ matrix.cross }}
+    
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
 
