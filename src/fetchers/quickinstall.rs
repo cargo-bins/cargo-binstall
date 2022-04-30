@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use log::info;
 use reqwest::Method;
 
@@ -32,10 +30,10 @@ impl super::Fetcher for QuickInstall {
         remote_exists(&url, Method::HEAD).await
     }
 
-    async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
+    async fn fetch(&self) -> Result<bytes::Bytes, anyhow::Error> {
         let url = self.package_url();
         info!("Downloading package from: '{url}'");
-        download(&url, &dst).await
+        download(&url).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

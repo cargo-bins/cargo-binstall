@@ -1,14 +1,18 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use cargo_toml::Product;
 use log::debug;
 use serde::Serialize;
 
-use crate::{PkgFmt, PkgMeta, Template};
+use crate::{extract_file, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: String,
-    pub source: PathBuf,
+    pub source: Option<PathBuf>,
     pub dest: PathBuf,
     pub link: PathBuf,
 }
@@ -35,19 +39,21 @@ impl BinFile {
 
         // Generate install paths
         // Source path is the download dir + the generated binary path
-        let source_file_path = ctx.render(&data.meta.bin_dir)?;
         let source = if data.meta.pkg_fmt == PkgFmt::Bin {
-            data.bin_path.clone()
+            None
         } else {
-            data.bin_path.join(&source_file_path)
+            Some(PathBuf::from(ctx.render(&data.meta.bin_dir)?))
         };
 
         // Destination path is the install dir + base-name-version{.extension}
-        let dest_file_path = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
-        let dest = data.install_path.join(dest_file_path);
+        let dest = data
+            .install_path
+            .join(ctx.render("{ bin }-v{ version }{ binary-ext }")?);
 
         // Link at install dir + base-name{.extension}
-        let link = data.install_path.join(&ctx.render("{ bin }{ binary-ext }")?);
+        let link = data
+            .install_path
+            .join(&ctx.render("{ bin }{ binary-ext }")?);
 
         Ok(Self {
             base_name,
@@ -58,12 +64,7 @@ impl BinFile {
     }
 
     pub fn preview_bin(&self) -> String {
-        format!(
-            "{} ({} -> {})",
-            self.base_name,
-            self.source.file_name().unwrap().to_string_lossy(),
-            self.dest.display()
-        )
+        format!("{} ({})", self.base_name, self.dest.display())
     }
 
     pub fn preview_link(&self) -> String {
@@ -75,14 +76,28 @@ impl BinFile {
         )
     }
 
-    pub fn install_bin(&self) -> Result<(), anyhow::Error> {
-        // TODO: check if file already exists
-        debug!(
-            "Copy file from '{}' to '{}'",
-            self.source.display(),
-            self.dest.display()
-        );
-        std::fs::copy(&self.source, &self.dest)?;
+    pub fn is_binary_already_installed(&self) -> bool {
+        self.dest.exists()
+    }
+
+    pub fn install_bin(&self, data: &bytes::Bytes, pkg_fmt: PkgFmt) -> Result<(), anyhow::Error> {
+        debug!("Writing file to '{}'", self.dest.display());
+
+        // Extract files
+        let bin_file = if pkg_fmt != PkgFmt::Bin {
+            extract_file(data, pkg_fmt, self.source.as_ref().unwrap().to_path_buf())?
+        } else {
+            data.to_vec()
+        };
+
+        if let Some(parent_dir) = self.dest.parent() {
+            std::fs::create_dir_all(parent_dir)?;
+        }
+
+        // Will truncate existing file
+        let mut file = File::create(&self.dest)?;
+        file.write_all(&bin_file)?;
+        file.flush().unwrap();
 
         #[cfg(target_family = "unix")]
         {
@@ -135,7 +150,6 @@ pub struct Data {
     pub version: String,
     pub repo: Option<String>,
     pub meta: PkgMeta,
-    pub bin_path: PathBuf,
     pub install_path: PathBuf,
 }
 

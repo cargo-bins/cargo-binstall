@@ -1,10 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::{
+    io::Cursor,
+    path::{Path, PathBuf},
+};
 
 use log::{debug, error, info};
 
 use cargo_toml::Manifest;
 use flate2::read::GzDecoder;
 use serde::Serialize;
+use std::io::Read;
 use tar::Archive;
 use tinytemplate::TinyTemplate;
 use xz2::read::XzDecoder;
@@ -15,10 +19,20 @@ use crate::Meta;
 use super::PkgFmt;
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
-pub fn load_manifest_path<P: AsRef<Path>>(
-    manifest_path: P,
-) -> Result<Manifest<Meta>, anyhow::Error> {
-    debug!("Reading manifest: {}", manifest_path.as_ref().display());
+pub fn load_manifest_path(mut manifest_path: PathBuf) -> Result<Manifest<Meta>, anyhow::Error> {
+    debug!("Reading manifest: {}", manifest_path.display());
+
+    if manifest_path.is_dir() {
+        manifest_path = manifest_path.join("Cargo.toml");
+    }
+
+    if !manifest_path.exists() {
+        error!(
+            "Manifest at '{:?}' could not be found",
+            manifest_path.display()
+        );
+        return Err(anyhow::anyhow!("Manifest could not be found"));
+    }
 
     // Load and parse manifest (this checks file system for binary output names)
     let manifest = Manifest::<Meta>::from_path_with_metadata(manifest_path)?;
@@ -33,7 +47,7 @@ pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, a
 }
 
 /// Download a file from the provided URL to the provided path
-pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::Error> {
+pub async fn download(url: &str) -> Result<bytes::Bytes, anyhow::Error> {
     debug!("Downloading from: '{}'", url);
 
     let resp = reqwest::get(url).await?;
@@ -43,90 +57,89 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::
         return Err(anyhow::anyhow!(resp.status()));
     }
 
-    let bytes = resp.bytes().await?;
+    Ok(resp.bytes().await?)
+}
 
-    let path = path.as_ref();
-    debug!("Download OK, writing to file: '{}'", path.display());
+// Extracts a file at path from tar archive to byte vector
+fn extract_file_from_tar_archive<T: std::io::Read>(
+    tar_archive: &mut Archive<T>,
+    path: PathBuf,
+) -> Result<Vec<u8>, anyhow::Error> {
+    let mut file = tar_archive
+        .entries()?
+        .find(|e| {
+            if let Ok(value) = e.as_ref() {
+                if let Ok(file_path) = value.path() {
+                    file_path == path
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        })
+        .unwrap()?;
 
-    std::fs::create_dir_all(path.parent().unwrap())?;
-    std::fs::write(&path, bytes)?;
+    let mut buffer = Vec::with_capacity(file.size() as usize);
 
-    Ok(())
+    file.read_to_end(&mut buffer)?;
+
+    Ok(buffer)
 }
 
 /// Extract files from the specified source onto the specified path
-pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
-    source: S,
+pub fn extract_file(
+    source: &bytes::Bytes,
     fmt: PkgFmt,
-    path: P,
-) -> Result<(), anyhow::Error> {
+    file: PathBuf,
+) -> Result<Vec<u8>, anyhow::Error> {
     match fmt {
         PkgFmt::Tar => {
             // Extract to install dir
-            debug!(
-                "Extracting from tar archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Extracting from tar archive '{:?}'", source.as_ref(),);
 
-            let dat = std::fs::File::open(source)?;
-            let mut tar = Archive::new(dat);
+            let mut tar = Archive::new(&source[..]);
 
-            tar.unpack(path)?;
+            extract_file_from_tar_archive(&mut tar, file)
         }
         PkgFmt::Tgz => {
             // Extract to install dir
-            debug!(
-                "Decompressing from tgz archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Decompressing from tgz archive '{:?}'", source.as_ref());
 
-            let dat = std::fs::File::open(source)?;
-            let tar = GzDecoder::new(dat);
+            let tar = GzDecoder::new(&source[..]);
             let mut tgz = Archive::new(tar);
 
-            tgz.unpack(path)?;
+            extract_file_from_tar_archive(&mut tgz, file)
         }
         PkgFmt::Txz => {
             // Extract to install dir
-            debug!(
-                "Decompressing from txz archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Decompressing from txz archive '{:?}'", source.as_ref());
 
-            let dat = std::fs::File::open(source)?;
-            let tar = XzDecoder::new(dat);
+            let tar = XzDecoder::new(&source[..]);
             let mut txz = Archive::new(tar);
 
-            txz.unpack(path)?;
+            extract_file_from_tar_archive(&mut txz, file)
         }
         PkgFmt::Zip => {
             // Extract to install dir
-            debug!(
-                "Decompressing from zip archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Decompressing from zip archive '{:?}'", source.as_ref());
 
-            let dat = std::fs::File::open(source)?;
-            let mut zip = ZipArchive::new(dat)?;
+            let mut zip = ZipArchive::new(Cursor::new(&source[..]))?;
 
-            zip.extract(path)?;
+            let mut file = zip.by_name(file.to_str().unwrap())?;
+
+            let mut buffer = Vec::with_capacity(file.size() as usize);
+
+            file.read_to_end(&mut buffer)?;
+
+            Ok(buffer)
         }
         PkgFmt::Bin => {
-            debug!(
-                "Copying binary '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Copying binary '{:?}'", source.as_ref());
             // Copy to install dir
-            std::fs::copy(source, path)?;
+            Ok(source.to_vec())
         }
-    };
-
-    Ok(())
+    }
 }
 
 /// Fetch install path from environment
@@ -162,7 +175,7 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
     // Local executable dir if no cargo is found
     if let Some(d) = dirs::executable_dir() {
         debug!("Fallback to {}", d.display());
-        return Some(d.into());
+        return Some(d);
     }
 
     None
@@ -192,7 +205,7 @@ pub trait Template: Serialize {
         let mut tt = TinyTemplate::new();
 
         // Add template to instance
-        tt.add_template("path", &template)?;
+        tt.add_template("path", template)?;
 
         // Render output
         Ok(tt.render("path", self)?)

@@ -1,5 +1,3 @@
-use std::path::Path;
-
 pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
@@ -17,7 +15,7 @@ pub trait Fetcher {
         Self: Sized;
 
     /// Fetch a package
-    async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error>;
+    async fn fetch(&self) -> Result<bytes::Bytes, anyhow::Error>;
 
     /// Check if a package is available for download
     async fn check(&self) -> Result<bool, anyhow::Error>;
@@ -54,15 +52,18 @@ impl MultiFetcher {
 
     pub async fn first_available(&self) -> Option<&dyn Fetcher> {
         for fetcher in &self.fetchers {
-            if fetcher.check().await.unwrap_or_else(|err| {
-                debug!(
-                    "Error while checking fetcher {}: {}",
-                    fetcher.source_name(),
-                    err
-                );
-                false
-            }) {
-                return Some(&**fetcher);
+            match fetcher.check().await {
+                Ok(true) => {
+                    return Some(&**fetcher);
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    debug!(
+                        "Error while checking fetcher {}: {}",
+                        fetcher.source_name(),
+                        err
+                    );
+                }
             }
         }
 

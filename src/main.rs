@@ -4,7 +4,6 @@ use cargo_toml::{Package, Product};
 use log::{debug, error, info, warn, LevelFilter};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use structopt::StructOpt;
-use tempdir::TempDir;
 use tokio::process::Command;
 
 use cargo_binstall::{
@@ -46,10 +45,6 @@ struct Options {
     #[structopt(long)]
     no_confirm: bool,
 
-    /// Do not cleanup temporary files on success
-    #[structopt(long)]
-    no_cleanup: bool,
-
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
     /// the specified path directly, useful for debugging and
@@ -88,21 +83,17 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .unwrap();
 
-    // Create a temporary directory for downloads etc.
-    let temp_dir = TempDir::new("cargo-binstall")?;
-
     info!("Installing package: '{}'", opts.name);
 
+    debug!("Reading manifest");
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
     // TODO: support git-based fetches (whole repo name rather than just crate name)
-    let manifest_path = match opts.manifest_path.clone() {
-        Some(p) => p,
-        None => fetch_crate_cratesio(&opts.name, &opts.version, temp_dir.path()).await?,
+    let manifest = match opts.manifest_path.clone() {
+        Some(p) => load_manifest_path(p)?,
+        None => fetch_manifest_cratesio(&opts.name, &opts.version).await?,
     };
 
-    debug!("Reading manifest: {}", manifest_path.display());
-    let manifest = load_manifest_path(manifest_path.join("Cargo.toml"))?;
     let package = manifest.package.unwrap();
 
     let is_plain_version = semver::Version::from_str(&opts.version).is_ok();
@@ -122,9 +113,8 @@ async fn main() -> Result<(), anyhow::Error> {
         package
             .metadata
             .as_ref()
-            .map(|m| m.binstall.clone())
-            .flatten()
-            .unwrap_or(PkgMeta::default()),
+            .and_then(|m| m.binstall.clone())
+            .unwrap_or_default(),
         manifest.bin,
     );
 
@@ -142,12 +132,6 @@ async fn main() -> Result<(), anyhow::Error> {
     })?;
     debug!("Using install path: {}", install_path.display());
 
-    // Compute temporary directory for downloads
-    let pkg_path = temp_dir
-        .path()
-        .join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
-    debug!("Using temporary download path: {}", pkg_path.display());
-
     let fetcher_data = Data {
         name: package.name.clone(),
         target: opts.target.clone(),
@@ -163,17 +147,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match fetchers.first_available().await {
         Some(fetcher) => {
-            install_from_package(
-                binaries,
-                fetcher,
-                install_path,
-                meta,
-                opts,
-                package,
-                pkg_path,
-                temp_dir,
-            )
-            .await
+            install_from_package(binaries, fetcher, install_path, meta, opts, package).await
         }
         None => install_from_source(opts, package).await,
     }
@@ -186,8 +160,6 @@ async fn install_from_package(
     mut meta: PkgMeta,
     opts: Options,
     package: Package<Meta>,
-    pkg_path: PathBuf,
-    temp_dir: TempDir,
 ) -> Result<(), anyhow::Error> {
     // Prompt user for third-party source
     if fetcher.is_third_party() {
@@ -212,11 +184,12 @@ async fn install_from_package(
     }
 
     // Download package
-    if opts.dry_run {
+    let binary = if opts.dry_run {
         info!("Dry run, not downloading package");
+        None
     } else {
-        fetcher.fetch(&pkg_path).await?;
-    }
+        Some(fetcher.fetch().await?)
+    };
 
     #[cfg(incomplete)]
     {
@@ -242,24 +215,11 @@ async fn install_from_package(
         }
     }
 
-    let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
-    debug!("Using temporary binary path: {}", bin_path.display());
-
-    if !opts.dry_run {
-        // Extract files
-        extract(&pkg_path, fetcher.pkg_fmt(), &bin_path)?;
-
-        // Bypass cleanup if disabled
-        if opts.no_cleanup {
-            let _ = temp_dir.into_path();
-        }
-
-        if binaries.is_empty() {
-            error!("No binaries specified (or inferred from file system)");
-            return Err(anyhow::anyhow!(
-                "No binaries specified (or inferred from file system)"
-            ));
-        }
+    if !opts.dry_run && binaries.is_empty() {
+        error!("No binaries specified (or inferred from file system)");
+        return Err(anyhow::anyhow!(
+            "No binaries specified (or inferred from file system)"
+        ));
     }
 
     // List files to be installed
@@ -270,7 +230,6 @@ async fn install_from_package(
         version: package.version.clone(),
         repo: package.repository.clone(),
         meta,
-        bin_path,
         install_path,
     };
 
@@ -304,7 +263,24 @@ async fn install_from_package(
 
     info!("Installing binaries...");
     for file in &bin_files {
-        file.install_bin()?;
+        if file.is_binary_already_installed() {
+            if opts.no_confirm {
+                warn!(
+                    "The binary at {} does already exist, going to overwrite it",
+                    file.dest.display()
+                );
+            } else {
+                warn!(
+                    "The binary at {} does already exist, would you like to overwrite it?",
+                    file.dest.display()
+                );
+                if !confirm()? {
+                    continue;
+                }
+            }
+        }
+
+        file.install_bin(binary.as_ref().unwrap(), fetcher.pkg_fmt())?;
     }
 
     // Generate symlinks

@@ -21,7 +21,7 @@ pkg-fmt = "zip"
 [dependencies]
 anyhow = "1.0.57"
 async-trait = "0.1.52"
-cargo_metadata = "0.14.2"
+bytes = "1.1.0"
 cargo_toml = "0.11.4"
 crates-index = "0.18.7"
 crates_io_api = { version = "0.8.0", default-features = false, features = ["rustls"] }
@@ -36,7 +36,6 @@ structopt = "0.3.26"
 strum = "0.24.0"
 strum_macros = "0.24.0"
 tar = "0.4.38"
-tempdir = "0.3.7"
 tinytemplate = "1.2.1"
 tokio = { version = "1.18.0", features = [ "full" ] }
 url = "2.2.2"

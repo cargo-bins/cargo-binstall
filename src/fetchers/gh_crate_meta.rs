@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use log::{debug, info};
 use reqwest::Method;
 use serde::Serialize;
@@ -16,7 +14,7 @@ impl GhCrateMeta {
     fn url(&self) -> Result<Url, anyhow::Error> {
         let ctx = Context::from_data(&self.data);
         debug!("Using context: {:?}", ctx);
-        Ok(ctx.render_url(&self.data.meta.pkg_url)?)
+        ctx.render_url(&self.data.meta.pkg_url)
     }
 }
 
@@ -32,10 +30,10 @@ impl super::Fetcher for GhCrateMeta {
         remote_exists(url.as_str(), Method::HEAD).await
     }
 
-    async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
+    async fn fetch(&self) -> Result<bytes::Bytes, anyhow::Error> {
         let url = self.url()?;
         info!("Downloading package from: '{url}'");
-        download(url.as_str(), dst).await
+        download(url.as_str()).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
@@ -171,8 +169,11 @@ mod test {
 
     #[test]
     fn different_url() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }".to_string();
+        let meta = PkgMeta {
+            pkg_url: "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }".to_string(),
+            ..PkgMeta::default()
+        };
+
         let data = Data {
             name: "radio-sx128x".to_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
@@ -190,8 +191,11 @@ mod test {
 
     #[test]
     fn deprecated_format() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".to_string();
+        let meta = PkgMeta {
+            pkg_url: "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".to_string(),
+            ..PkgMeta::default()
+        };
+
         let data = Data {
             name: "radio-sx128x".to_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
@@ -209,11 +213,13 @@ mod test {
 
     #[test]
     fn different_ext() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url =
-            "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
-                .to_string();
-        meta.pkg_fmt = PkgFmt::Txz;
+        let meta = PkgMeta {
+            pkg_url:
+                "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
+                    .to_string(),
+            pkg_fmt: PkgFmt::Txz,
+            ..PkgMeta::default()
+        };
         let data = Data {
             name: "cargo-watch".to_string(),
             target: "aarch64-apple-darwin".to_string(),
@@ -231,9 +237,12 @@ mod test {
 
     #[test]
     fn no_archive() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".to_string();
-        meta.pkg_fmt = PkgFmt::Bin;
+        let meta = PkgMeta{
+            pkg_fmt: PkgFmt::Bin,
+            pkg_url: "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".to_string(),
+            ..PkgMeta::default()
+        };
+
         let data = Data {
             name: "cargo-watch".to_string(),
             target: "aarch64-pc-windows-msvc".to_string(),
