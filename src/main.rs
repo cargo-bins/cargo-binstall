@@ -112,7 +112,7 @@ async fn main() -> Result<(), anyhow::Error> {
             o=opts.version, p=package.version
         );
 
-        if !opts.no_confirm && !opts.dry_run && !confirm()? {
+        if opts.no_confirm || opts.dry_run || !confirm()? {
             warn!("Installation cancelled");
             return Ok(());
         }
