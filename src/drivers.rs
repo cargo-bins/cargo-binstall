@@ -10,7 +10,7 @@ use crates_io_api::AsyncClient;
 use crate::helpers::*;
 use crate::PkgFmt;
 
-fn find_version<'a, V: Iterator<Item = &'a str>>(
+fn find_version<'a, V: Iterator<Item = &'a String>>(
     requirement: &str,
     version_iter: V,
 ) -> Result<String, anyhow::Error> {
@@ -66,31 +66,7 @@ pub async fn fetch_crate_cratesio(
     temp_dir: &Path,
 ) -> Result<PathBuf, anyhow::Error> {
     // Fetch / update index
-    debug!("Updating crates.io index");
-    let mut index = crates_index::Index::new_cargo_default()?;
-    index.update()?;
-
-    // Lookup crate in index
     debug!("Looking up crate information");
-    let base_info = match index.crate_(name) {
-        Some(i) => i,
-        None => {
-            return Err(anyhow::anyhow!(
-                "Error fetching information for crate {}",
-                name
-            ));
-        }
-    };
-
-    // Locate matching version
-    let version_iter = base_info.versions().iter().filter_map(|v| {
-        if !v.is_yanked() {
-            Some(v.version())
-        } else {
-            None
-        }
-    });
-    let version_name = find_version(version_req, version_iter)?;
 
     // Build crates.io api client
     let api_client = AsyncClient::new(
@@ -102,10 +78,30 @@ pub async fn fetch_crate_cratesio(
     let crate_info = api_client
         .get_crate(name.as_ref())
         .await
-        .context("Error fetching crate information")?;
+        .context("Error fetching crate information");
+
+    let base_info = match crate_info {
+        Ok(i) => i,
+        Err(_) => {
+            return Err(anyhow::anyhow!(
+                "Error fetching information for crate {}",
+                name
+            ));
+        }
+    };
+
+    // Locate matching version
+    let version_iter = base_info.versions.iter().filter_map(|v| {
+        if !v.yanked {
+            Some(&v.num)
+        } else {
+            None
+        }
+    });
+    let version_name = find_version(version_req, version_iter)?;
 
     // Fetch information for the filtered version
-    let version = match crate_info.versions.iter().find(|v| v.num == version_name) {
+    let version = match base_info.versions.iter().find(|v| v.num == version_name) {
         Some(v) => v,
         None => {
             return Err(anyhow::anyhow!(
