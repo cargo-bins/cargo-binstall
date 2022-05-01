@@ -52,17 +52,19 @@ impl MultiFetcher {
         self.fetchers.push(fetcher);
     }
 
-    pub async fn first_available(&self) -> Option<&dyn Fetcher> {
+    pub async fn first_available(&self, allow_third_party_sources: bool) -> Option<&dyn Fetcher> {
         for fetcher in &self.fetchers {
-            if fetcher.check().await.unwrap_or_else(|err| {
-                debug!(
-                    "Error while checking fetcher {}: {}",
-                    fetcher.source_name(),
-                    err
-                );
-                false
-            }) {
-                return Some(&**fetcher);
+            if allow_third_party_sources || !fetcher.is_third_party() {
+                if fetcher.check().await.unwrap_or_else(|err| {
+                    debug!(
+                        "Error while checking fetcher {}: {}",
+                        fetcher.source_name(),
+                        err
+                    );
+                    false
+                }) {
+                    return Some(&**fetcher);
+                }
             }
         }
 

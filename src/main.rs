@@ -50,6 +50,14 @@ struct Options {
     #[structopt(long)]
     no_cleanup: bool,
 
+    /// Do not allow installs from third party sources such as quickinstall
+    #[structopt(long)]
+    no_third_party_sources: bool,
+
+    /// Disable fallback installation via `cargo install`
+    #[structopt(long)]
+    disable_cargo_install: bool,
+
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
     /// the specified path directly, useful for debugging and
@@ -161,7 +169,11 @@ async fn main() -> Result<(), anyhow::Error> {
     fetchers.add(GhCrateMeta::new(&fetcher_data).await);
     fetchers.add(QuickInstall::new(&fetcher_data).await);
 
-    match fetchers.first_available().await {
+    if opts.no_third_party_sources {
+        info!("Installs from third party sources has been disabled");
+    }
+
+    match fetchers.first_available(!opts.no_third_party_sources).await {
         Some(fetcher) => {
             install_from_package(
                 binaries,
@@ -175,7 +187,16 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await
         }
-        None => install_from_source(opts, package).await,
+        None => {
+            if opts.disable_cargo_install {
+                error!("Fallback to install from source is disabled via `--disable-cargo-install`");
+                Err(anyhow::anyhow!(
+                    "Installs from source is disabled via `--disable-cargo-install`"
+                ))
+            } else {
+                install_from_source(opts, package).await
+            }
+        }
     }
 }
 
