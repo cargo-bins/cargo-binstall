@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use rayon::prelude::*;
 
 use anyhow::{anyhow, Context};
 use log::debug;
@@ -10,7 +11,7 @@ use crates_io_api::AsyncClient;
 use crate::helpers::*;
 use crate::PkgFmt;
 
-fn find_version<'a, V: Iterator<Item = &'a str>>(
+fn find_version<'a, V: ParallelIterator<Item = &'a str>>(
     requirement: &str,
     version_iter: V,
 ) -> Result<String, anyhow::Error> {
@@ -40,7 +41,7 @@ fn find_version<'a, V: Iterator<Item = &'a str>>(
         .collect();
 
     // Sort by highest matching version
-    filtered.sort_by(|a, b| {
+    filtered.par_sort_by(|a, b| {
         let a = Version::parse(a).unwrap();
         let b = Version::parse(b).unwrap();
 
@@ -83,7 +84,7 @@ pub async fn fetch_crate_cratesio(
     };
 
     // Locate matching version
-    let version_iter = base_info.versions().iter().filter_map(|v| {
+    let version_iter = base_info.versions().par_iter().filter_map(|v| {
         if !v.is_yanked() {
             Some(v.version())
         } else {
@@ -105,7 +106,7 @@ pub async fn fetch_crate_cratesio(
         .context("Error fetching crate information")?;
 
     // Fetch information for the filtered version
-    let version = match crate_info.versions.iter().find(|v| v.num == version_name) {
+    let version = match crate_info.versions.par_iter().find_first(|v| v.num == version_name) {
         Some(v) => v,
         None => {
             return Err(anyhow::anyhow!(

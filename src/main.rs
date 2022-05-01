@@ -6,6 +6,7 @@ use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use structopt::StructOpt;
 use tempdir::TempDir;
 use tokio::process::Command;
+use rayon::prelude::*;
 
 use cargo_binstall::{
     bins,
@@ -275,7 +276,7 @@ async fn install_from_package(
     };
 
     let bin_files = binaries
-        .iter()
+        .par_iter()
         .map(|p| bins::BinFile::from_product(&bin_data, p))
         .collect::<Result<Vec<_>, anyhow::Error>>()?;
 

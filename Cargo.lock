@@ -161,6 +161,7 @@ dependencies = [
  "env_logger",
  "flate2",
  "log",
+ "rayon",
  "reqwest",
  "semver",
  "serde",
