@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use backoff::{Error, ExponentialBackoff};
 use log::{debug, error, info};
 
 use cargo_toml::Manifest;
@@ -28,7 +29,13 @@ pub fn load_manifest_path<P: AsRef<Path>>(
 }
 
 pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, anyhow::Error> {
-    let req = reqwest::Client::new().request(method, url).send().await?;
+    let req = backoff::future::retry(ExponentialBackoff::default(), || async {
+        Ok(reqwest::Client::new()
+            .request(method.to_owned(), url)
+            .send()
+            .await?)
+    })
+    .await?;
     Ok(req.status().is_success())
 }
 
@@ -36,22 +43,43 @@ pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, a
 pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::Error> {
     debug!("Downloading from: '{}'", url);
 
-    let resp = reqwest::get(url).await?;
+    let bytes_response = backoff::future::retry(ExponentialBackoff::default(), || async {
+        let resp = reqwest::get(url)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        if !resp.status().is_success() {
+            debug!(
+                "Request was unsuccessful with status code: {}",
+                resp.status()
+            );
+            return Err(Error::transient(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                resp.status().as_str(),
+            )));
+        }
 
-    if !resp.status().is_success() {
-        error!("Download error: {}", resp.status());
-        return Err(anyhow::anyhow!(resp.status()));
+        Ok(resp
+            .bytes()
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?)
+    })
+    .await;
+
+    match bytes_response {
+        Ok(bytes) => {
+            let path = path.as_ref();
+            debug!("Download OK, writing to file: '{}'", path.display());
+
+            std::fs::create_dir_all(path.parent().unwrap())?;
+            std::fs::write(&path, bytes)?;
+
+            Ok(())
+        }
+        Err(err) => {
+            error!("Download error: {}", err);
+            return Err(anyhow::anyhow!(err));
+        }
     }
-
-    let bytes = resp.bytes().await?;
-
-    let path = path.as_ref();
-    debug!("Download OK, writing to file: '{}'", path.display());
-
-    std::fs::create_dir_all(path.parent().unwrap())?;
-    std::fs::write(&path, bytes)?;
-
-    Ok(())
 }
 
 /// Extract files from the specified source onto the specified path

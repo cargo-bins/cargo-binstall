@@ -21,6 +21,7 @@ pkg-fmt = "zip"
 [dependencies]
 anyhow = "1.0.57"
 async-trait = "0.1.52"
+backoff = { version = "0.4.0", features = ["tokio"] }
 cargo_metadata = "0.14.2"
 cargo_toml = "0.11.4"
 crates-index = "0.18.7"

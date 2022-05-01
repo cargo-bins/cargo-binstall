@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use backoff::ExponentialBackoff;
 use log::info;
 use reqwest::Method;
 
@@ -70,12 +71,15 @@ impl QuickInstall {
 
     pub async fn report(&self) -> Result<(), anyhow::Error> {
         info!("Sending installation report to quickinstall (anonymous)");
-        reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .build()?
-            .request(Method::HEAD, &self.stats_url())
-            .send()
-            .await?;
+        backoff::future::retry(ExponentialBackoff::default(), || async {
+            Ok(reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                .build()?
+                .head(&self.stats_url())
+                .send()
+                .await?)
+        })
+        .await?;
         Ok(())
     }
 }
