@@ -37,7 +37,7 @@ strum_macros = "0.24.0"
 tar = "0.4.38"
 tempdir = "0.3.7"
 tinytemplate = "1.2.1"
-tokio = { version = "1.18.0", features = [ "full" ] }
+tokio = { version = "1.18.2", features = [ "full" ] }
 url = "2.2.2"
 xz2 = "0.1.6"
 zip = "0.6.2"
