@@ -164,6 +164,10 @@ jobs:
             os: windows-latest
             output: cargo-binstall.exe
             archive: zip
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            output: cargo-binstall
+            archive: tgz
 
     steps:
     - uses: actions/checkout@v2
