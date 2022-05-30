@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
@@ -27,7 +27,7 @@ jobs:
             os: macos-latest
             output: cargo-binstall
             archive: zip
-          - target: armv7-unknown-linux-musleabihf
+          - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
             archive: tgz
@@ -35,6 +35,14 @@ jobs:
             os: windows-latest
             output: cargo-binstall.exe
             archive: zip
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            output: cargo-binstall
+            archive: tgz
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-20.04
+            output: cargo-binstall
+            archive: tgz
 
     steps:
     - uses: actions/checkout@v2
@@ -47,6 +55,13 @@ jobs:
         target:  ${{ matrix.target }}
         override: true
  
+    - name: Install openssl (apt armv7)
+      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+      uses: ryankurte/action-apt@v0.3.0
+      with:
+        arch: armhf
+        packages: libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
+
     - name: Install openssl (apt armv7)
       if: ${{ matrix.target == 'armv7-unknown-linux-musleabihf' }}
       uses: ryankurte/action-apt@v0.3.0
@@ -65,8 +80,18 @@ jobs:
           target
 
     - name: Install cross toolchain (armv7)
+      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+      run: sudo apt-get install gcc-arm-linux-gnueabihf
+
+    - name: Install cross toolchain (armv7)
       if: ${{ matrix.target == 'armv7-unknown-linux-musleabihf' }}
       run: sudo apt-get install gcc-arm-linux-gnueabihf
+
+    - name: Enable cross compilation (armv7)
+      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
+      run: |
+        echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+        echo "LZMA_API_STATIC=1" >> $GITHUB_ENV
 
     - name: Enable cross compilation (armv7)
       if: ${{ matrix.target == 'armv7-unknown-linux-musleabihf' }}
