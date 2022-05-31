@@ -6,11 +6,11 @@ use strum_macros::{Display, EnumString, EnumVariantNames};
 pub mod drivers;
 pub use drivers::*;
 
+pub mod errors;
+pub use errors::*;
+
 pub mod helpers;
 pub use helpers::*;
-
-mod errors;
-pub use errors::BinstallError;
 
 pub mod bins;
 pub mod fetchers;

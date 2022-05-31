@@ -200,7 +200,7 @@ Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. I
     However, we're pulling data from crates.io and the cargo manifest, both of which are _already_ trusted entities, and this is
     functionally a replacement for `curl ... | bash` or `wget`-ing the same files, so, things can be improved but it's also sorta moot
 - What do the error codes mean?
-  - You can find a full description of errors including exit codes here: <https://docs.rs/cargo-binstall/latest/cargo_binstall/enum.BinstallError.html>
+  - You can find a full description of errors including exit codes here: <https://docs.rs/cargo-binstall/latest/cargo_binstall/errors/enum.BinstallError.html>
 
 ---
 
