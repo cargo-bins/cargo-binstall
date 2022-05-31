@@ -173,9 +173,13 @@ async fn entry() -> Result<()> {
 
     let is_plain_version = semver::Version::from_str(&opts.version).is_ok();
     if is_plain_version && package.version != opts.version {
-        warn!(
-            "You specified `--version {o}` but the package resolved that to '{p}', use `={o}` if you want an exact match",
-            o=opts.version, p=package.version
+        warn!("Warning!");
+        eprintln!(
+            "{:?}",
+            miette::Report::new(BinstallError::VersionWarning {
+                ver: package.version.clone(),
+                req: opts.version.clone()
+            })
         );
 
         if !opts.no_confirm && !opts.dry_run {

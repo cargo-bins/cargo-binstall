@@ -13,7 +13,7 @@ pub enum BinstallError {
     ///
     /// - Exit code: 32
     #[error("installation cancelled by user")]
-    #[diagnostic(code(binstall::user_abort))]
+    #[diagnostic(severity(info), code(binstall::user_abort))]
     UserAbort,
 
     /// A URL is invalid.
@@ -22,21 +22,21 @@ pub enum BinstallError {
     ///
     /// - Exit code: 65
     #[error(transparent)]
-    #[diagnostic(code(binstall::url_parse))]
+    #[diagnostic(severity(error), code(binstall::url_parse))]
     UrlParse(#[from] url::ParseError),
 
     /// An error while unzipping a file.
     ///
     /// - Exit code: 66
     #[error(transparent)]
-    #[diagnostic(code(binstall::unzip))]
+    #[diagnostic(severity(error), code(binstall::unzip))]
     Unzip(#[from] zip::result::ZipError),
 
     /// A rendering error in a template.
     ///
     /// - Exit code: 67
     #[error(transparent)]
-    #[diagnostic(code(binstall::template))]
+    #[diagnostic(severity(error), code(binstall::template))]
     Template(#[from] tinytemplate::error::Error),
 
     /// A generic error from our HTTP client, reqwest.
@@ -45,7 +45,7 @@ pub enum BinstallError {
     ///
     /// - Exit code: 68
     #[error(transparent)]
-    #[diagnostic(code(binstall::reqwest))]
+    #[diagnostic(severity(error), code(binstall::reqwest))]
     Reqwest(#[from] reqwest::Error),
 
     /// An HTTP request failed.
@@ -55,7 +55,7 @@ pub enum BinstallError {
     ///
     /// - Exit code: 69
     #[error("could not {method} {url}: {err}")]
-    #[diagnostic(code(binstall::http))]
+    #[diagnostic(severity(error), code(binstall::http))]
     Http {
         method: reqwest::Method,
         url: url::Url,
@@ -67,7 +67,7 @@ pub enum BinstallError {
     ///
     /// - Exit code: 74
     #[error(transparent)]
-    #[diagnostic(code(binstall::io))]
+    #[diagnostic(severity(error), code(binstall::io))]
     Io(#[from] std::io::Error),
 
     /// An error interacting with the crates.io API.
@@ -77,6 +77,7 @@ pub enum BinstallError {
     /// - Exit code: 76
     #[error("crates.io api error fetching crate information for '{crate_name}': {err}")]
     #[diagnostic(
+        severity(error),
         code(binstall::crates_io_api),
         help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={crate_name}")
     )]
@@ -94,7 +95,11 @@ pub enum BinstallError {
     ///
     /// - Exit code: 78
     #[error(transparent)]
-    #[diagnostic(code(binstall::cargo_manifest))]
+    #[diagnostic(
+        severity(error),
+        code(binstall::cargo_manifest),
+        help("If you used --manifest-path, check the Cargo.toml syntax.")
+    )]
     CargoManifest(#[from] cargo_toml::Error),
 
     /// A version is not valid semver.
@@ -104,7 +109,7 @@ pub enum BinstallError {
     ///
     /// - Exit code: 80
     #[error("version string '{v}' is not semver: {err}")]
-    #[diagnostic(code(binstall::version::parse))]
+    #[diagnostic(severity(error), code(binstall::version::parse))]
     VersionParse {
         v: String,
         #[source]
@@ -120,7 +125,7 @@ pub enum BinstallError {
     ///
     /// - Exit code: 81
     #[error("version requirement '{req}' is not semver: {err}")]
-    #[diagnostic(code(binstall::version::requirement))]
+    #[diagnostic(severity(error), code(binstall::version::requirement))]
     VersionReq {
         req: String,
         #[source]
@@ -136,18 +141,33 @@ pub enum BinstallError {
     ///
     /// - Exit code: 82
     #[error("no version matching requirement '{req}'")]
-    #[diagnostic(code(binstall::version::mismatch))]
+    #[diagnostic(severity(error), code(binstall::version::mismatch))]
     VersionMismatch { req: semver::VersionReq },
 
     /// The crates.io API doesn't have manifest metadata for the given version.
     ///
     /// - Exit code: 83
     #[error("no crate information available for '{crate_name}' version '{v}'")]
-    #[diagnostic(code(binstall::version::unavailable))]
+    #[diagnostic(severity(error), code(binstall::version::unavailable))]
     VersionUnavailable {
         crate_name: String,
         v: semver::Version,
     },
+
+    /// Warning: The resolved version may not be what was meant.
+    ///
+    /// This occurs when using the `--version` option with a bare version, like `--version 1.2.3`.
+    /// That is parsed as the semver requirement `^1.2.3`, but the user may have expected that to
+    /// be an exact version (which should be specified with `--version '=1.2.3'`.
+    ///
+    /// - Exit code: none (runtime warning only)
+    #[error("version semantic mismatch: {ver} <> {req}")]
+    #[diagnostic(
+        severity(warning),
+        code(binstall::version::warning),
+        help("You specified `--version {req}` but the package resolved that to '{ver}'.\nUse `--version '={req}'` if you want an exact match.")
+    )]
+    VersionWarning { ver: String, req: String },
 }
 
 impl BinstallError {
@@ -174,6 +194,7 @@ impl BinstallError {
             VersionReq { .. } => 81,
             VersionMismatch { .. } => 82,
             VersionUnavailable { .. } => 83,
+            VersionWarning { .. } => unimplemented!("BUG: warnings do not terminate"),
         };
 
         // reserved codes
