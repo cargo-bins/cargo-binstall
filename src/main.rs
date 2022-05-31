@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr, time::Instant};
+use std::{path::PathBuf, process::exit, str::FromStr, time::Instant};
 
 use cargo_toml::{Package, Product};
 use log::{debug, error, info, warn, LevelFilter};
@@ -75,7 +75,7 @@ struct Options {
     pkg_url: Option<String>,
 }
 
-fn main() -> Result<()> {
+fn main() -> ! {
     let start = Instant::now();
 
     let rt = Runtime::new().unwrap();
@@ -87,15 +87,23 @@ fn main() -> Result<()> {
     if let Err(err) = result {
         debug!("run time: {done:?}");
 
-        if let Some(BinstallError::UserAbort) = err.downcast_ref::<BinstallError>() {
-            warn!("Installation cancelled");
-            Ok(())
-        } else {
-            Err(err)
+        match err.downcast::<BinstallError>() {
+            Ok(liberr @ BinstallError::UserAbort) => {
+                warn!("Installation cancelled");
+                exit(liberr.exit_code() as _);
+            }
+            Ok(liberr) => {
+                eprintln!("{liberr:?}");
+                exit(liberr.exit_code() as _);
+            }
+            Err(binerr) => {
+                eprintln!("{binerr:?}");
+                exit(16);
+            }
         }
     } else {
         info!("Installation complete! [{done:?}]");
-        Ok(())
+        exit(0);
     }
 }
 
