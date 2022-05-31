@@ -157,7 +157,7 @@ If your package already uses this approach, you shouldn't need to set anything.
 
 ### Examples
 
-For example, the default configuration (as shown above) for a crate called `radio-sx128x` (version: `v0.14.1-alpha.5` on x86_64 linux) would be interpolated to:
+For example, the default configuration (as shown above) for a crate called `radio-sx128x` (version: `v0.14.1-alpha.5` on x86\_64 linux) would be interpolated to:
 
 - A download URL of `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
 - Containing a single binary file `rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5/rust-radio-x86_64-unknown-linux-gnu`
@@ -199,6 +199,8 @@ Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. I
   - Yes and also no? We're not (yet? #1) doing anything to verify the CI binaries are produced by the right person / organisation.
     However, we're pulling data from crates.io and the cargo manifest, both of which are _already_ trusted entities, and this is
     functionally a replacement for `curl ... | bash` or `wget`-ing the same files, so, things can be improved but it's also sorta moot
+- What do the error codes mean?
+  - You can find a full description of errors including exit codes here: <https://docs.rs/cargo-binstall/latest/cargo_binstall/enum.BinstallError.html>
 
 ---
 
