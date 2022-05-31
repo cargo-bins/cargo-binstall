@@ -23,18 +23,42 @@ jobs:
             os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
+            use-cross: false
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             archive: zip
+            use-cross: false
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
             archive: tgz
+            use-cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
             archive: zip
+            use-cross: false
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            output: cargo-binstall
+            archive: tgz
+            use-cross: false
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-20.04
+            output: cargo-binstall
+            archive: tgz
+            use-cross: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            output: cargo-binstall
+            archive: tgz
+            use-cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            output: cargo-binstall
+            archive: tgz
+            use-cross: true
 
     steps:
     - uses: actions/checkout@v2
@@ -46,13 +70,6 @@ jobs:
         toolchain: nightly
         target:  ${{ matrix.target }}
         override: true
- 
-    - name: Install openssl (apt armv7)
-      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      uses: ryankurte/action-apt@v0.3.0
-      with:
-        arch: armhf
-        packages: libssl-dev:armhf libssl1.1:armhf zlib1g-dev:armhf zlib1g:armhf libc-dev:armhf
 
     - name: Configure caching
       uses: actions/cache@v2
@@ -61,24 +78,19 @@ jobs:
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
         path: |
-          ${{ env.HOME }}/.cargo"
+          ${{ env.HOME }}/.cargo
           target
 
-    - name: Install cross toolchain (armv7)
-      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      run: sudo apt install gcc-arm-linux-gnueabihf
-
-    - name: Enable cross compilation (armv7)
-      if: ${{ matrix.target == 'armv7-unknown-linux-gnueabihf' }}
-      run: |
-        echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
-        echo "LZMA_API_STATIC=1" >> $GITHUB_ENV
+    - name: Install musl-tools
+      if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
+      run: sudo apt-get install -y musl-tools
 
     - name: Build release
       uses: actions-rs/cargo@v1
       with:
         command: build
         args: --target ${{ matrix.target }} --release
+        use-cross: ${{ matrix.use-cross }}
 
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
@@ -131,10 +143,22 @@ jobs:
             os: windows-latest
             output: cargo-binstall.exe
             archive: zip
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            output: cargo-binstall
+            archive: tgz
 
     steps:
     - uses: actions/checkout@v2
     - uses: FranzDiebold/github-env-vars-action@v1.2.1
+
+    - name: Configure toolchain
+      if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target:  ${{ matrix.target }}
+        override: true
 
     - uses: actions/download-artifact@v2
       with:
