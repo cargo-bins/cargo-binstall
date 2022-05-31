@@ -23,26 +23,32 @@ jobs:
             os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
+            use-cross: false
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             archive: zip
+            use-cross: false
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
             archive: tgz
+            use-cross: false
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
             archive: zip
+            use-cross: false
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
+            use-cross: false
           - target: armv7-unknown-linux-musleabihf
             os: ubuntu-20.04
             output: cargo-binstall
             archive: tgz
+            use-cross: true
 
     steps:
     - uses: actions/checkout@v2
@@ -80,19 +86,11 @@ jobs:
       run: sudo apt-get install -y musl-tools
 
     - name: Build release
-      if: ${{ matrix.target != 'armv7-unknown-linux-musleabihf' }}
       uses: actions-rs/cargo@v1
       with:
         command: build
         args: --target ${{ matrix.target }} --release
-
-    - name: Build release for armv7 musl target
-      if: ${{ matrix.target == 'armv7-unknown-linux-musleabihf' }}
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --target ${{ matrix.target }} --release
-        use-cross: true
+        use-cross: ${{ matrix.use-cross }}
 
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
