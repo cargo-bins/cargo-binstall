@@ -7,14 +7,14 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 
 To get started _using_ `cargo-binstall`, first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/ryankurte/cargo-binstall/releases).
 
-linux x86_64:
+linux x86\_64:
 ```
-wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz
 ```
 
 linux armv7:
 ```
-wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-gnueabihf.tgz
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz
 ```
 
 macos x86_64:
