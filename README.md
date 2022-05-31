@@ -64,7 +64,7 @@ To install an unsupported crate, you may specify the Cargo.toml metadata entries
 For example:
 ```
 $ binstall \
-  --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ format }" \
+  --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ archive-format }" \
   --pkg-fmt="txz" crate_name
 ```
 
