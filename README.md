@@ -19,7 +19,7 @@ wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-
 
 linux arm64:
 ```
-wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musleabihf.tgz
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz
 ```
 
 macos x86\_64:
