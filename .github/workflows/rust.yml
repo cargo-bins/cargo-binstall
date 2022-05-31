@@ -34,11 +34,6 @@ jobs:
             output: cargo-binstall
             archive: zip
             use-cross: false
-          - target: armv7-unknown-linux-gnueabihf
-            os: ubuntu-20.04
-            output: cargo-binstall
-            archive: tgz
-            use-cross: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
@@ -51,11 +46,6 @@ jobs:
             use-cross: false
           - target: armv7-unknown-linux-musleabihf
             os: ubuntu-20.04
-            output: cargo-binstall
-            archive: tgz
-            use-cross: true
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
             use-cross: true
