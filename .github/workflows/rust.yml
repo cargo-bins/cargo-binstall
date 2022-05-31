@@ -96,6 +96,8 @@ jobs:
         command: build
         args: --target ${{ matrix.target }} --release
         use-cross: ${{ matrix.use-cross }}
+      env:
+        RUSTFLAGS: -Zstrip=symbols
 
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
