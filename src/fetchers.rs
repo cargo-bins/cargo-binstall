@@ -54,14 +54,16 @@ impl MultiFetcher {
 
     pub async fn first_available(&self) -> Option<&dyn Fetcher> {
         for fetcher in &self.fetchers {
-            if fetcher.check().await.unwrap_or_else(|err| {
+            let available = fetcher.check().await.unwrap_or_else(|err| {
                 debug!(
                     "Error while checking fetcher {}: {}",
                     fetcher.source_name(),
                     err
                 );
                 false
-            }) {
+            });
+
+            if available {
                 return Some(&**fetcher);
             }
         }

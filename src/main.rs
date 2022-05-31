@@ -191,9 +191,8 @@ async fn entry() -> Result<()> {
         package
             .metadata
             .as_ref()
-            .map(|m| m.binstall.clone())
-            .flatten()
-            .unwrap_or(PkgMeta::default()),
+            .and_then(|m| m.binstall.clone())
+            .unwrap_or_default(),
         manifest.bin,
     );
 
@@ -254,6 +253,7 @@ async fn entry() -> Result<()> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn install_from_package(
     binaries: Vec<Product>,
     fetcher: &dyn Fetcher,

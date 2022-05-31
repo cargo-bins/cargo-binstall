@@ -22,7 +22,7 @@ fn find_version<'a, V: Iterator<Item = &'a String>>(
     let filtered: BTreeSet<_> = version_iter
         .filter_map(|v| {
             // Remove leading `v` for git tags
-            let ver_str = match v.strip_prefix("s") {
+            let ver_str = match v.strip_prefix('s') {
                 Some(v) => v,
                 None => v,
             };
@@ -47,7 +47,7 @@ fn find_version<'a, V: Iterator<Item = &'a String>>(
         .iter()
         .max()
         .cloned()
-        .ok_or_else(|| BinstallError::VersionMismatch { req: version_req })
+        .ok_or(BinstallError::VersionMismatch { req: version_req })
 }
 
 /// Fetch a crate by name and version from crates.io

@@ -16,7 +16,7 @@ impl GhCrateMeta {
     fn url(&self) -> Result<Url, BinstallError> {
         let ctx = Context::from_data(&self.data);
         debug!("Using context: {:?}", ctx);
-        Ok(ctx.render_url(&self.data.meta.pkg_url)?)
+        ctx.render_url(&self.data.meta.pkg_url)
     }
 }
 
