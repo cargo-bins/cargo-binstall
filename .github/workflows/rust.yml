@@ -29,6 +29,11 @@ jobs:
             output: cargo-binstall
             archive: zip
             use-cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            output: cargo-binstall
+            archive: zip
+            use-cross: false
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
