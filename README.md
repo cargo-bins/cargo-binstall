@@ -57,6 +57,16 @@ yes
 21:15:30 [INFO] Installation complete!
 ```
 
+### Unsupported crates
+
+To install an unsupported crate, you may specify the Cargo.toml metadata entries for `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values [as documented below](#supporting-binary-installation).
+
+For example:
+```
+$ binstall \
+  --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ archive-format }" \
+  --pkg-fmt="txz" crate_name
+```
 
 ## Status
 
