@@ -60,6 +60,18 @@ struct Options {
     /// Utility log level
     #[structopt(long, default_value = "info")]
     log_level: LevelFilter,
+
+    /// Override Cargo.toml package manifest bin-dir.
+    #[structopt(long)]
+    bin_dir: Option<String>,
+
+    /// Override Cargo.toml package manifest pkg-fmt.
+    #[structopt(long)]
+    pkg_fmt: Option<PkgFmt>,
+
+    /// Override Cargo.toml package manifest pkg-url.
+    #[structopt(long)]
+    pkg_url: Option<String>,
 }
 
 #[tokio::main]
@@ -73,7 +85,12 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     // Load options
-    let opts = Options::from_iter(args.iter());
+    let mut opts = Options::from_iter(args.iter());
+    let cli_overrides = PkgOverride {
+        pkg_url: opts.pkg_url.take(),
+        pkg_fmt: opts.pkg_fmt.take(),
+        bin_dir: opts.bin_dir.take(),
+    };
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();
@@ -133,6 +150,7 @@ async fn main() -> Result<(), anyhow::Error> {
         meta.merge(&o);
     }
 
+    meta.merge(&cli_overrides);
     debug!("Found metadata: {:?}", meta);
 
     // Compute install directory
