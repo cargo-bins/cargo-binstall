@@ -90,11 +90,15 @@ impl Termination for MainExit {
     fn report(self) -> ExitCode {
         match self {
             Self::Success(spent) => {
-                info!("Installation complete! [{spent:?}]");
+                info!("Installation completed in {spent:?}");
                 ExitCode::SUCCESS
             }
-            Self::Error(err) => err.report(),
+            Self::Error(err) => {
+                error!("Fatal error:");
+                err.report()
+            }
             Self::Report(err) => {
+                error!("Fatal error:");
                 eprintln!("{err:?}");
                 ExitCode::from(16)
             }
@@ -112,14 +116,13 @@ fn main() -> MainExit {
     let done = start.elapsed();
     debug!("run time: {done:?}");
 
-    if let Err(err) = result {
-        match err.downcast::<BinstallError>() {
-            Ok(liberr) => MainExit::Error(liberr),
-            Err(binerr) => MainExit::Report(binerr),
-        }
-    } else {
-        MainExit::Success(done)
-    }
+    result
+        .map(|_| MainExit::Success(done))
+        .unwrap_or_else(|err| {
+            err.downcast::<BinstallError>()
+                .map(MainExit::Error)
+                .unwrap_or_else(MainExit::Report)
+        })
 }
 
 async fn entry() -> Result<()> {

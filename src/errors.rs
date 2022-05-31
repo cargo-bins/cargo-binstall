@@ -1,7 +1,7 @@
 use std::process::{ExitCode, Termination};
 
 use log::warn;
-use miette::Diagnostic;
+use miette::{Report, Diagnostic};
 use thiserror::Error;
 
 /// Errors emitted by the library portion of cargo-binstall.
@@ -182,12 +182,13 @@ impl BinstallError {
 
 impl Termination for BinstallError {
     fn report(self) -> ExitCode {
+        let code = self.exit_code();
         if let BinstallError::UserAbort = self {
             warn!("Installation cancelled");
         } else {
-            eprintln!("{self:?}");
+            eprintln!("{:?}", Report::new(self));
         }
 
-        self.exit_code()
+        code
     }
 }
