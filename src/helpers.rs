@@ -193,17 +193,12 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
 
     // Local executable dir if no cargo is found
     let dir = dirs::executable_dir();
-    
+
     if let Some(d) = &dir {
         debug!("Fallback to {}", d.display());
     }
 
     dir
-        debug!("Fallback to {}", d.display());
-        return Some(d);
-    }
-
-    None
 }
 
 pub fn confirm() -> Result<(), BinstallError> {
