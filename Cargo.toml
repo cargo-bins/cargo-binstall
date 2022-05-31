@@ -35,7 +35,7 @@ structopt = "0.3.26"
 strum = "0.24.0"
 strum_macros = "0.24.0"
 tar = "0.4.38"
-tempdir = "0.3.7"
+tempfile = "3.3.0"
 tinytemplate = "1.2.1"
 tokio = { version = "1.18.0", features = [ "full" ] }
 url = "2.2.2"

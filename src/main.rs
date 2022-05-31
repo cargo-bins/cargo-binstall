@@ -4,7 +4,7 @@ use cargo_toml::{Package, Product};
 use log::{debug, error, info, warn, LevelFilter};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use structopt::StructOpt;
-use tempdir::TempDir;
+use tempfile::TempDir;
 use tokio::process::Command;
 
 use cargo_binstall::{
@@ -89,7 +89,7 @@ async fn main() -> Result<(), anyhow::Error> {
     .unwrap();
 
     // Create a temporary directory for downloads etc.
-    let temp_dir = TempDir::new("cargo-binstall")?;
+    let temp_dir = TempDir::new()?;
 
     info!("Installing package: '{}'", opts.name);
 
@@ -175,7 +175,12 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await
         }
-        None => install_from_source(opts, package).await,
+        None => {
+            temp_dir.close().unwrap_or_else(|err| {
+                warn!("Failed to clean up some resources: {err}");
+            });
+            install_from_source(opts, package).await
+        }
     }
 }
 
@@ -249,11 +254,6 @@ async fn install_from_package(
         // Extract files
         extract(&pkg_path, fetcher.pkg_fmt(), &bin_path)?;
 
-        // Bypass cleanup if disabled
-        if opts.no_cleanup {
-            let _ = temp_dir.into_path();
-        }
-
         if binaries.is_empty() {
             error!("No binaries specified (or inferred from file system)");
             return Err(anyhow::anyhow!(
@@ -315,6 +315,15 @@ async fn install_from_package(
     }
 
     info!("Installation complete!");
+
+    if opts.no_cleanup {
+        let _ = temp_dir.into_path();
+    } else {
+        temp_dir.close().unwrap_or_else(|err| {
+            warn!("Failed to clean up some resources: {err}");
+        });
+    }
+
     Ok(())
 }
 
