@@ -1,3 +1,4 @@
+use std::io::{stderr, stdin, Write};
 use std::path::{Path, PathBuf};
 
 use log::{debug, info};
@@ -194,9 +195,11 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
 pub fn confirm() -> Result<(), BinstallError> {
     loop {
         info!("Do you wish to continue? yes/no");
+        eprint!("? ");
+        stderr().flush().ok();
 
         let mut input = String::new();
-        std::io::stdin().read_line(&mut input).unwrap();
+        stdin().read_line(&mut input).unwrap();
 
         match input.as_str().trim() {
             "yes" | "y" | "YES" | "Y" => break Ok(()),
