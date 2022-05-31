@@ -80,10 +80,19 @@ jobs:
       run: sudo apt-get install -y musl-tools
 
     - name: Build release
+      if: ${{ matrix.target != 'armv7-unknown-linux-musleabihf' }}
       uses: actions-rs/cargo@v1
       with:
         command: build
         args: --target ${{ matrix.target }} --release
+
+    - name: Build release for armv7 musl target
+      if: ${{ matrix.target == 'armv7-unknown-linux-musleabihf' }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --target ${{ matrix.target }} --release
+        use-cross: true
 
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
