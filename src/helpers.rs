@@ -29,8 +29,13 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     Ok(manifest)
 }
 
-pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, BinstallError> {
-    let req = reqwest::Client::new().request(method, url).send().await?;
+pub async fn remote_exists(url: &str, method: Method) -> Result<bool, BinstallError> {
+    let url = Url::parse(url)?;
+    let req = reqwest::Client::new()
+        .request(method.clone(), url.clone())
+        .send()
+        .await
+        .map_err(|err| BinstallError::Http { method, url, err })?;
     Ok(req.status().is_success())
 }
 
