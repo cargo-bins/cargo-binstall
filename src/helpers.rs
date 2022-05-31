@@ -1,5 +1,8 @@
-use std::io::{stderr, stdin, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    io::{stderr, stdin, Write},
+    path::{Path, PathBuf},
+};
 
 use log::{debug, info};
 
@@ -58,8 +61,8 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), Binstall
     let path = path.as_ref();
     debug!("Download OK, writing to file: '{}'", path.display());
 
-    std::fs::create_dir_all(path.parent().unwrap())?;
-    std::fs::write(&path, bytes)?;
+    fs::create_dir_all(path.parent().unwrap())?;
+    fs::write(&path, bytes)?;
 
     Ok(())
 }
@@ -79,7 +82,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let mut tar = Archive::new(dat);
 
             tar.unpack(path)?;
@@ -92,7 +95,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let tar = GzDecoder::new(dat);
             let mut tgz = Archive::new(tar);
 
@@ -106,7 +109,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let tar = XzDecoder::new(dat);
             let mut txz = Archive::new(tar);
 
@@ -139,7 +142,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let mut zip = ZipArchive::new(dat)?;
 
             zip.extract(path)?;
@@ -151,7 +154,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
             // Copy to install dir
-            std::fs::copy(source, path)?;
+            fs::copy(source, path)?;
         }
     };
 
