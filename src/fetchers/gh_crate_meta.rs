@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use log::{debug, info};
+use log::{debug, info, warn};
 use reqwest::Method;
 use serde::Serialize;
 use url::Url;
@@ -28,6 +28,11 @@ impl super::Fetcher for GhCrateMeta {
 
     async fn check(&self) -> Result<bool, BinstallError> {
         let url = self.url()?;
+
+        if url.scheme() != "https" {
+            warn!("URL is not HTTPS! This may become a hard error in the future, tell the upstream!");
+        }
+
         info!("Checking for package at: '{url}'");
         remote_exists(url.as_str(), Method::HEAD).await
     }
