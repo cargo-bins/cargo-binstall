@@ -59,6 +59,11 @@ jobs:
             output: cargo-binstall
             archive: tgz
             use-cross: true
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            output: cargo-binstall
+            archive: zip
+            use-cross: false
 
     steps:
     - uses: actions/checkout@v2
