@@ -16,14 +16,14 @@ pub mod bins;
 pub mod fetchers;
 
 /// Compiled target triple, used as default for binary fetching
-pub const TARGET: &'static str = env!("TARGET");
+pub const TARGET: &str = env!("TARGET");
 
 /// Default package path template (may be overridden in package Cargo.toml)
-pub const DEFAULT_PKG_URL: &'static str =
+pub const DEFAULT_PKG_URL: &str =
     "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }";
 
 /// Default binary name template (may be overridden in package Cargo.toml)
-pub const DEFAULT_BIN_DIR: &'static str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
+pub const DEFAULT_BIN_DIR: &str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
 
 /// Binary format enumeration
 #[derive(
@@ -113,7 +113,7 @@ impl PkgMeta {
 /// Target specific overrides for binary installation
 ///
 /// Exposed via `[package.metadata.TARGET]` in `Cargo.toml`
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgOverride {
     /// URL template override for package downloads
@@ -124,16 +124,6 @@ pub struct PkgOverride {
 
     /// Path template override for binary files in packages
     pub bin_dir: Option<String>,
-}
-
-impl Default for PkgOverride {
-    fn default() -> Self {
-        Self {
-            pkg_url: None,
-            pkg_fmt: None,
-            bin_dir: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -164,7 +154,7 @@ mod test {
 
         let manifest = load_manifest_path(&manifest_dir).expect("Error parsing metadata");
         let package = manifest.package.unwrap();
-        let meta = package.metadata.map(|m| m.binstall).flatten().unwrap();
+        let meta = package.metadata.and_then(|m| m.binstall).unwrap();
 
         assert_eq!(&package.name, "cargo-binstall");
 

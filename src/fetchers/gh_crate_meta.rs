@@ -16,7 +16,7 @@ impl GhCrateMeta {
     fn url(&self) -> Result<Url, BinstallError> {
         let ctx = Context::from_data(&self.data);
         debug!("Using context: {:?}", ctx);
-        Ok(ctx.render_url(&self.data.meta.pkg_url)?)
+        ctx.render_url(&self.data.meta.pkg_url)
     }
 }
 
@@ -30,7 +30,9 @@ impl super::Fetcher for GhCrateMeta {
         let url = self.url()?;
 
         if url.scheme() != "https" {
-            warn!("URL is not HTTPS! This may become a hard error in the future, tell the upstream!");
+            warn!(
+                "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
+            );
         }
 
         info!("Checking for package at: '{url}'");
@@ -157,8 +159,11 @@ mod test {
 
     #[test]
     fn no_repo_but_full_url() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url = format!("https://example.com{}", meta.pkg_url);
+        let meta = PkgMeta {
+            pkg_url: format!("https://example.com{}", PkgMeta::default().pkg_url),
+            ..Default::default()
+        };
+
         let data = Data {
             name: "cargo-binstall".to_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
@@ -176,8 +181,13 @@ mod test {
 
     #[test]
     fn different_url() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }".to_string();
+        let meta = PkgMeta {
+            pkg_url:
+            "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }"
+                .into(),
+            ..Default::default()
+        };
+
         let data = Data {
             name: "radio-sx128x".to_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
@@ -195,8 +205,11 @@ mod test {
 
     #[test]
     fn deprecated_format() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".to_string();
+        let meta = PkgMeta {
+            pkg_url: "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".into(),
+            ..Default::default()
+        };
+
         let data = Data {
             name: "radio-sx128x".to_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
@@ -214,11 +227,14 @@ mod test {
 
     #[test]
     fn different_ext() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url =
-            "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
-                .to_string();
-        meta.pkg_fmt = PkgFmt::Txz;
+        let meta = PkgMeta {
+            pkg_url:
+                "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
+                    .into(),
+            pkg_fmt: PkgFmt::Txz,
+            ..Default::default()
+        };
+
         let data = Data {
             name: "cargo-watch".to_string(),
             target: "aarch64-apple-darwin".to_string(),
@@ -236,9 +252,12 @@ mod test {
 
     #[test]
     fn no_archive() {
-        let mut meta = PkgMeta::default();
-        meta.pkg_url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".to_string();
-        meta.pkg_fmt = PkgFmt::Bin;
+        let meta = PkgMeta {
+            pkg_url: "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".into(),
+            pkg_fmt: PkgFmt::Bin,
+            ..Default::default()
+        };
+
         let data = Data {
             name: "cargo-watch".to_string(),
             target: "aarch64-pc-windows-msvc".to_string(),

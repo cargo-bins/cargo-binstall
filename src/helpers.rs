@@ -192,12 +192,13 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
     }
 
     // Local executable dir if no cargo is found
-    if let Some(d) = dirs::executable_dir() {
+    let dir = dirs::executable_dir();
+
+    if let Some(d) = &dir {
         debug!("Fallback to {}", d.display());
-        return Some(d.into());
     }
 
-    None
+    dir
 }
 
 pub fn confirm() -> Result<(), BinstallError> {
@@ -226,7 +227,7 @@ pub trait Template: Serialize {
         let mut tt = TinyTemplate::new();
 
         // Add template to instance
-        tt.add_template("path", &template)?;
+        tt.add_template("path", template)?;
 
         // Render output
         Ok(tt.render("path", self)?)
