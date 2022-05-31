@@ -9,6 +9,7 @@ use tar::Archive;
 use tinytemplate::TinyTemplate;
 use xz2::read::XzDecoder;
 use zip::read::ZipArchive;
+use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::Meta;
 
@@ -98,6 +99,25 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
 
             let dat = std::fs::File::open(source)?;
             let tar = XzDecoder::new(dat);
+            let mut txz = Archive::new(tar);
+
+            txz.unpack(path)?;
+        }
+        PkgFmt::Tzstd => {
+            // Extract to install dir
+            debug!(
+                "Decompressing from tzstd archive '{:?}' to `{:?}`",
+                source.as_ref(),
+                path.as_ref()
+            );
+
+            let dat = std::fs::File::open(source)?;
+
+            // The error can only come from raw::Decoder::with_dictionary
+            // as of zstd 0.10.2 and 0.11.2, which is specified
+            // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
+            // should not return any error.
+            let tar = ZstdDecoder::new(dat)?;
             let mut txz = Archive::new(tar);
 
             txz.unpack(path)?;

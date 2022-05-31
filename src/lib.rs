@@ -35,6 +35,8 @@ pub enum PkgFmt {
     Tgz,
     /// Download format is TAR + XZ
     Txz,
+    /// Download format is TAR + Zstd
+    Tzstd,
     /// Download format is Zip
     Zip,
     /// Download format is raw / binary
