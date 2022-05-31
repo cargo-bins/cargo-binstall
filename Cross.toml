@@ -2,10 +2,10 @@
 image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf@sha256:379eee7aa254912a803b558fe0742450dd32ca9749bc8b931927dafa2ce6e8d3"
 
 [target.armv7-unknown-linux-musleabihf]
-image = "ghcr.io/cross-rs/armv7-unknown-linux-musleabihf@sha256:379eee7aa254912a803b558fe0742450dd32ca9749bc8b931927dafa2ce6e8d3"
+image = "ghcr.io/cross-rs/armv7-unknown-linux-musleabihf@sha256:00088ebbb98f5d9895c2b6e7f713cd3028331185fe82f60d93efc03bdff8ea65"
 
 [target.aarch64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu@sha256:5db2a92c73d1251c5fb9de895928ef2551c08d0ec30b969cf7340ca3dd62ea81"
 
 [target.aarch64-unknown-linux-musl]
-image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:5db2a92c73d1251c5fb9de895928ef2551c08d0ec30b969cf7340ca3dd62ea81"
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:341256c185132fff9265ee7c8d94ba9b4fde3e8cfa8b39047c0e64ba4c1faf9a"
