@@ -62,7 +62,7 @@ jobs:
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
         path: |
-          ${{ env.HOME }}/.cargo"
+          ${{ env.HOME }}/.cargo
           target
 
     - name: Install cross toolchain (armv7)
