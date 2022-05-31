@@ -30,7 +30,9 @@ impl super::Fetcher for GhCrateMeta {
         let url = self.url()?;
 
         if url.scheme() != "https" {
-            warn!("URL is not HTTPS! This may become a hard error in the future, tell the upstream!");
+            warn!(
+                "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
+            );
         }
 
         info!("Checking for package at: '{url}'");
