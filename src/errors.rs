@@ -1,7 +1,7 @@
 use std::process::{ExitCode, Termination};
 
 use log::warn;
-use miette::{Report, Diagnostic};
+use miette::{Diagnostic, Report};
 use thiserror::Error;
 
 /// Errors emitted by the library portion of cargo-binstall.
@@ -76,7 +76,10 @@ pub enum BinstallError {
     ///
     /// - Exit code: 76
     #[error("crates.io api error fetching crate information for '{crate_name}': {err}")]
-    #[diagnostic(code(binstall::crates_io_api))]
+    #[diagnostic(
+        code(binstall::crates_io_api),
+        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={crate_name}")
+    )]
     CratesIoApi {
         crate_name: String,
         #[source]
