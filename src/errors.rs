@@ -11,7 +11,8 @@ use thiserror::Error;
 pub enum BinstallError {
     /// The installation was cancelled by a user at a confirmation prompt.
     ///
-    /// - Exit code: 32
+    /// - Code: `binstall::user_abort`
+    /// - Exit: 32
     #[error("installation cancelled by user")]
     #[diagnostic(severity(info), code(binstall::user_abort))]
     UserAbort,
@@ -20,21 +21,24 @@ pub enum BinstallError {
     ///
     /// This may be the result of a template in a Cargo manifest.
     ///
-    /// - Exit code: 65
+    /// - Code: `binstall::url_parse`
+    /// - Exit: 65
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::url_parse))]
     UrlParse(#[from] url::ParseError),
 
     /// An error while unzipping a file.
     ///
-    /// - Exit code: 66
+    /// - Code: `binstall::unzip`
+    /// - Exit: 66
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::unzip))]
     Unzip(#[from] zip::result::ZipError),
 
     /// A rendering error in a template.
     ///
-    /// - Exit code: 67
+    /// - Code: `binstall::template`
+    /// - Exit: 67
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::template))]
     Template(#[from] tinytemplate::error::Error),
@@ -43,7 +47,8 @@ pub enum BinstallError {
     ///
     /// Errors resulting from HTTP fetches are handled with [`BinstallError::Http`] instead.
     ///
-    /// - Exit code: 68
+    /// - Code: `binstall::reqwest`
+    /// - Exit: 68
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::reqwest))]
     Reqwest(#[from] reqwest::Error),
@@ -53,7 +58,8 @@ pub enum BinstallError {
     /// This includes both connection/transport failures and when the HTTP status of the response
     /// is not as expected.
     ///
-    /// - Exit code: 69
+    /// - Code: `binstall::http`
+    /// - Exit: 69
     #[error("could not {method} {url}: {err}")]
     #[diagnostic(severity(error), code(binstall::http))]
     Http {
@@ -65,7 +71,8 @@ pub enum BinstallError {
 
     /// A generic I/O error.
     ///
-    /// - Exit code: 74
+    /// - Code: `binstall::io`
+    /// - Exit: 74
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::io))]
     Io(#[from] std::io::Error),
@@ -74,7 +81,8 @@ pub enum BinstallError {
     ///
     /// This could either be a "not found" or a server/transport error.
     ///
-    /// - Exit code: 76
+    /// - Code: `binstall::crates_io_api`
+    /// - Exit: 76
     #[error("crates.io api error fetching crate information for '{crate_name}': {err}")]
     #[diagnostic(
         severity(error),
@@ -93,7 +101,8 @@ pub enum BinstallError {
     /// validation upstream. The most common failure will therefore be for direct repository access
     /// and with the `--manifest-path` option.
     ///
-    /// - Exit code: 78
+    /// - Code: `binstall::cargo_manifest`
+    /// - Exit: 78
     #[error(transparent)]
     #[diagnostic(
         severity(error),
@@ -107,7 +116,8 @@ pub enum BinstallError {
     /// Note that we use the [`semver`] crate, which parses Cargo version syntax; this may be
     /// somewhat stricter or very slightly different from other semver implementations.
     ///
-    /// - Exit code: 80
+    /// - Code: `binstall::version::parse`
+    /// - Exit: 80
     #[error("version string '{v}' is not semver: {err}")]
     #[diagnostic(severity(error), code(binstall::version::parse))]
     VersionParse {
@@ -123,7 +133,8 @@ pub enum BinstallError {
     /// Note that we use the [`semver`] crate, which parses Cargo version requirement syntax; they
     /// may be slightly different from other semver requirements expressions implementations.
     ///
-    /// - Exit code: 81
+    /// - Code: `binstall::version::requirement`
+    /// - Exit: 81
     #[error("version requirement '{req}' is not semver: {err}")]
     #[diagnostic(severity(error), code(binstall::version::requirement))]
     VersionReq {
@@ -139,14 +150,16 @@ pub enum BinstallError {
     /// Note that using `--version 1.2.3` is interpreted as the requirement `^1.2.3` as per
     /// Cargo.toml rules. If you want the exact version 1.2.3, use `--version '=1.2.3'`.
     ///
-    /// - Exit code: 82
+    /// - Code: `binstall::version::mismatch`
+    /// - Exit: 82
     #[error("no version matching requirement '{req}'")]
     #[diagnostic(severity(error), code(binstall::version::mismatch))]
     VersionMismatch { req: semver::VersionReq },
 
     /// The crates.io API doesn't have manifest metadata for the given version.
     ///
-    /// - Exit code: 83
+    /// - Code: `binstall::version::unavailable`
+    /// - Exit: 83
     #[error("no crate information available for '{crate_name}' version '{v}'")]
     #[diagnostic(severity(error), code(binstall::version::unavailable))]
     VersionUnavailable {
@@ -160,7 +173,8 @@ pub enum BinstallError {
     /// That is parsed as the semver requirement `^1.2.3`, but the user may have expected that to
     /// be an exact version (which should be specified with `--version '=1.2.3'`.
     ///
-    /// - Exit code: none (runtime warning only)
+    /// - Code: `binstall::version::warning`
+    /// - Exit: none (runtime warning only)
     #[error("version semantic mismatch: {ver} <> {req}")]
     #[diagnostic(
         severity(warning),
