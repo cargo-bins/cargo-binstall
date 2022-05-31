@@ -6,14 +6,14 @@ use serde::Serialize;
 use url::Url;
 
 use super::Data;
-use crate::{download, remote_exists, PkgFmt, Template};
+use crate::{download, remote_exists, BinstallError, PkgFmt, Template};
 
 pub struct GhCrateMeta {
     data: Data,
 }
 
 impl GhCrateMeta {
-    fn url(&self) -> Result<Url, anyhow::Error> {
+    fn url(&self) -> Result<Url, BinstallError> {
         let ctx = Context::from_data(&self.data);
         debug!("Using context: {:?}", ctx);
         Ok(ctx.render_url(&self.data.meta.pkg_url)?)
@@ -26,13 +26,13 @@ impl super::Fetcher for GhCrateMeta {
         Box::new(Self { data: data.clone() })
     }
 
-    async fn check(&self) -> Result<bool, anyhow::Error> {
+    async fn check(&self) -> Result<bool, BinstallError> {
         let url = self.url()?;
         info!("Checking for package at: '{url}'");
         remote_exists(url.as_str(), Method::HEAD).await
     }
 
-    async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
+    async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.url()?;
         info!("Downloading package from: '{url}'");
         download(url.as_str(), dst).await
@@ -101,7 +101,7 @@ impl<'c> Context<'c> {
         }
     }
 
-    pub(self) fn render_url(&self, template: &str) -> Result<Url, anyhow::Error> {
+    pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
         Ok(Url::parse(&self.render(template)?)?)
     }
 }

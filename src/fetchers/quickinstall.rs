@@ -2,9 +2,10 @@ use std::path::Path;
 
 use log::info;
 use reqwest::Method;
+use url::Url;
 
 use super::Data;
-use crate::{download, remote_exists, PkgFmt};
+use crate::{download, remote_exists, BinstallError, PkgFmt};
 
 const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
@@ -25,14 +26,14 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    async fn check(&self) -> Result<bool, anyhow::Error> {
+    async fn check(&self) -> Result<bool, BinstallError> {
         let url = self.package_url();
         self.report().await?;
         info!("Checking for package at: '{url}'");
         remote_exists(&url, Method::HEAD).await
     }
 
-    async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error> {
+    async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
         info!("Downloading package from: '{url}'");
         download(&url, &dst).await
@@ -68,14 +69,20 @@ impl QuickInstall {
         )
     }
 
-    pub async fn report(&self) -> Result<(), anyhow::Error> {
+    pub async fn report(&self) -> Result<(), BinstallError> {
         info!("Sending installation report to quickinstall (anonymous)");
+        let url = Url::parse(&self.stats_url())?;
         reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .build()?
-            .request(Method::HEAD, &self.stats_url())
+            .request(Method::HEAD, url.clone())
             .send()
-            .await?;
+            .await
+            .map_err(|err| BinstallError::Http {
+                method: Method::HEAD,
+                url,
+                err,
+            })?;
         Ok(())
     }
 }

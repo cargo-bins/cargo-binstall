@@ -1,11 +1,12 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, time::Instant};
 
 use cargo_toml::{Package, Product};
 use log::{debug, error, info, warn, LevelFilter};
+use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use structopt::StructOpt;
 use tempfile::TempDir;
-use tokio::process::Command;
+use tokio::{process::Command, runtime::Runtime};
 
 use cargo_binstall::{
     bins,
@@ -74,8 +75,31 @@ struct Options {
     pkg_url: Option<String>,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<()> {
+    let start = Instant::now();
+
+    let rt = Runtime::new().unwrap();
+    let result = rt.block_on(entry());
+    drop(rt);
+
+    let done = start.elapsed();
+
+    if let Err(err) = result {
+        debug!("run time: {done:?}");
+
+        if let Some(BinstallError::UserAbort) = err.downcast_ref::<BinstallError>() {
+            warn!("Installation cancelled");
+            Ok(())
+        } else {
+            Err(err)
+        }
+    } else {
+        info!("Installation complete! [{done:?}]");
+        Ok(())
+    }
+}
+
+async fn entry() -> Result<()> {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
@@ -106,7 +130,9 @@ async fn main() -> Result<(), anyhow::Error> {
     .unwrap();
 
     // Create a temporary directory for downloads etc.
-    let temp_dir = TempDir::new()?;
+    let temp_dir = TempDir::new()
+        .map_err(BinstallError::from)
+        .wrap_err("Creating a temporary directory failed.")?;
 
     info!("Installing package: '{}'", opts.name);
 
@@ -129,9 +155,8 @@ async fn main() -> Result<(), anyhow::Error> {
             o=opts.version, p=package.version
         );
 
-        if opts.no_confirm || opts.dry_run || !confirm()? {
-            warn!("Installation cancelled");
-            return Ok(());
+        if !opts.no_confirm && !opts.dry_run {
+            confirm()?;
         }
     }
 
@@ -156,7 +181,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Compute install directory
     let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
         error!("No viable install path found of specified, try `--install-path`");
-        anyhow::anyhow!("No install path found or specified")
+        miette!("No install path found or specified")
     })?;
     debug!("Using install path: {}", install_path.display());
 
@@ -211,16 +236,15 @@ async fn install_from_package(
     package: Package<Meta>,
     pkg_path: PathBuf,
     temp_dir: TempDir,
-) -> Result<(), anyhow::Error> {
+) -> Result<()> {
     // Prompt user for third-party source
     if fetcher.is_third_party() {
         warn!(
             "The package will be downloaded from third-party source {}",
             fetcher.source_name()
         );
-        if !opts.no_confirm && !opts.dry_run && !confirm()? {
-            warn!("Installation cancelled");
-            return Ok(());
+        if !opts.no_confirm && !opts.dry_run {
+            confirm()?;
         }
     } else {
         info!(
@@ -274,7 +298,7 @@ async fn install_from_package(
 
         if binaries.is_empty() {
             error!("No binaries specified (or inferred from file system)");
-            return Err(anyhow::anyhow!(
+            return Err(miette!(
                 "No binaries specified (or inferred from file system)"
             ));
         }
@@ -295,7 +319,7 @@ async fn install_from_package(
     let bin_files = binaries
         .iter()
         .map(|p| bins::BinFile::from_product(&bin_data, p))
-        .collect::<Result<Vec<_>, anyhow::Error>>()?;
+        .collect::<Result<Vec<_>, BinstallError>>()?;
 
     // Prompt user for confirmation
     info!("This will install the following binaries:");
@@ -315,9 +339,8 @@ async fn install_from_package(
         return Ok(());
     }
 
-    if !opts.no_confirm && !confirm()? {
-        warn!("Installation cancelled");
-        return Ok(());
+    if !opts.no_confirm {
+        confirm()?;
     }
 
     info!("Installing binaries...");
@@ -332,8 +355,6 @@ async fn install_from_package(
         }
     }
 
-    info!("Installation complete!");
-
     if opts.no_cleanup {
         let _ = temp_dir.into_path();
     } else {
@@ -345,12 +366,11 @@ async fn install_from_package(
     Ok(())
 }
 
-async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<(), anyhow::Error> {
+async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<()> {
     // Prompt user for source install
     warn!("The package will be installed from source (with cargo)",);
-    if !opts.no_confirm && !opts.dry_run && !confirm()? {
-        warn!("Installation cancelled");
-        return Ok(());
+    if !opts.no_confirm && !opts.dry_run {
+        confirm()?;
     }
 
     if opts.dry_run {
@@ -371,16 +391,22 @@ async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<()
             .arg(package.version)
             .arg("--target")
             .arg(opts.target)
-            .spawn()?;
+            .spawn()
+            .into_diagnostic()
+            .wrap_err("Spawning cargo install failed.")?;
         debug!("Spawned command pid={:?}", child.id());
 
-        let status = child.wait().await?;
+        let status = child
+            .wait()
+            .await
+            .into_diagnostic()
+            .wrap_err("Running cargo install failed.")?;
         if status.success() {
             info!("Cargo finished successfully");
             Ok(())
         } else {
             error!("Cargo errored! {:?}", status);
-            Err(anyhow::anyhow!("Cargo install error"))
+            Err(miette!("Cargo install error"))
         }
     }
 }

@@ -4,7 +4,7 @@ use cargo_toml::Product;
 use log::debug;
 use serde::Serialize;
 
-use crate::{PkgFmt, PkgMeta, Template};
+use crate::{BinstallError, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: String,
@@ -14,7 +14,7 @@ pub struct BinFile {
 }
 
 impl BinFile {
-    pub fn from_product(data: &Data, product: &Product) -> Result<Self, anyhow::Error> {
+    pub fn from_product(data: &Data, product: &Product) -> Result<Self, BinstallError> {
         let base_name = product.name.clone().unwrap();
 
         let binary_ext = if data.target.contains("windows") {
@@ -77,7 +77,7 @@ impl BinFile {
         )
     }
 
-    pub fn install_bin(&self) -> Result<(), anyhow::Error> {
+    pub fn install_bin(&self) -> Result<(), BinstallError> {
         // TODO: check if file already exists
         debug!(
             "Copy file from '{}' to '{}'",
@@ -96,7 +96,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_link(&self) -> Result<(), anyhow::Error> {
+    pub fn install_link(&self) -> Result<(), BinstallError> {
         // Remove existing symlink
         // TODO: check if existing symlink is correct
         if self.link.exists() {

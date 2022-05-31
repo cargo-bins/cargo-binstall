@@ -1,24 +1,24 @@
 use std::path::{Path, PathBuf};
 
-use log::{debug, error, info};
+use log::{debug, info};
 
 use cargo_toml::Manifest;
 use flate2::read::GzDecoder;
+use reqwest::Method;
 use serde::Serialize;
 use tar::Archive;
 use tinytemplate::TinyTemplate;
+use url::Url;
 use xz2::read::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
-use crate::Meta;
-
-use super::PkgFmt;
+use crate::{BinstallError, Meta, PkgFmt};
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
-) -> Result<Manifest<Meta>, anyhow::Error> {
+) -> Result<Manifest<Meta>, BinstallError> {
     debug!("Reading manifest: {}", manifest_path.as_ref().display());
 
     // Load and parse manifest (this checks file system for binary output names)
@@ -28,21 +28,24 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     Ok(manifest)
 }
 
-pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, anyhow::Error> {
+pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, BinstallError> {
     let req = reqwest::Client::new().request(method, url).send().await?;
     Ok(req.status().is_success())
 }
 
 /// Download a file from the provided URL to the provided path
-pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::Error> {
+pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
+    let url = Url::parse(url)?;
     debug!("Downloading from: '{}'", url);
 
-    let resp = reqwest::get(url).await?;
-
-    if !resp.status().is_success() {
-        error!("Download error: {}", resp.status());
-        return Err(anyhow::anyhow!(resp.status()));
-    }
+    let resp = reqwest::get(url.clone())
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|err| BinstallError::Http {
+            method: Method::GET,
+            url,
+            err,
+        })?;
 
     let bytes = resp.bytes().await?;
 
@@ -60,7 +63,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
     source: S,
     fmt: PkgFmt,
     path: P,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), BinstallError> {
     match fmt {
         PkgFmt::Tar => {
             // Extract to install dir
@@ -188,23 +191,23 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
     None
 }
 
-pub fn confirm() -> Result<bool, anyhow::Error> {
-    info!("Do you wish to continue? yes/no");
+pub fn confirm() -> Result<(), BinstallError> {
+    loop {
+        info!("Do you wish to continue? yes/no");
 
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap();
 
-    match input.as_str().trim() {
-        "yes" => Ok(true),
-        "no" => Ok(false),
-        _ => Err(anyhow::anyhow!(
-            "Valid options are 'yes', 'no', please try again"
-        )),
+        match input.as_str().trim() {
+            "yes" | "y" | "YES" | "Y" => break Ok(()),
+            "no" | "n" | "NO" | "N" => break Err(BinstallError::UserAbort),
+            _ => continue,
+        }
     }
 }
 
 pub trait Template: Serialize {
-    fn render(&self, template: &str) -> Result<String, anyhow::Error>
+    fn render(&self, template: &str) -> Result<String, BinstallError>
     where
         Self: Sized,
     {

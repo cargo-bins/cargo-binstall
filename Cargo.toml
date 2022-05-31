@@ -19,7 +19,6 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-anyhow = "1.0.57"
 async-trait = "0.1.52"
 cargo_metadata = "0.14.2"
 cargo_toml = "0.11.4"
@@ -27,6 +26,7 @@ crates_io_api = { version = "0.8.0", default-features = false, features = ["rust
 dirs = "4.0.0"
 flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
 log = "0.4.14"
+miette = { version = "4.7.1", features = ["fancy-no-backtrace"] }
 reqwest = { version = "0.11.10", features = [ "rustls-tls" ], default-features = false }
 semver = "1.0.7"
 serde = { version = "1.0.136", features = [ "derive" ] }
@@ -36,6 +36,7 @@ strum = "0.24.0"
 strum_macros = "0.24.0"
 tar = "0.4.38"
 tempfile = "3.3.0"
+thiserror = "1.0.31"
 tinytemplate = "1.2.1"
 
 # This crate uses features rt-multi-thread and macros in `#[tokio::main]` and
