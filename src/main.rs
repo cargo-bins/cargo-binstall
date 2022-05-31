@@ -1,4 +1,9 @@
-use std::{path::PathBuf, process::exit, str::FromStr, time::Instant};
+use std::{
+    path::PathBuf,
+    process::{ExitCode, Termination},
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
 use cargo_toml::{Package, Product};
 use log::{debug, error, info, warn, LevelFilter};
@@ -75,7 +80,29 @@ struct Options {
     pkg_url: Option<String>,
 }
 
-fn main() -> ! {
+enum MainExit {
+    Success(Duration),
+    Error(BinstallError),
+    Report(miette::Report),
+}
+
+impl Termination for MainExit {
+    fn report(self) -> ExitCode {
+        match self {
+            Self::Success(spent) => {
+                info!("Installation complete! [{spent:?}]");
+                ExitCode::SUCCESS
+            }
+            Self::Error(err) => err.report(),
+            Self::Report(err) => {
+                eprintln!("{err:?}");
+                ExitCode::from(16)
+            }
+        }
+    }
+}
+
+fn main() -> MainExit {
     let start = Instant::now();
 
     let rt = Runtime::new().unwrap();
@@ -83,27 +110,15 @@ fn main() -> ! {
     drop(rt);
 
     let done = start.elapsed();
+    debug!("run time: {done:?}");
 
     if let Err(err) = result {
-        debug!("run time: {done:?}");
-
         match err.downcast::<BinstallError>() {
-            Ok(liberr @ BinstallError::UserAbort) => {
-                warn!("Installation cancelled");
-                exit(liberr.exit_code() as _);
-            }
-            Ok(liberr) => {
-                eprintln!("{liberr:?}");
-                exit(liberr.exit_code() as _);
-            }
-            Err(binerr) => {
-                eprintln!("{binerr:?}");
-                exit(16);
-            }
+            Ok(liberr) => MainExit::Error(liberr),
+            Err(binerr) => MainExit::Report(binerr),
         }
     } else {
-        info!("Installation complete! [{done:?}]");
-        exit(0);
+        MainExit::Success(done)
     }
 }
 

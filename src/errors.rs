@@ -1,3 +1,6 @@
+use std::process::{ExitCode, Termination};
+
+use log::warn;
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -152,9 +155,9 @@ impl BinstallError {
     /// - 1 and 2 (catchall and shell)
     /// - 16 (binstall errors not handled here)
     /// - 64 (generic error)
-    pub fn exit_code(&self) -> u8 {
+    pub fn exit_code(&self) -> ExitCode {
         use BinstallError::*;
-        let code = match self {
+        let code: u8 = match self {
             UserAbort => 32,
             UrlParse(_) => 65,
             Unzip(_) => 66,
@@ -173,6 +176,18 @@ impl BinstallError {
         // reserved codes
         debug_assert!(code != 64 && code != 16 && code != 1 && code != 2 && code != 0);
 
-        code
+        code.into()
+    }
+}
+
+impl Termination for BinstallError {
+    fn report(self) -> ExitCode {
+        if let BinstallError::UserAbort = self {
+            warn!("Installation cancelled");
+        } else {
+            eprintln!("{self:?}");
+        }
+
+        self.exit_code()
     }
 }
