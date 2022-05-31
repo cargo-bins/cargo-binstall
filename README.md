@@ -27,6 +27,11 @@ macos x86_64:
 wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip
 ```
 
+macos M1:
+```
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip
+```
+
 windows x86_64:
 ```
 wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip
