@@ -85,7 +85,7 @@ $ binstall \
 - Package formats
   - [x] Tgz
   - [x] Txz
-  - [ ] Tar.zst
+  - [x] Tar.zst
   - [x] Tar
   - [x] Zip
   - [x] Bin

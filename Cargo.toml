@@ -41,6 +41,13 @@ tokio = { version = "1.18.0", features = [ "full" ] }
 url = "2.2.2"
 xz2 = "0.1.6"
 zip = "0.6.2"
+# zstd is also depended by zip.
+# Since zip 0.6.2 depends on zstd 0.10.0, we also have to use 0.10.0 here,
+# otherwise there will be a link conflict.
+#
+# Enable feature bindgen to generate C bindings.
+# Enable feature zstdmt to enable multithreading in libzstd.
+zstd = { version = "0.10.0", features = [ "bindgen", "zstdmt" ], default-features = false }
 
 [dev-dependencies]
 env_logger = "0.9.0"
