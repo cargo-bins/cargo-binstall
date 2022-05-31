@@ -43,7 +43,13 @@ tinytemplate = "1.2.1"
 tokio = { version = "1.18.0", features = [ "rt-multi-thread", "macros", "process" ], default-features = false }
 url = "2.2.2"
 xz2 = "0.1.6"
-zip = "0.6.2"
+# Disable all features of zip except for features of compression algorithms:
+# Disable features include:
+#  - aes-crypto: Enables decryption of files which were encrypted with AES, absolutely zero use for
+#    this crate.
+#  - time: Enables features using the [time](https://github.com/time-rs/time) crate,
+#    which is not used by this crate.
+zip = { version = "0.6.2", default-features = false, features = [ "deflate", "bzip2", "zstd" ] }
 # zstd is also depended by zip.
 # Since zip 0.6.2 depends on zstd 0.10.0, we also have to use 0.10.0 here,
 # otherwise there will be a link conflict.
