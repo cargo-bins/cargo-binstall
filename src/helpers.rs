@@ -194,7 +194,7 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
 
 pub fn confirm() -> Result<(), BinstallError> {
     loop {
-        info!("Do you wish to continue? yes/no");
+        info!("Do you wish to continue? yes/[no]");
         eprint!("? ");
         stderr().flush().ok();
 
@@ -203,7 +203,7 @@ pub fn confirm() -> Result<(), BinstallError> {
 
         match input.as_str().trim() {
             "yes" | "y" | "YES" | "Y" => break Ok(()),
-            "no" | "n" | "NO" | "N" => break Err(BinstallError::UserAbort),
+            "no" | "n" | "NO" | "N" | "" => break Err(BinstallError::UserAbort),
             _ => continue,
         }
     }
