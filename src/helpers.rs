@@ -153,7 +153,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
 }
 
 /// Fetch install path from environment
-/// roughly follows https://doc.rust-lang.org/cargo/commands/cargo-install.html#description
+/// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
 pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathBuf> {
     // Command line override first first
     if let Some(p) = install_path {
