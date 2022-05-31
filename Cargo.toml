@@ -44,3 +44,9 @@ zip = "0.6.2"
 
 [dev-dependencies]
 env_logger = "0.9.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
