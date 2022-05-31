@@ -17,6 +17,11 @@ linux armv7:
 wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz
 ```
 
+linux arm64:
+```
+wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musleabihf.tgz
+```
+
 macos x86_64:
 ```
 wget https://github.com/ryankurte/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip
