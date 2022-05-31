@@ -41,9 +41,11 @@ tinytemplate = "1.2.1"
 
 # This crate uses features rt-multi-thread and macros in `#[tokio::main]` and
 # uses feature process to create process.
-tokio = { version = "1.18.0", features = [ "rt-multi-thread", "macros", "process" ], default-features = false }
+tokio = { version = "1.18.0", features = [ "rt-multi-thread", "process" ], default-features = false }
+
 url = "2.2.2"
 xz2 = "0.1.6"
+
 # Disable all features of zip except for features of compression algorithms:
 # Disable features include:
 #  - aes-crypto: Enables decryption of files which were encrypted with AES, absolutely zero use for
@@ -51,6 +53,7 @@ xz2 = "0.1.6"
 #  - time: Enables features using the [time](https://github.com/time-rs/time) crate,
 #    which is not used by this crate.
 zip = { version = "0.6.2", default-features = false, features = [ "deflate", "bzip2", "zstd" ] }
+
 # zstd is also depended by zip.
 # Since zip 0.6.2 depends on zstd 0.10.0, we also have to use 0.10.0 here,
 # otherwise there will be a link conflict.
