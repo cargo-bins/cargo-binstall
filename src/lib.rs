@@ -3,11 +3,14 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, EnumVariantNames};
 
-pub mod helpers;
-pub use helpers::*;
-
 pub mod drivers;
 pub use drivers::*;
+
+pub mod errors;
+pub use errors::*;
+
+pub mod helpers;
+pub use helpers::*;
 
 pub mod bins;
 pub mod fetchers;

@@ -1,25 +1,26 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use crates_io_api::AsyncClient;
 use log::debug;
 use semver::{Version, VersionReq};
 
-use crates_io_api::AsyncClient;
-
-use crate::helpers::*;
-use crate::PkgFmt;
+use crate::{helpers::*, BinstallError, PkgFmt};
 
 fn find_version<'a, V: Iterator<Item = &'a String>>(
     requirement: &str,
     version_iter: V,
-) -> Result<String, anyhow::Error> {
+) -> Result<Version, BinstallError> {
     // Parse version requirement
-    let version_req = VersionReq::parse(requirement)?;
+    let version_req = VersionReq::parse(requirement).map_err(|err| BinstallError::VersionReq {
+        req: requirement.into(),
+        err,
+    })?;
 
     // Filter for matching versions
-    let mut filtered: Vec<_> = version_iter
-        .filter(|v| {
+    let filtered: BTreeSet<_> = version_iter
+        .filter_map(|v| {
             // Remove leading `v` for git tags
             let ver_str = match v.strip_prefix("s") {
                 Some(v) => v,
@@ -27,36 +28,26 @@ fn find_version<'a, V: Iterator<Item = &'a String>>(
             };
 
             // Parse out version
-            let ver = match Version::parse(ver_str) {
-                Ok(sv) => sv,
-                Err(_) => return false,
-            };
-
+            let ver = Version::parse(ver_str).ok()?;
             debug!("Version: {:?}", ver);
 
             // Filter by version match
-            version_req.matches(&ver)
+            if version_req.matches(&ver) {
+                Some(ver)
+            } else {
+                None
+            }
         })
         .collect();
-
-    // Sort by highest matching version
-    filtered.sort_by(|a, b| {
-        let a = Version::parse(a).unwrap();
-        let b = Version::parse(b).unwrap();
-
-        b.partial_cmp(&a).unwrap()
-    });
 
     debug!("Filtered: {:?}", filtered);
 
     // Return highest version
-    match filtered.get(0) {
-        Some(v) => Ok(v.to_string()),
-        None => Err(anyhow!(
-            "No matching version for requirement: '{}'",
-            version_req
-        )),
-    }
+    filtered
+        .iter()
+        .max()
+        .cloned()
+        .ok_or_else(|| BinstallError::VersionMismatch { req: version_req })
 }
 
 /// Fetch a crate by name and version from crates.io
@@ -64,7 +55,7 @@ pub async fn fetch_crate_cratesio(
     name: &str,
     version_req: &str,
     temp_dir: &Path,
-) -> Result<PathBuf, anyhow::Error> {
+) -> Result<PathBuf, BinstallError> {
     // Fetch / update index
     debug!("Looking up crate information");
 
@@ -72,23 +63,18 @@ pub async fn fetch_crate_cratesio(
     let api_client = AsyncClient::new(
         "cargo-binstall (https://github.com/ryankurte/cargo-binstall)",
         Duration::from_millis(100),
-    )?;
+    )
+    .expect("bug: invalid user agent");
 
     // Fetch online crate information
-    let crate_info = api_client
-        .get_crate(name.as_ref())
-        .await
-        .context("Error fetching crate information");
-
-    let base_info = match crate_info {
-        Ok(i) => i,
-        Err(_) => {
-            return Err(anyhow::anyhow!(
-                "Error fetching information for crate {}",
-                name
-            ));
-        }
-    };
+    let base_info =
+        api_client
+            .get_crate(name.as_ref())
+            .await
+            .map_err(|err| BinstallError::CratesIoApi {
+                crate_name: name.into(),
+                err,
+            })?;
 
     // Locate matching version
     let version_iter =
@@ -99,16 +85,14 @@ pub async fn fetch_crate_cratesio(
     let version_name = find_version(version_req, version_iter)?;
 
     // Fetch information for the filtered version
-    let version = match base_info.versions.iter().find(|v| v.num == version_name) {
-        Some(v) => v,
-        None => {
-            return Err(anyhow::anyhow!(
-                "No information found for crate: '{}' version: '{}'",
-                name,
-                version_name
-            ));
-        }
-    };
+    let version = base_info
+        .versions
+        .iter()
+        .find(|v| v.num == version_name.to_string())
+        .ok_or_else(|| BinstallError::VersionUnavailable {
+            crate_name: name.into(),
+            v: version_name.clone(),
+        })?;
 
     debug!("Found information for crate version: '{}'", version.num);
 
@@ -136,6 +120,6 @@ pub async fn fetch_crate_gh_releases(
     _name: &str,
     _version: Option<&str>,
     _temp_dir: &Path,
-) -> Result<PathBuf, anyhow::Error> {
+) -> Result<PathBuf, BinstallError> {
     unimplemented!();
 }

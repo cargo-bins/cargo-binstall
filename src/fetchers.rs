@@ -4,7 +4,7 @@ pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
 
-use crate::{PkgFmt, PkgMeta};
+use crate::{BinstallError, PkgFmt, PkgMeta};
 
 mod gh_crate_meta;
 mod quickinstall;
@@ -17,10 +17,10 @@ pub trait Fetcher {
         Self: Sized;
 
     /// Fetch a package
-    async fn fetch(&self, dst: &Path) -> Result<(), anyhow::Error>;
+    async fn fetch(&self, dst: &Path) -> Result<(), BinstallError>;
 
     /// Check if a package is available for download
-    async fn check(&self) -> Result<bool, anyhow::Error>;
+    async fn check(&self) -> Result<bool, BinstallError>;
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;

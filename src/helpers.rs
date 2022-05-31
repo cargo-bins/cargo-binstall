@@ -1,24 +1,28 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    io::{stderr, stdin, Write},
+    path::{Path, PathBuf},
+};
 
-use log::{debug, error, info};
+use log::{debug, info};
 
 use cargo_toml::Manifest;
 use flate2::read::GzDecoder;
+use reqwest::Method;
 use serde::Serialize;
 use tar::Archive;
 use tinytemplate::TinyTemplate;
+use url::Url;
 use xz2::read::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
-use crate::Meta;
-
-use super::PkgFmt;
+use crate::{BinstallError, Meta, PkgFmt};
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
-) -> Result<Manifest<Meta>, anyhow::Error> {
+) -> Result<Manifest<Meta>, BinstallError> {
     debug!("Reading manifest: {}", manifest_path.as_ref().display());
 
     // Load and parse manifest (this checks file system for binary output names)
@@ -28,29 +32,37 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     Ok(manifest)
 }
 
-pub async fn remote_exists(url: &str, method: reqwest::Method) -> Result<bool, anyhow::Error> {
-    let req = reqwest::Client::new().request(method, url).send().await?;
+pub async fn remote_exists(url: &str, method: Method) -> Result<bool, BinstallError> {
+    let url = Url::parse(url)?;
+    let req = reqwest::Client::new()
+        .request(method.clone(), url.clone())
+        .send()
+        .await
+        .map_err(|err| BinstallError::Http { method, url, err })?;
     Ok(req.status().is_success())
 }
 
 /// Download a file from the provided URL to the provided path
-pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), anyhow::Error> {
+pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
+    let url = Url::parse(url)?;
     debug!("Downloading from: '{}'", url);
 
-    let resp = reqwest::get(url).await?;
-
-    if !resp.status().is_success() {
-        error!("Download error: {}", resp.status());
-        return Err(anyhow::anyhow!(resp.status()));
-    }
+    let resp = reqwest::get(url.clone())
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|err| BinstallError::Http {
+            method: Method::GET,
+            url,
+            err,
+        })?;
 
     let bytes = resp.bytes().await?;
 
     let path = path.as_ref();
     debug!("Download OK, writing to file: '{}'", path.display());
 
-    std::fs::create_dir_all(path.parent().unwrap())?;
-    std::fs::write(&path, bytes)?;
+    fs::create_dir_all(path.parent().unwrap())?;
+    fs::write(&path, bytes)?;
 
     Ok(())
 }
@@ -60,7 +72,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
     source: S,
     fmt: PkgFmt,
     path: P,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), BinstallError> {
     match fmt {
         PkgFmt::Tar => {
             // Extract to install dir
@@ -70,7 +82,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let mut tar = Archive::new(dat);
 
             tar.unpack(path)?;
@@ -83,7 +95,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let tar = GzDecoder::new(dat);
             let mut tgz = Archive::new(tar);
 
@@ -97,7 +109,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let tar = XzDecoder::new(dat);
             let mut txz = Archive::new(tar);
 
@@ -130,7 +142,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
 
-            let dat = std::fs::File::open(source)?;
+            let dat = fs::File::open(source)?;
             let mut zip = ZipArchive::new(dat)?;
 
             zip.extract(path)?;
@@ -142,7 +154,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
                 path.as_ref()
             );
             // Copy to install dir
-            std::fs::copy(source, path)?;
+            fs::copy(source, path)?;
         }
     };
 
@@ -150,7 +162,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
 }
 
 /// Fetch install path from environment
-/// roughly follows https://doc.rust-lang.org/cargo/commands/cargo-install.html#description
+/// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
 pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathBuf> {
     // Command line override first first
     if let Some(p) = install_path {
@@ -188,23 +200,25 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
     None
 }
 
-pub fn confirm() -> Result<bool, anyhow::Error> {
-    info!("Do you wish to continue? yes/no");
+pub fn confirm() -> Result<(), BinstallError> {
+    loop {
+        info!("Do you wish to continue? yes/[no]");
+        eprint!("? ");
+        stderr().flush().ok();
 
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
+        let mut input = String::new();
+        stdin().read_line(&mut input).unwrap();
 
-    match input.as_str().trim() {
-        "yes" => Ok(true),
-        "no" => Ok(false),
-        _ => Err(anyhow::anyhow!(
-            "Valid options are 'yes', 'no', please try again"
-        )),
+        match input.as_str().trim() {
+            "yes" | "y" | "YES" | "Y" => break Ok(()),
+            "no" | "n" | "NO" | "N" | "" => break Err(BinstallError::UserAbort),
+            _ => continue,
+        }
     }
 }
 
 pub trait Template: Serialize {
-    fn render(&self, template: &str) -> Result<String, anyhow::Error>
+    fn render(&self, template: &str) -> Result<String, BinstallError>
     where
         Self: Sized,
     {
