@@ -93,10 +93,7 @@ impl Termination for MainExit {
                 info!("Installation completed in {spent:?}");
                 ExitCode::SUCCESS
             }
-            Self::Error(err) => {
-                error!("Fatal error:");
-                err.report()
-            }
+            Self::Error(err) => err.report(),
             Self::Report(err) => {
                 error!("Fatal error:");
                 eprintln!("{err:?}");

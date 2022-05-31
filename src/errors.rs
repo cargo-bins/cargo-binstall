@@ -1,6 +1,6 @@
 use std::process::{ExitCode, Termination};
 
-use log::warn;
+use log::{error, warn};
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 
@@ -189,6 +189,7 @@ impl Termination for BinstallError {
         if let BinstallError::UserAbort = self {
             warn!("Installation cancelled");
         } else {
+            error!("Fatal error:");
             eprintln!("{:?}", Report::new(self));
         }
 
