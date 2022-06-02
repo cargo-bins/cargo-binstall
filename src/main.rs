@@ -7,10 +7,10 @@ use std::{
 };
 
 use cargo_toml::{Package, Product};
+use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
-use structopt::StructOpt;
 use tempfile::TempDir;
 use tokio::{process::Command, runtime::Runtime, task::JoinError};
 
@@ -20,64 +20,65 @@ use cargo_binstall::{
     *,
 };
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
+#[clap(version, about = "Install a Rust binary... from binaries!")]
 struct Options {
     /// Package name or URL for installation
     /// This must be either a crates.io package name or github or gitlab url
-    #[structopt()]
+    #[clap(value_name = "crate")]
     name: String,
 
     /// Filter for package version to install, in Cargo.toml format.
     /// Use `=1.2.3` to install a specific version.
-    #[structopt(long, default_value = "*")]
+    #[clap(long, default_value = "*")]
     version: String,
 
     /// Override binary target, ignoring compiled version
-    #[structopt(long, default_value = TARGET)]
+    #[clap(help_heading = "OVERRIDES", long, default_value = TARGET)]
     target: String,
 
     /// Override install path for downloaded binary.
     /// Defaults to `$HOME/.cargo/bin`
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     install_path: Option<String>,
 
     /// Disable symlinking / versioned updates
-    #[structopt(long)]
+    #[clap(long)]
     no_symlinks: bool,
 
     /// Dry run, fetch and show changes without installing binaries
-    #[structopt(long)]
+    #[clap(long)]
     dry_run: bool,
 
     /// Disable interactive mode / confirmation
-    #[structopt(long)]
+    #[clap(long)]
     no_confirm: bool,
 
     /// Do not cleanup temporary files on success
-    #[structopt(long)]
+    #[clap(long)]
     no_cleanup: bool,
 
     /// Override manifest source.
     /// This skips searching crates.io for a manifest and uses
     /// the specified path directly, useful for debugging and
     /// when adding `binstall` support.
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     manifest_path: Option<PathBuf>,
 
     /// Utility log level
-    #[structopt(long, default_value = "info")]
+    #[clap(long, default_value = "info")]
     log_level: LevelFilter,
 
     /// Override Cargo.toml package manifest bin-dir.
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     bin_dir: Option<String>,
 
     /// Override Cargo.toml package manifest pkg-fmt.
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     pkg_fmt: Option<PkgFmt>,
 
     /// Override Cargo.toml package manifest pkg-url.
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     pkg_url: Option<String>,
 }
 
@@ -140,7 +141,7 @@ async fn entry() -> Result<()> {
     }
 
     // Load options
-    let mut opts = Options::from_iter(args.iter());
+    let mut opts = Options::parse_from(args.iter());
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
