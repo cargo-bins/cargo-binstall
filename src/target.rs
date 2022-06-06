@@ -17,7 +17,7 @@ pub const TARGET: &str = env!("TARGET");
 pub async fn detect_targets() -> Vec<Box<str>> {
     #[cfg(target_os = "linux")]
     {
-        return linux::detect_targets_linux().await;
+        linux::detect_targets_linux().await
     }
     #[cfg(target_os = "macos")]
     {
@@ -31,7 +31,7 @@ mod linux {
     use std::process::Output;
     use tokio::process::Command;
 
-    async fn detect_targets_linux() -> Vec<Box<str>> {
+    pub(super) async fn detect_targets_linux() -> Vec<Box<str>> {
         let abi = parse_abi();
 
         if let Ok(Output {
