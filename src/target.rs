@@ -21,20 +21,32 @@ pub const TARGET: &str = env!("TARGET");
 /// for more information.
 pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
     if let Some(target) = get_targets_from_rustc().await {
-        return from_array([target]);
-    }
+        let mut v = from_array([target]);
 
-    #[cfg(target_os = "linux")]
-    {
-        linux::detect_targets_linux().await
-    }
-    #[cfg(target_os = "macos")]
-    {
-        macos::detect_targets_macos()
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        vec![TARGET.into()]
+        #[cfg(target_os = "linux")]
+        if v[0].contains("gnu") {
+            v.push(target.replace("gnu", "musl").into_boxed_str());
+        }
+
+        #[cfg(target_os = "macos")]
+        if &*v[0] == macos::AARCH64 {
+            v.push(macos::X86.into());
+        }
+
+        v
+    } else {
+        #[cfg(target_os = "linux")]
+        {
+            linux::detect_targets_linux().await
+        }
+        #[cfg(target_os = "macos")]
+        {
+            macos::detect_targets_macos()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            vec![TARGET.into()]
+        }
     }
 }
 
@@ -139,8 +151,8 @@ mod macos {
     use super::{from_array, ArrayVec};
     use guess_host_triple::guess_host_triple;
 
-    const AARCH64: &str = "aarch64-apple-darwin";
-    const X86: &str = "x86_64-apple-darwin";
+    pub(super) const AARCH64: &str = "aarch64-apple-darwin";
+    pub(super) const X86: &str = "x86_64-apple-darwin";
 
     pub(super) fn detect_targets_macos() -> ArrayVec<Box<str>, 2> {
         if guess_host_triple() == Some(AARCH64) {
