@@ -56,13 +56,14 @@ mod linux {
             stderr,
         }) = Command::new("ldd").arg("--version").output().await
         {
-            let libc_version = if let Some(libc_version) = parse_libc_version(stdout) {
-                libc_version
-            } else if let Some(libc_version) = parse_libc_version(stderr) {
-                libc_version
-            } else {
-                return from_array([create_target_str("musl", abi)]);
-            };
+            let libc_version =
+                if let Some(libc_version) = parse_libc_version_from_ldd_output(stdout) {
+                    libc_version
+                } else if let Some(libc_version) = parse_libc_version(stderr) {
+                    libc_version
+                } else {
+                    return from_array([create_target_str("musl", abi)]);
+                };
 
             if libc_version == "gnu" {
                 return from_array([
@@ -76,7 +77,7 @@ mod linux {
         from_array([create_target_str("musl", abi)])
     }
 
-    fn parse_libc_version(output: &[u8]) -> Option<&'static str> {
+    fn parse_libc_version_from_ldd_output(output: &[u8]) -> Option<&'static str> {
         let s = String::from_utf8_lossy(output);
         if s.contains("musl libc") {
             Some("musl")
