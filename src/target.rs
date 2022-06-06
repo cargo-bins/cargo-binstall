@@ -120,13 +120,13 @@ mod linux {
     }
 
     const fn parse_abi() -> &'static str {
-        if TARGET.endswith("abi64") {
+        if TARGET.ends_with("abi64") {
             "abi64"
-        } else if TARGET.endswith("eabi") {
+        } else if TARGET.ends_with("eabi") {
             "eabi"
-        } else if TARGET.endswith("eabihf") {
+        } else if TARGET.ends_with("eabihf") {
             "eabihf"
-        } else if TARGET.endswith("gnu") || TARGET.endswith("musl") {
+        } else if TARGET.ends_with("gnu") || TARGET.ends_with("musl") {
             ""
         } else {
             panic!("Unknown abi")
