@@ -19,7 +19,7 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-async-trait = "0.1.52"
+async-trait = "0.1.56"
 cargo_metadata = "0.14.2"
 cargo_toml = "0.11.4"
 crates_io_api = { version = "0.8.0", default-features = false, features = ["rustls"] }
