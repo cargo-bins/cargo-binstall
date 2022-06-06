@@ -1,3 +1,5 @@
+use arrayvec::ArrayVec;
+
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");
 
@@ -14,7 +16,7 @@ pub const TARGET: &str = env!("TARGET");
 ///
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
-pub async fn detect_targets() -> Vec<Box<str>> {
+pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
     #[cfg(target_os = "linux")]
     {
         linux::detect_targets_linux().await
@@ -29,13 +31,23 @@ pub async fn detect_targets() -> Vec<Box<str>> {
     }
 }
 
+fn from_array<T, const LEN: usize, const CAP: usize>(arr: [T; LEN]) -> ArrayVec<T, CAP> {
+    let mut v = ArrayVec::new();
+
+    for elem in arr {
+        v.push(elem);
+    }
+
+    v
+}
+
 #[cfg(target_os = "linux")]
 mod linux {
-    use super::TARGET;
+    use super::{from_array, ArrayVec, TARGET};
     use std::process::Output;
     use tokio::process::Command;
 
-    pub(super) async fn detect_targets_linux() -> Vec<Box<str>> {
+    pub(super) async fn detect_targets_linux() -> ArrayVec<Box<str>, 2> {
         let abi = parse_abi();
 
         if let Ok(Output {
@@ -49,19 +61,19 @@ mod linux {
             } else if let Some(libc_version) = parse_libc_version(stderr) {
                 libc_version
             } else {
-                return vec![create_target_str("musl", abi)];
+                return from_array([create_target_str("musl", abi)]);
             };
 
             if libc_version == "gnu" {
-                return vec![
+                return from_array([
                     create_target_str("gnu", abi),
                     create_target_str("musl", abi),
-                ];
+                ]);
             }
         }
 
         // Fallback to using musl
-        vec![create_target_str("musl", abi)]
+        from_array([create_target_str("musl", abi)])
     }
 
     fn parse_libc_version(output: &[u8]) -> Option<&'static str> {
@@ -104,16 +116,17 @@ mod linux {
 
 #[cfg(target_os = "macos")]
 mod macos {
+    use super::{from_array, ArrayVec};
     use guess_host_triple::guess_host_triple;
 
     const AARCH64: &str = "aarch64-apple-darwin";
     const X86: &str = "x86_64-apple-darwin";
 
-    pub(super) fn detect_targets_macos() -> Vec<Box<str>> {
+    pub(super) fn detect_targets_macos() -> ArrayVec<Box<str>, 2> {
         if guess_host_triple() == Some(AARCH64) {
-            vec![AARCH64.into(), X86.into()]
+            from_array([AARCH64.into(), X86.into()])
         } else {
-            vec![X86.into()]
+            from_array([X86.into()])
         }
     }
 }
