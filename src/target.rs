@@ -1,4 +1,7 @@
 use arrayvec::ArrayVec;
+use std::io::{BufRead, Cursor};
+use std::process::Output;
+use tokio::process::Command;
 
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");
@@ -17,6 +20,10 @@ pub const TARGET: &str = env!("TARGET");
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
 pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
+    if let Some(target) = get_targets_from_rustc().await {
+        return from_array([target]);
+    }
+
     #[cfg(target_os = "linux")]
     {
         linux::detect_targets_linux().await
@@ -28,6 +35,20 @@ pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         vec![TARGET.into()]
+    }
+}
+
+// Figure out what the host target is, from rustc or from this program's own build target
+async fn get_targets_from_rustc() -> Option<Box<str>> {
+    match Command::new("rustc").arg("-vV").output().await {
+        Ok(Output { status, stdout, .. }) if status.success() => Cursor::new(stdout)
+            .lines()
+            .filter_map(|line| line.ok())
+            .find_map(|line| {
+                line.strip_prefix("host: ")
+                    .map(|host| host.to_owned().into_boxed_str())
+            }),
+        _ => None,
     }
 }
 
@@ -43,9 +64,7 @@ fn from_array<T, const LEN: usize, const CAP: usize>(arr: [T; LEN]) -> ArrayVec<
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use super::{from_array, ArrayVec, TARGET};
-    use std::process::Output;
-    use tokio::process::Command;
+    use super::{from_array, ArrayVec, Command, Output, TARGET};
 
     pub(super) async fn detect_targets_linux() -> ArrayVec<Box<str>, 2> {
         let abi = parse_abi();
