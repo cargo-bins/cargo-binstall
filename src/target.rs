@@ -19,8 +19,10 @@ pub async fn detect_targets() -> Vec<Box<str>> {
     {
         return linux::detect_targets_linux().await;
     }
-
-    todo!()
+    #[cfg(target_os = "macos")]
+    {
+        macos::detect_targets_macos()
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -93,5 +95,21 @@ mod linux {
         target.push_str(abi);
 
         target.into_boxed_str()
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod macos {
+    use guess_host_triple::guess_host_triple;
+
+    const AARCH64: &str = "aarch64-apple-darwin";
+    const X86: &str = "x86_64-apple-darwin";
+
+    pub(super) fn detect_targets_macos() -> Vec<Box<str>> {
+        if guess_host_triple() == Some(AARCH64) {
+            vec![AARCH64.into(), X86.into()]
+        } else {
+            vec![X86.into()]
+        }
     }
 }
