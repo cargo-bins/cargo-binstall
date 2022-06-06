@@ -23,6 +23,10 @@ pub async fn detect_targets() -> Vec<Box<str>> {
     {
         macos::detect_targets_macos()
     }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        vec![TARGET.into()]
+    }
 }
 
 #[cfg(target_os = "linux")]
