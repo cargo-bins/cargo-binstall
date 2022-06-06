@@ -45,7 +45,7 @@ pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
-            vec![TARGET.into()]
+            from_array([TARGET.into()])
         }
     }
 }
