@@ -25,7 +25,7 @@ pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
 
         #[cfg(target_os = "linux")]
         if v[0].contains("gnu") {
-            v.push(target.replace("gnu", "musl").into_boxed_str());
+            v.push(v[0].replace("gnu", "musl").into_boxed_str());
         }
 
         #[cfg(target_os = "macos")]
@@ -88,9 +88,9 @@ mod linux {
         }) = Command::new("ldd").arg("--version").output().await
         {
             let libc_version =
-                if let Some(libc_version) = parse_libc_version_from_ldd_output(stdout) {
+                if let Some(libc_version) = parse_libc_version_from_ldd_output(&stdout) {
                     libc_version
-                } else if let Some(libc_version) = parse_libc_version(stderr) {
+                } else if let Some(libc_version) = parse_libc_version_from_ldd_output(&stderr) {
                     libc_version
                 } else {
                     return from_array([create_target_str("musl", abi)]);
