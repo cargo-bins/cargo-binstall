@@ -119,7 +119,7 @@ mod linux {
         }
     }
 
-    const fn parse_abi() -> &'static str {
+    fn parse_abi() -> &'static str {
         if TARGET.ends_with("abi64") {
             "abi64"
         } else if TARGET.ends_with("eabi") {
