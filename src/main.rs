@@ -103,7 +103,7 @@ impl Termination for MainExit {
             Self::JoinErr(err) => {
                 error!("Fatal error:");
                 eprintln!("{err:?}");
-                ExitCode::from(16)
+                ExitCode::from(17)
             }
         }
     }
