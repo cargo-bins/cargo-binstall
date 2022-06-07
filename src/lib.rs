@@ -15,8 +15,8 @@ pub use helpers::*;
 pub mod bins;
 pub mod fetchers;
 
-/// Compiled target triple, used as default for binary fetching
-pub const TARGET: &str = env!("TARGET");
+mod target;
+pub use target::*;
 
 /// Default package path template (may be overridden in package Cargo.toml)
 pub const DEFAULT_PKG_URL: &str =
