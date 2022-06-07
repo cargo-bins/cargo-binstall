@@ -181,6 +181,7 @@ async fn entry() -> Result<()> {
     let mut log_config = ConfigBuilder::new();
     log_config.add_filter_ignore("hyper".to_string());
     log_config.add_filter_ignore("reqwest".to_string());
+    log_config.add_filter_ignore("rustls".to_string());
     log_config.set_location_level(LevelFilter::Off);
     TermLogger::init(
         opts.log_level,
