@@ -120,15 +120,13 @@ fn main() -> MainExit {
     let done = start.elapsed();
     debug!("run time: {done:?}");
 
-    result
-        .map(|res| {
-            res.map(|_| MainExit::Success(done)).unwrap_or_else(|err| {
-                err.downcast::<BinstallError>()
-                    .map(MainExit::Error)
-                    .unwrap_or_else(MainExit::Report)
-            })
+    result.map_or_else(MainExit::JoinErr, |res| {
+        res.map(|_| MainExit::Success(done)).unwrap_or_else(|err| {
+            err.downcast::<BinstallError>()
+                .map(MainExit::Error)
+                .unwrap_or_else(MainExit::Report)
         })
-        .unwrap_or_else(MainExit::JoinErr)
+    })
 }
 
 async fn entry() -> Result<()> {
