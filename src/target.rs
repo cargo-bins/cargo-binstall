@@ -126,7 +126,7 @@ mod linux {
             .expect("unwrap: TARGET always has a -")
             .0;
 
-        format!("{prefix}{libc_version}{abi}")
+        format!("{prefix}-{libc_version}{abi}")
     }
 }
 
