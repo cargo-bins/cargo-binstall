@@ -77,6 +77,11 @@ impl QuickInstall {
     }
 
     pub async fn report(&self) -> Result<(), BinstallError> {
+        if cfg!(debug_assertions) {
+            debug!("Not sending quickinstall report in debug mode");
+            return Ok(());
+        }
+
         let url = Url::parse(&self.stats_url())?;
         debug!("Sending installation report to quickinstall ({url})");
 
