@@ -30,7 +30,7 @@ impl super::Fetcher for QuickInstall {
         let url = self.package_url();
         self.report().await?;
         info!("Checking for package at: '{url}'");
-        remote_exists(&url, Method::HEAD).await
+        remote_exists(Url::parse(&url)?, Method::HEAD).await
     }
 
     async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {
