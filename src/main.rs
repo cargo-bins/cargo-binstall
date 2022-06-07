@@ -341,7 +341,7 @@ async fn install_from_package(
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
         name: package.name.clone(),
-        target: opts.target.clone(),
+        target: fetcher.target().to_string(),
         version: package.version.clone(),
         repo: package.repository.clone(),
         meta,
