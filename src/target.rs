@@ -3,6 +3,7 @@ use std::io::{BufRead, Cursor};
 use std::iter::IntoIterator;
 use std::ops::Deref;
 use std::process::Output;
+use std::slice;
 use tokio::process::Command;
 
 /// Compiled target triple, used as default for binary fetching
@@ -41,6 +42,15 @@ impl IntoIterator for Targets {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Targets {
+    type Item = &'a Box<str>;
+    type IntoIter = slice::Iter<'a, Box<str>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.0).into_iter()
     }
 }
 
