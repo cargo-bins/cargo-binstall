@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use log::info;
 use reqwest::Method;
@@ -17,11 +18,11 @@ pub struct QuickInstall {
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    async fn new(data: &Data) -> Box<Self> {
+    async fn new(data: &Data) -> Arc<Self> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = &data.target;
-        Box::new(Self {
+        Arc::new(Self {
             package: format!("{crate_name}-{version}-{target}"),
         })
     }

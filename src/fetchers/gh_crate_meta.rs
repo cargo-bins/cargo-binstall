@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use log::{debug, info, warn};
 use reqwest::Method;
@@ -22,8 +23,8 @@ impl GhCrateMeta {
 
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
-    async fn new(data: &Data) -> Box<Self> {
-        Box::new(Self { data: data.clone() })
+    async fn new(data: &Data) -> Arc<Self> {
+        Arc::new(Self { data: data.clone() })
     }
 
     async fn check(&self) -> Result<bool, BinstallError> {

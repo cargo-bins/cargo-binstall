@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 pub use gh_crate_meta::*;
 pub use log::debug;
@@ -12,7 +13,7 @@ mod quickinstall;
 #[async_trait::async_trait]
 pub trait Fetcher {
     /// Create a new fetcher from some data
-    async fn new(data: &Data) -> Box<Self>
+    async fn new(data: &Data) -> Arc<Self>
     where
         Self: Sized;
 
@@ -44,11 +45,11 @@ pub struct Data {
 
 #[derive(Default)]
 pub struct MultiFetcher {
-    fetchers: Vec<Box<dyn Fetcher>>,
+    fetchers: Vec<Arc<dyn Fetcher>>,
 }
 
 impl MultiFetcher {
-    pub fn add(&mut self, fetcher: Box<dyn Fetcher>) {
+    pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
         self.fetchers.push(fetcher);
     }
 
