@@ -98,7 +98,8 @@ pub async fn detect_targets() -> Targets {
     }
 }
 
-// Figure out what the host target is, from rustc or from this program's own build target
+/// Figure out what the host target is using `rustc`.
+/// If `rustc` is absent, then it would return `None`.
 async fn get_target_from_rustc() -> Option<Box<str>> {
     match Command::new("rustc").arg("-vV").output().await {
         Ok(Output { status, stdout, .. }) if status.success() => Cursor::new(stdout)
