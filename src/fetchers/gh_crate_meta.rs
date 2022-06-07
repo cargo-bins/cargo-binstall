@@ -37,7 +37,7 @@ impl super::Fetcher for GhCrateMeta {
         }
 
         info!("Checking for package at: '{url}'");
-        remote_exists(url.as_str(), Method::HEAD).await
+        remote_exists(url, Method::HEAD).await
     }
 
     async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {
