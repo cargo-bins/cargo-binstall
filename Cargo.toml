@@ -41,7 +41,7 @@ tinytemplate = "1.2.1"
 
 # This crate uses features rt-multi-thread and macros in `#[tokio::main]` and
 # uses feature process to create process.
-tokio = { version = "1.18.0", features = [ "rt-multi-thread", "process" ], default-features = false }
+tokio = { version = "1.19.1", features = [ "rt-multi-thread", "process" ], default-features = false }
 
 url = "2.2.2"
 xz2 = "0.1.6"
