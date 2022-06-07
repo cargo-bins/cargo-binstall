@@ -120,16 +120,14 @@ mod linux {
     }
 
     fn parse_abi() -> &'static str {
-        if TARGET.ends_with("abi64") {
-            "abi64"
-        } else if TARGET.ends_with("eabi") {
-            "eabi"
-        } else if TARGET.ends_with("eabihf") {
-            "eabihf"
-        } else if TARGET.ends_with("gnu") || TARGET.ends_with("musl") {
-            ""
+        let last = TARGET.rsplit_once('-').unwrap().1;
+
+        if let Some(libc_version) = last.strip_prefix("musl") {
+            libc_version
+        } else if let Some(libc_version) = last.strip_prefix("gnu") {
+            libc_version
         } else {
-            panic!("Unknown abi")
+            panic!("Unrecognized libc")
         }
     }
 
