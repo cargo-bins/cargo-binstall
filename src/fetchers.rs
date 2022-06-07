@@ -11,7 +11,7 @@ mod gh_crate_meta;
 mod quickinstall;
 
 #[async_trait::async_trait]
-pub trait Fetcher {
+pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
     async fn new(data: &Data) -> Arc<Self>
     where
