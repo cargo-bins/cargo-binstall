@@ -32,8 +32,7 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     Ok(manifest)
 }
 
-pub async fn remote_exists(url: &str, method: Method) -> Result<bool, BinstallError> {
-    let url = Url::parse(url)?;
+pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallError> {
     let req = reqwest::Client::new()
         .request(method.clone(), url.clone())
         .send()

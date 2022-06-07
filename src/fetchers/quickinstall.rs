@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use log::info;
 use reqwest::Method;
@@ -18,11 +19,11 @@ pub struct QuickInstall {
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    async fn new(data: &Data) -> Box<Self> {
+    async fn new(data: &Data) -> Arc<Self> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = data.target.clone();
-        Box::new(Self {
+        Arc::new(Self {
             package: format!("{crate_name}-{version}-{target}"),
             target,
         })
@@ -32,7 +33,7 @@ impl super::Fetcher for QuickInstall {
         let url = self.package_url();
         self.report().await?;
         info!("Checking for package at: '{url}'");
-        remote_exists(&url, Method::HEAD).await
+        remote_exists(Url::parse(&url)?, Method::HEAD).await
     }
 
     async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {

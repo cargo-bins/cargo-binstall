@@ -11,7 +11,7 @@ use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use structopt::StructOpt;
 use tempfile::TempDir;
-use tokio::{process::Command, runtime::Runtime};
+use tokio::{process::Command, runtime::Runtime, task::JoinError};
 
 use cargo_binstall::{
     bins,
@@ -84,6 +84,7 @@ enum MainExit {
     Success(Duration),
     Error(BinstallError),
     Report(miette::Report),
+    JoinErr(JoinError),
 }
 
 impl Termination for MainExit {
@@ -99,6 +100,11 @@ impl Termination for MainExit {
                 eprintln!("{err:?}");
                 ExitCode::from(16)
             }
+            Self::JoinErr(err) => {
+                error!("Fatal error:");
+                eprintln!("{err:?}");
+                ExitCode::from(17)
+            }
         }
     }
 }
@@ -107,19 +113,20 @@ fn main() -> MainExit {
     let start = Instant::now();
 
     let rt = Runtime::new().unwrap();
-    let result = rt.block_on(entry());
+    let handle = rt.spawn(entry());
+    let result = rt.block_on(handle);
     drop(rt);
 
     let done = start.elapsed();
     debug!("run time: {done:?}");
 
-    result
-        .map(|_| MainExit::Success(done))
-        .unwrap_or_else(|err| {
+    result.map_or_else(MainExit::JoinErr, |res| {
+        res.map(|_| MainExit::Success(done)).unwrap_or_else(|err| {
             err.downcast::<BinstallError>()
                 .map(MainExit::Error)
                 .unwrap_or_else(MainExit::Report)
         })
+    })
 }
 
 async fn entry() -> Result<()> {
@@ -240,7 +247,7 @@ async fn entry() -> Result<()> {
         Some(fetcher) => {
             install_from_package(
                 binaries,
-                fetcher,
+                &*fetcher,
                 install_path,
                 meta,
                 opts,

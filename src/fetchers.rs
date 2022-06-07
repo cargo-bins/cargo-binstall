@@ -1,8 +1,10 @@
 use std::path::Path;
+use std::sync::Arc;
 
 pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
+use tokio::task::JoinHandle;
 
 use crate::{BinstallError, PkgFmt, PkgMeta};
 
@@ -10,9 +12,9 @@ mod gh_crate_meta;
 mod quickinstall;
 
 #[async_trait::async_trait]
-pub trait Fetcher {
+pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
-    async fn new(data: &Data) -> Box<Self>
+    async fn new(data: &Data) -> Arc<Self>
     where
         Self: Sized;
 
@@ -47,30 +49,59 @@ pub struct Data {
 
 #[derive(Default)]
 pub struct MultiFetcher {
-    fetchers: Vec<Box<dyn Fetcher>>,
+    fetchers: Vec<Arc<dyn Fetcher>>,
 }
 
 impl MultiFetcher {
-    pub fn add(&mut self, fetcher: Box<dyn Fetcher>) {
+    pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
         self.fetchers.push(fetcher);
     }
 
-    pub async fn first_available(&self) -> Option<&dyn Fetcher> {
-        for fetcher in &self.fetchers {
-            let available = fetcher.check().await.unwrap_or_else(|err| {
-                debug!(
-                    "Error while checking fetcher {}: {}",
-                    fetcher.source_name(),
-                    err
-                );
-                false
-            });
+    pub async fn first_available(&self) -> Option<Arc<dyn Fetcher>> {
+        let handles: Vec<_> = self
+            .fetchers
+            .iter()
+            .cloned()
+            .map(|fetcher| {
+                let fetcher_cloned = fetcher.clone();
 
-            if available {
-                return Some(&**fetcher);
+                (
+                    AutoAbortJoinHandle(tokio::spawn(async move { fetcher.check().await })),
+                    fetcher_cloned,
+                )
+            })
+            .collect();
+
+        for (mut handle, fetcher) in handles {
+            match (&mut handle.0).await {
+                Ok(Ok(true)) => return Some(fetcher),
+                Ok(Ok(false)) => (),
+                Ok(Err(err)) => {
+                    debug!(
+                        "Error while checking fetcher {}: {}",
+                        fetcher.source_name(),
+                        err
+                    );
+                }
+                Err(join_err) => {
+                    debug!(
+                        "Error while checking fetcher {}: {}",
+                        fetcher.source_name(),
+                        join_err
+                    );
+                }
             }
         }
 
         None
+    }
+}
+
+#[derive(Debug)]
+struct AutoAbortJoinHandle(JoinHandle<Result<bool, BinstallError>>);
+
+impl Drop for AutoAbortJoinHandle {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }
