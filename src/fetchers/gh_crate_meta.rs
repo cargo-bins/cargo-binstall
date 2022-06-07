@@ -66,6 +66,10 @@ impl super::Fetcher for GhCrateMeta {
     fn is_third_party(&self) -> bool {
         false
     }
+
+    fn target(&self) -> &str {
+        &self.data.target
+    }
 }
 
 /// Template for constructing download paths

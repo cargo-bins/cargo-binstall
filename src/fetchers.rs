@@ -30,6 +30,9 @@ pub trait Fetcher {
 
     /// Should return true if the remote is from a third-party source
     fn is_third_party(&self) -> bool;
+
+    /// Return the target for this fetcher
+    fn target(&self) -> &str;
 }
 
 /// Data required to fetch a package
