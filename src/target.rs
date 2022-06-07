@@ -123,8 +123,8 @@ mod linux {
     fn create_target_str(libc_version: &str, abi: &str) -> String {
         let prefix = TARGET
             .rsplit_once('-')
-            .map(|s| format!("{}-", s.0))
-            .unwrap_or_default();
+            .expect("unwrap: TARGET always has a -")
+            .0;
 
         format!("{prefix}{libc_version}{abi}")
     }
