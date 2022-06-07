@@ -19,6 +19,7 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
+arrayvec = "0.7.2"
 async-trait = "0.1.52"
 cargo_metadata = "0.14.2"
 cargo_toml = "0.11.4"
@@ -61,8 +62,6 @@ zip = { version = "0.6.2", default-features = false, features = [ "deflate", "bz
 # Enable feature bindgen to generate C bindings.
 # Enable feature zstdmt to enable multithreading in libzstd.
 zstd = { version = "0.10.0", features = [ "bindgen", "zstdmt" ], default-features = false }
-
-arrayvec = "0.7.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 guess_host_triple = "0.1.3"
