@@ -63,16 +63,7 @@ impl MultiFetcher {
                 let fetcher_cloned = fetcher.clone();
 
                 (
-                    AutoAbortJoinHandle(tokio::spawn(async move {
-                        fetcher.check().await.unwrap_or_else(|err| {
-                            debug!(
-                                "Error while checking fetcher {}: {}",
-                                fetcher.source_name(),
-                                err
-                            );
-                            false
-                        })
-                    })),
+                    AutoAbortJoinHandle(tokio::spawn(async move { fetcher.check().await })),
                     fetcher_cloned,
                 )
             })
@@ -80,7 +71,15 @@ impl MultiFetcher {
 
         for (mut handle, fetcher) in handles {
             match (&mut handle.0).await {
-                Ok(true) => return Some(fetcher),
+                Ok(Ok(true)) => return Some(fetcher),
+                Ok(Ok(false)) => (),
+                Ok(Err(err)) => {
+                    debug!(
+                        "Error while checking fetcher {}: {}",
+                        fetcher.source_name(),
+                        err
+                    );
+                }
                 Err(join_err) => {
                     debug!(
                         "Error while checking fetcher {}: {}",
@@ -88,7 +87,6 @@ impl MultiFetcher {
                         join_err
                     );
                 }
-                _ => (),
             }
         }
 
@@ -97,7 +95,7 @@ impl MultiFetcher {
 }
 
 #[derive(Debug)]
-struct AutoAbortJoinHandle(JoinHandle<bool>);
+struct AutoAbortJoinHandle(JoinHandle<Result<bool, BinstallError>>);
 
 impl Drop for AutoAbortJoinHandle {
     fn drop(&mut self) {
