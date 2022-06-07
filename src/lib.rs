@@ -16,7 +16,7 @@ pub mod bins;
 pub mod fetchers;
 
 mod target;
-pub use target::{detect_targets, TARGET};
+pub use target::*;
 
 /// Default package path template (may be overridden in package Cargo.toml)
 pub const DEFAULT_PKG_URL: &str =
