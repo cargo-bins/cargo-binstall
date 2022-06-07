@@ -4,6 +4,7 @@ use std::sync::Arc;
 pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
+use tokio::task::JoinHandle;
 
 use crate::{BinstallError, PkgFmt, PkgMeta};
 
@@ -53,22 +54,53 @@ impl MultiFetcher {
         self.fetchers.push(fetcher);
     }
 
-    pub async fn first_available(&self) -> Option<&dyn Fetcher> {
-        for fetcher in &self.fetchers {
-            let available = fetcher.check().await.unwrap_or_else(|err| {
-                debug!(
-                    "Error while checking fetcher {}: {}",
-                    fetcher.source_name(),
-                    err
-                );
-                false
-            });
+    pub async fn first_available(&self) -> Option<Arc<dyn Fetcher>> {
+        let handles: Vec<_> = self
+            .fetchers
+            .iter()
+            .cloned()
+            .map(|fetcher| {
+                let fetcher_cloned = fetcher.clone();
 
-            if available {
-                return Some(&**fetcher);
+                (
+                    AutoAbortJoinHandle(tokio::spawn(async move {
+                        fetcher.check().await.unwrap_or_else(|err| {
+                            debug!(
+                                "Error while checking fetcher {}: {}",
+                                fetcher.source_name(),
+                                err
+                            );
+                            false
+                        })
+                    })),
+                    fetcher_cloned,
+                )
+            })
+            .collect();
+
+        for (mut handle, fetcher) in handles {
+            match (&mut handle.0).await {
+                Ok(true) => return Some(fetcher),
+                Err(join_err) => {
+                    debug!(
+                        "Error while checking fetcher {}: {}",
+                        fetcher.source_name(),
+                        join_err
+                    );
+                }
+                _ => (),
             }
         }
 
         None
+    }
+}
+
+#[derive(Debug)]
+struct AutoAbortJoinHandle(JoinHandle<bool>);
+
+impl Drop for AutoAbortJoinHandle {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }

@@ -234,7 +234,7 @@ async fn entry() -> Result<()> {
         Some(fetcher) => {
             install_from_package(
                 binaries,
-                fetcher,
+                &*fetcher,
                 install_path,
                 meta,
                 opts,
