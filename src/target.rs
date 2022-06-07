@@ -1,10 +1,48 @@
 use arrayvec::ArrayVec;
 use std::io::{BufRead, Cursor};
+use std::iter::IntoIterator;
+use std::ops::Deref;
 use std::process::Output;
 use tokio::process::Command;
 
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");
+
+#[derive(Debug, Clone)]
+pub struct Targets(ArrayVec<Box<str>, 2>);
+
+impl Targets {
+    fn from_array<const LEN: usize>(arr: [Box<str>; LEN]) -> Self {
+        let mut v = ArrayVec::new();
+
+        for elem in arr {
+            v.push(elem);
+        }
+
+        Self(v)
+    }
+
+    fn push(&mut self, s: Box<str>) {
+        self.0.push(s)
+    }
+}
+
+impl Deref for Targets {
+    type Target = [Box<str>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl IntoIterator for Targets {
+    type Item = Box<str>;
+    type IntoIter = arrayvec::IntoIter<Box<str>, 2>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
 
 /// Detect the targets supported at runtime,
 /// which might be different from `TARGET` which is detected
@@ -19,9 +57,9 @@ pub const TARGET: &str = env!("TARGET");
 ///
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
-pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
+pub async fn detect_targets() -> Targets {
     if let Some(target) = get_targets_from_rustc().await {
-        let mut v = from_array([target]);
+        let mut v = Targets::from_array([target]);
 
         #[cfg(target_os = "linux")]
         if v[0].contains("gnu") {
@@ -45,7 +83,7 @@ pub async fn detect_targets() -> ArrayVec<Box<str>, 2> {
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
-            from_array([TARGET.into()])
+            Targets::from_array([TARGET.into()])
         }
     }
 }
@@ -64,21 +102,11 @@ async fn get_targets_from_rustc() -> Option<Box<str>> {
     }
 }
 
-fn from_array<T, const LEN: usize, const CAP: usize>(arr: [T; LEN]) -> ArrayVec<T, CAP> {
-    let mut v = ArrayVec::new();
-
-    for elem in arr {
-        v.push(elem);
-    }
-
-    v
-}
-
 #[cfg(target_os = "linux")]
 mod linux {
-    use super::{from_array, ArrayVec, Command, Output, TARGET};
+    use super::{Command, Output, Targets, TARGET};
 
-    pub(super) async fn detect_targets_linux() -> ArrayVec<Box<str>, 2> {
+    pub(super) async fn detect_targets_linux() -> Targets {
         let abi = parse_abi();
 
         if let Ok(Output {
@@ -93,11 +121,11 @@ mod linux {
                 } else if let Some(libc_version) = parse_libc_version_from_ldd_output(&stderr) {
                     libc_version
                 } else {
-                    return from_array([create_target_str("musl", abi)]);
+                    return Targets::from_array([create_target_str("musl", abi)]);
                 };
 
             if libc_version == "gnu" {
-                return from_array([
+                return Targets::from_array([
                     create_target_str("gnu", abi),
                     create_target_str("musl", abi),
                 ]);
@@ -105,7 +133,7 @@ mod linux {
         }
 
         // Fallback to using musl
-        from_array([create_target_str("musl", abi)])
+        Targets::from_array([create_target_str("musl", abi)])
     }
 
     fn parse_libc_version_from_ldd_output(output: &[u8]) -> Option<&'static str> {
@@ -146,17 +174,17 @@ mod linux {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::{from_array, ArrayVec};
+    use super::Targets;
     use guess_host_triple::guess_host_triple;
 
     pub(super) const AARCH64: &str = "aarch64-apple-darwin";
     pub(super) const X86: &str = "x86_64-apple-darwin";
 
-    pub(super) fn detect_targets_macos() -> ArrayVec<Box<str>, 2> {
+    pub(super) fn detect_targets_macos() -> Targets {
         if guess_host_triple() == Some(AARCH64) {
-            from_array([AARCH64.into(), X86.into()])
+            Targets::from_array([AARCH64.into(), X86.into()])
         } else {
-            from_array([X86.into()])
+            Targets::from_array([X86.into()])
         }
     }
 }
