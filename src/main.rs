@@ -23,14 +23,14 @@ use cargo_binstall::{
 #[derive(Debug, Parser)]
 #[clap(version, about = "Install a Rust binary... from binaries!")]
 struct Options {
-    /// Package name or URL for installation.
-    /// 
-    /// This must be either a crates.io package name or github or gitlab URL.
+    /// Package name for installation.
+    ///
+    /// This must be a crates.io package name.
     #[clap(value_name = "crate")]
     name: String,
 
     /// Semver filter to select the package version to install.
-    /// 
+    ///
     /// This is in Cargo.toml dependencies format: `--version 1.2.3` is equivalent to
     /// `--version "^1.2.3"`. Use `=1.2.3` to install a specific version.
     #[clap(long, default_value = "*")]
@@ -41,17 +41,17 @@ struct Options {
     target: Option<String>,
 
     /// Override install path for downloaded binary.
-    /// 
+    ///
     /// Defaults to `$HOME/.cargo/bin`
     #[clap(help_heading = "OVERRIDES", long)]
     install_path: Option<String>,
 
     /// Disable symlinking / versioned updates.
-    /// 
+    ///
     /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and
     /// either symlink or copy it to (depending on platform) the plain binary name. This makes it
     /// possible to have multiple versions of the same binary, for example for testing or rollback.
-    /// 
+    ///
     /// Pass this flag to disable this behavior.
     #[clap(long)]
     no_symlinks: bool,
@@ -69,7 +69,7 @@ struct Options {
     no_cleanup: bool,
 
     /// Override manifest source.
-    /// 
+    ///
     /// This skips searching crates.io for a manifest and uses the specified path directly, useful
     /// for debugging and when adding Binstall support. This must be the path to the folder
     /// containing a Cargo.toml file, not the Cargo.toml file itself.
@@ -77,7 +77,7 @@ struct Options {
     manifest_path: Option<PathBuf>,
 
     /// Utility log level
-    /// 
+    ///
     /// Set to `debug` when submitting a bug report.
     #[clap(long, default_value = "info")]
     log_level: LevelFilter,
