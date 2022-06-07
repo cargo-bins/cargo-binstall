@@ -68,7 +68,7 @@ impl<'a> IntoIterator for &'a Targets {
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
 pub async fn detect_targets() -> Targets {
-    if let Some(target) = get_targets_from_rustc().await {
+    if let Some(target) = get_target_from_rustc().await {
         let mut v = Targets::from_array([target]);
 
         #[cfg(target_os = "linux")]
@@ -99,7 +99,7 @@ pub async fn detect_targets() -> Targets {
 }
 
 // Figure out what the host target is, from rustc or from this program's own build target
-async fn get_targets_from_rustc() -> Option<Box<str>> {
+async fn get_target_from_rustc() -> Option<Box<str>> {
     match Command::new("rustc").arg("-vV").output().await {
         Ok(Output { status, stdout, .. }) if status.success() => Cursor::new(stdout)
             .lines()
