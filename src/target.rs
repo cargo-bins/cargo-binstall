@@ -101,16 +101,18 @@ pub async fn detect_targets() -> Targets {
 /// Figure out what the host target is using `rustc`.
 /// If `rustc` is absent, then it would return `None`.
 async fn get_target_from_rustc() -> Option<Box<str>> {
-    match Command::new("rustc").arg("-vV").output().await {
-        Ok(Output { status, stdout, .. }) if status.success() => Cursor::new(stdout)
-            .lines()
-            .filter_map(|line| line.ok())
-            .find_map(|line| {
-                line.strip_prefix("host: ")
-                    .map(|host| host.to_owned().into_boxed_str())
-            }),
-        _ => None,
+    let Output { status, stdout, .. } = Command::new("rustc").arg("-vV").output().await.ok()?;
+    if !status.success() {
+        return None;
     }
+
+    Cursor::new(stdout)
+        .lines()
+        .filter_map(|line| line.ok())
+        .find_map(|line| {
+            line.strip_prefix("host: ")
+                .map(|host| host.to_owned().into_boxed_str())
+        })
 }
 
 #[cfg(target_os = "linux")]
