@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsString,
     path::PathBuf,
     process::{ExitCode, Termination},
     str::FromStr,
@@ -133,7 +134,7 @@ async fn entry() -> Result<()> {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
-    let mut args: Vec<String> = std::env::args().collect();
+    let mut args: Vec<OsString> = std::env::args_os().collect();
     if args.len() > 1 && args[1] == "binstall" {
         args.remove(1);
     }
