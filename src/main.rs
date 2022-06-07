@@ -23,49 +23,62 @@ use cargo_binstall::{
 #[derive(Debug, Parser)]
 #[clap(version, about = "Install a Rust binary... from binaries!")]
 struct Options {
-    /// Package name or URL for installation
-    /// This must be either a crates.io package name or github or gitlab url
+    /// Package name or URL for installation.
+    /// 
+    /// This must be either a crates.io package name or github or gitlab URL.
     #[clap(value_name = "crate")]
     name: String,
 
-    /// Filter for package version to install, in Cargo.toml format.
-    /// Use `=1.2.3` to install a specific version.
+    /// Semver filter to select the package version to install.
+    /// 
+    /// This is in Cargo.toml dependencies format: `--version 1.2.3` is equivalent to
+    /// `--version "^1.2.3"`. Use `=1.2.3` to install a specific version.
     #[clap(long, default_value = "*")]
     version: String,
 
-    /// Override binary target, ignoring compiled version
-    #[clap(help_heading = "OVERRIDES", long, default_value = TARGET)]
-    target: String,
+    /// Override binary target set. Defaults to a set of targets based on the current platform.
+    #[clap(help_heading = "OVERRIDES", long)]
+    target: Option<String>,
 
     /// Override install path for downloaded binary.
+    /// 
     /// Defaults to `$HOME/.cargo/bin`
     #[clap(help_heading = "OVERRIDES", long)]
     install_path: Option<String>,
 
-    /// Disable symlinking / versioned updates
+    /// Disable symlinking / versioned updates.
+    /// 
+    /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and
+    /// either symlink or copy it to (depending on platform) the plain binary name. This makes it
+    /// possible to have multiple versions of the same binary, for example for testing or rollback.
+    /// 
+    /// Pass this flag to disable this behavior.
     #[clap(long)]
     no_symlinks: bool,
 
-    /// Dry run, fetch and show changes without installing binaries
+    /// Dry run, fetch and show changes without installing binaries.
     #[clap(long)]
     dry_run: bool,
 
-    /// Disable interactive mode / confirmation
+    /// Disable interactive mode / confirmation prompts.
     #[clap(long)]
     no_confirm: bool,
 
-    /// Do not cleanup temporary files on success
+    /// Do not cleanup temporary files.
     #[clap(long)]
     no_cleanup: bool,
 
     /// Override manifest source.
-    /// This skips searching crates.io for a manifest and uses
-    /// the specified path directly, useful for debugging and
-    /// when adding `binstall` support.
+    /// 
+    /// This skips searching crates.io for a manifest and uses the specified path directly, useful
+    /// for debugging and when adding Binstall support. This must be the path to the folder
+    /// containing a Cargo.toml file, not the Cargo.toml file itself.
     #[clap(help_heading = "OVERRIDES", long)]
     manifest_path: Option<PathBuf>,
 
     /// Utility log level
+    /// 
+    /// Set to `debug` when submitting a bug report.
     #[clap(long, default_value = "info")]
     log_level: LevelFilter,
 
