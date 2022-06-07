@@ -14,6 +14,7 @@ const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VE
 
 pub struct QuickInstall {
     package: String,
+    target: String,
 }
 
 #[async_trait::async_trait]
@@ -21,9 +22,10 @@ impl super::Fetcher for QuickInstall {
     async fn new(data: &Data) -> Arc<Self> {
         let crate_name = &data.name;
         let version = &data.version;
-        let target = &data.target;
+        let target = data.target.clone();
         Arc::new(Self {
             package: format!("{crate_name}-{version}-{target}"),
+            target,
         })
     }
 
@@ -50,6 +52,10 @@ impl super::Fetcher for QuickInstall {
 
     fn is_third_party(&self) -> bool {
         true
+    }
+
+    fn target(&self) -> &str {
+        &self.target
     }
 }
 

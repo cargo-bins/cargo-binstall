@@ -225,18 +225,24 @@ async fn entry() -> Result<()> {
         .join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
     debug!("Using temporary download path: {}", pkg_path.display());
 
-    let fetcher_data = Data {
-        name: package.name.clone(),
-        target: opts.target.clone(),
-        version: package.version.clone(),
-        repo: package.repository.clone(),
-        meta: meta.clone(),
-    };
+    let fetcher_data: Vec<_> = detect_targets()
+        .await
+        .into_iter()
+        .map(|target| Data {
+            name: package.name.clone(),
+            target: target.into(),
+            version: package.version.clone(),
+            repo: package.repository.clone(),
+            meta: meta.clone(),
+        })
+        .collect();
 
     // Try github releases, then quickinstall
     let mut fetchers = MultiFetcher::default();
-    fetchers.add(GhCrateMeta::new(&fetcher_data).await);
-    fetchers.add(QuickInstall::new(&fetcher_data).await);
+    for data in &fetcher_data {
+        fetchers.add(GhCrateMeta::new(data).await);
+        fetchers.add(QuickInstall::new(data).await);
+    }
 
     match fetchers.first_available().await {
         Some(fetcher) => {
@@ -343,7 +349,7 @@ async fn install_from_package(
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
         name: package.name.clone(),
-        target: opts.target.clone(),
+        target: fetcher.target().to_string(),
         version: package.version.clone(),
         repo: package.repository.clone(),
         meta,
