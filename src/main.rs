@@ -36,7 +36,7 @@ struct Options {
     #[clap(long, default_value = "*")]
     version: String,
 
-    /// Override binary target set. Defaults to a set of targets based on the current platform.
+    /// Override binary target set.
     ///
     /// Binstall is able to look for binaries for several targets, installing the first one it finds
     /// in the order the targets were given. For example, on a 64-bit glibc Linux distribution, the
@@ -45,13 +45,14 @@ struct Options {
     /// considered.
     ///
     /// This option takes a comma-separated list of target triples, which will be tried in order.
+    /// They override the default list, which is detected automatically from the current platform.
     ///
     /// If falling back to installing from source, the first target will be used.
     #[clap(
         help_heading = "OVERRIDES",
         alias = "target",
         long,
-        value_name = "triple"
+        value_name = "TRIPLE"
     )]
     targets: Option<String>,
 
@@ -94,7 +95,7 @@ struct Options {
     /// Utility log level
     ///
     /// Set to `debug` when submitting a bug report.
-    #[clap(long, default_value = "info")]
+    #[clap(long, default_value = "info", value_name = "LEVEL")]
     log_level: LevelFilter,
 
     /// Override Cargo.toml package manifest bin-dir.
