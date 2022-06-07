@@ -19,7 +19,6 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-arrayvec = "0.7.2"
 async-trait = "0.1.52"
 cargo_metadata = "0.14.2"
 cargo_toml = "0.11.4"
