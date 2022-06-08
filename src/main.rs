@@ -7,10 +7,10 @@ use std::{
 };
 
 use cargo_toml::{Package, Product};
+use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
-use structopt::StructOpt;
 use tempfile::TempDir;
 use tokio::{process::Command, runtime::Runtime, task::JoinError};
 
@@ -20,64 +20,94 @@ use cargo_binstall::{
     *,
 };
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
+#[clap(version, about = "Install a Rust binary... from binaries!")]
 struct Options {
-    /// Package name or URL for installation
-    /// This must be either a crates.io package name or github or gitlab url
-    #[structopt()]
+    /// Package name for installation.
+    ///
+    /// This must be a crates.io package name.
+    #[clap(value_name = "crate")]
     name: String,
 
-    /// Filter for package version to install, in Cargo.toml format.
-    /// Use `=1.2.3` to install a specific version.
-    #[structopt(long, default_value = "*")]
+    /// Semver filter to select the package version to install.
+    ///
+    /// This is in Cargo.toml dependencies format: `--version 1.2.3` is equivalent to
+    /// `--version "^1.2.3"`. Use `=1.2.3` to install a specific version.
+    #[clap(long, default_value = "*")]
     version: String,
 
-    /// Override binary target, ignoring compiled version
-    #[structopt(long, default_value = TARGET)]
-    target: String,
+    /// Override binary target set.
+    ///
+    /// Binstall is able to look for binaries for several targets, installing the first one it finds
+    /// in the order the targets were given. For example, on a 64-bit glibc Linux distribution, the
+    /// default is to look first for a `x86_64-unknown-linux-gnu` binary, then for a
+    /// `x86_64-unknown-linux-musl` binary. However, on a musl system, the gnu version will not be
+    /// considered.
+    ///
+    /// This option takes a comma-separated list of target triples, which will be tried in order.
+    /// They override the default list, which is detected automatically from the current platform.
+    ///
+    /// If falling back to installing from source, the first target will be used.
+    #[clap(
+        help_heading = "OVERRIDES",
+        alias = "target",
+        long,
+        value_name = "TRIPLE"
+    )]
+    targets: Option<String>,
 
     /// Override install path for downloaded binary.
+    ///
     /// Defaults to `$HOME/.cargo/bin`
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     install_path: Option<String>,
 
-    /// Disable symlinking / versioned updates
-    #[structopt(long)]
+    /// Disable symlinking / versioned updates.
+    ///
+    /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and
+    /// either symlink or copy it to (depending on platform) the plain binary name. This makes it
+    /// possible to have multiple versions of the same binary, for example for testing or rollback.
+    ///
+    /// Pass this flag to disable this behavior.
+    #[clap(long)]
     no_symlinks: bool,
 
-    /// Dry run, fetch and show changes without installing binaries
-    #[structopt(long)]
+    /// Dry run, fetch and show changes without installing binaries.
+    #[clap(long)]
     dry_run: bool,
 
-    /// Disable interactive mode / confirmation
-    #[structopt(long)]
+    /// Disable interactive mode / confirmation prompts.
+    #[clap(long)]
     no_confirm: bool,
 
-    /// Do not cleanup temporary files on success
-    #[structopt(long)]
+    /// Do not cleanup temporary files.
+    #[clap(long)]
     no_cleanup: bool,
 
     /// Override manifest source.
-    /// This skips searching crates.io for a manifest and uses
-    /// the specified path directly, useful for debugging and
-    /// when adding `binstall` support.
-    #[structopt(long)]
+    ///
+    /// This skips searching crates.io for a manifest and uses the specified path directly, useful
+    /// for debugging and when adding Binstall support. This must be the path to the folder
+    /// containing a Cargo.toml file, not the Cargo.toml file itself.
+    #[clap(help_heading = "OVERRIDES", long)]
     manifest_path: Option<PathBuf>,
 
     /// Utility log level
-    #[structopt(long, default_value = "info")]
+    ///
+    /// Set to `debug` when submitting a bug report.
+    #[clap(long, default_value = "info", value_name = "LEVEL")]
     log_level: LevelFilter,
 
     /// Override Cargo.toml package manifest bin-dir.
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     bin_dir: Option<String>,
 
     /// Override Cargo.toml package manifest pkg-fmt.
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     pkg_fmt: Option<PkgFmt>,
 
     /// Override Cargo.toml package manifest pkg-url.
-    #[structopt(long)]
+    #[clap(help_heading = "OVERRIDES", long)]
     pkg_url: Option<String>,
 }
 
@@ -140,7 +170,7 @@ async fn entry() -> Result<()> {
     }
 
     // Load options
-    let mut opts = Options::from_iter(args.iter());
+    let mut opts = Options::parse_from(args);
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
@@ -151,6 +181,7 @@ async fn entry() -> Result<()> {
     let mut log_config = ConfigBuilder::new();
     log_config.add_filter_ignore("hyper".to_string());
     log_config.add_filter_ignore("reqwest".to_string());
+    log_config.add_filter_ignore("rustls".to_string());
     log_config.set_location_level(LevelFilter::Off);
     TermLogger::init(
         opts.log_level,
@@ -159,6 +190,13 @@ async fn entry() -> Result<()> {
         ColorChoice::Auto,
     )
     .unwrap();
+
+    // Compute install directory
+    let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
+        error!("No viable install path found of specified, try `--install-path`");
+        miette!("No install path found or specified")
+    })?;
+    debug!("Using install path: {}", install_path.display());
 
     // Create a temporary directory for downloads etc.
     let temp_dir = TempDir::new()
@@ -204,51 +242,68 @@ async fn entry() -> Result<()> {
         manifest.bin,
     );
 
-    // Merge any overrides
-    if let Some(o) = meta.overrides.remove(&opts.target) {
-        meta.merge(&o);
-    }
+    let desired_targets = {
+        let from_opts = opts
+            .targets
+            .as_ref()
+            .map(|ts| ts.split(',').map(|t| t.to_string()).collect());
 
-    meta.merge(&cli_overrides);
-    debug!("Found metadata: {:?}", meta);
+        if let Some(ts) = from_opts {
+            ts
+        } else {
+            detect_targets().await
+        }
+    };
 
-    // Compute install directory
-    let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
-        error!("No viable install path found of specified, try `--install-path`");
-        miette!("No install path found or specified")
-    })?;
-    debug!("Using install path: {}", install_path.display());
+    let mut fetchers = MultiFetcher::default();
 
-    // Compute temporary directory for downloads
-    let pkg_path = temp_dir
-        .path()
-        .join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
-    debug!("Using temporary download path: {}", pkg_path.display());
+    for target in &desired_targets {
+        debug!("Building metadata for target: {target}");
+        let mut target_meta = meta.clone();
 
-    let fetcher_data: Vec<_> = detect_targets()
-        .await
-        .into_iter()
-        .map(|target| Data {
+        // Merge any overrides
+        if let Some(o) = target_meta.overrides.get(target).cloned() {
+            target_meta.merge(&o);
+        }
+
+        target_meta.merge(&cli_overrides);
+        debug!("Found metadata: {target_meta:?}");
+
+        let fetcher_data = Data {
             name: package.name.clone(),
-            target: target.into(),
+            target: target.clone(),
             version: package.version.clone(),
             repo: package.repository.clone(),
-            meta: meta.clone(),
-        })
-        .collect();
+            meta: target_meta,
+        };
 
-    // Try github releases, then quickinstall
-    let mut fetchers = MultiFetcher::default();
-    for data in &fetcher_data {
-        fetchers.add(GhCrateMeta::new(data).await);
-        fetchers.add(QuickInstall::new(data).await);
+        fetchers.add(GhCrateMeta::new(&fetcher_data).await);
+        fetchers.add(QuickInstall::new(&fetcher_data).await);
     }
 
     match fetchers.first_available().await {
         Some(fetcher) => {
+            // Build final metadata
+            let fetcher_target = fetcher.target();
+            if let Some(o) = meta.overrides.get(&fetcher_target.to_owned()).cloned() {
+                meta.merge(&o);
+            }
+            meta.merge(&cli_overrides);
+
+            debug!(
+                "Found a binary install source: {} ({fetcher_target})",
+                fetcher.source_name()
+            );
+
+            // Compute temporary directory for downloads
+            let pkg_path = temp_dir
+                .path()
+                .join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
+            debug!("Using temporary download path: {}", pkg_path.display());
+
             install_from_package(
                 binaries,
-                &*fetcher,
+                fetcher.as_ref(),
                 install_path,
                 meta,
                 opts,
@@ -259,10 +314,17 @@ async fn entry() -> Result<()> {
             .await
         }
         None => {
-            temp_dir.close().unwrap_or_else(|err| {
-                warn!("Failed to clean up some resources: {err}");
-            });
-            install_from_source(opts, package).await
+            if !opts.no_cleanup {
+                temp_dir.close().unwrap_or_else(|err| {
+                    warn!("Failed to clean up some resources: {err}");
+                });
+            }
+
+            let target = desired_targets
+                .first()
+                .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
+
+            install_from_source(opts, package, target).await
         }
     }
 }
@@ -407,7 +469,7 @@ async fn install_from_package(
     Ok(())
 }
 
-async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<()> {
+async fn install_from_source(opts: Options, package: Package<Meta>, target: &str) -> Result<()> {
     // Prompt user for source install
     warn!("The package will be installed from source (with cargo)",);
     if !opts.no_confirm && !opts.dry_run {
@@ -416,14 +478,14 @@ async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<()
 
     if opts.dry_run {
         info!(
-            "Dry-run: running `cargo install {} --version {} --target {}`",
-            package.name, package.version, opts.target
+            "Dry-run: running `cargo install {} --version {} --target {target}`",
+            package.name, package.version
         );
         Ok(())
     } else {
         debug!(
-            "Running `cargo install {} --version {} --target {}`",
-            package.name, package.version, opts.target
+            "Running `cargo install {} --version {} --target {target}`",
+            package.name, package.version
         );
         let mut child = Command::new("cargo")
             .arg("install")
@@ -431,7 +493,7 @@ async fn install_from_source(opts: Options, package: Package<Meta>) -> Result<()
             .arg("--version")
             .arg(package.version)
             .arg("--target")
-            .arg(opts.target)
+            .arg(target)
             .spawn()
             .into_diagnostic()
             .wrap_err("Spawning cargo install failed.")?;

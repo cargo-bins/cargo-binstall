@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use log::info;
+use log::{debug, info};
 use reqwest::Method;
 use url::Url;
 
@@ -77,8 +77,14 @@ impl QuickInstall {
     }
 
     pub async fn report(&self) -> Result<(), BinstallError> {
-        info!("Sending installation report to quickinstall (anonymous)");
+        if cfg!(debug_assertions) {
+            debug!("Not sending quickinstall report in debug mode");
+            return Ok(());
+        }
+
         let url = Url::parse(&self.stats_url())?;
+        debug!("Sending installation report to quickinstall ({url})");
+
         reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .build()?

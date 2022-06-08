@@ -18,13 +18,13 @@ pub const TARGET: &str = env!("TARGET");
 ///
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
-pub async fn detect_targets() -> Vec<Box<str>> {
+pub async fn detect_targets() -> Vec<String> {
     if let Some(target) = get_target_from_rustc().await {
         let mut v = vec![target];
 
         #[cfg(target_os = "linux")]
         if v[0].contains("gnu") {
-            v.push(v[0].replace("gnu", "musl").into_boxed_str());
+            v.push(v[0].replace("gnu", "musl"));
         }
 
         #[cfg(target_os = "macos")]
@@ -51,7 +51,7 @@ pub async fn detect_targets() -> Vec<Box<str>> {
 
 /// Figure out what the host target is using `rustc`.
 /// If `rustc` is absent, then it would return `None`.
-async fn get_target_from_rustc() -> Option<Box<str>> {
+async fn get_target_from_rustc() -> Option<String> {
     let Output { status, stdout, .. } = Command::new("rustc").arg("-vV").output().await.ok()?;
     if !status.success() {
         return None;
@@ -60,17 +60,14 @@ async fn get_target_from_rustc() -> Option<Box<str>> {
     Cursor::new(stdout)
         .lines()
         .filter_map(|line| line.ok())
-        .find_map(|line| {
-            line.strip_prefix("host: ")
-                .map(|host| host.to_owned().into_boxed_str())
-        })
+        .find_map(|line| line.strip_prefix("host: ").map(|host| host.to_owned()))
 }
 
 #[cfg(target_os = "linux")]
 mod linux {
     use super::{Command, Output, TARGET};
 
-    pub(super) async fn detect_targets_linux() -> Vec<Box<str>> {
+    pub(super) async fn detect_targets_linux() -> Vec<String> {
         let abi = parse_abi();
 
         if let Ok(Output {
@@ -123,16 +120,13 @@ mod linux {
         }
     }
 
-    fn create_target_str(libc_version: &str, abi: &str) -> Box<str> {
-        let prefix = TARGET.rsplit_once('-').unwrap().0;
+    fn create_target_str(libc_version: &str, abi: &str) -> String {
+        let prefix = TARGET
+            .rsplit_once('-')
+            .expect("unwrap: TARGET always has a -")
+            .0;
 
-        let mut target = String::with_capacity(prefix.len() + 1 + libc_version.len() + abi.len());
-        target.push_str(prefix);
-        target.push('-');
-        target.push_str(libc_version);
-        target.push_str(abi);
-
-        target.into_boxed_str()
+        format!("{prefix}-{libc_version}{abi}")
     }
 }
 
@@ -143,7 +137,7 @@ mod macos {
     pub(super) const AARCH64: &str = "aarch64-apple-darwin";
     pub(super) const X86: &str = "x86_64-apple-darwin";
 
-    pub(super) fn detect_targets_macos() -> Vec<Box<str>> {
+    pub(super) fn detect_targets_macos() -> Vec<String> {
         if guess_host_triple() == Some(AARCH64) {
             vec![AARCH64.into(), X86.into()]
         } else {
