@@ -1,12 +1,13 @@
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Seek, Write};
 use std::path::Path;
 
 use bytes::Bytes;
 use scopeguard::{guard, Always, ScopeGuard};
+use tempfile::tempfile;
 use tokio::{sync::mpsc, task::spawn_blocking};
 
-use super::AutoAbortJoinHandle;
+use super::{extracter::*, readable_rx::*, AutoAbortJoinHandle};
 use crate::{BinstallError, PkgFmt};
 
 pub enum Content {
@@ -26,7 +27,7 @@ struct AsyncFileWriterInner {
 }
 
 impl AsyncFileWriterInner {
-    fn new(path: &Path) -> Self {
+    fn new(path: &Path, fmt: PkgFmt) -> Self {
         let path = path.to_owned();
         let (tx, rx) = mpsc::channel::<Content>(100);
 
@@ -37,33 +38,58 @@ impl AsyncFileWriterInner {
             });
 
             fs::create_dir_all(path.parent().unwrap())?;
-            let mut file = fs::File::create(&path)?;
 
-            // remove it unless the operation isn't aborted and no write
-            // fails.
-            let remove_guard = guard(path, |path| {
-                fs::remove_file(path).ok();
-            });
+            match fmt {
+                PkgFmt::Bin => {
+                    let mut file = fs::File::create(&path)?;
 
-            while let Some(content) = rx.blocking_recv() {
-                match content {
-                    Content::Data(bytes) => file.write_all(&*bytes)?,
-                    Content::Abort => {
-                        return Err(io::Error::new(io::ErrorKind::Other, "Aborted").into())
-                    }
+                    // remove it unless the operation isn't aborted and no write
+                    // fails.
+                    let remove_guard = guard(&path, |path| {
+                        fs::remove_file(path).ok();
+                    });
+
+                    Self::read_into_file(&mut file, &mut rx)?;
+
+                    // Operation isn't aborted and all writes succeed,
+                    // disarm the remove_guard.
+                    ScopeGuard::into_inner(remove_guard);
                 }
+                PkgFmt::Zip => {
+                    let mut file = tempfile()?;
+
+                    Self::read_into_file(&mut file, &mut rx)?;
+
+                    // rewind it so that we can pass it to unzip
+                    file.rewind()?;
+
+                    unzip(file, &path)?;
+                }
+                _ => extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, &path)?,
             }
-
-            file.flush()?;
-
-            // Operation isn't aborted and all writes succeed,
-            // disarm the remove_guard.
-            ScopeGuard::into_inner(remove_guard);
 
             Ok(())
         }));
 
         Self { handle, tx }
+    }
+
+    fn read_into_file(
+        file: &mut fs::File,
+        rx: &mut mpsc::Receiver<Content>,
+    ) -> Result<(), BinstallError> {
+        while let Some(content) = rx.blocking_recv() {
+            match content {
+                Content::Data(bytes) => file.write_all(&*bytes)?,
+                Content::Abort => {
+                    return Err(io::Error::new(io::ErrorKind::Other, "Aborted").into())
+                }
+            }
+        }
+
+        file.flush()?;
+
+        Ok(())
     }
 
     /// Upon error, this writer shall not be reused.
@@ -115,8 +141,8 @@ impl AsyncFileWriterInner {
 pub struct AsyncFileWriter(ScopeGuard<AsyncFileWriterInner, fn(AsyncFileWriterInner), Always>);
 
 impl AsyncFileWriter {
-    pub fn new(path: &Path) -> Self {
-        let inner = AsyncFileWriterInner::new(path);
+    pub fn new(path: &Path, fmt: PkgFmt) -> Self {
+        let inner = AsyncFileWriterInner::new(path, fmt);
         Self(guard(inner, AsyncFileWriterInner::abort))
     }
 
