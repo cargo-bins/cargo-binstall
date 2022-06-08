@@ -246,7 +246,7 @@ impl AsyncFileWriter {
         let mut file = fs::File::create(path)?;
         let (tx, mut rx) = mpsc::channel::<Bytes>(100);
 
-        let handle = AutoAbortJoinHandle(task::spawn_blocking(move || {
+        let handle = AutoAbortJoinHandle::new(task::spawn_blocking(move || {
             while let Some(bytes) = rx.blocking_recv() {
                 file.write_all(&*bytes)?;
             }
@@ -300,7 +300,7 @@ impl AsyncFileWriter {
     }
 
     async fn wait(handle: &mut AutoAbortJoinHandle<io::Result<()>>) -> io::Result<()> {
-        match (&mut handle.0).await {
+        match handle.await {
             Ok(res) => res,
             Err(join_err) => Err(io::Error::new(io::ErrorKind::Other, join_err)),
         }
@@ -308,7 +308,13 @@ impl AsyncFileWriter {
 }
 
 #[derive(Debug)]
-pub struct AutoAbortJoinHandle<T>(pub task::JoinHandle<T>);
+pub struct AutoAbortJoinHandle<T>(task::JoinHandle<T>);
+
+impl<T> AutoAbortJoinHandle<T> {
+    pub fn new(handle: task::JoinHandle<T>) -> Self {
+        Self(handle)
+    }
+}
 
 impl<T> Drop for AutoAbortJoinHandle<T> {
     fn drop(&mut self) {
