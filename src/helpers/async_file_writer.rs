@@ -25,7 +25,7 @@ struct AsyncFileWriterInner {
 }
 
 impl AsyncFileWriterInner {
-    fn new(path: &Path) -> io::Result<Self> {
+    fn new(path: &Path) -> Self {
         let path = path.to_owned();
         let (tx, rx) = mpsc::channel::<Content>(100);
 
@@ -60,7 +60,7 @@ impl AsyncFileWriterInner {
             Ok(())
         }));
 
-        Ok(Self { handle, tx })
+        Self { handle, tx }
     }
 
     /// Upon error, this writer shall not be reused.
@@ -110,8 +110,9 @@ impl AsyncFileWriterInner {
 pub struct AsyncFileWriter(ScopeGuard<AsyncFileWriterInner, fn(AsyncFileWriterInner), Always>);
 
 impl AsyncFileWriter {
-    pub fn new(path: &Path) -> io::Result<Self> {
-        AsyncFileWriterInner::new(path).map(|inner| Self(guard(inner, AsyncFileWriterInner::abort)))
+    pub fn new(path: &Path) -> Self {
+        let inner = AsyncFileWriterInner::new(path);
+        Self(guard(inner, AsyncFileWriterInner::abort))
     }
 
     /// Upon error, this writer shall not be reused.

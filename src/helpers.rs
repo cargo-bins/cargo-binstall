@@ -65,7 +65,7 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), Binstall
     debug!("Downloading to file: '{}'", path.display());
 
     let mut bytes_stream = resp.bytes_stream();
-    let mut writer = AsyncFileWriter::new(path)?;
+    let mut writer = AsyncFileWriter::new(path);
 
     while let Some(res) = bytes_stream.next().await {
         writer.write(res?).await?;
