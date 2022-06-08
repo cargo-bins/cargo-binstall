@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use log::{debug, info};
 use reqwest::Method;
+use tokio::task::JoinHandle;
 use url::Url;
 
 use super::Data;
@@ -31,7 +32,7 @@ impl super::Fetcher for QuickInstall {
 
     async fn check(&self) -> Result<bool, BinstallError> {
         let url = self.package_url();
-        self.report().await?;
+        self.report();
         info!("Checking for package at: '{url}'");
         remote_exists(Url::parse(&url)?, Method::HEAD).await
     }
@@ -76,26 +77,31 @@ impl QuickInstall {
         )
     }
 
-    pub async fn report(&self) -> Result<(), BinstallError> {
-        if cfg!(debug_assertions) {
-            debug!("Not sending quickinstall report in debug mode");
-            return Ok(());
-        }
+    pub fn report(&self) -> JoinHandle<Result<(), BinstallError>> {
+        let stats_url = self.stats_url();
 
-        let url = Url::parse(&self.stats_url())?;
-        debug!("Sending installation report to quickinstall ({url})");
+        tokio::spawn(async move {
+            if cfg!(debug_assertions) {
+                debug!("Not sending quickinstall report in debug mode");
+                return Ok(());
+            }
 
-        reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .build()?
-            .request(Method::HEAD, url.clone())
-            .send()
-            .await
-            .map_err(|err| BinstallError::Http {
-                method: Method::HEAD,
-                url,
-                err,
-            })?;
-        Ok(())
+            let url = Url::parse(&stats_url)?;
+            debug!("Sending installation report to quickinstall ({url})");
+
+            reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                .build()?
+                .request(Method::HEAD, url.clone())
+                .send()
+                .await
+                .map_err(|err| BinstallError::Http {
+                    method: Method::HEAD,
+                    url,
+                    err,
+                })?;
+
+            Ok(())
+        })
     }
 }
