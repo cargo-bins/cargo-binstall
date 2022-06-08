@@ -4,10 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use log::{debug, info};
-
 use cargo_toml::Manifest;
 use flate2::read::GzDecoder;
+use log::{debug, info};
 use reqwest::Method;
 use serde::Serialize;
 use tar::Archive;
@@ -44,7 +43,7 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
 /// Download a file from the provided URL to the provided path
 pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
     let url = Url::parse(url)?;
-    debug!("Downloading from: '{}'", url);
+    debug!("Downloading from: '{url}'");
 
     let resp = reqwest::get(url.clone())
         .await
@@ -72,14 +71,13 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
     fmt: PkgFmt,
     path: P,
 ) -> Result<(), BinstallError> {
+    let source = source.as_ref();
+    let path = path.as_ref();
+
     match fmt {
         PkgFmt::Tar => {
             // Extract to install dir
-            debug!(
-                "Extracting from tar archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Extracting from tar archive '{source:?}' to `{path:?}`");
 
             let dat = fs::File::open(source)?;
             let mut tar = Archive::new(dat);
@@ -88,11 +86,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
         }
         PkgFmt::Tgz => {
             // Extract to install dir
-            debug!(
-                "Decompressing from tgz archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Decompressing from tgz archive '{source:?}' to `{path:?}`");
 
             let dat = fs::File::open(source)?;
             let tar = GzDecoder::new(dat);
@@ -102,11 +96,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
         }
         PkgFmt::Txz => {
             // Extract to install dir
-            debug!(
-                "Decompressing from txz archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Decompressing from txz archive '{source:?}' to `{path:?}`");
 
             let dat = fs::File::open(source)?;
             let tar = XzDecoder::new(dat);
@@ -116,11 +106,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
         }
         PkgFmt::Tzstd => {
             // Extract to install dir
-            debug!(
-                "Decompressing from tzstd archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Decompressing from tzstd archive '{source:?}' to `{path:?}`");
 
             let dat = std::fs::File::open(source)?;
 
@@ -135,11 +121,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
         }
         PkgFmt::Zip => {
             // Extract to install dir
-            debug!(
-                "Decompressing from zip archive '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Decompressing from zip archive '{source:?}' to `{path:?}`");
 
             let dat = fs::File::open(source)?;
             let mut zip = ZipArchive::new(dat)?;
@@ -147,11 +129,7 @@ pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
             zip.extract(path)?;
         }
         PkgFmt::Bin => {
-            debug!(
-                "Copying binary '{:?}' to `{:?}`",
-                source.as_ref(),
-                path.as_ref()
-            );
+            debug!("Copying binary '{source:?}' to `{path:?}`");
             // Copy to install dir
             fs::copy(source, path)?;
         }
@@ -170,12 +148,12 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
 
     // Environmental variables
     if let Ok(p) = std::env::var("CARGO_INSTALL_ROOT") {
-        debug!("using CARGO_INSTALL_ROOT ({})", p);
+        debug!("using CARGO_INSTALL_ROOT ({p})");
         let b = PathBuf::from(p);
         return Some(b.join("bin"));
     }
     if let Ok(p) = std::env::var("CARGO_HOME") {
-        debug!("using CARGO_HOME ({})", p);
+        debug!("using CARGO_HOME ({p})");
         let b = PathBuf::from(p);
         return Some(b.join("bin"));
     }

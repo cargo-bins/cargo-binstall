@@ -98,9 +98,9 @@ pub async fn fetch_crate_cratesio(
 
     // Download crate to temporary dir (crates.io or git?)
     let crate_url = format!("https://crates.io/{}", version.dl_path);
-    let tgz_path = temp_dir.join(format!("{}.tgz", name));
+    let tgz_path = temp_dir.join(format!("{name}.tgz"));
 
-    debug!("Fetching crate from: {}", crate_url);
+    debug!("Fetching crate from: {crate_url}");
 
     // Download crate
     download(&crate_url, &tgz_path).await?;
@@ -108,7 +108,7 @@ pub async fn fetch_crate_cratesio(
     // Decompress downloaded tgz
     debug!("Decompressing crate archive");
     extract(&tgz_path, PkgFmt::Tgz, &temp_dir)?;
-    let crate_path = temp_dir.join(format!("{}-{}", name, version_name));
+    let crate_path = temp_dir.join(format!("{name}-{version_name}"));
 
     // Return crate directory
     Ok(crate_path)

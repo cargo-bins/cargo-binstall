@@ -372,17 +372,17 @@ async fn install_from_package(
     {
         // Fetch and check package signature if available
         if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
-            debug!("Found public key: {}", pub_key);
+            debug!("Found public key: {pub_key}");
 
             // Generate signature file URL
             let mut sig_ctx = ctx.clone();
             sig_ctx.format = "sig".to_string();
             let sig_url = sig_ctx.render(&pkg_url)?;
 
-            debug!("Fetching signature file: {}", sig_url);
+            debug!("Fetching signature file: {sig_url}");
 
             // Download signature file
-            let sig_path = temp_dir.path().join(format!("{}.sig", pkg_name));
+            let sig_path = temp_dir.path().join(format!("{pkg_name}.sig"));
             download(&sig_url, &sig_path).await?;
 
             // TODO: do the signature check
@@ -508,7 +508,7 @@ async fn install_from_source(opts: Options, package: Package<Meta>, target: &str
             info!("Cargo finished successfully");
             Ok(())
         } else {
-            error!("Cargo errored! {:?}", status);
+            error!("Cargo errored! {status:?}");
             Err(miette!("Cargo install error"))
         }
     }

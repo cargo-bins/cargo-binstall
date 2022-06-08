@@ -4,10 +4,10 @@ description = "Rust binary package installer for CI integration"
 repository = "https://github.com/ryankurte/cargo-binstall"
 documentation = "https://docs.rs/cargo-binstall"
 version = "0.8.0"
+rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]
-edition = "2018"
+edition = "2021"
 license = "GPL-3.0"
-
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ format }"
@@ -38,16 +38,12 @@ tar = "0.4.38"
 tempfile = "3.3.0"
 thiserror = "1.0.31"
 tinytemplate = "1.2.1"
-
-# This crate uses features rt-multi-thread and macros in `#[tokio::main]` and
-# uses feature process to create process.
 tokio = { version = "1.19.1", features = [ "rt-multi-thread", "process" ], default-features = false }
-
 url = "2.2.2"
 xz2 = "0.1.6"
 
 # Disable all features of zip except for features of compression algorithms:
-# Disable features include:
+# Disabled features include:
 #  - aes-crypto: Enables decryption of files which were encrypted with AES, absolutely zero use for
 #    this crate.
 #  - time: Enables features using the [time](https://github.com/time-rs/time) crate,
