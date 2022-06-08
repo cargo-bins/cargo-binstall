@@ -229,7 +229,9 @@ pub trait Template: Serialize {
 
 #[derive(Debug)]
 pub struct AsyncFileWriter {
-    handle: task::JoinHandle<io::Result<()>>,
+    /// Use AutoAbortJoinHandle so that the task
+    /// will be cancelled on failure.
+    handle: AutoAbortJoinHandle<io::Result<()>>,
     tx: mpsc::Sender<Bytes>,
 }
 
@@ -240,7 +242,7 @@ impl AsyncFileWriter {
         let mut file = fs::File::create(path)?;
         let (tx, mut rx) = mpsc::channel::<Bytes>(100);
 
-        let handle = task::spawn_blocking(move || {
+        let handle = AutoAbortJoinHandle(task::spawn_blocking(move || {
             while let Some(bytes) = rx.blocking_recv() {
                 file.write_all(&*bytes)?;
             }
@@ -249,7 +251,7 @@ impl AsyncFileWriter {
             file.flush()?;
 
             Ok(())
-        });
+        }));
 
         Ok(Self { handle, tx })
     }
@@ -293,8 +295,8 @@ impl AsyncFileWriter {
         Self::wait(&mut self.handle).await
     }
 
-    async fn wait(handle: &mut task::JoinHandle<io::Result<()>>) -> io::Result<()> {
-        match handle.await {
+    async fn wait(handle: &mut AutoAbortJoinHandle<io::Result<()>>) -> io::Result<()> {
+        match (&mut handle.0).await {
             Ok(res) => res,
             Err(join_err) => Err(io::Error::new(io::ErrorKind::Other, join_err)),
         }
