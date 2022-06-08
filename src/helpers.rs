@@ -53,6 +53,15 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
 /// Download a file from the provided URL to the provided path
 pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
     let url = Url::parse(url)?;
+    download_and_extract(url, PkgFmt::Bin, path.as_ref()).await
+}
+
+/// Download a file from the provided URL and extract it to the provided path
+pub async fn download_and_extract<P: AsRef<Path>>(
+    url: Url,
+    fmt: PkgFmt,
+    path: P,
+) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
     let resp = reqwest::get(url.clone())
@@ -68,7 +77,7 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), Binstall
     debug!("Downloading to file: '{}'", path.display());
 
     let mut bytes_stream = resp.bytes_stream();
-    let mut writer = AsyncFileWriter::new(path, PkgFmt::Bin);
+    let mut writer = AsyncFileWriter::new(path, fmt);
 
     while let Some(res) = bytes_stream.next().await {
         writer.write(res?).await?;
