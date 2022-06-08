@@ -28,7 +28,7 @@ dirs = "4.0.0"
 flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
 log = "0.4.14"
 miette = { version = "4.7.1", features = ["fancy-no-backtrace"] }
-reqwest = { version = "0.11.10", features = [ "rustls-tls" ], default-features = false }
+reqwest = { version = "0.11.10", features = [ "rustls-tls", "stream" ], default-features = false }
 semver = "1.0.7"
 serde = { version = "1.0.136", features = [ "derive" ] }
 simplelog = "0.12.0"
