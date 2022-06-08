@@ -7,6 +7,7 @@ use scopeguard::{guard, Always, ScopeGuard};
 use tokio::{sync::mpsc, task::spawn_blocking};
 
 use super::AutoAbortJoinHandle;
+use crate::{BinstallError, PkgFmt};
 
 pub enum Content {
     /// Data to write to file
@@ -20,7 +21,7 @@ pub enum Content {
 struct AsyncFileWriterInner {
     /// Use AutoAbortJoinHandle so that the task
     /// will be cancelled on failure.
-    handle: AutoAbortJoinHandle<io::Result<()>>,
+    handle: AutoAbortJoinHandle<Result<(), BinstallError>>,
     tx: mpsc::Sender<Content>,
 }
 
@@ -47,7 +48,9 @@ impl AsyncFileWriterInner {
             while let Some(content) = rx.blocking_recv() {
                 match content {
                     Content::Data(bytes) => file.write_all(&*bytes)?,
-                    Content::Abort => return Err(io::Error::new(io::ErrorKind::Other, "Aborted")),
+                    Content::Abort => {
+                        return Err(io::Error::new(io::ErrorKind::Other, "Aborted").into())
+                    }
                 }
             }
 
@@ -65,7 +68,7 @@ impl AsyncFileWriterInner {
 
     /// Upon error, this writer shall not be reused.
     /// Otherwise, `Self::done` would panic.
-    async fn write(&mut self, bytes: Bytes) -> io::Result<()> {
+    async fn write(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
         if self.tx.send(Content::Data(bytes)).await.is_err() {
             // task failed
             Err(Self::wait(&mut self.handle).await.expect_err(
@@ -76,7 +79,7 @@ impl AsyncFileWriterInner {
         }
     }
 
-    async fn done(mut self) -> io::Result<()> {
+    async fn done(mut self) -> Result<(), BinstallError> {
         // Drop tx as soon as possible so that the task would wrap up what it
         // was doing and flush out all the pending data.
         drop(self.tx);
@@ -84,10 +87,12 @@ impl AsyncFileWriterInner {
         Self::wait(&mut self.handle).await
     }
 
-    async fn wait(handle: &mut AutoAbortJoinHandle<io::Result<()>>) -> io::Result<()> {
+    async fn wait(
+        handle: &mut AutoAbortJoinHandle<Result<(), BinstallError>>,
+    ) -> Result<(), BinstallError> {
         match handle.await {
             Ok(res) => res,
-            Err(join_err) => Err(io::Error::new(io::ErrorKind::Other, join_err)),
+            Err(join_err) => Err(io::Error::new(io::ErrorKind::Other, join_err).into()),
         }
     }
 
@@ -117,11 +122,11 @@ impl AsyncFileWriter {
 
     /// Upon error, this writer shall not be reused.
     /// Otherwise, `Self::done` would panic.
-    pub async fn write(&mut self, bytes: Bytes) -> io::Result<()> {
+    pub async fn write(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
         self.0.write(bytes).await
     }
 
-    pub async fn done(self) -> io::Result<()> {
+    pub async fn done(self) -> Result<(), BinstallError> {
         ScopeGuard::into_inner(self.0).done().await
     }
 }
