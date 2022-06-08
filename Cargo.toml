@@ -26,6 +26,7 @@ clap = { version = "3.1.18", features = ["derive"] }
 crates_io_api = { version = "0.8.0", default-features = false, features = ["rustls"] }
 dirs = "4.0.0"
 flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
+futures-util = { version = "0.3.21", default-features = false }
 log = "0.4.14"
 miette = { version = "4.7.1", features = ["fancy-no-backtrace"] }
 reqwest = { version = "0.11.10", features = [ "rustls-tls", "stream" ], default-features = false }
