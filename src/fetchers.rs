@@ -62,17 +62,13 @@ impl MultiFetcher {
             .fetchers
             .iter()
             .cloned()
-            .map(|fetcher| {
-                let fetcher_cloned = fetcher.clone();
-
-                (
-                    AutoAbortJoinHandle(tokio::spawn(async move { fetcher.check().await })),
-                    fetcher_cloned,
-                )
-            })
+            .map(|fetcher| (
+                fetcher.clone(),
+                AutoAbortJoinHandle(tokio::spawn(async move { fetcher.check().await })),
+            ))
             .collect();
 
-        for (mut handle, fetcher) in handles {
+        for (fetcher, mut handle) in handles {
             match (&mut handle.0).await {
                 Ok(Ok(true)) => return Some(fetcher),
                 Ok(Ok(false)) => (),
