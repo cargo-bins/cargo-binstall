@@ -25,6 +25,8 @@ pub use async_file_writer::AsyncFileWriter;
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
 
+mod extracter;
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
