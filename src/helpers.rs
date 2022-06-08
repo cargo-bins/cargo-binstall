@@ -1,6 +1,7 @@
 use std::{
     fs,
     io::{self, stderr, stdin, Write},
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
 };
 
@@ -309,5 +310,19 @@ pub struct AutoAbortJoinHandle<T>(pub task::JoinHandle<T>);
 impl<T> Drop for AutoAbortJoinHandle<T> {
     fn drop(&mut self) {
         self.0.abort();
+    }
+}
+
+impl<T> Deref for AutoAbortJoinHandle<T> {
+    type Target = task::JoinHandle<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for AutoAbortJoinHandle<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
