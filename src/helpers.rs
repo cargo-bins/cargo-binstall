@@ -26,7 +26,7 @@ mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
 
 mod extracter;
-mod receiver_as_readable;
+mod readable_rx;
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
