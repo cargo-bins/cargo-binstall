@@ -7,6 +7,7 @@ use std::{
 use bytes::Bytes;
 use cargo_toml::Manifest;
 use flate2::read::GzDecoder;
+use futures_util::stream::StreamExt;
 use log::{debug, info};
 use reqwest::Method;
 use serde::Serialize;
@@ -56,13 +57,19 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), Binstall
             err,
         })?;
 
-    let bytes = resp.bytes().await?;
-
     let path = path.as_ref();
-    debug!("Download OK, writing to file: '{}'", path.display());
+    debug!("Downloading to file: '{}'", path.display());
 
-    fs::create_dir_all(path.parent().unwrap())?;
-    fs::write(&path, bytes)?;
+    let mut bytes_stream = resp.bytes_stream();
+    let writer = AsyncFileWriter::new(path)?;
+
+    while let Some(res) = bytes_stream.next().await {
+        writer.write(res?).await;
+    }
+
+    writer.done().await?;
+
+    debug!("Download OK, written to file: '{}'", path.display());
 
     Ok(())
 }
