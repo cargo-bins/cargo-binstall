@@ -1,8 +1,11 @@
 use std::{
     fs,
+    future::Future,
     io::{self, stderr, stdin, Write},
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
+    pin::Pin,
+    task::{Context, Poll},
 };
 
 use bytes::Bytes;
@@ -324,5 +327,13 @@ impl<T> Deref for AutoAbortJoinHandle<T> {
 impl<T> DerefMut for AutoAbortJoinHandle<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl<T> Future for AutoAbortJoinHandle<T> {
+    type Output = Result<T, task::JoinError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Pin::new(&mut Pin::into_inner(self).0).poll(cx)
     }
 }
