@@ -300,3 +300,12 @@ impl AsyncFileWriter {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct AutoAbortJoinHandle<T>(pub task::JoinHandle<T>);
+
+impl<T> Drop for AutoAbortJoinHandle<T> {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}

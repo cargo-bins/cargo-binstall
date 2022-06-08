@@ -4,9 +4,8 @@ use std::sync::Arc;
 pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
-use tokio::task::JoinHandle;
 
-use crate::{BinstallError, PkgFmt, PkgMeta};
+use crate::{AutoAbortJoinHandle, BinstallError, PkgFmt, PkgMeta};
 
 mod gh_crate_meta;
 mod quickinstall;
@@ -62,10 +61,12 @@ impl MultiFetcher {
             .fetchers
             .iter()
             .cloned()
-            .map(|fetcher| (
-                fetcher.clone(),
-                AutoAbortJoinHandle(tokio::spawn(async move { fetcher.check().await })),
-            ))
+            .map(|fetcher| {
+                (
+                    fetcher.clone(),
+                    AutoAbortJoinHandle(tokio::spawn(async move { fetcher.check().await })),
+                )
+            })
             .collect();
 
         for (fetcher, mut handle) in handles {
@@ -90,14 +91,5 @@ impl MultiFetcher {
         }
 
         None
-    }
-}
-
-#[derive(Debug)]
-struct AutoAbortJoinHandle(JoinHandle<Result<bool, BinstallError>>);
-
-impl Drop for AutoAbortJoinHandle {
-    fn drop(&mut self) {
-        self.0.abort();
     }
 }
