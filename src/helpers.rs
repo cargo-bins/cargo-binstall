@@ -10,6 +10,7 @@ use flate2::read::GzDecoder;
 use futures_util::stream::StreamExt;
 use log::{debug, info};
 use reqwest::Method;
+use scopeguard::ScopeGuard;
 use serde::Serialize;
 use tar::Archive;
 use tinytemplate::TinyTemplate;
@@ -63,11 +64,17 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), Binstall
     let mut bytes_stream = resp.bytes_stream();
     let writer = AsyncFileWriter::new(path)?;
 
+    let guard = scopeguard::guard(path, |path| {
+        fs::remove_file(path).ok();
+    });
+
     while let Some(res) = bytes_stream.next().await {
         writer.write(res?).await;
     }
 
     writer.done().await?;
+    // Disarm as it is successfully downloaded and written to file.
+    ScopeGuard::into_inner(guard);
 
     debug!("Download OK, written to file: '{}'", path.display());
 
