@@ -8,7 +8,7 @@ use tokio::{sync::mpsc, task::spawn_blocking};
 
 use super::AutoAbortJoinHandle;
 
-enum Content {
+pub enum Content {
     /// Data to write to file
     Data(Bytes),
 
