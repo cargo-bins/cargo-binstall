@@ -38,16 +38,12 @@ tar = "0.4.38"
 tempfile = "3.3.0"
 thiserror = "1.0.31"
 tinytemplate = "1.2.1"
-
-# This crate uses features rt-multi-thread and macros in `#[tokio::main]` and
-# uses feature process to create process.
 tokio = { version = "1.19.1", features = [ "rt-multi-thread", "process" ], default-features = false }
-
 url = "2.2.2"
 xz2 = "0.1.6"
 
 # Disable all features of zip except for features of compression algorithms:
-# Disable features include:
+# Disabled features include:
 #  - aes-crypto: Enables decryption of files which were encrypted with AES, absolutely zero use for
 #    this crate.
 #  - time: Enables features using the [time](https://github.com/time-rs/time) crate,
