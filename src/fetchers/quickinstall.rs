@@ -39,7 +39,7 @@ impl super::Fetcher for QuickInstall {
     async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
         info!("Downloading package from: '{url}'");
-        download(&url, &dst).await
+        download(Url::parse(&url)?, &dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

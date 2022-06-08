@@ -41,8 +41,7 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
 }
 
 /// Download a file from the provided URL to the provided path
-pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
-    let url = Url::parse(url)?;
+pub async fn download<P: AsRef<Path>>(url: Url, path: P) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
     let resp = reqwest::get(url.clone())

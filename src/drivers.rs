@@ -5,6 +5,7 @@ use std::time::Duration;
 use crates_io_api::AsyncClient;
 use log::debug;
 use semver::{Version, VersionReq};
+use url::Url;
 
 use crate::{helpers::*, BinstallError, PkgFmt};
 
@@ -103,7 +104,7 @@ pub async fn fetch_crate_cratesio(
     debug!("Fetching crate from: {crate_url}");
 
     // Download crate
-    download(&crate_url, &tgz_path).await?;
+    download(Url::parse(&crate_url)?, &tgz_path).await?;
 
     // Decompress downloaded tgz
     debug!("Decompressing crate archive");
