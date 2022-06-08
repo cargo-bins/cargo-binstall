@@ -168,7 +168,7 @@ mod test {
             &[Product {
                 name: Some("cargo-binstall".to_string()),
                 path: Some("src/main.rs".to_string()),
-                edition: Some(cargo_toml::Edition::E2018),
+                edition: Some(cargo_toml::Edition::E2021),
                 ..Default::default()
             },],
         );

@@ -1,0 +1,31 @@
+name: Rust
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Configure toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Configure caching
+        uses: actions/cache@v2
+        with:
+          key: ubuntu-latest-stable-testing
+          path: |
+            ${{ env.HOME }}/.cargo
+            target
+      - name: test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
