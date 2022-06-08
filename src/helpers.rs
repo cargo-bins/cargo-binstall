@@ -1,14 +1,9 @@
 use std::{
     fs,
-    future::Future,
-    io::{self, stderr, stdin, Write},
-    ops::{Deref, DerefMut},
+    io::{stderr, stdin, Write},
     path::{Path, PathBuf},
-    pin::Pin,
-    task::{Context, Poll},
 };
 
-use bytes::Bytes;
 use cargo_toml::Manifest;
 use flate2::read::GzDecoder;
 use futures_util::stream::StreamExt;
@@ -18,7 +13,6 @@ use scopeguard::ScopeGuard;
 use serde::Serialize;
 use tar::Archive;
 use tinytemplate::TinyTemplate;
-use tokio::{sync::mpsc, task};
 use url::Url;
 use xz2::read::XzDecoder;
 use zip::read::ZipArchive;
@@ -28,6 +22,9 @@ use crate::{BinstallError, Meta, PkgFmt};
 
 mod async_file_writer;
 pub use async_file_writer::AsyncFileWriter;
+
+mod auto_abort_join_handle;
+pub use auto_abort_join_handle::AutoAbortJoinHandle;
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
@@ -231,42 +228,5 @@ pub trait Template: Serialize {
 
         // Render output
         Ok(tt.render("path", self)?)
-    }
-}
-
-#[derive(Debug)]
-pub struct AutoAbortJoinHandle<T>(task::JoinHandle<T>);
-
-impl<T> AutoAbortJoinHandle<T> {
-    pub fn new(handle: task::JoinHandle<T>) -> Self {
-        Self(handle)
-    }
-}
-
-impl<T> Drop for AutoAbortJoinHandle<T> {
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
-
-impl<T> Deref for AutoAbortJoinHandle<T> {
-    type Target = task::JoinHandle<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> DerefMut for AutoAbortJoinHandle<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<T> Future for AutoAbortJoinHandle<T> {
-    type Output = Result<T, task::JoinError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Pin::new(&mut Pin::into_inner(self).0).poll(cx)
     }
 }
