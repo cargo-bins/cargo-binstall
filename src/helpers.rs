@@ -51,12 +51,6 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
     Ok(req.status().is_success())
 }
 
-/// Download a file from the provided URL to the provided path
-pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
-    let url = Url::parse(url)?;
-    download_and_extract::<_, 0>(url, PkgFmt::Bin, path.as_ref(), None).await
-}
-
 /// Download a file from the provided URL and extract it to the provided path
 ///
 ///  * `desired_outputs - If Some(_) and `fmt` is not `PkgFmt::Bin` or
