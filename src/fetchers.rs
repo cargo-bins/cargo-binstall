@@ -4,9 +4,8 @@ use std::sync::Arc;
 pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
-use tokio::task::JoinHandle;
 
-use crate::{BinstallError, PkgFmt, PkgMeta};
+use crate::{AutoAbortJoinHandle, BinstallError, PkgFmt, PkgMeta};
 
 mod gh_crate_meta;
 mod quickinstall;
@@ -18,8 +17,8 @@ pub trait Fetcher: Send + Sync {
     where
         Self: Sized;
 
-    /// Fetch a package
-    async fn fetch(&self, dst: &Path) -> Result<(), BinstallError>;
+    /// Fetch a package and extract
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError>;
 
     /// Check if a package is available for download
     async fn check(&self) -> Result<bool, BinstallError>;
@@ -62,14 +61,16 @@ impl MultiFetcher {
             .fetchers
             .iter()
             .cloned()
-            .map(|fetcher| (
-                fetcher.clone(),
-                AutoAbortJoinHandle(tokio::spawn(async move { fetcher.check().await })),
-            ))
+            .map(|fetcher| {
+                (
+                    fetcher.clone(),
+                    AutoAbortJoinHandle::new(tokio::spawn(async move { fetcher.check().await })),
+                )
+            })
             .collect();
 
-        for (fetcher, mut handle) in handles {
-            match (&mut handle.0).await {
+        for (fetcher, handle) in handles {
+            match handle.await {
                 Ok(Ok(true)) => return Some(fetcher),
                 Ok(Ok(false)) => (),
                 Ok(Err(err)) => {
@@ -90,14 +91,5 @@ impl MultiFetcher {
         }
 
         None
-    }
-}
-
-#[derive(Debug)]
-struct AutoAbortJoinHandle(JoinHandle<Result<bool, BinstallError>>);
-
-impl Drop for AutoAbortJoinHandle {
-    fn drop(&mut self) {
-        self.0.abort();
     }
 }

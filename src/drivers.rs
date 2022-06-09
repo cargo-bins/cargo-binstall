@@ -5,6 +5,7 @@ use std::time::Duration;
 use crates_io_api::AsyncClient;
 use log::debug;
 use semver::{Version, VersionReq};
+use url::Url;
 
 use crate::{helpers::*, BinstallError, PkgFmt};
 
@@ -50,7 +51,7 @@ fn find_version<'a, V: Iterator<Item = &'a String>>(
         .ok_or(BinstallError::VersionMismatch { req: version_req })
 }
 
-/// Fetch a crate by name and version from crates.io
+/// Fetch a crate Cargo.toml by name and version from crates.io
 pub async fn fetch_crate_cratesio(
     name: &str,
     version_req: &str,
@@ -98,16 +99,17 @@ pub async fn fetch_crate_cratesio(
 
     // Download crate to temporary dir (crates.io or git?)
     let crate_url = format!("https://crates.io/{}", version.dl_path);
-    let tgz_path = temp_dir.join(format!("{name}.tgz"));
 
-    debug!("Fetching crate from: {crate_url}");
+    debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
-    // Download crate
-    download(&crate_url, &tgz_path).await?;
+    download_and_extract(
+        Url::parse(&crate_url)?,
+        PkgFmt::Tgz,
+        &temp_dir,
+        Some([Path::new("Cargo.toml").into()]),
+    )
+    .await?;
 
-    // Decompress downloaded tgz
-    debug!("Decompressing crate archive");
-    extract(&tgz_path, PkgFmt::Tgz, &temp_dir)?;
     let crate_path = temp_dir.join(format!("{name}-{version_name}"));
 
     // Return crate directory

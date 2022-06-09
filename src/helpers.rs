@@ -1,22 +1,26 @@
 use std::{
-    fs,
+    borrow::Cow,
     io::{stderr, stdin, Write},
     path::{Path, PathBuf},
 };
 
 use cargo_toml::Manifest;
-use flate2::read::GzDecoder;
 use log::{debug, info};
 use reqwest::Method;
 use serde::Serialize;
-use tar::Archive;
 use tinytemplate::TinyTemplate;
 use url::Url;
-use xz2::read::XzDecoder;
-use zip::read::ZipArchive;
-use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::{BinstallError, Meta, PkgFmt};
+
+mod async_extracter;
+pub use async_extracter::extract_archive_stream;
+
+mod auto_abort_join_handle;
+pub use auto_abort_join_handle::AutoAbortJoinHandle;
+
+mod extracter;
+mod readable_rx;
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
@@ -40,9 +44,17 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
     Ok(req.status().is_success())
 }
 
-/// Download a file from the provided URL to the provided path
-pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
-    let url = Url::parse(url)?;
+/// Download a file from the provided URL and extract it to the provided path
+///
+///  * `desired_outputs - If Some(_) and `fmt` is not `PkgFmt::Bin` or
+///    `PkgFmt::Zip`, then it will filter the tar and only extract files
+///    specified in it.
+pub async fn download_and_extract<P: AsRef<Path>, const N: usize>(
+    url: Url,
+    fmt: PkgFmt,
+    path: P,
+    desired_outputs: Option<[Cow<'static, Path>; N]>,
+) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
     let resp = reqwest::get(url.clone())
@@ -54,86 +66,12 @@ pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), Binstall
             err,
         })?;
 
-    let bytes = resp.bytes().await?;
-
     let path = path.as_ref();
-    debug!("Download OK, writing to file: '{}'", path.display());
+    debug!("Downloading to file: '{}'", path.display());
 
-    fs::create_dir_all(path.parent().unwrap())?;
-    fs::write(&path, bytes)?;
+    extract_archive_stream(resp.bytes_stream(), path, fmt, desired_outputs).await?;
 
-    Ok(())
-}
-
-/// Extract files from the specified source onto the specified path
-pub fn extract<S: AsRef<Path>, P: AsRef<Path>>(
-    source: S,
-    fmt: PkgFmt,
-    path: P,
-) -> Result<(), BinstallError> {
-    let source = source.as_ref();
-    let path = path.as_ref();
-
-    match fmt {
-        PkgFmt::Tar => {
-            // Extract to install dir
-            debug!("Extracting from tar archive '{source:?}' to `{path:?}`");
-
-            let dat = fs::File::open(source)?;
-            let mut tar = Archive::new(dat);
-
-            tar.unpack(path)?;
-        }
-        PkgFmt::Tgz => {
-            // Extract to install dir
-            debug!("Decompressing from tgz archive '{source:?}' to `{path:?}`");
-
-            let dat = fs::File::open(source)?;
-            let tar = GzDecoder::new(dat);
-            let mut tgz = Archive::new(tar);
-
-            tgz.unpack(path)?;
-        }
-        PkgFmt::Txz => {
-            // Extract to install dir
-            debug!("Decompressing from txz archive '{source:?}' to `{path:?}`");
-
-            let dat = fs::File::open(source)?;
-            let tar = XzDecoder::new(dat);
-            let mut txz = Archive::new(tar);
-
-            txz.unpack(path)?;
-        }
-        PkgFmt::Tzstd => {
-            // Extract to install dir
-            debug!("Decompressing from tzstd archive '{source:?}' to `{path:?}`");
-
-            let dat = std::fs::File::open(source)?;
-
-            // The error can only come from raw::Decoder::with_dictionary
-            // as of zstd 0.10.2 and 0.11.2, which is specified
-            // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
-            // should not return any error.
-            let tar = ZstdDecoder::new(dat)?;
-            let mut txz = Archive::new(tar);
-
-            txz.unpack(path)?;
-        }
-        PkgFmt::Zip => {
-            // Extract to install dir
-            debug!("Decompressing from zip archive '{source:?}' to `{path:?}`");
-
-            let dat = fs::File::open(source)?;
-            let mut zip = ZipArchive::new(dat)?;
-
-            zip.extract(path)?;
-        }
-        PkgFmt::Bin => {
-            debug!("Copying binary '{source:?}' to `{path:?}`");
-            // Copy to install dir
-            fs::copy(source, path)?;
-        }
-    };
+    debug!("Download OK, written to file: '{}'", path.display());
 
     Ok(())
 }
