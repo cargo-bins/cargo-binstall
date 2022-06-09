@@ -148,6 +148,11 @@ impl AsyncFileWriterInner {
     }
 }
 
+/// AsyncFileWriter will pass the `Bytes` you give to another thread via
+/// a `mpsc` and decompress and unpack it if needed.
+///
+/// # Cancellation
+///
 /// AsyncFileWriter removes the file if `done` isn't called.
 #[derive(Debug)]
 pub struct AsyncFileWriter(ScopeGuard<AsyncFileWriterInner, fn(AsyncFileWriterInner), Always>);
