@@ -151,16 +151,39 @@ impl AsyncExtracterInner {
 /// AsyncExtracter will pass the `Bytes` you give to another thread via
 /// a `mpsc` and decompress and unpack it if needed.
 ///
-/// # Cancellation
+/// After all write is done, you must call `AsyncExtracter::done`,
+/// otherwise the extracted content will be removed on drop.
 ///
-/// AsyncExtracter removes the file if `done` isn't called.
+/// # Advantages
+///
+/// `download_and_extract` has the following advantages over downloading
+/// plus extracting in on the same thread:
+///
+///  - The code is pipelined instead of storing the downloaded file in memory
+///    and extract it, except for `PkgFmt::Zip`, since `ZipArchiver::new`
+///    requires `std::io::Seek`, so it fallbacks to writing the a file then
+///    unzip it.
+///  - The async part (downloading) and the extracting part runs in parallel
+///    using `tokio::spawn_nonblocking`.
+///  - Compressing/writing which takes a lot of CPU time will not block
+///    the runtime anymore.
+///  - For any PkgFmt except for `PkgFmt::Zip` and `PkgFmt::Bin` (basically
+///    all `tar` based formats), it can extract only specified files.
+///    This means that `super::drivers::fetch_crate_cratesio` no longer need to
+///    extract the whole crate and write them to disk, it now only extract the
+///    relevant part (`Cargo.toml`) out to disk and open it.
 #[derive(Debug)]
 pub struct AsyncExtracter(ScopeGuard<AsyncExtracterInner, fn(AsyncExtracterInner), Always>);
 
 impl AsyncExtracter {
-    ///  * `desired_outputs - If Some(_) and `fmt` is not `PkgFmt::Bin` or
-    ///    `PkgFmt::Zip`, then it will filter the tar and only extract files
-    ///    specified in it.
+    ///  * `path` - If `fmt` is `PkgFmt::Bin`, then this is the filename
+    ///    for the bin.
+    ///    Otherwise, it is the directory where the extracted content will be put.
+    ///  * `fmt` - The format of the archive to feed in.
+    ///  * `desired_outputs - If Some(_), then it will filter the tar and
+    ///    only extract files specified in it.
+    ///    Note that it only works when `fmt` is not `PkgFmt::Bin` or
+    ///    `PkgFmt::Zip`.
     pub fn new<const N: usize>(
         path: &Path,
         fmt: PkgFmt,
