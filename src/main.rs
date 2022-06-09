@@ -361,11 +361,21 @@ async fn install_from_package(
         meta.bin_dir = "{ bin }{ binary-ext }".to_string();
     }
 
+    let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
+    debug!("Using temporary binary path: {}", bin_path.display());
+
     // Download package
     if opts.dry_run {
         info!("Dry run, not downloading package");
     } else {
-        fetcher.fetch(&pkg_path).await?;
+        fetcher.fetch_and_extract(&bin_path).await?;
+
+        if binaries.is_empty() {
+            error!("No binaries specified (or inferred from file system)");
+            return Err(miette!(
+                "No binaries specified (or inferred from file system)"
+            ));
+        }
     }
 
     #[cfg(incomplete)]
@@ -389,21 +399,6 @@ async fn install_from_package(
             unimplemented!()
         } else {
             warn!("No public key found, package signature could not be validated");
-        }
-    }
-
-    let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
-    debug!("Using temporary binary path: {}", bin_path.display());
-
-    if !opts.dry_run {
-        // Extract files
-        extract(&pkg_path, fetcher.pkg_fmt(), &bin_path)?;
-
-        if binaries.is_empty() {
-            error!("No binaries specified (or inferred from file system)");
-            return Err(miette!(
-                "No binaries specified (or inferred from file system)"
-            ));
         }
     }
 

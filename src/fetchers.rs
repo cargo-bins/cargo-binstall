@@ -17,8 +17,8 @@ pub trait Fetcher: Send + Sync {
     where
         Self: Sized;
 
-    /// Fetch a package
-    async fn fetch(&self, dst: &Path) -> Result<(), BinstallError>;
+    /// Fetch a package and extract
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError>;
 
     /// Check if a package is available for download
     async fn check(&self) -> Result<bool, BinstallError>;

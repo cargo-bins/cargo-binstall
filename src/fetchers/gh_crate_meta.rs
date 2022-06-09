@@ -7,7 +7,7 @@ use serde::Serialize;
 use url::Url;
 
 use super::Data;
-use crate::{download, remote_exists, BinstallError, PkgFmt, Template};
+use crate::{download_and_extract, remote_exists, BinstallError, PkgFmt, Template};
 
 pub struct GhCrateMeta {
     data: Data,
@@ -40,10 +40,10 @@ impl super::Fetcher for GhCrateMeta {
         remote_exists(url, Method::HEAD).await
     }
 
-    async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.url()?;
         info!("Downloading package from: '{url}'");
-        download(url.as_str(), dst).await
+        download_and_extract::<_, 0>(url, self.pkg_fmt(), dst, None).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

@@ -6,7 +6,7 @@ use reqwest::Method;
 use url::Url;
 
 use super::Data;
-use crate::{download, remote_exists, BinstallError, PkgFmt};
+use crate::{download_and_extract, remote_exists, BinstallError, PkgFmt};
 
 const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
@@ -36,10 +36,10 @@ impl super::Fetcher for QuickInstall {
         remote_exists(Url::parse(&url)?, Method::HEAD).await
     }
 
-    async fn fetch(&self, dst: &Path) -> Result<(), BinstallError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
         info!("Downloading package from: '{url}'");
-        download(&url, &dst).await
+        download_and_extract::<_, 0>(Url::parse(&url)?, self.pkg_fmt(), dst, None).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
