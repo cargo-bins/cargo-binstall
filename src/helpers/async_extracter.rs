@@ -104,9 +104,9 @@ impl AsyncExtracterInner {
         Ok(())
     }
 
-    /// Upon error, this writer shall not be reused.
+    /// Upon error, this extracter shall not be reused.
     /// Otherwise, `Self::done` would panic.
-    async fn write(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
+    async fn feed(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
         if self.tx.send(Content::Data(bytes)).await.is_err() {
             // task failed
             Err(Self::wait(&mut self.handle).await.expect_err(
@@ -193,10 +193,10 @@ impl AsyncExtracter {
         Self(guard(inner, AsyncExtracterInner::abort))
     }
 
-    /// Upon error, this writer shall not be reused.
+    /// Upon error, this extracter shall not be reused.
     /// Otherwise, `Self::done` would panic.
-    pub async fn write(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
-        self.0.write(bytes).await
+    pub async fn feed(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
+        self.0.feed(bytes).await
     }
 
     pub async fn done(self) -> Result<(), BinstallError> {

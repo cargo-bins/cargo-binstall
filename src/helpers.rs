@@ -74,7 +74,7 @@ pub async fn download_and_extract<P: AsRef<Path>, const N: usize>(
     let mut extracter = AsyncExtracter::new(path, fmt, desired_outputs);
 
     while let Some(res) = bytes_stream.next().await {
-        extracter.write(res?).await?;
+        extracter.feed(res?).await?;
     }
 
     extracter.done().await?;
