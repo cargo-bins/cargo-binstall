@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs;
 use std::io::{self, Seek, Write};
 use std::path::Path;
@@ -27,7 +28,13 @@ struct AsyncFileWriterInner {
 }
 
 impl AsyncFileWriterInner {
-    fn new(path: &Path, fmt: PkgFmt) -> Self {
+    ///  * `desired_outputs - If Some(_), then it will filter the tar
+    ///    and only extract files specified in it.
+    fn new<const N: usize>(
+        path: &Path,
+        fmt: PkgFmt,
+        desired_outputs: Option<[Cow<'static, Path>; N]>,
+    ) -> Self {
         let path = path.to_owned();
         let (tx, rx) = mpsc::channel::<Content>(100);
 
@@ -65,7 +72,12 @@ impl AsyncFileWriterInner {
 
                     unzip(file, &path)?;
                 }
-                _ => extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, &path)?,
+                _ => extract_compressed_from_readable(
+                    ReadableRx::new(&mut rx),
+                    fmt,
+                    &path,
+                    desired_outputs.as_ref().map(|arr| &arr[..]),
+                )?,
             }
 
             Ok(())
@@ -141,8 +153,15 @@ impl AsyncFileWriterInner {
 pub struct AsyncFileWriter(ScopeGuard<AsyncFileWriterInner, fn(AsyncFileWriterInner), Always>);
 
 impl AsyncFileWriter {
-    pub fn new(path: &Path, fmt: PkgFmt) -> Self {
-        let inner = AsyncFileWriterInner::new(path, fmt);
+    ///  * `desired_outputs - If Some(_) and `fmt` is not `PkgFmt::Bin` or
+    ///    `PkgFmt::Zip`, then it will filter the tar and only extract files
+    ///    specified in it.
+    pub fn new<const N: usize>(
+        path: &Path,
+        fmt: PkgFmt,
+        desired_outputs: Option<[Cow<'static, Path>; N]>,
+    ) -> Self {
+        let inner = AsyncFileWriterInner::new(path, fmt, desired_outputs);
         Self(guard(inner, AsyncFileWriterInner::abort))
     }
 

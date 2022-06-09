@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fs,
     io::{stderr, stdin, Write},
     path::{Path, PathBuf},
@@ -53,14 +54,19 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
 /// Download a file from the provided URL to the provided path
 pub async fn download<P: AsRef<Path>>(url: &str, path: P) -> Result<(), BinstallError> {
     let url = Url::parse(url)?;
-    download_and_extract(url, PkgFmt::Bin, path.as_ref()).await
+    download_and_extract::<_, 0>(url, PkgFmt::Bin, path.as_ref(), None).await
 }
 
 /// Download a file from the provided URL and extract it to the provided path
-pub async fn download_and_extract<P: AsRef<Path>>(
+///
+///  * `desired_outputs - If Some(_) and `fmt` is not `PkgFmt::Bin` or
+///    `PkgFmt::Zip`, then it will filter the tar and only extract files
+///    specified in it.
+pub async fn download_and_extract<P: AsRef<Path>, const N: usize>(
     url: Url,
     fmt: PkgFmt,
     path: P,
+    desired_outputs: Option<[Cow<'static, Path>; N]>,
 ) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
@@ -77,7 +83,7 @@ pub async fn download_and_extract<P: AsRef<Path>>(
     debug!("Downloading to file: '{}'", path.display());
 
     let mut bytes_stream = resp.bytes_stream();
-    let mut writer = AsyncFileWriter::new(path, fmt);
+    let mut writer = AsyncFileWriter::new(path, fmt, desired_outputs);
 
     while let Some(res) = bytes_stream.next().await {
         writer.write(res?).await?;
