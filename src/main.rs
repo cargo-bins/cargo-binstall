@@ -295,12 +295,6 @@ async fn entry() -> Result<()> {
                 fetcher.source_name()
             );
 
-            // Compute temporary directory for downloads
-            let pkg_path = temp_dir
-                .path()
-                .join(format!("pkg-{}.{}", opts.name, meta.pkg_fmt));
-            debug!("Using temporary download path: {}", pkg_path.display());
-
             install_from_package(
                 binaries,
                 fetcher.as_ref(),
@@ -308,7 +302,6 @@ async fn entry() -> Result<()> {
                 meta,
                 opts,
                 package,
-                pkg_path,
                 temp_dir,
             )
             .await
@@ -337,7 +330,6 @@ async fn install_from_package(
     mut meta: PkgMeta,
     opts: Options,
     package: Package<Meta>,
-    pkg_path: PathBuf,
     temp_dir: TempDir,
 ) -> Result<()> {
     // Prompt user for third-party source
