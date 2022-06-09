@@ -10,7 +10,7 @@ use tokio::{sync::mpsc, task::spawn_blocking};
 use super::{extracter::*, readable_rx::*, AutoAbortJoinHandle};
 use crate::{BinstallError, PkgFmt};
 
-pub enum Content {
+pub(crate) enum Content {
     /// Data to write to file
     Data(Bytes),
 

@@ -14,7 +14,7 @@ use crate::{BinstallError, PkgFmt};
 /// Extract files from the specified source onto the specified path.
 ///
 ///  * `fmt` - must not be `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub fn extract_compressed_from_readable(
+pub(crate) fn extract_compressed_from_readable(
     dat: impl Read,
     fmt: PkgFmt,
     path: &Path,
@@ -66,7 +66,7 @@ pub fn extract_compressed_from_readable(
     Ok(())
 }
 
-pub fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {
+pub(crate) fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {
     debug!("Decompressing from zip archive to `{dst:?}`");
 
     let mut zip = ZipArchive::new(dat)?;

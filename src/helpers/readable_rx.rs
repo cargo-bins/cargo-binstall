@@ -7,13 +7,13 @@ use tokio::sync::mpsc::Receiver;
 use super::async_file_writer::Content;
 
 #[derive(Debug)]
-pub struct ReadableRx<'a> {
+pub(crate) struct ReadableRx<'a> {
     rx: &'a mut Receiver<Content>,
     bytes: Bytes,
 }
 
 impl<'a> ReadableRx<'a> {
-    pub fn new(rx: &'a mut Receiver<Content>) -> Self {
+    pub(crate) fn new(rx: &'a mut Receiver<Content>) -> Self {
         Self {
             rx,
             bytes: Bytes::new(),
