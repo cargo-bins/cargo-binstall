@@ -182,8 +182,8 @@ impl AsyncExtracter {
     ///  * `fmt` - The format of the archive to feed in.
     ///  * `desired_outputs - If Some(_), then it will filter the tar and
     ///    only extract files specified in it.
-    ///    Note that it only works when `fmt` is not `PkgFmt::Bin` or
-    ///    `PkgFmt::Zip`.
+    ///    Note that this is a best-effort and it only works when `fmt`
+    ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
     pub fn new<const N: usize>(
         path: &Path,
         fmt: PkgFmt,
