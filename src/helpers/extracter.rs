@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -10,6 +11,31 @@ use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::{BinstallError, PkgFmt};
+
+fn untar(
+    dat: impl Read,
+    path: &Path,
+    desired_outputs: Option<&[Cow<'_, Path>]>,
+) -> Result<(), BinstallError> {
+    let mut tar = Archive::new(dat);
+
+    if let Some(desired_outputs) = desired_outputs {
+        for res in tar.entries()? {
+            let mut entry = res?;
+            let entry_path = entry.path()?;
+
+            if desired_outputs.contains(&entry_path) {
+                let dst = path.join(entry_path);
+
+                entry.unpack(dst)?;
+            }
+        }
+    } else {
+        tar.unpack(path)?;
+    }
+
+    Ok(())
+}
 
 /// Extract files from the specified source onto the specified path.
 ///
