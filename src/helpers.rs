@@ -14,8 +14,8 @@ use url::Url;
 
 use crate::{BinstallError, Meta, PkgFmt};
 
-mod async_file_writer;
-pub use async_file_writer::AsyncFileWriter;
+mod async_extracter;
+pub use async_extracter::AsyncExtracter;
 
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
@@ -71,13 +71,13 @@ pub async fn download_and_extract<P: AsRef<Path>, const N: usize>(
     debug!("Downloading to file: '{}'", path.display());
 
     let mut bytes_stream = resp.bytes_stream();
-    let mut writer = AsyncFileWriter::new(path, fmt, desired_outputs);
+    let mut extracter = AsyncExtracter::new(path, fmt, desired_outputs);
 
     while let Some(res) = bytes_stream.next().await {
-        writer.write(res?).await?;
+        extracter.write(res?).await?;
     }
 
-    writer.done().await?;
+    extracter.done().await?;
 
     debug!("Download OK, written to file: '{}'", path.display());
 

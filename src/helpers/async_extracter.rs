@@ -20,14 +20,14 @@ pub(crate) enum Content {
 }
 
 #[derive(Debug)]
-struct AsyncFileWriterInner {
+struct AsyncExtracterInner {
     /// Use AutoAbortJoinHandle so that the task
     /// will be cancelled on failure.
     handle: AutoAbortJoinHandle<Result<(), BinstallError>>,
     tx: mpsc::Sender<Content>,
 }
 
-impl AsyncFileWriterInner {
+impl AsyncExtracterInner {
     ///  * `desired_outputs - If Some(_), then it will filter the tar
     ///    and only extract files specified in it.
     fn new<const N: usize>(
@@ -148,16 +148,16 @@ impl AsyncFileWriterInner {
     }
 }
 
-/// AsyncFileWriter will pass the `Bytes` you give to another thread via
+/// AsyncExtracter will pass the `Bytes` you give to another thread via
 /// a `mpsc` and decompress and unpack it if needed.
 ///
 /// # Cancellation
 ///
-/// AsyncFileWriter removes the file if `done` isn't called.
+/// AsyncExtracter removes the file if `done` isn't called.
 #[derive(Debug)]
-pub struct AsyncFileWriter(ScopeGuard<AsyncFileWriterInner, fn(AsyncFileWriterInner), Always>);
+pub struct AsyncExtracter(ScopeGuard<AsyncExtracterInner, fn(AsyncExtracterInner), Always>);
 
-impl AsyncFileWriter {
+impl AsyncExtracter {
     ///  * `desired_outputs - If Some(_) and `fmt` is not `PkgFmt::Bin` or
     ///    `PkgFmt::Zip`, then it will filter the tar and only extract files
     ///    specified in it.
@@ -166,8 +166,8 @@ impl AsyncFileWriter {
         fmt: PkgFmt,
         desired_outputs: Option<[Cow<'static, Path>; N]>,
     ) -> Self {
-        let inner = AsyncFileWriterInner::new(path, fmt, desired_outputs);
-        Self(guard(inner, AsyncFileWriterInner::abort))
+        let inner = AsyncExtracterInner::new(path, fmt, desired_outputs);
+        Self(guard(inner, AsyncExtracterInner::abort))
     }
 
     /// Upon error, this writer shall not be reused.

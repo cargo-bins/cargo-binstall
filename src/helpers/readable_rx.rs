@@ -4,7 +4,7 @@ use std::io::{self, Read};
 use bytes::{Buf, Bytes};
 use tokio::sync::mpsc::Receiver;
 
-use super::async_file_writer::Content;
+use super::async_extracter::Content;
 
 #[derive(Debug)]
 pub(crate) struct ReadableRx<'a> {
