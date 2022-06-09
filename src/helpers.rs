@@ -5,7 +5,6 @@ use std::{
 };
 
 use cargo_toml::Manifest;
-use futures_util::stream::StreamExt;
 use log::{debug, info};
 use reqwest::Method;
 use serde::Serialize;
@@ -15,7 +14,7 @@ use url::Url;
 use crate::{BinstallError, Meta, PkgFmt};
 
 mod async_extracter;
-pub use async_extracter::AsyncExtracter;
+pub use async_extracter::extract_archive_stream;
 
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
@@ -70,14 +69,7 @@ pub async fn download_and_extract<P: AsRef<Path>, const N: usize>(
     let path = path.as_ref();
     debug!("Downloading to file: '{}'", path.display());
 
-    let mut bytes_stream = resp.bytes_stream();
-    let mut extracter = AsyncExtracter::new(path, fmt, desired_outputs);
-
-    while let Some(res) = bytes_stream.next().await {
-        extracter.feed(res?).await?;
-    }
-
-    extracter.done().await?;
+    extract_archive_stream(resp.bytes_stream(), path, fmt, desired_outputs).await?;
 
     debug!("Download OK, written to file: '{}'", path.display());
 

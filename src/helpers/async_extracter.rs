@@ -4,6 +4,7 @@ use std::io::{self, Seek, Write};
 use std::path::Path;
 
 use bytes::Bytes;
+use futures_util::stream::{Stream, StreamExt};
 use scopeguard::{guard, Always, ScopeGuard};
 use tempfile::tempfile;
 use tokio::{sync::mpsc, task::spawn_blocking};
@@ -173,7 +174,7 @@ impl AsyncExtracterInner {
 ///    extract the whole crate and write them to disk, it now only extract the
 ///    relevant part (`Cargo.toml`) out to disk and open it.
 #[derive(Debug)]
-pub struct AsyncExtracter(ScopeGuard<AsyncExtracterInner, fn(AsyncExtracterInner), Always>);
+struct AsyncExtracter(ScopeGuard<AsyncExtracterInner, fn(AsyncExtracterInner), Always>);
 
 impl AsyncExtracter {
     ///  * `path` - If `fmt` is `PkgFmt::Bin`, then this is the filename
@@ -184,7 +185,7 @@ impl AsyncExtracter {
     ///    only extract files specified in it.
     ///    Note that this is a best-effort and it only works when `fmt`
     ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-    pub fn new<const N: usize>(
+    fn new<const N: usize>(
         path: &Path,
         fmt: PkgFmt,
         desired_outputs: Option<[Cow<'static, Path>; N]>,
@@ -195,11 +196,37 @@ impl AsyncExtracter {
 
     /// Upon error, this extracter shall not be reused.
     /// Otherwise, `Self::done` would panic.
-    pub async fn feed(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
+    async fn feed(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
         self.0.feed(bytes).await
     }
 
-    pub async fn done(self) -> Result<(), BinstallError> {
+    async fn done(self) -> Result<(), BinstallError> {
         ScopeGuard::into_inner(self.0).done().await
     }
+}
+
+///  * `output` - If `fmt` is `PkgFmt::Bin`, then this is the filename
+///    for the bin.
+///    Otherwise, it is the directory where the extracted content will be put.
+///  * `fmt` - The format of the archive to feed in.
+///  * `desired_outputs - If Some(_), then it will filter the tar and
+///    only extract files specified in it.
+///    Note that this is a best-effort and it only works when `fmt`
+///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
+pub async fn extract_archive_stream<E, const N: usize>(
+    mut stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
+    output: &Path,
+    fmt: PkgFmt,
+    desired_outputs: Option<[Cow<'static, Path>; N]>,
+) -> Result<(), BinstallError>
+where
+    BinstallError: From<E>,
+{
+    let mut extracter = AsyncExtracter::new(output, fmt, desired_outputs);
+
+    while let Some(res) = stream.next().await {
+        extracter.feed(res?).await?;
+    }
+
+    extracter.done().await
 }
