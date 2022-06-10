@@ -165,3 +165,6 @@ jobs:
 
     - name: "Run binstall"
       run: ./${{ matrix.output }} cargo-binstall --no-confirm
+
+    - name: "Run binstall with manifest"
+      run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
