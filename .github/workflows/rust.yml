@@ -99,8 +99,8 @@ jobs:
     - name: Test
       if: ${{ matrix.test == 'true' }}
       run: |
-        for bin in $bins; do ./${{ matrix.output }} cargo-binstall --no-confirm $bin; done
-        ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
+        for bin in $bins; do ./${{ matrix.output }} binstall --no-confirm $bin; done
+        ./${{ matrix.output }} binstall --manifest-path . --no-confirm cargo-binstall
       env:
         bins: cargo-bindgen cbindgen cargo-deb cargo-llvm-cov cargo-binstall
 
