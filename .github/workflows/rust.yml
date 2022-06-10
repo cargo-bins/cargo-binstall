@@ -103,7 +103,7 @@ jobs:
         for bin in $bins; do ./${{ matrix.output }} binstall --no-confirm $bin; done
         ./${{ matrix.output }} binstall --manifest-path . --no-confirm cargo-binstall
       env:
-        bins: cargo-bindgen cbindgen cargo-deb cargo-llvm-cov cargo-binstall
+        bins: cbindgen cargo-deb cargo-llvm-cov cargo-binstall
 
     - name: Create archive (tgz, linux)
       if: ${{ matrix.os != 'macos-latest' && matrix.os != 'windows-latest' }}
