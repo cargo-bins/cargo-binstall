@@ -37,14 +37,9 @@ impl AsyncExtracterInner {
         desired_outputs: Option<[Cow<'static, Path>; N]>,
     ) -> Self {
         let path = path.to_owned();
-        let (tx, rx) = mpsc::channel::<Content>(100);
+        let (tx, mut rx) = mpsc::channel::<Content>(100);
 
         let handle = AutoAbortJoinHandle::new(spawn_blocking(move || {
-            // close rx on error so that tx.send will return an error
-            let mut rx = guard(rx, |mut rx| {
-                rx.close();
-            });
-
             fs::create_dir_all(path.parent().unwrap())?;
 
             match fmt {
