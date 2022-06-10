@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Read;
 use std::path::Path;
 
@@ -28,6 +28,8 @@ fn untar(
 
             if desired_outputs.contains(&entry_path) {
                 let dst = path.join(entry_path);
+
+                fs::create_dir_all(dst.parent().unwrap())?;
 
                 entry.unpack(dst)?;
             }
