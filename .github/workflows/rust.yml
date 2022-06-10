@@ -96,15 +96,13 @@ jobs:
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
 
-    - name: Test installing bins
+    - name: Test
       if: ${{ matrix.test == 'true' }}
-      run: for bin in $bins; do ./${{ matrix.output }} cargo-binstall --no-confirm $bin; done
+      run: |
+        for bin in $bins; do ./${{ matrix.output }} cargo-binstall --no-confirm $bin; done
+        ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
       env:
         bins: cargo-bindgen cbindgen cargo-deb cargo-llvm-cov cargo-binstall
-
-    - name: Test binstall with manifest
-      if: ${{ matrix.test == 'true' }}
-      run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
 
     - name: Create archive (tgz, linux)
       if: ${{ matrix.os != 'macos-latest' && matrix.os != 'windows-latest' }}
