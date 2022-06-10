@@ -68,8 +68,6 @@ jobs:
 
     - name: Configure caching
       uses: actions/cache@v2
-      # Caching disabled on macos due to https://github.com/actions/cache/issues/403
-      if: ${{ matrix.os != 'macos-latest' }}
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
         path: |
