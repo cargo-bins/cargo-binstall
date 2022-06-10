@@ -19,8 +19,8 @@ pub use async_extracter::extract_archive_stream;
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
 
-mod confirm;
-pub use confirm::Confirmer;
+mod ui_thread;
+pub use ui_thread::UIThread;
 
 mod extracter;
 mod readable_rx;

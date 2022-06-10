@@ -6,7 +6,7 @@ use tokio::task::spawn_blocking;
 use crate::BinstallError;
 
 #[derive(Debug)]
-struct ConfirmerInner {
+struct UIThreadInner {
     /// Request for confirmation
     request_tx: mpsc::Sender<()>,
 
@@ -14,7 +14,7 @@ struct ConfirmerInner {
     confirm_rx: mpsc::Receiver<Result<(), BinstallError>>,
 }
 
-impl ConfirmerInner {
+impl UIThreadInner {
     fn new() -> Self {
         let (request_tx, mut request_rx) = mpsc::channel(1);
         let (confirm_tx, confirm_rx) = mpsc::channel(10);
@@ -75,13 +75,13 @@ impl ConfirmerInner {
 }
 
 #[derive(Debug)]
-pub struct Confirmer(Option<ConfirmerInner>);
+pub struct UIThread(Option<UIThreadInner>);
 
-impl Confirmer {
+impl UIThread {
     ///  * `enable` - `true` to enable confirmation, `false` to disable it.
     pub fn new(enable: bool) -> Self {
         Self(if enable {
-            Some(ConfirmerInner::new())
+            Some(UIThreadInner::new())
         } else {
             None
         })
