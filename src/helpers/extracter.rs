@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::Path;
@@ -12,23 +11,25 @@ use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::{BinstallError, PkgFmt};
 
-///  * `desired_outputs - If Some(_), then it will filter the tar
-///    and only extract files specified in it.
-fn untar(
+///  * `filter` - If Some, then it will pass the path of the file to it
+///    and only extract ones which filter returns `true`.
+///    Note that this is a best-effort and it only works when `fmt`
+///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
+fn untar<Filter: FnMut(&Path) -> bool>(
     dat: impl Read,
     path: &Path,
-    desired_outputs: Option<&[Cow<'_, Path>]>,
+    filter: Option<Filter>,
 ) -> Result<(), BinstallError> {
     let mut tar = Archive::new(dat);
 
-    if let Some(desired_outputs) = desired_outputs {
-        debug!("Untaring only {desired_outputs:#?}");
+    if let Some(mut filter) = filter {
+        debug!("Untaring with filter");
 
         for res in tar.entries()? {
             let mut entry = res?;
             let entry_path = entry.path()?;
 
-            if desired_outputs.contains(&entry_path) {
+            if filter(&entry_path) {
                 debug!("Extracting {entry_path:#?}");
 
                 let dst = path.join(entry_path);
@@ -49,34 +50,36 @@ fn untar(
 /// Extract files from the specified source onto the specified path.
 ///
 ///  * `fmt` - must not be `PkgFmt::Bin` or `PkgFmt::Zip`.
-///  * `desired_outputs - If Some(_), then it will filter the tar
-///    and only extract files specified in it.
-pub(crate) fn extract_compressed_from_readable(
+///  * `filter` - If Some, then it will pass the path of the file to it
+///    and only extract ones which filter returns `true`.
+///    Note that this is a best-effort and it only works when `fmt`
+///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
+pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool>(
     dat: impl Read,
     fmt: PkgFmt,
     path: &Path,
-    desired_outputs: Option<&[Cow<'_, Path>]>,
+    filter: Option<Filter>,
 ) -> Result<(), BinstallError> {
     match fmt {
         PkgFmt::Tar => {
             // Extract to install dir
             debug!("Extracting from tar archive to `{path:?}`");
 
-            untar(dat, path, desired_outputs)?
+            untar(dat, path, filter)?
         }
         PkgFmt::Tgz => {
             // Extract to install dir
             debug!("Decompressing from tgz archive to `{path:?}`");
 
             let tar = GzDecoder::new(dat);
-            untar(tar, path, desired_outputs)?;
+            untar(tar, path, filter)?;
         }
         PkgFmt::Txz => {
             // Extract to install dir
             debug!("Decompressing from txz archive to `{path:?}`");
 
             let tar = XzDecoder::new(dat);
-            untar(tar, path, desired_outputs)?;
+            untar(tar, path, filter)?;
         }
         PkgFmt::Tzstd => {
             // Extract to install dir
@@ -87,7 +90,7 @@ pub(crate) fn extract_compressed_from_readable(
             // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
             // should not return any error.
             let tar = ZstdDecoder::new(dat)?;
-            untar(tar, path, desired_outputs)?;
+            untar(tar, path, filter)?;
         }
         PkgFmt::Zip => panic!("Unexpected PkgFmt::Zip!"),
         PkgFmt::Bin => panic!("Unexpected PkgFmt::Bin!"),

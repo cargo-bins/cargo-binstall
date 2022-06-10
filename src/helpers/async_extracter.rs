@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fs;
 use std::io::{self, Seek, Write};
 use std::path::Path;
@@ -29,12 +28,14 @@ struct AsyncExtracterInner {
 }
 
 impl AsyncExtracterInner {
-    ///  * `desired_outputs - If Some(_), then it will filter the tar
-    ///    and only extract files specified in it.
-    fn new<const N: usize>(
+    ///  * `filter` - If Some, then it will pass the path of the file to it
+    ///    and only extract ones which filter returns `true`.
+    ///    Note that this is a best-effort and it only works when `fmt`
+    ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
+    fn new<Filter: FnMut(&Path) -> bool + Send + 'static>(
         path: &Path,
         fmt: PkgFmt,
-        desired_outputs: Option<[Cow<'static, Path>; N]>,
+        filter: Option<Filter>,
     ) -> Self {
         let path = path.to_owned();
         let (tx, rx) = mpsc::channel::<Content>(100);
@@ -73,12 +74,9 @@ impl AsyncExtracterInner {
 
                     unzip(file, &path)?;
                 }
-                _ => extract_compressed_from_readable(
-                    ReadableRx::new(&mut rx),
-                    fmt,
-                    &path,
-                    desired_outputs.as_ref().map(|arr| &arr[..]),
-                )?,
+                _ => {
+                    extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, &path, filter)?
+                }
             }
 
             Ok(())
@@ -181,16 +179,16 @@ impl AsyncExtracter {
     ///    for the bin.
     ///    Otherwise, it is the directory where the extracted content will be put.
     ///  * `fmt` - The format of the archive to feed in.
-    ///  * `desired_outputs - If Some(_), then it will filter the tar and
-    ///    only extract files specified in it.
+    ///  * `filter` - If Some, then it will pass the path of the file to it
+    ///    and only extract ones which filter returns `true`.
     ///    Note that this is a best-effort and it only works when `fmt`
     ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-    fn new<const N: usize>(
+    fn new<Filter: FnMut(&Path) -> bool + Send + 'static>(
         path: &Path,
         fmt: PkgFmt,
-        desired_outputs: Option<[Cow<'static, Path>; N]>,
+        filter: Option<Filter>,
     ) -> Self {
-        let inner = AsyncExtracterInner::new(path, fmt, desired_outputs);
+        let inner = AsyncExtracterInner::new(path, fmt, filter);
         Self(guard(inner, AsyncExtracterInner::abort))
     }
 
@@ -209,20 +207,20 @@ impl AsyncExtracter {
 ///    for the bin.
 ///    Otherwise, it is the directory where the extracted content will be put.
 ///  * `fmt` - The format of the archive to feed in.
-///  * `desired_outputs - If Some(_), then it will filter the tar and
-///    only extract files specified in it.
+///  * `filter` - If Some, then it will pass the path of the file to it
+///    and only extract ones which filter returns `true`.
 ///    Note that this is a best-effort and it only works when `fmt`
 ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub async fn extract_archive_stream<E, const N: usize>(
+pub async fn extract_archive_stream<Filter: FnMut(&Path) -> bool + Send + 'static, E>(
     mut stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
     output: &Path,
     fmt: PkgFmt,
-    desired_outputs: Option<[Cow<'static, Path>; N]>,
+    filter: Option<Filter>,
 ) -> Result<(), BinstallError>
 where
     BinstallError: From<E>,
 {
-    let mut extracter = AsyncExtracter::new(output, fmt, desired_outputs);
+    let mut extracter = AsyncExtracter::new(output, fmt, filter);
 
     while let Some(res) = stream.next().await {
         extracter.feed(res?).await?;

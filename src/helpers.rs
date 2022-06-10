@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     io::{stderr, stdin, Write},
     path::{Path, PathBuf},
 };
@@ -46,14 +45,15 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
 
 /// Download a file from the provided URL and extract it to the provided path
 ///
-///  * `desired_outputs - If Some(_) and `fmt` is not `PkgFmt::Bin` or
-///    `PkgFmt::Zip`, then it will filter the tar and only extract files
-///    specified in it.
-pub async fn download_and_extract<P: AsRef<Path>, const N: usize>(
+///  * `filter` - If Some, then it will pass the path of the file to it
+///    and only extract ones which filter returns `true`.
+///    Note that this is a best-effort and it only works when `fmt`
+///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
+pub async fn download_and_extract<Filter: FnMut(&Path) -> bool + Send + 'static, P: AsRef<Path>>(
     url: Url,
     fmt: PkgFmt,
     path: P,
-    desired_outputs: Option<[Cow<'static, Path>; N]>,
+    filter: Option<Filter>,
 ) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
@@ -69,7 +69,7 @@ pub async fn download_and_extract<P: AsRef<Path>, const N: usize>(
     let path = path.as_ref();
     debug!("Downloading to file: '{}'", path.display());
 
-    extract_archive_stream(resp.bytes_stream(), path, fmt, desired_outputs).await?;
+    extract_archive_stream(resp.bytes_stream(), path, fmt, filter).await?;
 
     debug!("Download OK, written to file: '{}'", path.display());
 
