@@ -22,11 +22,15 @@ fn untar(
     let mut tar = Archive::new(dat);
 
     if let Some(desired_outputs) = desired_outputs {
+        debug!("Untaring only {desired_outputs:#?}");
+
         for res in tar.entries()? {
             let mut entry = res?;
             let entry_path = entry.path()?;
 
             if desired_outputs.contains(&entry_path) {
+                debug!("Extracting {entry_path:#?}");
+
                 let dst = path.join(entry_path);
 
                 fs::create_dir_all(dst.parent().unwrap())?;
@@ -35,6 +39,7 @@ fn untar(
             }
         }
     } else {
+        debug!("Untaring entire tar");
         tar.unpack(path)?;
     }
 
