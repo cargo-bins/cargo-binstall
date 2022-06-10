@@ -1,27 +1,9 @@
 use std::io::{self, BufRead, Write};
 
-use log::info;
 use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 
 use crate::BinstallError;
-
-pub fn confirm() -> Result<(), BinstallError> {
-    loop {
-        info!("Do you wish to continue? yes/[no]");
-        eprint!("? ");
-        io::stderr().flush().ok();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-
-        match input.as_str().trim() {
-            "yes" | "y" | "YES" | "Y" => break Ok(()),
-            "no" | "n" | "NO" | "N" | "" => break Err(BinstallError::UserAbort),
-            _ => continue,
-        }
-    }
-}
 
 #[derive(Debug)]
 struct ConfirmerInner {
