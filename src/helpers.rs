@@ -20,7 +20,7 @@ mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
 
 mod confirm;
-pub use confirm::confirm;
+pub use confirm::{confirm, Confirmer};
 
 mod extracter;
 mod readable_rx;
