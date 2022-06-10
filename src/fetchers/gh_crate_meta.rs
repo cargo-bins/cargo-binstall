@@ -43,7 +43,7 @@ impl super::Fetcher for GhCrateMeta {
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.url()?;
         info!("Downloading package from: '{url}'");
-        download_and_extract::<fn(&Path) -> bool, _>(url, self.pkg_fmt(), dst, None).await
+        download_and_extract(url, self.pkg_fmt(), dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

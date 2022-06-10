@@ -110,7 +110,7 @@ pub async fn fetch_crate_cratesio(
     let main = src.join("main.rs");
     let bin = src.join("bin");
 
-    download_and_extract(
+    download_and_extract_with_filter(
         Url::parse(&crate_url)?,
         PkgFmt::Tgz,
         &temp_dir,
