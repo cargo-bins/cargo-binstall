@@ -42,7 +42,7 @@ jobs:
             output: cargo-binstall.exe
             archive: zip
             use-cross: false
-            test: true
+            test: false
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
@@ -96,14 +96,20 @@ jobs:
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
 
-    - name: Test
-      if: ${{ matrix.test }}
+    - name: Test (Unix)
+      if: ${{ matrix.test && matrix.os != 'windows-latest' }}
       run: |
         set -euxo pipefail
         for bin in $bins; do ./${{ matrix.output }} binstall --no-confirm $bin; done
         ./${{ matrix.output }} binstall --manifest-path . --no-confirm cargo-binstall
       env:
         bins: cargo-deb cargo-llvm-cov cargo-binstall
+
+    - name: Test (Windows)
+      if: ${{ matrix.os == 'windows-latest' }}
+      run: |
+        ./${{ matrix.output }} binstall --no-confirm cargo-binstall
+        ./${{ matrix.output }} binstall --manifest-path . --no-confirm cargo-binstall
 
     - name: Create archive (tgz, linux)
       if: ${{ matrix.os != 'macos-latest' && matrix.os != 'windows-latest' }}
