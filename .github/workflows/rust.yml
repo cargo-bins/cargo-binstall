@@ -90,7 +90,7 @@ jobs:
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
 
     - name: Test installing bins
-      run: for bin in $bins; do ./${{ matrix.output }} cargo-binstall --no-confirm $bin; $done
+      run: for bin in $bins; do ./${{ matrix.output }} cargo-binstall --no-confirm $bin; done
       env:
         bins: cargo-bindgen cbindgen cargo-deb cargo-llvm-cov cargo-binstall
 
