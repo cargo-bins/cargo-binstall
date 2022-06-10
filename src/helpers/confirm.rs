@@ -40,9 +40,7 @@ impl ConfirmerInner {
                     stdout.flush().unwrap();
 
                     input.clear();
-                    if stdin.read_line(&mut input).is_err() {
-                        break Err(BinstallError::UserAbort);
-                    }
+                    stdin.read_line(&mut input).unwrap();
 
                     match input.as_str().trim() {
                         "yes" | "y" | "YES" | "Y" => break Ok(()),
