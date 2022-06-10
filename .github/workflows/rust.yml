@@ -73,7 +73,8 @@ jobs:
       with:
         key: ${{ matrix.os }}-${{ matrix.target }}
         path: |
-          ${{ env.HOME }}/.cargo
+          ${{ env.HOME }}/.cargo/git
+          ${{ env.HOME }}/.cargo/registry
           target
 
     - name: Install musl-tools
