@@ -24,36 +24,43 @@ jobs:
             output: cargo-binstall
             archive: tgz
             use-cross: false
+            test: true
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             archive: zip
             use-cross: false
+            test: true
           - target: aarch64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             archive: zip
             use-cross: false
+            test: false
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
             archive: zip
             use-cross: false
+            test: true
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
             use-cross: false
+            test: true
           - target: armv7-unknown-linux-musleabihf
             os: ubuntu-20.04
             output: cargo-binstall
             archive: tgz
             use-cross: true
+            test: false
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             archive: tgz
             use-cross: true
+            test: false
 
     steps:
     - uses: actions/checkout@v2
@@ -90,11 +97,13 @@ jobs:
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
 
     - name: Test installing bins
+      if: ${{ matrix.test == 'true' }}
       run: for bin in $bins; do ./${{ matrix.output }} cargo-binstall --no-confirm $bin; done
       env:
         bins: cargo-bindgen cbindgen cargo-deb cargo-llvm-cov cargo-binstall
 
     - name: Test binstall with manifest
+      if: ${{ matrix.test == 'true' }}
       run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
 
     - name: Create archive (tgz, linux)
