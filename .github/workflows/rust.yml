@@ -164,4 +164,4 @@ jobs:
       run: unzip cargo-binstall-${{ matrix.target }}.zip
 
     - name: "Run binstall"
-      run: ./${{ matrix.output }} cargo-binstall --manifest-path . --no-confirm
+      run: ./${{ matrix.output }} cargo-binstall --no-confirm
