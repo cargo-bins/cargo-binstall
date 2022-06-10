@@ -99,6 +99,7 @@ jobs:
     - name: Test
       if: ${{ matrix.test == 'true' }}
       run: |
+        set -euxo pipefail
         for bin in $bins; do ./${{ matrix.output }} binstall --no-confirm $bin; done
         ./${{ matrix.output }} binstall --manifest-path . --no-confirm cargo-binstall
       env:
