@@ -102,15 +102,16 @@ pub async fn fetch_crate_cratesio(
 
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
+    let crate_dir = format!("{name}-{version_name}");
+    let crate_path = temp_dir.join(&crate_dir);
+
     download_and_extract(
         Url::parse(&crate_url)?,
         PkgFmt::Tgz,
         &temp_dir,
-        Some([Path::new("Cargo.toml").into()]),
+        Some([Path::new(&crate_dir).join("Cargo.toml").into()]),
     )
     .await?;
-
-    let crate_path = temp_dir.join(format!("{name}-{version_name}"));
 
     // Return crate directory
     Ok(crate_path)
