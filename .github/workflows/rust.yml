@@ -97,7 +97,7 @@ jobs:
       run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
 
     - name: Test
-      if: ${{ matrix.test == 'true' }}
+      if: ${{ matrix.test }}
       run: |
         set -euxo pipefail
         for bin in $bins; do ./${{ matrix.output }} binstall --no-confirm $bin; done
