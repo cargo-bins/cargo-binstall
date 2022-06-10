@@ -7,9 +7,12 @@ use bytes::Bytes;
 use futures_util::stream::{Stream, StreamExt};
 use scopeguard::{guard, Always, ScopeGuard};
 use tempfile::tempfile;
-use tokio::{sync::mpsc, task::spawn_blocking};
+use tokio::{
+    sync::mpsc,
+    task::{spawn_blocking, JoinHandle},
+};
 
-use super::{extracter::*, readable_rx::*, AutoAbortJoinHandle};
+use super::{extracter::*, readable_rx::*};
 use crate::{BinstallError, PkgFmt};
 
 pub(crate) enum Content {
@@ -24,7 +27,7 @@ pub(crate) enum Content {
 struct AsyncExtracterInner {
     /// Use AutoAbortJoinHandle so that the task
     /// will be cancelled on failure.
-    handle: AutoAbortJoinHandle<Result<(), BinstallError>>,
+    handle: JoinHandle<Result<(), BinstallError>>,
     tx: mpsc::Sender<Content>,
 }
 
@@ -39,7 +42,7 @@ impl AsyncExtracterInner {
         let path = path.to_owned();
         let (tx, mut rx) = mpsc::channel::<Content>(100);
 
-        let handle = AutoAbortJoinHandle::new(spawn_blocking(move || {
+        let handle = spawn_blocking(move || {
             fs::create_dir_all(path.parent().unwrap())?;
 
             match fmt {
@@ -77,7 +80,7 @@ impl AsyncExtracterInner {
             }
 
             Ok(())
-        }));
+        });
 
         Self { handle, tx }
     }
@@ -121,9 +124,7 @@ impl AsyncExtracterInner {
         Self::wait(&mut self.handle).await
     }
 
-    async fn wait(
-        handle: &mut AutoAbortJoinHandle<Result<(), BinstallError>>,
-    ) -> Result<(), BinstallError> {
+    async fn wait(handle: &mut JoinHandle<Result<(), BinstallError>>) -> Result<(), BinstallError> {
         match handle.await {
             Ok(res) => res,
             Err(join_err) => Err(io::Error::new(io::ErrorKind::Other, join_err).into()),
