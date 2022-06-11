@@ -11,6 +11,8 @@ use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::{BinstallError, TarBasedFmt};
 
+/// Visitor must iterate over all entries.
+/// Entires can be in arbitary order.
 pub trait TarEntriesVisitor {
     fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
 }
