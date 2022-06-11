@@ -5,7 +5,7 @@ use std::path::Path;
 
 use bytes::Bytes;
 use futures_util::stream::{Stream, StreamExt};
-use scopeguard::{guard, Always, ScopeGuard};
+use scopeguard::{guard, ScopeGuard};
 use tempfile::tempfile;
 use tokio::{
     sync::mpsc,
@@ -13,7 +13,7 @@ use tokio::{
 };
 
 use super::{extracter::*, readable_rx::*};
-use crate::{BinstallError, PkgFmt, TarBasedFmt};
+use crate::{BinstallError, TarBasedFmt};
 
 pub(crate) enum Content {
     /// Data to write to file
@@ -61,45 +61,7 @@ impl<T: Debug + Send + 'static> AsyncExtracterInner<T> {
     ) -> Self {
         let (tx, rx) = mpsc::channel::<Content>(100);
 
-        let handle = spawn_blocking(move || {
-            f(rx)
-            /*
-            fs::create_dir_all(path.parent().unwrap())?;
-
-            match fmt {
-                PkgFmt::Bin => {
-                    let mut file = fs::File::create(&path)?;
-
-                    // remove it unless the operation isn't aborted and no write
-                    // fails.
-                    let remove_guard = guard(&path, |path| {
-                        fs::remove_file(path).ok();
-                    });
-
-                    Self::read_into_file(&mut file, &mut rx)?;
-
-                    // Operation isn't aborted and all writes succeed,
-                    // disarm the remove_guard.
-                    ScopeGuard::into_inner(remove_guard);
-                }
-                PkgFmt::Zip => {
-                    let mut file = tempfile()?;
-
-                    Self::read_into_file(&mut file, &mut rx)?;
-
-                    // rewind it so that we can pass it to unzip
-                    file.rewind()?;
-
-                    unzip(file, &path)?;
-                }
-                _ => {
-                    extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, &path, filter)?
-                }
-            }
-
-            Ok(())
-                */
-        });
+        let handle = spawn_blocking(move || f(rx));
 
         Self { handle, tx }
     }
@@ -233,9 +195,7 @@ where
         // rewind it so that we can pass it to unzip
         file.rewind()?;
 
-        unzip(file, &path)?;
-
-        Ok(())
+        unzip(file, &path)
     })
     .await
 }
@@ -259,9 +219,7 @@ where
     extract_impl(stream, move |mut rx| {
         fs::create_dir_all(path.parent().unwrap())?;
 
-        extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt.into(), &path, filter)?;
-
-        Ok(())
+        extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt.into(), &path, filter)
     })
     .await
 }
@@ -284,9 +242,7 @@ where
             fmt.into(),
             &path,
             None,
-        )?;
-
-        Ok(())
+        )
     })
     .await
 }
