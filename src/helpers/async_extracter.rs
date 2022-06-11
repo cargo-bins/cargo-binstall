@@ -282,3 +282,29 @@ where
     })
     .await
 }
+
+pub async fn extract_tar_based_stream_and_visit<V: TarEntriesVisitor + Debug + Send + 'static, E>(
+    stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
+    output: &Path,
+    fmt: TarBasedFmt,
+    mut visitor: V,
+) -> Result<V, BinstallError>
+where
+    BinstallError: From<E>,
+{
+    let path = output.to_owned();
+
+    extract_impl(stream, move |mut rx| {
+        fs::create_dir_all(path.parent().unwrap())?;
+
+        extract_compressed_from_readable(
+            ReadableRx::new(&mut rx),
+            fmt,
+            &*path,
+            Some(&mut visitor),
+        )?;
+
+        Ok(visitor)
+    })
+    .await
+}
