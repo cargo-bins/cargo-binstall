@@ -9,7 +9,7 @@ use xz2::bufread::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
-use crate::{BinstallError, PkgFmt};
+use crate::{BinstallError, TarBasedFmt};
 
 ///  * `filter` - If Some, then it will pass the path of the file to it
 ///    and only extract ones which filter returns `true`.
@@ -58,32 +58,34 @@ fn untar<Filter: FnMut(&Path) -> bool>(
 ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
 pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool, R: BufRead>(
     dat: R,
-    fmt: PkgFmt,
+    fmt: TarBasedFmt,
     path: &Path,
     filter: Option<Filter>,
 ) -> Result<(), BinstallError> {
+    use TarBasedFmt::*;
+
     match fmt {
-        PkgFmt::Tar => {
+        Tar => {
             // Extract to install dir
             debug!("Extracting from tar archive to `{path:?}`");
 
             untar(dat, path, filter)?
         }
-        PkgFmt::Tgz => {
+        Tgz => {
             // Extract to install dir
             debug!("Decompressing from tgz archive to `{path:?}`");
 
             let tar = GzDecoder::new(dat);
             untar(tar, path, filter)?;
         }
-        PkgFmt::Txz => {
+        Txz => {
             // Extract to install dir
             debug!("Decompressing from txz archive to `{path:?}`");
 
             let tar = XzDecoder::new(dat);
             untar(tar, path, filter)?;
         }
-        PkgFmt::Tzstd => {
+        Tzstd => {
             // Extract to install dir
             debug!("Decompressing from tzstd archive to `{path:?}`");
 
@@ -94,8 +96,6 @@ pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool, R: 
             let tar = ZstdDecoder::with_buffer(dat)?;
             untar(tar, path, filter)?;
         }
-        PkgFmt::Zip => panic!("Unexpected PkgFmt::Zip!"),
-        PkgFmt::Bin => panic!("Unexpected PkgFmt::Bin!"),
     };
 
     Ok(())

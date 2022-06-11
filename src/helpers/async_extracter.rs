@@ -219,7 +219,7 @@ where
     extract_impl(stream, move |mut rx| {
         fs::create_dir_all(path.parent().unwrap())?;
 
-        extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt.into(), &path, filter)
+        extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, &path, filter)
     })
     .await
 }
@@ -239,7 +239,7 @@ where
 
         extract_compressed_from_readable::<fn(&Path) -> bool, _>(
             ReadableRx::new(&mut rx),
-            fmt.into(),
+            fmt,
             &path,
             None,
         )
