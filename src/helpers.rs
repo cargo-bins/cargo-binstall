@@ -24,6 +24,9 @@ pub use extracter::TarEntriesVisitor;
 
 mod readable_rx;
 
+mod path_ext;
+pub use path_ext::*;
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
