@@ -101,11 +101,13 @@ jobs:
       run: |
         set -euxo pipefail
         for bin in $bins; do ./${{ matrix.output }} binstall --log-level debug --no-confirm $bin; done
-        for bin in $bins; do $HOME/.cargo/bin/${{ matrix.output }} --version; done
+        for bin in $test_bins; do $HOME/.cargo/bin/${{ matrix.output }} --version; done
+        cargo binstall --help >dev/null
         ./${{ matrix.output }} binstall --log-level debug --manifest-path . --no-confirm cargo-binstall
-        cargo binstall --version
+        cargo binstall --help >dev/null
       env:
         bins: cargo-deb cargo-llvm-cov cargo-binstall
+        test_bins: cargo-deb cargo-llvm-cov
 
     - name: Test (Windows)
       if: ${{ matrix.os == 'windows-latest' }}
