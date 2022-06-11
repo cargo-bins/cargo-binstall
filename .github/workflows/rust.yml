@@ -101,7 +101,7 @@ jobs:
       run: |
         set -euxo pipefail
         for bin in $bins; do ./${{ matrix.output }} binstall --log-level debug --no-confirm $bin; done
-        for bin in $test_bins; do $HOME/.cargo/bin/${{ matrix.output }} --version; done
+        for bin in $test_bins; do $HOME/.cargo/bin/$bin --version; done
         cargo binstall --help >dev/null
         ./${{ matrix.output }} binstall --log-level debug --manifest-path . --no-confirm cargo-binstall
         cargo binstall --help >dev/null
