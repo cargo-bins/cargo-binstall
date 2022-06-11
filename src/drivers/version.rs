@@ -5,7 +5,7 @@ use semver::{Version, VersionReq};
 
 use crate::BinstallError;
 
-pub(crate) fn find_version<'a, V: Iterator<Item = &'a String>>(
+pub(super) fn find_version<'a, V: Iterator<Item = &'a String>>(
     requirement: &str,
     version_iter: V,
 ) -> Result<Version, BinstallError> {
