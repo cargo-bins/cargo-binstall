@@ -1,11 +1,11 @@
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::{BufRead, Read};
 use std::path::Path;
 
-use flate2::read::GzDecoder;
+use flate2::bufread::GzDecoder;
 use log::debug;
 use tar::Archive;
-use xz2::read::XzDecoder;
+use xz2::bufread::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
@@ -55,7 +55,7 @@ fn untar<Filter: FnMut(&Path) -> bool>(
 ///    Note that this is a best-effort and it only works when `fmt`
 ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
 pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool>(
-    dat: impl Read,
+    dat: impl BufRead,
     fmt: PkgFmt,
     path: &Path,
     filter: Option<Filter>,
@@ -89,7 +89,7 @@ pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool>(
             // as of zstd 0.10.2 and 0.11.2, which is specified
             // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
             // should not return any error.
-            let tar = ZstdDecoder::new(dat)?;
+            let tar = ZstdDecoder::with_buffer(dat)?;
             untar(tar, path, filter)?;
         }
         PkgFmt::Zip => panic!("Unexpected PkgFmt::Zip!"),
