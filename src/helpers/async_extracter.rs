@@ -199,24 +199,70 @@ impl AsyncExtracter {
     }
 }
 
-///  * `output` - If `fmt` is `PkgFmt::Bin`, then this is the filename
-///    for the bin.
-///    Otherwise, it is the directory where the extracted content will be put.
-///  * `fmt` - The format of the archive to feed in.
-///  * `filter` - If Some, then it will pass the path of the file to it
-///    and only extract ones which filter returns `true`.
-///    Note that this is a best-effort and it only works when `fmt`
-///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub async fn extract_archive_stream<Filter: FnMut(&Path) -> bool + Send + 'static, E>(
+pub async fn extract_bin<E>(
     mut stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
     output: &Path,
-    fmt: PkgFmt,
+) -> Result<(), BinstallError>
+where
+    BinstallError: From<E>,
+{
+    let mut extracter = AsyncExtracter::new::<fn(&Path) -> bool>(output, PkgFmt::Bin, None);
+
+    while let Some(res) = stream.next().await {
+        extracter.feed(res?).await?;
+    }
+
+    extracter.done().await
+}
+
+pub async fn extract_zip<E>(
+    mut stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
+    output: &Path,
+) -> Result<(), BinstallError>
+where
+    BinstallError: From<E>,
+{
+    let mut extracter = AsyncExtracter::new::<fn(&Path) -> bool>(output, PkgFmt::Zip, None);
+
+    while let Some(res) = stream.next().await {
+        extracter.feed(res?).await?;
+    }
+
+    extracter.done().await
+}
+
+///  * `filter` - If Some, then it will pass the path of the file to it
+///    and only extract ones which filter returns `true`.
+pub async fn extract_tar_based_stream_with_filter<
+    Filter: FnMut(&Path) -> bool + Send + 'static,
+    E,
+>(
+    mut stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
+    output: &Path,
+    fmt: TarBasedFmt,
     filter: Option<Filter>,
 ) -> Result<(), BinstallError>
 where
     BinstallError: From<E>,
 {
-    let mut extracter = AsyncExtracter::new(output, fmt, filter);
+    let mut extracter = AsyncExtracter::new(output, fmt.into(), filter);
+
+    while let Some(res) = stream.next().await {
+        extracter.feed(res?).await?;
+    }
+
+    extracter.done().await
+}
+
+pub async fn extract_tar_based_stream<E>(
+    mut stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
+    output: &Path,
+    fmt: TarBasedFmt,
+) -> Result<(), BinstallError>
+where
+    BinstallError: From<E>,
+{
+    let mut extracter = AsyncExtracter::new::<fn(&Path) -> bool>(output, fmt.into(), None);
 
     while let Some(res) = stream.next().await {
         extracter.feed(res?).await?;

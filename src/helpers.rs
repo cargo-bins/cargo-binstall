@@ -1,18 +1,16 @@
-use std::{
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use cargo_toml::Manifest;
 use log::debug;
-use reqwest::Method;
+use reqwest::{Method, Response};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 use url::Url;
 
-use crate::{BinstallError, Meta, PkgFmt};
+use crate::{BinstallError, Meta, PkgFmt, PkgFmtDecomposed};
 
 mod async_extracter;
-pub use async_extracter::extract_archive_stream;
+pub use async_extracter::*;
 
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
@@ -45,13 +43,41 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
     Ok(req.status().is_success())
 }
 
+async fn create_request(url: Url) -> Result<Response, BinstallError> {
+    reqwest::get(url.clone())
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|err| BinstallError::Http {
+            method: Method::GET,
+            url,
+            err,
+        })
+}
+
 /// Download a file from the provided URL and extract it to the provided path.
 pub async fn download_and_extract<P: AsRef<Path>>(
     url: Url,
     fmt: PkgFmt,
     path: P,
 ) -> Result<(), BinstallError> {
-    download_and_extract_with_filter::<fn(&Path) -> bool, _>(url, fmt, path.as_ref(), None).await
+    debug!("Downloading from: '{url}'");
+
+    let resp = create_request(url).await?;
+
+    let path = path.as_ref();
+    debug!("Downloading to file: '{}'", path.display());
+
+    let stream = resp.bytes_stream();
+
+    match fmt.decompose() {
+        PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
+        PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
+        PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+    }
+
+    debug!("Download OK, written to file: '{}'", path.display());
+
+    Ok(())
 }
 
 /// Download a file from the provided URL and extract part of it to
@@ -72,19 +98,20 @@ pub async fn download_and_extract_with_filter<
 ) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    let resp = reqwest::get(url.clone())
-        .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|err| BinstallError::Http {
-            method: Method::GET,
-            url,
-            err,
-        })?;
+    let resp = create_request(url).await?;
 
     let path = path.as_ref();
     debug!("Downloading to file: '{}'", path.display());
 
-    extract_archive_stream(resp.bytes_stream(), path, fmt, filter).await?;
+    let stream = resp.bytes_stream();
+
+    match fmt.decompose() {
+        PkgFmtDecomposed::Tar(fmt) => {
+            extract_tar_based_stream_with_filter(stream, path, fmt, filter).await?
+        }
+        PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
+        PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+    }
 
     debug!("Download OK, written to file: '{}'", path.display());
 
