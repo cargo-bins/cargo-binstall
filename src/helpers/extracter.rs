@@ -44,6 +44,8 @@ fn untar<Filter: FnMut(&Path) -> bool>(
         tar.unpack(path)?;
     }
 
+    debug!("Untaring completed");
+
     Ok(())
 }
 
