@@ -1,6 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
-trait PathExt {
+pub trait PathExt {
     fn normalize_path(&self) -> PathBuf;
 }
 
