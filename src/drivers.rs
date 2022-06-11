@@ -114,7 +114,7 @@ pub async fn fetch_crate_cratesio(
         Url::parse(&crate_url)?,
         TarBasedFmt::Tgz,
         &temp_dir,
-        Some(move |path: &Path| path == cargo_toml || path == main || path.starts_with(&bin)),
+        move |path: &Path| path == cargo_toml || path == main || path.starts_with(&bin),
     )
     .await?;
 

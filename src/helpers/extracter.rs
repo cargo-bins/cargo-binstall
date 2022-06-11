@@ -1,44 +1,34 @@
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{BufRead, Read};
 use std::path::Path;
 
 use flate2::bufread::GzDecoder;
 use log::debug;
-use tar::Archive;
+use tar::{Archive, Entries};
 use xz2::bufread::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::{BinstallError, TarBasedFmt};
 
-///  * `filter` - If Some, then it will pass the path of the file to it
-///    and only extract ones which filter returns `true`.
-///    Note that this is a best-effort and it only works when `fmt`
-///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-fn untar<Filter: FnMut(&Path) -> bool>(
-    dat: impl Read,
+pub trait TarEntriesVisitor {
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
+}
+
+///  * `f` - If Some, then this function will pass
+///    the entries of the `dat` to it and let it decides
+///    what to do with the tar.
+fn untar<R: Read, V: TarEntriesVisitor>(
+    dat: R,
     path: &Path,
-    filter: Option<Filter>,
+    visitor: Option<V>,
 ) -> Result<(), BinstallError> {
     let mut tar = Archive::new(dat);
 
-    if let Some(mut filter) = filter {
+    if let Some(mut visitor) = visitor {
         debug!("Untaring with filter");
 
-        for res in tar.entries()? {
-            let mut entry = res?;
-            let entry_path = entry.path()?;
-
-            if filter(&entry_path) {
-                debug!("Extracting {entry_path:#?}");
-
-                let dst = path.join(entry_path);
-
-                fs::create_dir_all(dst.parent().unwrap())?;
-
-                entry.unpack(dst)?;
-            }
-        }
+        visitor.visit(tar.entries()?)?;
     } else {
         debug!("Untaring entire tar");
         tar.unpack(path)?;
@@ -56,11 +46,11 @@ fn untar<Filter: FnMut(&Path) -> bool>(
 ///    and only extract ones which filter returns `true`.
 ///    Note that this is a best-effort and it only works when `fmt`
 ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool, R: BufRead>(
+pub(crate) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead>(
     dat: R,
     fmt: TarBasedFmt,
     path: &Path,
-    filter: Option<Filter>,
+    visitor: Option<V>,
 ) -> Result<(), BinstallError> {
     use TarBasedFmt::*;
 
@@ -69,21 +59,21 @@ pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool, R: 
             // Extract to install dir
             debug!("Extracting from tar archive to `{path:?}`");
 
-            untar(dat, path, filter)?
+            untar(dat, path, visitor)?
         }
         Tgz => {
             // Extract to install dir
             debug!("Decompressing from tgz archive to `{path:?}`");
 
             let tar = GzDecoder::new(dat);
-            untar(tar, path, filter)?;
+            untar(tar, path, visitor)?;
         }
         Txz => {
             // Extract to install dir
             debug!("Decompressing from txz archive to `{path:?}`");
 
             let tar = XzDecoder::new(dat);
-            untar(tar, path, filter)?;
+            untar(tar, path, visitor)?;
         }
         Tzstd => {
             // Extract to install dir
@@ -94,7 +84,7 @@ pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool, R: 
             // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
             // should not return any error.
             let tar = ZstdDecoder::with_buffer(dat)?;
-            untar(tar, path, filter)?;
+            untar(tar, path, visitor)?;
         }
     };
 

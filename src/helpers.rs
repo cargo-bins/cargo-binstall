@@ -92,7 +92,7 @@ pub async fn download_and_extract_with_filter<
     url: Url,
     fmt: TarBasedFmt,
     path: P,
-    filter: Option<Filter>,
+    filter: Filter,
 ) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
