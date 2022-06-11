@@ -100,8 +100,8 @@ jobs:
       if: ${{ matrix.test && matrix.os != 'windows-latest' }}
       run: |
         set -euxo pipefail
-        for bin in $bins; do ./${{ matrix.output }} binstall --no-confirm $bin; done
-        ./${{ matrix.output }} binstall --manifest-path . --no-confirm cargo-binstall
+        for bin in $bins; do ./${{ matrix.output }} binstall --log-level debug --no-confirm $bin; done
+        ./${{ matrix.output }} binstall --log-level debug --manifest-path . --no-confirm cargo-binstall
       env:
         bins: cargo-deb cargo-llvm-cov cargo-binstall
 
