@@ -98,16 +98,7 @@ jobs:
 
     - name: Test (Unix)
       if: ${{ matrix.test && matrix.os != 'windows-latest' }}
-      run: |
-        set -euxo pipefail
-        for bin in $bins; do ./${{ matrix.output }} binstall --log-level debug --no-confirm $bin; done
-        for bin in $test_bins; do $HOME/.cargo/bin/$bin --version; done
-        cargo binstall --help >/dev/null
-        ./${{ matrix.output }} binstall --log-level debug --manifest-path . --no-confirm cargo-binstall
-        cargo binstall --help >/dev/null
-      env:
-        bins: cargo-deb cargo-llvm-cov cargo-binstall
-        test_bins: cargo-deb cargo-llvm-cov
+      run: ./ci-scripts/run_tests_unix.sh ${{ matrix.output }}
 
     - name: Test (Windows)
       if: ${{ matrix.os == 'windows-latest' }}
