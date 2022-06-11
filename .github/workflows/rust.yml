@@ -101,7 +101,9 @@ jobs:
       run: |
         set -euxo pipefail
         for bin in $bins; do ./${{ matrix.output }} binstall --log-level debug --no-confirm $bin; done
+        for bin in $bins; do $HOME/.cargo/bin/${{ matrix.output }} --version; done
         ./${{ matrix.output }} binstall --log-level debug --manifest-path . --no-confirm cargo-binstall
+        cargo binstall --version
       env:
         bins: cargo-deb cargo-llvm-cov cargo-binstall
 
