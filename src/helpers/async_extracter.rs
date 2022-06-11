@@ -12,7 +12,7 @@ use tokio::{
 };
 
 use super::{extracter::*, readable_rx::*};
-use crate::{BinstallError, PkgFmt};
+use crate::{BinstallError, PkgFmt, TarBasedFmt};
 
 pub(crate) enum Content {
     /// Data to write to file
