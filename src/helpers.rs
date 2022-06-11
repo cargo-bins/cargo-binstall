@@ -85,8 +85,6 @@ pub async fn download_and_extract<P: AsRef<Path>>(
 ///
 ///  * `filter` - If Some, then it will pass the path of the file to it
 ///    and only extract ones which filter returns `true`.
-///    Note that this is a best-effort and it only works when `fmt`
-///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
 pub async fn download_and_extract_with_filter<
     Filter: FnMut(&Path) -> bool + Send + 'static,
     P: AsRef<Path>,
