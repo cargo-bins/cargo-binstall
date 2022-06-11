@@ -7,7 +7,7 @@ use serde::Serialize;
 use tinytemplate::TinyTemplate;
 use url::Url;
 
-use crate::{BinstallError, Meta, PkgFmt, PkgFmtDecomposed};
+use crate::{BinstallError, Meta, PkgFmt, PkgFmtDecomposed, TarBasedFmt};
 
 mod async_extracter;
 pub use async_extracter::*;
@@ -92,7 +92,7 @@ pub async fn download_and_extract_with_filter<
     P: AsRef<Path>,
 >(
     url: Url,
-    fmt: PkgFmt,
+    fmt: TarBasedFmt,
     path: P,
     filter: Option<Filter>,
 ) -> Result<(), BinstallError> {
@@ -105,13 +105,7 @@ pub async fn download_and_extract_with_filter<
 
     let stream = resp.bytes_stream();
 
-    match fmt.decompose() {
-        PkgFmtDecomposed::Tar(fmt) => {
-            extract_tar_based_stream_with_filter(stream, path, fmt, filter).await?
-        }
-        PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
-        PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
-    }
+    extract_tar_based_stream_with_filter(stream, path, fmt, filter).await?;
 
     debug!("Download OK, written to file: '{}'", path.display());
 

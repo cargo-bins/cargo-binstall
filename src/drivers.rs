@@ -7,7 +7,7 @@ use log::debug;
 use semver::{Version, VersionReq};
 use url::Url;
 
-use crate::{helpers::*, BinstallError, PkgFmt};
+use crate::{helpers::*, BinstallError, TarBasedFmt};
 
 fn find_version<'a, V: Iterator<Item = &'a String>>(
     requirement: &str,
@@ -112,7 +112,7 @@ pub async fn fetch_crate_cratesio(
 
     download_and_extract_with_filter(
         Url::parse(&crate_url)?,
-        PkgFmt::Tgz,
+        TarBasedFmt::Tgz,
         &temp_dir,
         Some(move |path: &Path| path == cargo_toml || path == main || path.starts_with(&bin)),
     )
