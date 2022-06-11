@@ -191,6 +191,8 @@ async fn entry() -> Result<()> {
     )
     .unwrap();
 
+    let mut uithread = UIThread::new(!opts.no_confirm);
+
     // Compute install directory
     let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
         error!("No viable install path found of specified, try `--install-path`");
@@ -228,8 +230,8 @@ async fn entry() -> Result<()> {
             })
         );
 
-        if !opts.no_confirm && !opts.dry_run {
-            confirm()?;
+        if !opts.dry_run {
+            uithread.confirm().await?;
         }
     }
 
@@ -303,6 +305,7 @@ async fn entry() -> Result<()> {
                 opts,
                 package,
                 temp_dir,
+                &mut uithread,
             )
             .await
         }
@@ -317,7 +320,7 @@ async fn entry() -> Result<()> {
                 .first()
                 .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
 
-            install_from_source(opts, package, target).await
+            install_from_source(opts, package, target, &mut uithread).await
         }
     }
 }
@@ -331,6 +334,7 @@ async fn install_from_package(
     opts: Options,
     package: Package<Meta>,
     temp_dir: TempDir,
+    uithread: &mut UIThread,
 ) -> Result<()> {
     // Prompt user for third-party source
     if fetcher.is_third_party() {
@@ -338,8 +342,8 @@ async fn install_from_package(
             "The package will be downloaded from third-party source {}",
             fetcher.source_name()
         );
-        if !opts.no_confirm && !opts.dry_run {
-            confirm()?;
+        if !opts.dry_run {
+            uithread.confirm().await?;
         }
     } else {
         info!(
@@ -429,9 +433,7 @@ async fn install_from_package(
         return Ok(());
     }
 
-    if !opts.no_confirm {
-        confirm()?;
-    }
+    uithread.confirm().await?;
 
     info!("Installing binaries...");
     for file in &bin_files {
@@ -456,11 +458,16 @@ async fn install_from_package(
     Ok(())
 }
 
-async fn install_from_source(opts: Options, package: Package<Meta>, target: &str) -> Result<()> {
+async fn install_from_source(
+    opts: Options,
+    package: Package<Meta>,
+    target: &str,
+    uithread: &mut UIThread,
+) -> Result<()> {
     // Prompt user for source install
     warn!("The package will be installed from source (with cargo)",);
-    if !opts.no_confirm && !opts.dry_run {
-        confirm()?;
+    if !opts.dry_run {
+        uithread.confirm().await?;
     }
 
     if opts.dry_run {

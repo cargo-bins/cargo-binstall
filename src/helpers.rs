@@ -1,10 +1,9 @@
 use std::{
-    io::{stderr, stdin, Write},
     path::{Path, PathBuf},
 };
 
 use cargo_toml::Manifest;
-use log::{debug, info};
+use log::debug;
 use reqwest::Method;
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
@@ -17,6 +16,9 @@ pub use async_extracter::extract_archive_stream;
 
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
+
+mod ui_thread;
+pub use ui_thread::UIThread;
 
 mod extracter;
 mod readable_rx;
@@ -127,23 +129,6 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
     }
 
     dir
-}
-
-pub fn confirm() -> Result<(), BinstallError> {
-    loop {
-        info!("Do you wish to continue? yes/[no]");
-        eprint!("? ");
-        stderr().flush().ok();
-
-        let mut input = String::new();
-        stdin().read_line(&mut input).unwrap();
-
-        match input.as_str().trim() {
-            "yes" | "y" | "YES" | "Y" => break Ok(()),
-            "no" | "n" | "NO" | "N" | "" => break Err(BinstallError::UserAbort),
-            _ => continue,
-        }
-    }
 }
 
 pub trait Template: Serialize {
