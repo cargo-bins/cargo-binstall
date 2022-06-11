@@ -56,8 +56,8 @@ fn untar<Filter: FnMut(&Path) -> bool>(
 ///    and only extract ones which filter returns `true`.
 ///    Note that this is a best-effort and it only works when `fmt`
 ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool>(
-    dat: impl BufRead,
+pub(crate) fn extract_compressed_from_readable<Filter: FnMut(&Path) -> bool, R: BufRead>(
+    dat: R,
     fmt: PkgFmt,
     path: &Path,
     filter: Option<Filter>,
