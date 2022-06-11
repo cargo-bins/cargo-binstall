@@ -15,6 +15,12 @@ pub trait TarEntriesVisitor {
     fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
 }
 
+impl<V: TarEntriesVisitor> TarEntriesVisitor for &mut V {
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
+        (*self).visit(entries)
+    }
+}
+
 ///  * `f` - If Some, then this function will pass
 ///    the entries of the `dat` to it and let it decides
 ///    what to do with the tar.
