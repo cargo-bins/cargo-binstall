@@ -4,24 +4,12 @@ use std::path::Path;
 
 use flate2::bufread::GzDecoder;
 use log::debug;
-use tar::{Archive, Entries};
+use tar::Archive;
 use xz2::bufread::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::{BinstallError, TarBasedFmt};
-
-/// Visitor must iterate over all entries.
-/// Entires can be in arbitary order.
-pub trait TarEntriesVisitor {
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
-}
-
-impl<V: TarEntriesVisitor> TarEntriesVisitor for &mut V {
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
-        (*self).visit(entries)
-    }
-}
 
 pub(super) fn create_tar_decoder(
     dat: impl BufRead + 'static,

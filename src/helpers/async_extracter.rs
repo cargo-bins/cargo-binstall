@@ -232,6 +232,18 @@ where
     .await
 }
 
+/// Visitor must iterate over all entries.
+/// Entires can be in arbitary order.
+pub trait TarEntriesVisitor {
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
+}
+
+impl<V: TarEntriesVisitor> TarEntriesVisitor for &mut V {
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
+        (*self).visit(entries)
+    }
+}
+
 pub async fn extract_tar_based_stream_and_visit<V: TarEntriesVisitor + Debug + Send + 'static, E>(
     stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
     fmt: TarBasedFmt,

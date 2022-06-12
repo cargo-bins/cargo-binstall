@@ -22,7 +22,6 @@ mod ui_thread;
 pub use ui_thread::UIThread;
 
 mod extracter;
-pub use extracter::TarEntriesVisitor;
 
 mod readable_rx;
 
