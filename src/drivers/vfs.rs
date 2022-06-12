@@ -17,11 +17,14 @@ impl Vfs {
     /// * `path` - must be canonical, must not be empty.
     pub(super) fn add_path(&mut self, mut path: &Path) {
         while let Some(parent) = path.parent() {
-            if let Some(path_str) = path.to_str() {
+            // Since path has parent, it must have a filename
+            let filename = path.file_name().unwrap();
+
+            if let Some(filename) = filename.to_str() {
                 self.0
                     .entry(parent.into())
                     .or_insert_with(|| HashSet::with_capacity(4))
-                    .insert(path_str.into());
+                    .insert(filename.into());
             }
 
             path = parent;
