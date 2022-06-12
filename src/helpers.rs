@@ -89,36 +89,6 @@ pub async fn download_and_extract<P: AsRef<Path>>(
 /// Download a file from the provided URL and extract part of it to
 /// the provided path.
 ///
-///  * `filter` - It will pass the path of the file to it
-///    and only extract ones which filter returns `true`.
-pub async fn download_and_extract_with_filter<
-    Filter: FnMut(&Path) -> bool + Send + 'static,
-    P: AsRef<Path>,
->(
-    url: Url,
-    fmt: TarBasedFmt,
-    path: P,
-    filter: Filter,
-) -> Result<(), BinstallError> {
-    debug!("Downloading from: '{url}'");
-
-    let resp = create_request(url).await?;
-
-    let path = path.as_ref();
-    debug!("Downloading to file: '{}'", path.display());
-
-    let stream = resp.bytes_stream();
-
-    extract_tar_based_stream_with_filter(stream, path, fmt, filter).await?;
-
-    debug!("Download OK, written to file: '{}'", path.display());
-
-    Ok(())
-}
-
-/// Download a file from the provided URL and extract part of it to
-/// the provided path.
-///
 ///  * `filter` - If Some, then it will pass the path of the file to it
 ///    and only extract ones which filter returns `true`.
 pub async fn download_tar_based_and_visit<

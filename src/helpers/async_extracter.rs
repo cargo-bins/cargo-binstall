@@ -1,12 +1,10 @@
 use std::fmt::Debug;
 use std::fs;
 use std::io::{self, Read, Seek, Write};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
 
 use bytes::Bytes;
 use futures_util::stream::{Stream, StreamExt};
-use log::debug;
 use scopeguard::{guard, ScopeGuard};
 use tar::Entries;
 use tempfile::tempfile;
@@ -199,55 +197,6 @@ where
         file.rewind()?;
 
         unzip(file, &path)
-    })
-    .await
-}
-
-///  * `filter` - If Some, then it will pass the path of the file to it
-///    and only extract ones which filter returns `true`.
-pub async fn extract_tar_based_stream_with_filter<
-    Filter: FnMut(&Path) -> bool + Send + 'static,
-    E,
->(
-    stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
-    output: &Path,
-    fmt: TarBasedFmt,
-    filter: Filter,
-) -> Result<(), BinstallError>
-where
-    BinstallError: From<E>,
-{
-    struct Visitor<F>(F, Arc<PathBuf>);
-
-    impl<F: FnMut(&Path) -> bool + Send + 'static> TarEntriesVisitor for Visitor<F> {
-        fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
-            for res in entries {
-                let mut entry = res?;
-                let entry_path = entry.path()?;
-
-                if self.0(&entry_path) {
-                    debug!("Extracting {entry_path:#?}");
-
-                    let dst = self.1.join(entry_path);
-
-                    fs::create_dir_all(dst.parent().unwrap())?;
-
-                    entry.unpack(dst)?;
-                }
-            }
-
-            Ok(())
-        }
-    }
-
-    let path = Arc::new(output.to_owned());
-
-    let visitor = Visitor(filter, path.clone());
-
-    extract_impl(stream, move |mut rx| {
-        fs::create_dir_all(path.parent().unwrap())?;
-
-        extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, &*path, Some(visitor))
     })
     .await
 }
