@@ -81,21 +81,21 @@ pub(super) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead>
         }
         Tgz => {
             // Extract to install dir
-            debug!("Decompressing from tgz archive {msg}");
+            debug!("Decompressing from tgz archive: {msg}");
 
             let tar = GzDecoder::new(dat);
             untar(tar, op)?;
         }
         Txz => {
             // Extract to install dir
-            debug!("Decompressing from txz archive {msg}");
+            debug!("Decompressing from txz archive: {msg}");
 
             let tar = XzDecoder::new(dat);
             untar(tar, op)?;
         }
         Tzstd => {
             // Extract to install dir
-            debug!("Decompressing from tzstd archive {msg}");
+            debug!("Decompressing from tzstd archive: {msg}");
 
             // The error can only come from raw::Decoder::with_dictionary
             // as of zstd 0.10.2 and 0.11.2, which is specified
