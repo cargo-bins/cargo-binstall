@@ -23,36 +23,6 @@ impl<V: TarEntriesVisitor> TarEntriesVisitor for &mut V {
     }
 }
 
-#[derive(Debug)]
-pub(super) enum Op<'a, V: TarEntriesVisitor> {
-    UnpackToPath(&'a Path),
-    Visit(V),
-}
-
-///  * `f` - If Some, then this function will pass
-///    the entries of the `dat` to it and let it decides
-///    what to do with the tar.
-fn untar<R: Read, V: TarEntriesVisitor>(
-    mut tar: Archive<R>,
-    op: Op<'_, V>,
-) -> Result<(), BinstallError> {
-    match op {
-        Op::Visit(mut visitor) => {
-            debug!("Untaring with callback");
-
-            visitor.visit(tar.entries()?)?;
-        }
-        Op::UnpackToPath(path) => {
-            debug!("Untaring entire tar");
-            tar.unpack(path)?;
-        }
-    }
-
-    debug!("Untaring completed");
-
-    Ok(())
-}
-
 pub(super) fn create_tar_decoder(
     dat: impl BufRead + 'static,
     fmt: TarBasedFmt,
@@ -73,30 +43,6 @@ pub(super) fn create_tar_decoder(
     };
 
     Ok(Archive::new(r))
-}
-
-/// Extract files from the specified source onto the specified path.
-///
-///  * `fmt` - must not be `PkgFmt::Bin` or `PkgFmt::Zip`.
-///  * `filter` - If Some, then it will pass the path of the file to it
-///    and only extract ones which filter returns `true`.
-///    Note that this is a best-effort and it only works when `fmt`
-///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub(super) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead + 'static>(
-    dat: R,
-    fmt: TarBasedFmt,
-    op: Op<'_, V>,
-) -> Result<(), BinstallError> {
-    let msg = if let Op::UnpackToPath(path) = op {
-        format!("destination: {path:#?}")
-    } else {
-        "process in-memory".to_string()
-    };
-
-    debug!("Extracting from {fmt} archive: {msg}");
-
-    let tar = create_tar_decoder(dat, fmt)?;
-    untar(tar, op)
 }
 
 pub(super) fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {

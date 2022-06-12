@@ -21,6 +21,7 @@ use std::path::Path;
 
 use bytes::Bytes;
 use futures_util::stream::{Stream, StreamExt};
+use log::debug;
 use scopeguard::{guard, ScopeGuard};
 use tar::Entries;
 use tempfile::tempfile;
@@ -222,11 +223,10 @@ where
         Box::new(move |rx| {
             fs::create_dir_all(path.parent().unwrap())?;
 
-            extract_compressed_from_readable::<DummyVisitor, _>(
-                ReadableRx::new(rx),
-                fmt,
-                Op::UnpackToPath(&path),
-            )
+            debug!("Extracting from {fmt} archive to {path:#?}");
+            create_tar_decoder(ReadableRx::new(rx), fmt)?.unpack(path)?;
+
+            Ok(())
         }),
     )
     .await
@@ -243,8 +243,11 @@ where
     extract_impl(
         stream,
         Box::new(move |rx| {
-            extract_compressed_from_readable(ReadableRx::new(rx), fmt, Op::Visit(&mut visitor))
-                .map(|_| visitor)
+            debug!("Extracting from {fmt} archive to process it in memory");
+
+            let mut tar = create_tar_decoder(ReadableRx::new(rx), fmt)?;
+            visitor.visit(tar.entries()?)?;
+            Ok(visitor)
         }),
     )
     .await
