@@ -10,6 +10,8 @@ use strum_macros::{Display, EnumString, EnumVariantNames};
 pub enum PkgFmt {
     /// Download format is TAR (uncompressed)
     Tar,
+    /// Download format is TAR + Bzip2
+    Tbz2,
     /// Download format is TGZ (TAR + GZip)
     Tgz,
     /// Download format is TAR + XZ
@@ -34,6 +36,7 @@ impl PkgFmt {
     pub fn decompose(self) -> PkgFmtDecomposed {
         match self {
             PkgFmt::Tar => PkgFmtDecomposed::Tar(TarBasedFmt::Tar),
+            PkgFmt::Tbz2 => PkgFmtDecomposed::Tar(TarBasedFmt::Tbz2),
             PkgFmt::Tgz => PkgFmtDecomposed::Tar(TarBasedFmt::Tgz),
             PkgFmt::Txz => PkgFmtDecomposed::Tar(TarBasedFmt::Txz),
             PkgFmt::Tzstd => PkgFmtDecomposed::Tar(TarBasedFmt::Tzstd),
@@ -54,6 +57,8 @@ pub enum PkgFmtDecomposed {
 pub enum TarBasedFmt {
     /// Download format is TAR (uncompressed)
     Tar,
+    /// Download format is TAR + Bzip2
+    Tbz2,
     /// Download format is TGZ (TAR + GZip)
     Tgz,
     /// Download format is TAR + XZ
@@ -66,6 +71,7 @@ impl From<TarBasedFmt> for PkgFmt {
     fn from(fmt: TarBasedFmt) -> Self {
         match fmt {
             TarBasedFmt::Tar => PkgFmt::Tar,
+            TarBasedFmt::Tbz2 => PkgFmt::Tbz2,
             TarBasedFmt::Tgz => PkgFmt::Tgz,
             TarBasedFmt::Txz => PkgFmt::Txz,
             TarBasedFmt::Tzstd => PkgFmt::Tzstd,
