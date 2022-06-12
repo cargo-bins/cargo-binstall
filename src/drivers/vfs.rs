@@ -20,12 +20,14 @@ impl Vfs {
             // Since path has parent, it must have a filename
             let filename = path.file_name().unwrap();
 
-            if let Some(filename) = filename.to_str() {
-                self.0
-                    .entry(parent.into())
-                    .or_insert_with(|| HashSet::with_capacity(4))
-                    .insert(filename.into());
-            }
+            // `cargo_toml`'s implementation does the same thing.
+            // https://docs.rs/cargo_toml/0.11.5/src/cargo_toml/afs.rs.html#24
+            let filename = filename.to_string_lossy();
+
+            self.0
+                .entry(parent.into())
+                .or_insert_with(|| HashSet::with_capacity(4))
+                .insert(filename.into());
 
             path = parent;
         }
