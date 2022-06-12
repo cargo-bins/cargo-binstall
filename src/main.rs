@@ -215,7 +215,7 @@ async fn entry() -> Result<()> {
             debug!("Reading manifest: {}", manifest_path.display());
             load_manifest_path(manifest_path.join("Cargo.toml"))?
         }
-        None => fetch_crate_cratesio(&opts.name, &opts.version, temp_dir.path()).await?,
+        None => fetch_crate_cratesio(&opts.name, &opts.version).await?,
     };
 
     let package = manifest.package.unwrap();

@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use cargo_toml::Manifest;
@@ -13,7 +13,6 @@ use crate::{helpers::*, BinstallError, Meta, TarBasedFmt};
 pub async fn fetch_crate_cratesio(
     name: &str,
     version_req: &str,
-    temp_dir: &Path,
 ) -> Result<Manifest<Meta>, BinstallError> {
     // Fetch / update index
     debug!("Looking up crate information");
