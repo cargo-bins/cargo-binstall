@@ -14,8 +14,7 @@ impl Vfs {
         Self(HashMap::with_capacity(16))
     }
 
-    /// * `path` - must be canonical, must not be empty and must
-    ///   start with a prefix.
+    /// * `path` - must be canonical, must not be empty.
     pub(super) fn add_path(&mut self, mut path: &Path) {
         while let Some(parent) = path.parent() {
             if let Some(path_str) = path.to_str() {
