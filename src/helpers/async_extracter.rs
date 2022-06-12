@@ -1,3 +1,19 @@
+//! # Advantages
+//!
+//! Using this mod has the following advantages over downloading
+//! and extracting in on the async thread:
+//!
+//!  - The code is pipelined instead of storing the downloaded file in memory
+//!    and extract it, except for `PkgFmt::Zip`, since `ZipArchiver::new`
+//!    requires `std::io::Seek`, so it fallbacks to writing the a file then
+//!    unzip it.
+//!  - The async part (downloading) and the extracting part runs in parallel
+//!    using `tokio::spawn_nonblocking`.
+//!  - Compressing/writing which takes a lot of CPU time will not block
+//!    the runtime anymore.
+//!  - For all `tar` based formats, it can extract only specified files and
+//!    process them in memory, without any disk I/O.
+
 use std::fmt::Debug;
 use std::fs;
 use std::io::{self, Read, Seek, Write};
@@ -29,25 +45,6 @@ pub(crate) enum Content {
 ///
 /// After all write is done, you must call `AsyncExtracter::done`,
 /// otherwise the extracted content will be removed on drop.
-///
-/// # Advantages
-///
-/// `download_and_extract` has the following advantages over downloading
-/// plus extracting in on the same thread:
-///
-///  - The code is pipelined instead of storing the downloaded file in memory
-///    and extract it, except for `PkgFmt::Zip`, since `ZipArchiver::new`
-///    requires `std::io::Seek`, so it fallbacks to writing the a file then
-///    unzip it.
-///  - The async part (downloading) and the extracting part runs in parallel
-///    using `tokio::spawn_nonblocking`.
-///  - Compressing/writing which takes a lot of CPU time will not block
-///    the runtime anymore.
-///  - For any PkgFmt except for `PkgFmt::Zip` and `PkgFmt::Bin` (basically
-///    all `tar` based formats), it can extract only specified files.
-///    This means that `super::drivers::fetch_crate_cratesio` no longer need to
-///    extract the whole crate and write them to disk, it now only extract the
-///    relevant part (`Cargo.toml`) out to disk and open it.
 #[derive(Debug)]
 struct AsyncExtracterInner<T> {
     /// Use AutoAbortJoinHandle so that the task
