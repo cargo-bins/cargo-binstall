@@ -1,6 +1,8 @@
 use std::path::{Component, Path, PathBuf};
 
 pub trait PathExt {
+    /// Similiar to `os.path.normpath`: It does not perform
+    /// any fs operation.
     fn normalize_path(&self) -> PathBuf;
 }
 
