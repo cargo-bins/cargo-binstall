@@ -109,7 +109,7 @@ pub async fn download_tar_based_and_visit<
 
     let stream = resp.bytes_stream();
 
-    let visitor = extract_tar_based_stream_and_visit(stream, path, fmt, visitor).await?;
+    let visitor = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
     debug!("Download OK, written to file: '{}'", path.display());
 
