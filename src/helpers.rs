@@ -91,27 +91,22 @@ pub async fn download_and_extract<P: AsRef<Path>>(
 ///
 ///  * `filter` - If Some, then it will pass the path of the file to it
 ///    and only extract ones which filter returns `true`.
-pub async fn download_tar_based_and_visit<
-    V: TarEntriesVisitor + Debug + Send + 'static,
-    P: AsRef<Path>,
->(
+pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 'static>(
     url: Url,
     fmt: TarBasedFmt,
-    path: P,
     visitor: V,
 ) -> Result<V, BinstallError> {
     debug!("Downloading from: '{url}'");
 
     let resp = create_request(url).await?;
 
-    let path = path.as_ref();
-    debug!("Downloading to file: '{}'", path.display());
+    debug!("Downloading and extracting then in-memory processing");
 
     let stream = resp.bytes_stream();
 
     let visitor = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
-    debug!("Download OK, written to file: '{}'", path.display());
+    debug!("Download, extraction and in-memory procession OK");
 
     Ok(visitor)
 }

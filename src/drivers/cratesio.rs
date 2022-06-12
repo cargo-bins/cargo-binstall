@@ -65,7 +65,6 @@ pub async fn fetch_crate_cratesio(
     download_tar_based_and_visit(
         Url::parse(&crate_url)?,
         TarBasedFmt::Tgz,
-        &temp_dir,
         ManifestVisitor::new(manifest_dir_path),
     )
     .await?
