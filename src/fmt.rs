@@ -50,7 +50,7 @@ pub enum PkgFmtDecomposed {
     Zip,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Display, Copy, Clone, PartialEq)]
 pub enum TarBasedFmt {
     /// Download format is TAR (uncompressed)
     Tar,
