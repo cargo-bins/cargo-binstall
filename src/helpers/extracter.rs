@@ -32,9 +32,10 @@ pub(super) enum Op<'a, V: TarEntriesVisitor> {
 ///  * `f` - If Some, then this function will pass
 ///    the entries of the `dat` to it and let it decides
 ///    what to do with the tar.
-fn untar<R: Read, V: TarEntriesVisitor>(dat: R, op: Op<'_, V>) -> Result<(), BinstallError> {
-    let mut tar = Archive::new(dat);
-
+fn untar<R: Read, V: TarEntriesVisitor>(
+    mut tar: Archive<R>,
+    op: Op<'_, V>,
+) -> Result<(), BinstallError> {
     match op {
         Op::Visit(mut visitor) => {
             debug!("Untaring with callback");
@@ -52,6 +53,28 @@ fn untar<R: Read, V: TarEntriesVisitor>(dat: R, op: Op<'_, V>) -> Result<(), Bin
     Ok(())
 }
 
+pub(super) fn create_tar_decoder(
+    dat: impl BufRead + 'static,
+    fmt: TarBasedFmt,
+) -> Result<Archive<Box<dyn Read>>, BinstallError> {
+    use TarBasedFmt::*;
+
+    let r: Box<dyn Read> = match fmt {
+        Tar => Box::new(dat),
+        Tgz => Box::new(GzDecoder::new(dat)),
+        Txz => Box::new(XzDecoder::new(dat)),
+        Tzstd => {
+            // The error can only come from raw::Decoder::with_dictionary
+            // as of zstd 0.10.2 and 0.11.2, which is specified
+            // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
+            // should not return any error.
+            Box::new(ZstdDecoder::with_buffer(dat)?)
+        }
+    };
+
+    Ok(Archive::new(r))
+}
+
 /// Extract files from the specified source onto the specified path.
 ///
 ///  * `fmt` - must not be `PkgFmt::Bin` or `PkgFmt::Zip`.
@@ -59,54 +82,21 @@ fn untar<R: Read, V: TarEntriesVisitor>(dat: R, op: Op<'_, V>) -> Result<(), Bin
 ///    and only extract ones which filter returns `true`.
 ///    Note that this is a best-effort and it only works when `fmt`
 ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub(super) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead>(
+pub(super) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead + 'static>(
     dat: R,
     fmt: TarBasedFmt,
     op: Op<'_, V>,
 ) -> Result<(), BinstallError> {
-    use TarBasedFmt::*;
-
     let msg = if let Op::UnpackToPath(path) = op {
         format!("destination: {path:#?}")
     } else {
         "process in-memory".to_string()
     };
 
-    match fmt {
-        Tar => {
-            // Extract to install dir
-            debug!("Extracting from tar archive: {msg}");
+    debug!("Extracting from {fmt} archive: {msg}");
 
-            untar(dat, op)?
-        }
-        Tgz => {
-            // Extract to install dir
-            debug!("Decompressing from tgz archive: {msg}");
-
-            let tar = GzDecoder::new(dat);
-            untar(tar, op)?;
-        }
-        Txz => {
-            // Extract to install dir
-            debug!("Decompressing from txz archive: {msg}");
-
-            let tar = XzDecoder::new(dat);
-            untar(tar, op)?;
-        }
-        Tzstd => {
-            // Extract to install dir
-            debug!("Decompressing from tzstd archive: {msg}");
-
-            // The error can only come from raw::Decoder::with_dictionary
-            // as of zstd 0.10.2 and 0.11.2, which is specified
-            // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
-            // should not return any error.
-            let tar = ZstdDecoder::with_buffer(dat)?;
-            untar(tar, op)?;
-        }
-    };
-
-    Ok(())
+    let tar = create_tar_decoder(dat, fmt)?;
+    untar(tar, op)
 }
 
 pub(super) fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {
