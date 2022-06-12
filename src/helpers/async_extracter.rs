@@ -109,14 +109,9 @@ impl<T: Debug + Send + 'static> AsyncExtracterInner<T> {
     }
 }
 
-async fn extract_impl<
-    F: FnOnce(mpsc::Receiver<Content>) -> Result<T, BinstallError> + Send + 'static,
-    T: Debug + Send + 'static,
-    S: Stream<Item = Result<Bytes, E>> + Unpin,
-    E,
->(
+async fn extract_impl<T: Debug + Send + 'static, S: Stream<Item = Result<Bytes, E>> + Unpin, E>(
     mut stream: S,
-    f: F,
+    f: Box<dyn FnOnce(mpsc::Receiver<Content>) -> Result<T, BinstallError> + Send>,
 ) -> Result<T, BinstallError>
 where
     BinstallError: From<E>,
@@ -155,25 +150,28 @@ where
 {
     let path = output.to_owned();
 
-    extract_impl(stream, move |mut rx| {
-        fs::create_dir_all(path.parent().unwrap())?;
+    extract_impl(
+        stream,
+        Box::new(move |mut rx| {
+            fs::create_dir_all(path.parent().unwrap())?;
 
-        let mut file = fs::File::create(&path)?;
+            let mut file = fs::File::create(&path)?;
 
-        // remove it unless the operation isn't aborted and no write
-        // fails.
-        let remove_guard = guard(&path, |path| {
-            fs::remove_file(path).ok();
-        });
+            // remove it unless the operation isn't aborted and no write
+            // fails.
+            let remove_guard = guard(&path, |path| {
+                fs::remove_file(path).ok();
+            });
 
-        read_into_file(&mut file, &mut rx)?;
+            read_into_file(&mut file, &mut rx)?;
 
-        // Operation isn't aborted and all writes succeed,
-        // disarm the remove_guard.
-        ScopeGuard::into_inner(remove_guard);
+            // Operation isn't aborted and all writes succeed,
+            // disarm the remove_guard.
+            ScopeGuard::into_inner(remove_guard);
 
-        Ok(())
-    })
+            Ok(())
+        }),
+    )
     .await
 }
 
@@ -186,18 +184,21 @@ where
 {
     let path = output.to_owned();
 
-    extract_impl(stream, move |mut rx| {
-        fs::create_dir_all(path.parent().unwrap())?;
+    extract_impl(
+        stream,
+        Box::new(move |mut rx| {
+            fs::create_dir_all(path.parent().unwrap())?;
 
-        let mut file = tempfile()?;
+            let mut file = tempfile()?;
 
-        read_into_file(&mut file, &mut rx)?;
+            read_into_file(&mut file, &mut rx)?;
 
-        // rewind it so that we can pass it to unzip
-        file.rewind()?;
+            // rewind it so that we can pass it to unzip
+            file.rewind()?;
 
-        unzip(file, &path)
-    })
+            unzip(file, &path)
+        }),
+    )
     .await
 }
 
@@ -219,15 +220,18 @@ where
 
     let path = output.to_owned();
 
-    extract_impl(stream, move |mut rx| {
-        fs::create_dir_all(path.parent().unwrap())?;
+    extract_impl(
+        stream,
+        Box::new(move |mut rx| {
+            fs::create_dir_all(path.parent().unwrap())?;
 
-        extract_compressed_from_readable::<DummyVisitor, _>(
-            ReadableRx::new(&mut rx),
-            fmt,
-            Op::UnpackToPath(&path),
-        )
-    })
+            extract_compressed_from_readable::<DummyVisitor, _>(
+                ReadableRx::new(&mut rx),
+                fmt,
+                Op::UnpackToPath(&path),
+            )
+        }),
+    )
     .await
 }
 
@@ -239,9 +243,12 @@ pub async fn extract_tar_based_stream_and_visit<V: TarEntriesVisitor + Debug + S
 where
     BinstallError: From<E>,
 {
-    extract_impl(stream, move |mut rx| {
-        extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, Op::Visit(&mut visitor))
-            .map(|_| visitor)
-    })
+    extract_impl(
+        stream,
+        Box::new(move |mut rx| {
+            extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, Op::Visit(&mut visitor))
+                .map(|_| visitor)
+        }),
+    )
     .await
 }
