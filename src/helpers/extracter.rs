@@ -54,7 +54,7 @@ fn untar<R: Read, V: TarEntriesVisitor>(
 ///    and only extract ones which filter returns `true`.
 ///    Note that this is a best-effort and it only works when `fmt`
 ///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub(crate) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead>(
+pub(super) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead>(
     dat: R,
     fmt: TarBasedFmt,
     path: &Path,
@@ -99,7 +99,7 @@ pub(crate) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead>
     Ok(())
 }
 
-pub(crate) fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {
+pub(super) fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {
     debug!("Decompressing from zip archive to `{dst:?}`");
 
     let mut zip = ZipArchive::new(dat)?;
