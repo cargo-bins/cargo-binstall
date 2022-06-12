@@ -225,8 +225,7 @@ where
         extract_compressed_from_readable::<DummyVisitor, _>(
             ReadableRx::new(&mut rx),
             fmt,
-            &path,
-            None,
+            Op::UnpackToPath(&path),
         )
     })
     .await
@@ -246,12 +245,7 @@ where
     extract_impl(stream, move |mut rx| {
         fs::create_dir_all(path.parent().unwrap())?;
 
-        extract_compressed_from_readable(
-            ReadableRx::new(&mut rx),
-            fmt,
-            &*path,
-            Some(&mut visitor),
-        )?;
+        extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, Op::Visit(&mut visitor))?;
 
         Ok(visitor)
     })

@@ -23,23 +23,28 @@ impl<V: TarEntriesVisitor> TarEntriesVisitor for &mut V {
     }
 }
 
+#[derive(Debug)]
+pub(super) enum Op<'a, V: TarEntriesVisitor> {
+    UnpackToPath(&'a Path),
+    Visit(V),
+}
+
 ///  * `f` - If Some, then this function will pass
 ///    the entries of the `dat` to it and let it decides
 ///    what to do with the tar.
-fn untar<R: Read, V: TarEntriesVisitor>(
-    dat: R,
-    path: &Path,
-    visitor: Option<V>,
-) -> Result<(), BinstallError> {
+fn untar<R: Read, V: TarEntriesVisitor>(dat: R, op: Op<'_, V>) -> Result<(), BinstallError> {
     let mut tar = Archive::new(dat);
 
-    if let Some(mut visitor) = visitor {
-        debug!("Untaring with filter");
+    match op {
+        Op::Visit(mut visitor) => {
+            debug!("Untaring with callback");
 
-        visitor.visit(tar.entries()?)?;
-    } else {
-        debug!("Untaring entire tar");
-        tar.unpack(path)?;
+            visitor.visit(tar.entries()?)?;
+        }
+        Op::UnpackToPath(path) => {
+            debug!("Untaring entire tar");
+            tar.unpack(path)?;
+        }
     }
 
     debug!("Untaring completed");
@@ -57,42 +62,47 @@ fn untar<R: Read, V: TarEntriesVisitor>(
 pub(super) fn extract_compressed_from_readable<V: TarEntriesVisitor, R: BufRead>(
     dat: R,
     fmt: TarBasedFmt,
-    path: &Path,
-    visitor: Option<V>,
+    op: Op<'_, V>,
 ) -> Result<(), BinstallError> {
     use TarBasedFmt::*;
+
+    let msg = if let Op::UnpackToPath(path) = op {
+        format!("destination: {path:#?}")
+    } else {
+        "process in-memory".to_string()
+    };
 
     match fmt {
         Tar => {
             // Extract to install dir
-            debug!("Extracting from tar archive to `{path:?}`");
+            debug!("Extracting from tar archive: {msg}");
 
-            untar(dat, path, visitor)?
+            untar(dat, op)?
         }
         Tgz => {
             // Extract to install dir
-            debug!("Decompressing from tgz archive to `{path:?}`");
+            debug!("Decompressing from tgz archive {msg}");
 
             let tar = GzDecoder::new(dat);
-            untar(tar, path, visitor)?;
+            untar(tar, op)?;
         }
         Txz => {
             // Extract to install dir
-            debug!("Decompressing from txz archive to `{path:?}`");
+            debug!("Decompressing from txz archive {msg}");
 
             let tar = XzDecoder::new(dat);
-            untar(tar, path, visitor)?;
+            untar(tar, op)?;
         }
         Tzstd => {
             // Extract to install dir
-            debug!("Decompressing from tzstd archive to `{path:?}`");
+            debug!("Decompressing from tzstd archive {msg}");
 
             // The error can only come from raw::Decoder::with_dictionary
             // as of zstd 0.10.2 and 0.11.2, which is specified
             // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
             // should not return any error.
             let tar = ZstdDecoder::with_buffer(dat)?;
-            untar(tar, path, visitor)?;
+            untar(tar, op)?;
         }
     };
 
