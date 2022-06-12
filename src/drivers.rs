@@ -11,7 +11,6 @@ use version::find_version;
 mod vfs;
 
 mod visitor;
-pub use visitor::*;
 
 /// Fetch a crate by name and version from github
 /// TODO: implement this

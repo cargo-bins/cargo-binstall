@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct ManifestVisitor {
+pub(super) struct ManifestVisitor {
     cargo_toml_content: Vec<u8>,
     /// manifest_dir_path is treated as the current dir.
     manifest_dir_path: PathBuf,
@@ -31,7 +31,7 @@ impl ManifestVisitor {
     }
 
     /// Load binstall metadata using the extracted information stored in memory.
-    pub fn load_manifest(&self) -> Result<Manifest<Meta>, BinstallError> {
+    pub(super) fn load_manifest(&self) -> Result<Manifest<Meta>, BinstallError> {
         debug!("Loading manifest directly from extracted file");
 
         // Load and parse manifest

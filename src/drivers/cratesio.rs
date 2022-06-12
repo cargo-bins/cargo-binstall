@@ -6,7 +6,7 @@ use crates_io_api::AsyncClient;
 use log::debug;
 use url::Url;
 
-use super::{find_version, ManifestVisitor};
+use super::{find_version, visitor::ManifestVisitor};
 use crate::{helpers::*, BinstallError, Meta, TarBasedFmt};
 
 /// Fetch a crate Cargo.toml by name and version from crates.io
