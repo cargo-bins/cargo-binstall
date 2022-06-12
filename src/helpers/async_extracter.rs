@@ -219,11 +219,11 @@ where
 
     extract_impl(
         stream,
-        Box::new(move |mut rx| {
+        Box::new(move |rx| {
             fs::create_dir_all(path.parent().unwrap())?;
 
             extract_compressed_from_readable::<DummyVisitor, _>(
-                ReadableRx::new(&mut rx),
+                ReadableRx::new(rx),
                 fmt,
                 Op::UnpackToPath(&path),
             )
@@ -242,8 +242,8 @@ where
 {
     extract_impl(
         stream,
-        Box::new(move |mut rx| {
-            extract_compressed_from_readable(ReadableRx::new(&mut rx), fmt, Op::Visit(&mut visitor))
+        Box::new(move |rx| {
+            extract_compressed_from_readable(ReadableRx::new(rx), fmt, Op::Visit(&mut visitor))
                 .map(|_| visitor)
         }),
     )

@@ -7,13 +7,13 @@ use tokio::sync::mpsc::Receiver;
 use super::async_extracter::Content;
 
 #[derive(Debug)]
-pub(crate) struct ReadableRx<'a> {
-    rx: &'a mut Receiver<Content>,
+pub(crate) struct ReadableRx {
+    rx: Receiver<Content>,
     bytes: Bytes,
 }
 
-impl<'a> ReadableRx<'a> {
-    pub(crate) fn new(rx: &'a mut Receiver<Content>) -> Self {
+impl ReadableRx {
+    pub(crate) fn new(rx: Receiver<Content>) -> Self {
         Self {
             rx,
             bytes: Bytes::new(),
@@ -21,7 +21,7 @@ impl<'a> ReadableRx<'a> {
     }
 }
 
-impl Read for ReadableRx<'_> {
+impl Read for ReadableRx {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
@@ -43,7 +43,7 @@ impl Read for ReadableRx<'_> {
     }
 }
 
-impl BufRead for ReadableRx<'_> {
+impl BufRead for ReadableRx {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         let bytes = &mut self.bytes;
         if !bytes.has_remaining() {
