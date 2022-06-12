@@ -1,19 +1,20 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
 use log::debug;
 use url::Url;
 
-use super::find_version;
-use crate::{helpers::*, BinstallError, TarBasedFmt};
+use super::{find_version, ManifestVisitor};
+use crate::{helpers::*, BinstallError, Meta, TarBasedFmt};
 
 /// Fetch a crate Cargo.toml by name and version from crates.io
 pub async fn fetch_crate_cratesio(
     name: &str,
     version_req: &str,
     temp_dir: &Path,
-) -> Result<PathBuf, BinstallError> {
+) -> Result<Manifest<Meta>, BinstallError> {
     // Fetch / update index
     debug!("Looking up crate information");
 
@@ -59,22 +60,14 @@ pub async fn fetch_crate_cratesio(
 
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
-    let crate_dir: PathBuf = format!("{name}-{version_name}").into();
-    let crate_path = temp_dir.join(&crate_dir);
+    let manifest_dir_path: PathBuf = format!("{name}-{version_name}").into();
 
-    let cargo_toml = crate_dir.join("Cargo.toml");
-    let src = crate_dir.join("src");
-    let main = src.join("main.rs");
-    let bin = src.join("bin");
-
-    download_and_extract_with_filter(
+    download_tar_based_and_visit(
         Url::parse(&crate_url)?,
         TarBasedFmt::Tgz,
         &temp_dir,
-        move |path: &Path| path == cargo_toml || path == main || path.starts_with(&bin),
+        ManifestVisitor::new(manifest_dir_path),
     )
-    .await?;
-
-    // Return crate directory
-    Ok(crate_path)
+    .await?
+    .load_manifest()
 }
