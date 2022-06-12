@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 
+use bytes::Bytes;
 use cargo_toml::Manifest;
+use futures_util::stream::Stream;
 use log::debug;
 use reqwest::{Method, Response};
 use serde::Serialize;
@@ -49,7 +51,9 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
     Ok(req.status().is_success())
 }
 
-async fn create_request(url: Url) -> Result<Response, BinstallError> {
+async fn create_request(
+    url: Url,
+) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     reqwest::get(url.clone())
         .await
         .and_then(|r| r.error_for_status())
@@ -58,6 +62,7 @@ async fn create_request(url: Url) -> Result<Response, BinstallError> {
             url,
             err,
         })
+        .map(Response::bytes_stream)
 }
 
 /// Download a file from the provided URL and extract it to the provided path.
@@ -68,12 +73,10 @@ pub async fn download_and_extract<P: AsRef<Path>>(
 ) -> Result<(), BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    let resp = create_request(url).await?;
+    let stream = create_request(url).await?;
 
     let path = path.as_ref();
     debug!("Downloading and extracting to: '{}'", path.display());
-
-    let stream = resp.bytes_stream();
 
     match fmt.decompose() {
         PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
@@ -98,11 +101,9 @@ pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 
 ) -> Result<V, BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    let resp = create_request(url).await?;
+    let stream = create_request(url).await?;
 
     debug!("Downloading and extracting then in-memory processing");
-
-    let stream = resp.bytes_stream();
 
     let visitor = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
