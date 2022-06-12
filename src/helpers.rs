@@ -71,7 +71,7 @@ pub async fn download_and_extract<P: AsRef<Path>>(
     let resp = create_request(url).await?;
 
     let path = path.as_ref();
-    debug!("Downloading to file: '{}'", path.display());
+    debug!("Downloading and extracting to: '{}'", path.display());
 
     let stream = resp.bytes_stream();
 
@@ -81,7 +81,7 @@ pub async fn download_and_extract<P: AsRef<Path>>(
         PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
     }
 
-    debug!("Download OK, written to file: '{}'", path.display());
+    debug!("Download OK, extracted to: '{}'", path.display());
 
     Ok(())
 }
