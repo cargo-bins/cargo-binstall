@@ -208,14 +208,6 @@ pub async fn extract_tar_based_stream<E>(
 where
     BinstallError: From<E>,
 {
-    struct DummyVisitor;
-
-    impl TarEntriesVisitor for DummyVisitor {
-        fn visit<R: Read>(&mut self, _entries: Entries<'_, R>) -> Result<(), BinstallError> {
-            unimplemented!()
-        }
-    }
-
     let path = output.to_owned();
 
     extract_impl(
