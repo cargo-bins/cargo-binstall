@@ -49,7 +49,8 @@ impl TarEntriesVisitor for ManifestVisitor {
     fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
         for res in entries {
             let mut entry = res?;
-            let path = entry.path()?.normalize_path();
+            let path = entry.path()?;
+            let path = path.normalize_path();
 
             let path = if let Ok(path) = path.strip_prefix(&self.manifest_dir_path) {
                 path
