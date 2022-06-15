@@ -1,3 +1,6 @@
+//! Shamelessly taken from:
+//! https://github.com/rust-lang/cargo/blob/fede83ccf973457de319ba6fa0e36ead454d2e20/src/cargo/util/paths.rs#L61
+
 use std::path::{Component, Path, PathBuf};
 
 pub trait PathExt {
