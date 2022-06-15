@@ -30,9 +30,10 @@ impl PathExt for Path {
         }
 
         let mut components = self.components().peekable();
-        let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek() {
+            let buf = PathBuf::from(c.as_os_str());
             components.next();
-            PathBuf::from(c.as_os_str())
+            buf
         } else {
             PathBuf::new()
         };
