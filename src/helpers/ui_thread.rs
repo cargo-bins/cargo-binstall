@@ -1,10 +1,10 @@
 use std::io::{self, BufRead, Write};
+use std::thread;
 
 use bytes::Bytes;
 use log::LevelFilter;
 use std::sync::mpsc as mpsc_sync;
 use tokio::sync::mpsc;
-use tokio::task::spawn_blocking;
 
 use super::ui_thread_logger::UIThreadLogger;
 use crate::BinstallError;
@@ -36,7 +36,7 @@ impl UIThreadInner {
         let (request_tx, request_rx) = mpsc_sync::sync_channel(50);
         let (confirm_tx, confirm_rx) = mpsc::channel(10);
 
-        spawn_blocking(move || {
+        thread::spawn(move || {
             // This task should be the only one able to
             // access stdin
             let mut stdin = io::stdin().lock();
