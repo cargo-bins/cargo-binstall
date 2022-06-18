@@ -1,14 +1,26 @@
 use std::io::{self, BufRead, Write};
 
+use bytes::Bytes;
 use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 
 use crate::BinstallError;
 
+pub(super) enum UIRequest {
+    /// Request user confirmation
+    Confirm,
+    /// Print to stdout
+    PrintToStdout(Bytes),
+    /// Print to stderr
+    PrintToStderr(Bytes),
+    /// Flush stdout
+    FlushStdout,
+}
+
 #[derive(Debug)]
 struct UIThreadInner {
     /// Request for confirmation
-    request_tx: mpsc::Sender<()>,
+    request_tx: mpsc::Sender<UIRequest>,
 
     /// Confirmation
     confirm_rx: mpsc::Receiver<Result<(), BinstallError>>,
@@ -23,35 +35,39 @@ impl UIThreadInner {
             // This task should be the only one able to
             // access stdin
             let mut stdin = io::stdin().lock();
+            let mut stdout = io::stdout().lock();
+            let mut stderr = io::stderr().lock();
             let mut input = String::with_capacity(16);
 
             loop {
-                if request_rx.blocking_recv().is_none() {
-                    break;
-                }
+                match request_rx.blocking_recv() {
+                    Some(UIRequest::Confirm) => {
+                        let res = loop {
+                            writeln!(&mut stdout, "Do you wish to continue? yes/[no]").unwrap();
+                            write!(&mut stdout, "? ").unwrap();
+                            stdout.flush().unwrap();
 
-                // Lock stdout so that nobody can interfere
-                // with confirmation.
-                let mut stdout = io::stdout().lock();
+                            input.clear();
+                            stdin.read_line(&mut input).unwrap();
 
-                let res = loop {
-                    writeln!(&mut stdout, "Do you wish to continue? yes/[no]").unwrap();
-                    write!(&mut stdout, "? ").unwrap();
-                    stdout.flush().unwrap();
+                            match input.as_str().trim() {
+                                "yes" | "y" | "YES" | "Y" => break Ok(()),
+                                "no" | "n" | "NO" | "N" | "" => {
+                                    break Err(BinstallError::UserAbort)
+                                }
+                                _ => continue,
+                            }
+                        };
 
-                    input.clear();
-                    stdin.read_line(&mut input).unwrap();
-
-                    match input.as_str().trim() {
-                        "yes" | "y" | "YES" | "Y" => break Ok(()),
-                        "no" | "n" | "NO" | "N" | "" => break Err(BinstallError::UserAbort),
-                        _ => continue,
+                        confirm_tx
+                            .blocking_send(res)
+                            .expect("entry exits when confirming request")
                     }
-                };
-
-                confirm_tx
-                    .blocking_send(res)
-                    .expect("entry exits when confirming request");
+                    Some(UIRequest::PrintToStdout(output)) => stdout.write_all(&output).unwrap(),
+                    Some(UIRequest::PrintToStderr(output)) => stderr.write_all(&output).unwrap(),
+                    Some(UIRequest::FlushStdout) => stdout.flush().unwrap(),
+                    None => break,
+                }
             }
         });
 
@@ -63,7 +79,7 @@ impl UIThreadInner {
 
     async fn confirm(&mut self) -> Result<(), BinstallError> {
         self.request_tx
-            .send(())
+            .send(UIRequest::Confirm)
             .await
             .map_err(|_| BinstallError::UserAbort)?;
 
