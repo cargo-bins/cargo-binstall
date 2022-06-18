@@ -10,7 +10,6 @@ use cargo_toml::{Package, Product};
 use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tempfile::TempDir;
 use tokio::{process::Command, runtime::Runtime, task::JoinError};
 
@@ -177,21 +176,11 @@ async fn entry() -> Result<()> {
         bin_dir: opts.bin_dir.take(),
     };
 
-    // Setup logging
-    let mut log_config = ConfigBuilder::new();
-    log_config.add_filter_ignore("hyper".to_string());
-    log_config.add_filter_ignore("reqwest".to_string());
-    log_config.add_filter_ignore("rustls".to_string());
-    log_config.set_location_level(LevelFilter::Off);
-    TermLogger::init(
+    let mut uithread = UIThread::new(
+        !opts.no_confirm,
         opts.log_level,
-        log_config.build(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )
-    .unwrap();
-
-    let mut uithread = UIThread::new(!opts.no_confirm);
+        &["hyper", "reqwest", "rustls"],
+    );
 
     // Compute install directory
     let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
