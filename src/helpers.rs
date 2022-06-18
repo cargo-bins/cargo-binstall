@@ -22,6 +22,7 @@ mod ui_thread;
 pub use ui_thread::UIThread;
 
 mod extracter;
+mod stream_readable;
 
 mod readable_rx;
 
