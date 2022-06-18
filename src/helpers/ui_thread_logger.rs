@@ -58,7 +58,7 @@ impl Log for UIThreadLogger {
         {
             let output = Self::BUFFER.with(|cell| {
                 let mut buffer = cell.take();
-                write!(&mut buffer, "{}", record.args()).unwrap();
+                writeln!(&mut buffer, "{}", record.args()).unwrap();
 
                 let output = buffer.split().freeze();
                 cell.set(buffer);
