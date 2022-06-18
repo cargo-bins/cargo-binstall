@@ -75,7 +75,7 @@ pub enum BinstallError {
     /// - Exit: 74
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::io))]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
 
     /// An error interacting with the crates.io API.
     ///
@@ -229,5 +229,25 @@ impl Termination for BinstallError {
         }
 
         code
+    }
+}
+
+impl From<std::io::Error> for BinstallError {
+    fn from(err: std::io::Error) -> Self {
+        let is_inner_binstall_err = err
+            .get_ref()
+            .map(|e| e.is::<BinstallError>())
+            .unwrap_or_default();
+
+        if is_inner_binstall_err {
+            let inner = err
+                .into_inner()
+                .expect("err.get_ref() returns Some, so err.into_inner() should als return Some");
+            *inner
+                .downcast()
+                .expect("The inner err is tested to be BinstallError")
+        } else {
+            BinstallError::Io(err)
+        }
     }
 }
