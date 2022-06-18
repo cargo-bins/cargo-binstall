@@ -40,13 +40,11 @@ where
 
 pub async fn extract_bin<E>(
     stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
-    output: &Path,
+    path: &Path,
 ) -> Result<(), BinstallError>
 where
     BinstallError: From<E>,
 {
-    let path = output.to_owned();
-
     extract_impl(stream, move |mut reader| {
         fs::create_dir_all(path.parent().unwrap())?;
 
@@ -71,13 +69,11 @@ where
 
 pub async fn extract_zip<E>(
     stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
-    output: &Path,
+    path: &Path,
 ) -> Result<(), BinstallError>
 where
     BinstallError: From<E>,
 {
-    let path = output.to_owned();
-
     extract_impl(stream, move |mut reader| {
         fs::create_dir_all(path.parent().unwrap())?;
 
@@ -88,21 +84,19 @@ where
         // rewind it so that we can pass it to unzip
         file.rewind()?;
 
-        unzip(file, &path)
+        unzip(file, path)
     })
     .await
 }
 
 pub async fn extract_tar_based_stream<E>(
     stream: impl Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    output: &Path,
+    path: &Path,
     fmt: TarBasedFmt,
 ) -> Result<(), BinstallError>
 where
     BinstallError: From<E>,
 {
-    let path = output.to_owned();
-
     extract_impl(stream, move |reader| {
         fs::create_dir_all(path.parent().unwrap())?;
 
