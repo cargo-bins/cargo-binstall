@@ -1,22 +1,22 @@
 use std::cell::Cell;
 use std::fmt::Write;
+use std::sync::mpsc::SyncSender;
 
 use bytes::BytesMut;
 use log::{set_boxed_logger, set_max_level, LevelFilter, Log, Metadata, Record};
-use tokio::{runtime::Handle, sync::mpsc::Sender};
 
 use super::ui_thread::UIRequest;
 
 #[derive(Debug)]
 pub(super) struct UIThreadLogger {
-    tx: Sender<UIRequest>,
+    tx: SyncSender<UIRequest>,
     level: LevelFilter,
     filter_ignore: &'static [&'static str],
 }
 
 impl UIThreadLogger {
     pub(super) fn init(
-        tx: Sender<UIRequest>,
+        tx: SyncSender<UIRequest>,
         level: LevelFilter,
         filter_ignore: &'static [&'static str],
     ) {
@@ -25,7 +25,7 @@ impl UIThreadLogger {
     }
 
     fn new(
-        tx: Sender<UIRequest>,
+        tx: SyncSender<UIRequest>,
         level: LevelFilter,
         filter_ignore: &'static [&'static str],
     ) -> Box<Self> {
@@ -34,18 +34,6 @@ impl UIThreadLogger {
             level,
             filter_ignore,
         })
-    }
-
-    fn send_request(&self, request: UIRequest) {
-        // TODO: Use another mpsc type.
-        // Tokio's mpsc requires the async send to be used
-        // in async context.
-        if let Ok(handle) = Handle::try_current() {
-            let tx = self.tx.clone();
-            handle.spawn(async move { tx.send(request).await.unwrap() });
-        } else {
-            self.tx.blocking_send(request).unwrap();
-        }
     }
 
     thread_local! {
@@ -76,11 +64,11 @@ impl Log for UIThreadLogger {
                 output
             });
 
-            self.send_request(UIRequest::PrintToStdout(output));
+            self.tx.send(UIRequest::PrintToStdout(output)).unwrap()
         }
     }
 
     fn flush(&self) {
-        self.send_request(UIRequest::FlushStdout);
+        self.tx.send(UIRequest::FlushStdout).unwrap();
     }
 }
