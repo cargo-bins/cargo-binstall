@@ -6,6 +6,7 @@ use tokio::task::spawn_blocking;
 
 use crate::BinstallError;
 
+#[derive(Debug)]
 pub(super) enum UIRequest {
     /// Request user confirmation
     Confirm,
