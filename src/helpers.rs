@@ -1,6 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use cargo_toml::Manifest;
 use log::debug;
@@ -19,6 +17,8 @@ pub use auto_abort_join_handle::AutoAbortJoinHandle;
 
 mod ui_thread;
 pub use ui_thread::UIThread;
+
+mod ui_thread_logger;
 
 mod extracter;
 mod readable_rx;
