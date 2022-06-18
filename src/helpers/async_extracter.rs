@@ -32,7 +32,6 @@ use crate::{BinstallError, TarBasedFmt};
 
 async fn extract_impl<T, S, F, E>(stream: S, f: F) -> Result<T, BinstallError>
 where
-    T: Debug + Send + 'static,
     S: Stream<Item = Result<Bytes, E>> + Unpin,
     F: FnOnce(StreamReadable<S>) -> Result<T, BinstallError>,
     BinstallError: From<E>,
