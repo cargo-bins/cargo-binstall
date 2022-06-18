@@ -16,96 +16,19 @@
 
 use std::fmt::Debug;
 use std::fs;
-use std::io::{self, copy, Read, Seek, Write};
+use std::io::{copy, Read, Seek};
 use std::path::Path;
 
 use bytes::Bytes;
-use futures_util::stream::{Stream, StreamExt};
+use futures_util::stream::Stream;
 use log::debug;
 use scopeguard::{guard, ScopeGuard};
 use tar::Entries;
 use tempfile::tempfile;
-use tokio::{
-    sync::mpsc,
-    task::{block_in_place, spawn_blocking, JoinHandle},
-};
+use tokio::task::block_in_place;
 
-use super::{extracter::*, readable_rx::*, stream_readable::StreamReadable};
+use super::{extracter::*, stream_readable::StreamReadable};
 use crate::{BinstallError, TarBasedFmt};
-
-pub(crate) enum Content {
-    /// Data to write to file
-    Data(Bytes),
-
-    /// Abort the writing and remove the file.
-    Abort,
-}
-
-/// AsyncExtracter will pass the `Bytes` you give to another thread via
-/// a `mpsc` and decompress and unpack it if needed.
-///
-/// After all write is done, you must call `AsyncExtracter::done`,
-/// otherwise the extracted content will be removed on drop.
-#[derive(Debug)]
-struct AsyncExtracterInner<T> {
-    /// Use AutoAbortJoinHandle so that the task
-    /// will be cancelled on failure.
-    handle: JoinHandle<Result<T, BinstallError>>,
-    tx: mpsc::Sender<Content>,
-}
-
-impl<T: Debug + Send + 'static> AsyncExtracterInner<T> {
-    fn new<F: FnOnce(mpsc::Receiver<Content>) -> Result<T, BinstallError> + Send + 'static>(
-        f: F,
-    ) -> Self {
-        let (tx, rx) = mpsc::channel::<Content>(100);
-
-        let handle = spawn_blocking(move || f(rx));
-
-        Self { handle, tx }
-    }
-
-    /// Upon error, this extracter shall not be reused.
-    /// Otherwise, `Self::done` would panic.
-    async fn feed(&mut self, bytes: Bytes) -> Result<(), BinstallError> {
-        if self.tx.send(Content::Data(bytes)).await.is_err() {
-            // task failed
-            Err(Self::wait(&mut self.handle).await.expect_err(
-                "Implementation bug: write task finished successfully before all writes are done",
-            ))
-        } else {
-            Ok(())
-        }
-    }
-
-    async fn done(mut self) -> Result<T, BinstallError> {
-        // Drop tx as soon as possible so that the task would wrap up what it
-        // was doing and flush out all the pending data.
-        drop(self.tx);
-
-        Self::wait(&mut self.handle).await
-    }
-
-    async fn wait(handle: &mut JoinHandle<Result<T, BinstallError>>) -> Result<T, BinstallError> {
-        match handle.await {
-            Ok(res) => res,
-            Err(join_err) => Err(io::Error::new(io::ErrorKind::Other, join_err).into()),
-        }
-    }
-
-    fn abort(self) {
-        let tx = self.tx;
-        // If Self::write fail, then the task is already tear down,
-        // tx closed and no need to abort.
-        if !tx.is_closed() {
-            // Use send here because blocking_send would panic if used
-            // in async threads.
-            tokio::spawn(async move {
-                tx.send(Content::Abort).await.ok();
-            });
-        }
-    }
-}
 
 async fn extract_impl<T, S, F, E>(stream: S, f: F) -> Result<T, BinstallError>
 where
@@ -116,22 +39,6 @@ where
 {
     let readable = StreamReadable::new(stream).await;
     block_in_place(move || f(readable))
-}
-
-fn read_into_file(
-    file: &mut fs::File,
-    rx: &mut mpsc::Receiver<Content>,
-) -> Result<(), BinstallError> {
-    while let Some(content) = rx.blocking_recv() {
-        match content {
-            Content::Data(bytes) => file.write_all(&*bytes)?,
-            Content::Abort => return Err(io::Error::new(io::ErrorKind::Other, "Aborted").into()),
-        }
-    }
-
-    file.flush()?;
-
-    Ok(())
 }
 
 pub async fn extract_bin<E>(

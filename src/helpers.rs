@@ -24,8 +24,6 @@ pub use ui_thread::UIThread;
 mod extracter;
 mod stream_readable;
 
-mod readable_rx;
-
 mod path_ext;
 pub use path_ext::*;
 
