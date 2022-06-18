@@ -1,6 +1,7 @@
 use std::io::{self, BufRead, Write};
 
 use bytes::Bytes;
+use std::sync::mpsc as mpsc_sync;
 use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 
@@ -21,7 +22,7 @@ pub(super) enum UIRequest {
 #[derive(Debug)]
 struct UIThreadInner {
     /// Request for confirmation
-    request_tx: mpsc::Sender<UIRequest>,
+    request_tx: mpsc_sync::SyncSender<UIRequest>,
 
     /// Confirmation
     confirm_rx: mpsc::Receiver<Result<(), BinstallError>>,
@@ -29,7 +30,8 @@ struct UIThreadInner {
 
 impl UIThreadInner {
     fn new() -> Self {
-        let (request_tx, mut request_rx) = mpsc::channel(1);
+        // Set it to a large enough number so it will never block.
+        let (request_tx, mut request_rx) = mpsc_sync::sync_channel(50);
         let (confirm_tx, confirm_rx) = mpsc::channel(10);
 
         spawn_blocking(move || {
@@ -41,8 +43,8 @@ impl UIThreadInner {
             let mut input = String::with_capacity(16);
 
             loop {
-                match request_rx.blocking_recv() {
-                    Some(UIRequest::Confirm) => {
+                match request_rx.recv() {
+                    Ok(UIRequest::Confirm) => {
                         let res = loop {
                             writeln!(&mut stdout, "Do you wish to continue? yes/[no]").unwrap();
                             write!(&mut stdout, "? ").unwrap();
@@ -64,10 +66,10 @@ impl UIThreadInner {
                             .blocking_send(res)
                             .expect("entry exits when confirming request")
                     }
-                    Some(UIRequest::PrintToStdout(output)) => stdout.write_all(&output).unwrap(),
-                    Some(UIRequest::PrintToStderr(output)) => stderr.write_all(&output).unwrap(),
-                    Some(UIRequest::FlushStdout) => stdout.flush().unwrap(),
-                    None => break,
+                    Ok(UIRequest::PrintToStdout(output)) => stdout.write_all(&output).unwrap(),
+                    Ok(UIRequest::PrintToStderr(output)) => stderr.write_all(&output).unwrap(),
+                    Ok(UIRequest::FlushStdout) => stdout.flush().unwrap(),
+                    Err(_) => break,
                 }
             }
         });
@@ -81,7 +83,6 @@ impl UIThreadInner {
     async fn confirm(&mut self) -> Result<(), BinstallError> {
         self.request_tx
             .send(UIRequest::Confirm)
-            .await
             .map_err(|_| BinstallError::UserAbort)?;
 
         self.confirm_rx
