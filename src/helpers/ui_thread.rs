@@ -31,7 +31,7 @@ struct UIThreadInner {
 impl UIThreadInner {
     fn new() -> Self {
         // Set it to a large enough number so it will never block.
-        let (request_tx, mut request_rx) = mpsc_sync::sync_channel(50);
+        let (request_tx, request_rx) = mpsc_sync::sync_channel(50);
         let (confirm_tx, confirm_rx) = mpsc::channel(10);
 
         spawn_blocking(move || {
