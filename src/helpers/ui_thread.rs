@@ -41,7 +41,6 @@ impl UIThreadInner {
             // access stdin
             let mut stdin = io::stdin().lock();
             let mut stdout = io::stdout().lock();
-            let mut stderr = io::stderr().lock();
             let mut input = String::with_capacity(16);
 
             loop {
@@ -69,7 +68,9 @@ impl UIThreadInner {
                             .expect("entry exits when confirming request")
                     }
                     Ok(UIRequest::PrintToStdout(output)) => stdout.write_all(&output).unwrap(),
-                    Ok(UIRequest::PrintToStderr(output)) => stderr.write_all(&output).unwrap(),
+                    Ok(UIRequest::PrintToStderr(output)) => {
+                        io::stderr().write_all(&output).unwrap()
+                    }
                     Ok(UIRequest::FlushStdout) => stdout.flush().unwrap(),
                     Err(_) => break,
                 }
