@@ -38,11 +38,9 @@ where
     block_in_place(move || f(readable))
 }
 
-pub async fn extract_bin<E>(
-    stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
-    path: &Path,
-) -> Result<(), BinstallError>
+pub async fn extract_bin<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
 where
+    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     BinstallError: From<E>,
 {
     extract_impl(stream, move |mut reader| {
@@ -67,11 +65,9 @@ where
     .await
 }
 
-pub async fn extract_zip<E>(
-    stream: impl Stream<Item = Result<Bytes, E>> + Unpin,
-    path: &Path,
-) -> Result<(), BinstallError>
+pub async fn extract_zip<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
 where
+    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     BinstallError: From<E>,
 {
     extract_impl(stream, move |mut reader| {
@@ -89,12 +85,13 @@ where
     .await
 }
 
-pub async fn extract_tar_based_stream<E>(
-    stream: impl Stream<Item = Result<Bytes, E>> + Unpin + 'static,
+pub async fn extract_tar_based_stream<S, E>(
+    stream: S,
     path: &Path,
     fmt: TarBasedFmt,
 ) -> Result<(), BinstallError>
 where
+    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     BinstallError: From<E>,
 {
     extract_impl(stream, move |reader| {
@@ -121,12 +118,14 @@ impl<V: TarEntriesVisitor> TarEntriesVisitor for &mut V {
     }
 }
 
-pub async fn extract_tar_based_stream_and_visit<V: TarEntriesVisitor + Debug + Send + 'static, E>(
-    stream: impl Stream<Item = Result<Bytes, E>> + Unpin + 'static,
+pub async fn extract_tar_based_stream_and_visit<S, V, E>(
+    stream: S,
     fmt: TarBasedFmt,
     mut visitor: V,
 ) -> Result<V, BinstallError>
 where
+    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
+    V: TarEntriesVisitor + Debug + Send + 'static,
     BinstallError: From<E>,
 {
     extract_impl(stream, move |reader| {
