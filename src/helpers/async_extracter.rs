@@ -28,22 +28,13 @@ use tokio::task::block_in_place;
 use super::{extracter::*, stream_readable::StreamReadable};
 use crate::{BinstallError, TarBasedFmt};
 
-async fn extract_impl<T, S, F, E>(stream: S, f: F) -> Result<T, BinstallError>
-where
-    S: Stream<Item = Result<Bytes, E>> + Unpin,
-    F: FnOnce(StreamReadable<S>) -> Result<T, BinstallError>,
-    BinstallError: From<E>,
-{
-    let readable = StreamReadable::new(stream).await;
-    block_in_place(move || f(readable))
-}
-
 pub async fn extract_bin<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     BinstallError: From<E>,
 {
-    extract_impl(stream, move |mut reader| {
+    let mut reader = StreamReadable::new(stream).await;
+    block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
         let mut file = fs::File::create(&path)?;
@@ -62,7 +53,6 @@ where
 
         Ok(())
     })
-    .await
 }
 
 pub async fn extract_zip<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
@@ -70,7 +60,8 @@ where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     BinstallError: From<E>,
 {
-    extract_impl(stream, move |mut reader| {
+    let mut reader = StreamReadable::new(stream).await;
+    block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
         let mut file = tempfile()?;
@@ -82,7 +73,6 @@ where
 
         unzip(file, path)
     })
-    .await
 }
 
 pub async fn extract_tar_based_stream<S, E>(
@@ -94,7 +84,8 @@ where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     BinstallError: From<E>,
 {
-    extract_impl(stream, move |reader| {
+    let reader = StreamReadable::new(stream).await;
+    block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
         debug!("Extracting from {fmt} archive to {path:#?}");
@@ -103,7 +94,6 @@ where
 
         Ok(())
     })
-    .await
 }
 
 /// Visitor must iterate over all entries.
@@ -128,12 +118,12 @@ where
     V: TarEntriesVisitor + Debug + Send + 'static,
     BinstallError: From<E>,
 {
-    extract_impl(stream, move |reader| {
+    let reader = StreamReadable::new(stream).await;
+    block_in_place(move || {
         debug!("Extracting from {fmt} archive to process it in memory");
 
         let mut tar = create_tar_decoder(reader, fmt)?;
         visitor.visit(tar.entries()?)?;
         Ok(visitor)
     })
-    .await
 }
