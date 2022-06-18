@@ -96,11 +96,8 @@ pub struct UIThread(Option<UIThreadInner>);
 impl UIThread {
     ///  * `enable` - `true` to enable confirmation, `false` to disable it.
     pub fn new(enable: bool) -> Self {
-        Self(if enable {
-            Some(UIThreadInner::new())
-        } else {
-            None
-        })
+        let ui_thread = UIThreadInner::new();
+        Self(enable.then(|| ui_thread))
     }
 
     pub async fn confirm(&mut self) -> Result<(), BinstallError> {
