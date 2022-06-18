@@ -1,10 +1,12 @@
 use std::io::{self, BufRead, Write};
 
 use bytes::Bytes;
+use log::LevelFilter;
 use std::sync::mpsc as mpsc_sync;
 use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 
+use super::ui_thread_logger::UIThreadLogger;
 use crate::BinstallError;
 
 #[derive(Debug)]
@@ -97,8 +99,9 @@ pub struct UIThread(Option<UIThreadInner>);
 
 impl UIThread {
     ///  * `enable` - `true` to enable confirmation, `false` to disable it.
-    pub fn new(enable: bool) -> Self {
+    pub fn new(enable: bool, level: LevelFilter, filter_ignore: &'static [&'static str]) -> Self {
         let ui_thread = UIThreadInner::new();
+        UIThreadLogger::init(ui_thread.request_tx.clone(), level, filter_ignore);
         Self(enable.then(|| ui_thread))
     }
 
