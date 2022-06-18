@@ -3,7 +3,7 @@ use std::fmt::Write;
 use std::sync::mpsc::SyncSender;
 
 use bytes::BytesMut;
-use log::{set_boxed_logger, set_max_level, LevelFilter, Log, Metadata, Record};
+use log::{set_boxed_logger, set_max_level, Level, LevelFilter, Log, Metadata, Record};
 
 use super::ui_thread::UIRequest;
 
@@ -48,7 +48,9 @@ impl Log for UIThreadLogger {
 
     fn log(&self, record: &Record<'_>) {
         let target = record.target();
-        if self.enabled(record.metadata())
+        let metadata = record.metadata();
+
+        if self.enabled(metadata)
             && !self
                 .filter_ignore
                 .iter()
@@ -64,7 +66,12 @@ impl Log for UIThreadLogger {
                 output
             });
 
-            self.tx.send(UIRequest::PrintToStdout(output)).unwrap()
+            let request_builder = match metadata.level() {
+                Level::Error | Level::Warn => UIRequest::PrintToStderr,
+                _ => UIRequest::PrintToStdout,
+            };
+
+            self.tx.send(request_builder(output)).unwrap()
         }
     }
 
