@@ -1,14 +1,12 @@
 //! # Advantages
 //!
 //! Using this mod has the following advantages over downloading
-//! and extracting in on the async thread:
+//! to file then extracting:
 //!
 //!  - The code is pipelined instead of storing the downloaded file in memory
 //!    and extract it, except for `PkgFmt::Zip`, since `ZipArchiver::new`
 //!    requires `std::io::Seek`, so it fallbacks to writing the a file then
 //!    unzip it.
-//!  - The async part (downloading) and the extracting part runs in parallel
-//!    using `tokio::spawn_nonblocking`.
 //!  - Compressing/writing which takes a lot of CPU time will not block
 //!    the runtime anymore.
 //!  - For all `tar` based formats, it can extract only specified files and
