@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufRead, Read};
+use std::io::{self, BufRead, Read};
 use std::path::Path;
 
 use flate2::bufread::GzDecoder;
@@ -14,7 +14,7 @@ use crate::{BinstallError, TarBasedFmt};
 pub(super) fn create_tar_decoder(
     dat: impl BufRead + 'static,
     fmt: TarBasedFmt,
-) -> Result<Archive<Box<dyn Read>>, BinstallError> {
+) -> io::Result<Archive<Box<dyn Read>>> {
     use TarBasedFmt::*;
 
     let r: Box<dyn Read> = match fmt {
