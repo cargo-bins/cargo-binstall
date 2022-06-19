@@ -52,7 +52,9 @@ impl UIThreadInner {
                             stdout.flush().unwrap();
 
                             input.clear();
-                            stdin.read_line(&mut input).unwrap();
+                            if stdin.read_line(&mut input).is_err() {
+                                break Err(BinstallError::UserAbort);
+                            }
 
                             match input.as_str().trim() {
                                 "yes" | "y" | "YES" | "Y" => break Ok(()),
