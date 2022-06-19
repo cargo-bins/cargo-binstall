@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::fmt::Write;
 use std::sync::mpsc::SyncSender;
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use log::{set_boxed_logger, set_max_level, Level, LevelFilter, Log, Metadata, Record};
 
 use super::ui_thread::UIRequest;
@@ -56,15 +56,21 @@ impl Log for UIThreadLogger {
                 .iter()
                 .any(|filter| target.starts_with(filter))
         {
-            let output = Self::BUFFER.with(|cell| {
-                let mut buffer = cell.take();
-                writeln!(&mut buffer, "{}", record.args()).unwrap();
+            let args = record.args();
 
-                let output = buffer.split().freeze();
-                cell.set(buffer);
+            let output = if let Some(s) = args.as_str() {
+                Bytes::from_static(s.as_bytes())
+            } else {
+                Self::BUFFER.with(|cell| {
+                    let mut buffer = cell.take();
+                    writeln!(&mut buffer, "{}", args).unwrap();
 
-                output
-            });
+                    let output = buffer.split().freeze();
+                    cell.set(buffer);
+
+                    output
+                })
+            };
 
             let request_builder = match metadata.level() {
                 Level::Error | Level::Warn => UIRequest::PrintToStderr,
