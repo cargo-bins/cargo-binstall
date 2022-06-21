@@ -234,18 +234,17 @@ impl Termination for BinstallError {
 
 impl From<std::io::Error> for BinstallError {
     fn from(err: std::io::Error) -> Self {
-        let is_inner_binstall_err = err
-            .get_ref()
-            .map(|e| e.is::<BinstallError>())
-            .unwrap_or_default();
+        if err.get_ref().is_some() {
+            let kind = err.kind();
 
-        if is_inner_binstall_err {
             let inner = err
                 .into_inner()
-                .expect("err.get_ref() returns Some, so err.into_inner() should als return Some");
-            *inner
+                .expect("err.get_ref() returns Some, so err.into_inner() should also return Some");
+
+            inner
                 .downcast()
-                .expect("The inner err is tested to be BinstallError")
+                .map(|b| *b)
+                .unwrap_or_else(|err| BinstallError::Io(std::io::Error::new(kind, err)))
         } else {
             BinstallError::Io(err)
         }
