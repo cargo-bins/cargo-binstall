@@ -6,6 +6,9 @@ use cargo_toml::AbstractFilesystem;
 
 use crate::helpers::PathExt;
 
+/// This type stores the filesystem structure for the crate tarball
+/// extracted in memory and can be passed to
+/// `cargo_toml::Manifest::complete_from_abstract_filesystem`.
 #[derive(Debug)]
 pub(super) struct Vfs(HashMap<Box<Path>, HashSet<Box<str>>>);
 
