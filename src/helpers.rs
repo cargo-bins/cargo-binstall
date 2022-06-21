@@ -52,6 +52,8 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
 async fn create_request(
     url: Url,
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
+    debug!("Downloading from: '{url}'");
+
     reqwest::get(url.clone())
         .await
         .and_then(|r| r.error_for_status())
@@ -69,8 +71,6 @@ pub async fn download_and_extract<P: AsRef<Path>>(
     fmt: PkgFmt,
     path: P,
 ) -> Result<(), BinstallError> {
-    debug!("Downloading from: '{url}'");
-
     let stream = create_request(url).await?;
 
     let path = path.as_ref();
@@ -97,8 +97,6 @@ pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 
     fmt: TarBasedFmt,
     visitor: V,
 ) -> Result<V, BinstallError> {
-    debug!("Downloading from: '{url}'");
-
     let stream = create_request(url).await?;
 
     debug!("Downloading and extracting then in-memory processing");
