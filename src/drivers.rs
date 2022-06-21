@@ -2,11 +2,6 @@ use std::path::{Path, PathBuf};
 
 use crate::BinstallError;
 
-mod vfs;
-
-mod visitor;
-use visitor::ManifestVisitor;
-
 mod version;
 use version::find_version;
 
