@@ -1,11 +1,9 @@
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
 use log::debug;
-use semver::{Version, VersionReq};
 use url::Url;
 
 use crate::{helpers::*, BinstallError, Meta, TarBasedFmt};
@@ -15,47 +13,8 @@ mod vfs;
 mod visitor;
 use visitor::ManifestVisitor;
 
-fn find_version<'a, V: Iterator<Item = &'a String>>(
-    requirement: &str,
-    version_iter: V,
-) -> Result<Version, BinstallError> {
-    // Parse version requirement
-    let version_req = VersionReq::parse(requirement).map_err(|err| BinstallError::VersionReq {
-        req: requirement.into(),
-        err,
-    })?;
-
-    // Filter for matching versions
-    let filtered: BTreeSet<_> = version_iter
-        .filter_map(|v| {
-            // Remove leading `v` for git tags
-            let ver_str = match v.strip_prefix('s') {
-                Some(v) => v,
-                None => v,
-            };
-
-            // Parse out version
-            let ver = Version::parse(ver_str).ok()?;
-            debug!("Version: {:?}", ver);
-
-            // Filter by version match
-            if version_req.matches(&ver) {
-                Some(ver)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    debug!("Filtered: {:?}", filtered);
-
-    // Return highest version
-    filtered
-        .iter()
-        .max()
-        .cloned()
-        .ok_or(BinstallError::VersionMismatch { req: version_req })
-}
+mod version;
+use version::find_version;
 
 /// Fetch a crate Cargo.toml by name and version from crates.io
 pub async fn fetch_crate_cratesio(
