@@ -23,7 +23,7 @@ async-trait = "0.1.56"
 bytes = "1.1.0"
 bzip2 = { version = "0.4.3", features = ["static"] }
 cargo_toml = "0.11.4"
-clap = { version = "3.1.18", features = ["derive"] }
+clap = { version = "3.2.6", features = ["derive"] }
 crates_io_api = { version = "0.8.0", default-features = false, features = ["rustls"] }
 dirs = "4.0.0"
 flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
