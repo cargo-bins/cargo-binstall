@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead, Read};
 use std::path::Path;
 
+use bzip2::bufread::BzDecoder;
 use flate2::bufread::GzDecoder;
 use log::debug;
 use tar::Archive;
@@ -19,6 +20,7 @@ pub(super) fn create_tar_decoder(
 
     let r: Box<dyn Read> = match fmt {
         Tar => Box::new(dat),
+        Tbz2 => Box::new(BzDecoder::new(dat)),
         Tgz => Box::new(GzDecoder::new(dat)),
         Txz => Box::new(XzDecoder::new(dat)),
         Tzstd => {

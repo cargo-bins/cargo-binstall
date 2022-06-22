@@ -134,6 +134,7 @@ version = "0.9.1"
 dependencies = [
  "async-trait",
  "bytes",
+ "bzip2",
  "cargo_toml",
  "clap 3.1.18",
  "crates_io_api",
