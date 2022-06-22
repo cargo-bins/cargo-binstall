@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString, EnumVariantNames};
 
 pub mod drivers;
 pub use drivers::*;
@@ -18,39 +17,15 @@ pub mod fetchers;
 mod target;
 pub use target::*;
 
+mod format;
+pub use format::*;
+
 /// Default package path template (may be overridden in package Cargo.toml)
 pub const DEFAULT_PKG_URL: &str =
     "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }";
 
 /// Default binary name template (may be overridden in package Cargo.toml)
 pub const DEFAULT_BIN_DIR: &str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
-
-/// Binary format enumeration
-#[derive(
-    Debug, Copy, Clone, PartialEq, Serialize, Deserialize, Display, EnumString, EnumVariantNames,
-)]
-#[strum(serialize_all = "snake_case")]
-#[serde(rename_all = "snake_case")]
-pub enum PkgFmt {
-    /// Download format is TAR (uncompressed)
-    Tar,
-    /// Download format is TGZ (TAR + GZip)
-    Tgz,
-    /// Download format is TAR + XZ
-    Txz,
-    /// Download format is TAR + Zstd
-    Tzstd,
-    /// Download format is Zip
-    Zip,
-    /// Download format is raw / binary
-    Bin,
-}
-
-impl Default for PkgFmt {
-    fn default() -> Self {
-        Self::Tgz
-    }
-}
 
 /// `binstall` metadata container
 ///

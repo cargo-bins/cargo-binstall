@@ -210,13 +210,11 @@ async fn entry() -> Result<()> {
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
     // TODO: support git-based fetches (whole repo name rather than just crate name)
-    let manifest_path = match opts.manifest_path.clone() {
-        Some(p) => p,
-        None => fetch_crate_cratesio(&opts.name, &opts.version, temp_dir.path()).await?,
+    let manifest = match opts.manifest_path.clone() {
+        Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
+        None => fetch_crate_cratesio(&opts.name, &opts.version).await?,
     };
 
-    debug!("Reading manifest: {}", manifest_path.display());
-    let manifest = load_manifest_path(manifest_path.join("Cargo.toml"))?;
     let package = manifest.package.unwrap();
 
     let is_plain_version = semver::Version::from_str(&opts.version).is_ok();

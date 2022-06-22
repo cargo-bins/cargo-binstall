@@ -1,18 +1,19 @@
-use std::{
-    path::{Path, PathBuf},
-};
+use std::fmt::Debug;
+use std::path::{Path, PathBuf};
 
+use bytes::Bytes;
 use cargo_toml::Manifest;
+use futures_util::stream::Stream;
 use log::debug;
-use reqwest::Method;
+use reqwest::{Method, Response};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 use url::Url;
 
-use crate::{BinstallError, Meta, PkgFmt};
+use crate::{BinstallError, Meta, PkgFmt, PkgFmtDecomposed, TarBasedFmt};
 
 mod async_extracter;
-pub use async_extracter::extract_archive_stream;
+pub use async_extracter::*;
 
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
@@ -21,7 +22,10 @@ mod ui_thread;
 pub use ui_thread::UIThread;
 
 mod extracter;
-mod readable_rx;
+mod stream_readable;
+
+mod path_ext;
+pub use path_ext::*;
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
@@ -45,13 +49,42 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
     Ok(req.status().is_success())
 }
 
+async fn create_request(
+    url: Url,
+) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
+    debug!("Downloading from: '{url}'");
+
+    reqwest::get(url.clone())
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|err| BinstallError::Http {
+            method: Method::GET,
+            url,
+            err,
+        })
+        .map(Response::bytes_stream)
+}
+
 /// Download a file from the provided URL and extract it to the provided path.
 pub async fn download_and_extract<P: AsRef<Path>>(
     url: Url,
     fmt: PkgFmt,
     path: P,
 ) -> Result<(), BinstallError> {
-    download_and_extract_with_filter::<fn(&Path) -> bool, _>(url, fmt, path.as_ref(), None).await
+    let stream = create_request(url).await?;
+
+    let path = path.as_ref();
+    debug!("Downloading and extracting to: '{}'", path.display());
+
+    match fmt.decompose() {
+        PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
+        PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
+        PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+    }
+
+    debug!("Download OK, extracted to: '{}'", path.display());
+
+    Ok(())
 }
 
 /// Download a file from the provided URL and extract part of it to
@@ -59,36 +92,20 @@ pub async fn download_and_extract<P: AsRef<Path>>(
 ///
 ///  * `filter` - If Some, then it will pass the path of the file to it
 ///    and only extract ones which filter returns `true`.
-///    Note that this is a best-effort and it only works when `fmt`
-///    is not `PkgFmt::Bin` or `PkgFmt::Zip`.
-pub async fn download_and_extract_with_filter<
-    Filter: FnMut(&Path) -> bool + Send + 'static,
-    P: AsRef<Path>,
->(
+pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 'static>(
     url: Url,
-    fmt: PkgFmt,
-    path: P,
-    filter: Option<Filter>,
-) -> Result<(), BinstallError> {
-    debug!("Downloading from: '{url}'");
+    fmt: TarBasedFmt,
+    visitor: V,
+) -> Result<V, BinstallError> {
+    let stream = create_request(url).await?;
 
-    let resp = reqwest::get(url.clone())
-        .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|err| BinstallError::Http {
-            method: Method::GET,
-            url,
-            err,
-        })?;
+    debug!("Downloading and extracting then in-memory processing");
 
-    let path = path.as_ref();
-    debug!("Downloading to file: '{}'", path.display());
+    let visitor = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
-    extract_archive_stream(resp.bytes_stream(), path, fmt, filter).await?;
+    debug!("Download, extraction and in-memory procession OK");
 
-    debug!("Download OK, written to file: '{}'", path.display());
-
-    Ok(())
+    Ok(visitor)
 }
 
 /// Fetch install path from environment
