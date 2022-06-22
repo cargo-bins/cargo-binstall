@@ -32,7 +32,7 @@ log = "0.4.14"
 miette = { version = "4.7.1", features = ["fancy-no-backtrace"] }
 reqwest = { version = "0.11.11", features = [ "rustls-tls", "stream" ], default-features = false }
 scopeguard = "1.1.0"
-semver = "1.0.7"
+semver = "1.0.10"
 serde = { version = "1.0.136", features = [ "derive" ] }
 simplelog = "0.12.0"
 strum = "0.24.1"
