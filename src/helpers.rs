@@ -5,7 +5,7 @@ use bytes::Bytes;
 use cargo_toml::Manifest;
 use futures_util::stream::Stream;
 use log::debug;
-use reqwest::{Method, Response};
+use reqwest::{Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 use url::Url;
@@ -40,8 +40,16 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     Ok(manifest)
 }
 
+pub fn new_reqwest_client_builder() -> ClientBuilder {
+    ClientBuilder::new()
+}
+
+pub fn new_reqwest_client() -> reqwest::Result<Client> {
+    new_reqwest_client_builder().build()
+}
+
 pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallError> {
-    let req = reqwest::Client::new()
+    let req = new_reqwest_client()?
         .request(method.clone(), url.clone())
         .send()
         .await
@@ -54,7 +62,9 @@ async fn create_request(
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    reqwest::get(url.clone())
+    new_reqwest_client()?
+        .get(url.clone())
+        .send()
         .await
         .and_then(|r| r.error_for_status())
         .map_err(|err| BinstallError::Http {
