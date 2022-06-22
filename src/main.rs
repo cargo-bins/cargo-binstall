@@ -185,6 +185,11 @@ async fn entry() -> Result<()> {
         bin_dir: opts.bin_dir.take(),
     };
 
+    // Initialize REQWESTGLOBALCONFIG
+    REQWESTGLOBALCONFIG
+        .set((opts.https_only_mode, opts.min_tls_version))
+        .unwrap();
+
     // Setup logging
     let mut log_config = ConfigBuilder::new();
     log_config.add_filter_ignore("hyper".to_string());
