@@ -145,6 +145,7 @@ dependencies = [
  "guess_host_triple",
  "log",
  "miette",
+ "once_cell",
  "reqwest",
  "scopeguard",
  "semver",
