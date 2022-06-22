@@ -51,9 +51,7 @@ pub fn new_reqwest_client_builder() -> ClientBuilder {
     let mut builder = ClientBuilder::new();
 
     if let Some((https_only, min_tls_ver_opt)) = REQWESTGLOBALCONFIG.get() {
-        if *https_only {
-            builder = builder.http2_prior_knowledge();
-        }
+        builder = builder.https_only(*https_only);
 
         if let Some(min_tls_ver) = *min_tls_ver_opt {
             builder = builder.min_tls_version(min_tls_ver.into());
