@@ -5,6 +5,7 @@ use bytes::Bytes;
 use cargo_toml::Manifest;
 use futures_util::stream::Stream;
 use log::debug;
+use once_cell::sync::OnceCell;
 use reqwest::{Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
@@ -30,6 +31,9 @@ pub use path_ext::*;
 mod tls_version;
 pub use tls_version::TLSVersion;
 
+/// (enable https only mode, min TLS version_option)
+pub static REQWESTGLOBALCONFIG: OnceCell<(bool, Option<TLSVersion>)> = OnceCell::new();
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
@@ -44,7 +48,19 @@ pub fn load_manifest_path<P: AsRef<Path>>(
 }
 
 pub fn new_reqwest_client_builder() -> ClientBuilder {
-    ClientBuilder::new()
+    let mut builder = ClientBuilder::new();
+
+    if let Some((https_only, min_tls_ver_opt)) = REQWESTGLOBALCONFIG.get() {
+        if *https_only {
+            builder = builder.http2_prior_knowledge();
+        }
+
+        if let Some(min_tls_ver) = *min_tls_ver_opt {
+            builder = builder.min_tls_version(min_tls_ver.into());
+        }
+    }
+
+    builder
 }
 
 pub fn new_reqwest_client() -> reqwest::Result<Client> {
