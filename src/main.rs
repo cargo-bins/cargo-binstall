@@ -84,6 +84,14 @@ struct Options {
     #[clap(long)]
     no_cleanup: bool,
 
+    /// Enable https only mode
+    #[clap(long)]
+    https_only_mode: bool,
+
+    /// Decide which TLS version to use.
+    #[clap(long, arg_enum)]
+    min_tls_version: Option<TLSVersion>,
+
     /// Override manifest source.
     ///
     /// This skips searching crates.io for a manifest and uses the specified path directly, useful
