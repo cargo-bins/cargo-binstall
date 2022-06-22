@@ -129,22 +129,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "camino"
-version = "1.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "869119e97797867fd90f5e22af7d0bd274bd4635ebb9eb68c04f3f513ae6c412"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "cargo-binstall"
 version = "0.9.1"
 dependencies = [
  "async-trait",
  "bytes",
  "bzip2",
- "cargo_metadata",
  "cargo_toml",
  "clap 3.1.18",
  "crates_io_api",
@@ -171,28 +161,6 @@ dependencies = [
  "xz2",
  "zip",
  "zstd",
-]
-
-[[package]]
-name = "cargo-platform"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "cargo_metadata"
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4acbb09d9ee8e23699b9634375c72795d095bf268439da88562cf9b501f181fa"
-dependencies = [
- "camino",
- "cargo-platform",
- "semver",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -601,7 +569,7 @@ dependencies = [
  "indexmap",
  "slab",
  "tokio",
- "tokio-util 0.7.3",
+ "tokio-util",
  "tracing",
 ]
 
@@ -1088,9 +1056,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.10"
+version = "0.11.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46a1f7aa4f35e5e8b4160449f51afc758f0ce6454315a9fa7d0d113e958c41eb"
+checksum = "b75aa69a3f06bbcc66ede33af2af253c6f7a86b1ca0033f60c580a27074fbf92"
 dependencies = [
  "base64",
  "bytes",
@@ -1116,7 +1084,8 @@ dependencies = [
  "serde_urlencoded",
  "tokio",
  "tokio-rustls",
- "tokio-util 0.6.10",
+ "tokio-util",
+ "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1160,9 +1129,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pemfile"
-version = "0.3.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ee86d63972a7c661d1536fefe8c3c8407321c3df668891286de28abcd087360"
+checksum = "e7522c9de787ff061458fe9a829dc790a3f5b22dc571694fc5883f448b94d9a9"
 dependencies = [
  "base64",
 ]
@@ -1200,9 +1169,6 @@ name = "semver"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8cb243bdfdb5936c8dc3c45762a19d12ab4550cdc753bc247637d4ec35a040fd"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "serde"
@@ -1315,9 +1281,9 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "strum"
-version = "0.24.0"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e96acfc1b70604b8b2f1ffa4c57e59176c7dbb05d556c71ecd2f5498a1dee7f8"
+checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
 
 [[package]]
 name = "strum_macros"
@@ -1525,20 +1491,6 @@ dependencies = [
  "rustls",
  "tokio",
  "webpki",
-]
-
-[[package]]
-name = "tokio-util"
-version = "0.6.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36943ee01a6d67977dd3f84a5a1d2efeb4ada3a1ae771cadfaa535d9d9fc6507"
-dependencies = [
- "bytes",
- "futures-core",
- "futures-sink",
- "log",
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]
