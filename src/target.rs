@@ -32,6 +32,11 @@ pub async fn detect_targets() -> Vec<String> {
             v.push(macos::X86.into());
         }
 
+        #[cfg(target_os = "windows")]
+        if v[0].contains("gnu") {
+            v.push(v[0].replace("gnu", "msvc"));
+        }
+
         v
     } else {
         #[cfg(target_os = "linux")]
@@ -42,7 +47,11 @@ pub async fn detect_targets() -> Vec<String> {
         {
             macos::detect_targets_macos()
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(target_os = "windows")]
+        {
+            windows::detect_targets_windows()
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
         {
             vec![TARGET.into()]
         }
@@ -143,5 +152,21 @@ mod macos {
         } else {
             vec![X86.into()]
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::TARGET;
+    use guess_host_triple::guess_host_triple;
+
+    pub(super) fn detect_targets_windows() -> Vec<String> {
+        let mut targets = vec![guess_host_triple().unwrap_or(TARGET).to_string()];
+
+        if targets[0].contains("gnu") {
+            targets.push(targets[0].replace("gnu", "msvc"));
+        }
+
+        targets
     }
 }
