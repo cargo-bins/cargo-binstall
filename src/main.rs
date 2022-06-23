@@ -209,6 +209,8 @@ async fn entry() -> Result<()> {
 
     let mut uithread = UIThread::new(!opts.no_confirm);
 
+    let desired_targets = get_desired_targets(&opts.targets);
+
     // Compute install directory
     let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
         error!("No viable install path found of specified, try `--install-path`");
@@ -258,22 +260,11 @@ async fn entry() -> Result<()> {
         manifest.bin,
     );
 
-    let desired_targets = {
-        let from_opts = opts
-            .targets
-            .as_ref()
-            .map(|ts| ts.split(',').map(|t| t.to_string()).collect());
-
-        if let Some(ts) = from_opts {
-            ts
-        } else {
-            detect_targets().await
-        }
-    };
-
     let mut fetchers = MultiFetcher::default();
 
-    for target in &desired_targets {
+    let desired_targets = desired_targets.get().await;
+
+    for target in desired_targets {
         debug!("Building metadata for target: {target}");
         let mut target_meta = meta.clone();
 
