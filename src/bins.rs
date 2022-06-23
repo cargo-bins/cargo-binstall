@@ -4,7 +4,7 @@ use cargo_toml::Product;
 use log::debug;
 use serde::Serialize;
 
-use crate::{BinstallError, PkgFmt, PkgMeta, Template};
+use crate::{atomic_install, BinstallError, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: String,
@@ -80,11 +80,11 @@ impl BinFile {
     pub fn install_bin(&self) -> Result<(), BinstallError> {
         // TODO: check if file already exists
         debug!(
-            "Copy file from '{}' to '{}'",
+            "Atomically install file from '{}' to '{}'",
             self.source.display(),
             self.dest.display()
         );
-        std::fs::copy(&self.source, &self.dest)?;
+        atomic_install(&self.source, &self.dest)?;
 
         #[cfg(target_family = "unix")]
         {
