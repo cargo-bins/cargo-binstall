@@ -5,7 +5,8 @@ use bytes::Bytes;
 use cargo_toml::Manifest;
 use futures_util::stream::Stream;
 use log::debug;
-use reqwest::{Method, Response};
+use once_cell::sync::OnceCell;
+use reqwest::{Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 use url::Url;
@@ -27,6 +28,12 @@ mod stream_readable;
 mod path_ext;
 pub use path_ext::*;
 
+mod tls_version;
+pub use tls_version::TLSVersion;
+
+/// (enable https only mode, min TLS version_option)
+pub static REQWESTGLOBALCONFIG: OnceCell<(bool, Option<TLSVersion>)> = OnceCell::new();
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
@@ -40,8 +47,30 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     Ok(manifest)
 }
 
+pub fn new_reqwest_client_builder() -> ClientBuilder {
+    let mut builder = ClientBuilder::new();
+
+    if let Some((https_only, min_tls_ver_opt)) = REQWESTGLOBALCONFIG.get() {
+        builder = builder.https_only(*https_only);
+
+        if *https_only {
+            builder = builder.min_tls_version(reqwest::tls::Version::TLS_1_2);
+        }
+
+        if let Some(min_tls_ver) = *min_tls_ver_opt {
+            builder = builder.min_tls_version(min_tls_ver.into());
+        }
+    }
+
+    builder
+}
+
+pub fn new_reqwest_client() -> reqwest::Result<Client> {
+    new_reqwest_client_builder().build()
+}
+
 pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallError> {
-    let req = reqwest::Client::new()
+    let req = new_reqwest_client()?
         .request(method.clone(), url.clone())
         .send()
         .await
@@ -54,7 +83,9 @@ async fn create_request(
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    reqwest::get(url.clone())
+    new_reqwest_client()?
+        .get(url.clone())
+        .send()
         .await
         .and_then(|r| r.error_for_status())
         .map_err(|err| BinstallError::Http {

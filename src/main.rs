@@ -84,6 +84,17 @@ struct Options {
     #[clap(long)]
     no_cleanup: bool,
 
+    /// Enable https only mode.
+    ///
+    /// When https only mode is enabled, it will also set
+    /// minimum TLS version to tls1_2.
+    #[clap(long)]
+    https_only_mode: bool,
+
+    /// Decide which TLS version to use.
+    #[clap(long, arg_enum)]
+    min_tls_version: Option<TLSVersion>,
+
     /// Override manifest source.
     ///
     /// This skips searching crates.io for a manifest and uses the specified path directly, useful
@@ -176,6 +187,11 @@ async fn entry() -> Result<()> {
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
     };
+
+    // Initialize REQWESTGLOBALCONFIG
+    REQWESTGLOBALCONFIG
+        .set((opts.https_only_mode, opts.min_tls_version))
+        .unwrap();
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();

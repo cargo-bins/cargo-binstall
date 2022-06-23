@@ -20,3 +20,13 @@ cargo binstall --help >/dev/null
 "./$1" binstall --log-level debug --manifest-path . --no-confirm cargo-binstall
 # Test that the installed binaries can be run
 cargo binstall --help >/dev/null
+
+# Install binaries using https-only-mode and specify min tls ver
+"./$1" binstall \
+    --log-level debug \
+    --https-only-mode \
+    --min-tls-version tls1-3 \
+    --no-confirm \
+    cargo-binstall
+# Test that the installed binaries can be run
+cargo binstall --help >/dev/null
