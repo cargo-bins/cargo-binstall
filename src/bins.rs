@@ -109,12 +109,9 @@ impl BinFile {
     }
 
     fn link_dest(&self) -> &Path {
-        #[cfg(target_family = "unix")]
-        {
+        if cfg!(target_family = "unix") {
             Path::new(self.dest.file_name().unwrap())
-        }
-        #[cfg(target_family = "windows")]
-        {
+        } else {
             &self.dest
         }
     }
