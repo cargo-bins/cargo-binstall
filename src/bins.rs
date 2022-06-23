@@ -4,7 +4,7 @@ use cargo_toml::Product;
 use log::debug;
 use serde::Serialize;
 
-use crate::{atomic_install, BinstallError, PkgFmt, PkgMeta, Template};
+use crate::{atomic_install, atomic_symlink_file, BinstallError, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: String,
@@ -103,10 +103,7 @@ impl BinFile {
             self.link.display(),
             dest.display()
         );
-        #[cfg(target_family = "unix")]
-        std::os::unix::fs::symlink(dest, &self.link)?;
-        #[cfg(target_family = "windows")]
-        std::os::windows::fs::symlink_file(dest, &self.link)?;
+        atomic_symlink_file(dest, &self.link)?;
 
         Ok(())
     }
