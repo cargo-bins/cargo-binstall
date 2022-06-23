@@ -84,7 +84,10 @@ struct Options {
     #[clap(long)]
     no_cleanup: bool,
 
-    /// Enable https only mode
+    /// Enable https only mode.
+    ///
+    /// When https only mode is enabled, it will also set
+    /// minimum TLS version to tls1_2.
     #[clap(long)]
     https_only_mode: bool,
 
