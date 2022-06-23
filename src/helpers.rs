@@ -233,6 +233,40 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
+fn symlink_file<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> io::Result<()> {
+    #[cfg(target_family = "unix")]
+    let f = std::os::unix::fs::symlink;
+    #[cfg(target_family = "windows")]
+    let f = std::os::windows::fs::symlink_file;
+
+    f(original, link)
+}
+
+/// Atomically install symlink "link" to a file "dst".
+///
+/// This is a blocking function, must be called in `block_in_place` mode.
+pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
+    let parent = link.parent().unwrap();
+
+    debug!("Creating tempPath at '{}'", parent.display());
+    let temp_path = NamedTempFile::new_in(parent)?.into_temp_path();
+    fs::remove_file(&temp_path)?;
+
+    debug!(
+        "Creating symlink '{}' to file '{}'",
+        temp_path.display(),
+        dest.display()
+    );
+    symlink_file(dest, &temp_path)?;
+
+    debug!(
+        "Persisting '{}' to '{}'",
+        temp_path.display(),
+        link.display()
+    );
+    temp_path.persist(link).map_err(io::Error::from)
+}
+
 pub trait Template: Serialize {
     fn render(&self, template: &str) -> Result<String, BinstallError>
     where
