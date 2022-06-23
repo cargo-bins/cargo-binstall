@@ -1,4 +1,6 @@
 use std::fmt::Debug;
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
@@ -8,6 +10,7 @@ use log::debug;
 use once_cell::sync::OnceCell;
 use reqwest::{Client, ClientBuilder, Method, Response};
 use serde::Serialize;
+use tempfile::NamedTempFile;
 use tinytemplate::TinyTemplate;
 use url::Url;
 
@@ -177,6 +180,48 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
     }
 
     dir
+}
+
+/// Atomically install a file.
+///
+/// This is a blocking function, must be called in `block_in_place` mode.
+pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
+    debug!(
+        "Attempting to atomically rename from '{}' to '{}'",
+        src.display(),
+        dst.display()
+    );
+
+    if fs::rename(src, dst).is_err() {
+        debug!("Attempting at atomically failed, fallback to creating tempfile.");
+        // src and dst is not on the same filesystem/mountpoint.
+        // Fallback to creating NamedTempFile on the parent dir of
+        // dst.
+
+        let mut src_file = fs::File::open(src)?;
+
+        let parent = dst.parent().unwrap();
+        debug!("Creating named tempfile at '{}'", parent.display());
+        let mut tempfile = NamedTempFile::new_in(parent)?;
+
+        debug!(
+            "Copying from '{}' to '{}'",
+            src.display(),
+            tempfile.path().display()
+        );
+        io::copy(&mut src_file, tempfile.as_file_mut())?;
+
+        debug!(
+            "Persisting '{}' to '{}'",
+            tempfile.path().display(),
+            dst.display()
+        );
+        tempfile.persist(dst).map_err(io::Error::from)?;
+    } else {
+        debug!("Attempting at atomically succeeded.");
+    }
+
+    Ok(())
 }
 
 pub trait Template: Serialize {
