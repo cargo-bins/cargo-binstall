@@ -211,6 +211,15 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
         );
         io::copy(&mut src_file, tempfile.as_file_mut())?;
 
+        debug!("Retrieving permissions of '{}'", src.display());
+        let permissions = src_file.metadata()?.permissions();
+
+        debug!(
+            "Setting permissions of '{}' to '{permissions:#?}'",
+            tempfile.path().display()
+        );
+        tempfile.as_file().set_permissions(permissions)?;
+
         debug!(
             "Persisting '{}' to '{}'",
             tempfile.path().display(),
