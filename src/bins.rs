@@ -86,13 +86,6 @@ impl BinFile {
         );
         atomic_install(&self.source, &self.dest)?;
 
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            debug!("Set permissions 755 on '{}'", self.dest.display());
-            std::fs::set_permissions(&self.dest, std::fs::Permissions::from_mode(0o755))?;
-        }
-
         Ok(())
     }
 
