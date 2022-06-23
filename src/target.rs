@@ -141,17 +141,20 @@ mod linux {
 
 #[cfg(target_os = "macos")]
 mod macos {
+    use super::TARGET;
     use guess_host_triple::guess_host_triple;
 
     pub(super) const AARCH64: &str = "aarch64-apple-darwin";
     pub(super) const X86: &str = "x86_64-apple-darwin";
 
     pub(super) fn detect_targets_macos() -> Vec<String> {
-        if guess_host_triple() == Some(AARCH64) {
-            vec![AARCH64.into(), X86.into()]
-        } else {
-            vec![X86.into()]
+        let mut targets = vec![guess_host_triple().unwrap_or(TARGET).to_string()];
+
+        if targets[0] == AARCH64 {
+            targets.push(X86.into());
         }
+
+        targets
     }
 }
 
