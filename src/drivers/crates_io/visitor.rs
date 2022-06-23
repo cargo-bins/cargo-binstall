@@ -29,23 +29,11 @@ impl ManifestVisitor {
             vfs: Vfs::new(),
         }
     }
-
-    /// Load binstall metadata using the extracted information stored in memory.
-    pub(super) fn load_manifest(&self) -> Result<Manifest<Meta>, BinstallError> {
-        debug!("Loading manifest directly from extracted file");
-
-        // Load and parse manifest
-        let mut manifest = Manifest::<Meta>::from_slice_with_metadata(&self.cargo_toml_content)?;
-
-        // Checks vfs for binary output names
-        manifest.complete_from_abstract_filesystem(&self.vfs)?;
-
-        // Return metadata
-        Ok(manifest)
-    }
 }
 
 impl TarEntriesVisitor for ManifestVisitor {
+    type Target = Manifest<Meta>;
+
     fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
         for res in entries {
             let mut entry = res?;
@@ -77,5 +65,19 @@ impl TarEntriesVisitor for ManifestVisitor {
         }
 
         Ok(())
+    }
+
+    /// Load binstall metadata using the extracted information stored in memory.
+    fn finish(self) -> Result<Self::Target, BinstallError> {
+        debug!("Loading manifest directly from extracted file");
+
+        // Load and parse manifest
+        let mut manifest = Manifest::from_slice_with_metadata(&self.cargo_toml_content)?;
+
+        // Checks vfs for binary output names
+        manifest.complete_from_abstract_filesystem(&self.vfs)?;
+
+        // Return metadata
+        Ok(manifest)
     }
 }

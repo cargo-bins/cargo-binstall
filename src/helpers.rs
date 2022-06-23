@@ -130,16 +130,16 @@ pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 
     url: Url,
     fmt: TarBasedFmt,
     visitor: V,
-) -> Result<V, BinstallError> {
+) -> Result<V::Target, BinstallError> {
     let stream = create_request(url).await?;
 
     debug!("Downloading and extracting then in-memory processing");
 
-    let visitor = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
+    let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
     debug!("Download, extraction and in-memory procession OK");
 
-    Ok(visitor)
+    Ok(ret)
 }
 
 /// Fetch install path from environment
