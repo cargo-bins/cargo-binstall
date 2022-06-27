@@ -88,15 +88,22 @@ struct Options {
     #[clap(long)]
     no_cleanup: bool,
 
-    /// Enable https only mode.
+    /// Enforce downloads over secure transports only.
     ///
-    /// When https only mode is enabled, it will also set
-    /// minimum TLS version to tls1_2.
+    /// Insecure HTTP downloads will be removed completely in the future; in the meantime this
+    /// option forces a fail when the remote endpoint uses plaintext HTTP or insecure TLS suites.
+    ///
+    /// Without this option, plain HTTP will warn.
+    ///
+    /// Implies `--min-tls-version=1.2`.
     #[clap(long)]
-    https_only_mode: bool,
+    secure: bool,
 
-    /// Decide which TLS version to use.
-    #[clap(long, arg_enum)]
+    /// Require a minimum TLS version from remote endpoints.
+    ///
+    /// The default is not to require any minimum TLS version, and use the negotiated highest
+    /// version available to both this client and the remote server.
+    #[clap(long, arg_enum, value_name = "VERSION")]
     min_tls_version: Option<TLSVersion>,
 
     /// Override manifest source.
@@ -194,7 +201,7 @@ async fn entry() -> Result<()> {
 
     // Initialize REQWESTGLOBALCONFIG
     REQWESTGLOBALCONFIG
-        .set((opts.https_only_mode, opts.min_tls_version))
+        .set(ReqwestConfig { secure: opts.secure, min_tls: opts.min_tls_version.map(|v| v.into()) })
         .unwrap();
 
     // Setup logging
