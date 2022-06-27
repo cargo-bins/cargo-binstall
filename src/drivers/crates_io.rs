@@ -71,6 +71,5 @@ pub async fn fetch_crate_cratesio(
         TarBasedFmt::Tgz,
         ManifestVisitor::new(manifest_dir_path),
     )
-    .await?
-    .load_manifest()
+    .await
 }

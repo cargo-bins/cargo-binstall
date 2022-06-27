@@ -12,7 +12,11 @@ use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tempfile::TempDir;
-use tokio::{process::Command, runtime::Runtime, task::JoinError};
+use tokio::{
+    process::Command,
+    runtime::Runtime,
+    task::{block_in_place, JoinError},
+};
 
 use cargo_binstall::{
     bins,
@@ -441,26 +445,28 @@ async fn install_from_package(
     uithread.confirm().await?;
 
     info!("Installing binaries...");
-    for file in &bin_files {
-        file.install_bin()?;
-    }
-
-    // Generate symlinks
-    if !opts.no_symlinks {
+    block_in_place(|| {
         for file in &bin_files {
-            file.install_link()?;
+            file.install_bin()?;
         }
-    }
 
-    if opts.no_cleanup {
-        let _ = temp_dir.into_path();
-    } else {
-        temp_dir.close().unwrap_or_else(|err| {
-            warn!("Failed to clean up some resources: {err}");
-        });
-    }
+        // Generate symlinks
+        if !opts.no_symlinks {
+            for file in &bin_files {
+                file.install_link()?;
+            }
+        }
 
-    Ok(())
+        if opts.no_cleanup {
+            let _ = temp_dir.into_path();
+        } else {
+            temp_dir.close().unwrap_or_else(|err| {
+                warn!("Failed to clean up some resources: {err}");
+            });
+        }
+
+        Ok(())
+    })
 }
 
 async fn install_from_source(

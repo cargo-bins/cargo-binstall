@@ -9,6 +9,7 @@ use once_cell::sync::OnceCell;
 use reqwest::{Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
+use tokio::task::block_in_place;
 use url::Url;
 
 use crate::{BinstallError, Meta, PkgFmt, PkgFmtDecomposed, TarBasedFmt};
@@ -38,13 +39,15 @@ pub static REQWESTGLOBALCONFIG: OnceCell<(bool, Option<TLSVersion>)> = OnceCell:
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
 ) -> Result<Manifest<Meta>, BinstallError> {
-    debug!("Reading manifest: {}", manifest_path.as_ref().display());
+    block_in_place(|| {
+        debug!("Reading manifest: {}", manifest_path.as_ref().display());
 
-    // Load and parse manifest (this checks file system for binary output names)
-    let manifest = Manifest::<Meta>::from_path_with_metadata(manifest_path)?;
+        // Load and parse manifest (this checks file system for binary output names)
+        let manifest = Manifest::<Meta>::from_path_with_metadata(manifest_path)?;
 
-    // Return metadata
-    Ok(manifest)
+        // Return metadata
+        Ok(manifest)
+    })
 }
 
 pub fn new_reqwest_client_builder() -> ClientBuilder {
@@ -127,16 +130,16 @@ pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 
     url: Url,
     fmt: TarBasedFmt,
     visitor: V,
-) -> Result<V, BinstallError> {
+) -> Result<V::Target, BinstallError> {
     let stream = create_request(url).await?;
 
     debug!("Downloading and extracting then in-memory processing");
 
-    let visitor = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
+    let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
     debug!("Download, extraction and in-memory procession OK");
 
-    Ok(visitor)
+    Ok(ret)
 }
 
 /// Fetch install path from environment

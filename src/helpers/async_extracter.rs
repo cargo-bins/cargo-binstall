@@ -99,20 +99,17 @@ where
 /// Visitor must iterate over all entries.
 /// Entires can be in arbitary order.
 pub trait TarEntriesVisitor {
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
-}
+    type Target;
 
-impl<V: TarEntriesVisitor> TarEntriesVisitor for &mut V {
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
-        (*self).visit(entries)
-    }
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
+    fn finish(self) -> Result<Self::Target, BinstallError>;
 }
 
 pub async fn extract_tar_based_stream_and_visit<S, V, E>(
     stream: S,
     fmt: TarBasedFmt,
     mut visitor: V,
-) -> Result<V, BinstallError>
+) -> Result<V::Target, BinstallError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     V: TarEntriesVisitor + Debug + Send + 'static,
@@ -124,6 +121,6 @@ where
 
         let mut tar = create_tar_decoder(reader, fmt)?;
         visitor.visit(tar.entries()?)?;
-        Ok(visitor)
+        visitor.finish()
     })
 }
