@@ -17,8 +17,8 @@ pub mod fetchers;
 mod target;
 pub use target::*;
 
-mod format;
-pub use format::*;
+mod formats;
+pub use formats::*;
 
 /// Default package path template (may be overridden in package Cargo.toml)
 pub const DEFAULT_PKG_URL: &str =
