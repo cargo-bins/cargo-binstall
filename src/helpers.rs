@@ -80,12 +80,12 @@ pub fn initialize_reqwest_client(
     Ok(())
 }
 
-pub fn new_reqwest_client() -> &'static Client {
+pub fn get_reqwest_client() -> &'static Client {
     CLIENT.get().expect("Reqwest client is not initialized")
 }
 
 pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallError> {
-    let req = new_reqwest_client()
+    let req = get_reqwest_client()
         .request(method.clone(), url.clone())
         .send()
         .await
@@ -98,7 +98,7 @@ async fn create_request(
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    new_reqwest_client()
+    get_reqwest_client()
         .get(url.clone())
         .send()
         .await
