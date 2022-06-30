@@ -59,8 +59,10 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     })
 }
 
-pub fn new_reqwest_client_builder() -> ClientBuilder {
-    let mut builder = ClientBuilder::new();
+fn new_reqwest_client_builder() -> ClientBuilder {
+    const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
+    let mut builder = ClientBuilder::new().user_agent(USER_AGENT);
 
     if let Some(ReqwestConfig { secure, min_tls }) = REQWESTGLOBALCONFIG.get() {
         if *secure {
@@ -77,8 +79,9 @@ pub fn new_reqwest_client_builder() -> ClientBuilder {
     builder
 }
 
-pub fn new_reqwest_client() -> reqwest::Result<Client> {
-    new_reqwest_client_builder().build()
+pub fn new_reqwest_client() -> reqwest::Result<&'static Client> {
+    static CLIENT: OnceCell<Client> = OnceCell::new();
+    CLIENT.get_or_try_init(|| new_reqwest_client_builder().build())
 }
 
 pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallError> {
