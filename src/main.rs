@@ -200,13 +200,8 @@ async fn entry() -> Result<()> {
         bin_dir: opts.bin_dir.take(),
     };
 
-    // Initialize REQWESTGLOBALCONFIG
-    REQWESTGLOBALCONFIG
-        .set(ReqwestConfig {
-            secure: opts.secure,
-            min_tls: opts.min_tls_version.map(|v| v.into()),
-        })
-        .unwrap();
+    // Initialize reqwest client
+    initialize_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();

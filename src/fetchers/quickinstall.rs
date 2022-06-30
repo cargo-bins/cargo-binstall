@@ -88,7 +88,7 @@ impl QuickInstall {
             let url = Url::parse(&stats_url)?;
             debug!("Sending installation report to quickinstall ({url})");
 
-            new_reqwest_client()?
+            new_reqwest_client()
                 .request(Method::HEAD, url.clone())
                 .send()
                 .await

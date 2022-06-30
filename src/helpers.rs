@@ -35,15 +35,6 @@ pub use path_ext::*;
 mod tls_version;
 pub use tls_version::TLSVersion;
 
-#[derive(Debug)]
-pub struct ReqwestConfig {
-    pub secure: bool,
-    pub min_tls: Option<tls::Version>,
-}
-
-/// (secure mode, min TLS version)
-pub static REQWESTGLOBALCONFIG: OnceCell<ReqwestConfig> = OnceCell::new();
-
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
@@ -59,33 +50,42 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     })
 }
 
-fn new_reqwest_client_builder() -> ClientBuilder {
+static CLIENT: OnceCell<Client> = OnceCell::new();
+
+/// Should only be called once in main::entry.
+pub fn initialize_reqwest_client(
+    secure: bool,
+    min_tls: Option<tls::Version>,
+) -> Result<(), BinstallError> {
     const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
     let mut builder = ClientBuilder::new().user_agent(USER_AGENT);
 
-    if let Some(ReqwestConfig { secure, min_tls }) = REQWESTGLOBALCONFIG.get() {
-        if *secure {
-            builder = builder
-                .https_only(true)
-                .min_tls_version(tls::Version::TLS_1_2)
-        }
-
-        if let Some(ver) = *min_tls {
-            builder = builder.min_tls_version(ver);
-        }
+    if secure {
+        builder = builder
+            .https_only(true)
+            .min_tls_version(tls::Version::TLS_1_2);
     }
 
-    builder
+    if let Some(ver) = min_tls {
+        builder = builder.min_tls_version(ver);
+    }
+
+    let client = builder.build()?;
+
+    CLIENT
+        .set(client)
+        .expect("Reqwest client already initialized");
+
+    Ok(())
 }
 
-pub fn new_reqwest_client() -> reqwest::Result<&'static Client> {
-    static CLIENT: OnceCell<Client> = OnceCell::new();
-    CLIENT.get_or_try_init(|| new_reqwest_client_builder().build())
+pub fn new_reqwest_client() -> &'static Client {
+    CLIENT.get().expect("Reqwest client is not initialized")
 }
 
 pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallError> {
-    let req = new_reqwest_client()?
+    let req = new_reqwest_client()
         .request(method.clone(), url.clone())
         .send()
         .await
@@ -98,7 +98,7 @@ async fn create_request(
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    new_reqwest_client()?
+    new_reqwest_client()
         .get(url.clone())
         .send()
         .await
