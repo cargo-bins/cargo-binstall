@@ -229,7 +229,7 @@ mod windows {
     pub(super) fn detect_targets_windows() -> Vec<String> {
         let mut targets = vec![guess_host_triple().unwrap_or(TARGET).to_string()];
 
-        targets.extend(windows::detect_alternative_targets(&targets[0]));
+        targets.extend(detect_alternative_targets(&targets[0]));
 
         targets
     }
