@@ -220,9 +220,10 @@ mod windows {
     use guess_host_triple::guess_host_triple;
 
     pub(super) fn detect_alternative_targets(target: &str) -> Option<String> {
-        target
-            .contains("gnu")
-            .then(|| target.replace("gnu", "msvc"))
+        let (prefix, abi) = target.rsplit_once('-').expect("Invalid target triple");
+
+        // detect abi in ["gnu", "gnullvm", ...]
+        (abi != "msvc").then(|| format!("{prefix}-msvc"))
     }
 
     pub(super) fn detect_targets_windows() -> Vec<String> {
