@@ -91,9 +91,7 @@ pub async fn detect_targets() -> Vec<String> {
         }
 
         #[cfg(target_os = "windows")]
-        if v[0].contains("gnu") {
-            v.push(v[0].replace("gnu", "msvc"));
-        }
+        v.extend(windows::detect_alternative_targets(&v[0]));
 
         v
     } else {
@@ -221,12 +219,16 @@ mod windows {
     use super::TARGET;
     use guess_host_triple::guess_host_triple;
 
+    pub(super) fn detect_alternative_targets(target: &str) -> Option<String> {
+        target
+            .contains("gnu")
+            .then(|| target.replace("gnu", "msvc"))
+    }
+
     pub(super) fn detect_targets_windows() -> Vec<String> {
         let mut targets = vec![guess_host_triple().unwrap_or(TARGET).to_string()];
 
-        if targets[0].contains("gnu") {
-            targets.push(targets[0].replace("gnu", "msvc"));
-        }
+        targets.extend(windows::detect_alternative_targets(&targets[0]));
 
         targets
     }
