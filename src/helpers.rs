@@ -6,7 +6,7 @@ use cargo_toml::Manifest;
 use futures_util::stream::Stream;
 use log::debug;
 use once_cell::sync::OnceCell;
-use reqwest::{Client, ClientBuilder, Method, Response, tls};
+use reqwest::{tls, Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 use tokio::task::block_in_place;

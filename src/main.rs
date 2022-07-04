@@ -201,7 +201,10 @@ async fn entry() -> Result<()> {
 
     // Initialize REQWESTGLOBALCONFIG
     REQWESTGLOBALCONFIG
-        .set(ReqwestConfig { secure: opts.secure, min_tls: opts.min_tls_version.map(|v| v.into()) })
+        .set(ReqwestConfig {
+            secure: opts.secure,
+            min_tls: opts.min_tls_version.map(|v| v.into()),
+        })
         .unwrap();
 
     // Setup logging
@@ -450,6 +453,21 @@ async fn install_from_package(
     }
 
     uithread.confirm().await?;
+
+    debug!("Writing .crates.toml");
+    if let Ok(mut ctoml) = metafiles::CratesToml::load().await {
+        ctoml.insert(
+            metafiles::CrateVersionSource {
+                name: opts.name.into(),
+                version: package.version.parse().into_diagnostic()?,
+                source: metafiles::Source::Registry(
+                    url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
+                ),
+            },
+            bin_files.iter().map(|bin| bin.base_name.clone()),
+        );
+        ctoml.write().await?;
+    }
 
     info!("Installing binaries...");
     block_in_place(|| {
