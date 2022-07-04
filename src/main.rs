@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     ffi::OsString,
     path::PathBuf,
     process::{ExitCode, Termination},
@@ -454,20 +455,13 @@ async fn install_from_package(
 
     uithread.confirm().await?;
 
-    debug!("Writing .crates.toml");
-    if let Ok(mut ctoml) = metafiles::CratesToml::load().await {
-        ctoml.insert(
-            metafiles::CrateVersionSource {
-                name: opts.name.into(),
-                version: package.version.parse().into_diagnostic()?,
-                source: metafiles::Source::Registry(
-                    url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
-                ),
-            },
-            bin_files.iter().map(|bin| bin.base_name.clone()),
-        );
-        ctoml.write().await?;
-    }
+    let cvs = metafiles::CrateVersionSource {
+        name: opts.name,
+        version: package.version.parse().into_diagnostic()?,
+        source: metafiles::Source::Registry(
+            url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
+        ),
+    };
 
     info!("Installing binaries...");
     block_in_place(|| {
@@ -488,6 +482,30 @@ async fn install_from_package(
             temp_dir.close().unwrap_or_else(|err| {
                 warn!("Failed to clean up some resources: {err}");
             });
+        }
+
+        let bins: BTreeSet<String> = bin_files.iter().map(|bin| bin.base_name.clone()).collect();
+
+        debug!("Writing .crates.toml");
+        if let Ok(mut c1) = metafiles::v1::CratesToml::load() {
+            c1.insert(cvs.clone(), bins.clone());
+            c1.write()?;
+        }
+
+        debug!("Writing .crates2.json");
+        if let Ok(mut c2) = metafiles::v2::Crates2Json::load() {
+            c2.insert(
+                cvs.clone(),
+                metafiles::v2::CrateInfo {
+                    version_req: Some(opts.version),
+                    bins,
+                    profile: "release".into(),
+                    target: fetcher.target().to_string(),
+                    rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+                    ..Default::default()
+                },
+            );
+            c2.write()?;
         }
 
         Ok(())
