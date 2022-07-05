@@ -25,6 +25,10 @@ use cargo_binstall::{
     *,
 };
 
+#[cfg(windows)]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(Debug, Parser)]
 #[clap(version, about = "Install a Rust binary... from binaries!")]
 struct Options {
