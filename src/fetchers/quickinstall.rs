@@ -7,13 +7,10 @@ use tokio::task::JoinHandle;
 use url::Url;
 
 use super::Data;
-use crate::{
-    download_and_extract, new_reqwest_client_builder, remote_exists, BinstallError, PkgFmt,
-};
+use crate::{download_and_extract, get_reqwest_client, remote_exists, BinstallError, PkgFmt};
 
 const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
-const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 pub struct QuickInstall {
     package: String,
@@ -91,9 +88,7 @@ impl QuickInstall {
             let url = Url::parse(&stats_url)?;
             debug!("Sending installation report to quickinstall ({url})");
 
-            new_reqwest_client_builder()
-                .user_agent(USER_AGENT)
-                .build()?
+            get_reqwest_client()
                 .request(Method::HEAD, url.clone())
                 .send()
                 .await
