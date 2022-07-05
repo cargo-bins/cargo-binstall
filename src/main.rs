@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     ffi::OsString,
     path::PathBuf,
     process::{ExitCode, Termination},
@@ -201,7 +202,10 @@ async fn entry() -> Result<()> {
 
     // Initialize REQWESTGLOBALCONFIG
     REQWESTGLOBALCONFIG
-        .set(ReqwestConfig { secure: opts.secure, min_tls: opts.min_tls_version.map(|v| v.into()) })
+        .set(ReqwestConfig {
+            secure: opts.secure,
+            min_tls: opts.min_tls_version.map(|v| v.into()),
+        })
         .unwrap();
 
     // Setup logging
@@ -451,6 +455,14 @@ async fn install_from_package(
 
     uithread.confirm().await?;
 
+    let cvs = metafiles::CrateVersionSource {
+        name: opts.name,
+        version: package.version.parse().into_diagnostic()?,
+        source: metafiles::Source::Registry(
+            url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
+        ),
+    };
+
     info!("Installing binaries...");
     block_in_place(|| {
         for file in &bin_files {
@@ -470,6 +482,32 @@ async fn install_from_package(
             temp_dir.close().unwrap_or_else(|err| {
                 warn!("Failed to clean up some resources: {err}");
             });
+        }
+
+        let bins: BTreeSet<String> = bin_files.iter().map(|bin| bin.base_name.clone()).collect();
+
+        {
+            debug!("Writing .crates.toml");
+            let mut c1 = metafiles::v1::CratesToml::load().unwrap_or_default();
+            c1.insert(cvs.clone(), bins.clone());
+            c1.write()?;
+        }
+
+        {
+            debug!("Writing .crates2.json");
+            let mut c2 = metafiles::v2::Crates2Json::load().unwrap_or_default();
+            c2.insert(
+                cvs.clone(),
+                metafiles::v2::CrateInfo {
+                    version_req: Some(opts.version),
+                    bins,
+                    profile: "release".into(),
+                    target: fetcher.target().to_string(),
+                    rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+                    ..Default::default()
+                },
+            );
+            c2.write()?;
         }
 
         Ok(())

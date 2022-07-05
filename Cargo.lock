@@ -143,6 +143,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "guess_host_triple",
+ "home",
  "log",
  "miette",
  "once_cell",
@@ -150,6 +151,7 @@ dependencies = [
  "scopeguard",
  "semver",
  "serde",
+ "serde_json",
  "simplelog",
  "strum",
  "strum_macros",
@@ -158,6 +160,7 @@ dependencies = [
  "thiserror",
  "tinytemplate",
  "tokio",
+ "toml",
  "url",
  "xz2",
  "zip",
@@ -593,6 +596,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "home"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2456aef2e6b6a9784192ae780c0f15bc57df0e918585282325e8c8ac27737654"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -1193,9 +1205,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.81"
+version = "1.0.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b7ce2b32a1aed03c558dc61a5cd328f15aff2dbc17daad8fb8af04d2100e15c"
+checksum = "82c2c1fdcd807d1098552c5b9a36e425e42e9fbd7c6a37a8425f390f781f7fa7"
 dependencies = [
  "itoa",
  "ryu",
