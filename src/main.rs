@@ -486,14 +486,16 @@ async fn install_from_package(
 
         let bins: BTreeSet<String> = bin_files.iter().map(|bin| bin.base_name.clone()).collect();
 
-        debug!("Writing .crates.toml");
-        if let Ok(mut c1) = metafiles::v1::CratesToml::load() {
+        {
+            debug!("Writing .crates.toml");
+            let mut c1 = metafiles::v1::CratesToml::load().unwrap_or_default();
             c1.insert(cvs.clone(), bins.clone());
             c1.write()?;
         }
 
-        debug!("Writing .crates2.json");
-        if let Ok(mut c2) = metafiles::v2::Crates2Json::load() {
+        {
+            debug!("Writing .crates2.json");
+            let mut c2 = metafiles::v2::Crates2Json::load().unwrap_or_default();
             c2.insert(
                 cvs.clone(),
                 metafiles::v2::CrateInfo {
