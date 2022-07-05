@@ -4,7 +4,7 @@ use cargo_toml::Product;
 use log::debug;
 use serde::Serialize;
 
-use crate::{BinstallError, PkgFmt, PkgMeta, Template};
+use crate::{atomic_install, atomic_symlink_file, BinstallError, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: String,
@@ -80,18 +80,11 @@ impl BinFile {
     pub fn install_bin(&self) -> Result<(), BinstallError> {
         // TODO: check if file already exists
         debug!(
-            "Copy file from '{}' to '{}'",
+            "Atomically install file from '{}' to '{}'",
             self.source.display(),
             self.dest.display()
         );
-        std::fs::copy(&self.source, &self.dest)?;
-
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            debug!("Set permissions 755 on '{}'", self.dest.display());
-            std::fs::set_permissions(&self.dest, std::fs::Permissions::from_mode(0o755))?;
-        }
+        atomic_install(&self.source, &self.dest)?;
 
         Ok(())
     }
@@ -110,21 +103,15 @@ impl BinFile {
             self.link.display(),
             dest.display()
         );
-        #[cfg(target_family = "unix")]
-        std::os::unix::fs::symlink(dest, &self.link)?;
-        #[cfg(target_family = "windows")]
-        std::os::windows::fs::symlink_file(dest, &self.link)?;
+        atomic_symlink_file(dest, &self.link)?;
 
         Ok(())
     }
 
     fn link_dest(&self) -> &Path {
-        #[cfg(target_family = "unix")]
-        {
+        if cfg!(target_family = "unix") {
             Path::new(self.dest.file_name().unwrap())
-        }
-        #[cfg(target_family = "windows")]
-        {
+        } else {
             &self.dest
         }
     }
