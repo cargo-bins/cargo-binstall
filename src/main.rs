@@ -25,7 +25,7 @@ use cargo_binstall::{
     *,
 };
 
-#[cfg(all(feature = "mimalloc", any(windows, target_env = "musl")))]
+#[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
