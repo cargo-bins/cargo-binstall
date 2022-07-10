@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use log::{debug, info, warn};
+use reqwest::Client;
 use reqwest::Method;
 use serde::Serialize;
 use url::Url;
@@ -10,6 +11,7 @@ use super::Data;
 use crate::{download_and_extract, remote_exists, BinstallError, PkgFmt, Template};
 
 pub struct GhCrateMeta {
+    client: Client,
     data: Data,
 }
 
@@ -23,8 +25,11 @@ impl GhCrateMeta {
 
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
-    async fn new(data: &Data) -> Arc<Self> {
-        Arc::new(Self { data: data.clone() })
+    async fn new(client: &Client, data: &Data) -> Arc<Self> {
+        Arc::new(Self {
+            client: client.clone(),
+            data: data.clone(),
+        })
     }
 
     async fn check(&self) -> Result<bool, BinstallError> {
@@ -37,13 +42,13 @@ impl super::Fetcher for GhCrateMeta {
         }
 
         info!("Checking for package at: '{url}'");
-        remote_exists(url, Method::HEAD).await
+        remote_exists(&self.client, url, Method::HEAD).await
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.url()?;
         info!("Downloading package from: '{url}'");
-        download_and_extract(url, self.pkg_fmt(), dst).await
+        download_and_extract(&self.client, url, self.pkg_fmt(), dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

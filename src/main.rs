@@ -205,7 +205,7 @@ async fn entry() -> Result<()> {
     };
 
     // Initialize reqwest client
-    initialize_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
+    let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();
@@ -244,7 +244,7 @@ async fn entry() -> Result<()> {
     // TODO: support git-based fetches (whole repo name rather than just crate name)
     let manifest = match opts.manifest_path.clone() {
         Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
-        None => fetch_crate_cratesio(&opts.name, &opts.version).await?,
+        None => fetch_crate_cratesio(&client, &opts.name, &opts.version).await?,
     };
 
     let package = manifest.package.unwrap();
@@ -298,8 +298,8 @@ async fn entry() -> Result<()> {
             meta: target_meta,
         };
 
-        fetchers.add(GhCrateMeta::new(&fetcher_data).await);
-        fetchers.add(QuickInstall::new(&fetcher_data).await);
+        fetchers.add(GhCrateMeta::new(&client, &fetcher_data).await);
+        fetchers.add(QuickInstall::new(&client, &fetcher_data).await);
     }
 
     match fetchers.first_available().await {

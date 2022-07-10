@@ -147,7 +147,6 @@ dependencies = [
  "log",
  "miette",
  "mimalloc",
- "once_cell",
  "reqwest",
  "scopeguard",
  "semver",
