@@ -2,28 +2,31 @@ use std::path::Path;
 use std::sync::Arc;
 
 use log::{debug, info};
+use reqwest::Client;
 use reqwest::Method;
 use tokio::task::JoinHandle;
 use url::Url;
 
 use super::Data;
-use crate::{download_and_extract, get_reqwest_client, remote_exists, BinstallError, PkgFmt};
+use crate::{download_and_extract, remote_exists, BinstallError, PkgFmt};
 
 const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 
 pub struct QuickInstall {
+    client: Client,
     package: String,
     target: String,
 }
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    async fn new(data: &Data) -> Arc<Self> {
+    async fn new(client: &Client, data: &Data) -> Arc<Self> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = data.target.clone();
         Arc::new(Self {
+            client: client.clone(),
             package: format!("{crate_name}-{version}-{target}"),
             target,
         })
@@ -33,13 +36,13 @@ impl super::Fetcher for QuickInstall {
         let url = self.package_url();
         self.report();
         info!("Checking for package at: '{url}'");
-        remote_exists(Url::parse(&url)?, Method::HEAD).await
+        remote_exists(&self.client, Url::parse(&url)?, Method::HEAD).await
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
         info!("Downloading package from: '{url}'");
-        download_and_extract(Url::parse(&url)?, self.pkg_fmt(), dst).await
+        download_and_extract(&self.client, Url::parse(&url)?, self.pkg_fmt(), dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
@@ -78,6 +81,7 @@ impl QuickInstall {
 
     pub fn report(&self) -> JoinHandle<Result<(), BinstallError>> {
         let stats_url = self.stats_url();
+        let client = self.client.clone();
 
         tokio::spawn(async move {
             if cfg!(debug_assertions) {
@@ -88,7 +92,7 @@ impl QuickInstall {
             let url = Url::parse(&stats_url)?;
             debug!("Sending installation report to quickinstall ({url})");
 
-            get_reqwest_client()
+            client
                 .request(Method::HEAD, url.clone())
                 .send()
                 .await

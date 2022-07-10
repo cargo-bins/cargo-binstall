@@ -7,7 +7,6 @@ use bytes::Bytes;
 use cargo_toml::Manifest;
 use futures_util::stream::Stream;
 use log::debug;
-use once_cell::sync::OnceCell;
 use reqwest::{tls, Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tempfile::NamedTempFile;
@@ -50,13 +49,10 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     })
 }
 
-static CLIENT: OnceCell<Client> = OnceCell::new();
-
-/// Should only be called once in main::entry.
-pub fn initialize_reqwest_client(
+pub fn create_reqwest_client(
     secure: bool,
     min_tls: Option<tls::Version>,
-) -> Result<(), BinstallError> {
+) -> Result<Client, BinstallError> {
     const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
     let mut builder = ClientBuilder::new().user_agent(USER_AGENT);
@@ -71,21 +67,15 @@ pub fn initialize_reqwest_client(
         builder = builder.min_tls_version(ver);
     }
 
-    let client = builder.build()?;
-
-    CLIENT
-        .set(client)
-        .expect("Reqwest client already initialized");
-
-    Ok(())
+    Ok(builder.build()?)
 }
 
-pub fn get_reqwest_client() -> &'static Client {
-    CLIENT.get().expect("Reqwest client is not initialized")
-}
-
-pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallError> {
-    let req = get_reqwest_client()
+pub async fn remote_exists(
+    client: &Client,
+    url: Url,
+    method: Method,
+) -> Result<bool, BinstallError> {
+    let req = client
         .request(method.clone(), url.clone())
         .send()
         .await
@@ -94,11 +84,12 @@ pub async fn remote_exists(url: Url, method: Method) -> Result<bool, BinstallErr
 }
 
 async fn create_request(
+    client: &Client,
     url: Url,
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     debug!("Downloading from: '{url}'");
 
-    get_reqwest_client()
+    client
         .get(url.clone())
         .send()
         .await
@@ -113,11 +104,12 @@ async fn create_request(
 
 /// Download a file from the provided URL and extract it to the provided path.
 pub async fn download_and_extract<P: AsRef<Path>>(
+    client: &Client,
     url: Url,
     fmt: PkgFmt,
     path: P,
 ) -> Result<(), BinstallError> {
-    let stream = create_request(url).await?;
+    let stream = create_request(client, url).await?;
 
     let path = path.as_ref();
     debug!("Downloading and extracting to: '{}'", path.display());
@@ -139,11 +131,12 @@ pub async fn download_and_extract<P: AsRef<Path>>(
 ///  * `filter` - If Some, then it will pass the path of the file to it
 ///    and only extract ones which filter returns `true`.
 pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 'static>(
+    client: &Client,
     url: Url,
     fmt: TarBasedFmt,
     visitor: V,
 ) -> Result<V::Target, BinstallError> {
-    let stream = create_request(url).await?;
+    let stream = create_request(client, url).await?;
 
     debug!("Downloading and extracting then in-memory processing");
 

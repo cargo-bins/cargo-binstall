@@ -4,6 +4,7 @@ use std::time::Duration;
 use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
 use log::debug;
+use reqwest::Client;
 use url::Url;
 
 use super::find_version;
@@ -16,6 +17,7 @@ use visitor::ManifestVisitor;
 
 /// Fetch a crate Cargo.toml by name and version from crates.io
 pub async fn fetch_crate_cratesio(
+    client: &Client,
     name: &str,
     version_req: &str,
 ) -> Result<Manifest<Meta>, BinstallError> {
@@ -67,6 +69,7 @@ pub async fn fetch_crate_cratesio(
     let manifest_dir_path: PathBuf = format!("{name}-{version_name}").into();
 
     download_tar_based_and_visit(
+        client,
         Url::parse(&crate_url)?,
         TarBasedFmt::Tgz,
         ManifestVisitor::new(manifest_dir_path),
