@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use cargo_toml::Package;
+use cargo_toml::{Package, Product};
 use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
@@ -311,41 +311,18 @@ async fn entry() -> Result<()> {
             }
             meta.merge(&cli_overrides);
 
-            // Update meta
-            if fetcher.source_name() == "QuickInstall" {
-                // TODO: less of a hack?
-                meta.bin_dir = "{ bin }{ binary-ext }".to_string();
-            }
-
-            // Check binaries
-            if binaries.is_empty() {
-                error!("No binaries specified (or inferred from file system)");
-                return Err(miette!(
-                    "No binaries specified (or inferred from file system)"
-                ));
-            }
-
             // Generate temporary binary path
             let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
             debug!("Using temporary binary path: {}", bin_path.display());
 
-            // List files to be installed
-            // based on those found via Cargo.toml
-            let bin_data = bins::Data {
-                name: package.name.clone(),
-                target: fetcher.target().to_string(),
-                version: package.version.clone(),
-                repo: package.repository.clone(),
+            let bin_files = collect_bin_files(
+                fetcher.as_ref(),
+                &package,
                 meta,
-                bin_path,
+                binaries,
+                bin_path.clone(),
                 install_path,
-            };
-
-            // Create bin_files
-            let bin_files = binaries
-                .iter()
-                .map(|p| bins::BinFile::from_product(&bin_data, p))
-                .collect::<Result<Vec<_>, BinstallError>>()?;
+            )?;
 
             // Prompt user for confirmation
             debug!(
@@ -386,7 +363,7 @@ async fn entry() -> Result<()> {
                 opts,
                 package,
                 temp_dir,
-                &bin_data.bin_path,
+                &bin_path,
                 &bin_files,
             )
             .await
@@ -405,6 +382,49 @@ async fn entry() -> Result<()> {
             install_from_source(opts, package, target, &mut uithread).await
         }
     }
+}
+
+fn collect_bin_files(
+    fetcher: &dyn Fetcher,
+    package: &Package<Meta>,
+    mut meta: PkgMeta,
+    binaries: Vec<Product>,
+    bin_path: PathBuf,
+    install_path: PathBuf,
+) -> Result<Vec<bins::BinFile>> {
+    // Update meta
+    if fetcher.source_name() == "QuickInstall" {
+        // TODO: less of a hack?
+        meta.bin_dir = "{ bin }{ binary-ext }".to_string();
+    }
+
+    // Check binaries
+    if binaries.is_empty() {
+        error!("No binaries specified (or inferred from file system)");
+        return Err(miette!(
+            "No binaries specified (or inferred from file system)"
+        ));
+    }
+
+    // List files to be installed
+    // based on those found via Cargo.toml
+    let bin_data = bins::Data {
+        name: package.name.clone(),
+        target: fetcher.target().to_string(),
+        version: package.version.clone(),
+        repo: package.repository.clone(),
+        meta,
+        bin_path,
+        install_path,
+    };
+
+    // Create bin_files
+    let bin_files = binaries
+        .iter()
+        .map(|p| bins::BinFile::from_product(&bin_data, p))
+        .collect::<Result<Vec<_>, BinstallError>>()?;
+
+    Ok(bin_files)
 }
 
 #[allow(clippy::too_many_arguments)]
