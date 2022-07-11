@@ -379,7 +379,13 @@ async fn entry() -> Result<()> {
                 .first()
                 .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
 
-            install_from_source(opts, package, target, &mut uithread).await
+            // Prompt user for source install
+            warn!("The package will be installed from source (with cargo)",);
+            if !opts.dry_run {
+                uithread.confirm().await?;
+            }
+
+            install_from_source(opts, package, target).await
         }
     }
 }
@@ -530,18 +536,7 @@ async fn install_from_package(
     })
 }
 
-async fn install_from_source(
-    opts: Options,
-    package: Package<Meta>,
-    target: &str,
-    uithread: &mut UIThread,
-) -> Result<()> {
-    // Prompt user for source install
-    warn!("The package will be installed from source (with cargo)",);
-    if !opts.dry_run {
-        uithread.confirm().await?;
-    }
-
+async fn install_from_source(opts: Options, package: Package<Meta>, target: &str) -> Result<()> {
     if opts.dry_run {
         info!(
             "Dry-run: running `cargo install {} --version {} --target {target}`",
