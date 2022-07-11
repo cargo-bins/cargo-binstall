@@ -427,7 +427,6 @@ fn collect_bin_files(
     Ok(bin_files)
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn install_from_package(
     fetcher: &dyn Fetcher,
     opts: Options,
