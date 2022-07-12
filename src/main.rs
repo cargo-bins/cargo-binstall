@@ -36,14 +36,14 @@ struct Options {
     ///
     /// This must be a crates.io package name.
     #[clap(value_name = "crate")]
-    name: String,
+    crate_name: CrateName,
 
     /// Semver filter to select the package version to install.
     ///
     /// This is in Cargo.toml dependencies format: `--version 1.2.3` is equivalent to
     /// `--version "^1.2.3"`. Use `=1.2.3` to install a specific version.
-    #[clap(long, default_value = "*")]
-    version: String,
+    #[clap(long)]
+    version: Option<String>,
 
     /// Override binary target set.
     ///
@@ -237,26 +237,33 @@ async fn entry() -> Result<()> {
         .map_err(BinstallError::from)
         .wrap_err("Creating a temporary directory failed.")?;
 
-    info!("Installing package: '{}'", opts.name);
+    info!("Installing package: '{}'", opts.crate_name);
+
+    let version = match (&opts.crate_name.version, &opts.version) {
+        (Some(version), None) => version.to_string(),
+        (None, Some(version)) => version.to_string(),
+        (Some(_), Some(_)) => Err(BinstallError::DuplicateVersionReq)?,
+        (None, None) => "*".to_string(),
+    };
 
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
     // TODO: support git-based fetches (whole repo name rather than just crate name)
     let manifest = match opts.manifest_path.clone() {
         Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
-        None => fetch_crate_cratesio(&client, &opts.name, &opts.version).await?,
+        None => fetch_crate_cratesio(&client, &opts.crate_name.name, &version).await?,
     };
 
     let package = manifest.package.unwrap();
 
-    let is_plain_version = semver::Version::from_str(&opts.version).is_ok();
-    if is_plain_version && package.version != opts.version {
+    let is_plain_version = semver::Version::from_str(&version).is_ok();
+    if is_plain_version && package.version != version {
         warn!("Warning!");
         eprintln!(
             "{:?}",
             miette::Report::new(BinstallError::VersionWarning {
                 ver: package.version.clone(),
-                req: opts.version.clone()
+                req: version.clone(),
             })
         );
 
@@ -312,7 +319,9 @@ async fn entry() -> Result<()> {
             meta.merge(&cli_overrides);
 
             // Generate temporary binary path
-            let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
+            let bin_path = temp_dir
+                .path()
+                .join(format!("bin-{}", opts.crate_name.name));
             debug!("Using temporary binary path: {}", bin_path.display());
 
             let bin_files = collect_bin_files(
@@ -363,6 +372,7 @@ async fn entry() -> Result<()> {
                 opts,
                 package,
                 temp_dir,
+                version,
                 &bin_path,
                 &bin_files,
             )
@@ -438,6 +448,7 @@ async fn install_from_package(
     opts: Options,
     package: Package<Meta>,
     temp_dir: TempDir,
+    version: String,
     bin_path: &Path,
     bin_files: &[bins::BinFile],
 ) -> Result<()> {
@@ -478,7 +489,7 @@ async fn install_from_package(
     }
 
     let cvs = metafiles::CrateVersionSource {
-        name: opts.name,
+        name: opts.crate_name.name,
         version: package.version.parse().into_diagnostic()?,
         source: metafiles::Source::Registry(
             url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
@@ -521,7 +532,7 @@ async fn install_from_package(
             c2.insert(
                 cvs.clone(),
                 metafiles::v2::CrateInfo {
-                    version_req: Some(opts.version),
+                    version_req: Some(version),
                     bins,
                     profile: "release".into(),
                     target: fetcher.target().to_string(),
