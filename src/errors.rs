@@ -182,6 +182,12 @@ pub enum BinstallError {
         help("You specified `--version {req}` but the package resolved that to '{ver}'.\nUse `--version '={req}'` if you want an exact match.")
     )]
     VersionWarning { ver: String, req: String },
+
+    /// This occurs when you specified `--version` while also using
+    /// form `$crate_name@$ver` tp specify version requirements.
+    #[error("duplicate version requirements")]
+    #[diagnostic(severity(error), code(binstall::version::requirement))]
+    DuplicateVersionReq,
 }
 
 impl BinstallError {
@@ -209,6 +215,7 @@ impl BinstallError {
             VersionMismatch { .. } => 82,
             VersionUnavailable { .. } => 83,
             VersionWarning { .. } => unimplemented!("BUG: warnings do not terminate"),
+            DuplicateVersionReq => 84,
         };
 
         // reserved codes
