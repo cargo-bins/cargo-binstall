@@ -186,7 +186,11 @@ pub enum BinstallError {
     /// This occurs when you specified `--version` while also using
     /// form `$crate_name@$ver` tp specify version requirements.
     #[error("duplicate version requirements")]
-    #[diagnostic(severity(error), code(binstall::version::requirement))]
+    #[diagnostic(
+        severity(error),
+        code(binstall::version::requirement),
+        help("Remove the `--version req` or simply use `$crate_name`")
+    )]
     DuplicateVersionReq,
 }
 
