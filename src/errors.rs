@@ -147,8 +147,7 @@ pub enum BinstallError {
     ///
     /// This may be the case when using the `--version` option.
     ///
-    /// Note that using `--version 1.2.3` is interpreted as the requirement `^1.2.3` as per
-    /// Cargo.toml rules. If you want the exact version 1.2.3, use `--version '=1.2.3'`.
+    /// Note that using `--version 1.2.3` is interpreted as the requirement `=1.2.3`.
     ///
     /// - Code: `binstall::version::mismatch`
     /// - Exit: 82
@@ -167,21 +166,15 @@ pub enum BinstallError {
         v: semver::Version,
     },
 
-    /// Warning: The resolved version may not be what was meant.
-    ///
-    /// This occurs when using the `--version` option with a bare version, like `--version 1.2.3`.
-    /// That is parsed as the semver requirement `^1.2.3`, but the user may have expected that to
-    /// be an exact version (which should be specified with `--version '=1.2.3'`.
-    ///
-    /// - Code: `binstall::version::warning`
-    /// - Exit: none (runtime warning only)
-    #[error("version semantic mismatch: {ver} <> {req}")]
+    /// This occurs when you specified `--version` while also using
+    /// form `$crate_name@$ver` tp specify version requirements.
+    #[error("duplicate version requirements")]
     #[diagnostic(
-        severity(warning),
-        code(binstall::version::warning),
-        help("You specified `--version {req}` but the package resolved that to '{ver}'.\nUse `--version '={req}'` if you want an exact match.")
+        severity(error),
+        code(binstall::version::requirement),
+        help("Remove the `--version req` or simply use `$crate_name`")
     )]
-    VersionWarning { ver: String, req: String },
+    DuplicateVersionReq,
 }
 
 impl BinstallError {
@@ -208,7 +201,7 @@ impl BinstallError {
             VersionReq { .. } => 81,
             VersionMismatch { .. } => 82,
             VersionUnavailable { .. } => 83,
-            VersionWarning { .. } => unimplemented!("BUG: warnings do not terminate"),
+            DuplicateVersionReq => 84,
         };
 
         // reserved codes
