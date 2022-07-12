@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeSet,
     ffi::OsString,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{ExitCode, Termination},
     str::FromStr,
     time::{Duration, Instant},
@@ -311,20 +311,60 @@ async fn entry() -> Result<()> {
             }
             meta.merge(&cli_overrides);
 
+            // Generate temporary binary path
+            let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
+            debug!("Using temporary binary path: {}", bin_path.display());
+
+            let bin_files = collect_bin_files(
+                fetcher.as_ref(),
+                &package,
+                meta,
+                binaries,
+                bin_path.clone(),
+                install_path,
+            )?;
+
+            // Prompt user for confirmation
             debug!(
                 "Found a binary install source: {} ({fetcher_target})",
                 fetcher.source_name()
             );
 
+            if fetcher.is_third_party() {
+                warn!(
+                    "The package will be downloaded from third-party source {}",
+                    fetcher.source_name()
+                );
+            } else {
+                info!(
+                    "The package will be downloaded from {}",
+                    fetcher.source_name()
+                );
+            }
+
+            info!("This will install the following binaries:");
+            for file in &bin_files {
+                info!("  - {}", file.preview_bin());
+            }
+
+            if !opts.no_symlinks {
+                info!("And create (or update) the following symlinks:");
+                for file in &bin_files {
+                    info!("  - {}", file.preview_link());
+                }
+            }
+
+            if !opts.dry_run {
+                uithread.confirm().await?;
+            }
+
             install_from_package(
-                binaries,
                 fetcher.as_ref(),
-                install_path,
-                meta,
                 opts,
                 package,
                 temp_dir,
-                &mut uithread,
+                &bin_path,
+                &bin_files,
             )
             .await
         }
@@ -339,58 +379,73 @@ async fn entry() -> Result<()> {
                 .first()
                 .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
 
-            install_from_source(opts, package, target, &mut uithread).await
+            // Prompt user for source install
+            warn!("The package will be installed from source (with cargo)",);
+            if !opts.dry_run {
+                uithread.confirm().await?;
+            }
+
+            install_from_source(opts, package, target).await
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn install_from_package(
-    binaries: Vec<Product>,
+fn collect_bin_files(
     fetcher: &dyn Fetcher,
-    install_path: PathBuf,
+    package: &Package<Meta>,
     mut meta: PkgMeta,
-    opts: Options,
-    package: Package<Meta>,
-    temp_dir: TempDir,
-    uithread: &mut UIThread,
-) -> Result<()> {
-    // Prompt user for third-party source
-    if fetcher.is_third_party() {
-        warn!(
-            "The package will be downloaded from third-party source {}",
-            fetcher.source_name()
-        );
-        if !opts.dry_run {
-            uithread.confirm().await?;
-        }
-    } else {
-        info!(
-            "The package will be downloaded from {}",
-            fetcher.source_name()
-        );
-    }
-
+    binaries: Vec<Product>,
+    bin_path: PathBuf,
+    install_path: PathBuf,
+) -> Result<Vec<bins::BinFile>> {
+    // Update meta
     if fetcher.source_name() == "QuickInstall" {
         // TODO: less of a hack?
         meta.bin_dir = "{ bin }{ binary-ext }".to_string();
     }
 
-    let bin_path = temp_dir.path().join(format!("bin-{}", opts.name));
-    debug!("Using temporary binary path: {}", bin_path.display());
+    // Check binaries
+    if binaries.is_empty() {
+        error!("No binaries specified (or inferred from file system)");
+        return Err(miette!(
+            "No binaries specified (or inferred from file system)"
+        ));
+    }
 
+    // List files to be installed
+    // based on those found via Cargo.toml
+    let bin_data = bins::Data {
+        name: package.name.clone(),
+        target: fetcher.target().to_string(),
+        version: package.version.clone(),
+        repo: package.repository.clone(),
+        meta,
+        bin_path,
+        install_path,
+    };
+
+    // Create bin_files
+    let bin_files = binaries
+        .iter()
+        .map(|p| bins::BinFile::from_product(&bin_data, p))
+        .collect::<Result<Vec<_>, BinstallError>>()?;
+
+    Ok(bin_files)
+}
+
+async fn install_from_package(
+    fetcher: &dyn Fetcher,
+    opts: Options,
+    package: Package<Meta>,
+    temp_dir: TempDir,
+    bin_path: &Path,
+    bin_files: &[bins::BinFile],
+) -> Result<()> {
     // Download package
     if opts.dry_run {
         info!("Dry run, not downloading package");
     } else {
-        fetcher.fetch_and_extract(&bin_path).await?;
-
-        if binaries.is_empty() {
-            error!("No binaries specified (or inferred from file system)");
-            return Err(miette!(
-                "No binaries specified (or inferred from file system)"
-            ));
-        }
+        fetcher.fetch_and_extract(bin_path).await?;
     }
 
     #[cfg(incomplete)]
@@ -417,42 +472,10 @@ async fn install_from_package(
         }
     }
 
-    // List files to be installed
-    // based on those found via Cargo.toml
-    let bin_data = bins::Data {
-        name: package.name.clone(),
-        target: fetcher.target().to_string(),
-        version: package.version.clone(),
-        repo: package.repository.clone(),
-        meta,
-        bin_path,
-        install_path,
-    };
-
-    let bin_files = binaries
-        .iter()
-        .map(|p| bins::BinFile::from_product(&bin_data, p))
-        .collect::<Result<Vec<_>, BinstallError>>()?;
-
-    // Prompt user for confirmation
-    info!("This will install the following binaries:");
-    for file in &bin_files {
-        info!("  - {}", file.preview_bin());
-    }
-
-    if !opts.no_symlinks {
-        info!("And create (or update) the following symlinks:");
-        for file in &bin_files {
-            info!("  - {}", file.preview_link());
-        }
-    }
-
     if opts.dry_run {
         info!("Dry run, not proceeding");
         return Ok(());
     }
-
-    uithread.confirm().await?;
 
     let cvs = metafiles::CrateVersionSource {
         name: opts.name,
@@ -464,13 +487,13 @@ async fn install_from_package(
 
     info!("Installing binaries...");
     block_in_place(|| {
-        for file in &bin_files {
+        for file in bin_files {
             file.install_bin()?;
         }
 
         // Generate symlinks
         if !opts.no_symlinks {
-            for file in &bin_files {
+            for file in bin_files {
                 file.install_link()?;
             }
         }
@@ -513,18 +536,7 @@ async fn install_from_package(
     })
 }
 
-async fn install_from_source(
-    opts: Options,
-    package: Package<Meta>,
-    target: &str,
-    uithread: &mut UIThread,
-) -> Result<()> {
-    // Prompt user for source install
-    warn!("The package will be installed from source (with cargo)",);
-    if !opts.dry_run {
-        uithread.confirm().await?;
-    }
-
+async fn install_from_source(opts: Options, package: Package<Meta>, target: &str) -> Result<()> {
     if opts.dry_run {
         info!(
             "Dry-run: running `cargo install {} --version {} --target {target}`",
