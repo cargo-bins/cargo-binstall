@@ -34,6 +34,9 @@ pub use path_ext::*;
 mod tls_version;
 pub use tls_version::TLSVersion;
 
+mod crate_name;
+pub use crate_name::CrateName;
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
