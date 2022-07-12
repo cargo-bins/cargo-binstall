@@ -3,7 +3,6 @@ use std::{
     ffi::OsString,
     path::{Path, PathBuf},
     process::{ExitCode, Termination},
-    str::FromStr,
     time::{Duration, Instant},
 };
 
@@ -239,12 +238,21 @@ async fn entry() -> Result<()> {
 
     info!("Installing package: '{}'", opts.crate_name);
 
-    let version = match (&opts.crate_name.version, &opts.version) {
+    let mut version = match (&opts.crate_name.version, &opts.version) {
         (Some(version), None) => version.to_string(),
         (None, Some(version)) => version.to_string(),
         (Some(_), Some(_)) => Err(BinstallError::DuplicateVersionReq)?,
         (None, None) => "*".to_string(),
     };
+
+    if version
+        .chars()
+        .next()
+        .map(|ch| ch.is_ascii_digit())
+        .unwrap_or(false)
+    {
+        version.insert(0, '=');
+    }
 
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
@@ -255,22 +263,6 @@ async fn entry() -> Result<()> {
     };
 
     let package = manifest.package.unwrap();
-
-    let is_plain_version = semver::Version::from_str(&version).is_ok();
-    if is_plain_version && package.version != version {
-        warn!("Warning!");
-        eprintln!(
-            "{:?}",
-            miette::Report::new(BinstallError::VersionWarning {
-                ver: package.version.clone(),
-                req: version.clone(),
-            })
-        );
-
-        if !opts.dry_run {
-            uithread.confirm().await?;
-        }
-    }
 
     let (mut meta, binaries) = (
         package

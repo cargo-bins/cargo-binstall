@@ -147,8 +147,7 @@ pub enum BinstallError {
     ///
     /// This may be the case when using the `--version` option.
     ///
-    /// Note that using `--version 1.2.3` is interpreted as the requirement `^1.2.3` as per
-    /// Cargo.toml rules. If you want the exact version 1.2.3, use `--version '=1.2.3'`.
+    /// Note that using `--version 1.2.3` is interpreted as the requirement `=1.2.3`.
     ///
     /// - Code: `binstall::version::mismatch`
     /// - Exit: 82
