@@ -88,9 +88,18 @@ jobs:
 
     - name: Build release
       uses: actions-rs/cargo@v1
+      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
       with:
         command: build
         args: --target ${{ matrix.target }} --release
+        use-cross: ${{ matrix.use-cross }}
+
+    - name: Build debug
+      uses: actions-rs/cargo@v1
+      if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
+      with:
+        command: build
+        args: --target ${{ matrix.target }}
         use-cross: ${{ matrix.use-cross }}
 
     - name: Copy and rename utility
