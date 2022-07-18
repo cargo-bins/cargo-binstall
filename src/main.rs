@@ -225,8 +225,10 @@ async fn entry() -> Result<()> {
     )
     .unwrap();
 
+    // Initialize UI thread
     let mut uithread = UIThread::new(!opts.no_confirm);
 
+    // Launch target detection
     let desired_targets = get_desired_targets(&opts.targets);
 
     // Compute install directory
@@ -245,6 +247,7 @@ async fn entry() -> Result<()> {
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
+    // Resolve crates
     let tasks: Vec<_> = crate_names
         .into_iter()
         .map(|crate_name| {
@@ -269,6 +272,7 @@ async fn entry() -> Result<()> {
     );
 
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
+        // Confirm
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
             resolutions.push(await_task(task).await??);
@@ -276,6 +280,7 @@ async fn entry() -> Result<()> {
 
         uithread.confirm().await?;
 
+        // Install
         resolutions
             .into_iter()
             .map(|resolution| {
@@ -288,6 +293,7 @@ async fn entry() -> Result<()> {
             })
             .collect()
     } else {
+        // Install without confirm
         tasks
             .into_iter()
             .map(|task| {
