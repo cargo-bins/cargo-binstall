@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CrateName {
     pub name: String,
     pub version: Option<String>,
