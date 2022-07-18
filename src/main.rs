@@ -274,10 +274,6 @@ async fn entry() -> Result<()> {
             resolutions.push(await_task(task).await??);
         }
 
-        for resolution in &resolutions {
-            resolution.print(&opts);
-        }
-
         uithread.confirm().await?;
 
         resolutions
@@ -301,9 +297,6 @@ async fn entry() -> Result<()> {
 
                 tokio::spawn(async move {
                     let resolution = await_task(task).await??;
-
-                    resolution.print(&opts);
-
                     install(resolution, opts, temp_dir_path, target).await
                 })
             })
@@ -454,7 +447,7 @@ async fn resolve(
         fetchers.add(QuickInstall::new(&client, &fetcher_data).await);
     }
 
-    match fetchers.first_available().await {
+    let resolution = match fetchers.first_available().await {
         Some(fetcher) => {
             // Build final metadata
             let fetcher_target = fetcher.target();
@@ -476,17 +469,21 @@ async fn resolve(
                 install_path.to_path_buf(),
             )?;
 
-            Ok(Resolution::Fetch {
+            Resolution::Fetch {
                 fetcher,
                 package,
                 crate_name,
                 version,
                 bin_path,
                 bin_files,
-            })
+            }
         }
-        None => Ok(Resolution::InstallFromSource { package }),
-    }
+        None => Resolution::InstallFromSource { package },
+    };
+
+    resolution.print(&opts);
+
+    Ok(resolution)
 }
 
 fn collect_bin_files(
