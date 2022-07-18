@@ -261,7 +261,7 @@ async fn entry() -> Result<()> {
         .collect();
 
     let desired_targets = desired_targets.get().await;
-    let target = Arc::from(
+    let target: Arc<str> = Arc::from(
         desired_targets
             .first()
             .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?
@@ -281,9 +281,9 @@ async fn entry() -> Result<()> {
             .map(|resolution| {
                 tokio::spawn(install(
                     resolution,
-                    Arc::clone(&opts),
-                    Arc::clone(&temp_dir_path),
-                    Arc::clone(&target),
+                    opts.clone(),
+                    temp_dir_path.clone(),
+                    target.clone(),
                 ))
             })
             .collect()
@@ -291,9 +291,9 @@ async fn entry() -> Result<()> {
         tasks
             .into_iter()
             .map(|task| {
-                let opts = Arc::clone(&opts);
-                let temp_dir_path = Arc::clone(&temp_dir_path);
-                let target = Arc::clone(&target);
+                let opts = opts.clone();
+                let temp_dir_path = temp_dir_path.clone();
+                let target = target.clone();
 
                 tokio::spawn(async move {
                     let resolution = await_task(task).await??;
