@@ -335,7 +335,7 @@ enum Resolution {
     Fetch {
         fetcher: Arc<dyn Fetcher>,
         package: Package<Meta>,
-        crate_name: CrateName,
+        name: String,
         version: String,
         bin_path: PathBuf,
         bin_files: Vec<bins::BinFile>,
@@ -487,7 +487,7 @@ async fn resolve(
             Resolution::Fetch {
                 fetcher,
                 package,
-                crate_name,
+                name: crate_name.name,
                 version,
                 bin_path,
                 bin_files,
@@ -555,13 +555,13 @@ async fn install(
         Resolution::Fetch {
             fetcher,
             package,
-            crate_name,
+            name,
             version,
             bin_path,
             bin_files,
         } => {
             install_from_package(
-                fetcher, opts, package, crate_name, temp_dir, version, bin_path, bin_files,
+                fetcher, opts, package, name, temp_dir, version, bin_path, bin_files,
             )
             .await
         }
@@ -584,7 +584,7 @@ async fn install_from_package(
     fetcher: Arc<dyn Fetcher>,
     opts: Arc<Options>,
     package: Package<Meta>,
-    crate_name: CrateName,
+    name: String,
     temp_dir: Arc<Path>,
     version: String,
     bin_path: PathBuf,
@@ -627,7 +627,7 @@ async fn install_from_package(
     }
 
     let cvs = metafiles::CrateVersionSource {
-        name: crate_name.name.clone(),
+        name: name.clone(),
         version: package.version.parse().into_diagnostic()?,
         source: metafiles::Source::Registry(
             url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
