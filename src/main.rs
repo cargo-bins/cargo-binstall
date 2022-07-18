@@ -320,9 +320,16 @@ async fn entry() -> Result<()> {
             warn!("The package will be installed from source (with cargo)",);
             if !opts.dry_run {
                 uithread.confirm().await?;
-            }
 
-            install_from_source(opts, package, target).await
+                install_from_source(package, target).await
+            } else {
+                info!(
+                    "Dry-run: running `cargo install {} --version {} --target {target}`",
+                    package.name, package.version
+                );
+
+                Ok(())
+            }
         }
     }
 }
@@ -595,45 +602,33 @@ async fn install_from_package(
     })
 }
 
-async fn install_from_source(
-    opts: Arc<Options>,
-    package: Package<Meta>,
-    target: &str,
-) -> Result<()> {
-    if opts.dry_run {
-        info!(
-            "Dry-run: running `cargo install {} --version {} --target {target}`",
-            package.name, package.version
-        );
+async fn install_from_source(package: Package<Meta>, target: &str) -> Result<()> {
+    debug!(
+        "Running `cargo install {} --version {} --target {target}`",
+        package.name, package.version
+    );
+    let mut child = Command::new("cargo")
+        .arg("install")
+        .arg(package.name)
+        .arg("--version")
+        .arg(package.version)
+        .arg("--target")
+        .arg(target)
+        .spawn()
+        .into_diagnostic()
+        .wrap_err("Spawning cargo install failed.")?;
+    debug!("Spawned command pid={:?}", child.id());
+
+    let status = child
+        .wait()
+        .await
+        .into_diagnostic()
+        .wrap_err("Running cargo install failed.")?;
+    if status.success() {
+        info!("Cargo finished successfully");
         Ok(())
     } else {
-        debug!(
-            "Running `cargo install {} --version {} --target {target}`",
-            package.name, package.version
-        );
-        let mut child = Command::new("cargo")
-            .arg("install")
-            .arg(package.name)
-            .arg("--version")
-            .arg(package.version)
-            .arg("--target")
-            .arg(target)
-            .spawn()
-            .into_diagnostic()
-            .wrap_err("Spawning cargo install failed.")?;
-        debug!("Spawned command pid={:?}", child.id());
-
-        let status = child
-            .wait()
-            .await
-            .into_diagnostic()
-            .wrap_err("Running cargo install failed.")?;
-        if status.success() {
-            info!("Cargo finished successfully");
-            Ok(())
-        } else {
-            error!("Cargo errored! {status:?}");
-            Err(miette!("Cargo install error"))
-        }
+        error!("Cargo errored! {status:?}");
+        Err(miette!("Cargo install error"))
     }
 }
