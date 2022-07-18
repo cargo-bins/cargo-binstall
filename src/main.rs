@@ -230,16 +230,20 @@ async fn entry() -> Result<()> {
     let desired_targets = get_desired_targets(&opts.targets);
 
     // Compute install directory
-    let install_path = get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
-        error!("No viable install path found of specified, try `--install-path`");
-        miette!("No install path found or specified")
-    })?;
+    let install_path: Arc<Path> = Arc::from(
+        get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
+            error!("No viable install path found of specified, try `--install-path`");
+            miette!("No install path found or specified")
+        })?,
+    );
     debug!("Using install path: {}", install_path.display());
 
     // Create a temporary directory for downloads etc.
     let temp_dir = TempDir::new()
         .map_err(BinstallError::from)
         .wrap_err("Creating a temporary directory failed.")?;
+
+    let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
     let tasks: Vec<_> = crate_names
         .into_iter()
@@ -249,7 +253,7 @@ async fn entry() -> Result<()> {
                 crate_name,
                 desired_targets.clone(),
                 cli_overrides.clone(),
-                temp_dir.path().to_path_buf(),
+                temp_dir_path.clone(),
                 install_path.clone(),
                 client.clone(),
             ))
@@ -263,8 +267,6 @@ async fn entry() -> Result<()> {
             .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?
             .as_str(),
     );
-
-    let temp_dir_path = Arc::from(temp_dir.path());
 
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
         let mut resolutions = Vec::with_capacity(tasks.len());
@@ -383,8 +385,8 @@ async fn resolve(
     crate_name: CrateName,
     desired_targets: DesiredTargets,
     cli_overrides: Arc<PkgOverride>,
-    temp_dir: PathBuf,
-    install_path: PathBuf,
+    temp_dir: Arc<Path>,
+    install_path: Arc<Path>,
     client: Client,
 ) -> Result<Resolution> {
     info!("Installing package: '{}'", crate_name);
@@ -471,7 +473,7 @@ async fn resolve(
                 meta,
                 binaries,
                 bin_path.clone(),
-                install_path,
+                install_path.to_path_buf(),
             )?;
 
             Ok(Resolution::Fetch {
