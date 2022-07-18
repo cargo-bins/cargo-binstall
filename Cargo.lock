@@ -144,6 +144,7 @@ dependencies = [
  "futures-util",
  "guess_host_triple",
  "home",
+ "jobserver",
  "log",
  "miette",
  "mimalloc",
