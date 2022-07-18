@@ -3,6 +3,7 @@ use std::{
     ffi::OsString,
     path::{Path, PathBuf},
     process::{ExitCode, Termination},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -10,6 +11,7 @@ use cargo_toml::{Package, Product};
 use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
+use reqwest::Client;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tempfile::TempDir;
 use tokio::{
@@ -197,11 +199,12 @@ async fn entry() -> Result<()> {
 
     // Load options
     let mut opts = Options::parse_from(args);
-    let cli_overrides = PkgOverride {
+    let cli_overrides = Arc::new(PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
-    };
+    });
+    let opts = Arc::new(opts);
 
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
@@ -236,9 +239,119 @@ async fn entry() -> Result<()> {
         .map_err(BinstallError::from)
         .wrap_err("Creating a temporary directory failed.")?;
 
-    info!("Installing package: '{}'", opts.crate_name);
+    let resolution = resolve(
+        opts.clone(),
+        opts.crate_name.clone(),
+        desired_targets.clone(),
+        cli_overrides.clone(),
+        temp_dir.path().to_path_buf(),
+        install_path.clone(),
+        client.clone(),
+    )
+    .await?;
 
-    let mut version = match (&opts.crate_name.version, &opts.version) {
+    match resolution {
+        Resolution::Fetch {
+            fetcher,
+            package,
+            version,
+            bin_path,
+            bin_files,
+        } => {
+            let fetcher_target = fetcher.target();
+            // Prompt user for confirmation
+            debug!(
+                "Found a binary install source: {} ({fetcher_target})",
+                fetcher.source_name()
+            );
+
+            if fetcher.is_third_party() {
+                warn!(
+                    "The package will be downloaded from third-party source {}",
+                    fetcher.source_name()
+                );
+            } else {
+                info!(
+                    "The package will be downloaded from {}",
+                    fetcher.source_name()
+                );
+            }
+
+            info!("This will install the following binaries:");
+            for file in &bin_files {
+                info!("  - {}", file.preview_bin());
+            }
+
+            if !opts.no_symlinks {
+                info!("And create (or update) the following symlinks:");
+                for file in &bin_files {
+                    info!("  - {}", file.preview_link());
+                }
+            }
+
+            if !opts.dry_run {
+                uithread.confirm().await?;
+            }
+
+            install_from_package(
+                fetcher.as_ref(),
+                opts,
+                package,
+                temp_dir,
+                version,
+                &bin_path,
+                &bin_files,
+            )
+            .await
+        }
+        Resolution::InstallFromSource { package } => {
+            if !opts.no_cleanup {
+                temp_dir.close().unwrap_or_else(|err| {
+                    warn!("Failed to clean up some resources: {err}");
+                });
+            }
+
+            let desired_targets = desired_targets.get().await;
+            let target = desired_targets
+                .first()
+                .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
+
+            // Prompt user for source install
+            warn!("The package will be installed from source (with cargo)",);
+            if !opts.dry_run {
+                uithread.confirm().await?;
+            }
+
+            install_from_source(opts, package, target).await
+        }
+    }
+}
+
+enum Resolution {
+    Fetch {
+        fetcher: Arc<dyn Fetcher>,
+        package: Package<Meta>,
+        version: String,
+        bin_path: PathBuf,
+        bin_files: Vec<bins::BinFile>,
+    },
+    InstallFromSource {
+        package: Package<Meta>,
+    },
+}
+
+async fn resolve(
+    opts: Arc<Options>,
+    crate_name: CrateName,
+    desired_targets: DesiredTargets,
+    cli_overrides: Arc<PkgOverride>,
+    temp_dir: PathBuf,
+    install_path: PathBuf,
+    client: Client,
+) -> Result<Resolution> {
+    info!("Installing package: '{}'", crate_name);
+
+    let mut version = match (&crate_name.version, &opts.version) {
         (Some(version), None) => version.to_string(),
         (None, Some(version)) => version.to_string(),
         (Some(_), Some(_)) => Err(BinstallError::DuplicateVersionReq)?,
@@ -259,7 +372,7 @@ async fn entry() -> Result<()> {
     // TODO: support git-based fetches (whole repo name rather than just crate name)
     let manifest = match opts.manifest_path.clone() {
         Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
-        None => fetch_crate_cratesio(&client, &opts.crate_name.name, &version).await?,
+        None => fetch_crate_cratesio(&client, &crate_name.name, &version).await?,
     };
 
     let package = manifest.package.unwrap();
@@ -311,9 +424,7 @@ async fn entry() -> Result<()> {
             meta.merge(&cli_overrides);
 
             // Generate temporary binary path
-            let bin_path = temp_dir
-                .path()
-                .join(format!("bin-{}", opts.crate_name.name));
+            let bin_path = temp_dir.join(format!("bin-{}", crate_name.name));
             debug!("Using temporary binary path: {}", bin_path.display());
 
             let bin_files = collect_bin_files(
@@ -325,70 +436,15 @@ async fn entry() -> Result<()> {
                 install_path,
             )?;
 
-            // Prompt user for confirmation
-            debug!(
-                "Found a binary install source: {} ({fetcher_target})",
-                fetcher.source_name()
-            );
-
-            if fetcher.is_third_party() {
-                warn!(
-                    "The package will be downloaded from third-party source {}",
-                    fetcher.source_name()
-                );
-            } else {
-                info!(
-                    "The package will be downloaded from {}",
-                    fetcher.source_name()
-                );
-            }
-
-            info!("This will install the following binaries:");
-            for file in &bin_files {
-                info!("  - {}", file.preview_bin());
-            }
-
-            if !opts.no_symlinks {
-                info!("And create (or update) the following symlinks:");
-                for file in &bin_files {
-                    info!("  - {}", file.preview_link());
-                }
-            }
-
-            if !opts.dry_run {
-                uithread.confirm().await?;
-            }
-
-            install_from_package(
-                fetcher.as_ref(),
-                opts,
+            Ok(Resolution::Fetch {
+                fetcher,
                 package,
-                temp_dir,
                 version,
-                &bin_path,
-                &bin_files,
-            )
-            .await
+                bin_path,
+                bin_files,
+            })
         }
-        None => {
-            if !opts.no_cleanup {
-                temp_dir.close().unwrap_or_else(|err| {
-                    warn!("Failed to clean up some resources: {err}");
-                });
-            }
-
-            let target = desired_targets
-                .first()
-                .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
-
-            // Prompt user for source install
-            warn!("The package will be installed from source (with cargo)",);
-            if !opts.dry_run {
-                uithread.confirm().await?;
-            }
-
-            install_from_source(opts, package, target).await
-        }
+        None => Ok(Resolution::InstallFromSource { package }),
     }
 }
 
@@ -437,7 +493,7 @@ fn collect_bin_files(
 
 async fn install_from_package(
     fetcher: &dyn Fetcher,
-    opts: Options,
+    opts: Arc<Options>,
     package: Package<Meta>,
     temp_dir: TempDir,
     version: String,
@@ -481,7 +537,7 @@ async fn install_from_package(
     }
 
     let cvs = metafiles::CrateVersionSource {
-        name: opts.crate_name.name,
+        name: opts.crate_name.name.clone(),
         version: package.version.parse().into_diagnostic()?,
         source: metafiles::Source::Registry(
             url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
@@ -539,7 +595,11 @@ async fn install_from_package(
     })
 }
 
-async fn install_from_source(opts: Options, package: Package<Meta>, target: &str) -> Result<()> {
+async fn install_from_source(
+    opts: Arc<Options>,
+    package: Package<Meta>,
+    target: &str,
+) -> Result<()> {
     if opts.dry_run {
         info!(
             "Dry-run: running `cargo install {} --version {} --target {target}`",
