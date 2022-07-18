@@ -3,6 +3,7 @@ use std::{
     ffi::OsString,
     mem::take,
     path::{Path, PathBuf},
+    process,
     process::{ExitCode, Termination},
     sync::Arc,
     time::{Duration, Instant},
@@ -208,6 +209,9 @@ async fn entry() -> Result<()> {
     let crate_names = take(&mut opts.crate_names);
     let opts = Arc::new(opts);
 
+    // Create jobserver client
+    let jobserver_client = create_jobserver_client()?;
+
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
 
@@ -289,6 +293,7 @@ async fn entry() -> Result<()> {
                     opts.clone(),
                     temp_dir_path.clone(),
                     target.clone(),
+                    jobserver_client.clone(),
                 ))
             })
             .collect()
@@ -300,10 +305,11 @@ async fn entry() -> Result<()> {
                 let opts = opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
                 let target = target.clone();
+                let jobserver_client = jobserver_client.clone();
 
                 tokio::spawn(async move {
                     let resolution = await_task(task).await??;
-                    install(resolution, opts, temp_dir_path, target).await
+                    install(resolution, opts, temp_dir_path, target, jobserver_client).await
                 })
             })
             .collect()
@@ -540,6 +546,7 @@ async fn install(
     opts: Arc<Options>,
     temp_dir: Arc<Path>,
     target: Arc<str>,
+    jobserver_client: jobserver::Client,
 ) -> Result<()> {
     match resolution {
         Resolution::Fetch {
@@ -557,7 +564,7 @@ async fn install(
         }
         Resolution::InstallFromSource { package } => {
             if !opts.dry_run {
-                install_from_source(package, target).await
+                install_from_source(package, target, jobserver_client).await
             } else {
                 info!(
                     "Dry-run: running `cargo install {} --version {} --target {target}`",
@@ -667,12 +674,19 @@ async fn install_from_package(
     })
 }
 
-async fn install_from_source(package: Package<Meta>, target: Arc<str>) -> Result<()> {
+async fn install_from_source(
+    package: Package<Meta>,
+    target: Arc<str>,
+    jobserver_client: jobserver::Client,
+) -> Result<()> {
     debug!(
         "Running `cargo install {} --version {} --target {target}`",
         package.name, package.version
     );
-    let mut child = Command::new("cargo")
+    let mut command = process::Command::new("cargo");
+    jobserver_client.configure(&mut command);
+
+    let mut child = Command::from(command)
         .arg("install")
         .arg(package.name)
         .arg("--version")
