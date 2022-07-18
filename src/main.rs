@@ -273,45 +273,7 @@ async fn entry() -> Result<()> {
         }
 
         for resolution in &resolutions {
-            match resolution {
-                Resolution::Fetch {
-                    fetcher, bin_files, ..
-                } => {
-                    let fetcher_target = fetcher.target();
-                    // Prompt user for confirmation
-                    debug!(
-                        "Found a binary install source: {} ({fetcher_target})",
-                        fetcher.source_name()
-                    );
-
-                    if fetcher.is_third_party() {
-                        warn!(
-                            "The package will be downloaded from third-party source {}",
-                            fetcher.source_name()
-                        );
-                    } else {
-                        info!(
-                            "The package will be downloaded from {}",
-                            fetcher.source_name()
-                        );
-                    }
-
-                    info!("This will install the following binaries:");
-                    for file in bin_files {
-                        info!("  - {}", file.preview_bin());
-                    }
-
-                    if !opts.no_symlinks {
-                        info!("And create (or update) the following symlinks:");
-                        for file in bin_files {
-                            info!("  - {}", file.preview_link());
-                        }
-                    }
-                }
-                Resolution::InstallFromSource { .. } => {
-                    warn!("The package will be installed from source (with cargo)",)
-                }
-            }
+            resolution.print(&opts);
         }
 
         uithread.confirm().await?;
@@ -368,6 +330,49 @@ enum Resolution {
     InstallFromSource {
         package: Package<Meta>,
     },
+}
+impl Resolution {
+    fn print(&self, opts: &Options) {
+        match self {
+            Resolution::Fetch {
+                fetcher, bin_files, ..
+            } => {
+                let fetcher_target = fetcher.target();
+                // Prompt user for confirmation
+                debug!(
+                    "Found a binary install source: {} ({fetcher_target})",
+                    fetcher.source_name()
+                );
+
+                if fetcher.is_third_party() {
+                    warn!(
+                        "The package will be downloaded from third-party source {}",
+                        fetcher.source_name()
+                    );
+                } else {
+                    info!(
+                        "The package will be downloaded from {}",
+                        fetcher.source_name()
+                    );
+                }
+
+                info!("This will install the following binaries:");
+                for file in bin_files {
+                    info!("  - {}", file.preview_bin());
+                }
+
+                if !opts.no_symlinks {
+                    info!("And create (or update) the following symlinks:");
+                    for file in bin_files {
+                        info!("  - {}", file.preview_link());
+                    }
+                }
+            }
+            Resolution::InstallFromSource { .. } => {
+                warn!("The package will be installed from source (with cargo)",)
+            }
+        }
+    }
 }
 
 async fn resolve(
