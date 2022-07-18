@@ -308,9 +308,12 @@ async fn entry() -> Result<()> {
     }
 
     let desired_targets = desired_targets.get().await;
-    let target = desired_targets
-        .first()
-        .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
+    let target = Arc::from(
+        desired_targets
+            .first()
+            .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?
+            .as_str(),
+    );
 
     let tasks: Vec<_> = resolutions
         .into_iter()
@@ -334,7 +337,7 @@ async fn entry() -> Result<()> {
             )),
             Resolution::InstallFromSource { package } => {
                 if !opts.dry_run {
-                    tokio::spawn(install_from_source(package, target.clone()))
+                    tokio::spawn(install_from_source(package, Arc::clone(&target)))
                 } else {
                     info!(
                         "Dry-run: running `cargo install {} --version {} --target {target}`",
@@ -623,7 +626,7 @@ async fn install_from_package(
     })
 }
 
-async fn install_from_source(package: Package<Meta>, target: String) -> Result<()> {
+async fn install_from_source(package: Package<Meta>, target: Arc<str>) -> Result<()> {
     debug!(
         "Running `cargo install {} --version {} --target {target}`",
         package.name, package.version
@@ -634,7 +637,7 @@ async fn install_from_source(package: Package<Meta>, target: String) -> Result<(
         .arg("--version")
         .arg(package.version)
         .arg("--target")
-        .arg(target)
+        .arg(&*target)
         .spawn()
         .into_diagnostic()
         .wrap_err("Spawning cargo install failed.")?;
