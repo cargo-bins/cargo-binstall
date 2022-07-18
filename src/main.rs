@@ -279,7 +279,7 @@ async fn entry() -> Result<()> {
         // Confirm
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
-            resolutions.push(await_task(task).await??);
+            resolutions.push(await_task(task).await?);
         }
 
         uithread.confirm().await?;
@@ -308,7 +308,7 @@ async fn entry() -> Result<()> {
                 let jobserver_client = jobserver_client.clone();
 
                 tokio::spawn(async move {
-                    let resolution = await_task(task).await??;
+                    let resolution = await_task(task).await?;
                     install(resolution, opts, temp_dir_path, target, jobserver_client).await
                 })
             })
@@ -316,7 +316,7 @@ async fn entry() -> Result<()> {
     };
 
     for task in tasks {
-        await_task(task).await??;
+        await_task(task).await?;
     }
 
     if !opts.no_cleanup {

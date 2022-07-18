@@ -39,9 +39,11 @@ pub use tls_version::TLSVersion;
 mod crate_name;
 pub use crate_name::CrateName;
 
-pub async fn await_task<T>(task: tokio::task::JoinHandle<T>) -> miette::Result<T> {
-    task.await
-        .map_err(|join_err| miette::miette!("Task failed to join: {}", join_err))
+pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> miette::Result<T> {
+    match task.await {
+        Ok(res) => res,
+        Err(join_err) => Err(miette::miette!("Task failed to join: {}", join_err)),
+    }
 }
 
 pub fn create_jobserver_client() -> Result<jobserver::Client, BinstallError> {
