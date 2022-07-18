@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 use std::fs;
 use std::io;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
+use std::thread::available_parallelism;
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
@@ -40,6 +42,20 @@ pub use crate_name::CrateName;
 pub async fn await_task<T>(task: tokio::task::JoinHandle<T>) -> miette::Result<T> {
     task.await
         .map_err(|join_err| miette::miette!("Task failed to join: {}", join_err))
+}
+
+pub fn create_jobserver_client() -> Result<jobserver::Client, BinstallError> {
+    use jobserver::Client;
+
+    // Safety:
+    //
+    // Client::from_env is unsafe because from_raw_fd is unsafe.
+    if let Some(client) = unsafe { Client::from_env() } {
+        Ok(client)
+    } else {
+        let ncore = available_parallelism().map(NonZeroUsize::get).unwrap_or(1);
+        Ok(Client::new(ncore)?)
+    }
 }
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
