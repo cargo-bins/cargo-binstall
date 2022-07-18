@@ -6,9 +6,8 @@ bins="cargo-deb cargo-llvm-cov cargo-binstall"
 test_bins="cargo-deb cargo-llvm-cov"
 
 # Install binaries using cargo-binstall
-for bin in $bins; do
-    "./$1" binstall --log-level debug --no-confirm "$bin"
-done
+# shellcheck disable=SC2086
+"./$1" binstall --log-level debug --no-confirm $bins
 
 # Test that the installed binaries can be run
 for bin in $test_bins; do
