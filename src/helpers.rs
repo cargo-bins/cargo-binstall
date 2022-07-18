@@ -37,6 +37,11 @@ pub use tls_version::TLSVersion;
 mod crate_name;
 pub use crate_name::CrateName;
 
+pub async fn await_task<T>(task: tokio::task::JoinHandle<T>) -> miette::Result<T> {
+    task.await
+        .map_err(|join_err| miette::miette!("Task failed to join: {}", join_err))
+}
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
