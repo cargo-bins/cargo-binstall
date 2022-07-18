@@ -256,57 +256,6 @@ async fn entry() -> Result<()> {
         })
         .collect();
 
-    let mut resolutions = Vec::with_capacity(tasks.len());
-    for task in tasks {
-        resolutions.push(await_task(task).await??);
-    }
-
-    for resolution in &resolutions {
-        match resolution {
-            Resolution::Fetch {
-                fetcher, bin_files, ..
-            } => {
-                let fetcher_target = fetcher.target();
-                // Prompt user for confirmation
-                debug!(
-                    "Found a binary install source: {} ({fetcher_target})",
-                    fetcher.source_name()
-                );
-
-                if fetcher.is_third_party() {
-                    warn!(
-                        "The package will be downloaded from third-party source {}",
-                        fetcher.source_name()
-                    );
-                } else {
-                    info!(
-                        "The package will be downloaded from {}",
-                        fetcher.source_name()
-                    );
-                }
-
-                info!("This will install the following binaries:");
-                for file in bin_files {
-                    info!("  - {}", file.preview_bin());
-                }
-
-                if !opts.no_symlinks {
-                    info!("And create (or update) the following symlinks:");
-                    for file in bin_files {
-                        info!("  - {}", file.preview_link());
-                    }
-                }
-            }
-            Resolution::InstallFromSource { .. } => {
-                warn!("The package will be installed from source (with cargo)",)
-            }
-        }
-    }
-
-    if !opts.dry_run {
-        uithread.confirm().await?;
-    }
-
     let desired_targets = desired_targets.get().await;
     let target = Arc::from(
         desired_targets
@@ -317,10 +266,82 @@ async fn entry() -> Result<()> {
 
     let temp_dir_path = Arc::from(temp_dir.path());
 
-    let tasks: Vec<_> = resolutions
-        .into_iter()
-        .map(|resolution| install(resolution, &opts, &temp_dir_path, &target))
-        .collect();
+    let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
+        let mut resolutions = Vec::with_capacity(tasks.len());
+        for task in tasks {
+            resolutions.push(await_task(task).await??);
+        }
+
+        for resolution in &resolutions {
+            match resolution {
+                Resolution::Fetch {
+                    fetcher, bin_files, ..
+                } => {
+                    let fetcher_target = fetcher.target();
+                    // Prompt user for confirmation
+                    debug!(
+                        "Found a binary install source: {} ({fetcher_target})",
+                        fetcher.source_name()
+                    );
+
+                    if fetcher.is_third_party() {
+                        warn!(
+                            "The package will be downloaded from third-party source {}",
+                            fetcher.source_name()
+                        );
+                    } else {
+                        info!(
+                            "The package will be downloaded from {}",
+                            fetcher.source_name()
+                        );
+                    }
+
+                    info!("This will install the following binaries:");
+                    for file in bin_files {
+                        info!("  - {}", file.preview_bin());
+                    }
+
+                    if !opts.no_symlinks {
+                        info!("And create (or update) the following symlinks:");
+                        for file in bin_files {
+                            info!("  - {}", file.preview_link());
+                        }
+                    }
+                }
+                Resolution::InstallFromSource { .. } => {
+                    warn!("The package will be installed from source (with cargo)",)
+                }
+            }
+        }
+
+        uithread.confirm().await?;
+
+        resolutions
+            .into_iter()
+            .map(|resolution| {
+                tokio::spawn(install(
+                    resolution,
+                    Arc::clone(&opts),
+                    Arc::clone(&temp_dir_path),
+                    Arc::clone(&target),
+                ))
+            })
+            .collect()
+    } else {
+        tasks
+            .into_iter()
+            .map(|task| {
+                let opts = Arc::clone(&opts);
+                let temp_dir_path = Arc::clone(&temp_dir_path);
+                let target = Arc::clone(&target);
+
+                tokio::spawn(async move {
+                    let resolution = await_task(task).await??;
+                    install(resolution, opts, temp_dir_path, target).await
+                })
+            })
+            .collect()
+    };
 
     for task in tasks {
         await_task(task).await??;
@@ -501,12 +522,12 @@ fn collect_bin_files(
     Ok(bin_files)
 }
 
-fn install(
+async fn install(
     resolution: Resolution,
-    opts: &Arc<Options>,
-    temp_dir: &Arc<Path>,
-    target: &Arc<str>,
-) -> tokio::task::JoinHandle<Result<()>> {
+    opts: Arc<Options>,
+    temp_dir: Arc<Path>,
+    target: Arc<str>,
+) -> Result<()> {
     match resolution {
         Resolution::Fetch {
             fetcher,
@@ -515,25 +536,21 @@ fn install(
             version,
             bin_path,
             bin_files,
-        } => tokio::spawn(install_from_package(
-            fetcher,
-            opts.clone(),
-            package,
-            crate_name,
-            Arc::clone(temp_dir),
-            version,
-            bin_path,
-            bin_files,
-        )),
+        } => {
+            install_from_package(
+                fetcher, opts, package, crate_name, temp_dir, version, bin_path, bin_files,
+            )
+            .await
+        }
         Resolution::InstallFromSource { package } => {
             if !opts.dry_run {
-                tokio::spawn(install_from_source(package, Arc::clone(target)))
+                install_from_source(package, target).await
             } else {
                 info!(
                     "Dry-run: running `cargo install {} --version {} --target {target}`",
                     package.name, package.version
                 );
-                tokio::spawn(async { Ok(()) })
+                Ok(())
             }
         }
     }
