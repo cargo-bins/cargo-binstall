@@ -35,7 +35,7 @@ mimalloc = { version = "0.1.29", default-features = false, optional = true }
 reqwest = { version = "0.11.11", features = ["rustls-tls", "stream"], default-features = false }
 scopeguard = "1.1.0"
 semver = "1.0.12"
-serde = { version = "1.0.138", features = ["derive"] }
+serde = { version = "1.0.139", features = ["derive"] }
 serde_json = "1.0.82"
 simplelog = "0.12.0"
 strum = "0.24.1"
