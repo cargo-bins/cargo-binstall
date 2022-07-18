@@ -315,9 +315,11 @@ async fn entry() -> Result<()> {
             .as_str(),
     );
 
+    let temp_dir_path = Arc::from(temp_dir.path());
+
     let tasks: Vec<_> = resolutions
         .into_iter()
-        .map(|resolution| install(resolution, &opts, temp_dir.path(), &target))
+        .map(|resolution| install(resolution, &opts, &temp_dir_path, &target))
         .collect();
 
     for task in tasks {
@@ -502,7 +504,7 @@ fn collect_bin_files(
 fn install(
     resolution: Resolution,
     opts: &Arc<Options>,
-    temp_dir: &Path,
+    temp_dir: &Arc<Path>,
     target: &Arc<str>,
 ) -> tokio::task::JoinHandle<Result<()>> {
     match resolution {
@@ -518,7 +520,7 @@ fn install(
             opts.clone(),
             package,
             crate_name,
-            temp_dir.to_path_buf(),
+            Arc::clone(temp_dir),
             version,
             bin_path,
             bin_files,
@@ -543,7 +545,7 @@ async fn install_from_package(
     opts: Arc<Options>,
     package: Package<Meta>,
     crate_name: CrateName,
-    temp_dir: PathBuf,
+    temp_dir: Arc<Path>,
     version: String,
     bin_path: PathBuf,
     bin_files: Vec<bins::BinFile>,
