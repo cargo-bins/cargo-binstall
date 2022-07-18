@@ -299,6 +299,9 @@ async fn entry() -> Result<()> {
 
                 tokio::spawn(async move {
                     let resolution = await_task(task).await??;
+
+                    resolution.print(&opts);
+
                     install(resolution, opts, temp_dir_path, target).await
                 })
             })
