@@ -2,7 +2,7 @@ use std::{
     collections::BTreeSet,
     ffi::OsString,
     mem::take,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{ExitCode, Termination},
     sync::Arc,
     time::{Duration, Instant},
@@ -317,36 +317,7 @@ async fn entry() -> Result<()> {
 
     let tasks: Vec<_> = resolutions
         .into_iter()
-        .map(|resolution| match resolution {
-            Resolution::Fetch {
-                fetcher,
-                package,
-                crate_name,
-                version,
-                bin_path,
-                bin_files,
-            } => tokio::spawn(install_from_package(
-                fetcher,
-                opts.clone(),
-                package,
-                crate_name,
-                temp_dir.path().to_path_buf(),
-                version,
-                bin_path,
-                bin_files,
-            )),
-            Resolution::InstallFromSource { package } => {
-                if !opts.dry_run {
-                    tokio::spawn(install_from_source(package, Arc::clone(&target)))
-                } else {
-                    info!(
-                        "Dry-run: running `cargo install {} --version {} --target {target}`",
-                        package.name, package.version
-                    );
-                    tokio::spawn(async { Ok(()) })
-                }
-            }
-        })
+        .map(|resolution| install(resolution, &opts, temp_dir.path(), &target))
         .collect();
 
     for task in tasks {
@@ -526,6 +497,44 @@ fn collect_bin_files(
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     Ok(bin_files)
+}
+
+fn install(
+    resolution: Resolution,
+    opts: &Arc<Options>,
+    temp_dir: &Path,
+    target: &Arc<str>,
+) -> tokio::task::JoinHandle<Result<()>> {
+    match resolution {
+        Resolution::Fetch {
+            fetcher,
+            package,
+            crate_name,
+            version,
+            bin_path,
+            bin_files,
+        } => tokio::spawn(install_from_package(
+            fetcher,
+            opts.clone(),
+            package,
+            crate_name,
+            temp_dir.to_path_buf(),
+            version,
+            bin_path,
+            bin_files,
+        )),
+        Resolution::InstallFromSource { package } => {
+            if !opts.dry_run {
+                tokio::spawn(install_from_source(package, Arc::clone(target)))
+            } else {
+                info!(
+                    "Dry-run: running `cargo install {} --version {} --target {target}`",
+                    package.name, package.version
+                );
+                tokio::spawn(async { Ok(()) })
+            }
+        }
+    }
 }
 
 #[allow(unused, clippy::too_many_arguments)]
