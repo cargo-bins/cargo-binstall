@@ -319,7 +319,10 @@ async fn entry() -> Result<()> {
         await_task(task).await?;
     }
 
-    if !opts.no_cleanup {
+    if opts.no_cleanup {
+        // Consume temp_dir without removing it from fs.
+        temp_dir.into_path();
+    } else {
         temp_dir.close().unwrap_or_else(|err| {
             warn!("Failed to clean up some resources: {err}");
         });
