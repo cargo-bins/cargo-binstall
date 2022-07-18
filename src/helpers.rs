@@ -50,6 +50,8 @@ pub fn create_jobserver_client() -> Result<jobserver::Client, BinstallError> {
     // Safety:
     //
     // Client::from_env is unsafe because from_raw_fd is unsafe.
+    // It doesn't do anything that is actually unsafe, like
+    // dereferencing pointer.
     if let Some(client) = unsafe { Client::from_env() } {
         Ok(client)
     } else {
