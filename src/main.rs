@@ -251,23 +251,23 @@ async fn entry() -> Result<()> {
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
-    // Resolve crates
-    let tasks: Vec<_> = crate_names
-        .into_iter()
-        .map(|crate_name| {
-            tokio::spawn(resolve(
-                opts.clone(),
-                crate_name,
-                desired_targets.clone(),
-                cli_overrides.clone(),
-                temp_dir_path.clone(),
-                install_path.clone(),
-                client.clone(),
-            ))
-        })
-        .collect();
-
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
+        // Resolve crates
+        let tasks: Vec<_> = crate_names
+            .into_iter()
+            .map(|crate_name| {
+                tokio::spawn(resolve(
+                    opts.clone(),
+                    crate_name,
+                    desired_targets.clone(),
+                    cli_overrides.clone(),
+                    temp_dir_path.clone(),
+                    install_path.clone(),
+                    client.clone(),
+                ))
+            })
+            .collect();
+
         // Confirm
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
@@ -290,17 +290,31 @@ async fn entry() -> Result<()> {
             })
             .collect()
     } else {
-        // Install without confirm
-        tasks
+        // Resolve crates and install without confirmation
+        crate_names
             .into_iter()
-            .map(|task| {
+            .map(|crate_name| {
                 let opts = opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
                 let desired_target = desired_targets.clone();
                 let jobserver_client = jobserver_client.clone();
+                let desired_targets = desired_targets.clone();
+                let client = client.clone();
+                let cli_overrides = cli_overrides.clone();
+                let install_path = install_path.clone();
 
                 tokio::spawn(async move {
-                    let resolution = await_task(task).await?;
+                    let resolution = resolve(
+                        opts.clone(),
+                        crate_name,
+                        desired_targets.clone(),
+                        cli_overrides,
+                        temp_dir_path.clone(),
+                        install_path,
+                        client,
+                    )
+                    .await?;
+
                     install(
                         resolution,
                         opts,
