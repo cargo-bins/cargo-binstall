@@ -267,14 +267,6 @@ async fn entry() -> Result<()> {
         })
         .collect();
 
-    let desired_targets = desired_targets.get().await;
-    let target: Arc<str> = Arc::from(
-        desired_targets
-            .first()
-            .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?
-            .as_str(),
-    );
-
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
         // Confirm
         let mut resolutions = Vec::with_capacity(tasks.len());
@@ -292,7 +284,7 @@ async fn entry() -> Result<()> {
                     resolution,
                     opts.clone(),
                     temp_dir_path.clone(),
-                    target.clone(),
+                    desired_targets.clone(),
                     jobserver_client.clone(),
                 ))
             })
@@ -304,12 +296,19 @@ async fn entry() -> Result<()> {
             .map(|task| {
                 let opts = opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
-                let target = target.clone();
+                let desired_target = desired_targets.clone();
                 let jobserver_client = jobserver_client.clone();
 
                 tokio::spawn(async move {
                     let resolution = await_task(task).await?;
-                    install(resolution, opts, temp_dir_path, target, jobserver_client).await
+                    install(
+                        resolution,
+                        opts,
+                        temp_dir_path,
+                        desired_target,
+                        jobserver_client,
+                    )
+                    .await
                 })
             })
             .collect()
@@ -548,7 +547,7 @@ async fn install(
     resolution: Resolution,
     opts: Arc<Options>,
     temp_dir: Arc<Path>,
-    target: Arc<str>,
+    desired_targets: DesiredTargets,
     jobserver_client: jobserver::Client,
 ) -> Result<()> {
     match resolution {
@@ -566,6 +565,11 @@ async fn install(
             .await
         }
         Resolution::InstallFromSource { package } => {
+            let desired_targets = desired_targets.get().await;
+            let target = desired_targets
+                .first()
+                .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
+
             if !opts.dry_run {
                 install_from_source(package, target, jobserver_client).await
             } else {
@@ -679,7 +683,7 @@ async fn install_from_package(
 
 async fn install_from_source(
     package: Package<Meta>,
-    target: Arc<str>,
+    target: &str,
     jobserver_client: jobserver::Client,
 ) -> Result<()> {
     debug!(
