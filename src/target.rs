@@ -11,7 +11,7 @@ pub const TARGET: &str = env!("TARGET");
 #[derive(Debug, Clone)]
 enum DesiredTargetsInner {
     AutoDetect(Arc<OnceCell<Vec<String>>>),
-    Initialized(Vec<String>),
+    Initialized(Arc<Vec<String>>),
 }
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct DesiredTargets(DesiredTargetsInner);
 
 impl DesiredTargets {
     fn initialized(targets: Vec<String>) -> Self {
-        Self(DesiredTargetsInner::Initialized(targets))
+        Self(DesiredTargetsInner::Initialized(Arc::new(targets)))
     }
 
     fn auto_detect() -> Self {
