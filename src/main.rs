@@ -171,10 +171,16 @@ impl Termination for MainExit {
 }
 
 fn main() -> MainExit {
+    // Create jobserver client
+    let jobserver_client = match create_jobserver_client() {
+        Ok(jobserver_client) => jobserver_client,
+        Err(binstall_err) => return MainExit::Error(binstall_err),
+    };
+
     let start = Instant::now();
 
     let rt = Runtime::new().unwrap();
-    let handle = rt.spawn(entry());
+    let handle = rt.spawn(entry(jobserver_client));
     let result = rt.block_on(handle);
     drop(rt);
 
@@ -190,7 +196,7 @@ fn main() -> MainExit {
     })
 }
 
-async fn entry() -> Result<()> {
+async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
@@ -208,9 +214,6 @@ async fn entry() -> Result<()> {
     });
     let crate_names = take(&mut opts.crate_names);
     let opts = Arc::new(opts);
-
-    // Create jobserver client
-    let jobserver_client = create_jobserver_client()?;
 
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
