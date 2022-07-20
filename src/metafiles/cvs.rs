@@ -1,6 +1,7 @@
 use std::{fmt, str::FromStr};
 
 use miette::Diagnostic;
+use once_cell::sync::Lazy;
 use semver::Version;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
@@ -18,6 +19,15 @@ pub enum Source {
     Git(Url),
     Path(Url),
     Registry(Url),
+}
+
+impl Source {
+    pub fn cratesio_registry() -> Source {
+        static CRATESIO: Lazy<Url, fn() -> Url> =
+            Lazy::new(|| url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
+
+        Self::Registry(CRATESIO.clone())
+    }
 }
 
 impl FromStr for CrateVersionSource {
