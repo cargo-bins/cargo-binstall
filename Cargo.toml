@@ -63,9 +63,8 @@ zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzi
 # Since zip 0.6.2 depends on zstd 0.10.0, we also have to use 0.10.0 here,
 # otherwise there will be a link conflict.
 #
-# Enable feature bindgen to generate C bindings.
-# Enable feature zstdmt to enable multithreading in libzstd.
-zstd = { version = "0.10.0", features = ["bindgen", "zstdmt"], default-features = false }
+# Enable feature thin to optimize zstd by size.
+zstd = { version = "0.10.0", features = ["thin"], default-features = false }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 guess_host_triple = "0.1.3"
