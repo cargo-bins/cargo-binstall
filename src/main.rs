@@ -286,7 +286,6 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
                 tokio::spawn(install(
                     resolution,
                     opts.clone(),
-                    temp_dir_path.clone(),
                     desired_targets.clone(),
                     jobserver_client.clone(),
                 ))
@@ -312,20 +311,13 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
                         crate_name,
                         desired_targets.clone(),
                         cli_overrides,
-                        temp_dir_path.clone(),
+                        temp_dir_path,
                         install_path,
                         client,
                     )
                     .await?;
 
-                    install(
-                        resolution,
-                        opts,
-                        temp_dir_path,
-                        desired_target,
-                        jobserver_client,
-                    )
-                    .await
+                    install(resolution, opts, desired_target, jobserver_client).await
                 })
             })
             .collect()
@@ -563,7 +555,6 @@ fn collect_bin_files(
 async fn install(
     resolution: Resolution,
     opts: Arc<Options>,
-    temp_dir: Arc<Path>,
     desired_targets: DesiredTargets,
     jobserver_client: jobserver::Client,
 ) -> Result<()> {
@@ -582,7 +573,7 @@ async fn install(
                 source: metafiles::Source::cratesio_registry(),
             };
 
-            install_from_package(fetcher, opts, cvs, temp_dir, version, bin_path, bin_files).await
+            install_from_package(fetcher, opts, cvs, version, bin_path, bin_files).await
         }
         Resolution::InstallFromSource { package } => {
             let desired_targets = desired_targets.get().await;
@@ -603,12 +594,10 @@ async fn install(
     }
 }
 
-#[allow(unused, clippy::too_many_arguments)]
 async fn install_from_package(
     fetcher: Arc<dyn Fetcher>,
     opts: Arc<Options>,
     cvs: metafiles::CrateVersionSource,
-    temp_dir: Arc<Path>,
     version: String,
     bin_path: PathBuf,
     bin_files: Vec<bins::BinFile>,
