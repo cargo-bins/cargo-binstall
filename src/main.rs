@@ -198,6 +198,9 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         bin_dir: opts.bin_dir.take(),
     });
     let crate_names = take(&mut opts.crate_names);
+    if crate_names.len() > 1 && opts.manifest_path.is_some() {
+        return Err(BinstallError::ManifestPathConflictedWithBatchInstallation.into());
+    }
 
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
