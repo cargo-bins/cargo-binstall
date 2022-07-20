@@ -12,6 +12,7 @@ pub mod helpers;
 pub use helpers::*;
 
 pub mod bins;
+pub mod binstall;
 pub mod fetchers;
 pub mod metafiles;
 

@@ -1,32 +1,20 @@
 use std::{
-    collections::BTreeSet,
     ffi::OsString,
     mem::take,
     path::{Path, PathBuf},
-    process,
     process::{ExitCode, Termination},
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use cargo_toml::{Package, Product};
 use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
-use miette::{miette, IntoDiagnostic, Result, WrapErr};
-use reqwest::Client;
+use miette::{miette, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tempfile::TempDir;
-use tokio::{
-    process::Command,
-    runtime::Runtime,
-    task::{block_in_place, JoinError},
-};
+use tokio::{runtime::Runtime, task::JoinError};
 
-use cargo_binstall::{
-    bins,
-    fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
-    *,
-};
+use cargo_binstall::{binstall, *};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -172,10 +160,7 @@ impl Termination for MainExit {
 
 fn main() -> MainExit {
     // Create jobserver client
-    let jobserver_client = match create_jobserver_client() {
-        Ok(jobserver_client) => jobserver_client,
-        Err(binstall_err) => return MainExit::Error(binstall_err),
-    };
+    let jobserver_client = LazyJobserverClient::new();
 
     let start = Instant::now();
 
@@ -196,7 +181,7 @@ fn main() -> MainExit {
     })
 }
 
-async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
+async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
@@ -213,7 +198,6 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
         bin_dir: opts.bin_dir.take(),
     });
     let crate_names = take(&mut opts.crate_names);
-    let opts = Arc::new(opts);
 
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
@@ -254,13 +238,21 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
+    // Create binstall_opts
+    let binstall_opts = Arc::new(binstall::Options {
+        no_symlinks: opts.no_symlinks,
+        dry_run: opts.dry_run,
+        version: opts.version.take(),
+        manifest_path: opts.manifest_path.take(),
+    });
+
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
         // Resolve crates
         let tasks: Vec<_> = crate_names
             .into_iter()
             .map(|crate_name| {
-                tokio::spawn(resolve(
-                    opts.clone(),
+                tokio::spawn(binstall::resolve(
+                    binstall_opts.clone(),
                     crate_name,
                     desired_targets.clone(),
                     cli_overrides.clone(),
@@ -283,9 +275,9 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
         resolutions
             .into_iter()
             .map(|resolution| {
-                tokio::spawn(install(
+                tokio::spawn(binstall::install(
                     resolution,
-                    opts.clone(),
+                    binstall_opts.clone(),
                     desired_targets.clone(),
                     jobserver_client.clone(),
                 ))
@@ -296,7 +288,7 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
         crate_names
             .into_iter()
             .map(|crate_name| {
-                let opts = opts.clone();
+                let opts = binstall_opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
                 let desired_target = desired_targets.clone();
                 let jobserver_client = jobserver_client.clone();
@@ -306,7 +298,7 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
                 let install_path = install_path.clone();
 
                 tokio::spawn(async move {
-                    let resolution = resolve(
+                    let resolution = binstall::resolve(
                         opts.clone(),
                         crate_name,
                         desired_targets.clone(),
@@ -317,7 +309,7 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
                     )
                     .await?;
 
-                    install(resolution, opts, desired_target, jobserver_client).await
+                    binstall::install(resolution, opts, desired_target, jobserver_client).await
                 })
             })
             .collect()
@@ -337,384 +329,4 @@ async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
     }
 
     Ok(())
-}
-
-enum Resolution {
-    Fetch {
-        fetcher: Arc<dyn Fetcher>,
-        package: Package<Meta>,
-        name: String,
-        version: String,
-        bin_path: PathBuf,
-        bin_files: Vec<bins::BinFile>,
-    },
-    InstallFromSource {
-        package: Package<Meta>,
-    },
-}
-impl Resolution {
-    fn print(&self, opts: &Options) {
-        match self {
-            Resolution::Fetch {
-                fetcher, bin_files, ..
-            } => {
-                let fetcher_target = fetcher.target();
-                // Prompt user for confirmation
-                debug!(
-                    "Found a binary install source: {} ({fetcher_target})",
-                    fetcher.source_name()
-                );
-
-                if fetcher.is_third_party() {
-                    warn!(
-                        "The package will be downloaded from third-party source {}",
-                        fetcher.source_name()
-                    );
-                } else {
-                    info!(
-                        "The package will be downloaded from {}",
-                        fetcher.source_name()
-                    );
-                }
-
-                info!("This will install the following binaries:");
-                for file in bin_files {
-                    info!("  - {}", file.preview_bin());
-                }
-
-                if !opts.no_symlinks {
-                    info!("And create (or update) the following symlinks:");
-                    for file in bin_files {
-                        info!("  - {}", file.preview_link());
-                    }
-                }
-            }
-            Resolution::InstallFromSource { .. } => {
-                warn!("The package will be installed from source (with cargo)",)
-            }
-        }
-    }
-}
-
-async fn resolve(
-    opts: Arc<Options>,
-    crate_name: CrateName,
-    desired_targets: DesiredTargets,
-    cli_overrides: Arc<PkgOverride>,
-    temp_dir: Arc<Path>,
-    install_path: Arc<Path>,
-    client: Client,
-) -> Result<Resolution> {
-    info!("Installing package: '{}'", crate_name);
-
-    let mut version = match (&crate_name.version, &opts.version) {
-        (Some(version), None) => version.to_string(),
-        (None, Some(version)) => version.to_string(),
-        (Some(_), Some(_)) => Err(BinstallError::DuplicateVersionReq)?,
-        (None, None) => "*".to_string(),
-    };
-
-    if version
-        .chars()
-        .next()
-        .map(|ch| ch.is_ascii_digit())
-        .unwrap_or(false)
-    {
-        version.insert(0, '=');
-    }
-
-    // Fetch crate via crates.io, git, or use a local manifest path
-    // TODO: work out which of these to do based on `opts.name`
-    // TODO: support git-based fetches (whole repo name rather than just crate name)
-    let manifest = match opts.manifest_path.clone() {
-        Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
-        None => fetch_crate_cratesio(&client, &crate_name.name, &version).await?,
-    };
-
-    let package = manifest.package.unwrap();
-
-    let (mut meta, binaries) = (
-        package
-            .metadata
-            .as_ref()
-            .and_then(|m| m.binstall.clone())
-            .unwrap_or_default(),
-        manifest.bin,
-    );
-
-    let mut fetchers = MultiFetcher::default();
-
-    let desired_targets = desired_targets.get().await;
-
-    for target in desired_targets {
-        debug!("Building metadata for target: {target}");
-        let mut target_meta = meta.clone();
-
-        // Merge any overrides
-        if let Some(o) = target_meta.overrides.get(target).cloned() {
-            target_meta.merge(&o);
-        }
-
-        target_meta.merge(&cli_overrides);
-        debug!("Found metadata: {target_meta:?}");
-
-        let fetcher_data = Data {
-            name: package.name.clone(),
-            target: target.clone(),
-            version: package.version.clone(),
-            repo: package.repository.clone(),
-            meta: target_meta,
-        };
-
-        fetchers.add(GhCrateMeta::new(&client, &fetcher_data).await);
-        fetchers.add(QuickInstall::new(&client, &fetcher_data).await);
-    }
-
-    let resolution = match fetchers.first_available().await {
-        Some(fetcher) => {
-            // Build final metadata
-            let fetcher_target = fetcher.target();
-            if let Some(o) = meta.overrides.get(&fetcher_target.to_owned()).cloned() {
-                meta.merge(&o);
-            }
-            meta.merge(&cli_overrides);
-
-            // Generate temporary binary path
-            let bin_path = temp_dir.join(format!("bin-{}", crate_name.name));
-            debug!("Using temporary binary path: {}", bin_path.display());
-
-            let bin_files = collect_bin_files(
-                fetcher.as_ref(),
-                &package,
-                meta,
-                binaries,
-                bin_path.clone(),
-                install_path.to_path_buf(),
-            )?;
-
-            Resolution::Fetch {
-                fetcher,
-                package,
-                name: crate_name.name,
-                version,
-                bin_path,
-                bin_files,
-            }
-        }
-        None => Resolution::InstallFromSource { package },
-    };
-
-    resolution.print(&opts);
-
-    Ok(resolution)
-}
-
-fn collect_bin_files(
-    fetcher: &dyn Fetcher,
-    package: &Package<Meta>,
-    mut meta: PkgMeta,
-    binaries: Vec<Product>,
-    bin_path: PathBuf,
-    install_path: PathBuf,
-) -> Result<Vec<bins::BinFile>> {
-    // Update meta
-    if fetcher.source_name() == "QuickInstall" {
-        // TODO: less of a hack?
-        meta.bin_dir = "{ bin }{ binary-ext }".to_string();
-    }
-
-    // Check binaries
-    if binaries.is_empty() {
-        error!("No binaries specified (or inferred from file system)");
-        return Err(miette!(
-            "No binaries specified (or inferred from file system)"
-        ));
-    }
-
-    // List files to be installed
-    // based on those found via Cargo.toml
-    let bin_data = bins::Data {
-        name: package.name.clone(),
-        target: fetcher.target().to_string(),
-        version: package.version.clone(),
-        repo: package.repository.clone(),
-        meta,
-        bin_path,
-        install_path,
-    };
-
-    // Create bin_files
-    let bin_files = binaries
-        .iter()
-        .map(|p| bins::BinFile::from_product(&bin_data, p))
-        .collect::<Result<Vec<_>, BinstallError>>()?;
-
-    Ok(bin_files)
-}
-
-async fn install(
-    resolution: Resolution,
-    opts: Arc<Options>,
-    desired_targets: DesiredTargets,
-    jobserver_client: jobserver::Client,
-) -> Result<()> {
-    match resolution {
-        Resolution::Fetch {
-            fetcher,
-            package,
-            name,
-            version,
-            bin_path,
-            bin_files,
-        } => {
-            let cvs = metafiles::CrateVersionSource {
-                name,
-                version: package.version.parse().into_diagnostic()?,
-                source: metafiles::Source::cratesio_registry(),
-            };
-
-            install_from_package(fetcher, opts, cvs, version, bin_path, bin_files).await
-        }
-        Resolution::InstallFromSource { package } => {
-            let desired_targets = desired_targets.get().await;
-            let target = desired_targets
-                .first()
-                .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
-
-            if !opts.dry_run {
-                install_from_source(package, target, jobserver_client).await
-            } else {
-                info!(
-                    "Dry-run: running `cargo install {} --version {} --target {target}`",
-                    package.name, package.version
-                );
-                Ok(())
-            }
-        }
-    }
-}
-
-async fn install_from_package(
-    fetcher: Arc<dyn Fetcher>,
-    opts: Arc<Options>,
-    cvs: metafiles::CrateVersionSource,
-    version: String,
-    bin_path: PathBuf,
-    bin_files: Vec<bins::BinFile>,
-) -> Result<()> {
-    // Download package
-    if opts.dry_run {
-        info!("Dry run, not downloading package");
-    } else {
-        fetcher.fetch_and_extract(&bin_path).await?;
-    }
-
-    #[cfg(incomplete)]
-    {
-        // Fetch and check package signature if available
-        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
-            debug!("Found public key: {pub_key}");
-
-            // Generate signature file URL
-            let mut sig_ctx = ctx.clone();
-            sig_ctx.format = "sig".to_string();
-            let sig_url = sig_ctx.render(&pkg_url)?;
-
-            debug!("Fetching signature file: {sig_url}");
-
-            // Download signature file
-            let sig_path = temp_dir.join(format!("{pkg_name}.sig"));
-            download(&sig_url, &sig_path).await?;
-
-            // TODO: do the signature check
-            unimplemented!()
-        } else {
-            warn!("No public key found, package signature could not be validated");
-        }
-    }
-
-    if opts.dry_run {
-        info!("Dry run, not proceeding");
-        return Ok(());
-    }
-
-    info!("Installing binaries...");
-    block_in_place(|| {
-        for file in &bin_files {
-            file.install_bin()?;
-        }
-
-        // Generate symlinks
-        if !opts.no_symlinks {
-            for file in &bin_files {
-                file.install_link()?;
-            }
-        }
-
-        let bins: BTreeSet<String> = bin_files.into_iter().map(|bin| bin.base_name).collect();
-
-        {
-            debug!("Writing .crates.toml");
-            let mut c1 = metafiles::v1::CratesToml::load().unwrap_or_default();
-            c1.insert(cvs.clone(), bins.clone());
-            c1.write()?;
-        }
-
-        {
-            debug!("Writing .crates2.json");
-            let mut c2 = metafiles::v2::Crates2Json::load().unwrap_or_default();
-            c2.insert(
-                cvs,
-                metafiles::v2::CrateInfo {
-                    version_req: Some(version),
-                    bins,
-                    profile: "release".into(),
-                    target: fetcher.target().to_string(),
-                    rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-                    ..Default::default()
-                },
-            );
-            c2.write()?;
-        }
-
-        Ok(())
-    })
-}
-
-async fn install_from_source(
-    package: Package<Meta>,
-    target: &str,
-    jobserver_client: jobserver::Client,
-) -> Result<()> {
-    debug!(
-        "Running `cargo install {} --version {} --target {target}`",
-        package.name, package.version
-    );
-    let mut command = process::Command::new("cargo");
-    jobserver_client.configure(&mut command);
-
-    let mut child = Command::from(command)
-        .arg("install")
-        .arg(package.name)
-        .arg("--version")
-        .arg(package.version)
-        .arg("--target")
-        .arg(&*target)
-        .spawn()
-        .into_diagnostic()
-        .wrap_err("Spawning cargo install failed.")?;
-    debug!("Spawned command pid={:?}", child.id());
-
-    let status = child
-        .wait()
-        .await
-        .into_diagnostic()
-        .wrap_err("Running cargo install failed.")?;
-    if status.success() {
-        info!("Cargo finished successfully");
-        Ok(())
-    } else {
-        error!("Cargo errored! {status:?}");
-        Err(miette!("Cargo install error"))
-    }
 }
