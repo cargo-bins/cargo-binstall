@@ -1,9 +1,7 @@
 use std::fmt::Debug;
 use std::fs;
 use std::io;
-use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::thread::available_parallelism;
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
@@ -30,6 +28,9 @@ pub use ui_thread::UIThread;
 mod extracter;
 mod stream_readable;
 
+mod jobserver_client;
+pub use jobserver_client::*;
+
 mod path_ext;
 pub use path_ext::*;
 
@@ -43,22 +44,6 @@ pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> 
     match task.await {
         Ok(res) => res,
         Err(join_err) => Err(miette::miette!("Task failed to join: {}", join_err)),
-    }
-}
-
-pub fn create_jobserver_client() -> Result<jobserver::Client, BinstallError> {
-    use jobserver::Client;
-
-    // Safety:
-    //
-    // Client::from_env is unsafe because from_raw_fd is unsafe.
-    // It doesn't do anything that is actually unsafe, like
-    // dereferencing pointer.
-    if let Some(client) = unsafe { Client::from_env() } {
-        Ok(client)
-    } else {
-        let ncore = available_parallelism().map(NonZeroUsize::get).unwrap_or(1);
-        Ok(Client::new(ncore)?)
     }
 }
 
