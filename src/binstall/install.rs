@@ -12,7 +12,7 @@ pub async fn install(
     resolution: Resolution,
     opts: Arc<Options>,
     desired_targets: DesiredTargets,
-    jobserver_client: jobserver::Client,
+    jobserver_client: LazyJobserverClient,
 ) -> Result<()> {
     match resolution {
         Resolution::Fetch {
@@ -140,8 +140,10 @@ async fn install_from_package(
 async fn install_from_source(
     package: Package<Meta>,
     target: &str,
-    jobserver_client: jobserver::Client,
+    lazy_jobserver_client: LazyJobserverClient,
 ) -> Result<()> {
+    let jobserver_client = lazy_jobserver_client.get().await?;
+
     debug!(
         "Running `cargo install {} --version {} --target {target}`",
         package.name, package.version

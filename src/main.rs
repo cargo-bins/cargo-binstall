@@ -160,10 +160,7 @@ impl Termination for MainExit {
 
 fn main() -> MainExit {
     // Create jobserver client
-    let jobserver_client = match create_jobserver_client() {
-        Ok(jobserver_client) => jobserver_client,
-        Err(binstall_err) => return MainExit::Error(binstall_err),
-    };
+    let jobserver_client = LazyJobserverClient::new();
 
     let start = Instant::now();
 
@@ -184,7 +181,7 @@ fn main() -> MainExit {
     })
 }
 
-async fn entry(jobserver_client: jobserver::Client) -> Result<()> {
+async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]

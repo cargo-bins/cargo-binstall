@@ -1,20 +1,35 @@
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::thread::available_parallelism;
+
+use jobserver::Client;
+use tokio::sync::OnceCell;
 
 use crate::BinstallError;
 
-pub fn create_jobserver_client() -> Result<jobserver::Client, BinstallError> {
-    use jobserver::Client;
+#[derive(Clone)]
+pub struct LazyJobserverClient(Arc<OnceCell<Client>>);
 
-    // Safety:
-    //
-    // Client::from_env is unsafe because from_raw_fd is unsafe.
-    // It doesn't do anything that is actually unsafe, like
-    // dereferencing pointer.
-    if let Some(client) = unsafe { Client::from_env() } {
-        Ok(client)
-    } else {
-        let ncore = available_parallelism().map(NonZeroUsize::get).unwrap_or(1);
-        Ok(Client::new(ncore)?)
+impl LazyJobserverClient {
+    /// This must be called at the start of the program since
+    /// `Client::from_env` requires that.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        // Safety:
+        //
+        // Client::from_env is unsafe because from_raw_fd is unsafe.
+        // It doesn't do anything that is actually unsafe, like
+        // dereferencing pointer.
+        let opt = unsafe { Client::from_env() };
+        Self(Arc::new(OnceCell::new_with(opt)))
+    }
+
+    pub async fn get(&self) -> Result<&Client, BinstallError> {
+        self.0
+            .get_or_try_init(|| async {
+                let ncore = available_parallelism().map(NonZeroUsize::get).unwrap_or(1);
+                Ok(Client::new(ncore)?)
+            })
+            .await
     }
 }
