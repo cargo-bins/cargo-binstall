@@ -650,9 +650,7 @@ async fn install_from_package(
     let cvs = metafiles::CrateVersionSource {
         name: name.clone(),
         version: package.version.parse().into_diagnostic()?,
-        source: metafiles::Source::Registry(
-            url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap(),
-        ),
+        source: metafiles::Source::cratesio_registry(),
     };
 
     info!("Installing binaries...");
