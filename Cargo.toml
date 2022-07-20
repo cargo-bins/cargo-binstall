@@ -49,7 +49,7 @@ tinytemplate = "1.2.1"
 tokio = { version = "1.20.0", features = ["rt-multi-thread", "process", "sync"], default-features = false }
 toml = "0.5.9"
 url = "2.2.2"
-xz2 = "0.1.6"
+xz2 = { version = "0.1.6", features = ["static"] }
 
 # Disable all features of zip except for features of compression algorithms:
 # Disabled features include:
@@ -62,10 +62,7 @@ zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzi
 # zstd is also depended by zip.
 # Since zip 0.6.2 depends on zstd 0.10.0, we also have to use 0.10.0 here,
 # otherwise there will be a link conflict.
-#
-# Enable feature bindgen to generate C bindings.
-# Enable feature zstdmt to enable multithreading in libzstd.
-zstd = { version = "0.10.0", features = ["bindgen", "zstdmt"], default-features = false }
+zstd = { version = "0.10.0", default-features = false }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 guess_host_triple = "0.1.3"
