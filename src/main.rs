@@ -576,10 +576,13 @@ async fn install(
             bin_path,
             bin_files,
         } => {
-            install_from_package(
-                fetcher, opts, package, name, temp_dir, version, bin_path, bin_files,
-            )
-            .await
+            let cvs = metafiles::CrateVersionSource {
+                name,
+                version: package.version.parse().into_diagnostic()?,
+                source: metafiles::Source::cratesio_registry(),
+            };
+
+            install_from_package(fetcher, opts, cvs, temp_dir, version, bin_path, bin_files).await
         }
         Resolution::InstallFromSource { package } => {
             let desired_targets = desired_targets.get().await;
@@ -604,8 +607,7 @@ async fn install(
 async fn install_from_package(
     fetcher: Arc<dyn Fetcher>,
     opts: Arc<Options>,
-    package: Package<Meta>,
-    name: String,
+    cvs: metafiles::CrateVersionSource,
     temp_dir: Arc<Path>,
     version: String,
     bin_path: PathBuf,
@@ -646,12 +648,6 @@ async fn install_from_package(
         info!("Dry run, not proceeding");
         return Ok(());
     }
-
-    let cvs = metafiles::CrateVersionSource {
-        name: name.clone(),
-        version: package.version.parse().into_diagnostic()?,
-        source: metafiles::Source::cratesio_registry(),
-    };
 
     info!("Installing binaries...");
     block_in_place(|| {
