@@ -175,6 +175,16 @@ pub enum BinstallError {
         help("Remove the `--version req` or simply use `$crate_name`")
     )]
     DuplicateVersionReq,
+
+    /// This occurs when you specified `--manifest-path` while also
+    /// specifing multiple crates to install.
+    #[error("If you use --manifest-path, then you can only specify one crate to install")]
+    #[diagnostic(
+        severity(error),
+        code(binstall::manifest_path),
+        help("Remove the `--manifest-path` or only specify one `$crate_name`")
+    )]
+    ManifestPathConflictedWithBatchInstallation,
 }
 
 impl BinstallError {
@@ -202,6 +212,7 @@ impl BinstallError {
             VersionMismatch { .. } => 82,
             VersionUnavailable { .. } => 83,
             DuplicateVersionReq => 84,
+            ManifestPathConflictedWithBatchInstallation => 85,
         };
 
         // reserved codes
