@@ -90,6 +90,7 @@ pub async fn resolve(
         (None, None) => "*".to_string(),
     };
 
+    // Treat 0.1.2 as =0.1.2
     if version
         .chars()
         .next()
