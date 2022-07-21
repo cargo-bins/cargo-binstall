@@ -43,7 +43,7 @@ pub use crate_name::CrateName;
 pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> miette::Result<T> {
     match task.await {
         Ok(res) => res,
-        Err(join_err) => Err(miette::miette!("Task failed to join: {}", join_err)),
+        Err(join_err) => Err(BinstallError::from(join_err).into()),
     }
 }
 
