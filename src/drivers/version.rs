@@ -17,7 +17,7 @@ impl<T: Version> Version for &T {
 impl Version for crates_io_api::Version {
     fn get_version(&self) -> Option<semver::Version> {
         // Remove leading `v` for git tags
-        let ver_str = match self.num.strip_prefix('s') {
+        let ver_str = match self.num.strip_prefix('v') {
             Some(v) => v,
             None => &self.num,
         };
