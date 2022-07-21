@@ -34,22 +34,8 @@ pub async fn fetch_crate_cratesio(
         })?;
 
     // Locate matching version
-    let version_iter =
-        base_info
-            .versions
-            .iter()
-            .filter_map(|v| if !v.yanked { Some(&v.num) } else { None });
-    let version_name = find_version(version_req, version_iter)?;
-
-    // Fetch information for the filtered version
-    let version = base_info
-        .versions
-        .iter()
-        .find(|v| v.num == version_name.to_string())
-        .ok_or_else(|| BinstallError::VersionUnavailable {
-            crate_name: name.into(),
-            v: version_name.clone(),
-        })?;
+    let version_iter = base_info.versions.iter().filter(|v| !v.yanked);
+    let (version, version_name) = find_version(version_req, version_iter)?;
 
     debug!("Found information for crate version: '{}'", version.num);
 
