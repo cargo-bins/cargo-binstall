@@ -1,12 +1,14 @@
 use std::fmt::Debug;
 use std::fs;
 use std::io;
+use std::ops;
 use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
 use futures_util::stream::Stream;
 use log::debug;
+use once_cell::sync::OnceCell;
 use reqwest::{tls, Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tempfile::NamedTempFile;
@@ -39,6 +41,14 @@ pub use tls_version::TLSVersion;
 
 mod crate_name;
 pub use crate_name::CrateName;
+
+pub fn cargo_home() -> Result<&'static Path, io::Error> {
+    static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();
+
+    CARGO_HOME
+        .get_or_try_init(home::cargo_home)
+        .map(ops::Deref::deref)
+}
 
 pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> miette::Result<T> {
     match task.await {
