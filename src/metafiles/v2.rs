@@ -60,7 +60,8 @@ impl Crates2Json {
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), Crates2JsonParseError> {
-        fs::write(path, &serde_json::to_vec(&self)?)?;
+        let file = fs::File::create(path.as_ref())?;
+        serde_json::to_writer(file, &self)?;
         Ok(())
     }
 
