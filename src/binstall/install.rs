@@ -11,7 +11,6 @@ use crate::{bins, fetchers::Fetcher, *};
 pub async fn install(
     resolution: Resolution,
     opts: Arc<Options>,
-    desired_targets: DesiredTargets,
     jobserver_client: LazyJobserverClient,
 ) -> Result<()> {
     match resolution {
@@ -32,7 +31,7 @@ pub async fn install(
             install_from_package(fetcher, opts, cvs, version, bin_path, bin_files).await
         }
         Resolution::InstallFromSource { package } => {
-            let desired_targets = desired_targets.get().await;
+            let desired_targets = opts.desired_targets.get().await;
             let target = desired_targets
                 .first()
                 .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;

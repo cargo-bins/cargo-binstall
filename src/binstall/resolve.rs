@@ -75,7 +75,6 @@ impl Resolution {
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
-    desired_targets: DesiredTargets,
     temp_dir: Arc<Path>,
     install_path: Arc<Path>,
     client: Client,
@@ -123,7 +122,7 @@ pub async fn resolve(
 
     let mut fetchers = MultiFetcher::default();
 
-    let desired_targets = desired_targets.get().await;
+    let desired_targets = opts.desired_targets.get().await;
 
     for target in desired_targets {
         debug!("Building metadata for target: {target}");

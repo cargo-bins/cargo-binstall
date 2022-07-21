@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::PkgOverride;
+use crate::{DesiredTargets, PkgOverride};
 
 mod resolve;
 pub use resolve::*;
@@ -14,4 +14,5 @@ pub struct Options {
     pub version: Option<String>,
     pub manifest_path: Option<PathBuf>,
     pub cli_overrides: PkgOverride,
+    pub desired_targets: DesiredTargets,
 }

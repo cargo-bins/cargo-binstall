@@ -266,6 +266,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         version: opts.version.take(),
         manifest_path: opts.manifest_path.take(),
         cli_overrides,
+        desired_targets,
     });
 
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
@@ -276,7 +277,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 tokio::spawn(binstall::resolve(
                     binstall_opts.clone(),
                     crate_name,
-                    desired_targets.clone(),
                     temp_dir_path.clone(),
                     install_path.clone(),
                     client.clone(),
@@ -300,7 +300,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 tokio::spawn(binstall::install(
                     resolution,
                     binstall_opts.clone(),
-                    desired_targets.clone(),
                     jobserver_client.clone(),
                 ))
             })
@@ -312,9 +311,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             .map(|crate_name| {
                 let opts = binstall_opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
-                let desired_target = desired_targets.clone();
                 let jobserver_client = jobserver_client.clone();
-                let desired_targets = desired_targets.clone();
                 let client = client.clone();
                 let crates_io_api_client = crates_io_api_client.clone();
                 let install_path = install_path.clone();
@@ -323,7 +320,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     let resolution = binstall::resolve(
                         opts.clone(),
                         crate_name,
-                        desired_targets.clone(),
                         temp_dir_path,
                         install_path,
                         client,
@@ -331,7 +327,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     )
                     .await?;
 
-                    binstall::install(resolution, opts, desired_target, jobserver_client).await
+                    binstall::install(resolution, opts, jobserver_client).await
                 })
             })
             .collect()
