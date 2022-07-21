@@ -133,7 +133,6 @@ enum MainExit {
     Success(Duration),
     Error(BinstallError),
     Report(miette::Report),
-    JoinErr(JoinError),
 }
 
 impl Termination for MainExit {
@@ -148,11 +147,6 @@ impl Termination for MainExit {
                 error!("Fatal error:");
                 eprintln!("{err:?}");
                 ExitCode::from(16)
-            }
-            Self::JoinErr(err) => {
-                error!("Fatal error:");
-                eprintln!("{err:?}");
-                ExitCode::from(17)
             }
         }
     }
