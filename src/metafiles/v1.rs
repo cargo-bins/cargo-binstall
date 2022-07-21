@@ -13,7 +13,7 @@ use super::CrateVersionSource;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
-    v1: BTreeMap<CrateVersionSource, BTreeSet<String>>,
+    v1: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl CratesToml {
@@ -31,7 +31,7 @@ impl CratesToml {
     }
 
     pub fn insert(&mut self, cvs: CrateVersionSource, bins: BTreeSet<String>) {
-        self.v1.insert(cvs, bins);
+        self.v1.insert(cvs.to_string(), bins);
     }
 
     pub fn write(&self) -> Result<(), CratesTomlParseError> {
