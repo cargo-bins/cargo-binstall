@@ -74,7 +74,7 @@ impl MultiFetcher {
                 }
                 Err(join_err) => {
                     debug!(
-                        "Error while checking fetcher {}: {}",
+                        "Error while joining the task that checks the fetcher {}: {}",
                         fetcher.source_name(),
                         join_err
                     );
