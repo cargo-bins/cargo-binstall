@@ -186,9 +186,20 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
     let mut args: Vec<OsString> = std::env::args_os().collect();
-    if args.len() > 1 && args[1] == "binstall" {
-        args.remove(1);
-    }
+    let args = if args.len() > 1 && args[1] == "binstall" {
+        // Equivalent to
+        //
+        //     args.remove(1);
+        //
+        // But is O(1)
+        args.swap(0, 1);
+        let mut args = args.into_iter();
+        drop(args.next().unwrap());
+
+        args
+    } else {
+        args.into_iter()
+    };
 
     // Load options
     let mut opts = Options::parse_from(args);
