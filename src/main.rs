@@ -216,6 +216,13 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
 
+    // Build crates.io api client
+    let crates_io_api_client = crates_io_api::AsyncClient::new(
+        "cargo-binstall (https://github.com/ryankurte/cargo-binstall)",
+        Duration::from_millis(100),
+    )
+    .expect("bug: invalid user agent");
+
     // Setup logging
     let mut log_config = ConfigBuilder::new();
     log_config.add_filter_ignore("hyper".to_string());
@@ -273,6 +280,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     temp_dir_path.clone(),
                     install_path.clone(),
                     client.clone(),
+                    crates_io_api_client.clone(),
                 ))
             })
             .collect();
@@ -308,6 +316,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 let jobserver_client = jobserver_client.clone();
                 let desired_targets = desired_targets.clone();
                 let client = client.clone();
+                let crates_io_api_client = crates_io_api_client.clone();
                 let cli_overrides = cli_overrides.clone();
                 let install_path = install_path.clone();
 
@@ -320,6 +329,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                         temp_dir_path,
                         install_path,
                         client,
+                        crates_io_api_client,
                     )
                     .await?;
 

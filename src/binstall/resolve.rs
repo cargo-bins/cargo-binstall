@@ -72,6 +72,7 @@ impl Resolution {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
@@ -80,6 +81,7 @@ pub async fn resolve(
     temp_dir: Arc<Path>,
     install_path: Arc<Path>,
     client: Client,
+    crates_io_api_client: crates_io_api::AsyncClient,
 ) -> Result<Resolution> {
     info!("Installing package: '{}'", crate_name);
 
@@ -105,7 +107,9 @@ pub async fn resolve(
     // TODO: support git-based fetches (whole repo name rather than just crate name)
     let manifest = match opts.manifest_path.clone() {
         Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
-        None => fetch_crate_cratesio(&client, &crate_name.name, &version).await?,
+        None => {
+            fetch_crate_cratesio(&client, &crates_io_api_client, &crate_name.name, &version).await?
+        }
     };
 
     let package = manifest.package.unwrap();
