@@ -12,7 +12,7 @@ use super::CrateVersionSource;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Crates2Json {
-    pub installs: BTreeMap<CrateVersionSource, CrateInfo>,
+    pub installs: BTreeMap<String, CrateInfo>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -52,7 +52,7 @@ impl Crates2Json {
     }
 
     pub fn insert(&mut self, cvs: CrateVersionSource, info: CrateInfo) {
-        self.installs.insert(cvs, info);
+        self.installs.insert(cvs.to_string(), info);
     }
 
     pub fn write(&self) -> Result<(), Crates2JsonParseError> {
