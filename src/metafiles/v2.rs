@@ -63,6 +63,22 @@ impl Crates2Json {
         fs::write(path, &serde_json::to_vec(&self)?)?;
         Ok(())
     }
+
+    pub fn append_to_path(
+        path: impl AsRef<Path>,
+        cvs: CrateVersionSource,
+        info: CrateInfo,
+    ) -> Result<(), Crates2JsonParseError> {
+        let mut c2 = Self::load_from_path(path.as_ref()).unwrap_or_default();
+        c2.insert(cvs, info);
+        c2.write_to_path(path.as_ref())?;
+
+        Ok(())
+    }
+
+    pub fn append(cvs: CrateVersionSource, info: CrateInfo) -> Result<(), Crates2JsonParseError> {
+        Self::append_to_path(Self::default_path()?, cvs, info)
+    }
 }
 
 #[derive(Debug, Diagnostic, Error)]
