@@ -72,12 +72,10 @@ impl Resolution {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
     desired_targets: DesiredTargets,
-    cli_overrides: Arc<PkgOverride>,
     temp_dir: Arc<Path>,
     install_path: Arc<Path>,
     client: Client,
@@ -136,7 +134,7 @@ pub async fn resolve(
             target_meta.merge(&o);
         }
 
-        target_meta.merge(&cli_overrides);
+        target_meta.merge(&opts.cli_overrides);
         debug!("Found metadata: {target_meta:?}");
 
         let fetcher_data = Data {
@@ -158,7 +156,7 @@ pub async fn resolve(
             if let Some(o) = meta.overrides.get(&fetcher_target.to_owned()).cloned() {
                 meta.merge(&o);
             }
-            meta.merge(&cli_overrides);
+            meta.merge(&opts.cli_overrides);
 
             // Generate temporary binary path
             let bin_path = temp_dir.join(format!("bin-{}", crate_name.name));

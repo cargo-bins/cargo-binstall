@@ -203,11 +203,11 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Load options
     let mut opts = Options::parse_from(args);
-    let cli_overrides = Arc::new(PkgOverride {
+    let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
-    });
+    };
     let crate_names = take(&mut opts.crate_names);
     if crate_names.len() > 1 && opts.manifest_path.is_some() {
         return Err(BinstallError::ManifestPathConflictedWithBatchInstallation.into());
@@ -265,6 +265,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         dry_run: opts.dry_run,
         version: opts.version.take(),
         manifest_path: opts.manifest_path.take(),
+        cli_overrides,
     });
 
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
@@ -276,7 +277,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     binstall_opts.clone(),
                     crate_name,
                     desired_targets.clone(),
-                    cli_overrides.clone(),
                     temp_dir_path.clone(),
                     install_path.clone(),
                     client.clone(),
@@ -317,7 +317,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 let desired_targets = desired_targets.clone();
                 let client = client.clone();
                 let crates_io_api_client = crates_io_api_client.clone();
-                let cli_overrides = cli_overrides.clone();
                 let install_path = install_path.clone();
 
                 tokio::spawn(async move {
@@ -325,7 +324,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                         opts.clone(),
                         crate_name,
                         desired_targets.clone(),
-                        cli_overrides,
                         temp_dir_path,
                         install_path,
                         client,
