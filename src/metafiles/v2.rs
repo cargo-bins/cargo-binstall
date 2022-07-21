@@ -51,7 +51,7 @@ impl Crates2Json {
         Ok(serde_json::from_reader(file)?)
     }
 
-    pub fn insert(&mut self, cvs: CrateVersionSource, info: CrateInfo) {
+    pub fn insert(&mut self, cvs: &CrateVersionSource, info: CrateInfo) {
         self.installs.insert(cvs.to_string(), info);
     }
 
@@ -67,7 +67,7 @@ impl Crates2Json {
 
     pub fn append_to_path(
         path: impl AsRef<Path>,
-        cvs: CrateVersionSource,
+        cvs: &CrateVersionSource,
         info: CrateInfo,
     ) -> Result<(), Crates2JsonParseError> {
         let mut c2 = match Self::load_from_path(path.as_ref()) {
@@ -83,7 +83,7 @@ impl Crates2Json {
         Ok(())
     }
 
-    pub fn append(cvs: CrateVersionSource, info: CrateInfo) -> Result<(), Crates2JsonParseError> {
+    pub fn append(cvs: &CrateVersionSource, info: CrateInfo) -> Result<(), Crates2JsonParseError> {
         Self::append_to_path(Self::default_path()?, cvs, info)
     }
 }

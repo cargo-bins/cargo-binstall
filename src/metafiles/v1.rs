@@ -30,7 +30,7 @@ impl CratesToml {
         Self::from_str(&file)
     }
 
-    pub fn insert(&mut self, cvs: CrateVersionSource, bins: BTreeSet<String>) {
+    pub fn insert(&mut self, cvs: &CrateVersionSource, bins: BTreeSet<String>) {
         self.v1.insert(cvs.to_string(), bins);
     }
 
@@ -45,7 +45,7 @@ impl CratesToml {
 
     pub fn append_to_path(
         path: impl AsRef<Path>,
-        cvs: CrateVersionSource,
+        cvs: &CrateVersionSource,
         bins: BTreeSet<String>,
     ) -> Result<(), CratesTomlParseError> {
         let mut c1 = match Self::load_from_path(path.as_ref()) {
@@ -62,7 +62,7 @@ impl CratesToml {
     }
 
     pub fn append(
-        cvs: CrateVersionSource,
+        cvs: &CrateVersionSource,
         bins: BTreeSet<String>,
     ) -> Result<(), CratesTomlParseError> {
         Self::append_to_path(Self::default_path()?, cvs, bins)
