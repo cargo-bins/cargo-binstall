@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -69,7 +69,13 @@ impl Crates2Json {
         cvs: CrateVersionSource,
         info: CrateInfo,
     ) -> Result<(), Crates2JsonParseError> {
-        let mut c2 = Self::load_from_path(path.as_ref()).unwrap_or_default();
+        let mut c2 = match Self::load_from_path(path.as_ref()) {
+            Ok(c2) => c2,
+            Err(Crates2JsonParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
+                Self::default()
+            }
+            Err(err) => return Err(err),
+        };
         c2.insert(cvs, info);
         c2.write_to_path(path.as_ref())?;
 
@@ -84,7 +90,7 @@ impl Crates2Json {
 #[derive(Debug, Diagnostic, Error)]
 pub enum Crates2JsonParseError {
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),
