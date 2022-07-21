@@ -116,6 +116,7 @@ impl<'de> Deserialize<'de> for CrateVersionSource {
     where
         D: Deserializer<'de>,
     {
-        Self::from_str(&String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+        let s = <&str>::deserialize(deserializer)?;
+        Self::from_str(s).map_err(serde::de::Error::custom)
     }
 }
