@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs, io,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -48,7 +48,13 @@ impl CratesToml {
         cvs: CrateVersionSource,
         bins: BTreeSet<String>,
     ) -> Result<(), CratesTomlParseError> {
-        let mut c1 = Self::load_from_path(path.as_ref()).unwrap_or_default();
+        let mut c1 = match Self::load_from_path(path.as_ref()) {
+            Ok(c1) => c1,
+            Err(CratesTomlParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
+                Self::default()
+            }
+            Err(err) => return Err(err),
+        };
         c1.insert(cvs, bins);
         c1.write_to_path(path.as_ref())?;
 
@@ -73,7 +79,7 @@ impl FromStr for CratesToml {
 #[derive(Debug, Diagnostic, Error)]
 pub enum CratesTomlParseError {
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
 
     #[error(transparent)]
     TomlParse(#[from] toml::de::Error),
