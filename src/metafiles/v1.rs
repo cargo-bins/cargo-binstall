@@ -47,18 +47,16 @@ impl CratesToml {
         self.write_to_path(Self::default_path()?)
     }
 
-    pub fn write_to_writer<W: io::Write>(
-        &self,
-        mut writer: W,
-    ) -> Result<u64, CratesTomlParseError> {
+    pub fn write_to_writer<W: io::Write>(&self, mut writer: W) -> Result<(), CratesTomlParseError> {
         let data = toml::to_vec(&self)?;
         writer.write_all(&data)?;
-        Ok(data.len().try_into().unwrap())
+        Ok(())
     }
 
     pub fn write_to_file(&self, file: &mut fs::File) -> Result<(), CratesTomlParseError> {
-        let cnt = self.write_to_writer(&mut *file)?;
-        file.set_len(cnt)?;
+        self.write_to_writer(&mut *file)?;
+        let pos = file.stream_position()?;
+        file.set_len(pos)?;
 
         Ok(())
     }
