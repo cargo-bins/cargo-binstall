@@ -46,6 +46,15 @@ impl CratesToml {
         self.write_to_path(Self::default_path()?)
     }
 
+    pub fn write_to_writer<W: io::Write>(
+        &self,
+        mut writer: W,
+    ) -> Result<u64, CratesTomlParseError> {
+        let data = toml::to_vec(&self)?;
+        writer.write_all(&data)?;
+        Ok(data.len().try_into().unwrap())
+    }
+
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
         fs::write(path, &toml::to_vec(&self)?)?;
         Ok(())
