@@ -12,10 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install cargo-release
-        uses: baptiste0928/cargo-install@v1
+        uses: taiki-e/install-action@v1
         with:
-          crate: cargo-release
-          version: "0.21"
+          tool: cargo-release
 
       - uses: actions/checkout@v2
         with:
