@@ -250,7 +250,13 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     debug!("Using install path: {}", install_path.display());
 
     // Create a temporary directory for downloads etc.
-    let temp_dir = TempDir::new()
+    //
+    // Put all binaries to a temporary directory under `dst` first, catching
+    // some failure modes (e.g., out of space) before touching the existing
+    // binaries. This directory will get cleaned up via RAII.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("cargo-binstall")
+        .tempdir_in(&install_path)
         .map_err(BinstallError::from)
         .wrap_err("Creating a temporary directory failed.")?;
 
