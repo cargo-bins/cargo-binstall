@@ -42,6 +42,9 @@ pub use tls_version::TLSVersion;
 mod crate_name;
 pub use crate_name::CrateName;
 
+mod flock;
+pub use flock::FileLock;
+
 pub fn cargo_home() -> Result<&'static Path, io::Error> {
     static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();
 
