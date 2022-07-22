@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::CrateVersionSource;
-use crate::cargo_home;
+use crate::{cargo_home, create_if_not_exist, FileLock};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
@@ -53,6 +53,13 @@ impl CratesToml {
         let data = toml::to_vec(&self)?;
         writer.write_all(&data)?;
         Ok(data.len().try_into().unwrap())
+    }
+
+    pub fn write_to_file(&self, file: &mut fs::File) -> Result<(), CratesTomlParseError> {
+        let cnt = self.write_to_writer(&mut *file)?;
+        file.set_len(cnt)?;
+
+        Ok(())
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
