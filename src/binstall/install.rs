@@ -108,29 +108,21 @@ async fn install_from_package(
 
         let bins: BTreeSet<String> = bin_files.into_iter().map(|bin| bin.base_name).collect();
 
-        {
-            debug!("Writing .crates.toml");
-            let mut c1 = metafiles::v1::CratesToml::load().unwrap_or_default();
-            c1.insert(cvs.clone(), bins.clone());
-            c1.write()?;
-        }
+        debug!("Writing .crates.toml");
+        metafiles::v1::CratesToml::append(&cvs, bins.clone())?;
 
-        {
-            debug!("Writing .crates2.json");
-            let mut c2 = metafiles::v2::Crates2Json::load().unwrap_or_default();
-            c2.insert(
-                cvs,
-                metafiles::v2::CrateInfo {
-                    version_req: Some(version),
-                    bins,
-                    profile: "release".into(),
-                    target: fetcher.target().to_string(),
-                    rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-                    ..Default::default()
-                },
-            );
-            c2.write()?;
-        }
+        debug!("Writing .crates2.json");
+        metafiles::v2::Crates2Json::append(
+            &cvs,
+            metafiles::v2::CrateInfo {
+                version_req: Some(version),
+                bins,
+                profile: "release".into(),
+                target: fetcher.target().to_string(),
+                rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+                ..Default::default()
+            },
+        )?;
 
         Ok(())
     })

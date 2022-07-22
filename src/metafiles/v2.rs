@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -13,7 +13,7 @@ use crate::cargo_home;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Crates2Json {
-    pub installs: BTreeMap<CrateVersionSource, CrateInfo>,
+    pub installs: BTreeMap<String, CrateInfo>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -48,12 +48,12 @@ impl Crates2Json {
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, Crates2JsonParseError> {
-        let file = fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&file)?)
+        let file = fs::File::open(path.as_ref())?;
+        Ok(serde_json::from_reader(file)?)
     }
 
-    pub fn insert(&mut self, cvs: CrateVersionSource, info: CrateInfo) {
-        self.installs.insert(cvs, info);
+    pub fn insert(&mut self, cvs: &CrateVersionSource, info: CrateInfo) {
+        self.installs.insert(cvs.to_string(), info);
     }
 
     pub fn write(&self) -> Result<(), Crates2JsonParseError> {
@@ -61,15 +61,38 @@ impl Crates2Json {
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), Crates2JsonParseError> {
-        fs::write(path, &serde_json::to_vec(&self)?)?;
+        let file = fs::File::create(path.as_ref())?;
+        serde_json::to_writer(file, &self)?;
         Ok(())
+    }
+
+    pub fn append_to_path(
+        path: impl AsRef<Path>,
+        cvs: &CrateVersionSource,
+        info: CrateInfo,
+    ) -> Result<(), Crates2JsonParseError> {
+        let mut c2 = match Self::load_from_path(path.as_ref()) {
+            Ok(c2) => c2,
+            Err(Crates2JsonParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
+                Self::default()
+            }
+            Err(err) => return Err(err),
+        };
+        c2.insert(cvs, info);
+        c2.write_to_path(path.as_ref())?;
+
+        Ok(())
+    }
+
+    pub fn append(cvs: &CrateVersionSource, info: CrateInfo) -> Result<(), Crates2JsonParseError> {
+        Self::append_to_path(Self::default_path()?, cvs, info)
     }
 }
 
 #[derive(Debug, Diagnostic, Error)]
 pub enum Crates2JsonParseError {
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),

@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs, io,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -14,7 +14,7 @@ use crate::cargo_home;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
-    v1: BTreeMap<CrateVersionSource, BTreeSet<String>>,
+    v1: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl CratesToml {
@@ -31,8 +31,8 @@ impl CratesToml {
         Self::from_str(&file)
     }
 
-    pub fn insert(&mut self, cvs: CrateVersionSource, bins: BTreeSet<String>) {
-        self.v1.insert(cvs, bins);
+    pub fn insert(&mut self, cvs: &CrateVersionSource, bins: BTreeSet<String>) {
+        self.v1.insert(cvs.to_string(), bins);
     }
 
     pub fn write(&self) -> Result<(), CratesTomlParseError> {
@@ -42,6 +42,31 @@ impl CratesToml {
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
         fs::write(path, &toml::to_vec(&self)?)?;
         Ok(())
+    }
+
+    pub fn append_to_path(
+        path: impl AsRef<Path>,
+        cvs: &CrateVersionSource,
+        bins: BTreeSet<String>,
+    ) -> Result<(), CratesTomlParseError> {
+        let mut c1 = match Self::load_from_path(path.as_ref()) {
+            Ok(c1) => c1,
+            Err(CratesTomlParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
+                Self::default()
+            }
+            Err(err) => return Err(err),
+        };
+        c1.insert(cvs, bins);
+        c1.write_to_path(path.as_ref())?;
+
+        Ok(())
+    }
+
+    pub fn append(
+        cvs: &CrateVersionSource,
+        bins: BTreeSet<String>,
+    ) -> Result<(), CratesTomlParseError> {
+        Self::append_to_path(Self::default_path()?, cvs, bins)
     }
 }
 
@@ -55,7 +80,7 @@ impl FromStr for CratesToml {
 #[derive(Debug, Diagnostic, Error)]
 pub enum CratesTomlParseError {
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
 
     #[error(transparent)]
     TomlParse(#[from] toml::de::Error),
