@@ -48,9 +48,13 @@ impl Crates2Json {
         Self::load_from_path(Self::default_path()?)
     }
 
+    pub fn load_from_reader<R: io::Read>(reader: R) -> Result<Self, Crates2JsonParseError> {
+        Ok(serde_json::from_reader(reader)?)
+    }
+
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, Crates2JsonParseError> {
         let file = fs::File::open(path.as_ref())?;
-        Ok(serde_json::from_reader(file)?)
+        Self::load_from_reader(file)
     }
 
     pub fn insert(&mut self, cvs: &CrateVersionSource, info: CrateInfo) {
