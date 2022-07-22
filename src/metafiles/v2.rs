@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::CrateVersionSource;
-use crate::cargo_home;
+use crate::{cargo_home, create_if_not_exist, FileLock};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Crates2Json {
@@ -91,17 +91,15 @@ impl Crates2Json {
     where
         Iter: IntoIterator<Item = (CrateVersionSource, CrateInfo)>,
     {
-        let mut c2 = match Self::load_from_path(path.as_ref()) {
-            Ok(c2) => c2,
-            Err(Crates2JsonParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
-                Self::default()
-            }
-            Err(err) => return Err(err),
-        };
+        let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+        let mut c2 = Self::load_from_reader(&mut *file)?;
+
         for (cvs, info) in iter {
             c2.insert(&cvs, info);
         }
-        c2.write_to_path(path.as_ref())?;
+
+        file.rewind()?;
+        c2.write_to_file(&mut *file)?;
 
         Ok(())
     }
