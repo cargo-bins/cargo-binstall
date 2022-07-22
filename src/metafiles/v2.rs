@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs, io,
+    iter::IntoIterator,
     path::{Path, PathBuf},
 };
 
@@ -66,11 +67,13 @@ impl Crates2Json {
         Ok(())
     }
 
-    pub fn append_to_path(
+    pub fn append_to_path<Iter>(
         path: impl AsRef<Path>,
-        cvs: &CrateVersionSource,
-        info: CrateInfo,
-    ) -> Result<(), Crates2JsonParseError> {
+        iter: Iter,
+    ) -> Result<(), Crates2JsonParseError>
+    where
+        Iter: IntoIterator<Item = (CrateVersionSource, CrateInfo)>,
+    {
         let mut c2 = match Self::load_from_path(path.as_ref()) {
             Ok(c2) => c2,
             Err(Crates2JsonParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
@@ -78,14 +81,19 @@ impl Crates2Json {
             }
             Err(err) => return Err(err),
         };
-        c2.insert(cvs, info);
+        for (cvs, info) in iter {
+            c2.insert(&cvs, info);
+        }
         c2.write_to_path(path.as_ref())?;
 
         Ok(())
     }
 
-    pub fn append(cvs: &CrateVersionSource, info: CrateInfo) -> Result<(), Crates2JsonParseError> {
-        Self::append_to_path(Self::default_path()?, cvs, info)
+    pub fn append<Iter>(iter: Iter) -> Result<(), Crates2JsonParseError>
+    where
+        Iter: IntoIterator<Item = (CrateVersionSource, CrateInfo)>,
+    {
+        Self::append_to_path(Self::default_path()?, iter)
     }
 }
 
