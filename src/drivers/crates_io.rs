@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::time::Duration;
 
 use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
@@ -18,46 +17,25 @@ use visitor::ManifestVisitor;
 /// Fetch a crate Cargo.toml by name and version from crates.io
 pub async fn fetch_crate_cratesio(
     client: &Client,
+    crates_io_api_client: &AsyncClient,
     name: &str,
     version_req: &str,
 ) -> Result<Manifest<Meta>, BinstallError> {
     // Fetch / update index
     debug!("Looking up crate information");
 
-    // Build crates.io api client
-    let api_client = AsyncClient::new(
-        "cargo-binstall (https://github.com/ryankurte/cargo-binstall)",
-        Duration::from_millis(100),
-    )
-    .expect("bug: invalid user agent");
-
     // Fetch online crate information
-    let base_info =
-        api_client
-            .get_crate(name.as_ref())
-            .await
-            .map_err(|err| BinstallError::CratesIoApi {
-                crate_name: name.into(),
-                err,
-            })?;
+    let base_info = crates_io_api_client
+        .get_crate(name.as_ref())
+        .await
+        .map_err(|err| BinstallError::CratesIoApi {
+            crate_name: name.into(),
+            err,
+        })?;
 
     // Locate matching version
-    let version_iter =
-        base_info
-            .versions
-            .iter()
-            .filter_map(|v| if !v.yanked { Some(&v.num) } else { None });
-    let version_name = find_version(version_req, version_iter)?;
-
-    // Fetch information for the filtered version
-    let version = base_info
-        .versions
-        .iter()
-        .find(|v| v.num == version_name.to_string())
-        .ok_or_else(|| BinstallError::VersionUnavailable {
-            crate_name: name.into(),
-            v: version_name.clone(),
-        })?;
+    let version_iter = base_info.versions.iter().filter(|v| !v.yanked);
+    let (version, version_name) = find_version(version_req, version_iter)?;
 
     debug!("Found information for crate version: '{}'", version.num);
 

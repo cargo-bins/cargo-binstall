@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::CrateVersionSource;
+use crate::cargo_home;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Crates2Json {
@@ -39,7 +40,7 @@ pub struct CrateInfo {
 
 impl Crates2Json {
     pub fn default_path() -> Result<PathBuf, Crates2JsonParseError> {
-        Ok(home::cargo_home()?.join(".crates2.json"))
+        Ok(cargo_home()?.join(".crates2.json"))
     }
 
     pub fn load() -> Result<Self, Crates2JsonParseError> {

@@ -186,17 +186,28 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
     let mut args: Vec<OsString> = std::env::args_os().collect();
-    if args.len() > 1 && args[1] == "binstall" {
-        args.remove(1);
-    }
+    let args = if args.len() > 1 && args[1] == "binstall" {
+        // Equivalent to
+        //
+        //     args.remove(1);
+        //
+        // But is O(1)
+        args.swap(0, 1);
+        let mut args = args.into_iter();
+        drop(args.next().unwrap());
+
+        args
+    } else {
+        args.into_iter()
+    };
 
     // Load options
     let mut opts = Options::parse_from(args);
-    let cli_overrides = Arc::new(PkgOverride {
+    let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
-    });
+    };
     let crate_names = take(&mut opts.crate_names);
     if crate_names.len() > 1 && opts.manifest_path.is_some() {
         return Err(BinstallError::ManifestPathConflictedWithBatchInstallation.into());
@@ -204,6 +215,13 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
+
+    // Build crates.io api client
+    let crates_io_api_client = crates_io_api::AsyncClient::new(
+        "cargo-binstall (https://github.com/ryankurte/cargo-binstall)",
+        Duration::from_millis(100),
+    )
+    .expect("bug: invalid user agent");
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();
@@ -247,6 +265,8 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         dry_run: opts.dry_run,
         version: opts.version.take(),
         manifest_path: opts.manifest_path.take(),
+        cli_overrides,
+        desired_targets,
     });
 
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
@@ -257,11 +277,10 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 tokio::spawn(binstall::resolve(
                     binstall_opts.clone(),
                     crate_name,
-                    desired_targets.clone(),
-                    cli_overrides.clone(),
                     temp_dir_path.clone(),
                     install_path.clone(),
                     client.clone(),
+                    crates_io_api_client.clone(),
                 ))
             })
             .collect();
@@ -281,7 +300,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 tokio::spawn(binstall::install(
                     resolution,
                     binstall_opts.clone(),
-                    desired_targets.clone(),
                     jobserver_client.clone(),
                 ))
             })
@@ -293,26 +311,23 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             .map(|crate_name| {
                 let opts = binstall_opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
-                let desired_target = desired_targets.clone();
                 let jobserver_client = jobserver_client.clone();
-                let desired_targets = desired_targets.clone();
                 let client = client.clone();
-                let cli_overrides = cli_overrides.clone();
+                let crates_io_api_client = crates_io_api_client.clone();
                 let install_path = install_path.clone();
 
                 tokio::spawn(async move {
                     let resolution = binstall::resolve(
                         opts.clone(),
                         crate_name,
-                        desired_targets.clone(),
-                        cli_overrides,
                         temp_dir_path,
                         install_path,
                         client,
+                        crates_io_api_client,
                     )
                     .await?;
 
-                    binstall::install(resolution, opts, desired_target, jobserver_client).await
+                    binstall::install(resolution, opts, jobserver_client).await
                 })
             })
             .collect()

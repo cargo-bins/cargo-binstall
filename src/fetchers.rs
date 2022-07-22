@@ -47,30 +47,21 @@ pub struct Data {
     pub meta: PkgMeta,
 }
 
+type FetcherJoinHandle = AutoAbortJoinHandle<Result<bool, BinstallError>>;
+
 #[derive(Default)]
-pub struct MultiFetcher {
-    fetchers: Vec<Arc<dyn Fetcher>>,
-}
+pub struct MultiFetcher(Vec<(Arc<dyn Fetcher>, FetcherJoinHandle)>);
 
 impl MultiFetcher {
     pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
-        self.fetchers.push(fetcher);
+        self.0.push((
+            fetcher.clone(),
+            AutoAbortJoinHandle::new(tokio::spawn(async move { fetcher.check().await })),
+        ));
     }
 
-    pub async fn first_available(&self) -> Option<Arc<dyn Fetcher>> {
-        let handles: Vec<_> = self
-            .fetchers
-            .iter()
-            .cloned()
-            .map(|fetcher| {
-                (
-                    fetcher.clone(),
-                    AutoAbortJoinHandle::new(tokio::spawn(async move { fetcher.check().await })),
-                )
-            })
-            .collect();
-
-        for (fetcher, handle) in handles {
+    pub async fn first_available(self) -> Option<Arc<dyn Fetcher>> {
+        for (fetcher, handle) in self.0 {
             match handle.await {
                 Ok(Ok(true)) => return Some(fetcher),
                 Ok(Ok(false)) => (),
@@ -83,7 +74,7 @@ impl MultiFetcher {
                 }
                 Err(join_err) => {
                     debug!(
-                        "Error while checking fetcher {}: {}",
+                        "Error while joining the task that checks the fetcher {}: {}",
                         fetcher.source_name(),
                         join_err
                     );

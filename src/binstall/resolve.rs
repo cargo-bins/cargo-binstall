@@ -75,11 +75,10 @@ impl Resolution {
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
-    desired_targets: DesiredTargets,
-    cli_overrides: Arc<PkgOverride>,
     temp_dir: Arc<Path>,
     install_path: Arc<Path>,
     client: Client,
+    crates_io_api_client: crates_io_api::AsyncClient,
 ) -> Result<Resolution> {
     info!("Installing package: '{}'", crate_name);
 
@@ -90,6 +89,7 @@ pub async fn resolve(
         (None, None) => "*".to_string(),
     };
 
+    // Treat 0.1.2 as =0.1.2
     if version
         .chars()
         .next()
@@ -104,7 +104,9 @@ pub async fn resolve(
     // TODO: support git-based fetches (whole repo name rather than just crate name)
     let manifest = match opts.manifest_path.clone() {
         Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
-        None => fetch_crate_cratesio(&client, &crate_name.name, &version).await?,
+        None => {
+            fetch_crate_cratesio(&client, &crates_io_api_client, &crate_name.name, &version).await?
+        }
     };
 
     let package = manifest.package.unwrap();
@@ -120,7 +122,7 @@ pub async fn resolve(
 
     let mut fetchers = MultiFetcher::default();
 
-    let desired_targets = desired_targets.get().await;
+    let desired_targets = opts.desired_targets.get().await;
 
     for target in desired_targets {
         debug!("Building metadata for target: {target}");
@@ -131,7 +133,7 @@ pub async fn resolve(
             target_meta.merge(&o);
         }
 
-        target_meta.merge(&cli_overrides);
+        target_meta.merge(&opts.cli_overrides);
         debug!("Found metadata: {target_meta:?}");
 
         let fetcher_data = Data {
@@ -153,7 +155,7 @@ pub async fn resolve(
             if let Some(o) = meta.overrides.get(&fetcher_target.to_owned()).cloned() {
                 meta.merge(&o);
             }
-            meta.merge(&cli_overrides);
+            meta.merge(&opts.cli_overrides);
 
             // Generate temporary binary path
             let bin_path = temp_dir.join(format!("bin-{}", crate_name.name));

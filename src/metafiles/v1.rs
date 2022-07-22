@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::CrateVersionSource;
+use crate::cargo_home;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
@@ -18,7 +19,7 @@ pub struct CratesToml {
 
 impl CratesToml {
     pub fn default_path() -> Result<PathBuf, CratesTomlParseError> {
-        Ok(home::cargo_home()?.join(".crates.toml"))
+        Ok(cargo_home()?.join(".crates.toml"))
     }
 
     pub fn load() -> Result<Self, CratesTomlParseError> {
