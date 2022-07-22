@@ -1,6 +1,7 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use crate::{DesiredTargets, PkgOverride};
+use crate::{metafiles, DesiredTargets, PkgOverride};
 
 mod resolve;
 pub use resolve::*;
@@ -15,4 +16,12 @@ pub struct Options {
     pub manifest_path: Option<PathBuf>,
     pub cli_overrides: PkgOverride,
     pub desired_targets: DesiredTargets,
+}
+
+/// MetaData required to update MetaFiles.
+pub struct MetaData {
+    pub bins: BTreeSet<String>,
+    pub cvs: metafiles::CrateVersionSource,
+    pub version_req: String,
+    pub target: String,
 }

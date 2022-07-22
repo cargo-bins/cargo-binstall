@@ -12,7 +12,7 @@ use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tempfile::TempDir;
-use tokio::{runtime::Runtime, task::JoinError};
+use tokio::{runtime::Runtime, task::block_in_place};
 
 use cargo_binstall::{binstall, *};
 
@@ -330,18 +330,45 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             .collect()
     };
 
+    let mut metadata_vec = Vec::with_capacity(tasks.len());
     for task in tasks {
-        await_task(task).await?;
+        if let Some(metadata) = await_task(task).await? {
+            metadata_vec.push(metadata);
+        }
     }
 
-    if opts.no_cleanup {
-        // Consume temp_dir without removing it from fs.
-        temp_dir.into_path();
-    } else {
-        temp_dir.close().unwrap_or_else(|err| {
-            warn!("Failed to clean up some resources: {err}");
-        });
-    }
+    block_in_place(|| {
+        debug!("Writing .crates.toml");
+        metafiles::v1::CratesToml::append(
+            metadata_vec
+                .iter()
+                .map(|metadata| (&metadata.cvs, metadata.bins.clone())),
+        )?;
 
-    Ok(())
+        debug!("Writing .crates2.json");
+        metafiles::v2::Crates2Json::append(metadata_vec.into_iter().map(|metadata| {
+            (
+                metadata.cvs,
+                metafiles::v2::CrateInfo {
+                    version_req: Some(metadata.version_req),
+                    bins: metadata.bins,
+                    profile: "release".into(),
+                    target: metadata.target,
+                    rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+                    ..Default::default()
+                },
+            )
+        }))?;
+
+        if opts.no_cleanup {
+            // Consume temp_dir without removing it from fs.
+            temp_dir.into_path();
+        } else {
+            temp_dir.close().unwrap_or_else(|err| {
+                warn!("Failed to clean up some resources: {err}");
+            });
+        }
+
+        Ok(())
+    })
 }

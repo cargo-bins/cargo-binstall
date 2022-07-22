@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs, io,
+    iter::IntoIterator,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -44,11 +45,13 @@ impl CratesToml {
         Ok(())
     }
 
-    pub fn append_to_path(
+    pub fn append_to_path<'a, Iter>(
         path: impl AsRef<Path>,
-        cvs: &CrateVersionSource,
-        bins: BTreeSet<String>,
-    ) -> Result<(), CratesTomlParseError> {
+        iter: Iter,
+    ) -> Result<(), CratesTomlParseError>
+    where
+        Iter: IntoIterator<Item = (&'a CrateVersionSource, BTreeSet<String>)>,
+    {
         let mut c1 = match Self::load_from_path(path.as_ref()) {
             Ok(c1) => c1,
             Err(CratesTomlParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
@@ -56,17 +59,19 @@ impl CratesToml {
             }
             Err(err) => return Err(err),
         };
-        c1.insert(cvs, bins);
+        for (cvs, bins) in iter {
+            c1.insert(cvs, bins);
+        }
         c1.write_to_path(path.as_ref())?;
 
         Ok(())
     }
 
-    pub fn append(
-        cvs: &CrateVersionSource,
-        bins: BTreeSet<String>,
-    ) -> Result<(), CratesTomlParseError> {
-        Self::append_to_path(Self::default_path()?, cvs, bins)
+    pub fn append<'a, Iter>(iter: Iter) -> Result<(), CratesTomlParseError>
+    where
+        Iter: IntoIterator<Item = (&'a CrateVersionSource, BTreeSet<String>)>,
+    {
+        Self::append_to_path(Self::default_path()?, iter)
     }
 }
 
