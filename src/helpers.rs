@@ -54,27 +54,12 @@ pub fn cargo_home() -> Result<&'static Path, io::Error> {
 }
 
 pub fn create_if_not_exist(path: impl AsRef<Path>) -> io::Result<fs::File> {
-    let mut options = fs::File::options();
-    options.create_new(true);
+    let path = path.as_ref();
 
-    for _ in 0..3 {
-        match options.open(path.as_ref()) {
-            Ok(file) => return Ok(file),
-            Err(io_err) if io_err.kind() == io::ErrorKind::AlreadyExists => {
-                match fs::File::open(path.as_ref()) {
-                    Ok(file) => return Ok(file),
-                    Err(io_err) if io_err.kind() == io::ErrorKind::NotFound => (),
-                    Err(err) => return Err(err),
-                }
-            }
-            Err(err) => return Err(err),
-        }
-    }
-
-    let errmsg = "We tried to open this file three times but all attempts have failed
-        with creation returns AlreadyExists and opening returns NotFound";
-
-    Err(io::Error::new(io::ErrorKind::TimedOut, errmsg))
+    fs::File::options()
+        .create_new(true)
+        .open(path)
+        .or_else(|_| fs::File::open(path))
 }
 
 pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> miette::Result<T> {
