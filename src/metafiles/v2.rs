@@ -65,10 +65,14 @@ impl Crates2Json {
         self.write_to_path(Self::default_path()?)
     }
 
+    pub fn write_to_writer<W: io::Write>(&self, writer: W) -> Result<(), Crates2JsonParseError> {
+        serde_json::to_writer(writer, &self)?;
+        Ok(())
+    }
+
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), Crates2JsonParseError> {
         let file = fs::File::create(path.as_ref())?;
-        serde_json::to_writer(file, &self)?;
-        Ok(())
+        self.write_to_writer(file)
     }
 
     pub fn append_to_path<Iter>(
