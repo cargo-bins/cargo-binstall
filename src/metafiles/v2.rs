@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs, io,
+    fs,
+    io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
 };
@@ -67,6 +68,14 @@ impl Crates2Json {
 
     pub fn write_to_writer<W: io::Write>(&self, writer: W) -> Result<(), Crates2JsonParseError> {
         serde_json::to_writer(writer, &self)?;
+        Ok(())
+    }
+
+    pub fn write_to_file(&self, file: &mut fs::File) -> Result<(), Crates2JsonParseError> {
+        self.write_to_writer(&mut *file)?;
+        let pos = file.stream_position()?;
+        file.set_len(pos)?;
+
         Ok(())
     }
 
