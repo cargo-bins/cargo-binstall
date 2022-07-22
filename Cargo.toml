@@ -27,6 +27,7 @@ clap = { version = "3.2.12", features = ["derive"] }
 crates_io_api = { version = "0.8.0", default-features = false, features = ["rustls"] }
 dirs = "4.0.0"
 flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
+fs4 = "0.6.2"
 futures-util = { version = "0.3.21", default-features = false }
 home = "0.5.3"
 jobserver = "0.1.24"
