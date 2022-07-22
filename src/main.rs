@@ -241,6 +241,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let desired_targets = get_desired_targets(&opts.targets);
 
     // Compute install directory
+    let custom_install_path = opts.install_path.is_some();
     let install_path: Arc<Path> = Arc::from(
         get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
             error!("No viable install path found of specified, try `--install-path`");
@@ -338,27 +339,29 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     }
 
     block_in_place(|| {
-        debug!("Writing .crates.toml");
-        metafiles::v1::CratesToml::append(
-            metadata_vec
-                .iter()
-                .map(|metadata| (&metadata.cvs, metadata.bins.clone())),
-        )?;
+        if !custom_install_path {
+            debug!("Writing .crates.toml");
+            metafiles::v1::CratesToml::append(
+                metadata_vec
+                    .iter()
+                    .map(|metadata| (&metadata.cvs, metadata.bins.clone())),
+            )?;
 
-        debug!("Writing .crates2.json");
-        metafiles::v2::Crates2Json::append(metadata_vec.into_iter().map(|metadata| {
-            (
-                metadata.cvs,
-                metafiles::v2::CrateInfo {
-                    version_req: Some(metadata.version_req),
-                    bins: metadata.bins,
-                    profile: "release".into(),
-                    target: metadata.target,
-                    rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-                    ..Default::default()
-                },
-            )
-        }))?;
+            debug!("Writing .crates2.json");
+            metafiles::v2::Crates2Json::append(metadata_vec.into_iter().map(|metadata| {
+                (
+                    metadata.cvs,
+                    metafiles::v2::CrateInfo {
+                        version_req: Some(metadata.version_req),
+                        bins: metadata.bins,
+                        profile: "release".into(),
+                        target: metadata.target,
+                        rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+                        ..Default::default()
+                    },
+                )
+            }))?;
+        }
 
         if opts.no_cleanup {
             // Consume temp_dir without removing it from fs.
