@@ -1,18 +1,18 @@
-use std::{collections::BTreeSet, path::PathBuf, process, sync::Arc};
+use std::{path::PathBuf, process, sync::Arc};
 
 use cargo_toml::Package;
 use log::{debug, error, info};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use tokio::{process::Command, task::block_in_place};
 
-use super::{Options, Resolution};
+use super::{MetaData, Options, Resolution};
 use crate::{bins, fetchers::Fetcher, *};
 
 pub async fn install(
     resolution: Resolution,
     opts: Arc<Options>,
     jobserver_client: LazyJobserverClient,
-) -> Result<()> {
+) -> Result<Option<MetaData>> {
     match resolution {
         Resolution::Fetch {
             fetcher,
@@ -37,13 +37,15 @@ pub async fn install(
                 .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
 
             if !opts.dry_run {
-                install_from_source(package, target, jobserver_client).await
+                install_from_source(package, target, jobserver_client)
+                    .await
+                    .map(|_| None)
             } else {
                 info!(
                     "Dry-run: running `cargo install {} --version {} --target {target}`",
                     package.name, package.version
                 );
-                Ok(())
+                Ok(None)
             }
         }
     }
@@ -56,7 +58,7 @@ async fn install_from_package(
     version: String,
     bin_path: PathBuf,
     bin_files: Vec<bins::BinFile>,
-) -> Result<()> {
+) -> Result<Option<MetaData>> {
     // Download package
     if opts.dry_run {
         info!("Dry run, not downloading package");
@@ -90,7 +92,7 @@ async fn install_from_package(
 
     if opts.dry_run {
         info!("Dry run, not proceeding");
-        return Ok(());
+        return Ok(None);
     }
 
     info!("Installing binaries...");
@@ -106,25 +108,12 @@ async fn install_from_package(
             }
         }
 
-        let bins: BTreeSet<String> = bin_files.into_iter().map(|bin| bin.base_name).collect();
-
-        debug!("Writing .crates.toml");
-        metafiles::v1::CratesToml::append(&cvs, bins.clone())?;
-
-        debug!("Writing .crates2.json");
-        metafiles::v2::Crates2Json::append(
-            &cvs,
-            metafiles::v2::CrateInfo {
-                version_req: Some(version),
-                bins,
-                profile: "release".into(),
-                target: fetcher.target().to_string(),
-                rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-                ..Default::default()
-            },
-        )?;
-
-        Ok(())
+        Ok(Some(MetaData {
+            bins: bin_files.into_iter().map(|bin| bin.base_name).collect(),
+            cvs,
+            version_req: version,
+            target: fetcher.target().to_string(),
+        }))
     })
 }
 
