@@ -11,7 +11,6 @@ use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
-use tempfile::TempDir;
 use tokio::{runtime::Runtime, task::block_in_place};
 
 use cargo_binstall::{binstall, *};
