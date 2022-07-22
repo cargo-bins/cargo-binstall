@@ -174,15 +174,15 @@ jobs:
           --json body \
           --jq '"::set-output name=notes_json::\((.body | split("### Release notes")[1] // "") | tojson)"'
 
-      - name: Publish release
-        uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
-        with:
-          tag_name: ${{ github.ref }}
-          name: ${{ github.ref }}
-          body: ${{ fromJSON(steps.notes.outputs.notes_json) }}
-          append_body: true
-          files: |
-            outputs/cargo-binstall-*.zip
-            outputs/cargo-binstall-*.tgz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Publish release
+      uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
+      with:
+        tag_name: ${{ github.ref }}
+        name: ${{ github.ref }}
+        body: ${{ fromJSON(steps.notes.outputs.notes_json) }}
+        append_body: true
+        files: |
+          outputs/cargo-binstall-*.zip
+          outputs/cargo-binstall-*.tgz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
