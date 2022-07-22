@@ -27,6 +27,12 @@ impl CratesToml {
         Self::load_from_path(Self::default_path()?)
     }
 
+    pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
+        let mut vec = Vec::new();
+        reader.read_to_end(&mut vec)?;
+        Ok(toml::from_slice(&vec)?)
+    }
+
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
         let file = fs::read_to_string(path)?;
         Self::from_str(&file)
