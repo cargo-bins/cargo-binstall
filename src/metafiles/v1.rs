@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs, io,
+    fs,
+    io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
     str::FromStr,
@@ -74,17 +75,15 @@ impl CratesToml {
     where
         Iter: IntoIterator<Item = (&'a CrateVersionSource, BTreeSet<String>)>,
     {
-        let mut c1 = match Self::load_from_path(path.as_ref()) {
-            Ok(c1) => c1,
-            Err(CratesTomlParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
-                Self::default()
-            }
-            Err(err) => return Err(err),
-        };
+        let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+        let mut c1 = Self::load_from_reader(&mut *file)?;
+
         for (cvs, bins) in iter {
             c1.insert(cvs, bins);
         }
-        c1.write_to_path(path.as_ref())?;
+
+        file.rewind()?;
+        c1.write_to_file(&mut *file)?;
 
         Ok(())
     }
