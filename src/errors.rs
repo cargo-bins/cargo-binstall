@@ -3,6 +3,7 @@ use std::process::{ExitCode, Termination};
 use log::{error, warn};
 use miette::{Diagnostic, Report};
 use thiserror::Error;
+use tokio::task;
 
 /// Errors emitted by the library portion of cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
@@ -185,6 +186,10 @@ pub enum BinstallError {
         help("Remove the `--manifest-path` or only specify one `$crate_name`")
     )]
     ManifestPathConflictedWithBatchInstallation,
+
+    #[error("Failed to join tokio::task::JoinHandle")]
+    #[diagnostic(severity(error), code(binstall::join_error))]
+    TaskJoinError(#[from] task::JoinError),
 }
 
 impl BinstallError {
@@ -213,6 +218,7 @@ impl BinstallError {
             VersionUnavailable { .. } => 83,
             DuplicateVersionReq => 84,
             ManifestPathConflictedWithBatchInstallation => 85,
+            TaskJoinError(_) => 17,
         };
 
         // reserved codes

@@ -133,7 +133,6 @@ enum MainExit {
     Success(Duration),
     Error(BinstallError),
     Report(miette::Report),
-    JoinErr(JoinError),
 }
 
 impl Termination for MainExit {
@@ -148,11 +147,6 @@ impl Termination for MainExit {
                 error!("Fatal error:");
                 eprintln!("{err:?}");
                 ExitCode::from(16)
-            }
-            Self::JoinErr(err) => {
-                error!("Fatal error:");
-                eprintln!("{err:?}");
-                ExitCode::from(17)
             }
         }
     }
@@ -172,13 +166,16 @@ fn main() -> MainExit {
     let done = start.elapsed();
     debug!("run time: {done:?}");
 
-    result.map_or_else(MainExit::JoinErr, |res| {
-        res.map(|_| MainExit::Success(done)).unwrap_or_else(|err| {
-            err.downcast::<BinstallError>()
-                .map(MainExit::Error)
-                .unwrap_or_else(MainExit::Report)
-        })
-    })
+    result.map_or_else(
+        |join_err| MainExit::Error(BinstallError::from(join_err)),
+        |res| {
+            res.map(|_| MainExit::Success(done)).unwrap_or_else(|err| {
+                err.downcast::<BinstallError>()
+                    .map(MainExit::Error)
+                    .unwrap_or_else(MainExit::Report)
+            })
+        },
+    )
 }
 
 async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
