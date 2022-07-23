@@ -52,7 +52,7 @@ pub fn cargo_home() -> Result<&'static Path, io::Error> {
             return Ok(p);
         }
 
-        // Standard $HOME/.cargo/bin
+        // Standard $HOME/.cargo
         if let Some(mut d) = dirs::home_dir() {
             d.push(".cargo");
 
