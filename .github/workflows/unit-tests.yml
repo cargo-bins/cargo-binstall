@@ -15,10 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Configure toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        run: rustup default stable
       - name: Configure caching
         uses: actions/cache@v2
         with:
@@ -26,10 +23,7 @@ jobs:
           path: |
             ${{ env.HOME }}/.cargo
             target
-      - name: Install deps 
+      - name: Install deps
         run: sudo ./ci-scripts/install-deps.sh
       - name: test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --no-default-features --features pkg-config,native-tls
+        run: cargo test --no-default-features --features pkg-config,native-tls
