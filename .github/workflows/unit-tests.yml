@@ -32,4 +32,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --no-default-features --features pkg-config
+          args: --no-default-features --features pkg-config,native-tls
