@@ -79,11 +79,9 @@ jobs:
       if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
       run: sudo apt-get install -y musl-tools
 
-    - name: Install liblzma-dev, libzip-dev and libzstd-dev
+    - name: Install deps
       if: ${{ startsWith(matrix.target, 'x86_64-unknown-linux-') && !startsWith(github.ref, 'refs/tags/v') }}
-      run: |
-        sudo apt update
-        sudo apt install -y --no-install-recommends liblzma-dev libzip-dev libzstd-dev
+      run: sudo ./ci-scripts/install-deps.sh
 
     - name: Build release
       uses: actions-rs/cargo@v1
