@@ -55,7 +55,19 @@ jobs:
             use-cross: true
             test: false
             debug_build_args: --no-default-features --features rustls
+          - target: armv7-unknown-linux-gnueabihf
+            os: ubuntu-20.04
+            output: cargo-binstall
+            use-cross: true
+            test: false
+            debug_build_args: --no-default-features --features rustls
           - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            output: cargo-binstall
+            use-cross: true
+            test: false
+            debug_build_args: --no-default-features --features rustls
+          - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: true
