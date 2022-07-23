@@ -23,13 +23,12 @@ jobs:
             output: cargo-binstall
             use-cross: false
             test: true
-            debug_build_args: --features pkg-config,native-tls
+            debug_build_args: --features pkg-config
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             use-cross: false
             test: true
-            debug_build_args: --features native-tls
           - target: aarch64-apple-darwin
             os: macos-latest
             output: cargo-binstall
