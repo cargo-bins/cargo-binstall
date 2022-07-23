@@ -91,20 +91,13 @@ jobs:
         args: --target ${{ matrix.target }} --release
         use-cross: ${{ matrix.use-cross }}
 
-    - name: Build debug with cross compilation
-      uses: actions-rs/cargo@v1
-      if: ${{ ! startsWith(github.ref, 'refs/tags/v') && matrix.use-cross == 'true' }}
-      with:
-        command: build
-        args: --target ${{ matrix.target }} --no-default-features
-        use-cross: true
-
     - name: Build debug
       uses: actions-rs/cargo@v1
       if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
       with:
         command: build
-        args: --target ${{ matrix.target }} --no-default-features --features pkg-config
+        args: --target ${{ matrix.target }} --no-default-features
+        use-cross: ${{ matrix.use-cross }}
 
     - name: Copy and rename utility
       if: ${{ startsWith(github.ref, 'refs/tags/v') }}
