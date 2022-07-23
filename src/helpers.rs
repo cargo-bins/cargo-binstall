@@ -1,8 +1,10 @@
+use std::env;
 use std::fmt::Debug;
 use std::fs;
 use std::io;
 use std::ops;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
@@ -189,32 +191,24 @@ pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 
 
 /// Fetch install path from environment
 /// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
-pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathBuf> {
+///
+/// Return (install_path, is_custom_install_path)
+pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> (Option<Arc<Path>>, bool) {
     // Command line override first first
     if let Some(p) = install_path {
-        return Some(PathBuf::from(p.as_ref()));
+        return (Some(Arc::from(p.as_ref())), true);
     }
 
     // Environmental variables
     if let Ok(p) = std::env::var("CARGO_INSTALL_ROOT") {
         debug!("using CARGO_INSTALL_ROOT ({p})");
         let b = PathBuf::from(p);
-        return Some(b.join("bin"));
-    }
-    if let Ok(p) = std::env::var("CARGO_HOME") {
-        debug!("using CARGO_HOME ({p})");
-        let b = PathBuf::from(p);
-        return Some(b.join("bin"));
+        return (Some(Arc::from(b.join("bin"))), true);
     }
 
-    // Standard $HOME/.cargo/bin
-    if let Some(d) = dirs::home_dir() {
-        let d = d.join(".cargo/bin");
-        if d.exists() {
-            debug!("using $HOME/.cargo/bin");
-
-            return Some(d);
-        }
+    if let Ok(p) = cargo_home() {
+        debug!("using ({}) as cargo home", p.display());
+        return (Some(p.join("bin").into()), false);
     }
 
     // Local executable dir if no cargo is found
@@ -224,7 +218,7 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> Option<PathB
         debug!("Fallback to {}", d.display());
     }
 
-    dir
+    (dir.map(Arc::from), true)
 }
 
 /// Atomically install a file.

@@ -5,6 +5,9 @@ set -euxo pipefail
 bins="cargo-deb cargo-llvm-cov cargo-binstall"
 test_bins="cargo-deb cargo-llvm-cov"
 
+unset CARGO_INSTALL_ROOT
+unset CARGO_HOME
+
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
 "./$1" binstall --log-level debug --no-confirm $bins
