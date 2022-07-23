@@ -1,0 +1,74 @@
+name: Open a release PR
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release
+        required: true
+        type: string
+
+jobs:
+  make-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cargo-release
+        uses: taiki-e/install-action@v1
+        with:
+          tool: cargo-release
+
+      - uses: actions/checkout@v2
+        with:
+          ref: main
+
+      - name: Extract info
+        run: |
+          set -euxo pipefail
+
+          branch_name="release-${{ inputs.version }}"
+          echo "branch_name=${branch_name}" >> $GITHUB_ENV
+
+      - name: Make release branch
+        run: git switch -c "${{ env.branch_name }}"
+
+      - name: Do release
+        run: |
+          set -euxo pipefail
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          cargo release \
+            --execute \
+            --no-push \
+            --no-tag \
+            --no-publish \
+            --no-confirm \
+            --verbose \
+            --config release.toml \
+            --allow-branch "${{ env.branch_name }}" \
+            --dependent-version upgrade \
+            "${{ inputs.version }}"
+
+      - name: Push new branch
+        run: |
+          set -euxo pipefail
+          git push origin "${{ env.branch_name }}"
+
+      - name: Create PR
+        run: |
+          set -euxo pipefail
+
+          nl=$'\n'
+          br=$'\n\n'
+          fence=$'```\n'
+          ecnef=$'\n```'
+
+          title="release: v${{ inputs.version }}"
+          body_intro="This is a release PR for version **${{ inputs.version }}**."
+          body_merge="**Use squash merge.** Upon merging, this will automatically build the CLI and create a GitHub release. You still need to manually publish the cargo crate."
+          body_pub="${fence}$ cd ${{ env.crate_path }}${nl}$ cargo publish${ecnef}"
+          body_notes="---${br}_Edit release notes into the section below:_${br}<!-- do not change or remove this heading -->${nl}### Release notes"
+
+          body="${body_intro}${br}${body_merge}${br}${body_pub}${br}${body_notes}${br}"
+
+          gh pr create --title "$title" --body "$body" --base main --head "${{ env.branch_name }}" --label "release"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
