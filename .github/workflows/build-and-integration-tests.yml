@@ -98,7 +98,7 @@ jobs:
       if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
       with:
         command: build
-        args: --target ${{ matrix.target }}
+        args: --target ${{ matrix.target }} --no-default-features --features pkg-config
         use-cross: ${{ matrix.use-cross }}
 
     - name: Copy and rename utility
