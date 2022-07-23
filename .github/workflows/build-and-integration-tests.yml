@@ -48,18 +48,21 @@ jobs:
             output: cargo-binstall
             use-cross: false
             test: true
+            debug_build_args: --no-default-features --features rustls
           - target: armv7-unknown-linux-musleabihf
             os: ubuntu-20.04
             output: cargo-binstall
             use-cross: true
             test: false
+            debug_build_args: --no-default-features --features rustls
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: true
             test: false
-    runs-on: ${{ matrix.os }}
+            debug_build_args: --no-default-features --features rustls
 
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
     - uses: FranzDiebold/github-env-vars-action@v1.2.1
