@@ -215,7 +215,7 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> (Option<Arc<
 
     if let Ok(p) = cargo_home() {
         debug!("using ({}) as cargo home", p.display());
-        return (Some(p.into()), false);
+        return (Some(p.join("bin").into()), false);
     }
 
     // Local executable dir if no cargo is found
