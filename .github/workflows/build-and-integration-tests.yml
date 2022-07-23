@@ -42,6 +42,7 @@ jobs:
             use-cross: false
             test: false
             debug_build_args: --no-default-features --features native-tls
+            release_build_args: --no-default-features --features static,zlib-ng,native-tls
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
@@ -92,7 +93,7 @@ jobs:
       if: ${{ startsWith(github.ref, 'refs/tags/v') }}
       with:
         command: build
-        args: --target ${{ matrix.target }} --release
+        args: --target ${{ matrix.target }} --release ${{ matrix.release_build_args }}
         use-cross: ${{ matrix.use-cross }}
 
     - name: Build debug
