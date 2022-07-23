@@ -23,7 +23,7 @@ jobs:
             output: cargo-binstall
             use-cross: false
             test: true
-            debug_build_args: --no-default-features --features pkg-config
+            debug_build_args: --no-default-features --features rustls,pkg-config
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
