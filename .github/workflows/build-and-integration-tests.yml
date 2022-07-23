@@ -92,12 +92,15 @@ jobs:
       run: rustup target add ${{ matrix.target }}
 
     - name: Select compile tool
+      shell: bash
       run: jq -nr '"CTOOL=\(if ${{ matrix.use-cross }} then "cross" else "cargo" end)"' >> $GITHUB_ENV
 
     - name: Select compile profile
+      shell: bash
       run: jq -nr '"CPROFILE=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "dev" end)"' >> $GITHUB_ENV
 
     - name: Select compile output
+      shell: bash
       run: jq -nr '"COUTPUT=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "debug" end)"' >> $GITHUB_ENV
 
     - name: Configure caching
