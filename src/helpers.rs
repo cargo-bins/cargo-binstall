@@ -45,34 +45,10 @@ mod crate_name;
 pub use crate_name::CrateName;
 
 pub fn cargo_home() -> Result<&'static Path, io::Error> {
-    fn cargo_home_inner() -> Result<PathBuf, io::Error> {
-        if let Some(p) = env::var_os("CARGO_HOME") {
-            let p = PathBuf::from(p);
-            debug!("using CARGO_HOME ({})", p.display());
-            return Ok(p);
-        }
-
-        // Standard $HOME/.cargo
-        if let Some(mut d) = dirs::home_dir() {
-            d.push(".cargo");
-
-            if d.exists() {
-                debug!("using $HOME/.cargo: {}", d.display());
-
-                return Ok(d);
-            }
-        }
-
-        Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "Failed to detect cargo home",
-        ))
-    }
-
     static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();
 
     CARGO_HOME
-        .get_or_try_init(cargo_home_inner)
+        .get_or_try_init(home::cargo_home)
         .map(ops::Deref::deref)
 }
 
