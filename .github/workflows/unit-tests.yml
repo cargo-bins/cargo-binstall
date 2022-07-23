@@ -26,10 +26,10 @@ jobs:
           path: |
             ${{ env.HOME }}/.cargo
             target
-      - name: Insall dependencies
+      - name: Install liblzma-dev, libzip-dev and libzstd-dev
         run: |
-          apt update
-          apt install -y --no-install-recommends liblzma-dev libzip-dev libzstd-dev
+          sudo apt update
+          sudo apt install -y --no-install-recommends liblzma-dev libzip-dev libzstd-dev
       - name: test
         uses: actions-rs/cargo@v1
         with:
