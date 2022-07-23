@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs, io,
+    fs,
+    io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
     str::FromStr,
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::CrateVersionSource;
-use crate::cargo_home;
+use crate::{cargo_home, create_if_not_exist, FileLock};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
@@ -27,6 +28,12 @@ impl CratesToml {
         Self::load_from_path(Self::default_path()?)
     }
 
+    pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
+        let mut vec = Vec::new();
+        reader.read_to_end(&mut vec)?;
+        Ok(toml::from_slice(&vec)?)
+    }
+
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
         let file = fs::read_to_string(path)?;
         Self::from_str(&file)
@@ -38,6 +45,20 @@ impl CratesToml {
 
     pub fn write(&self) -> Result<(), CratesTomlParseError> {
         self.write_to_path(Self::default_path()?)
+    }
+
+    pub fn write_to_writer<W: io::Write>(&self, mut writer: W) -> Result<(), CratesTomlParseError> {
+        let data = toml::to_vec(&self)?;
+        writer.write_all(&data)?;
+        Ok(())
+    }
+
+    pub fn write_to_file(&self, file: &mut fs::File) -> Result<(), CratesTomlParseError> {
+        self.write_to_writer(&mut *file)?;
+        let pos = file.stream_position()?;
+        file.set_len(pos)?;
+
+        Ok(())
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
@@ -52,17 +73,15 @@ impl CratesToml {
     where
         Iter: IntoIterator<Item = (&'a CrateVersionSource, BTreeSet<String>)>,
     {
-        let mut c1 = match Self::load_from_path(path.as_ref()) {
-            Ok(c1) => c1,
-            Err(CratesTomlParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
-                Self::default()
-            }
-            Err(err) => return Err(err),
-        };
+        let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+        let mut c1 = Self::load_from_reader(&mut *file)?;
+
         for (cvs, bins) in iter {
             c1.insert(cvs, bins);
         }
-        c1.write_to_path(path.as_ref())?;
+
+        file.rewind()?;
+        c1.write_to_file(&mut *file)?;
 
         Ok(())
     }

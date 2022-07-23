@@ -42,12 +42,29 @@ pub use tls_version::TLSVersion;
 mod crate_name;
 pub use crate_name::CrateName;
 
+mod flock;
+pub use flock::FileLock;
+
 pub fn cargo_home() -> Result<&'static Path, io::Error> {
     static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();
 
     CARGO_HOME
         .get_or_try_init(home::cargo_home)
         .map(ops::Deref::deref)
+}
+
+/// Returned file is readable and writable.
+pub fn create_if_not_exist(path: impl AsRef<Path>) -> io::Result<fs::File> {
+    let path = path.as_ref();
+
+    let mut options = fs::File::options();
+    options.read(true).write(true);
+
+    options
+        .clone()
+        .create_new(true)
+        .open(path)
+        .or_else(|_| options.open(path))
 }
 
 pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> miette::Result<T> {

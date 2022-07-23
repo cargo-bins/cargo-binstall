@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs, io,
+    fs,
+    io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
 };
@@ -10,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::CrateVersionSource;
-use crate::cargo_home;
+use crate::{cargo_home, create_if_not_exist, FileLock};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Crates2Json {
@@ -48,9 +49,13 @@ impl Crates2Json {
         Self::load_from_path(Self::default_path()?)
     }
 
+    pub fn load_from_reader<R: io::Read>(reader: R) -> Result<Self, Crates2JsonParseError> {
+        Ok(serde_json::from_reader(reader)?)
+    }
+
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, Crates2JsonParseError> {
         let file = fs::File::open(path.as_ref())?;
-        Ok(serde_json::from_reader(file)?)
+        Self::load_from_reader(file)
     }
 
     pub fn insert(&mut self, cvs: &CrateVersionSource, info: CrateInfo) {
@@ -61,10 +66,22 @@ impl Crates2Json {
         self.write_to_path(Self::default_path()?)
     }
 
+    pub fn write_to_writer<W: io::Write>(&self, writer: W) -> Result<(), Crates2JsonParseError> {
+        serde_json::to_writer(writer, &self)?;
+        Ok(())
+    }
+
+    pub fn write_to_file(&self, file: &mut fs::File) -> Result<(), Crates2JsonParseError> {
+        self.write_to_writer(&mut *file)?;
+        let pos = file.stream_position()?;
+        file.set_len(pos)?;
+
+        Ok(())
+    }
+
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), Crates2JsonParseError> {
         let file = fs::File::create(path.as_ref())?;
-        serde_json::to_writer(file, &self)?;
-        Ok(())
+        self.write_to_writer(file)
     }
 
     pub fn append_to_path<Iter>(
@@ -74,17 +91,15 @@ impl Crates2Json {
     where
         Iter: IntoIterator<Item = (CrateVersionSource, CrateInfo)>,
     {
-        let mut c2 = match Self::load_from_path(path.as_ref()) {
-            Ok(c2) => c2,
-            Err(Crates2JsonParseError::Io(io_err)) if io_err.kind() == io::ErrorKind::NotFound => {
-                Self::default()
-            }
-            Err(err) => return Err(err),
-        };
+        let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+        let mut c2 = Self::load_from_reader(&mut *file)?;
+
         for (cvs, info) in iter {
             c2.insert(&cvs, info);
         }
-        c2.write_to_path(path.as_ref())?;
+
+        file.rewind()?;
+        c2.write_to_file(&mut *file)?;
 
         Ok(())
     }
