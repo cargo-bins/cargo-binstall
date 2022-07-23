@@ -1,10 +1,9 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs::File,
     io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use miette::Diagnostic;
@@ -31,12 +30,12 @@ impl CratesToml {
     pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
         let mut vec = Vec::new();
         reader.read_to_end(&mut vec)?;
-        Ok(toml::from_slice(&vec)?)
+        Ok(toml_edit::easy::from_slice(&vec)?)
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
-        let file = fs::read_to_string(path)?;
-        Self::from_str(&file)
+        let file = File::open(path)?;
+        Self::load_from_reader(file)
     }
 
     pub fn insert(&mut self, cvs: &CrateVersionSource, bins: BTreeSet<String>) {
@@ -48,12 +47,12 @@ impl CratesToml {
     }
 
     pub fn write_to_writer<W: io::Write>(&self, mut writer: W) -> Result<(), CratesTomlParseError> {
-        let data = toml::to_vec(&self)?;
+        let data = toml_edit::easy::to_vec(&self)?;
         writer.write_all(&data)?;
         Ok(())
     }
 
-    pub fn write_to_file(&self, file: &mut fs::File) -> Result<(), CratesTomlParseError> {
+    pub fn write_to_file(&self, file: &mut File) -> Result<(), CratesTomlParseError> {
         self.write_to_writer(&mut *file)?;
         let pos = file.stream_position()?;
         file.set_len(pos)?;
@@ -62,8 +61,8 @@ impl CratesToml {
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
-        fs::write(path, &toml::to_vec(&self)?)?;
-        Ok(())
+        let mut file = File::create(path)?;
+        self.write_to_file(&mut file)
     }
 
     pub fn append_to_path<'a, Iter>(
@@ -94,23 +93,16 @@ impl CratesToml {
     }
 }
 
-impl FromStr for CratesToml {
-    type Err = CratesTomlParseError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(toml::from_str(s)?)
-    }
-}
-
 #[derive(Debug, Diagnostic, Error)]
 pub enum CratesTomlParseError {
     #[error(transparent)]
     Io(#[from] io::Error),
 
     #[error(transparent)]
-    TomlParse(#[from] toml::de::Error),
+    TomlParse(#[from] toml_edit::easy::de::Error),
 
     #[error(transparent)]
-    TomlWrite(#[from] toml::ser::Error),
+    TomlWrite(#[from] toml_edit::easy::ser::Error),
 
     #[error(transparent)]
     CvsParse(#[from] super::CvsParseError),
