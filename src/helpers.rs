@@ -3,6 +3,7 @@ use std::fs;
 use std::io;
 use std::ops;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
@@ -174,17 +175,17 @@ pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 
 /// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
 ///
 /// Return (install_path, is_custom_install_path)
-pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> (Option<PathBuf>, bool) {
+pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> (Option<Arc<Path>>, bool) {
     // Command line override first first
     if let Some(p) = install_path {
-        return (Some(PathBuf::from(p.as_ref())), true);
+        return (Some(Arc::from(p.as_ref())), true);
     }
 
     // Environmental variables
     if let Ok(p) = std::env::var("CARGO_INSTALL_ROOT") {
         debug!("using CARGO_INSTALL_ROOT ({p})");
         let b = PathBuf::from(p);
-        return (Some(b.join("bin")), true);
+        return (Some(Arc::from(b.join("bin"))), true);
     }
 
     if let Ok(p) = cargo_home() {
@@ -199,7 +200,7 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> (Option<Path
         debug!("Fallback to {}", d.display());
     }
 
-    (dir, true)
+    (dir.map(Arc::from), true)
 }
 
 /// Atomically install a file.
