@@ -142,7 +142,7 @@ jobs:
 
           cp ../../LICENSE.txt ../../README.md .
 
-          target=$(cut -d. -f1 <<< "$o")
+          target=$(basename "$o" | cut -d. -f1)
           if grep -qE '(apple|windows)' <<< "$target"; then
             zip "../cargo-binstall-${target}.zip" *
           else
@@ -181,7 +181,7 @@ jobs:
 
           cp ../../LICENSE.txt ../../README.md .
 
-          target=$(cut -d. -f1 <<< "$o")
+          target=$(basename "$o" | cut -d. -f1)
           if grep -qE '(apple|windows)' <<< "$target"; then
             zip "../cargo-binstall-${target}.zip" *
           else
