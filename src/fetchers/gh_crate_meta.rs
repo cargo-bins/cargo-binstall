@@ -2,10 +2,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use log::{debug, info, warn};
+use once_cell::sync::OnceCell;
 use reqwest::Client;
 use reqwest::Method;
 use serde::Serialize;
-use tokio::sync::OnceCell;
 use url::Url;
 
 use super::Data;
