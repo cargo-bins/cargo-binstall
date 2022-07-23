@@ -75,6 +75,7 @@ static = ["bzip2/static", "xz2/static"]
 pkg-config = ["zstd/pkg-config"]
 zlib-ng = ["flate2/zlib-ng"]
 rustls = ["crates_io_api/rustls", "reqwest/rustls-tls"]
+native-tls = ["reqwest/native-tls"]
 
 [dev-dependencies]
 env_logger = "0.9.0"
