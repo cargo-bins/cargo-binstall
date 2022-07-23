@@ -349,21 +349,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     .iter()
                     .map(|metadata| (&metadata.cvs, metadata.bins.clone())),
             )?;
-
-            debug!("Writing .crates2.json");
-            metafiles::v2::Crates2Json::append(metadata_vec.into_iter().map(|metadata| {
-                (
-                    metadata.cvs,
-                    metafiles::v2::CrateInfo {
-                        version_req: Some(metadata.version_req),
-                        bins: metadata.bins,
-                        profile: "release".into(),
-                        target: metadata.target,
-                        rustc: format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-                        ..Default::default()
-                    },
-                )
-            }))?;
         }
 
         if opts.no_cleanup {
