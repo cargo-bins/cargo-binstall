@@ -77,14 +77,28 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
-    - uses: FranzDiebold/github-env-vars-action@v1.2.1
 
     - name: Configure toolchain
-      uses: actions-rs/toolchain@v1
+      run: rustup default nightly
+
+    - name: Install cross
+      if: matrix.use-cross
+      uses: taiki-e/install-action@v1
       with:
-        toolchain: nightly
-        target:  ${{ matrix.target }}
-        override: true
+        tool: cross
+
+    - name: Install host target
+      if: "!matrix.use-cross"
+      run: rustup target add ${{ matrix.target }}
+
+    - name: Select compile tool
+      run: jq -nr '"CTOOL=\(if ${{ matrix.use-cross }} then "cross" else "cargo" end)"' >> $GITHUB_ENV
+
+    - name: Select compile profile
+      run: jq -nr '"CPROFILE=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "dev" end)"' >> $GITHUB_ENV
+
+    - name: Select compile output
+      run: jq -nr '"COUTPUT=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "debug" end)"' >> $GITHUB_ENV
 
     - name: Configure caching
       uses: actions/cache@v2
@@ -103,29 +117,11 @@ jobs:
       if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && !startsWith(github.ref, 'refs/tags/v') }}
       run: sudo ./ci-scripts/install-deps.sh
 
-    - name: Build release
-      uses: actions-rs/cargo@v1
-      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-      with:
-        command: build
-        args: --target ${{ matrix.target }} --release ${{ matrix.release_build_args }}
-        use-cross: ${{ matrix.use-cross }}
-
-    - name: Build debug
-      uses: actions-rs/cargo@v1
-      if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
-      with:
-        command: build
-        args: --target ${{ matrix.target }} ${{ matrix.debug_build_args }}
-        use-cross: ${{ matrix.use-cross }}
+    - name: Build
+      run: ${{ env.CTOOL }} build --target ${{ matrix.target }} --profile ${{ env.CPROFILE }}
 
     - name: Copy and rename utility
-      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-      run: cp target/${{ matrix.target }}/release/${{ matrix.output }} ${{ matrix.output }}
-
-    - name: Copy and rename utility
-      if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
-      run: cp target/${{ matrix.target }}/debug/${{ matrix.output }} ${{ matrix.output }}
+      run: cp target/${{ matrix.target }}/${{ env.COUTPUT }}/${{ matrix.output }} ${{ matrix.output }}
 
     - name: Test (Unix)
       if: ${{ matrix.test && matrix.os != 'windows-latest' }}
