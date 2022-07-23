@@ -32,17 +32,17 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    async fn check(&self) -> Result<bool, BinstallError> {
+    async fn find(&self) -> Result<bool, BinstallError> {
         let url = self.package_url();
         self.report();
         info!("Checking for package at: '{url}'");
-        remote_exists(&self.client, Url::parse(&url)?, Method::HEAD).await
+        remote_exists(self.client.clone(), Url::parse(&url)?, Method::HEAD).await
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
         info!("Downloading package from: '{url}'");
-        download_and_extract(&self.client, Url::parse(&url)?, self.pkg_fmt(), dst).await
+        download_and_extract(&self.client, &Url::parse(&url)?, self.pkg_fmt(), dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

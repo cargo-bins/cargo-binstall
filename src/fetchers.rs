@@ -21,8 +21,15 @@ pub trait Fetcher: Send + Sync {
     /// Fetch a package and extract
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError>;
 
-    /// Check if a package is available for download
-    async fn check(&self) -> Result<bool, BinstallError>;
+    /// Find the package, if it is available for download
+    ///
+    /// This may look for multiple remote targets, but must write (using some form of interior
+    /// mutability) the best one to the implementing struct in some way so `fetch_and_extract` can
+    /// proceed without additional work.
+    ///
+    /// Must return `true` if a package is available, `false` if none is, and reserve errors to
+    /// fatal conditions only.
+    async fn find(&self) -> Result<bool, BinstallError>;
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
@@ -56,7 +63,7 @@ impl MultiFetcher {
     pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
         self.0.push((
             fetcher.clone(),
-            AutoAbortJoinHandle::new(tokio::spawn(async move { fetcher.check().await })),
+            AutoAbortJoinHandle::new(tokio::spawn(async move { fetcher.find().await })),
         ));
     }
 

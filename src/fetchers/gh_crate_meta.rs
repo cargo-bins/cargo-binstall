@@ -5,22 +5,18 @@ use log::{debug, info, warn};
 use reqwest::Client;
 use reqwest::Method;
 use serde::Serialize;
+use tokio::sync::OnceCell;
 use url::Url;
 
 use super::Data;
-use crate::{download_and_extract, remote_exists, BinstallError, PkgFmt, Template};
+use crate::{
+    download_and_extract, remote_exists, AutoAbortJoinHandle, BinstallError, PkgFmt, Template,
+};
 
 pub struct GhCrateMeta {
     client: Client,
     data: Data,
-}
-
-impl GhCrateMeta {
-    fn url(&self) -> Result<Url, BinstallError> {
-        let ctx = Context::from_data(&self.data);
-        debug!("Using context: {:?}", ctx);
-        ctx.render_url(&self.data.meta.pkg_url)
-    }
+    url: OnceCell<Url>,
 }
 
 #[async_trait::async_trait]
@@ -29,24 +25,45 @@ impl super::Fetcher for GhCrateMeta {
         Arc::new(Self {
             client: client.clone(),
             data: data.clone(),
+            url: OnceCell::new(),
         })
     }
 
-    async fn check(&self) -> Result<bool, BinstallError> {
-        let url = self.url()?;
+    async fn find(&self) -> Result<bool, BinstallError> {
+        let ctx = Context::from_data(&self.data);
+        debug!("Using context: {:?}", ctx);
+        // TODO: alternatives
+        let urls = vec![ctx.render_url(&self.data.meta.pkg_url)?];
 
-        if url.scheme() != "https" {
-            warn!(
-                "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
-            );
+        let checks = urls.into_iter().map(|url| {
+            let client = self.client.clone();
+            AutoAbortJoinHandle::new(tokio::spawn(async move {
+                info!("Checking for package at: '{url}'");
+                remote_exists(client, url.clone(), Method::HEAD)
+                    .await
+                    .map(|exists| (url.clone(), exists))
+            }))
+        });
+
+        for check in checks {
+            let (url, exists) = check.await??;
+            if exists {
+                if url.scheme() != "https" {
+                    warn!(
+                        "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
+                    );
+                }
+
+                self.url.set(url).unwrap(); // find() is called first
+                return Ok(true);
+            }
         }
 
-        info!("Checking for package at: '{url}'");
-        remote_exists(&self.client, url, Method::HEAD).await
+        Ok(false)
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
-        let url = self.url()?;
+        let url = self.url.get().unwrap(); // find() is called first
         info!("Downloading package from: '{url}'");
         download_and_extract(&self.client, url, self.pkg_fmt(), dst).await
     }
@@ -56,7 +73,8 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     fn source_name(&self) -> String {
-        self.url()
+        self.url
+            .get()
             .map(|url| {
                 if let Some(domain) = url.domain() {
                     domain.to_string()
@@ -66,7 +84,7 @@ impl super::Fetcher for GhCrateMeta {
                     url.to_string()
                 }
             })
-            .unwrap_or_else(|_| "invalid url template".to_string())
+            .unwrap_or_else(|| "invalid url".to_string())
     }
 
     fn is_third_party(&self) -> bool {
