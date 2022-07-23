@@ -93,15 +93,15 @@ jobs:
 
     - name: Select compile tool
       shell: bash
-      run: jq -nr '"CTOOL=\(if ${{ matrix.use-cross }} then "cross" else "cargo" end)"' >> $GITHUB_ENV
+      run: jq -nr '"CTOOL=\(if ${{ matrix.use-cross }} then "cross" else "cargo" end)"' | tee -a $GITHUB_ENV
 
     - name: Select compile profile
       shell: bash
-      run: jq -nr '"CPROFILE=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "dev" end)"' >> $GITHUB_ENV
+      run: jq -nr '"CPROFILE=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "dev" end)"' | tee -a $GITHUB_ENV
 
     - name: Select compile output
       shell: bash
-      run: jq -nr '"COUTPUT=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "debug" end)"' >> $GITHUB_ENV
+      run: jq -nr '"COUTPUT=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "debug" end)"' | tee -a $GITHUB_ENV
 
     - name: Configure caching
       uses: actions/cache@v2
