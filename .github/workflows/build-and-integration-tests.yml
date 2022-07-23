@@ -35,7 +35,7 @@ jobs:
             output: cargo-binstall
             use-cross: false
             test: false
-            debug_build_args: --no-default-features --features native-tls
+            debug_build_args: --no-default-features --features rustls
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
