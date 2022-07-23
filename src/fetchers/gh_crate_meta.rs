@@ -169,7 +169,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data);
+        let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
             ctx.render_url(&data.meta.pkg_url).unwrap(),
             url("https://github.com/ryankurte/cargo-binstall/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
@@ -188,7 +188,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data);
+        let ctx = Context::from_data(&data, "tgz");
         ctx.render_url(&data.meta.pkg_url).unwrap();
     }
 
@@ -207,7 +207,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data);
+        let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
             ctx.render_url(&data.meta.pkg_url).unwrap(),
             url("https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
@@ -231,7 +231,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data);
+        let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
             ctx.render_url(&data.meta.pkg_url).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
@@ -253,7 +253,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data);
+        let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
             ctx.render_url(&data.meta.pkg_url).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
@@ -278,7 +278,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data);
+        let ctx = Context::from_data(&data, "txz");
         assert_eq!(
             ctx.render_url(&data.meta.pkg_url).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz")
@@ -301,7 +301,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data);
+        let ctx = Context::from_data(&data, "bin");
         assert_eq!(
             ctx.render_url(&data.meta.pkg_url).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe")
