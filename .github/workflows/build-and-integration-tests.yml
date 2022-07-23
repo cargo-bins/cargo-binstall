@@ -93,11 +93,18 @@ jobs:
 
     - name: Build debug
       uses: actions-rs/cargo@v1
-      if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
+      if: ${{ ! startsWith(github.ref, 'refs/tags/v') && use-cross == 'false' }}
       with:
         command: build
-        args: --target ${{ matrix.target }} --no-default-features
-        use-cross: ${{ matrix.use-cross }}
+        args: --target ${{ matrix.target }} --no-default-features --features native-tls
+
+    - name: Build debug with cross compilation
+      uses: actions-rs/cargo@v1
+      if: ${{ ! startsWith(github.ref, 'refs/tags/v') && use-cross == 'true' }}
+      with:
+        command: build
+        args: --target ${{ matrix.target }} --no-default-features --features rustls
+        use-cross: true
 
     - name: Copy and rename utility
       if: ${{ startsWith(github.ref, 'refs/tags/v') }}
