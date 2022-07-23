@@ -8,7 +8,7 @@ tag-message = "cargo-binstall {{version}}"
 publish = false
 
 [[pre-release-replacements]]
-file = "cargo-binstall.exe.manifest"
+file = "windows.manifest"
 search = "^		version=\"[\\d.]+[.]0\""
 replace = "		version=\"{{version}}.0\""
 prerelease = false
