@@ -241,13 +241,11 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let desired_targets = get_desired_targets(&opts.targets);
 
     // Compute install directory
-    let custom_install_path = opts.install_path.is_some();
-    let install_path: Arc<Path> = Arc::from(
-        get_install_path(opts.install_path.as_deref()).ok_or_else(|| {
-            error!("No viable install path found of specified, try `--install-path`");
-            miette!("No install path found or specified")
-        })?,
-    );
+    let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
+    let install_path: Arc<Path> = Arc::from(install_path.ok_or_else(|| {
+        error!("No viable install path found of specified, try `--install-path`");
+        miette!("No install path found or specified")
+    })?);
     debug!("Using install path: {}", install_path.display());
 
     // Create a temporary directory for downloads etc.
