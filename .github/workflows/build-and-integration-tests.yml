@@ -96,7 +96,7 @@ jobs:
       if: ${{ ! startsWith(github.ref, 'refs/tags/v') && use-cross == 'false' }}
       with:
         command: build
-        args: --target ${{ matrix.target }} --no-default-features --features native-tls
+        args: --target ${{ matrix.target }} --no-default-features --features pkg-config,native-tls
 
     - name: Build debug with cross compilation
       uses: actions-rs/cargo@v1
