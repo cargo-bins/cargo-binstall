@@ -187,20 +187,9 @@ pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> (Option<Path
         return (Some(b.join("bin")), true);
     }
 
-    if let Ok(p) = std::env::var("CARGO_HOME") {
-        debug!("using CARGO_HOME ({p})");
-        let b = PathBuf::from(p);
-        return (Some(b.join("bin")), false);
-    }
-
-    // Standard $HOME/.cargo/bin
-    if let Some(d) = dirs::home_dir() {
-        let d = d.join(".cargo/bin");
-        if d.exists() {
-            debug!("using $HOME/.cargo/bin");
-
-            return (Some(d), false);
-        }
+    if let Ok(p) = cargo_home() {
+        debug!("using ({}) as cargo home", p.display());
+        return (Some(p.into()), false);
     }
 
     // Local executable dir if no cargo is found
