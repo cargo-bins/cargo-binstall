@@ -122,44 +122,6 @@ jobs:
         name: "${{ matrix.target }}.${{ matrix.output }}"
         path: "${{ matrix.output }}"
 
-  release-test:
-    name: Package and release (testing)
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Get outputs
-      uses: actions/download-artifact@v3
-      with:
-        path: outputs/
-
-    - name: Create archives
-      shell: bash
-      run: |
-        set -euxo pipefail
-        for o in outputs/*; do
-          pushd "$o"
-
-          cp ../../LICENSE.txt ../../README.md .
-
-          target=$(basename "$o" | cut -d. -f1)
-          if grep -qE '(apple|windows)' <<< "$target"; then
-            zip -9 "../cargo-binstall-${target}.zip" *
-          else
-            tar cv * | gzip -9 > "../cargo-binstall-${target}.tgz"
-          fi
-
-          popd
-        done
-    - name: Upload output
-      uses: actions/upload-artifact@v3
-      with:
-        retention-days: 1
-        name: release-bits
-        path: |
-          outputs/cargo-binstall-*.zip
-          outputs/cargo-binstall-*.tgz
-
   release:
     name: Package and release
     needs: build
