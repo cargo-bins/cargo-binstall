@@ -63,7 +63,7 @@ jobs:
 
           title="release: v${{ inputs.version }}"
           body_intro="This is a release PR for version **${{ inputs.version }}**."
-          body_merge="Upon merging, this will automatically build the CLI and create a GitHub release. You still need to manually publish the cargo crate."
+          body_merge="**Use squash merge.** Upon merging, this will automatically build the CLI and create a GitHub release. You still need to manually publish the cargo crate."
           body_pub="${fence}$ cd ${{ env.crate_path }}${nl}$ cargo publish${ecnef}"
           body_notes="---${br}_Edit release notes into the section below:_${br}<!-- do not change or remove this heading -->${nl}### Release notes"
 
