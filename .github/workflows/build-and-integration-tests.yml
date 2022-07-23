@@ -67,6 +67,12 @@ jobs:
             use-cross: true
             test: false
             debug_build_args: --no-default-features --features rustls
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            output: cargo-binstall
+            use-cross: true
+            test: false
+            debug_build_args: --no-default-features --features rustls
 
     runs-on: ${{ matrix.os }}
     steps:
