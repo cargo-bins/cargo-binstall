@@ -23,38 +23,46 @@ jobs:
             output: cargo-binstall
             use-cross: false
             test: true
+            debug_build_args: --no-default-features --features rustls,pkg-config
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             use-cross: false
             test: true
+            debug_build_args: --no-default-features --features rustls
           - target: aarch64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             use-cross: false
             test: false
+            debug_build_args: --no-default-features --features rustls
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
             use-cross: false
             test: false
+            debug_build_args: --no-default-features --features native-tls
+            release_build_args: --no-default-features --features static,zlib-ng,native-tls
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: false
             test: true
+            debug_build_args: --no-default-features --features rustls
           - target: armv7-unknown-linux-musleabihf
             os: ubuntu-20.04
             output: cargo-binstall
             use-cross: true
             test: false
+            debug_build_args: --no-default-features --features rustls
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: true
             test: false
-    runs-on: ${{ matrix.os }}
+            debug_build_args: --no-default-features --features rustls
 
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
     - uses: FranzDiebold/github-env-vars-action@v1.2.1
@@ -79,12 +87,16 @@ jobs:
       if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
       run: sudo apt-get install -y musl-tools
 
+    - name: Install deps
+      if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && !startsWith(github.ref, 'refs/tags/v') }}
+      run: sudo ./ci-scripts/install-deps.sh
+
     - name: Build release
       uses: actions-rs/cargo@v1
       if: ${{ startsWith(github.ref, 'refs/tags/v') }}
       with:
         command: build
-        args: --target ${{ matrix.target }} --release
+        args: --target ${{ matrix.target }} --release ${{ matrix.release_build_args }}
         use-cross: ${{ matrix.use-cross }}
 
     - name: Build debug
@@ -92,7 +104,7 @@ jobs:
       if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
       with:
         command: build
-        args: --target ${{ matrix.target }}
+        args: --target ${{ matrix.target }} ${{ matrix.debug_build_args }}
         use-cross: ${{ matrix.use-cross }}
 
     - name: Copy and rename utility
