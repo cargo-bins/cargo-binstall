@@ -1,0 +1,28 @@
+This is a release PR for version **%version%**.
+
+**Use squash merge.**
+Upon merging, this will automatically build the CLI and create a GitHub release.
+You still need to manually publish the cargo crate.
+
+```
+$ git pull
+$ git checkout v%version%
+$ cargo publish
+```
+
+---
+
+_Edit release notes into the section below:_
+
+<!-- do not change or remove this heading -->
+### Release notes
+
+_Binstall is a tool to fetch and install Rust-based executables as binaries. It aims to be a drop-in replacement for `cargo install` in most cases. Install it today with `cargo install cargo-binstall`, from the binaries below, or if you already have it, upgrade with `cargo binstall cargo-binstall`._
+
+#### In this release:
+
+-
+
+#### Other changes:
+
+-

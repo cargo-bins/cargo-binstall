@@ -1,0 +1,123 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      for_release:
+        description: "True if the build is for a release"
+        required: true
+        default: false
+        type: boolean
+
+  workflow_dispatch:
+    inputs:
+      for_release:
+        description: "True if the build is for a release"
+        required: true
+        default: false
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            debug_build_args: --no-default-features --features rustls,pkg-config
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            debug_build_args: --no-default-features --features native-tls
+            release_build_args: --no-default-features --features static,zlib-ng,native-tls
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-20.04
+            use-cross: true
+          - target: armv7-unknown-linux-gnueabihf
+            os: ubuntu-20.04
+            use-cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            use-cross: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use-cross: true
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.target }}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Configure toolchain
+      run: |
+        rustup toolchain install --profile minimal --no-self-update nightly
+        rustup default nightly
+
+    - name: Install cross
+      if: matrix.use-cross
+      uses: taiki-e/install-action@v1
+      with:
+        tool: cross
+
+    - name: Install host target
+      if: "!matrix.use-cross"
+      run: rustup target add ${{ matrix.target }}
+
+    - name: Select compile settings
+      shell: bash
+      run: |
+        jq \
+          --argjson for_release '${{ toJSON(inputs.for_release) }}' \
+          --argjson matrix '${{ toJSON(matrix) }}' \
+          -nrf ci-scripts/compile-settings.jq \
+        | tee -a $GITHUB_ENV
+
+    - name: Configure caching
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.COUTPUT }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          ${{ runner.os }}-cargo-${{ matrix.target }}-
+          ${{ runner.os }}-cargo-
+
+    - name: Install musl-tools
+      if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
+      run: sudo apt-get install -y musl-tools
+
+    - name: Install deps
+      if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && !startsWith(github.ref, 'refs/tags/v') }}
+      run: sudo ./ci-scripts/install-deps.sh
+
+    - name: Build
+      run: ${{ env.CTOOL }} build ${{ env.CARGS }}
+
+    - name: Get output
+      shell: bash
+      run: |
+        cp target/${{ matrix.target }}/${{ env.COUTPUT }}/${{ env.CBIN }} ${{ env.CBIN }}
+        chmod +x ${{ env.CBIN }} || true
+        ls -l ${{ env.CBIN }}
+
+    - name: Upload output
+      uses: actions/upload-artifact@v3
+      with:
+        retention-days: 1
+        name: "${{ matrix.target }}.${{ env.CBIN }}"
+        path: "${{ env.CBIN }}"
+

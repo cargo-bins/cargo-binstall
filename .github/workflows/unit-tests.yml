@@ -1,29 +1,54 @@
 name: Unit tests
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
+  push:
+    branches:
+      - main
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   test:
-    name: test
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - macos
+        - ubuntu
+        - windows
+
+    runs-on: ${{ matrix.os }}-latest
+    name: on ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v2
-      - name: Configure toolchain
-        run: rustup default stable
-      - name: Configure caching
-        uses: actions/cache@v2
-        with:
-          key: ubuntu-latest-stable-testing
-          path: |
-            ${{ env.HOME }}/.cargo
-            target
-      - name: Install deps
-        run: sudo ./ci-scripts/install-deps.sh
-      - name: test
-        run: cargo test --no-default-features --features pkg-config,native-tls
+    - uses: actions/checkout@v2
+    - name: Configure toolchain
+      run: |
+        rustup toolchain install --profile minimal --no-self-update nightly
+        rustup default nightly
+
+    - name: Configure caching
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-unit-tests-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-unit-tests
+
+    - name: Install deps
+      if: matrix.os == 'ubuntu'
+      run: sudo ./ci-scripts/install-deps.sh
+
+    - name: Test (Unix)
+      if: matrix.os != 'windows'
+      run: cargo test --no-default-features --features pkg-config,native-tls
+
+    - name: Test (Windows)
+      if: matrix.os == 'windows'
+      run: cargo test --no-default-features --features native-tls

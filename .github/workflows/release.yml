@@ -1,0 +1,77 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - "*"
+
+jobs:
+  info:
+    runs-on: ubuntu-latest
+    # the commit message will look like: `release: v{version} (#{pr-number})`
+    if: "startsWith(github.event.head_commit.message, 'release: v')"
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      notes: ${{ fromJSON(steps.notes.outputs.notes_json) }}
+    env:
+      COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Extract tag from commit message
+      id: version
+      run: ./ci-scripts/extract-tag-from-release-commit.sh
+    - name: Extract release notes
+      id: notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPO: ${{ github.repository }}
+      run: ./ci-scripts/extract-release-notes.sh
+
+  tag:
+    needs: info
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Push release tag
+      uses: mathieudutour/github-tag-action@v6.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        custom_tag: ${{ needs.info.outputs.version }}
+        tag_prefix: ''
+
+  build:
+    needs: info # not really, but just so it fails fast
+    uses: ./.github/workflows/build.yml
+    with:
+      for_release: true
+
+  release:
+    needs:
+      - info
+      - tag
+      - build
+    name: Package and release
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Get outputs
+      uses: actions/download-artifact@v3
+      with:
+        path: outputs/
+
+    - name: Pack archives
+      run: ./ci-scripts/pack-release-archives.sh
+
+    - name: Publish release
+      uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
+      with:
+        tag_name: ${{ needs.info.outputs.version }}
+        name: ${{ needs.info.outputs.version }}
+        body: ${{ needs.info.outputs.notes }}
+        append_body: true
+        files: |
+          outputs/cargo-binstall-*.zip
+          outputs/cargo-binstall-*.tgz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
