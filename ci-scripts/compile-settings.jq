@@ -5,11 +5,12 @@ if ($ref | startswith("refs/tags/v")) then {
 } else {
   output: "debug",
   profile: "dev",
-  args: ($matrix.debug_build_args // ""),
+  args: ($matrix.debug_build_args // "--no-default-features --features rustls"),
 } end
 |
 {
-  CTOOL: (if $matrix."use-cross" then "cross" else "cargo" end),
+  CBIN: (if ($matrix.target | test("windows")) then "cargo-binstall.exe" else "cargo-binstall" end),
+  CTOOL: (if ($matrix."use-cross" // false) then "cross" else "cargo" end),
   COUTPUT: .output,
   CARGS: "--target \($matrix.target) --profile \(.profile) \(.args)",
 }
