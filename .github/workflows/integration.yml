@@ -46,5 +46,6 @@ jobs:
         name: "${{ matrix.target }}.${{ matrix.bin }}"
 
     - name: Test
+      shell: bash
       run: ci-scripts/run_tests_unix.sh ${{ matrix.bin }} ${{ runner.os }}
 
