@@ -44,7 +44,6 @@ jobs:
       with:
         retention-days: 1
         name: "${{ matrix.target }}.${{ matrix.bin }}"
-        path: "${{ matrix.bin }}"
 
     - name: Test (Unix)
       if: matrix.os != 'windows-latest'
