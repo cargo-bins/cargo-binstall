@@ -1,11 +1,8 @@
 use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString, EnumVariantNames};
+use strum_macros::{Display, EnumString};
 
 /// Binary format enumeration
-#[derive(
-    Debug, Copy, Clone, PartialEq, Serialize, Deserialize, Display, EnumString, EnumVariantNames,
-)]
-#[strum(serialize_all = "snake_case")]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "snake_case")]
 pub enum PkgFmt {
     /// Download format is TAR (uncompressed)
@@ -31,8 +28,7 @@ impl Default for PkgFmt {
 }
 
 impl PkgFmt {
-    /// If self is one of the tar based formats,
-    /// return Some.
+    /// If self is one of the tar based formats, return Some.
     pub fn decompose(self) -> PkgFmtDecomposed {
         match self {
             PkgFmt::Tar => PkgFmtDecomposed::Tar(TarBasedFmt::Tar),
@@ -42,6 +38,19 @@ impl PkgFmt {
             PkgFmt::Tzstd => PkgFmtDecomposed::Tar(TarBasedFmt::Tzstd),
             PkgFmt::Bin => PkgFmtDecomposed::Bin,
             PkgFmt::Zip => PkgFmtDecomposed::Zip,
+        }
+    }
+
+    /// List of possible file extensions for the format.
+    pub fn extensions(self) -> &'static [&'static str] {
+        match self {
+            PkgFmt::Tar => &["tar"],
+            PkgFmt::Tbz2 => &["tbz2", "tar.bz2"],
+            PkgFmt::Tgz => &["tgz", "tar.gz"],
+            PkgFmt::Txz => &["txz", "tar.xz"],
+            PkgFmt::Tzstd => &["tzstd", "tzst", "tar.zst"],
+            PkgFmt::Bin => &["bin", "exe"],
+            PkgFmt::Zip => &["zip"],
         }
     }
 }

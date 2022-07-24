@@ -113,7 +113,7 @@ pub fn create_reqwest_client(
 }
 
 pub async fn remote_exists(
-    client: &Client,
+    client: Client,
     url: Url,
     method: Method,
 ) -> Result<bool, BinstallError> {
@@ -147,11 +147,11 @@ async fn create_request(
 /// Download a file from the provided URL and extract it to the provided path.
 pub async fn download_and_extract<P: AsRef<Path>>(
     client: &Client,
-    url: Url,
+    url: &Url,
     fmt: PkgFmt,
     path: P,
 ) -> Result<(), BinstallError> {
-    let stream = create_request(client, url).await?;
+    let stream = create_request(client, url.clone()).await?;
 
     let path = path.as_ref();
     debug!("Downloading and extracting to: '{}'", path.display());

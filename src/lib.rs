@@ -137,7 +137,7 @@ mod test {
 
         assert_eq!(
             &meta.pkg_url,
-            "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ format }"
+            "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
         );
 
         assert_eq!(
