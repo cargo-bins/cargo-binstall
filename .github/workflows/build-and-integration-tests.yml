@@ -79,7 +79,9 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Configure toolchain
-      run: rustup default nightly
+      run: |
+        rustup toolchain install --profile minimal nightly
+        rustup default nightly
 
     - name: Install cross
       if: matrix.use-cross
