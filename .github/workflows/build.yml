@@ -2,7 +2,20 @@ name: Build
 
 on:
   workflow_call:
+    inputs:
+      for_release:
+        description: "True if the build is for a release"
+        required: true
+        default: false
+        type: boolean
+
   workflow_dispatch:
+    inputs:
+      for_release:
+        description: "True if the build is for a release"
+        required: true
+        default: false
+        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
@@ -62,7 +75,7 @@ jobs:
       shell: bash
       run: |
         jq \
-          --arg ref '${{ github.ref }}' \
+          --arg for_release '${{ inputs.for_release }}' \
           --argjson matrix '${{ toJSON(matrix) }}' \
           -nrf ci-scripts/compile-settings.jq \
         | tee -a $GITHUB_ENV

@@ -12,6 +12,8 @@ env:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+    with:
+      for_release: false
 
   test:
     needs: build

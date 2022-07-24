@@ -1,4 +1,4 @@
-if ($ref | startswith("refs/tags/v")) then {
+if $for_release then {
   output: "release",
   profile: "release",
   args: ($matrix.release_build_args // ""),
