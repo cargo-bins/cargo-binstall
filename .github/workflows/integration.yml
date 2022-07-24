@@ -58,4 +58,9 @@ jobs:
         ./${{ matrix.bin }} binstall --manifest-path . --no-confirm cargo-binstall
         cargo binstall --help >/dev/null
 
+    - name: Test (Windows, experiment)
+      if: matrix.os == 'windows-latest'
+      shell: bash
+      run: ./ci-scripts/run_tests_unix.sh ${{ matrix.bin }}
+
 
