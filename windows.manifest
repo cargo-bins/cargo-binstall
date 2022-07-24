@@ -3,7 +3,7 @@
 	<assemblyIdentity
 		type="win32"
 		name="Binstall.Cli.binstall"
-		version="0.10.0.0"
+		version="0.11.0.0"
 	/>
 
 	<trustInfo>
