@@ -189,6 +189,8 @@ jobs:
         release_commit: ${{ github.event.head_commit.message }}
       run: |
         set -euxo pipefail
+        echo "::set-output name=version::$(cut -d/ -f3 <<< "${{ github.ref }}")"
+
         release_pr=$(head -n1 <<< "${release_commit:-}" | jq -Rr 'split("[()]"; "")[1] // ""')
         if [[ -z "$release_pr" ]]; then
           echo "::set-output name=notes_json::null"
@@ -204,8 +206,8 @@ jobs:
     - name: Publish release
       uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
       with:
-        tag_name: ${{ github.ref }}
-        name: ${{ github.ref }}
+        tag_name: ${{ steps.notes.outputs.version }}
+        name: ${{ steps.notes.outputs.version }}
         body: ${{ fromJSON(steps.notes.outputs.notes_json) }}
         append_body: true
         files: |
