@@ -45,6 +45,9 @@ jobs:
       with:
         name: "${{ matrix.target }}.${{ matrix.bin }}"
 
+    - run: chmod +x ${{ matrix.bin }}
+      if: matrix.os != 'windows-latest'
+
     - name: Test
       shell: bash
       run: ./ci-scripts/tests.sh ${{ matrix.bin }} ${{ runner.os }}

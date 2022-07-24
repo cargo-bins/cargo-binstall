@@ -107,8 +107,12 @@ jobs:
     - name: Build
       run: ${{ env.CTOOL }} build ${{ env.CARGS }}
 
-    - name: Copy and rename utility
-      run: cp target/${{ matrix.target }}/${{ env.COUTPUT }}/${{ env.CBIN }} ${{ env.CBIN }}
+    - name: Get output
+      shell: bash
+      run: |
+        cp target/${{ matrix.target }}/${{ env.COUTPUT }}/${{ env.CBIN }} ${{ env.CBIN }}
+        chmod +x ${{ env.CBIN }} || true
+        ll ${{ env.CBIN }}
 
     - name: Upload output
       uses: actions/upload-artifact@v3
