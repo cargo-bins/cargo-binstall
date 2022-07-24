@@ -77,7 +77,7 @@ jobs:
       shell: bash
       run: |
         jq \
-          --arg for_release '${{ inputs.for_release }}' \
+          --argjson for_release '${{ toJSON(inputs.for_release) }}' \
           --argjson matrix '${{ toJSON(matrix) }}' \
           -nrf ci-scripts/compile-settings.jq \
         | tee -a $GITHUB_ENV
