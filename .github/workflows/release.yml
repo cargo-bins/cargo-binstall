@@ -17,10 +17,10 @@ jobs:
     env:
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Extract tag from commit message
-        id: version
-        run: ci-scripts/extract-tag-from-release-commit.sh
+    - uses: actions/checkout@v2
+    - name: Extract tag from commit message
+      id: version
+      run: ci-scripts/extract-tag-from-release-commit.sh
     - name: Extract release notes
       id: notes
       shell: bash
@@ -33,14 +33,14 @@ jobs:
     needs: info
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Push release tag
-        id: tag_version
-        uses: mathieudutour/github-tag-action@v6.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          custom_tag: ${{ needs.info.outputs.version }}
-          tag_prefix: ''
+    - uses: actions/checkout@v2
+    - name: Push release tag
+      id: tag_version
+      uses: mathieudutour/github-tag-action@v6.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        custom_tag: ${{ needs.info.outputs.version }}
+        tag_prefix: ''
 
   build:
     uses: ./.github/workflows/build.yml
