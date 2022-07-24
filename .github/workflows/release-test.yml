@@ -1,21 +1,15 @@
-name: Release
+name: Release TEST
 on:
-  push:
-    branches:
-      - main
-    tags-ignore:
-      - "*"
+  pull_request:
 
 jobs:
   info:
     runs-on: ubuntu-latest
-    # the commit message will look like: `release: v{version} (#{pr-number})`
-    if: "startsWith(github.event.head_commit.message, 'release: v')"
     outputs:
       version: ${{ steps.version.outputs.version }}
       notes: ${{ fromJSON(steps.notes.outputs.notes_json) }}
     env:
-      COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+      COMMIT_MESSAGE: "release: v0.11.0 (#234)"
     steps:
     - uses: actions/checkout@v2
     - name: Extract tag from commit message
@@ -39,7 +33,7 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ needs.info.outputs.version }}
-        tag_prefix: ''
+        tag_prefix: 'test-'
 
   build:
     uses: ./.github/workflows/build.yml
@@ -63,15 +57,23 @@ jobs:
     - name: Pack archives
       run: ci-scripts/pack-release-archives.sh
 
-    - name: Publish release
-      uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
+    - name: Write release notes
+      env:
+        notes: ${{ needs.info.outputs.notes }}
+      run: echo "$notes" > outputs/NOTES
+
+    - name: Write release version
+      env:
+        version: ${{ needs.info.outputs.version }}
+      run: echo "$version" > outputs/VERSION
+
+    - name: Upload release bits
+      uses: actions/upload-artifact@v3
       with:
-        tag_name: ${{ needs.info.outputs.version }}
-        name: ${{ needs.info.outputs.version }}
-        body: ${{ needs.info.outputs.notes }}
-        append_body: true
-        files: |
+        retention-days: 1
+        name: release-bits
+        path: |
           outputs/cargo-binstall-*.zip
           outputs/cargo-binstall-*.tgz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          outputs/NOTES
+          outputs/VERSION
