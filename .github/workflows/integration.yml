@@ -43,7 +43,6 @@ jobs:
     - name: Download build
       uses: actions/download-artifact@v3
       with:
-        retention-days: 1
         name: "${{ matrix.target }}.${{ matrix.bin }}"
 
     - name: Test (Unix)
@@ -52,10 +51,11 @@ jobs:
 
     - name: Test (Windows)
       if: matrix.os == 'windows-latest'
+      shell: bash
       run: |
         ./${{ matrix.bin }} binstall --no-confirm cargo-binstall
-        cargo binstall --help
+        cargo binstall --help >/dev/null
         ./${{ matrix.bin }} binstall --manifest-path . --no-confirm cargo-binstall
-        cargo binstall --help
+        cargo binstall --help >/dev/null
 
 
