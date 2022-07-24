@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euxo pipefail
+
 release_pr=$(head -n1 <<< "${COMMIT_MESSAGE:-}" | jq -Rr 'split("[()]"; "")[1] // ""')
 if [[ -z "$release_pr" ]]; then
   echo "::set-output name=notes_json::null"

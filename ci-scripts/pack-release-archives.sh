@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euxo pipefail
+
 for o in outputs/*; do
   pushd "$o"
 
