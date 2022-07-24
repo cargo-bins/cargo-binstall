@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use clap::Parser;
+use clap::{AppSettings, Parser};
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
@@ -20,7 +20,7 @@ use cargo_binstall::{binstall, *};
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug, Parser)]
-#[clap(version, about = "Install a Rust binary... from binaries!")]
+#[clap(version, about = "Install a Rust binary... from binaries!", setting = AppSettings::ArgRequiredElseHelp)]
 struct Options {
     /// Package name for installation.
     ///
