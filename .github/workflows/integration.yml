@@ -45,11 +45,11 @@ jobs:
         path: "${{ matrix.bin }}"
 
     - name: Test (Unix)
-      if: ${{ matrix.test && matrix.os != 'windows-latest' }}
+      if: matrix.os != 'windows-latest'
       run: ./ci-scripts/run_tests_unix.sh ${{ matrix.bin }}
 
     - name: Test (Windows)
-      if: ${{ matrix.os == 'windows-latest' }}
+      if: matrix.os == 'windows-latest'
       run: |
         ./${{ matrix.bin }} binstall --no-confirm cargo-binstall
         cargo binstall --help
