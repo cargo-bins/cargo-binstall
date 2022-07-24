@@ -42,6 +42,7 @@ jobs:
           ${{ runner.os }}-unit-tests
 
     - name: Install deps
+      if: matrix.os == 'ubuntu'
       run: sudo ./ci-scripts/install-deps.sh
 
     - name: Test
