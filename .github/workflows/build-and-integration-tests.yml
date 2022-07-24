@@ -93,17 +93,14 @@ jobs:
       if: "!matrix.use-cross"
       run: rustup target add ${{ matrix.target }}
 
-    - name: Select compile tool
+    - name: Select compile settings
       shell: bash
-      run: jq -nr '"CTOOL=\(if ${{ matrix.use-cross }} then "cross" else "cargo" end)"' | tee -a $GITHUB_ENV
-
-    - name: Select compile profile
-      shell: bash
-      run: jq -nr '"CPROFILE=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "dev" end)"' | tee -a $GITHUB_ENV
-
-    - name: Select compile output
-      shell: bash
-      run: jq -nr '"COUTPUT=\(if ${{ startsWith(github.ref, 'refs/tags/v') }} then "release" else "debug" end)"' | tee -a $GITHUB_ENV
+      run: |
+        jq \
+          --arg ref '${{ github.ref }}' \
+          --argjson matrix '${{ toJSON(matrix) }}' \
+          -nrf ci-scripts/compile-settings.jq \
+        | tee -a $GITHUB_ENV
 
     - name: Configure caching
       uses: actions/cache@v2
@@ -123,7 +120,7 @@ jobs:
       run: sudo ./ci-scripts/install-deps.sh
 
     - name: Build
-      run: ${{ env.CTOOL }} build --target ${{ matrix.target }} --profile ${{ env.CPROFILE }}
+      run: ${{ env.CTOOL }} build ${{ env.CARGS }}
 
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/${{ env.COUTPUT }}/${{ matrix.output }} ${{ matrix.output }}
