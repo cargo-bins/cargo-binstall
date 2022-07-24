@@ -46,7 +46,9 @@ jobs:
       run: sudo ./ci-scripts/install-deps.sh
 
     - name: Test (Unix)
+      if: matrix.os != 'windows'
       run: cargo test --no-default-features --features pkg-config,native-tls
 
     - name: Test (Windows)
+      if: matrix.os == 'windows'
       run: cargo test --no-default-features --features native-tls
