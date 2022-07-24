@@ -174,7 +174,7 @@ jobs:
           if grep -qE '(apple|windows)' <<< "$target"; then
             zip "../cargo-binstall-${target}.zip" *
           else
-            tar cvf "../cargo-binstall-${target}.tgz" *
+            tar cv * | gzip -9 > "../cargo-binstall-${target}.tgz"
           fi
 
           popd
