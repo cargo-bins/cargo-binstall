@@ -61,13 +61,8 @@ jobs:
           fence=$'```\n'
           ecnef=$'\n```'
 
-          title="release: v${{ inputs.version }}"
-          body_intro="This is a release PR for version **${{ inputs.version }}**."
-          body_merge="**Use squash merge.**${nl}Upon merging, this will automatically build the CLI and create a GitHub release. You still need to manually publish the cargo crate."
-          body_pub="${fence}$ git switch main${nl}$ git pull${nl}$ git checkout v${{ inputs.version }}${nl}$ cargo publish${ecnef}"
-          body_notes="---${br}_Edit release notes into the section below:_${br}<!-- do not change or remove this heading -->${nl}### Release notes"
-
-          body="${body_intro}${br}${body_merge}${br}${body_pub}${br}${body_notes}${br}"
+          title='release: v${{ inputs.version }}'
+          body=$(sed 's/%version%/${{ inputs.version }}/g' ci-scripts/release-pr.txt)
 
           gh pr create --title "$title" --body "$body" --base main --head "${{ env.branch_name }}" --label "release"
         env:
