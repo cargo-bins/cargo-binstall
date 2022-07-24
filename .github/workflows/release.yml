@@ -42,6 +42,7 @@ jobs:
         tag_prefix: ''
 
   build:
+    needs: info # not really, but just so it fails fast
     uses: ./.github/workflows/build.yml
     with:
       for_release: true

@@ -1,4 +1,3 @@
-#!/usr/bin/bash
 for o in outputs/*; do
   pushd "$o"
 
