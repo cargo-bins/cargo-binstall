@@ -24,10 +24,13 @@ cargo binstall --help >/dev/null
 cargo binstall --help >/dev/null
 
 # Install binaries using secure mode
+min_tls=1.3
+[[ "${2:-}" == "Windows" ]] && min_tls=1.2 # WinTLS on GHA doesn't support 1.3 yet
+
 "./$1" binstall \
     --log-level debug \
     --secure \
-    --min-tls-version 1.3 \
+    --min-tls-version $min_tls \
     --no-confirm \
     cargo-binstall
 # Test that the installed binaries can be run
