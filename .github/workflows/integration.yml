@@ -38,7 +38,7 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Download build
-      uses: actions/upload-artifact@v3
+      uses: actions/download-artifact@v3
       with:
         retention-days: 1
         name: "${{ matrix.target }}.${{ matrix.bin }}"
