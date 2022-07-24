@@ -80,7 +80,7 @@ jobs:
 
     - name: Configure toolchain
       run: |
-        rustup toolchain install --profile minimal nightly
+        rustup toolchain install --profile minimal --no-self-update nightly
         rustup default nightly
 
     - name: Install cross
@@ -103,13 +103,18 @@ jobs:
         | tee -a $GITHUB_ENV
 
     - name: Configure caching
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
-        key: ${{ matrix.os }}-${{ matrix.target }}
         path: |
-          ${{ env.HOME }}/.cargo/git
-          ${{ env.HOME }}/.cargo/registry
-          target
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.COUTPUT }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          ${{ runner.os }}-cargo-${{ matrix.target }}-
+          ${{ runner.os }}-cargo-
 
     - name: Install musl-tools
       if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
