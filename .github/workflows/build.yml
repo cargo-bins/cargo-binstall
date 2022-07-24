@@ -1,19 +1,14 @@
-name: Build and integration tests
+name: Build
 
 on:
-  push:
-    branches: [ main ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
+  workflow_call:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-    name: Build and Test
-
     strategy:
       fail-fast: false
       matrix:
@@ -22,56 +17,47 @@ jobs:
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: false
-            test: true
             debug_build_args: --no-default-features --features rustls,pkg-config
           - target: x86_64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             use-cross: false
-            test: true
             debug_build_args: --no-default-features --features rustls
           - target: aarch64-apple-darwin
             os: macos-latest
             output: cargo-binstall
             use-cross: false
-            test: false
             debug_build_args: --no-default-features --features rustls
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             output: cargo-binstall.exe
             use-cross: false
-            test: false
             debug_build_args: --no-default-features --features native-tls
             release_build_args: --no-default-features --features static,zlib-ng,native-tls
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: false
-            test: true
             debug_build_args: --no-default-features --features rustls
           - target: armv7-unknown-linux-musleabihf
             os: ubuntu-20.04
             output: cargo-binstall
             use-cross: true
-            test: false
             debug_build_args: --no-default-features --features rustls
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-20.04
             output: cargo-binstall
             use-cross: true
-            test: false
             debug_build_args: --no-default-features --features rustls
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: true
-            test: false
             debug_build_args: --no-default-features --features rustls
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             output: cargo-binstall
             use-cross: true
-            test: false
             debug_build_args: --no-default-features --features rustls
 
     runs-on: ${{ matrix.os }}
@@ -130,18 +116,6 @@ jobs:
     - name: Copy and rename utility
       run: cp target/${{ matrix.target }}/${{ env.COUTPUT }}/${{ matrix.output }} ${{ matrix.output }}
 
-    - name: Test (Unix)
-      if: ${{ matrix.test && matrix.os != 'windows-latest' }}
-      run: ./ci-scripts/run_tests_unix.sh ${{ matrix.output }}
-
-    - name: Test (Windows)
-      if: ${{ matrix.os == 'windows-latest' }}
-      run: |
-        ./${{ matrix.output }} binstall --no-confirm cargo-binstall
-        cargo binstall --help
-        ./${{ matrix.output }} binstall --manifest-path . --no-confirm cargo-binstall
-        cargo binstall --help
-
     - name: Upload output
       uses: actions/upload-artifact@v3
       with:
@@ -149,69 +123,3 @@ jobs:
         name: "${{ matrix.target }}.${{ matrix.output }}"
         path: "${{ matrix.output }}"
 
-  release:
-    name: Package and release
-    needs: build
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Get outputs
-      uses: actions/download-artifact@v3
-      with:
-        path: outputs/
-
-    - name: Create archives
-      shell: bash
-      run: |
-        set -euxo pipefail
-        for o in outputs/*; do
-          pushd "$o"
-
-          cp ../../LICENSE.txt ../../README.md .
-
-          target=$(basename "$o" | cut -d. -f1)
-          if grep -qE '(apple|windows)' <<< "$target"; then
-            zip "../cargo-binstall-${target}.zip" *
-          else
-            tar cv * | gzip -9 > "../cargo-binstall-${target}.tgz"
-          fi
-
-          popd
-        done
-
-    - name: Extract release notes
-      id: notes
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GITHUB_REPO: ${{ github.repository }}
-        release_commit: ${{ github.event.head_commit.message }}
-      run: |
-        set -euxo pipefail
-        echo "::set-output name=version::$(cut -d/ -f3 <<< "${{ github.ref }}")"
-
-        release_pr=$(head -n1 <<< "${release_commit:-}" | jq -Rr 'split("[()]"; "")[1] // ""')
-        if [[ -z "$release_pr" ]]; then
-          echo "::set-output name=notes_json::null"
-          exit
-        fi
-
-        gh \
-          pr --repo "$GITHUB_REPO" \
-          view "$release_pr" \
-          --json body \
-          --jq '"::set-output name=notes_json::\((.body | split("### Release notes")[1] // "") | tojson)"'
-
-    - name: Publish release
-      uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
-      with:
-        tag_name: ${{ steps.notes.outputs.version }}
-        name: ${{ steps.notes.outputs.version }}
-        body: ${{ fromJSON(steps.notes.outputs.notes_json) }}
-        append_body: true
-        files: |
-          outputs/cargo-binstall-*.zip
-          outputs/cargo-binstall-*.tgz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
