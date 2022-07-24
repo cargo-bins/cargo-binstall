@@ -80,7 +80,7 @@ jobs:
 
     - name: Configure toolchain
       run: |
-        rustup toolchain install --profile minimal nightly
+        rustup toolchain install --profile minimal --no-self-update nightly
         rustup default nightly
 
     - name: Install cross
