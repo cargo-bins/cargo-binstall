@@ -53,6 +53,8 @@ jobs:
             use-cross: true
 
     runs-on: ${{ matrix.os }}
+    name: ${{ matrix.target }}
+
     steps:
     - uses: actions/checkout@v2
 
