@@ -112,7 +112,7 @@ jobs:
       run: |
         cp target/${{ matrix.target }}/${{ env.COUTPUT }}/${{ env.CBIN }} ${{ env.CBIN }}
         chmod +x ${{ env.CBIN }} || true
-        ll ${{ env.CBIN }}
+        ls -l ${{ env.CBIN }}
 
     - name: Upload output
       uses: actions/upload-artifact@v3
