@@ -5,7 +5,7 @@ if $for_release then {
 } else {
   output: "debug",
   profile: "dev",
-  args: ($matrix.debug_build_args // "--no-default-features --features rustls"),
+  args: ($matrix.debug_build_args // "--no-default-features --features rustls,fancy-with-backtrace"),
 } end
 |
 {
