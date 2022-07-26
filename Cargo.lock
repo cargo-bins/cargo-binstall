@@ -276,6 +276,7 @@ dependencies = [
  "castaway",
  "itoa",
  "ryu",
+ "serde",
 ]
 
 [[package]]

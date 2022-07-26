@@ -24,7 +24,7 @@ bytes = "1.2.0"
 bzip2 = "0.4.3"
 cargo_toml = "0.11.5"
 clap = { version = "3.2.14", features = ["derive"] }
-compact_str = "0.5.2"
+compact_str = { version = "0.5.2", features = ["serde"] }
 crates_io_api = { version = "0.8.0", default-features = false }
 dirs = "4.0.0"
 flate2 = { version = "1.0.24", default-features = false }
