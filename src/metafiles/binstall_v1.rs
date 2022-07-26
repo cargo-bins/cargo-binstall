@@ -16,7 +16,7 @@ use crate::binstall::MetaData;
 use crate::FileLock;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Entry {
+pub struct Item {
     pub name: CompactString,
     pub version_req: CompactString,
     pub current_version: Version,
@@ -24,7 +24,7 @@ pub struct Entry {
     pub target: CompactString,
     pub bins: Vec<CompactString>,
 }
-impl Entry {
+impl Item {
     pub fn new(metadata: MetaData) -> Self {
         let MetaData {
             bins,
@@ -87,7 +87,7 @@ pub enum Error {
 
 pub fn append_to_path<Iter>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Error>
 where
-    Iter: IntoIterator<Item = Entry>,
+    Iter: IntoIterator<Item = Item>,
 {
     let file = FileLock::new_exclusive(
         fs::OpenOptions::new()
