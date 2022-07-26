@@ -1,9 +1,19 @@
+use std::{
+    fs,
+    io::{self, Write},
+    iter::IntoIterator,
+    path::Path,
+};
+
 use compact_str::CompactString;
+use miette::Diagnostic;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use url::Url;
 
 use crate::binstall::MetaData;
+use crate::FileLock;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Entry {
@@ -64,4 +74,13 @@ impl From<super::Source> for Source {
             },
         }
     }
+}
+
+#[derive(Debug, Diagnostic, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    #[error(transparent)]
+    SerdeJsonParse(#[from] serde_json::Error),
 }
