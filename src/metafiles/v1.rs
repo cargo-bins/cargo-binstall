@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     fs::File,
     io::{self, Seek},
     iter::IntoIterator,
@@ -15,7 +15,7 @@ use crate::{cargo_home, create_if_not_exist, FileLock};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
-    v1: BTreeMap<String, BTreeSet<String>>,
+    v1: BTreeMap<String, Vec<String>>,
 }
 
 impl CratesToml {
@@ -38,7 +38,7 @@ impl CratesToml {
         Self::load_from_reader(file)
     }
 
-    pub fn insert(&mut self, cvs: &CrateVersionSource, bins: BTreeSet<String>) {
+    pub fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<String>) {
         self.v1.insert(cvs.to_string(), bins);
     }
 
@@ -70,7 +70,7 @@ impl CratesToml {
         iter: Iter,
     ) -> Result<(), CratesTomlParseError>
     where
-        Iter: IntoIterator<Item = (&'a CrateVersionSource, BTreeSet<String>)>,
+        Iter: IntoIterator<Item = (&'a CrateVersionSource, Vec<String>)>,
     {
         let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
         let mut c1 = Self::load_from_reader(&mut *file)?;
@@ -87,7 +87,7 @@ impl CratesToml {
 
     pub fn append<'a, Iter>(iter: Iter) -> Result<(), CratesTomlParseError>
     where
-        Iter: IntoIterator<Item = (&'a CrateVersionSource, BTreeSet<String>)>,
+        Iter: IntoIterator<Item = (&'a CrateVersionSource, Vec<String>)>,
     {
         Self::append_to_path(Self::default_path()?, iter)
     }

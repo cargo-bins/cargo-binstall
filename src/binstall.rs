@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use crate::{metafiles, DesiredTargets, PkgOverride};
@@ -20,7 +19,7 @@ pub struct Options {
 
 /// MetaData required to update MetaFiles.
 pub struct MetaData {
-    pub bins: BTreeSet<String>,
+    pub bins: Vec<String>,
     pub cvs: metafiles::CrateVersionSource,
     pub version_req: String,
     pub target: String,
