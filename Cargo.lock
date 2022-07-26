@@ -148,6 +148,7 @@ dependencies = [
  "scopeguard",
  "semver",
  "serde",
+ "serde_json",
  "simplelog",
  "strum",
  "strum_macros",
