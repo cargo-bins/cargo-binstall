@@ -84,3 +84,27 @@ pub enum Error {
     #[error(transparent)]
     SerdeJsonParse(#[from] serde_json::Error),
 }
+
+pub fn append_to_path<Iter>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Error>
+where
+    Iter: IntoIterator<Item = Entry>,
+{
+    let file = FileLock::new_exclusive(
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?,
+    )?;
+
+    let writer = io::BufWriter::with_capacity(512, file);
+
+    let mut ser = serde_json::Serializer::new(writer);
+
+    for item in iter {
+        item.serialize(&mut ser)?;
+    }
+
+    ser.into_inner().flush()?;
+
+    Ok(())
+}
