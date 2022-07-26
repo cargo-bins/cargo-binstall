@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use cargo_toml::Product;
+use compact_str::CompactString;
 use log::debug;
 use serde::Serialize;
 
 use crate::{atomic_install, atomic_symlink_file, BinstallError, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
-    pub base_name: String,
+    pub base_name: CompactString,
     pub source: PathBuf,
     pub dest: PathBuf,
     pub link: PathBuf,
@@ -15,7 +16,7 @@ pub struct BinFile {
 
 impl BinFile {
     pub fn from_product(data: &Data, product: &Product) -> Result<Self, BinstallError> {
-        let base_name = product.name.clone().unwrap();
+        let base_name = CompactString::from(product.name.clone().unwrap());
 
         let binary_ext = if data.target.contains("windows") {
             ".exe"
