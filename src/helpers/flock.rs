@@ -56,3 +56,13 @@ impl io::Write for FileLock {
         self.0.write_vectored(bufs)
     }
 }
+
+impl io::Read for FileLock {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        self.0.read_vectored(bufs)
+    }
+}
