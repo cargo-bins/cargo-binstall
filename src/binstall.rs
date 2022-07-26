@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use compact_str::CompactString;
+
 use crate::{metafiles, DesiredTargets, PkgOverride};
 
 mod resolve;
@@ -19,7 +21,7 @@ pub struct Options {
 
 /// MetaData required to update MetaFiles.
 pub struct MetaData {
-    pub bins: Vec<String>,
+    pub bins: Vec<CompactString>,
     pub cvs: metafiles::CrateVersionSource,
     pub version_req: String,
     pub target: String,
