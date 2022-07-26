@@ -66,3 +66,16 @@ impl io::Read for FileLock {
         self.0.read_vectored(bufs)
     }
 }
+
+impl io::Seek for FileLock {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        self.0.seek(pos)
+    }
+
+    fn rewind(&mut self) -> io::Result<()> {
+        self.0.rewind()
+    }
+    fn stream_position(&mut self) -> io::Result<u64> {
+        self.0.stream_position()
+    }
+}
