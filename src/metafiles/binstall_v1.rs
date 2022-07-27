@@ -49,7 +49,7 @@ impl MetaData {
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-enum SourceType {
+pub enum SourceType {
     Git,
     Path,
     Registry,
@@ -57,8 +57,8 @@ enum SourceType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Source {
-    source_type: SourceType,
-    url: Url,
+    pub source_type: SourceType,
+    pub url: Url,
 }
 
 impl Source {
