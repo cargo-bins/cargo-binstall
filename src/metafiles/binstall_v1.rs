@@ -67,7 +67,7 @@ pub enum SourceType {
     Registry,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Source {
     pub source_type: SourceType,
     pub url: Url,
