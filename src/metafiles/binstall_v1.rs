@@ -1,9 +1,9 @@
 use std::{
     cmp,
-    collections::BTreeSet,
+    collections::{btree_set, BTreeSet},
     fs, hash,
     io::{self, Write},
-    iter::IntoIterator,
+    iter::{IntoIterator, Iterator},
     path::{Path, PathBuf},
 };
 
@@ -153,5 +153,15 @@ impl Records {
     /// **Warning: This will overwrite all existing records!**
     pub fn overwrite(self) -> Result<(), Error> {
         write_to(self.file, &mut self.data.into_iter())
+    }
+}
+
+impl<'a> IntoIterator for &'a Records {
+    type Item = &'a MetaData;
+
+    type IntoIter = btree_set::Iter<'a, MetaData>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
     }
 }
