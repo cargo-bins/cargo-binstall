@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::{cargo_home, FileLock};
+use crate::{cargo_home, cratesio_url, FileLock};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetaData {
@@ -59,6 +59,15 @@ enum SourceType {
 pub struct Source {
     source_type: SourceType,
     url: Url,
+}
+
+impl Source {
+    pub fn cratesio_registry() -> Source {
+        Self {
+            source_type: SourceType::Registry,
+            url: cratesio_url().clone(),
+        }
+    }
 }
 
 impl From<super::Source> for Source {
