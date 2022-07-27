@@ -1,5 +1,5 @@
 use std::{
-    cmp,
+    borrow, cmp,
     collections::{btree_set, BTreeSet},
     fs, hash,
     io::{self, Write},
@@ -25,6 +25,13 @@ pub struct MetaData {
     pub target: CompactString,
     pub bins: Vec<CompactString>,
 }
+
+impl borrow::Borrow<str> for MetaData {
+    fn borrow(&self) -> &str {
+        &self.name
+    }
+}
+
 impl PartialEq for MetaData {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
