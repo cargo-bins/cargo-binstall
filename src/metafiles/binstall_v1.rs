@@ -1,5 +1,5 @@
 use std::{
-    fs, hash,
+    cmp, fs, hash,
     io::{self, Write},
     iter::IntoIterator,
     path::{Path, PathBuf},
@@ -24,11 +24,23 @@ pub struct MetaData {
     pub bins: Vec<CompactString>,
 }
 impl PartialEq for MetaData {
-    fn eq(&self, other: &MetaData) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
 impl Eq for MetaData {}
+
+impl PartialOrd for MetaData {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.name.partial_cmp(&other.name)
+    }
+}
+
+impl Ord for MetaData {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
 
 impl hash::Hash for MetaData {
     fn hash<H>(&self, state: &mut H)
