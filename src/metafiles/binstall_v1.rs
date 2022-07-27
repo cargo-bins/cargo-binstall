@@ -161,6 +161,34 @@ impl Records {
     pub fn overwrite(self) -> Result<(), Error> {
         write_to(self.file, &mut self.data.into_iter())
     }
+
+    pub fn get(&self, value: impl AsRef<str>) -> Option<&MetaData> {
+        self.data.get(value.as_ref())
+    }
+
+    pub fn contains(&self, value: impl AsRef<str>) -> bool {
+        self.data.contains(value.as_ref())
+    }
+
+    /// Adds a value to the set.
+    /// If the set did not have an equal element present, true is returned.
+    ///
+    /// If the set did have an equal element present, false is returned, and the entry is not updated. See the module-level documentation for more.
+    pub fn insert(&mut self, value: MetaData) -> bool {
+        self.data.insert(value)
+    }
+
+    pub fn replace(&mut self, value: MetaData) -> Option<MetaData> {
+        self.data.replace(value)
+    }
+
+    pub fn remove(&mut self, value: impl AsRef<str>) -> bool {
+        self.data.remove(value.as_ref())
+    }
+
+    pub fn take(&mut self, value: impl AsRef<str>) -> Option<MetaData> {
+        self.data.take(value.as_ref())
+    }
 }
 
 impl<'a> IntoIterator for &'a Records {
