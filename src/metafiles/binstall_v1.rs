@@ -189,6 +189,14 @@ impl Records {
     pub fn take(&mut self, value: impl AsRef<str>) -> Option<MetaData> {
         self.data.take(value.as_ref())
     }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
 }
 
 impl<'a> IntoIterator for &'a Records {
