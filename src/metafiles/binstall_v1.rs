@@ -105,6 +105,13 @@ where
     write_to(&mut file, &mut iter.into_iter())
 }
 
+pub fn append<Iter>(iter: Iter) -> Result<(), Error>
+where
+    Iter: IntoIterator<Item = MetaData>,
+{
+    append_to_path(default_path()?, iter)
+}
+
 pub fn write_to(
     file: &mut FileLock,
     iter: &mut dyn Iterator<Item = MetaData>,
