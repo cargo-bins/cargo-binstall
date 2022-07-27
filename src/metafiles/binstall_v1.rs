@@ -2,7 +2,7 @@ use std::{
     borrow, cmp,
     collections::{btree_set, BTreeSet},
     fs, hash,
-    io::{self, Write},
+    io::{self, Seek, Write},
     iter::{IntoIterator, Iterator},
     path::{Path, PathBuf},
 };
@@ -95,17 +95,20 @@ pub fn append_to_path<Iter>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Er
 where
     Iter: IntoIterator<Item = MetaData>,
 {
-    let file = FileLock::new_exclusive(
+    let mut file = FileLock::new_exclusive(
         fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)?,
     )?;
 
-    write_to(file, &mut iter.into_iter())
+    write_to(&mut file, &mut iter.into_iter())
 }
 
-pub fn write_to(file: FileLock, iter: &mut dyn Iterator<Item = MetaData>) -> Result<(), Error> {
+pub fn write_to(
+    file: &mut FileLock,
+    iter: &mut dyn Iterator<Item = MetaData>,
+) -> Result<(), Error> {
     let writer = io::BufWriter::with_capacity(512, file);
 
     let mut ser = serde_json::Serializer::new(writer);
@@ -158,8 +161,14 @@ impl Records {
     }
 
     /// **Warning: This will overwrite all existing records!**
-    pub fn overwrite(self) -> Result<(), Error> {
-        write_to(self.file, &mut self.data.into_iter())
+    pub fn overwrite(mut self) -> Result<(), Error> {
+        self.file.rewind()?;
+        write_to(&mut self.file, &mut self.data.into_iter())?;
+
+        let len = self.file.stream_position()?;
+        self.file.set_len(len)?;
+
+        Ok(())
     }
 
     pub fn get(&self, value: impl AsRef<str>) -> Option<&MetaData> {
