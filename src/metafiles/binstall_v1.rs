@@ -172,8 +172,8 @@ impl Records {
 
     /// Adds a value to the set.
     /// If the set did not have an equal element present, true is returned.
-    ///
-    /// If the set did have an equal element present, false is returned, and the entry is not updated. See the module-level documentation for more.
+    /// If the set did have an equal element present, false is returned,
+    /// and the entry is not updated.
     pub fn insert(&mut self, value: MetaData) -> bool {
         self.data.insert(value)
     }
