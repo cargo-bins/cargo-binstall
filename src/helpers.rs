@@ -10,7 +10,7 @@ use bytes::Bytes;
 use cargo_toml::Manifest;
 use futures_util::stream::Stream;
 use log::debug;
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use reqwest::{tls, Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tempfile::NamedTempFile;
@@ -53,6 +53,13 @@ pub fn cargo_home() -> Result<&'static Path, io::Error> {
     CARGO_HOME
         .get_or_try_init(home::cargo_home)
         .map(ops::Deref::deref)
+}
+
+pub fn cratesio_url() -> &'static Url {
+    static CRATESIO: Lazy<Url, fn() -> Url> =
+        Lazy::new(|| url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
+
+    &*CRATESIO
 }
 
 /// Returned file is readable and writable.

@@ -1,11 +1,12 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
 use miette::Diagnostic;
-use once_cell::sync::Lazy;
 use semver::Version;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
+
+use crate::cratesio_url;
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CrateVersionSource {
@@ -23,10 +24,7 @@ pub enum Source {
 
 impl Source {
     pub fn cratesio_registry() -> Source {
-        static CRATESIO: Lazy<Url, fn() -> Url> =
-            Lazy::new(|| url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
-
-        Self::Registry(CRATESIO.clone())
+        Self::Registry(cratesio_url().clone())
     }
 }
 
