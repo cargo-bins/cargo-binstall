@@ -208,3 +208,76 @@ impl<'a> IntoIterator for &'a Records {
         self.data.iter()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::target::TARGET;
+
+    use miette::Result;
+    use tempfile::TempDir;
+
+    macro_rules! assert_records_eq {
+        ($records:expr, $metadata_set:expr) => {
+            assert_eq!($records.len(), $metadata_set.len());
+            for (record, metadata) in $records.into_iter().zip($metadata_set.iter()) {
+                assert_eq!(record, metadata);
+            }
+        };
+    }
+
+    #[test]
+    fn rw_test() -> Result<()> {
+        let target = CompactString::from(TARGET);
+
+        let tempdir = TempDir::new().unwrap();
+        let path = tempdir.path().join("binstall-tests.json");
+
+        let metadata_vec = [
+            MetaData {
+                name: "a".into(),
+                version_req: "*".into(),
+                current_version: Version::new(0, 1, 0),
+                source: Source::cratesio_registry(),
+                target: target.clone(),
+                bins: vec!["1".into(), "2".into()],
+            },
+            MetaData {
+                name: "b".into(),
+                version_req: "0.1.0".into(),
+                current_version: Version::new(0, 1, 0),
+                source: Source::cratesio_registry(),
+                target: target.clone(),
+                bins: vec!["1".into(), "2".into()],
+            },
+            MetaData {
+                name: "a".into(),
+                version_req: "*".into(),
+                current_version: Version::new(0, 2, 0),
+                source: Source::cratesio_registry(),
+                target,
+                bins: vec!["1".into()],
+            },
+        ];
+
+        append_to_path(&path, metadata_vec.clone())?;
+
+        let mut iter = metadata_vec.into_iter();
+        iter.next().unwrap();
+
+        let mut metadata_set: BTreeSet<_> = iter.collect();
+
+        let mut records = Records::load_from_path(&path)?;
+        assert_records_eq!(&records, &metadata_set);
+
+        records.remove("b");
+        assert_eq!(records.len(), metadata_set.len() - 1);
+        records.overwrite()?;
+
+        metadata_set.remove("b");
+        let records = Records::load_from_path(&path)?;
+        assert_records_eq!(&records, &metadata_set);
+
+        Ok(())
+    }
+}
