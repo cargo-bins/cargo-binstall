@@ -12,11 +12,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::binstall::MetaData;
 use crate::{cargo_home, FileLock};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Item {
+pub struct MetaData {
     pub name: CompactString,
     pub version_req: CompactString,
     pub current_version: Version,
@@ -24,9 +23,9 @@ pub struct Item {
     pub target: CompactString,
     pub bins: Vec<CompactString>,
 }
-impl Item {
-    pub fn new(metadata: MetaData) -> Self {
-        let MetaData {
+impl MetaData {
+    pub fn new(metadata: crate::binstall::MetaData) -> Self {
+        let crate::binstall::MetaData {
             bins,
             cvs:
                 super::CrateVersionSource {
@@ -87,7 +86,7 @@ pub enum Error {
 
 pub fn append_to_path<Iter>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Error>
 where
-    Iter: IntoIterator<Item = Item>,
+    Iter: IntoIterator<Item = MetaData>,
 {
     let file = FileLock::new_exclusive(
         fs::OpenOptions::new()
