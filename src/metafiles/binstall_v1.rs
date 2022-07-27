@@ -2,7 +2,7 @@ use std::{
     fs,
     io::{self, Write},
     iter::IntoIterator,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use compact_str::CompactString;
@@ -13,7 +13,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::binstall::MetaData;
-use crate::FileLock;
+use crate::{cargo_home, FileLock};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Item {
@@ -107,4 +107,8 @@ where
     ser.into_inner().flush()?;
 
     Ok(())
+}
+
+pub fn default_path() -> Result<PathBuf, Error> {
+    Ok(cargo_home()?.join(".binstall-crates.toml"))
 }
