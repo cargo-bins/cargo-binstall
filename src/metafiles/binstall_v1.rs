@@ -1,5 +1,7 @@
 use std::{
-    cmp, fs, hash,
+    cmp,
+    collections::BTreeSet,
+    fs, hash,
     io::{self, Write},
     iter::IntoIterator,
     path::{Path, PathBuf},
@@ -12,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::{cargo_home, cratesio_url, FileLock};
+use crate::{cargo_home, cratesio_url, create_if_not_exist, FileLock};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetaData {
@@ -108,4 +110,38 @@ where
 
 pub fn default_path() -> Result<PathBuf, Error> {
     Ok(cargo_home()?.join(".binstall-crates.toml"))
+}
+
+#[derive(Debug)]
+pub struct Records {
+    file: FileLock,
+    data: BTreeSet<MetaData>,
+}
+
+impl Records {
+    fn load_impl(&mut self) -> Result<(), Error> {
+        let reader = io::BufReader::with_capacity(1024, &mut self.file);
+        let stream_deser = serde_json::Deserializer::from_reader(reader).into_iter();
+
+        for res in stream_deser {
+            let item = res?;
+
+            self.data.replace(item);
+        }
+
+        Ok(())
+    }
+
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        let mut this = Self {
+            file: FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?,
+            data: BTreeSet::default(),
+        };
+        this.load_impl()?;
+        Ok(this)
+    }
+
+    pub fn load() -> Result<Self, Error> {
+        Self::load_from_path(default_path()?)
+    }
 }
