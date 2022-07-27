@@ -95,6 +95,10 @@ where
             .open(path)?,
     )?;
 
+    write_to(file, &mut iter.into_iter())
+}
+
+pub fn write_to(file: FileLock, iter: &mut dyn Iterator<Item = MetaData>) -> Result<(), Error> {
     let writer = io::BufWriter::with_capacity(512, file);
 
     let mut ser = serde_json::Serializer::new(writer);
@@ -115,6 +119,7 @@ pub fn default_path() -> Result<PathBuf, Error> {
 #[derive(Debug)]
 pub struct Records {
     file: FileLock,
+    /// Use BTreeSet to dedup the metadata
     data: BTreeSet<MetaData>,
 }
 
@@ -143,5 +148,10 @@ impl Records {
 
     pub fn load() -> Result<Self, Error> {
         Self::load_from_path(default_path()?)
+    }
+
+    /// **Warning: This will overwrite all existing records!**
+    pub fn overwrite(self) -> Result<(), Error> {
+        write_to(self.file, &mut self.data.into_iter())
     }
 }
