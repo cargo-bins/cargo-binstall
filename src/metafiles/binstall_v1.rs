@@ -230,7 +230,7 @@ mod test {
     use super::*;
     use crate::target::TARGET;
 
-    use tempfile::TempDir;
+    use tempfile::NamedTempFile;
 
     macro_rules! assert_records_eq {
         ($records:expr, $metadata_set:expr) => {
@@ -245,8 +245,8 @@ mod test {
     fn rw_test() {
         let target = CompactString::from(TARGET);
 
-        let tempdir = TempDir::new().unwrap();
-        let path = tempdir.path().join("binstall-tests.json");
+        let named_tempfile = NamedTempFile::new().unwrap();
+        let path = named_tempfile.path();
 
         let metadata_vec = [
             MetaData {
