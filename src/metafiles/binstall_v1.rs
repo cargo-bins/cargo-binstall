@@ -48,9 +48,16 @@ impl MetaData {
     }
 }
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+enum SourceType {
+    Git,
+    Path,
+    Registry,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Source {
-    source_type: CompactString,
+    source_type: SourceType,
     url: Url,
 }
 
@@ -60,15 +67,15 @@ impl From<super::Source> for Source {
 
         match src {
             Git(url) => Source {
-                source_type: "Git".into(),
+                source_type: SourceType::Git,
                 url,
             },
             Path(url) => Source {
-                source_type: "Path".into(),
+                source_type: SourceType::Path,
                 url,
             },
             Registry(url) => Source {
-                source_type: "Registry".into(),
+                source_type: SourceType::Registry,
                 url,
             },
         }
