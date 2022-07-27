@@ -344,11 +344,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     block_in_place(|| {
         if !custom_install_path {
             debug!("Writing .crates.toml");
-            metafiles::v1::CratesToml::append(
-                metadata_vec
-                    .iter()
-                    .map(|metadata| (&metadata.cvs, metadata.bins.clone())),
-            )?;
+            metafiles::v1::CratesToml::append(metadata_vec.iter())?;
         }
 
         if opts.no_cleanup {

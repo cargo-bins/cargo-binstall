@@ -23,30 +23,6 @@ pub struct MetaData {
     pub target: CompactString,
     pub bins: Vec<CompactString>,
 }
-impl MetaData {
-    pub fn new(metadata: crate::binstall::MetaData) -> Self {
-        let crate::binstall::MetaData {
-            bins,
-            cvs:
-                super::CrateVersionSource {
-                    name,
-                    version,
-                    source,
-                },
-            version_req,
-            target,
-        } = metadata;
-
-        Self {
-            name: name.into(),
-            version_req: version_req.into(),
-            current_version: version,
-            source: source.into(),
-            target: target.into(),
-            bins,
-        }
-    }
-}
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum SourceType {
@@ -66,27 +42,6 @@ impl Source {
         Self {
             source_type: SourceType::Registry,
             url: cratesio_url().clone(),
-        }
-    }
-}
-
-impl From<super::Source> for Source {
-    fn from(src: super::Source) -> Self {
-        use super::Source::*;
-
-        match src {
-            Git(url) => Source {
-                source_type: SourceType::Git,
-                url,
-            },
-            Path(url) => Source {
-                source_type: SourceType::Path,
-                url,
-            },
-            Registry(url) => Source {
-                source_type: SourceType::Registry,
-                url,
-            },
         }
     }
 }

@@ -15,6 +15,16 @@ pub struct CrateVersionSource {
     pub source: Source,
 }
 
+impl From<&super::binstall_v1::MetaData> for CrateVersionSource {
+    fn from(metadata: &super::binstall_v1::MetaData) -> Self {
+        super::CrateVersionSource {
+            name: metadata.name.clone().to_string(),
+            version: metadata.current_version.clone(),
+            source: Source::from(&metadata.source),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Source {
     Git(Url),
@@ -25,6 +35,20 @@ pub enum Source {
 impl Source {
     pub fn cratesio_registry() -> Source {
         Self::Registry(cratesio_url().clone())
+    }
+}
+
+impl From<&super::binstall_v1::Source> for Source {
+    fn from(source: &super::binstall_v1::Source) -> Self {
+        use super::binstall_v1::SourceType::*;
+
+        let url = source.url.clone();
+
+        match source.source_type {
+            Git => Self::Git(url),
+            Path => Self::Path(url),
+            Registry => Self::Registry(url),
+        }
     }
 }
 
