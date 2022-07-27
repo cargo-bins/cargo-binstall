@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs, hash,
     io::{self, Write},
     iter::IntoIterator,
     path::{Path, PathBuf},
@@ -22,6 +22,21 @@ pub struct MetaData {
     pub source: Source,
     pub target: CompactString,
     pub bins: Vec<CompactString>,
+}
+impl PartialEq for MetaData {
+    fn eq(&self, other: &MetaData) -> bool {
+        self.name == other.name
+    }
+}
+impl Eq for MetaData {}
+
+impl hash::Hash for MetaData {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: hash::Hasher,
+    {
+        self.name.hash(state)
+    }
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
