@@ -16,7 +16,7 @@ use url::Url;
 
 use crate::{cargo_home, cratesio_url, create_if_not_exist, FileLock};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MetaData {
     pub name: CompactString,
     pub version_req: CompactString,
