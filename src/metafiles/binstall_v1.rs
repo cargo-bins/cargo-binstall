@@ -230,7 +230,6 @@ mod test {
     use super::*;
     use crate::target::TARGET;
 
-    use miette::Result;
     use tempfile::TempDir;
 
     macro_rules! assert_records_eq {
@@ -243,7 +242,7 @@ mod test {
     }
 
     #[test]
-    fn rw_test() -> Result<()> {
+    fn rw_test() {
         let target = CompactString::from(TARGET);
 
         let tempdir = TempDir::new().unwrap();
@@ -276,24 +275,22 @@ mod test {
             },
         ];
 
-        append_to_path(&path, metadata_vec.clone())?;
+        append_to_path(&path, metadata_vec.clone()).unwrap();
 
         let mut iter = metadata_vec.into_iter();
         iter.next().unwrap();
 
         let mut metadata_set: BTreeSet<_> = iter.collect();
 
-        let mut records = Records::load_from_path(&path)?;
+        let mut records = Records::load_from_path(&path).unwrap();
         assert_records_eq!(&records, &metadata_set);
 
         records.remove("b");
         assert_eq!(records.len(), metadata_set.len() - 1);
-        records.overwrite()?;
+        records.overwrite().unwrap();
 
         metadata_set.remove("b");
-        let records = Records::load_from_path(&path)?;
+        let records = Records::load_from_path(&path).unwrap();
         assert_records_eq!(&records, &metadata_set);
-
-        Ok(())
     }
 }
