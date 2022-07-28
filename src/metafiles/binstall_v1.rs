@@ -25,8 +25,10 @@ pub struct MetaData {
     pub target: CompactString,
     pub bins: Vec<CompactString>,
 
-    /// Forwards compatibility. Unknown keys from future versions of Cargo
+    /// Forwards compatibility. Unknown keys from future versions
     /// will be stored here and retained when the file is saved.
+    ///
+    /// We use an `Vec` here since it is never accessed in Rust.
     #[serde(flatten, with = "tuple_vec_map")]
     pub other: Vec<(CompactString, serde_json::Value)>,
 }
