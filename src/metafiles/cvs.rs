@@ -1,5 +1,6 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
+use compact_str::CompactString;
 use miette::Diagnostic;
 use semver::Version;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -10,7 +11,7 @@ use crate::cratesio_url;
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CrateVersionSource {
-    pub name: String,
+    pub name: CompactString,
     pub version: Version,
     pub source: Source,
 }
@@ -18,7 +19,7 @@ pub struct CrateVersionSource {
 impl From<&super::binstall_v1::MetaData> for CrateVersionSource {
     fn from(metadata: &super::binstall_v1::MetaData) -> Self {
         super::CrateVersionSource {
-            name: metadata.name.clone().to_string(),
+            name: metadata.name.clone(),
             version: metadata.current_version.clone(),
             source: Source::from(&metadata.source),
         }
@@ -75,7 +76,7 @@ impl FromStr for CrateVersionSource {
                     _ => return Err(CvsParseError::BadSource),
                 };
                 Ok(Self {
-                    name: name.to_string(),
+                    name: name.into(),
                     version,
                     source,
                 })
