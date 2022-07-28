@@ -11,7 +11,7 @@ use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::CrateVersionSource;
+use super::{binstall_v1::MetaData, CrateVersionSource};
 use crate::{cargo_home, create_if_not_exist, FileLock};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -71,13 +71,13 @@ impl CratesToml {
         iter: Iter,
     ) -> Result<(), CratesTomlParseError>
     where
-        Iter: IntoIterator<Item = (&'a CrateVersionSource, Vec<CompactString>)>,
+        Iter: IntoIterator<Item = &'a MetaData>,
     {
         let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
         let mut c1 = Self::load_from_reader(&mut *file)?;
 
-        for (cvs, bins) in iter {
-            c1.insert(cvs, bins);
+        for metadata in iter {
+            c1.insert(&CrateVersionSource::from(metadata), metadata.bins.clone());
         }
 
         file.rewind()?;
@@ -88,7 +88,7 @@ impl CratesToml {
 
     pub fn append<'a, Iter>(iter: Iter) -> Result<(), CratesTomlParseError>
     where
-        Iter: IntoIterator<Item = (&'a CrateVersionSource, Vec<CompactString>)>,
+        Iter: IntoIterator<Item = &'a MetaData>,
     {
         Self::append_to_path(Self::default_path()?, iter)
     }

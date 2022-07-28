@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
-use compact_str::CompactString;
-
-use crate::{metafiles, DesiredTargets, PkgOverride};
+use crate::{metafiles::binstall_v1::MetaData, DesiredTargets, PkgOverride};
 
 mod resolve;
 pub use resolve::*;
@@ -17,12 +15,4 @@ pub struct Options {
     pub manifest_path: Option<PathBuf>,
     pub cli_overrides: PkgOverride,
     pub desired_targets: DesiredTargets,
-}
-
-/// MetaData required to update MetaFiles.
-pub struct MetaData {
-    pub bins: Vec<CompactString>,
-    pub cvs: metafiles::CrateVersionSource,
-    pub version_req: String,
-    pub target: String,
 }

@@ -1,12 +1,13 @@
 use std::{path::PathBuf, process, sync::Arc};
 
 use cargo_toml::Package;
+use compact_str::CompactString;
 use log::{debug, error, info};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use tokio::{process::Command, task::block_in_place};
 
 use super::{MetaData, Options, Resolution};
-use crate::{bins, fetchers::Fetcher, *};
+use crate::{bins, fetchers::Fetcher, metafiles::binstall_v1::Source, *};
 
 pub async fn install(
     resolution: Resolution,
@@ -22,13 +23,22 @@ pub async fn install(
             bin_path,
             bin_files,
         } => {
-            let cvs = metafiles::CrateVersionSource {
-                name,
-                version: package.version.parse().into_diagnostic()?,
-                source: metafiles::Source::cratesio_registry(),
-            };
+            let current_version = package.version.parse().into_diagnostic()?;
+            let target = fetcher.target().into();
 
-            install_from_package(fetcher, opts, cvs, version, bin_path, bin_files).await
+            install_from_package(fetcher, opts, bin_path, bin_files)
+                .await
+                .map(|option| {
+                    option.map(|bins| MetaData {
+                        name: name.into(),
+                        version_req: version.into(),
+                        current_version,
+                        source: Source::cratesio_registry(),
+                        target,
+                        bins,
+                        other: Default::default(),
+                    })
+                })
         }
         Resolution::InstallFromSource { package } => {
             let desired_targets = opts.desired_targets.get().await;
@@ -54,11 +64,9 @@ pub async fn install(
 async fn install_from_package(
     fetcher: Arc<dyn Fetcher>,
     opts: Arc<Options>,
-    cvs: metafiles::CrateVersionSource,
-    version: String,
     bin_path: PathBuf,
     bin_files: Vec<bins::BinFile>,
-) -> Result<Option<MetaData>> {
+) -> Result<Option<Vec<CompactString>>> {
     // Download package
     if opts.dry_run {
         info!("Dry run, not downloading package");
@@ -108,12 +116,9 @@ async fn install_from_package(
             }
         }
 
-        Ok(Some(MetaData {
-            bins: bin_files.into_iter().map(|bin| bin.base_name).collect(),
-            cvs,
-            version_req: version,
-            target: fetcher.target().to_string(),
-        }))
+        Ok(Some(
+            bin_files.into_iter().map(|bin| bin.base_name).collect(),
+        ))
     })
 }
 

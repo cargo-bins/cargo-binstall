@@ -1,17 +1,29 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
+use compact_str::CompactString;
 use miette::Diagnostic;
-use once_cell::sync::Lazy;
 use semver::Version;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
+use crate::cratesio_url;
+
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CrateVersionSource {
-    pub name: String,
+    pub name: CompactString,
     pub version: Version,
     pub source: Source,
+}
+
+impl From<&super::binstall_v1::MetaData> for CrateVersionSource {
+    fn from(metadata: &super::binstall_v1::MetaData) -> Self {
+        super::CrateVersionSource {
+            name: metadata.name.clone(),
+            version: metadata.current_version.clone(),
+            source: Source::from(&metadata.source),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -23,10 +35,21 @@ pub enum Source {
 
 impl Source {
     pub fn cratesio_registry() -> Source {
-        static CRATESIO: Lazy<Url, fn() -> Url> =
-            Lazy::new(|| url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
+        Self::Registry(cratesio_url().clone())
+    }
+}
 
-        Self::Registry(CRATESIO.clone())
+impl From<&super::binstall_v1::Source> for Source {
+    fn from(source: &super::binstall_v1::Source) -> Self {
+        use super::binstall_v1::SourceType::*;
+
+        let url = source.url.clone();
+
+        match source.source_type {
+            Git => Self::Git(url),
+            Path => Self::Path(url),
+            Registry => Self::Registry(url),
+        }
     }
 }
 
@@ -53,7 +76,7 @@ impl FromStr for CrateVersionSource {
                     _ => return Err(CvsParseError::BadSource),
                 };
                 Ok(Self {
-                    name: name.to_string(),
+                    name: name.into(),
                     version,
                     source,
                 })
