@@ -1,6 +1,6 @@
 use std::{
     borrow, cmp,
-    collections::{btree_set, BTreeMap, BTreeSet},
+    collections::{btree_set, BTreeSet},
     hash,
     io::{self, Seek, Write},
     iter::{IntoIterator, Iterator},
@@ -27,8 +27,8 @@ pub struct MetaData {
 
     /// Forwards compatibility. Unknown keys from future versions of Cargo
     /// will be stored here and retained when the file is saved.
-    #[serde(flatten)]
-    pub other: BTreeMap<CompactString, serde_json::Value>,
+    #[serde(flatten, with = "tuple_vec_map")]
+    pub other: Vec<(CompactString, serde_json::Value)>,
 }
 
 impl borrow::Borrow<str> for MetaData {
