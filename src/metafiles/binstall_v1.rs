@@ -1,7 +1,7 @@
 use std::{
     borrow, cmp,
     collections::{btree_set, BTreeSet},
-    fs, hash,
+    hash,
     io::{self, Seek, Write},
     iter::{IntoIterator, Iterator},
     path::{Path, PathBuf},
