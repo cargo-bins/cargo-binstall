@@ -36,6 +36,7 @@ pub async fn install(
                         source: Source::cratesio_registry(),
                         target,
                         bins,
+                        other: Default::default(),
                     })
                 })
         }

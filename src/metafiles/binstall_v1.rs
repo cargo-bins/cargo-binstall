@@ -1,6 +1,6 @@
 use std::{
     borrow, cmp,
-    collections::{btree_set, BTreeSet},
+    collections::{btree_set, BTreeMap, BTreeSet},
     hash,
     io::{self, Seek, Write},
     iter::{IntoIterator, Iterator},
@@ -24,6 +24,11 @@ pub struct MetaData {
     pub source: Source,
     pub target: CompactString,
     pub bins: Vec<CompactString>,
+
+    /// Forwards compatibility. Unknown keys from future versions of Cargo
+    /// will be stored here and retained when the file is saved.
+    #[serde(flatten)]
+    pub other: BTreeMap<CompactString, serde_json::Value>,
 }
 
 impl borrow::Borrow<str> for MetaData {
@@ -253,6 +258,7 @@ mod test {
                 source: Source::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
+                other: Default::default(),
             },
             MetaData {
                 name: "b".into(),
@@ -261,6 +267,7 @@ mod test {
                 source: Source::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
+                other: Default::default(),
             },
             MetaData {
                 name: "a".into(),
@@ -269,6 +276,7 @@ mod test {
                 source: Source::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into()],
+                other: Default::default(),
             },
         ];
 
@@ -299,6 +307,7 @@ mod test {
             source: Source::cratesio_registry(),
             target,
             bins: vec!["1".into(), "2".into()],
+            other: Default::default(),
         };
         append_to_path(&path, [new_metadata.clone()]).unwrap();
         metadata_set.insert(new_metadata);
