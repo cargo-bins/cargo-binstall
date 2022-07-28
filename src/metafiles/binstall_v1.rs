@@ -1,7 +1,7 @@
 use std::{
     borrow, cmp,
     collections::{btree_set, BTreeSet},
-    hash,
+    fs, hash,
     io::{self, Seek, Write},
     iter::{IntoIterator, Iterator},
     path::{Path, PathBuf},
@@ -132,7 +132,11 @@ pub fn write_to(
 }
 
 pub fn default_path() -> Result<PathBuf, Error> {
-    Ok(cargo_home()?.join(".binstall-crates.toml"))
+    let dir = cargo_home()?.join("binstall");
+
+    fs::create_dir_all(&dir)?;
+
+    Ok(dir.join("crates-v1.json"))
 }
 
 #[derive(Debug)]
