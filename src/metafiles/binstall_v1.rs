@@ -95,12 +95,9 @@ pub fn append_to_path<Iter>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Er
 where
     Iter: IntoIterator<Item = MetaData>,
 {
-    let mut file = FileLock::new_exclusive(
-        fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?,
-    )?;
+    let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+    // Move the cursor to EOF
+    file.seek(io::SeekFrom::End(0))?;
 
     write_to(&mut file, &mut iter.into_iter())
 }
