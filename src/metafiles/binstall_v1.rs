@@ -267,7 +267,7 @@ mod test {
                 version_req: "*".into(),
                 current_version: Version::new(0, 2, 0),
                 source: Source::cratesio_registry(),
-                target,
+                target: target.clone(),
                 bins: vec!["1".into()],
             },
         ];
@@ -287,6 +287,22 @@ mod test {
         records.overwrite().unwrap();
 
         metadata_set.remove("b");
+        let records = Records::load_from_path(&path).unwrap();
+        assert_records_eq!(&records, &metadata_set);
+        // Drop the exclusive file lock
+        drop(records);
+
+        let new_metadata = MetaData {
+            name: "b".into(),
+            version_req: "0.1.0".into(),
+            current_version: Version::new(0, 1, 1),
+            source: Source::cratesio_registry(),
+            target,
+            bins: vec!["1".into(), "2".into()],
+        };
+        append_to_path(&path, [new_metadata.clone()]).unwrap();
+        metadata_set.insert(new_metadata);
+
         let records = Records::load_from_path(&path).unwrap();
         assert_records_eq!(&records, &metadata_set);
     }
