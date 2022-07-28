@@ -346,7 +346,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             debug!("Writing .crates.toml");
             metafiles::v1::CratesToml::append(metadata_vec.iter())?;
 
-            debug!("Writing .binstall-crates.toml");
+            debug!("Writing binstall/crates-v1.json");
             metafiles::binstall_v1::append(metadata_vec)?;
         }
 
