@@ -76,4 +76,20 @@ impl UIThread {
             Ok(())
         }
     }
+
+    pub fn start(&self) {
+        todo!("start timer")
+    }
+
+    pub fn stop(&self) {
+        todo!("stop timer")
+    }
+
+    pub fn setup(&self, steps: usize, bar_name: &str) {
+        todo!("setup {steps}-step progress bar for {bar_name}")
+    }
+
+    pub fn step(&self, step: &str) {
+        todo!("advance current progress bar by one with status {step}")
+    }
 }
