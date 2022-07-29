@@ -22,18 +22,27 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[derive(Debug, Parser)]
 #[clap(version, about = "Install a Rust binary... from binaries!", setting = AppSettings::ArgRequiredElseHelp)]
 struct Options {
-    /// Package name for installation.
+    /// Packages to install.
     ///
-    /// This must be a crates.io package name.
-    #[clap(value_name = "crate")]
+    /// Syntax: crate[@version]
+    ///
+    /// Each value is either a crate name alone, or a crate name followed by @ and the version to
+    /// install. The version syntax is as with the --version option.
+    ///
+    /// When multiple names are provided, the --version option and any override options are
+    /// unavailable due to ambiguity.
+    #[clap(help_heading = "Package selection", value_name = "crate[@version]")]
     crate_names: Vec<CrateName>,
 
-    /// Semver filter to select the package version to install.
+    /// Package version to install.
     ///
-    /// This is in Cargo.toml dependencies format: `--version 1.2.3` is equivalent to
-    /// `--version "^1.2.3"`. Use `=1.2.3` to install a specific version.
-    #[clap(long)]
-    version: Option<String>,
+    /// Takes either an exact semver version or a semver version requirement expression, which will
+    /// be resolved to the highest matching version available.
+    ///
+    /// Cannot be used when multiple packages are installed at once, use the attached version
+    /// syntax in that case.
+    #[clap(help_heading = "Package selection", long = "version")]
+    version_req: Option<String>,
 
     /// Override binary target set.
     ///
@@ -48,18 +57,32 @@ struct Options {
     ///
     /// If falling back to installing from source, the first target will be used.
     #[clap(
-        help_heading = "OVERRIDES",
+        help_heading = "Package selection",
         alias = "target",
         long,
         value_name = "TRIPLE"
     )]
     targets: Option<String>,
 
-    /// Override install path for downloaded binary.
+    /// Override Cargo.toml package manifest path.
     ///
-    /// Defaults to `$HOME/.cargo/bin`
-    #[clap(help_heading = "OVERRIDES", long)]
-    install_path: Option<String>,
+    /// This skips searching crates.io for a manifest and uses the specified path directly, useful
+    /// for debugging and when adding Binstall support. This may be either the path to the folder
+    /// containing a Cargo.toml file, or the Cargo.toml file itself.
+    #[clap(help_heading = "Overrides", long)]
+    manifest_path: Option<PathBuf>,
+
+    /// Override Cargo.toml package manifest bin-dir.
+    #[clap(help_heading = "Overrides", long)]
+    bin_dir: Option<String>,
+
+    /// Override Cargo.toml package manifest pkg-fmt.
+    #[clap(help_heading = "Overrides", long)]
+    pkg_fmt: Option<PkgFmt>,
+
+    /// Override Cargo.toml package manifest pkg-url.
+    #[clap(help_heading = "Overrides", long)]
+    pkg_url: Option<String>,
 
     /// Disable symlinking / versioned updates.
     ///
@@ -68,20 +91,29 @@ struct Options {
     /// possible to have multiple versions of the same binary, for example for testing or rollback.
     ///
     /// Pass this flag to disable this behavior.
-    #[clap(long)]
+    #[clap(help_heading = "Options", long)]
     no_symlinks: bool,
 
     /// Dry run, fetch and show changes without installing binaries.
-    #[clap(long)]
+    #[clap(help_heading = "Options", long)]
     dry_run: bool,
 
     /// Disable interactive mode / confirmation prompts.
-    #[clap(long)]
+    #[clap(help_heading = "Options", long)]
     no_confirm: bool,
 
     /// Do not cleanup temporary files.
-    #[clap(long)]
+    #[clap(help_heading = "Options", long)]
     no_cleanup: bool,
+
+    /// Install binaries in a custom location.
+    ///
+    /// By default, binaries are installed to the global location `$CARGO_HOME/bin`, and global
+    /// metadata files are updated with the package information. Specifying another path here
+    /// switches over to a "local" install, where binaries are installed at the path given, and the
+    /// global metadata files are not updated.
+    #[clap(help_heading = "Options", long)]
+    install_path: Option<String>,
 
     /// Enforce downloads over secure transports only.
     ///
@@ -91,41 +123,34 @@ struct Options {
     /// Without this option, plain HTTP will warn.
     ///
     /// Implies `--min-tls-version=1.2`.
-    #[clap(long)]
+    #[clap(help_heading = "Options", long)]
     secure: bool,
 
     /// Require a minimum TLS version from remote endpoints.
     ///
     /// The default is not to require any minimum TLS version, and use the negotiated highest
     /// version available to both this client and the remote server.
-    #[clap(long, arg_enum, value_name = "VERSION")]
+    #[clap(help_heading = "Options", long, arg_enum, value_name = "VERSION")]
     min_tls_version: Option<TLSVersion>,
 
-    /// Override manifest source.
-    ///
-    /// This skips searching crates.io for a manifest and uses the specified path directly, useful
-    /// for debugging and when adding Binstall support. This must be the path to the folder
-    /// containing a Cargo.toml file, not the Cargo.toml file itself.
-    #[clap(help_heading = "OVERRIDES", long)]
-    manifest_path: Option<PathBuf>,
+    /// Print help information
+    #[clap(help_heading = "Meta", short, long)]
+    help: bool,
+
+    /// Print version information
+    #[clap(help_heading = "Meta", short = 'V')]
+    version: bool,
 
     /// Utility log level
     ///
     /// Set to `debug` when submitting a bug report.
-    #[clap(long, default_value = "info", value_name = "LEVEL")]
+    #[clap(
+        help_heading = "Meta",
+        long,
+        default_value = "info",
+        value_name = "LEVEL"
+    )]
     log_level: LevelFilter,
-
-    /// Override Cargo.toml package manifest bin-dir.
-    #[clap(help_heading = "OVERRIDES", long)]
-    bin_dir: Option<String>,
-
-    /// Override Cargo.toml package manifest pkg-fmt.
-    #[clap(help_heading = "OVERRIDES", long)]
-    pkg_fmt: Option<PkgFmt>,
-
-    /// Override Cargo.toml package manifest pkg-url.
-    #[clap(help_heading = "OVERRIDES", long)]
-    pkg_url: Option<String>,
 }
 
 enum MainExit {
@@ -199,15 +224,33 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Load options
     let mut opts = Options::parse_from(args);
+
+    let crate_names = take(&mut opts.crate_names);
+    if crate_names.len() > 1 {
+        let option = if opts.version_req.is_some() {
+            "version"
+        } else if opts.manifest_path.is_some() {
+            "manifest-path"
+        } else if opts.bin_dir.is_some() {
+            "bin-dir"
+        } else if opts.pkg_fmt.is_some() {
+            "pkg-fmt"
+        } else if opts.pkg_url.is_some() {
+            "pkg-url"
+        } else {
+            ""
+        };
+
+        if option != "" {
+            return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
+        }
+    }
+
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
     };
-    let crate_names = take(&mut opts.crate_names);
-    if crate_names.len() > 1 && opts.manifest_path.is_some() {
-        return Err(BinstallError::ManifestPathConflictedWithBatchInstallation.into());
-    }
 
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
@@ -264,7 +307,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let binstall_opts = Arc::new(binstall::Options {
         no_symlinks: opts.no_symlinks,
         dry_run: opts.dry_run,
-        version: opts.version.take(),
+        version: opts.version_req.take(),
         manifest_path: opts.manifest_path.take(),
         cli_overrides,
         desired_targets,

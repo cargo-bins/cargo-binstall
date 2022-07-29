@@ -5,11 +5,19 @@ use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tokio::task;
 
-/// Errors emitted by the library portion of cargo-binstall.
+/// Errors emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
 #[diagnostic(url(docsrs))]
 #[non_exhaustive]
 pub enum BinstallError {
+    /// Internal: a task could not be joined.
+    ///
+    /// - Code: `binstall::internal::task_join`
+    /// - Exit: 17
+    #[error(transparent)]
+    #[diagnostic(severity(error), code(binstall::internal::task_join))]
+    TaskJoinError(#[from] task::JoinError),
+
     /// The installation was cancelled by a user at a confirmation prompt.
     ///
     /// - Code: `binstall::user_abort`
@@ -96,6 +104,14 @@ pub enum BinstallError {
         err: crates_io_api::Error,
     },
 
+    /// The override path to the cargo manifest is invalid or cannot be resolved.
+    ///
+    /// - Code: `binstall::cargo_manifest_path`
+    /// - Exit: 77
+    #[error("the --manifest-path is invalid or cannot be resolved")]
+    #[diagnostic(severity(error), code(binstall::cargo_manifest_path))]
+    CargoManifestPath,
+
     /// A parsing or validation error in a cargo manifest.
     ///
     /// This should be rare, as manifests are generally fetched from crates.io, which does its own
@@ -167,29 +183,41 @@ pub enum BinstallError {
         v: semver::Version,
     },
 
-    /// This occurs when you specified `--version` while also using
-    /// form `$crate_name@$ver` tp specify version requirements.
-    #[error("duplicate version requirements")]
+    /// The crate@version syntax was used at the same time as the --version option.
+    ///
+    /// You can't do that as it's ambiguous which should apply.
+    ///
+    /// - Code: `binstall::conflict::version`
+    /// - Exit: 84
+    #[error("superfluous version specification")]
     #[diagnostic(
         severity(error),
-        code(binstall::version::requirement),
-        help("Remove the `--version req` or simply use `$crate_name`")
+        code(binstall::conflict::version),
+        help("You cannot use both crate@version and the --version option. Remove one.")
     )]
-    DuplicateVersionReq,
+    SuperfluousVersionOption,
 
-    /// This occurs when you specified `--manifest-path` while also
-    /// specifing multiple crates to install.
-    #[error("If you use --manifest-path, then you can only specify one crate to install")]
+    /// An override option is used when multiple packages are to be installed.
+    ///
+    /// This is raised when more than one package name is provided and any of:
+    ///
+    /// - `--version`
+    /// - `--manifest-path`
+    /// - `--bin-dir`
+    /// - `--pkg-fmt`
+    /// - `--pkg-url`
+    ///
+    /// is provided.
+    ///
+    /// - Code: `binstall::conflict::overrides`
+    /// - Exit: 85
+    #[error("override option used with multi package syntax")]
     #[diagnostic(
         severity(error),
-        code(binstall::manifest_path),
-        help("Remove the `--manifest-path` or only specify one `$crate_name`")
+        code(binstall::conflict::overrides),
+        help("You cannot use --{option} and specify multiple packages at the same time. Do one or the other.")
     )]
-    ManifestPathConflictedWithBatchInstallation,
-
-    #[error("Failed to join tokio::task::JoinHandle")]
-    #[diagnostic(severity(error), code(binstall::join_error))]
-    TaskJoinError(#[from] task::JoinError),
+    OverrideOptionUsedWithMultiInstall { option: &'static str },
 }
 
 impl BinstallError {
@@ -203,6 +231,7 @@ impl BinstallError {
     pub fn exit_code(&self) -> ExitCode {
         use BinstallError::*;
         let code: u8 = match self {
+            TaskJoinError(_) => 17,
             UserAbort => 32,
             UrlParse(_) => 65,
             Unzip(_) => 66,
@@ -211,14 +240,14 @@ impl BinstallError {
             Http { .. } => 69,
             Io(_) => 74,
             CratesIoApi { .. } => 76,
+            CargoManifestPath => 77,
             CargoManifest { .. } => 78,
             VersionParse { .. } => 80,
             VersionReq { .. } => 81,
             VersionMismatch { .. } => 82,
             VersionUnavailable { .. } => 83,
-            DuplicateVersionReq => 84,
-            ManifestPathConflictedWithBatchInstallation => 85,
-            TaskJoinError(_) => 17,
+            SuperfluousVersionOption => 84,
+            OverrideOptionUsedWithMultiInstall { .. } => 85,
         };
 
         // reserved codes
