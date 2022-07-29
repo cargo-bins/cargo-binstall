@@ -1,14 +1,10 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
 use cargo_toml::{Package, Product};
 use log::{debug, error, info, warn};
 use miette::{miette, Result};
-use reqwest::Client;
 
-use super::Options;
+use super::{Context, Options};
 use crate::{
     bins,
     fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
@@ -24,10 +20,11 @@ pub enum Resolution {
         bin_path: PathBuf,
         bin_files: Vec<bins::BinFile>,
     },
-    InstallFromSource {
+    Source {
         package: Package<Meta>,
     },
 }
+
 impl Resolution {
     fn print(&self, opts: &Options) {
         match self {
@@ -65,22 +62,23 @@ impl Resolution {
                     }
                 }
             }
-            Resolution::InstallFromSource { .. } => {
+            Resolution::Source { .. } => {
                 warn!("The package will be installed from source (with cargo)",)
             }
         }
     }
 }
 
-pub async fn resolve(
-    opts: Arc<Options>,
-    crate_name: CrateName,
-    temp_dir: Arc<Path>,
-    install_path: Arc<Path>,
-    client: Client,
-    crates_io_api_client: crates_io_api::AsyncClient,
-) -> Result<Resolution> {
+pub async fn resolve(ctx: Context, crate_name: CrateName) -> Result<Resolution> {
     info!("Installing package: '{}'", crate_name);
+    let Context {
+        opts,
+        temp_dir,
+        install_path,
+        client,
+        crates_io_api_client,
+        ..
+    } = ctx;
 
     let mut version = match (&crate_name.version, &opts.version) {
         (Some(version), None) => version.to_string(),
@@ -179,7 +177,7 @@ pub async fn resolve(
                 bin_files,
             }
         }
-        None => Resolution::InstallFromSource { package },
+        None => Resolution::Source { package },
     };
 
     resolution.print(&opts);

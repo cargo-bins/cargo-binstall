@@ -8,13 +8,13 @@ use tokio::sync::OnceCell;
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum DesiredTargetsInner {
     AutoDetect(Arc<OnceCell<Vec<String>>>),
     Initialized(Vec<String>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DesiredTargets(DesiredTargetsInner);
 
 impl DesiredTargets {

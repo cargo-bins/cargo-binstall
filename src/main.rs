@@ -277,10 +277,12 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     .unwrap();
 
     // Initialize UI thread
-    let mut uithread = UIThread::new(!opts.no_confirm);
+    let mut ui = UIThread::new();
+    // ui.setup(3, "Prepare");
 
     // Launch target detection
     let desired_targets = get_desired_targets(&opts.targets);
+    // ui.step("Found targets");
 
     // Compute install directory
     let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
@@ -288,6 +290,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         error!("No viable install path found of specified, try `--install-path`");
         miette!("No install path found or specified")
     })?;
+    // ui.step("Found install path");
     debug!("Using install path: {}", install_path.display());
 
     // Create a temporary directory for downloads etc.
@@ -302,6 +305,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         .wrap_err("Creating a temporary directory failed.")?;
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
+    // ui.step("Created temporary folder");
 
     // Create binstall_opts
     let binstall_opts = Arc::new(binstall::Options {
@@ -313,84 +317,79 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         desired_targets,
     });
 
-    let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
-        // Resolve crates
-        let tasks: Vec<_> = crate_names
-            .into_iter()
-            .map(|crate_name| {
-                tokio::spawn(binstall::resolve(
-                    binstall_opts.clone(),
-                    crate_name,
-                    temp_dir_path.clone(),
-                    install_path.clone(),
-                    client.clone(),
-                    crates_io_api_client.clone(),
-                ))
-            })
-            .collect();
-
-        // Confirm
-        let mut resolutions = Vec::with_capacity(tasks.len());
-        for task in tasks {
-            resolutions.push(await_task(task).await?);
-        }
-
-        uithread.confirm().await?;
-
-        // Install
-        resolutions
-            .into_iter()
-            .map(|resolution| {
-                tokio::spawn(binstall::install(
-                    resolution,
-                    binstall_opts.clone(),
-                    jobserver_client.clone(),
-                ))
-            })
-            .collect()
-    } else {
-        // Resolve crates and install without confirmation
-        crate_names
-            .into_iter()
-            .map(|crate_name| {
-                let opts = binstall_opts.clone();
-                let temp_dir_path = temp_dir_path.clone();
-                let jobserver_client = jobserver_client.clone();
-                let client = client.clone();
-                let crates_io_api_client = crates_io_api_client.clone();
-                let install_path = install_path.clone();
-
-                tokio::spawn(async move {
-                    let resolution = binstall::resolve(
-                        opts.clone(),
-                        crate_name,
-                        temp_dir_path,
-                        install_path,
-                        client,
-                        crates_io_api_client,
-                    )
-                    .await?;
-
-                    binstall::install(resolution, opts, jobserver_client).await
-                })
-            })
-            .collect()
+    let ctx = binstall::Context {
+        opts: binstall_opts.clone(),
+        temp_dir: temp_dir_path.clone(),
+        install_path: install_path.clone(),
+        client: client.clone(),
+        crates_io_api_client: crates_io_api_client.clone(),
+        jobserver_client: jobserver_client.clone(),
     };
 
-    let mut metadata_vec = Vec::with_capacity(tasks.len());
+    let mut results = Vec::with_capacity(crate_names.len());
+
+    // ui.setup(crate_names.len(), "Resolving crates");
+    let tasks: Vec<_> = crate_names
+        .into_iter()
+        .map(|crate_name| {
+            let ctx = ctx.clone();
+            tokio::spawn(async move {
+                let step = crate_name.to_string();
+                let res = binstall::resolve(ctx, crate_name).await;
+                // ui.step(step);
+                res
+            })
+        })
+        .collect();
+
+    // Gather info
+    let mut resolutions = Vec::with_capacity(tasks.len());
     for task in tasks {
-        if let Some(metadata) = await_task(task).await? {
-            metadata_vec.push(metadata);
+        resolutions.push(await_task(task).await?);
+    }
+
+    // Confirm
+    let show_prompt = !(opts.dry_run || opts.no_confirm);
+    ui.confirm(&resolutions, show_prompt).await?;
+
+    // Install
+    let (fetches, sources): (Vec<_>, Vec<_>) = resolutions.into_iter().partition(|res| match res {
+        binstall::Resolution::Fetch { .. } => true,
+        binstall::Resolution::Source { .. } => false,
+    });
+
+    // ui.setup(fetches.len(), "Installing from packages");
+    let tasks: Vec<_> = fetches
+        .into_iter()
+        .map(|resolution| {
+            let ctx = ctx.clone();
+            tokio::spawn(binstall::install(ctx, resolution))
+        })
+        .collect();
+
+    // Wait for all fetches to be done
+    for task in tasks {
+        if let Some(res) = await_task(task).await? {
+            results.push(res);
+        }
+    }
+
+    // Run source installs in series
+    // ui.setup(sources.len(), "Installing from sources");
+    for src in sources {
+        if let Some(res) = await_task(tokio::spawn(binstall::install(ctx.clone(), src))).await? {
+            // ui.step(res.name);
+            results.push(res);
         }
     }
 
     block_in_place(|| {
         if !custom_install_path {
             debug!("Writing .crates.toml");
-            metafiles::v1::CratesToml::append(metadata_vec.iter())?;
+            metafiles::v1::CratesToml::append(results.iter())?;
 
             debug!("Writing binstall/crates-v1.json");
-            metafiles::binstall_v1::append(metadata_vec)?;
+            metafiles::binstall_v1::append(results)?;
         }
 
         if opts.no_cleanup {

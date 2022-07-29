@@ -3,10 +3,10 @@ use std::io::{self, BufRead, Write};
 use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 
-use crate::BinstallError;
+use crate::{binstall::Resolution, BinstallError};
 
 #[derive(Debug)]
-struct UIThreadInner {
+pub struct UIThread {
     /// Request for confirmation
     request_tx: mpsc::Sender<()>,
 
@@ -14,8 +14,8 @@ struct UIThreadInner {
     confirm_rx: mpsc::Receiver<Result<(), BinstallError>>,
 }
 
-impl UIThreadInner {
-    fn new() -> Self {
+impl UIThread {
+    pub fn new() -> Self {
         let (request_tx, mut request_rx) = mpsc::channel(1);
         let (confirm_tx, confirm_rx) = mpsc::channel(10);
 
@@ -61,7 +61,8 @@ impl UIThreadInner {
         }
     }
 
-    async fn confirm(&mut self) -> Result<(), BinstallError> {
+    pub async fn confirm(&mut self, _resolutions: &[Resolution], show_prompt: bool) -> Result<(), BinstallError> {
+        if show_prompt {
         self.request_tx
             .send(())
             .await
@@ -71,25 +72,6 @@ impl UIThreadInner {
             .recv()
             .await
             .unwrap_or(Err(BinstallError::UserAbort))
-    }
-}
-
-#[derive(Debug)]
-pub struct UIThread(Option<UIThreadInner>);
-
-impl UIThread {
-    ///  * `enable` - `true` to enable confirmation, `false` to disable it.
-    pub fn new(enable: bool) -> Self {
-        Self(if enable {
-            Some(UIThreadInner::new())
-        } else {
-            None
-        })
-    }
-
-    pub async fn confirm(&mut self) -> Result<(), BinstallError> {
-        if let Some(inner) = self.0.as_mut() {
-            inner.confirm().await
         } else {
             Ok(())
         }

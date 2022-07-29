@@ -6,14 +6,16 @@ use log::{debug, error, info};
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use tokio::{process::Command, task::block_in_place};
 
-use super::{MetaData, Options, Resolution};
+use super::{Context, MetaData, Options, Resolution};
 use crate::{bins, fetchers::Fetcher, metafiles::binstall_v1::Source, *};
 
-pub async fn install(
-    resolution: Resolution,
-    opts: Arc<Options>,
-    jobserver_client: LazyJobserverClient,
-) -> Result<Option<MetaData>> {
+pub async fn install(ctx: Context, resolution: Resolution) -> Result<Option<MetaData>> {
+    let Context {
+        opts,
+        jobserver_client,
+        ..
+    } = ctx;
+
     match resolution {
         Resolution::Fetch {
             fetcher,
@@ -40,7 +42,7 @@ pub async fn install(
                     })
                 })
         }
-        Resolution::InstallFromSource { package } => {
+        Resolution::Source { package } => {
             let desired_targets = opts.desired_targets.get().await;
             let target = desired_targets
                 .first()
