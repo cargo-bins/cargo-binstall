@@ -105,7 +105,7 @@ jobs:
       run: sudo ./ci-scripts/install-deps.sh
 
     - name: Build
-      run: ${{ env.CTOOL }} ${{ env.TOOLCHAIN }} build ${{ env.CARGS }}
+      run: ${{ env.CTOOL }} build ${{ env.CARGS }}
 
     - name: Get output
       shell: bash

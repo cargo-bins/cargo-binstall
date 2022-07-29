@@ -1,6 +1,5 @@
 if $for_release then {
   output: "release",
-  toolchain: "+nightly",
   profile: "release",
   # Use build-std to build a std library optimized for size and abort immediately on abort,
   # so that format string for `unwrap`/`expect`/`unreachable`/`panic` can be optimized out.
@@ -8,7 +7,6 @@ if $for_release then {
   features: ($matrix.release_features // []),
 } else {
   output: "debug",
-  toolchain: "+stable",
   profile: "dev",
   args: ($matrix.debug_build_args // ""),
   features: ($matrix.debug_features // ["rustls", "fancy-with-backtrace"]),
@@ -23,7 +21,6 @@ if $for_release then {
 {
   CBIN: (if ($matrix.target | test("windows")) then "cargo-binstall.exe" else "cargo-binstall" end),
   CTOOL: (if ($matrix."use-cross" // false) then "cross" else "cargo" end),
-  TOOLCHAIN: .toolchain,
   COUTPUT: .output,
   CARGS: "--target \($matrix.target) --profile \(.profile) \(.features) \(.args)",
 }
