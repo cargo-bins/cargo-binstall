@@ -91,8 +91,10 @@ pub fn load_manifest_path<P: AsRef<Path>>(
         let manifest_path = manifest_path.as_ref();
         let manifest_path = if manifest_path.is_dir() {
             manifest_path.join("Cargo.toml")
-        } else {
+        } else if manifest_path.is_file() {
             manifest_path.into()
+        } else {
+            return Err(BinstallError::CargoManifestPath);
         };
 
         debug!(
