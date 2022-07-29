@@ -73,6 +73,10 @@ jobs:
       if: "!matrix.use-cross"
       run: rustup target add ${{ matrix.target }}
 
+    - name: Install rust-src
+      if: inputs.for_release
+      run: rustup component add rust-src
+
     - name: Select compile settings
       shell: bash
       run: |
