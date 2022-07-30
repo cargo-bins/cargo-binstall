@@ -146,11 +146,7 @@ struct Options {
     /// Show logs at this level
     ///
     /// Set to `debug` when submitting a bug report.
-    #[clap(
-        help_heading = "Meta",
-        long,
-        value_name = "LEVEL"
-    )]
+    #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
     log_level: Option<LevelFilter>,
 }
 

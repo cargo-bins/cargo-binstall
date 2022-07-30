@@ -153,24 +153,12 @@ fn install_copy(src: &Path, dst: &Path) -> Result<(), BinstallError> {
         dst.display()
     );
 
-    #[cfg(any(
-        target = "x86_64-unknown-linux-gnu",
-        target = "x86_64-apple-darwin",
-        target = "aarch64-apple-darwin",
-        target = "aarch64-unknown-linux-gnu",
-        target = "x86_64-pc-windows-msvc",
-    ))]
+    #[cfg(feature = "reflink")]
     {
         debug!("Reflink copy or fallback");
         reflink::reflink_or_copy(src, dst)?;
     }
-    #[cfg(not(any(
-        target = "x86_64-unknown-linux-gnu",
-        target = "x86_64-apple-darwin",
-        target = "aarch64-apple-darwin",
-        target = "aarch64-unknown-linux-gnu",
-        target = "x86_64-pc-windows-msvc",
-    )))]
+    #[cfg(not(feature = "reflink"))]
     {
         debug!("Copy file");
         fs::copy(src, dst)?;
