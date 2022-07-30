@@ -92,7 +92,9 @@ impl BinFile {
     pub fn install_only_main(&self) -> Result<(), BinstallError> {
         info!("Install: {}", self.main_preview());
         try_remove(&self.main);
-        install_copy(&self.source, &self.main)?;
+        if install_move(&self.source, &self.main).is_err() {
+            install_copy(&self.source, &self.main)?;
+        }
 
         Ok(())
     }
@@ -100,7 +102,9 @@ impl BinFile {
     pub fn install_versioned(&self) -> Result<(), BinstallError> {
         info!("Install versioned: {}", self.versioned_preview());
         try_remove(&self.versioned);
-        install_copy(&self.source, &self.versioned)?;
+        if install_move(&self.source, &self.versioned).is_err() {
+            install_copy(&self.source, &self.versioned)?;
+        }
 
         info!("Install main: {}", self.main_preview());
         try_remove(&self.main);
@@ -144,6 +148,17 @@ fn try_remove(path: &Path) {
     if let Err(err) = fs::remove_file(&path) {
         debug!("Removing destination errored: {}", err);
     }
+}
+
+fn install_move(src: &Path, dst: &Path) -> Result<(), BinstallError> {
+    debug!(
+        "Installing file (move) from '{}' to '{}'",
+        src.display(),
+        dst.display()
+    );
+
+    fs::rename(src, dst)?;
+    Ok(())
 }
 
 fn install_copy(src: &Path, dst: &Path) -> Result<(), BinstallError> {
