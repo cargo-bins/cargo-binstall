@@ -88,7 +88,19 @@ pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
 ) -> Result<Manifest<Meta>, BinstallError> {
     block_in_place(|| {
-        debug!("Reading manifest: {}", manifest_path.as_ref().display());
+        let manifest_path = manifest_path.as_ref();
+        let manifest_path = if manifest_path.is_dir() {
+            manifest_path.join("Cargo.toml")
+        } else if manifest_path.is_file() {
+            manifest_path.into()
+        } else {
+            return Err(BinstallError::CargoManifestPath);
+        };
+
+        debug!(
+            "Reading manifest at local path: {}",
+            manifest_path.display()
+        );
 
         // Load and parse manifest (this checks file system for binary output names)
         let manifest = Manifest::<Meta>::from_path_with_metadata(manifest_path)?;

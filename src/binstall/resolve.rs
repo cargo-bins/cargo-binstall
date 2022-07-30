@@ -85,7 +85,7 @@ pub async fn resolve(
     let mut version = match (&crate_name.version, &opts.version) {
         (Some(version), None) => version.to_string(),
         (None, Some(version)) => version.to_string(),
-        (Some(_), Some(_)) => Err(BinstallError::DuplicateVersionReq)?,
+        (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
         (None, None) => "*".to_string(),
     };
 
@@ -103,7 +103,7 @@ pub async fn resolve(
     // TODO: work out which of these to do based on `opts.name`
     // TODO: support git-based fetches (whole repo name rather than just crate name)
     let manifest = match opts.manifest_path.clone() {
-        Some(manifest_path) => load_manifest_path(manifest_path.join("Cargo.toml"))?,
+        Some(manifest_path) => load_manifest_path(manifest_path)?,
         None => {
             fetch_crate_cratesio(&client, &crates_io_api_client, &crate_name.name, &version).await?
         }
