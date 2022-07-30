@@ -376,35 +376,40 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         binstall::Resolution::Source { .. } => false,
     });
 
-    ui.setup(fetches.len() + 1, "Install");
-    let tasks: Vec<_> = fetches
-        .into_iter()
-        .map(|resolution| {
-            let ctx = ctx.clone();
-            tokio::spawn(binstall::install(ctx, resolution))
-        })
-        .collect();
+    if !fetches.is_empty() {
+        ui.setup(fetches.len() + 1, "Install");
+        let tasks: Vec<_> = fetches
+            .into_iter()
+            .map(|resolution| {
+                let ctx = ctx.clone();
+                tokio::spawn(binstall::install(ctx, resolution))
+            })
+            .collect();
 
-    // Wait for all fetches to be done
-    for task in tasks {
-        if let Some(res) = await_task(task).await? {
-            results.push(res);
+        // Wait for all fetches to be done
+        for task in tasks {
+            if let Some(res) = await_task(task).await? {
+                results.push(res);
+            }
         }
+        ui.step();
     }
-    ui.step();
 
-    // Run source installs in series
-    ui.setup(sources.len(), "Build");
-    for src in sources {
-        if let binstall::Resolution::Source { package } = &src {
-            ui.start(&package.name);
-        } else {
-            unreachable!();
-        }
+    if !sources.is_empty() {
+        // Run source installs in series
+        ui.setup(sources.len(), "Build");
+        for src in sources {
+            if let binstall::Resolution::Source { package } = &src {
+                ui.start(&package.name);
+            } else {
+                unreachable!();
+            }
 
-        if let Some(res) = await_task(tokio::spawn(binstall::install(ctx.clone(), src))).await? {
-            results.push(res);
-            ui.step();
+            if let Some(res) = await_task(tokio::spawn(binstall::install(ctx.clone(), src))).await?
+            {
+                results.push(res);
+                ui.step();
+            }
         }
     }
 

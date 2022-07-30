@@ -106,7 +106,7 @@ pub fn init() -> (Controller, Confirmer) {
                 }
                 Finish => {
                     if let Some(old) = current_bar.take() {
-                            old.set_message("done");
+                        old.set_message("done");
                         old.finish();
                     }
 
