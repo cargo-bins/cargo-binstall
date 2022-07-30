@@ -1,11 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use cargo_toml::Product;
 use compact_str::CompactString;
-use log::debug;
+use log::{debug, info};
 use serde::Serialize;
 
-use crate::{atomic_install, atomic_link_file, BinstallError, PkgFmt, PkgMeta, Template};
+use crate::{BinstallError, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: CompactString,
@@ -87,35 +90,21 @@ impl BinFile {
     }
 
     pub fn install_only_main(&self) -> Result<(), BinstallError> {
-        debug!(
-            "Install file from '{}' to '{}'",
-            self.source.display(),
-            self.main.display()
-        );
-        atomic_install(&self.source, &self.main)?;
+        info!("Install: {}", self.main_preview());
+        try_remove(&self.main);
+        install_copy(&self.source, &self.main)?;
 
         Ok(())
     }
 
     pub fn install_versioned(&self) -> Result<(), BinstallError> {
-        debug!(
-            "Install file from '{}' to '{}'",
-            self.source.display(),
-            self.versioned.display(),
-        );
-        atomic_install(&self.source, &self.versioned)?;
+        info!("Install versioned: {}", self.versioned_preview());
+        try_remove(&self.versioned);
+        install_copy(&self.source, &self.versioned)?;
 
-        let dest = if cfg!(target_family = "unix") {
-            Path::new(self.main.file_name().unwrap())
-        } else {
-            &self.main
-        };
-        debug!(
-            "Install file from '{}' to '{}'",
-            self.main.display(),
-            dest.display(),
-        );
-        atomic_link_file(dest, &self.main)?;
+        info!("Install main: {}", self.main_preview());
+        try_remove(&self.main);
+        install_link_or_copy(&self.versioned, &self.main)?;
 
         Ok(())
     }
@@ -149,3 +138,47 @@ struct Context<'c> {
 }
 
 impl<'c> Template for Context<'c> {}
+
+fn try_remove(path: &Path) {
+    debug!("Try to remove {}", path.display());
+    if let Err(err) = fs::remove_file(&path) {
+        debug!("Removing destination errored: {}", err);
+    }
+}
+
+fn install_copy(src: &Path, dst: &Path) -> Result<(), BinstallError> {
+    debug!(
+        "Installing file (copy) from '{}' to '{}'",
+        src.display(),
+        dst.display()
+    );
+
+    debug!("Reflink copy or fallback");
+    reflink::reflink_or_copy(src, dst)?;
+
+    debug!("Copy permissions");
+    let permissions = fs::File::open(src)?.metadata()?.permissions();
+    fs::File::open(dst)?.set_permissions(permissions)?;
+
+    Ok(())
+}
+
+fn install_link_or_copy(src: &Path, dst: &Path) -> Result<(), BinstallError> {
+    debug!(
+        "Installing file (link or copy) from '{}' to '{}'",
+        src.display(),
+        dst.display()
+    );
+
+    #[cfg(unix)]
+    {
+        debug!("Try to symlink");
+        if let Err(err) = std::os::unix::fs::symlink(&src, &dst) {
+            debug!("Symlinking errored: {}", err);
+        } else {
+            return Ok(());
+        }
+    }
+
+    install_copy(src, dst)
+}
