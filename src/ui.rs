@@ -54,7 +54,8 @@ pub fn init() -> (Controller, Confirmer) {
                     let new = ProgressBar::new(steps * 10)
                         .with_style(
                             ProgressStyle::default_bar()
-                                .template("{prefix:>12.green} {bar:40.black} {msg:.cyan}"),
+                                .template("{prefix:>12.green} {bar:40.black} {msg:.cyan}")
+                                .unwrap(),
                         )
                         .with_prefix(name);
 
