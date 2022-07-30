@@ -26,9 +26,6 @@ pub use async_extracter::*;
 mod auto_abort_join_handle;
 pub use auto_abort_join_handle::AutoAbortJoinHandle;
 
-mod ui_thread;
-pub use ui_thread::UIThread;
-
 mod extracter;
 mod stream_readable;
 

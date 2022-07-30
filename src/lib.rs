@@ -15,6 +15,7 @@ pub mod bins;
 pub mod binstall;
 pub mod fetchers;
 pub mod metafiles;
+pub mod ui;
 pub mod wasi;
 
 mod target;

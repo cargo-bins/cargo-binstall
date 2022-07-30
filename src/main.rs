@@ -277,7 +277,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     .unwrap();
 
     // Initialize UI thread
-    let mut ui = UIThread::new();
+    let (ui, confirm) = ui::init();
     ui.start();
 
     ui.setup(3, "Prepare");
@@ -335,10 +335,11 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         .into_iter()
         .map(|crate_name| {
             let ctx = ctx.clone();
+            let ui = ui.clone();
             tokio::spawn(async move {
                 let step = crate_name.to_string();
                 let res = binstall::resolve(ctx, crate_name).await;
-                // ui.step(step);
+                ui.step(&step);
                 res
             })
         })
@@ -352,7 +353,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Confirm
     let show_prompt = !(opts.dry_run || opts.no_confirm);
-    ui.confirm(&resolutions, show_prompt).await?;
+    confirm.confirm(&resolutions, show_prompt).await?;
 
     // Install
     let (fetches, sources): (Vec<_>, Vec<_>) = resolutions.into_iter().partition(|res| match res {
