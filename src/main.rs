@@ -141,16 +141,15 @@ struct Options {
     #[clap(help_heading = "Meta", short = 'V')]
     version: bool,
 
-    /// Utility log level
+    /// Show logs at this level
     ///
     /// Set to `debug` when submitting a bug report.
     #[clap(
         help_heading = "Meta",
         long,
-        default_value = "info",
         value_name = "LEVEL"
     )]
-    log_level: LevelFilter,
+    log_level: Option<LevelFilter>,
 }
 
 enum MainExit {
@@ -256,50 +255,57 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
 
     // Build crates.io api client
-    let crates_io_api_client = crates_io_api::AsyncClient::new(
-        "cargo-binstall (https://github.com/ryankurte/cargo-binstall)",
-        Duration::from_millis(100),
-    )
-    .expect("bug: invalid user agent");
+    let crates_io_api_client =
+        crates_io_api::AsyncClient::new(USER_AGENT, Duration::from_millis(100))
+            .expect("bug: invalid user agent");
+
+    // Disable interactivity if there's no one to see it
+    if !console::user_attended() {
+        opts.log_level = Some(LevelFilter::Info);
+        opts.no_confirm = true;
+    }
 
     // Setup logging
-    let mut log_config = ConfigBuilder::new();
-    log_config.add_filter_ignore("hyper".to_string());
-    log_config.add_filter_ignore("reqwest".to_string());
-    log_config.add_filter_ignore("rustls".to_string());
-    log_config.set_location_level(LevelFilter::Off);
-    TermLogger::init(
-        opts.log_level,
-        log_config.build(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )
-    .unwrap();
+    if let Some(level) = opts.log_level {
+        let mut log_config = ConfigBuilder::new();
+        log_config.add_filter_ignore("hyper".to_string());
+        log_config.add_filter_ignore("reqwest".to_string());
+        log_config.add_filter_ignore("rustls".to_string());
+        log_config.set_location_level(LevelFilter::Off);
+        TermLogger::init(
+            level,
+            log_config.build(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )
+        .unwrap();
+    }
 
     // Initialize UI thread
     let (ui, confirm) = ui::init();
-    ui.start();
-
     ui.setup(3, "Prepare");
 
     // Launch target detection
+    ui.start("targets");
     let desired_targets = get_desired_targets(&opts.targets);
-    ui.step("Found targets");
+    ui.step();
 
     // Compute install directory
+    ui.start("install path");
     let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
     let install_path = install_path.ok_or_else(|| {
         error!("No viable install path found of specified, try `--install-path`");
         miette!("No install path found or specified")
     })?;
-    ui.step("Found install path");
     debug!("Using install path: {}", install_path.display());
+    ui.step();
 
     // Create a temporary directory for downloads etc.
     //
     // Put all binaries to a temporary directory under `dst` first, catching
     // some failure modes (e.g., out of space) before touching the existing
     // binaries. This directory will get cleaned up via RAII.
+    ui.start("temporary folder");
     let temp_dir = tempfile::Builder::new()
         .prefix("cargo-binstall")
         .tempdir_in(&install_path)
@@ -307,7 +313,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         .wrap_err("Creating a temporary directory failed.")?;
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
-    ui.step("Created temporary folder");
+    ui.step();
 
     // Create binstall_opts
     let binstall_opts = Arc::new(binstall::Options {
@@ -330,16 +336,16 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     let mut results = Vec::with_capacity(crate_names.len());
 
-    ui.setup(crate_names.len(), "Resolving crates");
+    ui.setup(crate_names.len() + 1, "Resolve");
     let tasks: Vec<_> = crate_names
         .into_iter()
         .map(|crate_name| {
             let ctx = ctx.clone();
             let ui = ui.clone();
             tokio::spawn(async move {
-                let step = crate_name.to_string();
+                ui.start(&crate_name.to_string());
                 let res = binstall::resolve(ctx, crate_name).await;
-                ui.step(&step);
+                ui.step();
                 res
             })
         })
@@ -350,10 +356,19 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     for task in tasks {
         resolutions.push(await_task(task).await?);
     }
+    ui.step();
 
-    // Confirm
-    let show_prompt = !(opts.dry_run || opts.no_confirm);
-    confirm.confirm(&resolutions, show_prompt).await?;
+    // Show summary of what's going to be installed
+    ui.summary(&resolutions, !opts.no_symlinks);
+
+    if opts.dry_run {
+        ui.finish();
+        return Ok(());
+    }
+
+    if !opts.no_confirm {
+        confirm.confirm().await?;
+    }
 
     // Install
     let (fetches, sources): (Vec<_>, Vec<_>) = resolutions.into_iter().partition(|res| match res {
@@ -361,7 +376,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         binstall::Resolution::Source { .. } => false,
     });
 
-    ui.setup(fetches.len(), "Installing from packages");
+    ui.setup(fetches.len() + 1, "Install");
     let tasks: Vec<_> = fetches
         .into_iter()
         .map(|resolution| {
@@ -376,27 +391,36 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             results.push(res);
         }
     }
+    ui.step();
 
     // Run source installs in series
-    ui.setup(sources.len(), "Installing from sources");
+    ui.setup(sources.len(), "Build");
     for src in sources {
+        if let binstall::Resolution::Source { package } = &src {
+            ui.start(&package.name);
+        } else {
+            unreachable!();
+        }
+
         if let Some(res) = await_task(tokio::spawn(binstall::install(ctx.clone(), src))).await? {
-            ui.step(&res.name);
             results.push(res);
+            ui.step();
         }
     }
 
     block_in_place(|| {
         if !custom_install_path {
-            ui.setup(2, "Updating metafiles");
+            ui.setup(2, "Register");
 
             debug!("Writing .crates.toml");
+            ui.start(".crates.toml");
             metafiles::v1::CratesToml::append(results.iter())?;
-            ui.step(".crates.toml");
+            ui.step();
 
             debug!("Writing binstall/crates-v1.json");
+            ui.start("binstall/crates-v1.json");
             metafiles::binstall_v1::append(results)?;
-            ui.step("binstall/crates-v1.json");
+            ui.step();
         }
 
         if opts.no_cleanup {
@@ -408,7 +432,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             });
         }
 
-        ui.stop();
+        ui.finish();
         Ok(())
     })
 }

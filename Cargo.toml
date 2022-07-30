@@ -25,12 +25,16 @@ bzip2 = "0.4.3"
 cargo_toml = "0.11.5"
 clap = { version = "3.2.14", features = ["derive"] }
 compact_str = { version = "0.5.2", features = ["serde"] }
+console = "0.15.1"
 crates_io_api = { version = "0.8.0", default-features = false }
+dialoguer = { version = "0.10.2", default-features = false }
 dirs = "4.0.0"
 flate2 = { version = "1.0.24", default-features = false }
 fs4 = "0.6.2"
 futures-util = { version = "0.3.21", default-features = false }
 home = "0.5.3"
+indicatif = "0.16.2"
+itertools = "0.10.3"
 jobserver = "0.1.24"
 log = "0.4.17"
 miette = "5.1.1"

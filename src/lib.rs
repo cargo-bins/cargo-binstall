@@ -31,6 +31,9 @@ pub const DEFAULT_PKG_URL: &str =
 /// Default binary name template (may be overridden in package Cargo.toml)
 pub const DEFAULT_BIN_DIR: &str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
 
+/// User agent for HTTP requests
+pub const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
 /// `binstall` metadata container
 ///
 /// Required to nest metadata under `package.metadata.binstall`

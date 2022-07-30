@@ -1,19 +1,21 @@
-use std::{
-    io::{self, BufRead, StdinLock, Write},
-    sync::mpsc,
-};
+use std::sync::mpsc;
 
+use console::{style, user_attended};
+use dialoguer::{theme::ColorfulTheme, Confirm};
+use indicatif::{ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use tokio::{sync::oneshot, task::spawn_blocking};
 
 use crate::{binstall::Resolution, BinstallError};
 
 #[derive(Debug, Clone)]
 pub enum Request {
+    Display(String),
     Prompt,
-    Start,
-    Stop,
-    ProgressSetup { steps: usize, name: String },
-    ProgressStep { status: String },
+    ProgressSetup { steps: u64, name: String },
+    ProgressStart { status: String },
+    ProgressStep,
+    Finish,
 }
 
 #[derive(Debug, Clone)]
@@ -30,33 +32,85 @@ pub fn init() -> (Controller, Confirmer) {
     let (cs, cr) = oneshot::channel();
 
     spawn_blocking(move || {
-        // This task should be the only one able to access stdin
-        let mut stdin = io::stdin().lock();
+        use Request::*;
+
+        let functional = user_attended();
         let mut unblock = Some(cs);
+        let mut current_bar: Option<ProgressBar> = None;
 
         for req in rr {
-            use Request::*;
+            // Pretend the UI works but do nothing
+            if !functional {
+                continue;
+            }
+
             match req {
-                Start => todo!("start timer"),
-                Stop => todo!("stop timer"),
                 ProgressSetup { steps, name } => {
-                    todo!("setup {steps}-step progress bar for {name}")
+                    if let Some(old) = current_bar.take() {
+                        old.set_message("done");
+                        old.finish();
+                    }
+
+                    let new = ProgressBar::new(steps * 10)
+                        .with_style(
+                            ProgressStyle::default_bar()
+                                .template("{prefix:>12.green} {bar:40.black} {msg:.cyan}"),
+                        )
+                        .with_prefix(name);
+
+                    new.inc(1);
+                    current_bar.replace(new);
                 }
-                ProgressStep { status } => {
-                    todo!("advance current progress bar by one with status {status}")
+                ProgressStart { status } => {
+                    if let Some(ref bar) = current_bar {
+                        bar.set_message(status);
+                        bar.inc(1);
+                    }
+                }
+                ProgressStep => {
+                    if let Some(ref bar) = current_bar {
+                        bar.inc(10);
+                    }
+                }
+                Display(text) => {
+                    if let Some(old) = current_bar.take() {
+                        old.set_message("done");
+                        old.finish();
+                    }
+
+                    eprintln!("{}", text);
                 }
                 Prompt => {
                     if let Some(unblock) = unblock.take() {
+                        if let Some(old) = current_bar.take() {
+                            old.set_message("done");
+                            old.finish();
+                        }
+
+                        let response = Confirm::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Does that look right?")
+                            .default(false)
+                            .interact()
+                            .unwrap();
+
                         unblock
-                            .send(if prompt(&mut stdin) {
+                            .send(if response {
                                 Ok(())
                             } else {
                                 Err(BinstallError::UserAbort)
                             })
                             .unwrap();
                     } else {
-                        unreachable!("confirmation is single-use");
+                        unreachable!("Confirmer is single-use");
                     }
+                }
+                Finish => {
+                    if let Some(old) = current_bar.take() {
+                            old.set_message("done");
+                        old.finish();
+                    }
+
+                    break;
                 }
             }
         }
@@ -66,66 +120,107 @@ pub fn init() -> (Controller, Confirmer) {
 }
 
 impl Confirmer {
-    pub async fn confirm(
-        self,
-        _resolutions: &[Resolution],
-        show_prompt: bool,
-    ) -> Result<(), BinstallError> {
-        if show_prompt {
-            self.req
-                .send(Request::Prompt)
-                .map_err(|_| BinstallError::UserAbort)?;
-            self.block.await.map_err(|_| BinstallError::UserAbort)??;
-        }
-
-        Ok(())
+    pub async fn confirm(self) -> Result<(), BinstallError> {
+        self.req
+            .send(Request::Prompt)
+            .map_err(|_| BinstallError::UserAbort)?;
+        self.block.await.map_err(|_| BinstallError::UserAbort)?
     }
 }
 
 impl Controller {
-    pub fn start(&self) {
-        self.0.send(Request::Start).unwrap();
-    }
-
-    pub fn stop(&self) {
-        self.0.send(Request::Stop).unwrap();
-    }
-
     pub fn setup(&self, steps: usize, bar_name: &str) {
         self.0
             .send(Request::ProgressSetup {
-                steps,
+                steps: u64::try_from(steps).unwrap(),
                 name: bar_name.into(),
             })
             .unwrap();
     }
 
-    pub fn step(&self, step: &str) {
+    pub fn start(&self, step: &str) {
         self.0
-            .send(Request::ProgressStep {
+            .send(Request::ProgressStart {
                 status: step.into(),
             })
             .unwrap();
     }
-}
 
-fn prompt(stdin: &mut StdinLock) -> bool {
-    // Lock stdout so that nobody can interfere with confirmation
-    let mut stdout = io::stdout().lock();
-    let mut input = String::with_capacity(16);
+    pub fn step(&self) {
+        self.0.send(Request::ProgressStep).unwrap();
+    }
 
-    loop {
-        writeln!(&mut stdout, "Do you wish to continue? yes/[no]").unwrap();
-        write!(&mut stdout, "? ").unwrap();
-        stdout.flush().unwrap();
+    pub fn summary(&self, resolutions: &[Resolution], versioned: bool) {
+        self.0
+            .send(Request::Display(
+                resolutions
+                    .iter()
+                    .map(|res| match res {
+                        Resolution::Fetch {
+                            fetcher,
+                            name,
+                            bin_files,
+                            ..
+                        } => (
+                            if fetcher.is_third_party() {
+                                format!("{} (3rd party)", fetcher.source_name())
+                            } else {
+                                fetcher.source_name()
+                            },
+                            (name, Some(bin_files)),
+                        ),
+                        Resolution::Source { package } => {
+                            ("source".to_string(), (&package.name, None))
+                        }
+                    })
+                    .into_group_map()
+                    .into_iter()
+                    .sorted_by_key(|(source, _)| {
+                        if source == "source" {
+                            "\u{FFFFF}"
+                        } else {
+                            source
+                        }
+                        .to_string()
+                    })
+                    .map(|(source, pkgs)| {
+                        format!(
+                            "{} {}{}\n{}",
+                            style("From").blue(),
+                            style(source).bold().blue(),
+                            style(":").blue(),
+                            pkgs.into_iter()
+                                .map(|(name, bins)| {
+                                    let pkg = style(name).magenta().bold();
+                                    if let Some(bins) = bins {
+                                        format!(
+                                            "\t{} {}{}{}",
+                                            pkg,
+                                            style("(").magenta(),
+                                            bins.into_iter()
+                                                .flat_map(|bin| {
+                                                    let mut v = vec![bin.main_filename()];
+                                                    if versioned {
+                                                        v.push(bin.versioned_filename());
+                                                    }
+                                                    v
+                                                })
+                                                .join(", "),
+                                            style(")").magenta()
+                                        )
+                                    } else {
+                                        format!("\t{}", pkg)
+                                    }
+                                })
+                                .join("\n")
+                        )
+                    })
+                    .join("\n"),
+            ))
+            .unwrap();
+    }
 
-        input.clear();
-        stdin.read_line(&mut input).unwrap();
-
-        match input.as_str().trim() {
-            "yes" | "y" | "YES" | "Y" => return true,
-            "no" | "n" | "NO" | "N" | "" => return false,
-            _ => continue,
-        }
+    pub fn finish(&self) {
+        self.0.send(Request::Finish).unwrap();
     }
 }

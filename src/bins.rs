@@ -60,6 +60,14 @@ impl BinFile {
         })
     }
 
+    pub fn main_filename(&self) -> String {
+        self.link.file_name().unwrap().to_string_lossy().into()
+    }
+
+    pub fn versioned_filename(&self) -> String {
+        self.dest.file_name().unwrap().to_string_lossy().into()
+    }
+
     pub fn preview_bin(&self) -> String {
         format!(
             "{} ({} -> {})",

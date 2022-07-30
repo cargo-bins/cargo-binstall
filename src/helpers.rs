@@ -1,10 +1,9 @@
-use std::env;
-use std::fmt::Debug;
-use std::fs;
-use std::io;
-use std::ops;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::{
+    fmt::Debug,
+    fs, io, ops,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
@@ -111,9 +110,7 @@ pub fn create_reqwest_client(
     secure: bool,
     min_tls: Option<tls::Version>,
 ) -> Result<Client, BinstallError> {
-    const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-
-    let mut builder = ClientBuilder::new().user_agent(USER_AGENT);
+    let mut builder = ClientBuilder::new().user_agent(crate::USER_AGENT);
 
     if secure {
         builder = builder
