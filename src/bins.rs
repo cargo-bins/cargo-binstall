@@ -153,8 +153,28 @@ fn install_copy(src: &Path, dst: &Path) -> Result<(), BinstallError> {
         dst.display()
     );
 
-    debug!("Reflink copy or fallback");
-    reflink::reflink_or_copy(src, dst)?;
+    #[cfg(any(
+        target = "x86_64-unknown-linux-gnu",
+        target = "x86_64-apple-darwin",
+        target = "aarch64-apple-darwin",
+        target = "aarch64-unknown-linux-gnu",
+        target = "x86_64-pc-windows-msvc",
+    ))]
+    {
+        debug!("Reflink copy or fallback");
+        reflink::reflink_or_copy(src, dst)?;
+    }
+    #[cfg(not(any(
+        target = "x86_64-unknown-linux-gnu",
+        target = "x86_64-apple-darwin",
+        target = "aarch64-apple-darwin",
+        target = "aarch64-unknown-linux-gnu",
+        target = "x86_64-pc-windows-msvc",
+    )))]
+    {
+        debug!("Copy file");
+        fs::copy(src, dst)?;
+    }
 
     debug!("Copy permissions");
     let permissions = fs::File::open(src)?.metadata()?.permissions();
