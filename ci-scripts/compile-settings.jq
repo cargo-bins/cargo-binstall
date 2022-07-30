@@ -7,13 +7,17 @@ if $for_release then {
   output: "debug",
   profile: "dev",
   args: ($matrix.debug_build_args // ""),
-  features: ($matrix.debug_features // ["rustls", "fancy-with-backtrace"]),
+  features: ($matrix.debug_features // ["fancy-with-backtrace"]),
 } end
 |
 .features = (
   if (.features | length > 0)
-  then "--no-default-features --features \(.features | join(","))"
-  else "" end
+  then (
+    if ((.features | index("no-defaults")) == null)
+    then "--features \(.features | join(","))"
+    else "--no-default-features --features \(.features | map(select(. != "no-defaults")) | join(","))"
+    end
+  ) else "" end
 )
 |
 {

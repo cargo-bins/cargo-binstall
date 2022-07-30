@@ -28,7 +28,7 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            debug_features: [ rustls, pkg-config, reflink ]
+            debug_features: [ pkg-config, reflink ]
             release_features: [ reflink ]
           - target: x86_64-apple-darwin
             os: macos-latest
@@ -38,8 +38,8 @@ jobs:
             release_features: [ reflink ]
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            debug_features: [ native-tls ]
-            release_features: [ static, zlib-ng, native-tls, fancy-no-backtrace, reflink ]
+            debug_features: [ no-defaults, static, zlib-ng, native-tls, fancy-no-backtrace ]
+            release_features: [ no-defaults, static, zlib-ng, native-tls, fancy-no-backtrace, reflink ]
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
           - target: armv7-unknown-linux-musleabihf
