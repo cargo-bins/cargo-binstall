@@ -26,6 +26,14 @@ pub enum Resolution {
 }
 
 impl Resolution {
+    pub fn name(&self) -> &str {
+        match self {
+            Resolution::Fetch { package, .. } | Resolution::Source { package } => {
+                package.name.as_ref()
+            }
+        }
+    }
+
     fn print(&self, opts: &Options) {
         match self {
             Resolution::Fetch {

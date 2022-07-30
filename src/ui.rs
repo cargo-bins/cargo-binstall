@@ -13,8 +13,8 @@ pub enum Request {
     Display(String),
     Prompt,
     ProgressSetup { steps: u64, name: String },
-    ProgressStart { status: String },
-    ProgressStep,
+    ProgressDoing { status: String },
+    ProgressDone { status: String },
     Finish,
 }
 
@@ -37,6 +37,7 @@ pub fn init() -> (Controller, Confirmer) {
         let functional = user_attended();
         let mut unblock = Some(cs);
         let mut current_bar: Option<ProgressBar> = None;
+        let mut statuses = Vec::<String>::with_capacity(3);
 
         for req in rr {
             // Pretend the UI works but do nothing
@@ -51,6 +52,7 @@ pub fn init() -> (Controller, Confirmer) {
                         old.finish();
                     }
 
+                    statuses.truncate(0);
                     let new = ProgressBar::new(steps * 10)
                         .with_style(
                             ProgressStyle::default_bar()
@@ -62,15 +64,22 @@ pub fn init() -> (Controller, Confirmer) {
                     new.inc(1);
                     current_bar.replace(new);
                 }
-                ProgressStart { status } => {
+                ProgressDoing { status } => {
                     if let Some(ref bar) = current_bar {
-                        bar.set_message(status);
                         bar.inc(1);
+                        if statuses.is_empty() {
+                            bar.set_message(status.clone());
+                        }
+                        statuses.push(status);
                     }
                 }
-                ProgressStep => {
+                ProgressDone { status } => {
                     if let Some(ref bar) = current_bar {
+                        statuses.retain(|st| st != &status);
                         bar.inc(10);
+                        if let Some(status) = statuses.first() {
+                            bar.set_message(status.clone());
+                        }
                     }
                 }
                 Display(text) => {
@@ -139,16 +148,20 @@ impl Controller {
             .unwrap();
     }
 
-    pub fn start(&self, step: &str) {
+    pub fn doing(&self, step: &str) {
         self.0
-            .send(Request::ProgressStart {
+            .send(Request::ProgressDoing {
                 status: step.into(),
             })
             .unwrap();
     }
 
-    pub fn step(&self) {
-        self.0.send(Request::ProgressStep).unwrap();
+    pub fn done(&self, step: &str) {
+        self.0
+            .send(Request::ProgressDone {
+                status: step.into(),
+            })
+            .unwrap();
     }
 
     pub fn summary(&self, resolutions: &[Resolution], versioned: bool) {

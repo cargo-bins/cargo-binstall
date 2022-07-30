@@ -284,26 +284,26 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     ui.setup(3, "Prepare");
 
     // Launch target detection
-    ui.start("targets");
+    ui.doing("targets");
     let desired_targets = get_desired_targets(&opts.targets);
-    ui.step();
+    ui.done("targets");
 
     // Compute install directory
-    ui.start("install path");
+    ui.doing("install path");
     let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
     let install_path = install_path.ok_or_else(|| {
         error!("No viable install path found of specified, try `--install-path`");
         miette!("No install path found or specified")
     })?;
     debug!("Using install path: {}", install_path.display());
-    ui.step();
+    ui.done("install path");
 
     // Create a temporary directory for downloads etc.
     //
     // Put all binaries to a temporary directory under `dst` first, catching
     // some failure modes (e.g., out of space) before touching the existing
     // binaries. This directory will get cleaned up via RAII.
-    ui.start("temporary folder");
+    ui.doing("temporary folder");
     let temp_dir = tempfile::Builder::new()
         .prefix("cargo-binstall")
         .tempdir_in(&install_path)
@@ -311,7 +311,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         .wrap_err("Creating a temporary directory failed.")?;
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
-    ui.step();
+    ui.done("temporary folder");
 
     // Create binstall_opts
     let binstall_opts = Arc::new(binstall::Options {
@@ -334,16 +334,17 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     let mut results = Vec::with_capacity(crate_names.len());
 
-    ui.setup(crate_names.len() + 1, "Resolve");
+    ui.setup(crate_names.len(), "Resolve");
     let tasks: Vec<_> = crate_names
         .into_iter()
         .map(|crate_name| {
             let ctx = ctx.clone();
             let ui = ui.clone();
             tokio::spawn(async move {
-                ui.start(&crate_name.to_string());
+                let step = crate_name.to_string();
+                ui.doing(&step);
                 let res = binstall::resolve(ctx, crate_name).await;
-                ui.step();
+                ui.done(&step);
                 res
             })
         })
@@ -354,7 +355,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     for task in tasks {
         resolutions.push(await_task(task).await?);
     }
-    ui.step();
 
     // Show summary of what's going to be installed
     ui.summary(&resolutions, binstall_opts.versioned);
@@ -375,12 +375,19 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     });
 
     if !fetches.is_empty() {
-        ui.setup(fetches.len() + 1, "Install");
+        ui.setup(fetches.len(), "Install");
         let tasks: Vec<_> = fetches
             .into_iter()
-            .map(|resolution| {
+            .map(|fetch| {
                 let ctx = ctx.clone();
-                tokio::spawn(binstall::install(ctx, resolution))
+                let ui = ui.clone();
+                tokio::spawn(async move {
+                    let step = fetch.name().to_string();
+                    ui.doing(&step);
+                    let res = binstall::install(ctx, fetch).await;
+                    ui.done(&step);
+                    res
+                })
             })
             .collect();
 
@@ -390,23 +397,18 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 results.push(res);
             }
         }
-        ui.step();
     }
 
     if !sources.is_empty() {
         // Run source installs in series
         ui.setup(sources.len(), "Build");
         for src in sources {
-            if let binstall::Resolution::Source { package } = &src {
-                ui.start(&package.name);
-            } else {
-                unreachable!();
-            }
-
+            let step = src.name().to_string();
+            ui.doing(&step);
             if let Some(res) = await_task(tokio::spawn(binstall::install(ctx.clone(), src))).await?
             {
                 results.push(res);
-                ui.step();
+                ui.done(&step);
             }
         }
     }
@@ -416,14 +418,14 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             ui.setup(2, "Register");
 
             debug!("Writing .crates.toml");
-            ui.start(".crates.toml");
+            ui.doing(".crates.toml");
             metafiles::v1::CratesToml::append(results.iter())?;
-            ui.step();
+            ui.done(".crates.toml");
 
             debug!("Writing binstall/crates-v1.json");
-            ui.start("binstall/crates-v1.json");
+            ui.doing("binstall/crates-v1.json");
             metafiles::binstall_v1::append(results)?;
-            ui.step();
+            ui.done("binstall/crates-v1.json");
         }
 
         if opts.no_cleanup {
