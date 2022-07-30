@@ -91,8 +91,8 @@ impl BinFile {
 
     pub fn install_only_main(&self) -> Result<(), BinstallError> {
         info!("Install: {}", self.main_preview());
-        try_remove(&self.main);
         if install_move(&self.source, &self.main).is_err() {
+            try_remove(&self.main);
             install_copy(&self.source, &self.main)?;
         }
 
@@ -101,8 +101,8 @@ impl BinFile {
 
     pub fn install_versioned(&self) -> Result<(), BinstallError> {
         info!("Install versioned: {}", self.versioned_preview());
-        try_remove(&self.versioned);
         if install_move(&self.source, &self.versioned).is_err() {
+            try_remove(&self.versioned);
             install_copy(&self.source, &self.versioned)?;
         }
 
@@ -179,9 +179,12 @@ fn install_copy(src: &Path, dst: &Path) -> Result<(), BinstallError> {
         fs::copy(src, dst)?;
     }
 
-    debug!("Copy permissions");
-    let permissions = fs::File::open(src)?.metadata()?.permissions();
-    fs::File::open(dst)?.set_permissions(permissions)?;
+    #[cfg(unix)]
+    {
+        debug!("Copy permissions");
+        let permissions = fs::File::open(src)?.metadata()?.permissions();
+        fs::File::open(dst)?.set_permissions(permissions)?;
+    }
 
     Ok(())
 }
