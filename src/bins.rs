@@ -5,13 +5,13 @@ use compact_str::CompactString;
 use log::debug;
 use serde::Serialize;
 
-use crate::{atomic_install, atomic_symlink_file, BinstallError, PkgFmt, PkgMeta, Template};
+use crate::{atomic_install, atomic_link_file, BinstallError, PkgFmt, PkgMeta, Template};
 
 pub struct BinFile {
     pub base_name: CompactString,
     pub source: PathBuf,
-    pub dest: PathBuf,
-    pub link: PathBuf,
+    pub versioned: PathBuf,
+    pub main: PathBuf,
 }
 
 impl BinFile {
@@ -43,86 +43,81 @@ impl BinFile {
             data.bin_path.join(&source_file_path)
         };
 
-        // Destination path is the install dir + base-name-version{.extension}
-        let dest_file_path = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
-        let dest = data.install_path.join(dest_file_path);
+        // Versioned path is the install dir + base-name-version{.extension}
+        let verd_file_path = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
+        let versioned = data.install_path.join(verd_file_path);
 
-        // Link at install dir + base-name{.extension}
-        let link = data
+        // Main file at install dir + base-name{.extension}
+        let main = data
             .install_path
             .join(&ctx.render("{ bin }{ binary-ext }")?);
 
         Ok(Self {
             base_name,
             source,
-            dest,
-            link,
+            versioned,
+            main,
         })
     }
 
     pub fn main_filename(&self) -> String {
-        self.link.file_name().unwrap().to_string_lossy().into()
+        self.main.file_name().unwrap().to_string_lossy().into()
     }
 
     pub fn versioned_filename(&self) -> String {
-        self.dest.file_name().unwrap().to_string_lossy().into()
+        self.versioned.file_name().unwrap().to_string_lossy().into()
     }
 
-    pub fn preview_bin(&self) -> String {
+    pub fn versioned_preview(&self) -> String {
         format!(
             "{} ({} -> {})",
             self.base_name,
             self.source.file_name().unwrap().to_string_lossy(),
-            self.dest.display()
+            self.versioned.display()
         )
     }
 
-    pub fn preview_link(&self) -> String {
+    pub fn main_preview(&self) -> String {
         format!(
             "{} ({} -> {})",
             self.base_name,
-            self.link.display(),
-            self.link_dest().display()
+            self.source.file_name().unwrap().to_string_lossy(),
+            self.main.display(),
         )
     }
 
-    pub fn install_bin(&self) -> Result<(), BinstallError> {
-        // TODO: check if file already exists
+    pub fn install_only_main(&self) -> Result<(), BinstallError> {
         debug!(
-            "Atomically install file from '{}' to '{}'",
+            "Install file from '{}' to '{}'",
             self.source.display(),
-            self.dest.display()
+            self.main.display()
         );
-        atomic_install(&self.source, &self.dest)?;
+        atomic_install(&self.source, &self.main)?;
 
         Ok(())
     }
 
-    pub fn install_link(&self) -> Result<(), BinstallError> {
-        // Remove existing symlink
-        // TODO: check if existing symlink is correct
-        if self.link.exists() {
-            debug!("Remove link '{}'", self.link.display());
-            std::fs::remove_file(&self.link)?;
-        }
-
-        let dest = self.link_dest();
+    pub fn install_versioned(&self) -> Result<(), BinstallError> {
         debug!(
-            "Create link '{}' pointing to '{}'",
-            self.link.display(),
-            dest.display()
+            "Install file from '{}' to '{}'",
+            self.source.display(),
+            self.versioned.display(),
         );
-        atomic_symlink_file(dest, &self.link)?;
+        atomic_install(&self.source, &self.versioned)?;
+
+        let dest = if cfg!(target_family = "unix") {
+            Path::new(self.main.file_name().unwrap())
+        } else {
+            &self.main
+        };
+        debug!(
+            "Install file from '{}' to '{}'",
+            self.main.display(),
+            dest.display(),
+        );
+        atomic_link_file(dest, &self.main)?;
 
         Ok(())
-    }
-
-    fn link_dest(&self) -> &Path {
-        if cfg!(target_family = "unix") {
-            Path::new(self.dest.file_name().unwrap())
-        } else {
-            &self.dest
-        }
     }
 }
 

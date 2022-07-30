@@ -15,7 +15,7 @@ pub use install::*;
 
 #[derive(Debug, Clone)]
 pub struct Options {
-    pub no_symlinks: bool,
+    pub versioned: bool,
     pub dry_run: bool,
     pub version: Option<String>,
     pub manifest_path: Option<PathBuf>,

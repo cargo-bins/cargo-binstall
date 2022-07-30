@@ -263,7 +263,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Disable interactivity if there's no one to see it
     if !console::user_attended() {
-        opts.log_level = Some(LevelFilter::Info);
+        opts.log_level.get_or_insert(LevelFilter::Info);
         opts.no_confirm = true;
     }
 
@@ -319,7 +319,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Create binstall_opts
     let binstall_opts = Arc::new(binstall::Options {
-        no_symlinks: opts.no_symlinks,
+        versioned: !opts.no_versioned,
         dry_run: opts.dry_run,
         version: opts.version_req.take(),
         manifest_path: opts.manifest_path.take(),
@@ -361,7 +361,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     ui.step();
 
     // Show summary of what's going to be installed
-    ui.summary(&resolutions, !opts.no_symlinks);
+    ui.summary(&resolutions, binstall_opts.versioned);
 
     if opts.dry_run {
         ui.finish();

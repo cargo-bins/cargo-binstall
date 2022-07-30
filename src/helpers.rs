@@ -294,10 +294,10 @@ fn symlink_file<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> io::Res
     f(original, link)
 }
 
-/// Atomically install symlink "link" to a file "dst".
+/// Atomically install link or copy "link" to a file "dst".
 ///
 /// This is a blocking function, must be called in `block_in_place` mode.
-pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
+pub fn atomic_link_file(dest: &Path, link: &Path) -> io::Result<()> {
     let parent = link.parent().unwrap();
 
     debug!("Creating tempPath at '{}'", parent.display());

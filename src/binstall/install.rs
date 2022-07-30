@@ -108,13 +108,10 @@ async fn install_from_package(
     info!("Installing binaries...");
     block_in_place(|| {
         for file in &bin_files {
-            file.install_bin()?;
-        }
-
-        // Generate symlinks
-        if !opts.no_symlinks {
-            for file in &bin_files {
-                file.install_link()?;
+            if opts.versioned {
+                file.install_versioned()?;
+            } else {
+                file.install_only_main()?;
             }
         }
 

@@ -52,13 +52,12 @@ impl Resolution {
 
                 info!("This will install the following binaries:");
                 for file in bin_files {
-                    info!("  - {}", file.preview_bin());
+                    info!("  - {}", file.main_preview());
                 }
 
-                if !opts.no_symlinks {
-                    info!("And create (or update) the following symlinks:");
+                if opts.versioned {
                     for file in bin_files {
-                        info!("  - {}", file.preview_link());
+                        info!("  - {}", file.versioned_preview());
                     }
                 }
             }
