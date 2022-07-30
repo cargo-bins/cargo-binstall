@@ -84,21 +84,23 @@ struct Options {
     #[clap(help_heading = "Overrides", long)]
     pkg_url: Option<String>,
 
-    /// Disable symlinking / versioned updates.
+    /// Disable versioned updates.
     ///
     /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and
-    /// either symlink or copy it to (depending on platform) the plain binary name. This makes it
+    /// (depending on platform) either symlink or copy it to the plain binary name. This makes it
     /// possible to have multiple versions of the same binary, for example for testing or rollback.
     ///
     /// Pass this flag to disable this behavior.
-    #[clap(help_heading = "Options", long)]
-    no_symlinks: bool,
+    #[clap(help_heading = "Options", long, alias = "no-symlinks")]
+    no_versioned: bool,
 
     /// Dry run, fetch and show changes without installing binaries.
     #[clap(help_heading = "Options", long)]
     dry_run: bool,
 
     /// Disable interactive mode / confirmation prompts.
+    ///
+    /// This is automatically set when the terminal is not interactive.
     #[clap(help_heading = "Options", long)]
     no_confirm: bool,
 
