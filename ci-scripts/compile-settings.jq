@@ -9,7 +9,6 @@ if $for_release then {
   output: "debug",
   profile: "dev",
   args: ($matrix.debug_build_args // ""),
-  rustflags: "",
   features: ($matrix.debug_features // ["rustls", "fancy-with-backtrace"]),
 } end
 |
