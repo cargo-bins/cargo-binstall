@@ -110,6 +110,8 @@ jobs:
 
     - name: Build
       run: ${{ env.CTOOL }} build ${{ env.CARGS }}
+      env:
+        RUSTFLAGS: ${{ env.RUSTFLAGS }}
 
     - name: Get output
       shell: bash
