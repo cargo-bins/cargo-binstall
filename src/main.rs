@@ -241,7 +241,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             ""
         };
 
-        if option != "" {
+        if !option.is_empty() {
             return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
         }
     }
