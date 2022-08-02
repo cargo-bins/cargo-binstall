@@ -31,6 +31,9 @@ struct Options {
     ///
     /// When multiple names are provided, the --version option and any override options are
     /// unavailable due to ambiguity.
+    ///
+    /// If duplicate names are provided, the last one (and their version requirement)
+    /// is kept.
     #[clap(help_heading = "Package selection", value_name = "crate[@version]")]
     crate_names: Vec<CrateName>,
 
@@ -245,6 +248,9 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
         }
     }
+
+    // Remove duplicate crate_name, keep the last one
+    let crate_names = CrateName::dedup(crate_names);
 
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
