@@ -1,11 +1,12 @@
 use std::{convert::Infallible, fmt, str::FromStr};
 
+use compact_str::CompactString;
 use itertools::Itertools;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CrateName {
-    pub name: String,
-    pub version: Option<String>,
+    pub name: CompactString,
+    pub version: Option<CompactString>,
 }
 
 impl fmt::Display for CrateName {
@@ -26,12 +27,12 @@ impl FromStr for CrateName {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(if let Some((name, version)) = s.split_once('@') {
             CrateName {
-                name: name.to_string(),
-                version: Some(version.to_string()),
+                name: name.into(),
+                version: Some(version.into()),
             }
         } else {
             CrateName {
-                name: s.to_string(),
+                name: s.into(),
                 version: None,
             }
         })

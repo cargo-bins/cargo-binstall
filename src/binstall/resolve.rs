@@ -4,6 +4,7 @@ use std::{
 };
 
 use cargo_toml::{Package, Product};
+use compact_str::CompactString;
 use log::{debug, error, info, warn};
 use miette::{miette, Result};
 use reqwest::Client;
@@ -19,7 +20,7 @@ pub enum Resolution {
     Fetch {
         fetcher: Arc<dyn Fetcher>,
         package: Package<Meta>,
-        name: String,
+        name: CompactString,
         version: String,
         bin_path: PathBuf,
         bin_files: Vec<bins::BinFile>,
