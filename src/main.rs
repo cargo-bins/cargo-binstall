@@ -114,7 +114,7 @@ struct Options {
     /// switches over to a "local" install, where binaries are installed at the path given, and the
     /// global metadata files are not updated.
     #[clap(help_heading = "Options", long)]
-    install_path: Option<String>,
+    install_path: Option<PathBuf>,
 
     /// Enforce downloads over secure transports only.
     ///
