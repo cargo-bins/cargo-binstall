@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use compact_str::CompactString;
 use log::{debug, info};
 use reqwest::Client;
 use reqwest::Method;
@@ -49,8 +50,8 @@ impl super::Fetcher for QuickInstall {
         PkgFmt::Tgz
     }
 
-    fn source_name(&self) -> String {
-        String::from("QuickInstall")
+    fn source_name(&self) -> CompactString {
+        CompactString::from("QuickInstall")
     }
 
     fn is_third_party(&self) -> bool {

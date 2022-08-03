@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use compact_str::CompactString;
 pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
@@ -35,7 +36,7 @@ pub trait Fetcher: Send + Sync {
     fn pkg_fmt(&self) -> PkgFmt;
 
     /// A short human-readable name or descriptor for the package source
-    fn source_name(&self) -> String;
+    fn source_name(&self) -> CompactString;
 
     /// Should return true if the remote is from a third-party source
     fn is_third_party(&self) -> bool;

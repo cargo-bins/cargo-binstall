@@ -8,6 +8,7 @@ use std::{
 };
 
 use clap::{AppSettings, Parser};
+use compact_str::CompactString;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
@@ -42,7 +43,7 @@ struct Options {
     /// Cannot be used when multiple packages are installed at once, use the attached version
     /// syntax in that case.
     #[clap(help_heading = "Package selection", long = "version")]
-    version_req: Option<String>,
+    version_req: Option<CompactString>,
 
     /// Override binary target set.
     ///
@@ -113,7 +114,7 @@ struct Options {
     /// switches over to a "local" install, where binaries are installed at the path given, and the
     /// global metadata files are not updated.
     #[clap(help_heading = "Options", long)]
-    install_path: Option<String>,
+    install_path: Option<PathBuf>,
 
     /// Enforce downloads over secure transports only.
     ///

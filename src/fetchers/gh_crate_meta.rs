@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use compact_str::{CompactString, ToCompactString};
 use log::{debug, info, warn};
 use once_cell::sync::OnceCell;
 use reqwest::Client;
@@ -79,19 +80,19 @@ impl super::Fetcher for GhCrateMeta {
         self.data.meta.pkg_fmt
     }
 
-    fn source_name(&self) -> String {
+    fn source_name(&self) -> CompactString {
         self.url
             .get()
             .map(|url| {
                 if let Some(domain) = url.domain() {
-                    domain.to_string()
+                    domain.to_compact_string()
                 } else if let Some(host) = url.host_str() {
-                    host.to_string()
+                    host.to_compact_string()
                 } else {
-                    url.to_string()
+                    url.to_compact_string()
                 }
             })
-            .unwrap_or_else(|| "invalid url".to_string())
+            .unwrap_or_else(|| "invalid url".into())
     }
 
     fn is_third_party(&self) -> bool {
