@@ -4,6 +4,7 @@ use std::{
 };
 
 use cargo_toml::{Package, Product};
+use compact_str::{format_compact, CompactString};
 use log::{debug, error, info, warn};
 use miette::{miette, Result};
 use reqwest::Client;
@@ -19,8 +20,8 @@ pub enum Resolution {
     Fetch {
         fetcher: Arc<dyn Fetcher>,
         package: Package<Meta>,
-        name: String,
-        version: String,
+        name: CompactString,
+        version: CompactString,
         bin_path: PathBuf,
         bin_files: Vec<bins::BinFile>,
     },
@@ -82,11 +83,11 @@ pub async fn resolve(
 ) -> Result<Resolution> {
     info!("Installing package: '{}'", crate_name);
 
-    let mut version = match (&crate_name.version, &opts.version) {
-        (Some(version), None) => version.to_string(),
-        (None, Some(version)) => version.to_string(),
+    let mut version: CompactString = match (&crate_name.version, &opts.version) {
+        (Some(version), None) => version.clone(),
+        (None, Some(version)) => version.into(),
         (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
-        (None, None) => "*".to_string(),
+        (None, None) => "*".into(),
     };
 
     // Treat 0.1.2 as =0.1.2
@@ -96,7 +97,7 @@ pub async fn resolve(
         .map(|ch| ch.is_ascii_digit())
         .unwrap_or(false)
     {
-        version.insert(0, '=');
+        version = format_compact!("={version}");
     }
 
     // Fetch crate via crates.io, git, or use a local manifest path

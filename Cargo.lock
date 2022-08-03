@@ -139,6 +139,7 @@ dependencies = [
  "futures-util",
  "guess_host_triple",
  "home",
+ "itertools",
  "jobserver",
  "log",
  "miette",
