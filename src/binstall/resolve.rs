@@ -85,7 +85,7 @@ pub async fn resolve(
 
     let mut version: CompactString = match (&crate_name.version, &opts.version) {
         (Some(version), None) => version.clone(),
-        (None, Some(version)) => version.into(),
+        (None, Some(version)) => version.clone(),
         (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
         (None, None) => "*".into(),
     };
