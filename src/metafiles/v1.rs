@@ -74,7 +74,11 @@ impl CratesToml {
         Iter: IntoIterator<Item = &'a MetaData>,
     {
         let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
-        let mut c1 = Self::load_from_reader(&mut *file)?;
+        let mut c1 = if file.metadata()?.len() != 0 {
+            Self::load_from_reader(&mut *file)?
+        } else {
+            Self::default()
+        };
 
         for metadata in iter {
             c1.insert(&CrateVersionSource::from(metadata), metadata.bins.clone());
@@ -107,4 +111,33 @@ pub enum CratesTomlParseError {
 
     #[error(transparent)]
     CvsParse(#[from] super::CvsParseError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{super::binstall_v1, *};
+    use crate::target::TARGET;
+
+    use semver::Version;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_empty() {
+        let tempdir = TempDir::new().unwrap();
+        let path = tempdir.path().join("crates-v1.toml");
+
+        CratesToml::append_to_path(
+            &path,
+            &[MetaData {
+                name: "cargo-binstall".into(),
+                version_req: "*".into(),
+                current_version: Version::new(0, 11, 1),
+                source: binstall_v1::Source::cratesio_registry(),
+                target: TARGET.into(),
+                bins: vec!["cargo-binstall".into()],
+                other: Default::default(),
+            }],
+        )
+        .unwrap();
+    }
 }
