@@ -16,6 +16,18 @@ impl<T> AutoAbortJoinHandle<T> {
     }
 }
 
+impl<T> AutoAbortJoinHandle<T>
+where
+    T: Send + 'static,
+{
+    pub fn spawn<F>(future: F) -> Self
+    where
+        F: Future<Output = T> + Send + 'static,
+    {
+        Self(tokio::spawn(future))
+    }
+}
+
 impl<T> Drop for AutoAbortJoinHandle<T> {
     fn drop(&mut self) {
         self.0.abort();
