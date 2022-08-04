@@ -162,6 +162,12 @@ struct Options {
         value_name = "LEVEL"
     )]
     log_level: LevelFilter,
+
+    /// Equivalent to setting `log_level` to `off`.
+    ///
+    /// This would override the `log_level`.
+    #[clap(help_heading = "Meta", long)]
+    quiet: bool,
 }
 
 enum MainExit {
@@ -235,6 +241,9 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Load options
     let mut opts = Options::parse_from(args);
+    if opts.quiet {
+        opts.log_level = LevelFilter::Off;
+    }
 
     let crate_names = take(&mut opts.crate_names);
     if crate_names.len() > 1 {
