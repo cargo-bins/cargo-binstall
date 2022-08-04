@@ -285,9 +285,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         }
     }
 
-    // Remove duplicate crate_name, keep the last one
-    let crate_names = CrateName::dedup(crate_names);
-
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
@@ -341,8 +338,8 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         None
     };
 
-    // Filter out installed crate_names
-    let crate_names = crate_names.filter(|crate_name| {
+    // Remove installed crates
+    let crate_names = CrateName::dedup(crate_names).filter(|crate_name| {
         if opts.force {
             true
         } else if let Some(records) = &metadata {
