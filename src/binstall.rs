@@ -17,4 +17,5 @@ pub struct Options {
     pub manifest_path: Option<PathBuf>,
     pub cli_overrides: PkgOverride,
     pub desired_targets: DesiredTargets,
+    pub quiet: bool,
 }

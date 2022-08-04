@@ -47,7 +47,7 @@ pub async fn install(
                 .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
 
             if !opts.dry_run {
-                install_from_source(package, target, jobserver_client)
+                install_from_source(package, target, jobserver_client, opts.quiet)
                     .await
                     .map(|_| None)
             } else {
@@ -126,6 +126,7 @@ async fn install_from_source(
     package: Package<Meta>,
     target: &str,
     lazy_jobserver_client: LazyJobserverClient,
+    quiet: bool,
 ) -> Result<()> {
     let jobserver_client = lazy_jobserver_client.get().await?;
 
@@ -136,13 +137,20 @@ async fn install_from_source(
     let mut command = process::Command::new("cargo");
     jobserver_client.configure(&mut command);
 
-    let mut child = Command::from(command)
-        .arg("install")
+    let mut cmd = Command::from(command);
+
+    cmd.arg("install")
         .arg(package.name)
         .arg("--version")
         .arg(package.version)
         .arg("--target")
-        .arg(&*target)
+        .arg(&*target);
+
+    if quiet {
+        cmd.arg("quiet");
+    }
+
+    let mut child = cmd
         .spawn()
         .into_diagnostic()
         .wrap_err("Spawning cargo install failed.")?;

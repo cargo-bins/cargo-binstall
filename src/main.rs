@@ -335,6 +335,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         manifest_path: opts.manifest_path.take(),
         cli_overrides,
         desired_targets,
+        quiet: opts.log_level == LevelFilter::Off,
     });
 
     let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
