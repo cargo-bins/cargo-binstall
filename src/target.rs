@@ -133,7 +133,20 @@ mod linux {
     use super::{Command, Output, TARGET};
 
     pub(super) async fn detect_targets_linux() -> Vec<String> {
-        let abi = parse_abi();
+        let (abi, libc) = parse_abi_and_libc();
+
+        match libc {
+            // Glibc can only be dynamically linked.
+            // If we can run this binary, then it means that the target
+            // supports both glibc and musl.
+            Libc::Glibc => {
+                return vec![
+                    create_target_str("gnu", abi),
+                    create_target_str("musl", abi),
+                ]
+            }
+            _ => (),
+        }
 
         if let Ok(Output {
             status: _,
@@ -173,13 +186,18 @@ mod linux {
         }
     }
 
-    fn parse_abi() -> &'static str {
+    enum Libc {
+        Glibc,
+        Musl,
+    }
+
+    fn parse_abi_and_libc() -> (&'static str, Libc) {
         let last = TARGET.rsplit_once('-').unwrap().1;
 
         if let Some(libc_version) = last.strip_prefix("musl") {
-            libc_version
+            (libc_version, Libc::Musl)
         } else if let Some(libc_version) = last.strip_prefix("gnu") {
-            libc_version
+            (libc_version, Libc::Glibc)
         } else {
             panic!("Unrecognized libc")
         }
