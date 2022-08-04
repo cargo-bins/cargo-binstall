@@ -291,6 +291,9 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         bin_dir: opts.bin_dir.take(),
     };
 
+    // Launch target detection
+    let desired_targets = get_desired_targets(&opts.targets);
+
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
 
@@ -317,9 +320,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     // Initialize UI thread
     let mut uithread = UIThread::new(!opts.no_confirm);
-
-    // Launch target detection
-    let desired_targets = get_desired_targets(&opts.targets);
 
     // Compute install directory
     let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
