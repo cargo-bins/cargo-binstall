@@ -51,4 +51,6 @@ jobs:
     - name: Test
       shell: bash
       run: ./ci-scripts/tests.sh ${{ matrix.bin }} ${{ runner.os }}
+      env:
+        CARGO_HOME: /tmp/cargo-home-for-test/
 
