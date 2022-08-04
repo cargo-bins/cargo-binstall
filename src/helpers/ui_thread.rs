@@ -32,14 +32,14 @@ impl UIThreadInner {
                     break;
                 }
 
-                // Lock stdout so that nobody can interfere
-                // with confirmation.
-                let mut stdout = io::stdout().lock();
-
                 let res = loop {
-                    writeln!(&mut stdout, "Do you wish to continue? yes/[no]").unwrap();
-                    write!(&mut stdout, "? ").unwrap();
-                    stdout.flush().unwrap();
+                    {
+                        let mut stdout = io::stdout().lock();
+
+                        writeln!(&mut stdout, "Do you wish to continue? yes/[no]").unwrap();
+                        write!(&mut stdout, "? ").unwrap();
+                        stdout.flush().unwrap();
+                    }
 
                     input.clear();
                     stdin.read_line(&mut input).unwrap();
