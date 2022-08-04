@@ -149,6 +149,12 @@ struct Options {
     /// Utility log level
     ///
     /// Set to `debug` when submitting a bug report.
+    /// Set to `info` to only print useful information.
+    /// Set to `Warn` to only print on hazardous situations.
+    /// Set to `Error` to only print serious errors.
+    ///
+    /// Set to `off` to disable logging completely, this will also
+    /// disable output from `cargo-install`.
     #[clap(
         help_heading = "Meta",
         long,
