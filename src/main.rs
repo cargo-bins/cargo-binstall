@@ -327,7 +327,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         let tasks: Vec<_> = crate_names
             .into_iter()
             .map(|crate_name| {
-                tokio::spawn(binstall::resolve(
+                AutoAbortJoinHandle::spawn(binstall::resolve(
                     binstall_opts.clone(),
                     crate_name,
                     temp_dir_path.clone(),
@@ -341,7 +341,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Confirm
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
-            resolutions.push(await_task(task).await?);
+            resolutions.push(task.await??);
         }
 
         uithread.confirm().await?;
@@ -350,7 +350,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         resolutions
             .into_iter()
             .map(|resolution| {
-                tokio::spawn(binstall::install(
+                AutoAbortJoinHandle::spawn(binstall::install(
                     resolution,
                     binstall_opts.clone(),
                     jobserver_client.clone(),
@@ -369,7 +369,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 let crates_io_api_client = crates_io_api_client.clone();
                 let install_path = install_path.clone();
 
-                tokio::spawn(async move {
+                AutoAbortJoinHandle::spawn(async move {
                     let resolution = binstall::resolve(
                         opts.clone(),
                         crate_name,
@@ -388,7 +388,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     let mut metadata_vec = Vec::with_capacity(tasks.len());
     for task in tasks {
-        if let Some(metadata) = await_task(task).await? {
+        if let Some(metadata) = task.await?? {
             metadata_vec.push(metadata);
         }
     }
