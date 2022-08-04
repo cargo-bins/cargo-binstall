@@ -64,7 +64,7 @@ impl MultiFetcher {
     pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
         self.0.push((
             fetcher.clone(),
-            AutoAbortJoinHandle::new(tokio::spawn(async move { fetcher.find().await })),
+            AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
         ));
     }
 
