@@ -30,8 +30,8 @@ pub async fn install(
                 .await
                 .map(|option| {
                     option.map(|bins| MetaData {
-                        name: name.into(),
-                        version_req: version.into(),
+                        name,
+                        version_req: version,
                         current_version,
                         source: Source::cratesio_registry(),
                         target,
