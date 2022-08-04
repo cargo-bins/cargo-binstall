@@ -322,21 +322,25 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let mut uithread = UIThread::new(!opts.no_confirm);
 
     // Compute install directory
-    let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
-    let install_path = install_path.ok_or_else(|| {
-        error!("No viable install path found of specified, try `--install-path`");
-        miette!("No install path found or specified")
-    })?;
-    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
-    debug!("Using install path: {}", install_path.display());
+    let (install_path, metadata) = block_in_place(|| -> Result<_> {
+        let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
+        let install_path = install_path.ok_or_else(|| {
+            error!("No viable install path found of specified, try `--install-path`");
+            miette!("No install path found or specified")
+        })?;
+        fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
+        debug!("Using install path: {}", install_path.display());
 
-    // Load metadata
-    let metadata = if !custom_install_path {
-        debug!("Reading binstall/crates-v1.json");
-        Some(block_in_place(metafiles::binstall_v1::Records::load)?)
-    } else {
-        None
-    };
+        // Load metadata
+        let metadata = if !custom_install_path {
+            debug!("Reading binstall/crates-v1.json");
+            Some(metafiles::binstall_v1::Records::load()?)
+        } else {
+            None
+        };
+
+        Ok((install_path, metadata))
+    })?;
 
     // Remove installed crates
     let crate_names = CrateName::dedup(crate_names).filter(|crate_name| {
