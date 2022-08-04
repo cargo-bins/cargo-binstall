@@ -50,7 +50,7 @@ tar = "0.4.38"
 tempfile = "3.3.0"
 thiserror = "1.0.32"
 tinytemplate = "1.2.1"
-tokio = { version = "1.20.1", features = ["rt-multi-thread", "process", "sync", "signal"], default-features = false }
+tokio = { version = "1.20.1", features = ["macros", "rt-multi-thread", "process", "sync", "signal"], default-features = false }
 toml_edit = { version = "0.14.4", features = ["easy"] }
 url = { version = "2.2.2", features = ["serde"] }
 xz2 = "0.1.7"
