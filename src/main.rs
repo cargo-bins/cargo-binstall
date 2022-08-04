@@ -188,23 +188,20 @@ fn main() -> MainExit {
     let start = Instant::now();
 
     let rt = Runtime::new().unwrap();
-    let handle = rt.spawn(entry(jobserver_client));
-    let result = rt.block_on(handle);
+    let handle = AutoAbortJoinHandle::new(rt.spawn(entry(jobserver_client)));
+    let result = rt.block_on(cancel_on_user_sig_term(handle));
     drop(rt);
 
     let done = start.elapsed();
     debug!("run time: {done:?}");
 
-    result.map_or_else(
-        |join_err| MainExit::Error(BinstallError::from(join_err)),
-        |res| {
-            res.map(|_| MainExit::Success(done)).unwrap_or_else(|err| {
-                err.downcast::<BinstallError>()
-                    .map(MainExit::Error)
-                    .unwrap_or_else(MainExit::Report)
-            })
-        },
-    )
+    result.map_or_else(MainExit::Error, |res| {
+        res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
+            err.downcast::<BinstallError>()
+                .map(MainExit::Error)
+                .unwrap_or_else(MainExit::Report)
+        })
+    })
 }
 
 async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
