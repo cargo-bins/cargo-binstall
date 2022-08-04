@@ -1,5 +1,6 @@
 use std::{
     ffi::OsString,
+    fs,
     mem::take,
     path::{Path, PathBuf},
     process::{ExitCode, Termination},
@@ -295,6 +296,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         error!("No viable install path found of specified, try `--install-path`");
         miette!("No install path found or specified")
     })?;
+    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
     debug!("Using install path: {}", install_path.display());
 
     // Create a temporary directory for downloads etc.
@@ -393,6 +395,10 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     block_in_place(|| {
         if !custom_install_path {
+            // If using standardised install path,
+            // then create_dir_all(&install_path) would also
+            // create .cargo.
+
             debug!("Writing .crates.toml");
             metafiles::v1::CratesToml::append(metadata_vec.iter())?;
 
