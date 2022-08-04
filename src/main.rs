@@ -333,7 +333,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // Load metadata
     let metadata = if !custom_install_path {
         debug!("Reading binstall/crates-v1.json");
-        Some(metafiles::binstall_v1::Records::load()?)
+        Some(block_in_place(metafiles::binstall_v1::Records::load)?)
     } else {
         None
     };
