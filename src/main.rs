@@ -321,8 +321,8 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // Initialize UI thread
     let mut uithread = UIThread::new(!opts.no_confirm);
 
-    // Compute install directory
-    let (install_path, metadata) = block_in_place(|| -> Result<_> {
+    let (install_path, metadata, temp_dir) = block_in_place(|| -> Result<_> {
+        // Compute install directory
         let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
         let install_path = install_path.ok_or_else(|| {
             error!("No viable install path found of specified, try `--install-path`");
@@ -339,7 +339,18 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             None
         };
 
-        Ok((install_path, metadata))
+        // Create a temporary directory for downloads etc.
+        //
+        // Put all binaries to a temporary directory under `dst` first, catching
+        // some failure modes (e.g., out of space) before touching the existing
+        // binaries. This directory will get cleaned up via RAII.
+        let temp_dir = tempfile::Builder::new()
+            .prefix("cargo-binstall")
+            .tempdir_in(&install_path)
+            .map_err(BinstallError::from)
+            .wrap_err("Creating a temporary directory failed.")?;
+
+        Ok((install_path, metadata, temp_dir))
     })?;
 
     // Remove installed crates
@@ -352,17 +363,6 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             true
         }
     });
-
-    // Create a temporary directory for downloads etc.
-    //
-    // Put all binaries to a temporary directory under `dst` first, catching
-    // some failure modes (e.g., out of space) before touching the existing
-    // binaries. This directory will get cleaned up via RAII.
-    let temp_dir = tempfile::Builder::new()
-        .prefix("cargo-binstall")
-        .tempdir_in(&install_path)
-        .map_err(BinstallError::from)
-        .wrap_err("Creating a temporary directory failed.")?;
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
