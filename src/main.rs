@@ -131,6 +131,10 @@ struct Options {
     #[clap(help_heading = "Options", long)]
     secure: bool,
 
+    /// Force a crate to be installed even if it is already installed.
+    #[clap(help_heading = "Options", long)]
+    force: bool,
+
     /// Require a minimum TLS version from remote endpoints.
     ///
     /// The default is not to require any minimum TLS version, and use the negotiated highest
