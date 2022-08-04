@@ -5,7 +5,9 @@ use std::{
     task::{Context, Poll},
 };
 
-use tokio::task::{JoinError, JoinHandle};
+use tokio::task::JoinHandle;
+
+use super::BinstallError;
 
 #[derive(Debug)]
 pub struct AutoAbortJoinHandle<T>(JoinHandle<T>);
@@ -49,9 +51,11 @@ impl<T> DerefMut for AutoAbortJoinHandle<T> {
 }
 
 impl<T> Future for AutoAbortJoinHandle<T> {
-    type Output = Result<T, JoinError>;
+    type Output = Result<T, BinstallError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Pin::new(&mut Pin::into_inner(self).0).poll(cx)
+        Pin::new(&mut Pin::into_inner(self).0)
+            .poll(cx)
+            .map(|res| res.map_err(BinstallError::TaskJoinError))
     }
 }
