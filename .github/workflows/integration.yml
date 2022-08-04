@@ -50,5 +50,7 @@ jobs:
 
     - name: Test
       shell: bash
-      run: ./ci-scripts/tests.sh ${{ matrix.bin }} ${{ runner.os }}
+      run: |
+        rm -rf "$HOME/.cargo"
+        ./ci-scripts/tests.sh ${{ matrix.bin }} ${{ runner.os }}
 
