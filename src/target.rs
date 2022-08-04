@@ -139,12 +139,7 @@ mod linux {
             // Glibc can only be dynamically linked.
             // If we can run this binary, then it means that the target
             // supports both glibc and musl.
-            Libc::Glibc => {
-                return vec![
-                    create_target_str("gnu", abi),
-                    create_target_str("musl", abi),
-                ]
-            }
+            Libc::Glibc => return create_targets_str(&["gnu", "musl"], abi),
             _ => (),
         }
 
@@ -164,10 +159,7 @@ mod linux {
                 };
 
             if libc_version == "gnu" {
-                return vec![
-                    create_target_str("gnu", abi),
-                    create_target_str("musl", abi),
-                ];
+                return create_targets_str(&["gnu", "musl"], abi);
             }
         }
 
@@ -210,6 +202,13 @@ mod linux {
             .0;
 
         format!("{prefix}-{libc_version}{abi}")
+    }
+
+    fn create_targets_str(libc_versions: &[&str], abi: &str) -> Vec<String> {
+        libc_version
+            .iter()
+            .map(|libc_version| create_target_str(libc_version, abi))
+            .collect()
     }
 }
 
