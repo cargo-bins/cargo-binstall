@@ -333,6 +333,25 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
     debug!("Using install path: {}", install_path.display());
 
+    // Load metadata
+    let metadata = if !custom_install_path {
+        debug!("Reading binstall/crates-v1.json");
+        Some(metafiles::binstall_v1::Records::load()?)
+    } else {
+        None
+    };
+
+    // Filter out installed crate_names
+    let crate_names = crate_names.filter(|crate_name| {
+        if opts.force {
+            true
+        } else if let Some(records) = &metadata {
+            !records.contains(&crate_name.name)
+        } else {
+            true
+        }
+    });
+
     // Create a temporary directory for downloads etc.
     //
     // Put all binaries to a temporary directory under `dst` first, catching
@@ -429,7 +448,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     }
 
     block_in_place(|| {
-        if !custom_install_path {
+        if let Some(mut records) = metadata {
             // If using standardised install path,
             // then create_dir_all(&install_path) would also
             // create .cargo.
@@ -438,7 +457,10 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             metafiles::v1::CratesToml::append(metadata_vec.iter())?;
 
             debug!("Writing binstall/crates-v1.json");
-            metafiles::binstall_v1::append(metadata_vec)?;
+            for metadata in metadata_vec {
+                records.replace(metadata);
+            }
+            records.overwrite()?;
         }
 
         if opts.no_cleanup {
