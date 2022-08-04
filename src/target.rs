@@ -205,7 +205,7 @@ mod linux {
     }
 
     fn create_targets_str(libc_versions: &[&str], abi: &str) -> Vec<String> {
-        libc_version
+        libc_versions
             .iter()
             .map(|libc_version| create_target_str(libc_version, abi))
             .collect()
