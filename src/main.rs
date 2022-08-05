@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use clap::{AppSettings, Parser};
+use clap::{builder::PossibleValue, AppSettings, Parser};
 use compact_str::CompactString;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
@@ -149,9 +149,12 @@ struct Options {
     /// Utility log level
     ///
     /// Set to `debug` when submitting a bug report.
+    ///
     /// Set to `info` to only print useful information.
-    /// Set to `Warn` to only print on hazardous situations.
-    /// Set to `Error` to only print serious errors.
+    ///
+    /// Set to `warn` to only print on hazardous situations.
+    ///
+    /// Set to `error` to only print serious errors.
     ///
     /// Set to `off` to disable logging completely, this will also
     /// disable output from `cargo-install`.
@@ -159,7 +162,14 @@ struct Options {
         help_heading = "Meta",
         long,
         default_value = "info",
-        value_name = "LEVEL"
+        value_name = "LEVEL",
+        possible_values = [
+            PossibleValue::new("debug").help("Set to debug when submitting a bug report."),
+            PossibleValue::new("info").help("Set to info to only print useful information."),
+            PossibleValue::new("warn").help("Set to warn to only print on hazardous situations."),
+            PossibleValue::new("error").help("Set to error to only print serious errors."),
+            PossibleValue::new("off").help("Set to off to disable logging completely, this will also disable output from `cargo-install`."),
+        ]
     )]
     log_level: LevelFilter,
 
