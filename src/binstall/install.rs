@@ -147,7 +147,7 @@ async fn install_from_source(
         .arg(&*target);
 
     if quiet {
-        cmd.arg("quiet");
+        cmd.arg("--quiet");
     }
 
     let mut child = cmd
