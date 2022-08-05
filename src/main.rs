@@ -148,6 +148,9 @@ struct Options {
 
     /// Utility log level
     ///
+    /// Set to `trace` to print very low priority, often extremely
+    /// verbose information.
+    ///
     /// Set to `debug` when submitting a bug report.
     ///
     /// Set to `info` to only print useful information.
@@ -164,11 +167,16 @@ struct Options {
         default_value = "info",
         value_name = "LEVEL",
         possible_values = [
+            PossibleValue::new("trace").help(
+                "Set to `trace` to print very low priority, often extremely verbose information."
+            ),
             PossibleValue::new("debug").help("Set to debug when submitting a bug report."),
             PossibleValue::new("info").help("Set to info to only print useful information."),
             PossibleValue::new("warn").help("Set to warn to only print on hazardous situations."),
             PossibleValue::new("error").help("Set to error to only print serious errors."),
-            PossibleValue::new("off").help("Set to off to disable logging completely, this will also disable output from `cargo-install`."),
+            PossibleValue::new("off").help(
+                "Set to off to disable logging completely, this will also disable output from `cargo-install`."
+            ),
         ]
     )]
     log_level: LevelFilter,
