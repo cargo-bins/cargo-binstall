@@ -166,7 +166,7 @@ struct Options {
     /// Equivalent to setting `log_level` to `off`.
     ///
     /// This would override the `log_level`.
-    #[clap(help_heading = "Meta", long)]
+    #[clap(help_heading = "Meta", short, long)]
     quiet: bool,
 }
 
