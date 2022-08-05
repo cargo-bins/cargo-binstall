@@ -370,6 +370,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let binstall_opts = Arc::new(binstall::Options {
         no_symlinks: opts.no_symlinks,
         dry_run: opts.dry_run,
+        force: opts.force,
         version: opts.version_req.take(),
         manifest_path: opts.manifest_path.take(),
         cli_overrides,
