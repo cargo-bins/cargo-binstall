@@ -18,7 +18,9 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::internal::task_join))]
     TaskJoinError(#[from] task::JoinError),
 
-    /// The installation was cancelled by a user at a confirmation prompt.
+    /// The installation was cancelled by a user at a confirmation prompt,
+    /// or user send a ctrl_c on all platforms or
+    /// `SIGINT`, `SIGHUP`, `SIGTERM` or `SIGQUIT` on unix to the program.
     ///
     /// - Code: `binstall::user_abort`
     /// - Exit: 32

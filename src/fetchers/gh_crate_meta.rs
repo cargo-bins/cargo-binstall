@@ -41,13 +41,13 @@ impl super::Fetcher for GhCrateMeta {
         let checks = urls
             .map(|url| {
                 let client = self.client.clone();
-                AutoAbortJoinHandle::new(tokio::spawn(async move {
+                AutoAbortJoinHandle::spawn(async move {
                     let url = url?;
                     info!("Checking for package at: '{url}'");
                     remote_exists(client, url.clone(), Method::HEAD)
                         .await
                         .map(|exists| (url.clone(), exists))
-                }))
+                })
             })
             .collect::<Vec<_>>();
 
