@@ -4,6 +4,7 @@ use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
 use log::debug;
 use reqwest::Client;
+use semver::VersionReq;
 use url::Url;
 
 use super::find_version;
@@ -19,7 +20,7 @@ pub async fn fetch_crate_cratesio(
     client: &Client,
     crates_io_api_client: &AsyncClient,
     name: &str,
-    version_req: &str,
+    version_req: &VersionReq,
 ) -> Result<Manifest<Meta>, BinstallError> {
     // Fetch / update index
     debug!("Looking up crate information");
