@@ -2,7 +2,7 @@
 
 `cargo binstall` provides a low-complexity mechanism for installing rust binaries as an alternative to building from source (via `cargo install`) or manually downloading packages. This is intended to work with existing CI artifacts and infrastructure, and with minimal overhead for package maintainers.
 
-`binstall` works by fetching the crate information from `crates.io`, then searching the linked `repository` for matching releases and artifacts.
+`binstall` works by fetching the crate information from `crates.io`, then searching the linked `repository` for matching releases and artifacts, with fallbacks to [quickinstall](https://github.com/alsuren/cargo-quickinstall) and finally `cargo install` if these are not found.
 To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate binary package for a given version and target. See [SUPPORT.md](./SUPPORT.md) for more detail.
 
 
