@@ -358,14 +358,20 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         if opts.force {
             true
         } else if let Some(records) = &metadata {
-            if let Some(version_req) = &crate_name.version_req {
+            let keep = if let Some(version_req) = &crate_name.version_req {
                 records
                     .get(&crate_name.name)
                     .map(|metadata| !version_req.matches(&metadata.current_version))
                     .unwrap_or(true)
             } else {
                 !records.contains(&crate_name.name)
+            };
+
+            if !keep {
+                info!("package {crate_name} is already installed, use --force to override")
             }
+
+            keep
         } else {
             true
         }
