@@ -46,3 +46,9 @@ cargo binstall --help >/dev/null
 "./$1" binstall --force --log-level debug --no-confirm cargo-binstall@0.11.1
 # Test that the installed binaries can be run
 cargo binstall --help >/dev/null
+
+# Test skip when installed
+"./$1" binstall --no-confirm cargo-binstall | grep -q 'package cargo-binstall is already installed'
+"./$1" binstall --no-confirm cargo-binstall@0.11.1 | grep -q 'package cargo-binstall is already installed'
+
+"./$1" binstall --no-confirm cargo-binstall@0.10.0 | grep -q -v 'package cargo-binstall is already installed'
