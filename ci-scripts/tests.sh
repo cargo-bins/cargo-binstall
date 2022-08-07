@@ -36,3 +36,13 @@ min_tls=1.3
     cargo-binstall
 # Test that the installed binaries can be run
 cargo binstall --help >/dev/null
+
+# Test --version
+"./$1" binstall --force --log-level debug --no-confirm --version 0.11.1 cargo-binstall
+# Test that the installed binaries can be run
+cargo binstall --help >/dev/null
+
+# Test "$crate_name@$version"
+"./$1" binstall --force --log-level debug --no-confirm cargo-binstall@0.11.1
+# Test that the installed binaries can be run
+cargo binstall --help >/dev/null
