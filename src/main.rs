@@ -9,9 +9,9 @@ use std::{
 };
 
 use clap::{builder::PossibleValue, AppSettings, Parser};
-use compact_str::CompactString;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
+use semver::VersionReq;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::{runtime::Runtime, task::block_in_place};
 
@@ -46,8 +46,8 @@ struct Options {
     ///
     /// Cannot be used when multiple packages are installed at once, use the attached version
     /// syntax in that case.
-    #[clap(help_heading = "Package selection", long = "version")]
-    version_req: Option<CompactString>,
+    #[clap(help_heading = "Package selection", long = "version", parse(try_from_str = parse_version))]
+    version_req: Option<VersionReq>,
 
     /// Override binary target set.
     ///
@@ -371,7 +371,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         no_symlinks: opts.no_symlinks,
         dry_run: opts.dry_run,
         force: opts.force,
-        version: opts.version_req.take(),
+        version_req: opts.version_req.take(),
         manifest_path: opts.manifest_path.take(),
         cli_overrides,
         desired_targets,

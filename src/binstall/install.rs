@@ -19,7 +19,7 @@ pub async fn install(
             fetcher,
             package,
             name,
-            version,
+            version_req,
             bin_path,
             bin_files,
         } => {
@@ -31,7 +31,7 @@ pub async fn install(
                 .map(|option| {
                     option.map(|bins| MetaData {
                         name,
-                        version_req: version,
+                        version_req,
                         current_version,
                         source: Source::cratesio_registry(),
                         target,

@@ -4,10 +4,11 @@ use std::{
 };
 
 use cargo_toml::{Package, Product};
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, ToCompactString};
 use log::{debug, error, info, warn};
 use miette::{miette, Result};
 use reqwest::Client;
+use semver::VersionReq;
 
 use super::Options;
 use crate::{
@@ -21,7 +22,7 @@ pub enum Resolution {
         fetcher: Arc<dyn Fetcher>,
         package: Package<Meta>,
         name: CompactString,
-        version: CompactString,
+        version_req: CompactString,
         bin_path: PathBuf,
         bin_files: Vec<bins::BinFile>,
     },
@@ -83,22 +84,12 @@ pub async fn resolve(
 ) -> Result<Resolution> {
     info!("Installing package: '{}'", crate_name);
 
-    let mut version: CompactString = match (&crate_name.version, &opts.version) {
+    let version_req: VersionReq = match (&crate_name.version_req, &opts.version_req) {
         (Some(version), None) => version.clone(),
         (None, Some(version)) => version.clone(),
         (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
-        (None, None) => "*".into(),
+        (None, None) => VersionReq::STAR,
     };
-
-    // Treat 0.1.2 as =0.1.2
-    if version
-        .chars()
-        .next()
-        .map(|ch| ch.is_ascii_digit())
-        .unwrap_or(false)
-    {
-        version = format_compact!("={version}");
-    }
 
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
@@ -106,7 +97,13 @@ pub async fn resolve(
     let manifest = match opts.manifest_path.clone() {
         Some(manifest_path) => load_manifest_path(manifest_path)?,
         None => {
-            fetch_crate_cratesio(&client, &crates_io_api_client, &crate_name.name, &version).await?
+            fetch_crate_cratesio(
+                &client,
+                &crates_io_api_client,
+                &crate_name.name,
+                &version_req,
+            )
+            .await?
         }
     };
 
@@ -175,7 +172,7 @@ pub async fn resolve(
                 fetcher,
                 package,
                 name: crate_name.name,
-                version,
+                version_req: version_req.to_compact_string(),
                 bin_path,
                 bin_files,
             }
