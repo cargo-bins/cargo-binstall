@@ -358,7 +358,14 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         if opts.force {
             true
         } else if let Some(records) = &metadata {
-            !records.contains(&crate_name.name)
+            if let Some(version_req) = &crate_name.version_req {
+                records
+                    .get(&crate_name.name)
+                    .map(|metadata| !version_req.matches(&metadata.current_version))
+                    .unwrap_or(true)
+            } else {
+                !records.contains(&crate_name.name)
+            }
         } else {
             true
         }
