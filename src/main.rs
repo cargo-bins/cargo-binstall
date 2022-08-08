@@ -385,10 +385,13 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             } else {
                 Some((crate_name, None))
             }
-        } else {
-            Some((crate_name, None))
-        }
-    });
+        })
+        .collect::<Vec<_>>();
+
+    if crate_names.is_empty() {
+        debug!("Nothing to do");
+        return Ok(());
+    }
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
@@ -424,7 +427,15 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Confirm
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
-            resolutions.push(task.await??);
+            match task.await?? {
+                binstall::Resolution::AlreadyUpToDate => {}
+                res => resolutions.push(res),
+            }
+        }
+
+        if resolutions.is_empty() {
+            debug!("Nothing to do");
+            return Ok(());
         }
 
         uithread.confirm().await?;
