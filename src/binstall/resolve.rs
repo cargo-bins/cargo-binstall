@@ -120,7 +120,10 @@ pub async fn resolve(
             })?;
 
         if new_version == curr_version {
-            info!("package {crate_name} is already up to date {curr_version}");
+            info!(
+                "{} v{curr_version} is already installed, use --force to override",
+                crate_name.name
+            );
             return Ok(Resolution::AlreadyUpToDate);
         }
     }

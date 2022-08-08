@@ -354,23 +354,29 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     })?;
 
     // Remove installed crates
-    let crate_names = CrateName::dedup(crate_names).filter_map(|crate_name| {
-        if opts.force {
-            Some((crate_name, None))
-        } else if let Some(records) = &metadata {
-            if let Some(metadata) = records.get(&crate_name.name) {
-                if let Some(version_req) = &crate_name.version_req {
-                    if version_req.is_latest_compatible(&metadata.current_version) {
-                        info!(
-                            "package {crate_name} is already installed and cannot be upgraded, use --force to override"
-                        );
-                        None
+    let crate_names = CrateName::dedup(crate_names)
+        .filter_map(|crate_name| {
+            if opts.force {
+                Some((crate_name, None))
+            } else if let Some(records) = &metadata {
+                if let Some(metadata) = records.get(&crate_name.name) {
+                    if let Some(version_req) = &crate_name.version_req {
+                        if version_req.is_latest_compatible(&metadata.current_version) {
+                            info!(
+                                "{} v{} is already installed, use --force to override",
+                                crate_name.name, metadata.current_version
+                            );
+                            None
+                        } else {
+                            Some((crate_name, Some(metadata.current_version.clone())))
+                        }
                     } else {
+                        // we have to assume that the version req is *, and so that a remote
+                        // upgraded version could exist
                         Some((crate_name, Some(metadata.current_version.clone())))
                     }
                 } else {
-                    info!("package {crate_name} is already installed, use --force to override");
-                    None
+                    Some((crate_name, None))
                 }
             } else {
                 Some((crate_name, None))
