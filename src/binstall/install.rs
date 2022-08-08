@@ -15,11 +15,12 @@ pub async fn install(
     jobserver_client: LazyJobserverClient,
 ) -> Result<Option<MetaData>> {
     match resolution {
+        Resolution::AlreadyUpToDate => Ok(None),
         Resolution::Fetch {
             fetcher,
             package,
             name,
-            version,
+            version_req,
             bin_path,
             bin_files,
         } => {
@@ -31,7 +32,7 @@ pub async fn install(
                 .map(|option| {
                     option.map(|bins| MetaData {
                         name,
-                        version_req: version,
+                        version_req,
                         current_version,
                         source: Source::cratesio_registry(),
                         target,
@@ -47,7 +48,7 @@ pub async fn install(
                 .ok_or_else(|| miette!("No viable targets found, try with `--targets`"))?;
 
             if !opts.dry_run {
-                install_from_source(package, target, jobserver_client, opts.quiet)
+                install_from_source(package, target, jobserver_client, opts.quiet, opts.force)
                     .await
                     .map(|_| None)
             } else {
@@ -127,6 +128,7 @@ async fn install_from_source(
     target: &str,
     lazy_jobserver_client: LazyJobserverClient,
     quiet: bool,
+    force: bool,
 ) -> Result<()> {
     let jobserver_client = lazy_jobserver_client.get().await?;
 
@@ -148,6 +150,10 @@ async fn install_from_source(
 
     if quiet {
         cmd.arg("--quiet");
+    }
+
+    if force {
+        cmd.arg("--force");
     }
 
     let mut child = cmd

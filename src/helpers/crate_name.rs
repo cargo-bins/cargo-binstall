@@ -1,19 +1,22 @@
-use std::{convert::Infallible, fmt, str::FromStr};
+use std::{fmt, str::FromStr};
 
 use compact_str::CompactString;
 use itertools::Itertools;
+use semver::{Error, VersionReq};
+
+use super::parse_version;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CrateName {
     pub name: CompactString,
-    pub version: Option<CompactString>,
+    pub version_req: Option<VersionReq>,
 }
 
 impl fmt::Display for CrateName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)?;
 
-        if let Some(version) = &self.version {
+        if let Some(version) = &self.version_req {
             write!(f, "@{version}")?;
         }
 
@@ -22,18 +25,18 @@ impl fmt::Display for CrateName {
 }
 
 impl FromStr for CrateName {
-    type Err = Infallible;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(if let Some((name, version)) = s.split_once('@') {
             CrateName {
                 name: name.into(),
-                version: Some(version.into()),
+                version_req: Some(parse_version(version)?),
             }
         } else {
             CrateName {
                 name: s.into(),
-                version: None,
+                version_req: None,
             }
         })
     }
@@ -60,11 +63,11 @@ mod tests {
         ([ $( ( $input_name:expr, $input_version:expr ) ),*  ], [ $( ( $output_name:expr, $output_version:expr ) ),*  ]) => {
             let input_crate_names = vec![$( CrateName {
                 name: $input_name.into(),
-                version: Some($input_version.into())
+                version_req: Some($input_version.parse().unwrap())
             }, )*];
 
             let mut output_crate_names: Vec<CrateName> = vec![$( CrateName {
-                name: $output_name.into(), version: Some($output_version.into())
+                name: $output_name.into(), version_req: Some($output_version.parse().unwrap())
             }, )*];
             output_crate_names.sort_by(|x, y| x.name.cmp(&y.name));
 

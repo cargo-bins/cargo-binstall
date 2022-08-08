@@ -28,15 +28,9 @@ impl Version for crates_io_api::Version {
 }
 
 pub(super) fn find_version<Item: Version, VersionIter: Iterator<Item = Item>>(
-    requirement: &str,
+    version_req: &VersionReq,
     version_iter: VersionIter,
 ) -> Result<(Item, semver::Version), BinstallError> {
-    // Parse version requirement
-    let version_req = VersionReq::parse(requirement).map_err(|err| BinstallError::VersionReq {
-        req: requirement.into(),
-        err,
-    })?;
-
     version_iter
         // Filter for matching versions
         .filter_map(|item| {
@@ -52,5 +46,7 @@ pub(super) fn find_version<Item: Version, VersionIter: Iterator<Item = Item>>(
         })
         // Return highest version
         .max_by_key(|(_item, ver)| ver.clone())
-        .ok_or(BinstallError::VersionMismatch { req: version_req })
+        .ok_or(BinstallError::VersionMismatch {
+            req: version_req.clone(),
+        })
 }

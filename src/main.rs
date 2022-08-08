@@ -9,9 +9,9 @@ use std::{
 };
 
 use clap::{builder::PossibleValue, AppSettings, Parser};
-use compact_str::CompactString;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
+use semver::VersionReq;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::{runtime::Runtime, task::block_in_place};
 
@@ -46,8 +46,8 @@ struct Options {
     ///
     /// Cannot be used when multiple packages are installed at once, use the attached version
     /// syntax in that case.
-    #[clap(help_heading = "Package selection", long = "version")]
-    version_req: Option<CompactString>,
+    #[clap(help_heading = "Package selection", long = "version", parse(try_from_str = parse_version))]
+    version_req: Option<VersionReq>,
 
     /// Override binary target set.
     ///
@@ -130,6 +130,10 @@ struct Options {
     /// Implies `--min-tls-version=1.2`.
     #[clap(help_heading = "Options", long)]
     secure: bool,
+
+    /// Force a crate to be installed even if it is already installed.
+    #[clap(help_heading = "Options", long)]
+    force: bool,
 
     /// Require a minimum TLS version from remote endpoints.
     ///
@@ -281,14 +285,14 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         }
     }
 
-    // Remove duplicate crate_name, keep the last one
-    let crate_names = CrateName::dedup(crate_names);
-
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
     };
+
+    // Launch target detection
+    let desired_targets = get_desired_targets(&opts.targets);
 
     // Initialize reqwest client
     let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
@@ -317,28 +321,64 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     // Initialize UI thread
     let mut uithread = UIThread::new(!opts.no_confirm);
 
-    // Launch target detection
-    let desired_targets = get_desired_targets(&opts.targets);
+    let (install_path, metadata, temp_dir) = block_in_place(|| -> Result<_> {
+        // Compute install directory
+        let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
+        let install_path = install_path.ok_or_else(|| {
+            error!("No viable install path found of specified, try `--install-path`");
+            miette!("No install path found or specified")
+        })?;
+        fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
+        debug!("Using install path: {}", install_path.display());
 
-    // Compute install directory
-    let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
-    let install_path = install_path.ok_or_else(|| {
-        error!("No viable install path found of specified, try `--install-path`");
-        miette!("No install path found or specified")
+        // Load metadata
+        let metadata = if !custom_install_path {
+            debug!("Reading binstall/crates-v1.json");
+            Some(metafiles::binstall_v1::Records::load()?)
+        } else {
+            None
+        };
+
+        // Create a temporary directory for downloads etc.
+        //
+        // Put all binaries to a temporary directory under `dst` first, catching
+        // some failure modes (e.g., out of space) before touching the existing
+        // binaries. This directory will get cleaned up via RAII.
+        let temp_dir = tempfile::Builder::new()
+            .prefix("cargo-binstall")
+            .tempdir_in(&install_path)
+            .map_err(BinstallError::from)
+            .wrap_err("Creating a temporary directory failed.")?;
+
+        Ok((install_path, metadata, temp_dir))
     })?;
-    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
-    debug!("Using install path: {}", install_path.display());
 
-    // Create a temporary directory for downloads etc.
-    //
-    // Put all binaries to a temporary directory under `dst` first, catching
-    // some failure modes (e.g., out of space) before touching the existing
-    // binaries. This directory will get cleaned up via RAII.
-    let temp_dir = tempfile::Builder::new()
-        .prefix("cargo-binstall")
-        .tempdir_in(&install_path)
-        .map_err(BinstallError::from)
-        .wrap_err("Creating a temporary directory failed.")?;
+    // Remove installed crates
+    let crate_names = CrateName::dedup(crate_names).filter_map(|crate_name| {
+        if opts.force {
+            Some((crate_name, None))
+        } else if let Some(records) = &metadata {
+            if let Some(metadata) = records.get(&crate_name.name) {
+                if let Some(version_req) = &crate_name.version_req {
+                    if version_req.is_latest_compatible(&metadata.current_version) {
+                        info!(
+                            "package {crate_name} is already installed and cannot be upgraded, use --force to override"
+                        );
+                        None
+                    } else {
+                        Some((crate_name, Some(metadata.current_version.clone())))
+                    }
+                } else {
+                    info!("package {crate_name} is already installed, use --force to override");
+                    None
+                }
+            } else {
+                Some((crate_name, None))
+            }
+        } else {
+            Some((crate_name, None))
+        }
+    });
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
@@ -346,7 +386,8 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let binstall_opts = Arc::new(binstall::Options {
         no_symlinks: opts.no_symlinks,
         dry_run: opts.dry_run,
-        version: opts.version_req.take(),
+        force: opts.force,
+        version_req: opts.version_req.take(),
         manifest_path: opts.manifest_path.take(),
         cli_overrides,
         desired_targets,
@@ -357,10 +398,11 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Resolve crates
         let tasks: Vec<_> = crate_names
             .into_iter()
-            .map(|crate_name| {
+            .map(|(crate_name, current_version)| {
                 AutoAbortJoinHandle::spawn(binstall::resolve(
                     binstall_opts.clone(),
                     crate_name,
+                    current_version,
                     temp_dir_path.clone(),
                     install_path.clone(),
                     client.clone(),
@@ -392,7 +434,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Resolve crates and install without confirmation
         crate_names
             .into_iter()
-            .map(|crate_name| {
+            .map(|(crate_name, current_version)| {
                 let opts = binstall_opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
                 let jobserver_client = jobserver_client.clone();
@@ -404,6 +446,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     let resolution = binstall::resolve(
                         opts.clone(),
                         crate_name,
+                        current_version,
                         temp_dir_path,
                         install_path,
                         client,
@@ -425,7 +468,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     }
 
     block_in_place(|| {
-        if !custom_install_path {
+        if let Some(mut records) = metadata {
             // If using standardised install path,
             // then create_dir_all(&install_path) would also
             // create .cargo.
@@ -434,7 +477,10 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             metafiles::v1::CratesToml::append(metadata_vec.iter())?;
 
             debug!("Writing binstall/crates-v1.json");
-            metafiles::binstall_v1::append(metadata_vec)?;
+            for metadata in metadata_vec {
+                records.replace(metadata);
+            }
+            records.overwrite()?;
         }
 
         if opts.no_cleanup {

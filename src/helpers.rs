@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
+use compact_str::format_compact;
 use futures_util::stream::Stream;
 use log::debug;
 use once_cell::sync::{Lazy, OnceCell};
@@ -50,6 +51,9 @@ pub use flock::FileLock;
 mod signal;
 pub use signal::cancel_on_user_sig_term;
 
+mod version;
+pub use version::VersionReqExt;
+
 pub fn cargo_home() -> Result<&'static Path, io::Error> {
     static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();
 
@@ -83,6 +87,20 @@ pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> 
     match task.await {
         Ok(res) => res,
         Err(join_err) => Err(BinstallError::from(join_err).into()),
+    }
+}
+
+pub fn parse_version(version: &str) -> Result<semver::VersionReq, semver::Error> {
+    // Treat 0.1.2 as =0.1.2
+    if version
+        .chars()
+        .next()
+        .map(|ch| ch.is_ascii_digit())
+        .unwrap_or(false)
+    {
+        format_compact!("={version}").parse()
+    } else {
+        version.parse()
     }
 }
 
