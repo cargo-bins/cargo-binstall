@@ -36,7 +36,8 @@ pub async fn fetch_crate_cratesio(
 
     // Locate matching version
     let version_iter = base_info.versions.iter().filter(|v| !v.yanked);
-    let (version, version_name) = find_version(version_req, version_iter)?;
+    let (version, version_name) =
+        find_version(version_req, version_iter).map_err(|err| err.crate_context(name))?;
 
     debug!("Found information for crate version: '{}'", version.num);
 

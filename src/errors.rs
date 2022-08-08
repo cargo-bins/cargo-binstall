@@ -1,13 +1,13 @@
 use std::process::{ExitCode, Termination};
 
+use compact_str::CompactString;
 use log::{error, warn};
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tokio::task;
 
-/// Errors emitted by cargo-binstall.
+/// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
-#[diagnostic(url(docsrs))]
 #[non_exhaustive]
 pub enum BinstallError {
     /// Internal: a task could not be joined.
@@ -220,17 +220,18 @@ pub enum BinstallError {
         help("You cannot use --{option} and specify multiple packages at the same time. Do one or the other.")
     )]
     OverrideOptionUsedWithMultiInstall { option: &'static str },
+
+    /// A wrapped error providing the context of which crate the error is about.
+    #[error("for crate {crate_name}")]
+    CrateContext {
+        #[source]
+        error: Box<BinstallError>,
+        crate_name: CompactString,
+    },
 }
 
 impl BinstallError {
-    /// The recommended exit code for this error.
-    ///
-    /// This will never output:
-    /// - 0 (success)
-    /// - 1 and 2 (catchall and shell)
-    /// - 16 (binstall errors not handled here)
-    /// - 64 (generic error)
-    pub fn exit_code(&self) -> ExitCode {
+    fn exit_number(&self) -> u8 {
         use BinstallError::*;
         let code: u8 = match self {
             TaskJoinError(_) => 17,
@@ -250,12 +251,32 @@ impl BinstallError {
             VersionUnavailable { .. } => 83,
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
+            CrateContext { error, .. } => error.exit_number(),
         };
 
         // reserved codes
         debug_assert!(code != 64 && code != 16 && code != 1 && code != 2 && code != 0);
 
-        code.into()
+        code
+    }
+
+    /// The recommended exit code for this error.
+    ///
+    /// This will never output:
+    /// - 0 (success)
+    /// - 1 and 2 (catchall and shell)
+    /// - 16 (binstall errors not handled here)
+    /// - 64 (generic error)
+    pub fn exit_code(&self) -> ExitCode {
+        self.exit_number().into()
+    }
+
+    /// Add crate context to the error
+    pub fn crate_context(self, crate_name: impl Into<CompactString>) -> Self {
+        Self::CrateContext {
+            error: Box::new(self),
+            crate_name: crate_name.into(),
+        }
     }
 }
 
