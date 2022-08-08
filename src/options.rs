@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use clap::{builder::PossibleValue, AppSettings, Parser};
 use log::LevelFilter;
+use miette::Result;
 use semver::VersionReq;
 
 use crate::*;
@@ -175,4 +176,55 @@ pub struct Options {
     /// This would override the `log_level`.
     #[clap(help_heading = "Meta", short, long)]
     pub quiet: bool,
+}
+
+impl Options {
+    pub fn parse() -> Result<Self> {
+        // Filter extraneous arg when invoked by cargo
+        // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
+        // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
+        let mut args: Vec<OsString> = std::env::args_os().collect();
+        let args = if args.len() > 1 && args[1] == "binstall" {
+            // Equivalent to
+            //
+            //     args.remove(1);
+            //
+            // But is O(1)
+            args.swap(0, 1);
+            let mut args = args.into_iter();
+            drop(args.next().unwrap());
+
+            args
+        } else {
+            args.into_iter()
+        };
+
+        // Load options
+        let mut opts = Options::parse_from(args);
+        if opts.quiet {
+            opts.log_level = LevelFilter::Off;
+        }
+
+        if opts.crate_names.len() > 1 {
+            let option = if opts.version_req.is_some() {
+                "version"
+            } else if opts.manifest_path.is_some() {
+                "manifest-path"
+            } else if opts.bin_dir.is_some() {
+                "bin-dir"
+            } else if opts.pkg_fmt.is_some() {
+                "pkg-fmt"
+            } else if opts.pkg_url.is_some() {
+                "pkg-url"
+            } else {
+                ""
+            };
+
+            if !option.is_empty() {
+                return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
+            }
+        }
+
+        Ok(opts)
+    }
 }

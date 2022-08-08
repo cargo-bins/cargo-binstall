@@ -1,5 +1,4 @@
 use std::{
-    ffi::OsString,
     fs,
     mem::take,
     path::Path,
@@ -8,7 +7,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use clap::Parser;
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
@@ -67,51 +65,9 @@ fn main() -> MainExit {
 }
 
 async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
-    // Filter extraneous arg when invoked by cargo
-    // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
-    // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
-    let mut args: Vec<OsString> = std::env::args_os().collect();
-    let args = if args.len() > 1 && args[1] == "binstall" {
-        // Equivalent to
-        //
-        //     args.remove(1);
-        //
-        // But is O(1)
-        args.swap(0, 1);
-        let mut args = args.into_iter();
-        drop(args.next().unwrap());
-
-        args
-    } else {
-        args.into_iter()
-    };
-
-    // Load options
-    let mut opts = Options::parse_from(args);
-    if opts.quiet {
-        opts.log_level = LevelFilter::Off;
-    }
+    let mut opts = Options::parse()?;
 
     let crate_names = take(&mut opts.crate_names);
-    if crate_names.len() > 1 {
-        let option = if opts.version_req.is_some() {
-            "version"
-        } else if opts.manifest_path.is_some() {
-            "manifest-path"
-        } else if opts.bin_dir.is_some() {
-            "bin-dir"
-        } else if opts.pkg_fmt.is_some() {
-            "pkg-fmt"
-        } else if opts.pkg_url.is_some() {
-            "pkg-url"
-        } else {
-            ""
-        };
-
-        if !option.is_empty() {
-            return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
-        }
-    }
 
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
