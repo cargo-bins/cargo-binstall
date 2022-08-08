@@ -206,7 +206,7 @@ impl Termination for MainExit {
     fn report(self) -> ExitCode {
         match self {
             Self::Success(spent) => {
-                info!("Installation completed in {spent:?}");
+                info!("Done in {spent:?}");
                 ExitCode::SUCCESS
             }
             Self::Error(err) => err.report(),
