@@ -71,7 +71,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::http`
     /// - Exit: 69
-    #[error("could not {method} {url}: {err}")]
+    #[error("could not {method} {url}")]
     #[diagnostic(severity(error), code(binstall::http))]
     Http {
         method: reqwest::Method,
@@ -94,7 +94,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::crates_io_api`
     /// - Exit: 76
-    #[error("crates.io api error fetching crate information for '{crate_name}': {err}")]
+    #[error("crates.io API error")]
     #[diagnostic(
         severity(error),
         code(binstall::crates_io_api),
@@ -137,7 +137,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::version::parse`
     /// - Exit: 80
-    #[error("version string '{v}' is not semver: {err}")]
+    #[error("version string '{v}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::parse))]
     VersionParse {
         v: String,
@@ -154,7 +154,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::version::requirement`
     /// - Exit: 81
-    #[error("version requirement '{req}' is not semver: {err}")]
+    #[error("version requirement '{req}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::requirement))]
     VersionReq {
         req: String,
@@ -221,6 +221,22 @@ pub enum BinstallError {
     )]
     OverrideOptionUsedWithMultiInstall { option: &'static str },
 
+    /// No binaries were found for the crate.
+    ///
+    /// When installing, either the binaries are specified in the crate's Cargo.toml, or they're
+    /// inferred from the crate layout (e.g. src/main.rs or src/bins/name.rs). If no binaries are
+    /// found through these methods, we can't know what to install!
+    ///
+    /// - Code: `binstall::resolve::binaries`
+    /// - Exit: 86
+    #[error("no binaries specified nor inferred")]
+    #[diagnostic(
+        severity(error),
+        code(binstall::resolve::binaries),
+        help("This crate doesn't specify any binaries, so there's nothing to install.")
+    )]
+    UnspecifiedBinaries,
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
     CrateContext {
@@ -251,6 +267,7 @@ impl BinstallError {
             VersionUnavailable { .. } => 83,
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
+            UnspecifiedBinaries => 86,
             CrateContext { error, .. } => error.exit_number(),
         };
 
