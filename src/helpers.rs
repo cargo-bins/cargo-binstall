@@ -51,6 +51,9 @@ pub use flock::FileLock;
 mod signal;
 pub use signal::cancel_on_user_sig_term;
 
+mod version;
+pub use version::VersionReqExt;
+
 pub fn cargo_home() -> Result<&'static Path, io::Error> {
     static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();
 
