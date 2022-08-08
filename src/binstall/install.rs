@@ -15,6 +15,7 @@ pub async fn install(
     jobserver_client: LazyJobserverClient,
 ) -> Result<Option<MetaData>> {
     match resolution {
+        Resolution::AlreadyUpToDate => Ok(None),
         Resolution::Fetch {
             fetcher,
             package,

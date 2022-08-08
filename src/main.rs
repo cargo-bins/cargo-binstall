@@ -354,26 +354,29 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     })?;
 
     // Remove installed crates
-    let crate_names = CrateName::dedup(crate_names).filter(|crate_name| {
+    let crate_names = CrateName::dedup(crate_names).filter_map(|crate_name| {
         if opts.force {
-            true
+            Some((crate_name, None))
         } else if let Some(records) = &metadata {
-            let keep = if let Some(version_req) = &crate_name.version_req {
-                records
-                    .get(&crate_name.name)
-                    .map(|metadata| !version_req.is_latest_compatible(&metadata.current_version))
-                    .unwrap_or(true)
+            if let Some(metadata) = records.get(&crate_name.name) {
+                if let Some(version_req) = &crate_name.version_req {
+                    if version_req.is_latest_compatible(&metadata.current_version) {
+                        info!(
+                            "package {crate_name} is already installed and cannot be upgraded, use --force to override"
+                        );
+                        None
+                    } else {
+                        Some((crate_name, Some(metadata.current_version.clone())))
+                    }
+                } else {
+                    info!("package {crate_name} is already installed, use --force to override");
+                    None
+                }
             } else {
-                !records.contains(&crate_name.name)
-            };
-
-            if !keep {
-                info!("package {crate_name} is already installed, use --force to override")
+                Some((crate_name, None))
             }
-
-            keep
         } else {
-            true
+            Some((crate_name, None))
         }
     });
 
@@ -395,10 +398,11 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Resolve crates
         let tasks: Vec<_> = crate_names
             .into_iter()
-            .map(|crate_name| {
+            .map(|(crate_name, current_version)| {
                 AutoAbortJoinHandle::spawn(binstall::resolve(
                     binstall_opts.clone(),
                     crate_name,
+                    current_version,
                     temp_dir_path.clone(),
                     install_path.clone(),
                     client.clone(),
@@ -430,7 +434,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Resolve crates and install without confirmation
         crate_names
             .into_iter()
-            .map(|crate_name| {
+            .map(|(crate_name, current_version)| {
                 let opts = binstall_opts.clone();
                 let temp_dir_path = temp_dir_path.clone();
                 let jobserver_client = jobserver_client.clone();
@@ -442,6 +446,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     let resolution = binstall::resolve(
                         opts.clone(),
                         crate_name,
+                        current_version,
                         temp_dir_path,
                         install_path,
                         client,

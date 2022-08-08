@@ -8,7 +8,7 @@ use compact_str::{CompactString, ToCompactString};
 use log::{debug, error, info, warn};
 use miette::{miette, Result};
 use reqwest::Client;
-use semver::VersionReq;
+use semver::{Version, VersionReq};
 
 use super::Options;
 use crate::{
@@ -29,6 +29,7 @@ pub enum Resolution {
     InstallFromSource {
         package: Package<Meta>,
     },
+    AlreadyUpToDate,
 }
 impl Resolution {
     fn print(&self, opts: &Options) {
@@ -70,6 +71,7 @@ impl Resolution {
             Resolution::InstallFromSource { .. } => {
                 warn!("The package will be installed from source (with cargo)",)
             }
+            Resolution::AlreadyUpToDate => (),
         }
     }
 }
@@ -77,6 +79,7 @@ impl Resolution {
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
+    curr_version: Option<Version>,
     temp_dir: Arc<Path>,
     install_path: Arc<Path>,
     client: Client,
@@ -108,6 +111,19 @@ pub async fn resolve(
     };
 
     let package = manifest.package.unwrap();
+
+    if let Some(curr_version) = curr_version {
+        let new_version =
+            Version::parse(&package.version).map_err(|err| BinstallError::VersionParse {
+                v: package.version.clone(),
+                err,
+            })?;
+
+        if new_version == curr_version {
+            info!("package {crate_name} is already up to date {curr_version}");
+            return Ok(Resolution::AlreadyUpToDate);
+        }
+    }
 
     let (mut meta, binaries) = (
         package
