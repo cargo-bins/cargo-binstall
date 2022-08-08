@@ -17,6 +17,9 @@ pub mod fetchers;
 pub mod metafiles;
 pub mod wasi;
 
+pub mod options;
+pub use options::*;
+
 mod target;
 pub use target::*;
 
