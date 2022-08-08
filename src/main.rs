@@ -36,7 +36,11 @@ struct Options {
     ///
     /// If duplicate names are provided, the last one (and their version requirement)
     /// is kept.
-    #[clap(help_heading = "Package selection", value_name = "crate[@version]")]
+    #[clap(
+        help_heading = "Package selection",
+        value_name = "crate[@version]",
+        required_unless_present_any = ["version", "help"],
+    )]
     crate_names: Vec<CrateName>,
 
     /// Package version to install.
