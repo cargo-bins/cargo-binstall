@@ -1,4 +1,4 @@
-use std::process::{ExitCode, Termination};
+use std::process::{ExitCode, ExitStatus, Termination};
 
 use compact_str::CompactString;
 use log::{error, warn};
@@ -79,6 +79,16 @@ pub enum BinstallError {
         #[source]
         err: reqwest::Error,
     },
+
+    /// A subprocess failed.
+    ///
+    /// This is often about cargo-install calls.
+    ///
+    /// - Code: `binstall::subprocess`
+    /// - Exit: 70
+    #[error("subprocess {command} errored with {status}")]
+    #[diagnostic(severity(error), code(binstall::subprocess))]
+    SubProcess { command: String, status: ExitStatus },
 
     /// A generic I/O error.
     ///
@@ -237,6 +247,24 @@ pub enum BinstallError {
     )]
     UnspecifiedBinaries,
 
+    /// No viable targets were found.
+    ///
+    /// When installing, we attempt to find which targets the host (your computer) supports, and
+    /// discover builds for these targets from the remote binary source. This error occurs when we
+    /// fail to discover the host's target.
+    ///
+    /// You should in this case specify --target manually.
+    ///
+    /// - Code: `binstall::targets::none_host`
+    /// - Exit: 87
+    #[error("failed to discovered a viable target from the host")]
+    #[diagnostic(
+        severity(error),
+        code(binstall::targets::none_host),
+        help("Try to specify --target")
+    )]
+    NoViableTargets,
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
     CrateContext {
@@ -257,6 +285,7 @@ impl BinstallError {
             Template(_) => 67,
             Reqwest(_) => 68,
             Http { .. } => 69,
+            SubProcess { .. } => 70,
             Io(_) => 74,
             CratesIoApi { .. } => 76,
             CargoManifestPath => 77,
@@ -268,6 +297,7 @@ impl BinstallError {
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
             UnspecifiedBinaries => 86,
+            NoViableTargets => 87,
             CrateContext { error, .. } => error.exit_number(),
         };
 
