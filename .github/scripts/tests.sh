@@ -19,7 +19,8 @@ done
 cargo binstall --help >/dev/null
 
 # Install binaries using `--manifest-path`
-"./$1" binstall --force --log-level debug --manifest-path . --no-confirm cargo-binstall
+"./$1" binstall --force --log-level debug --manifest-path crates/bin/Cargo.toml --no-confirm cargo-binstall
+"./$1" binstall --force --log-level debug --manifest-path crates/bin --no-confirm cargo-binstall
 # Test that the installed binaries can be run
 cargo binstall --help >/dev/null
 
