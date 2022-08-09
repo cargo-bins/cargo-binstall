@@ -5,8 +5,7 @@ use std::{
 
 use cargo_toml::{Package, Product};
 use compact_str::{CompactString, ToCompactString};
-use log::{debug, error, info, warn};
-use miette::{miette, Result};
+use log::{debug, info, warn};
 use reqwest::Client;
 use semver::{Version, VersionReq};
 
@@ -14,7 +13,7 @@ use super::Options;
 use crate::{
     bins,
     fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
-    *,
+    BinstallError, *,
 };
 
 pub enum Resolution {
@@ -84,8 +83,31 @@ pub async fn resolve(
     install_path: Arc<Path>,
     client: Client,
     crates_io_api_client: crates_io_api::AsyncClient,
-) -> Result<Resolution> {
-    info!("Installing package: '{}'", crate_name);
+) -> Result<Resolution, BinstallError> {
+    let crate_name_name = crate_name.name.clone();
+    resolve_inner(
+        opts,
+        crate_name,
+        curr_version,
+        temp_dir,
+        install_path,
+        client,
+        crates_io_api_client,
+    )
+    .await
+    .map_err(|err| err.crate_context(crate_name_name))
+}
+
+async fn resolve_inner(
+    opts: Arc<Options>,
+    crate_name: CrateName,
+    curr_version: Option<Version>,
+    temp_dir: Arc<Path>,
+    install_path: Arc<Path>,
+    client: Client,
+    crates_io_api_client: crates_io_api::AsyncClient,
+) -> Result<Resolution, BinstallError> {
+    info!("Resolving package: '{}'", crate_name);
 
     let version_req: VersionReq = match (&crate_name.version_req, &opts.version_req) {
         (Some(version), None) => version.clone(),
@@ -120,7 +142,10 @@ pub async fn resolve(
             })?;
 
         if new_version == curr_version {
-            info!("package {crate_name} is already up to date {curr_version}");
+            info!(
+                "{} v{curr_version} is already installed, use --force to override",
+                crate_name.name
+            );
             return Ok(Resolution::AlreadyUpToDate);
         }
     }
@@ -208,7 +233,7 @@ fn collect_bin_files(
     binaries: Vec<Product>,
     bin_path: PathBuf,
     install_path: PathBuf,
-) -> Result<Vec<bins::BinFile>> {
+) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Update meta
     if fetcher.source_name() == "QuickInstall" {
         // TODO: less of a hack?
@@ -217,10 +242,7 @@ fn collect_bin_files(
 
     // Check binaries
     if binaries.is_empty() {
-        error!("No binaries specified (or inferred from file system)");
-        return Err(miette!(
-            "No binaries specified (or inferred from file system)"
-        ));
+        return Err(BinstallError::UnspecifiedBinaries);
     }
 
     // List files to be installed

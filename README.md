@@ -5,18 +5,15 @@
 `binstall` works by fetching the crate information from `crates.io`, then searching the linked `repository` for matching releases and artifacts, with fallbacks to [quickinstall](https://github.com/alsuren/cargo-quickinstall) and finally `cargo install` if these are not found.
 To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate binary package for a given version and target. See [SUPPORT.md](./SUPPORT.md) for more detail.
 
-
 ## Status
 
-![Build](https://github.com/ryankurte/cargo-binstall/workflows/Rust/badge.svg)
-[![GitHub tag](https://img.shields.io/github/tag/ryankurte/cargo-binstall.svg)](https://github.com/ryankurte/cargo-binstall)
+![Build](https://github.com/cargo-bins/cargo-binstall/workflows/Rust/badge.svg)
+[![GitHub tag](https://img.shields.io/github/tag/cargo-bins/cargo-binstall.svg)](https://github.com/cargo-bins/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
-[![Docs.rs](https://docs.rs/cargo-binstall/badge.svg)](https://docs.rs/cargo-binstall)
 
 ## Installation
 
-To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/ryankurte/cargo-binstall/releases)).
-
+To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)).
 
 | OS      | Arch    | URL                                                          |
 | ------- | ------- | ------------------------------------------------------------ |
@@ -27,7 +24,7 @@ To get started _using_ `cargo-binstall` first install the binary (either via `ca
 | macos   | m1      | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip |
 | windows | x86\_64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip |
 
-
+To upgrade, use `cargo binstall cargo-binstall`!
 
 ## Usage
 
@@ -37,16 +34,15 @@ Package versions and targets may be specified using the `--version` and `--targe
 
 ```
 [garry] ➜  ~ cargo binstall radio-sx128x --version 0.14.1-alpha.5
-21:14:09 [INFO] Installing package: 'radio-sx128x'
-21:14:13 [INFO] Downloading package from: 'https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-apple-darwin.tgz'
+21:14:15 [INFO] Resolving package: 'radio-sx128x'
 21:14:18 [INFO] This will install the following binaries:
 21:14:18 [INFO]   - sx128x-util (sx128x-util-x86_64-apple-darwin -> /Users/ryankurte/.cargo/bin/sx128x-util-v0.14.1-alpha.5)
 21:14:18 [INFO] And create (or update) the following symlinks:
 21:14:18 [INFO]   - sx128x-util (/Users/ryankurte/.cargo/bin/sx128x-util-v0.14.1-alpha.5 -> /Users/ryankurte/.cargo/bin/sx128x-util)
-21:14:18 [INFO] Do you wish to continue? yes/no
-yes
-21:15:30 [INFO] Installing binaries...
-21:15:30 [INFO] Installation complete!
+21:14:18 [INFO] Do you wish to continue? yes/[no]
+? yes
+21:14:20 [INFO] Installing binaries...
+21:14:21 [INFO] Done in 6.212736s
 ```
 
 ### Unsupported crates
@@ -59,7 +55,6 @@ $ binstall \
   --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ archive-format }" \
   --pkg-fmt="txz" crate_name
 ```
-
 
 ## FAQ
 

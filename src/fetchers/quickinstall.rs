@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use compact_str::CompactString;
-use log::{debug, info};
+use log::debug;
 use reqwest::Client;
 use reqwest::Method;
 use tokio::task::JoinHandle;
@@ -36,13 +36,13 @@ impl super::Fetcher for QuickInstall {
     async fn find(&self) -> Result<bool, BinstallError> {
         let url = self.package_url();
         self.report();
-        info!("Checking for package at: '{url}'");
+        debug!("Checking for package at: '{url}'");
         remote_exists(self.client.clone(), Url::parse(&url)?, Method::HEAD).await
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
-        info!("Downloading package from: '{url}'");
+        debug!("Downloading package from: '{url}'");
         download_and_extract(&self.client, &Url::parse(&url)?, self.pkg_fmt(), dst).await
     }
 

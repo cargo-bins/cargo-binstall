@@ -1,13 +1,13 @@
-use std::process::{ExitCode, Termination};
+use std::process::{ExitCode, ExitStatus, Termination};
 
+use compact_str::CompactString;
 use log::{error, warn};
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tokio::task;
 
-/// Errors emitted by cargo-binstall.
+/// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
-#[diagnostic(url(docsrs))]
 #[non_exhaustive]
 pub enum BinstallError {
     /// Internal: a task could not be joined.
@@ -71,7 +71,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::http`
     /// - Exit: 69
-    #[error("could not {method} {url}: {err}")]
+    #[error("could not {method} {url}")]
     #[diagnostic(severity(error), code(binstall::http))]
     Http {
         method: reqwest::Method,
@@ -79,6 +79,16 @@ pub enum BinstallError {
         #[source]
         err: reqwest::Error,
     },
+
+    /// A subprocess failed.
+    ///
+    /// This is often about cargo-install calls.
+    ///
+    /// - Code: `binstall::subprocess`
+    /// - Exit: 70
+    #[error("subprocess {command} errored with {status}")]
+    #[diagnostic(severity(error), code(binstall::subprocess))]
+    SubProcess { command: String, status: ExitStatus },
 
     /// A generic I/O error.
     ///
@@ -94,7 +104,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::crates_io_api`
     /// - Exit: 76
-    #[error("crates.io api error fetching crate information for '{crate_name}': {err}")]
+    #[error("crates.io API error")]
     #[diagnostic(
         severity(error),
         code(binstall::crates_io_api),
@@ -137,7 +147,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::version::parse`
     /// - Exit: 80
-    #[error("version string '{v}' is not semver: {err}")]
+    #[error("version string '{v}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::parse))]
     VersionParse {
         v: String,
@@ -154,7 +164,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::version::requirement`
     /// - Exit: 81
-    #[error("version requirement '{req}' is not semver: {err}")]
+    #[error("version requirement '{req}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::requirement))]
     VersionReq {
         req: String,
@@ -220,17 +230,52 @@ pub enum BinstallError {
         help("You cannot use --{option} and specify multiple packages at the same time. Do one or the other.")
     )]
     OverrideOptionUsedWithMultiInstall { option: &'static str },
+
+    /// No binaries were found for the crate.
+    ///
+    /// When installing, either the binaries are specified in the crate's Cargo.toml, or they're
+    /// inferred from the crate layout (e.g. src/main.rs or src/bins/name.rs). If no binaries are
+    /// found through these methods, we can't know what to install!
+    ///
+    /// - Code: `binstall::resolve::binaries`
+    /// - Exit: 86
+    #[error("no binaries specified nor inferred")]
+    #[diagnostic(
+        severity(error),
+        code(binstall::resolve::binaries),
+        help("This crate doesn't specify any binaries, so there's nothing to install.")
+    )]
+    UnspecifiedBinaries,
+
+    /// No viable targets were found.
+    ///
+    /// When installing, we attempt to find which targets the host (your computer) supports, and
+    /// discover builds for these targets from the remote binary source. This error occurs when we
+    /// fail to discover the host's target.
+    ///
+    /// You should in this case specify --target manually.
+    ///
+    /// - Code: `binstall::targets::none_host`
+    /// - Exit: 87
+    #[error("failed to discovered a viable target from the host")]
+    #[diagnostic(
+        severity(error),
+        code(binstall::targets::none_host),
+        help("Try to specify --target")
+    )]
+    NoViableTargets,
+
+    /// A wrapped error providing the context of which crate the error is about.
+    #[error("for crate {crate_name}")]
+    CrateContext {
+        #[source]
+        error: Box<BinstallError>,
+        crate_name: CompactString,
+    },
 }
 
 impl BinstallError {
-    /// The recommended exit code for this error.
-    ///
-    /// This will never output:
-    /// - 0 (success)
-    /// - 1 and 2 (catchall and shell)
-    /// - 16 (binstall errors not handled here)
-    /// - 64 (generic error)
-    pub fn exit_code(&self) -> ExitCode {
+    fn exit_number(&self) -> u8 {
         use BinstallError::*;
         let code: u8 = match self {
             TaskJoinError(_) => 17,
@@ -240,6 +285,7 @@ impl BinstallError {
             Template(_) => 67,
             Reqwest(_) => 68,
             Http { .. } => 69,
+            SubProcess { .. } => 70,
             Io(_) => 74,
             CratesIoApi { .. } => 76,
             CargoManifestPath => 77,
@@ -250,12 +296,34 @@ impl BinstallError {
             VersionUnavailable { .. } => 83,
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
+            UnspecifiedBinaries => 86,
+            NoViableTargets => 87,
+            CrateContext { error, .. } => error.exit_number(),
         };
 
         // reserved codes
         debug_assert!(code != 64 && code != 16 && code != 1 && code != 2 && code != 0);
 
-        code.into()
+        code
+    }
+
+    /// The recommended exit code for this error.
+    ///
+    /// This will never output:
+    /// - 0 (success)
+    /// - 1 and 2 (catchall and shell)
+    /// - 16 (binstall errors not handled here)
+    /// - 64 (generic error)
+    pub fn exit_code(&self) -> ExitCode {
+        self.exit_number().into()
+    }
+
+    /// Add crate context to the error
+    pub fn crate_context(self, crate_name: impl Into<CompactString>) -> Self {
+        Self::CrateContext {
+            error: Box::new(self),
+            crate_name: crate_name.into(),
+        }
     }
 }
 

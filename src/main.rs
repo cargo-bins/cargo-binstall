@@ -36,7 +36,11 @@ struct Options {
     ///
     /// If duplicate names are provided, the last one (and their version requirement)
     /// is kept.
-    #[clap(help_heading = "Package selection", value_name = "crate[@version]")]
+    #[clap(
+        help_heading = "Package selection",
+        value_name = "crate[@version]",
+        required_unless_present_any = ["version", "help"],
+    )]
     crate_names: Vec<CrateName>,
 
     /// Package version to install.
@@ -202,7 +206,7 @@ impl Termination for MainExit {
     fn report(self) -> ExitCode {
         match self {
             Self::Success(spent) => {
-                info!("Installation completed in {spent:?}");
+                info!("Done in {spent:?}");
                 ExitCode::SUCCESS
             }
             Self::Error(err) => err.report(),
@@ -354,31 +358,39 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     })?;
 
     // Remove installed crates
-    let crate_names = CrateName::dedup(crate_names).filter_map(|crate_name| {
-        if opts.force {
-            Some((crate_name, None))
-        } else if let Some(records) = &metadata {
-            if let Some(metadata) = records.get(&crate_name.name) {
-                if let Some(version_req) = &crate_name.version_req {
-                    if version_req.is_latest_compatible(&metadata.current_version) {
-                        info!(
-                            "package {crate_name} is already installed and cannot be upgraded, use --force to override"
-                        );
-                        None
-                    } else {
-                        Some((crate_name, Some(metadata.current_version.clone())))
-                    }
-                } else {
-                    info!("package {crate_name} is already installed, use --force to override");
+    let crate_names = CrateName::dedup(crate_names)
+        .filter_map(|crate_name| {
+            match (
+                opts.force,
+                metadata.as_ref().and_then(|records| records.get(&crate_name.name)),
+                &crate_name.version_req,
+            ) {
+                (false, Some(metadata), Some(version_req))
+                    if version_req.is_latest_compatible(&metadata.current_version) =>
+                {
+                    debug!("Bailing out early because we can assume wanted is already installed from metafile");
+                    info!(
+                        "{} v{} is already installed, use --force to override",
+                        crate_name.name, metadata.current_version
+                    );
                     None
                 }
-            } else {
-                Some((crate_name, None))
+
+                // we have to assume that the version req could be *,
+                // and therefore a remote upgraded version could exist
+                (false, Some(metadata), _) => {
+                    Some((crate_name, Some(metadata.current_version.clone())))
+                }
+
+                _ => Some((crate_name, None)),
             }
-        } else {
-            Some((crate_name, None))
-        }
-    });
+        })
+        .collect::<Vec<_>>();
+
+    if crate_names.is_empty() {
+        debug!("Nothing to do");
+        return Ok(());
+    }
 
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
@@ -414,7 +426,15 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Confirm
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
-            resolutions.push(task.await??);
+            match task.await?? {
+                binstall::Resolution::AlreadyUpToDate => {}
+                res => resolutions.push(res),
+            }
+        }
+
+        if resolutions.is_empty() {
+            debug!("Nothing to do");
+            return Ok(());
         }
 
         uithread.confirm().await?;
