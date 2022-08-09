@@ -15,7 +15,7 @@ use semver::VersionReq;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::{runtime::Runtime, task::block_in_place};
 
-use cargo_binstall::{binstall, *};
+use binstall::{ops, *};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -395,7 +395,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
 
     // Create binstall_opts
-    let binstall_opts = Arc::new(binstall::Options {
+    let binstall_opts = Arc::new(ops::Options {
         no_symlinks: opts.no_symlinks,
         dry_run: opts.dry_run,
         force: opts.force,
@@ -411,7 +411,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         let tasks: Vec<_> = crate_names
             .into_iter()
             .map(|(crate_name, current_version)| {
-                AutoAbortJoinHandle::spawn(binstall::resolve(
+                AutoAbortJoinHandle::spawn(ops::resolve(
                     binstall_opts.clone(),
                     crate_name,
                     current_version,
@@ -427,7 +427,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
             match task.await?? {
-                binstall::Resolution::AlreadyUpToDate => {}
+                ops::Resolution::AlreadyUpToDate => {}
                 res => resolutions.push(res),
             }
         }
@@ -443,7 +443,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         resolutions
             .into_iter()
             .map(|resolution| {
-                AutoAbortJoinHandle::spawn(binstall::install(
+                AutoAbortJoinHandle::spawn(ops::install(
                     resolution,
                     binstall_opts.clone(),
                     jobserver_client.clone(),
@@ -463,7 +463,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 let install_path = install_path.clone();
 
                 AutoAbortJoinHandle::spawn(async move {
-                    let resolution = binstall::resolve(
+                    let resolution = ops::resolve(
                         opts.clone(),
                         crate_name,
                         current_version,
@@ -474,7 +474,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     )
                     .await?;
 
-                    binstall::install(resolution, opts, jobserver_client).await
+                    ops::install(resolution, opts, jobserver_client).await
                 })
             })
             .collect()

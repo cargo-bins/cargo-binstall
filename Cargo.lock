@@ -76,6 +76,49 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
+name = "binstall"
+version = "0.12.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "bzip2",
+ "cargo_toml",
+ "clap",
+ "compact_str",
+ "crates_io_api",
+ "dirs",
+ "env_logger",
+ "flate2",
+ "fs4",
+ "futures-util",
+ "guess_host_triple",
+ "home",
+ "itertools",
+ "jobserver",
+ "log",
+ "miette",
+ "once_cell",
+ "reqwest",
+ "scopeguard",
+ "semver",
+ "serde",
+ "serde-tuple-vec-map",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "tinytemplate",
+ "tokio",
+ "toml_edit",
+ "url",
+ "xz2",
+ "zip",
+ "zstd",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -124,46 +167,18 @@ dependencies = [
 name = "cargo-binstall"
 version = "0.12.0"
 dependencies = [
- "async-trait",
- "bytes",
- "bzip2",
- "cargo_toml",
+ "binstall",
  "clap",
- "compact_str",
  "crates_io_api",
- "dirs",
  "embed-resource",
- "env_logger",
- "flate2",
- "fs4",
- "futures-util",
  "guess_host_triple",
- "home",
- "itertools",
- "jobserver",
  "log",
  "miette",
  "mimalloc",
- "once_cell",
- "reqwest",
- "scopeguard",
  "semver",
- "serde",
- "serde-tuple-vec-map",
- "serde_json",
  "simplelog",
- "strum",
- "strum_macros",
- "tar",
  "tempfile",
- "thiserror",
- "tinytemplate",
  "tokio",
- "toml_edit",
- "url",
- "xz2",
- "zip",
- "zstd",
 ]
 
 [[package]]
