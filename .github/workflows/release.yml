@@ -20,13 +20,13 @@ jobs:
     - uses: actions/checkout@v2
     - name: Extract tag from commit message
       id: version
-      run: ./ci-scripts/extract-tag-from-release-commit.sh
+      run: .github/scripts/extract-tag-from-release-commit.sh
     - name: Extract release notes
       id: notes
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         GITHUB_REPO: ${{ github.repository }}
-      run: ./ci-scripts/extract-release-notes.sh
+      run: .github/scripts/extract-release-notes.sh
 
   tag:
     needs: info
@@ -61,7 +61,7 @@ jobs:
         path: outputs/
 
     - name: Pack archives
-      run: ./ci-scripts/pack-release-archives.sh
+      run: .github/scripts/pack-release-archives.sh
 
     - name: Publish release
       uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa

@@ -62,7 +62,7 @@ jobs:
           ecnef=$'\n```'
 
           title='release: v${{ inputs.version }}'
-          body=$(sed 's/%version%/${{ inputs.version }}/g' ci-scripts/release-pr.txt)
+          body=$(sed 's/%version%/${{ inputs.version }}/g' .github/scripts/release-pr.txt)
 
           gh pr create --title "$title" --body "$body" --base main --head "${{ env.branch_name }}" --label "release"
         env:

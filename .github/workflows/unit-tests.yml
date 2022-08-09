@@ -21,7 +21,7 @@ jobs:
         - windows
 
     runs-on: ${{ matrix.os }}-latest
-    name: on ${{ matrix.os }}
+    name: unit tests on ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v2
@@ -44,7 +44,7 @@ jobs:
 
     - name: Install deps
       if: matrix.os == 'ubuntu'
-      run: sudo ./ci-scripts/install-deps.sh
+      run: sudo .github/scripts/install-deps.sh
 
     - name: Test (Unix)
       if: matrix.os != 'windows'
