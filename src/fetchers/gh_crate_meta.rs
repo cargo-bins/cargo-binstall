@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use compact_str::{CompactString, ToCompactString};
-use log::{debug, info, warn};
+use log::{debug, warn};
 use once_cell::sync::OnceCell;
 use reqwest::Client;
 use reqwest::Method;
@@ -43,7 +43,7 @@ impl super::Fetcher for GhCrateMeta {
                 let client = self.client.clone();
                 AutoAbortJoinHandle::spawn(async move {
                     let url = url?;
-                    info!("Checking for package at: '{url}'");
+                    debug!("Checking for package at: '{url}'");
                     remote_exists(client, url.clone(), Method::HEAD)
                         .await
                         .map(|exists| (url.clone(), exists))
@@ -61,7 +61,7 @@ impl super::Fetcher for GhCrateMeta {
                     );
                 }
 
-                info!("Winning URL is {url}");
+                debug!("Winning URL is {url}");
                 self.url.set(url).unwrap(); // find() is called first
                 return Ok(true);
             }
@@ -72,7 +72,7 @@ impl super::Fetcher for GhCrateMeta {
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.url.get().unwrap(); // find() is called first
-        info!("Downloading package from: '{url}'");
+        debug!("Downloading package from: '{url}'");
         download_and_extract(&self.client, url, self.pkg_fmt(), dst).await
     }
 

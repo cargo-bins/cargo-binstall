@@ -107,7 +107,7 @@ async fn resolve_inner(
     client: Client,
     crates_io_api_client: crates_io_api::AsyncClient,
 ) -> Result<Resolution, BinstallError> {
-    info!("Installing package: '{}'", crate_name);
+    info!("Resolving package: '{}'", crate_name);
 
     let version_req: VersionReq = match (&crate_name.version_req, &opts.version_req) {
         (Some(version), None) => version.clone(),
