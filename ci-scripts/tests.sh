@@ -48,12 +48,12 @@ cargo binstall --help >/dev/null
 cargo binstall --help >/dev/null
 
 # Test skip when installed
-"./$1" binstall --no-confirm cargo-binstall | grep -q 'cargo-binstall v0.11.1 is already installed'
+"./$1" binstall --no-confirm --force cargo-binstall@0.11.1
 "./$1" binstall --no-confirm cargo-binstall@0.11.1 | grep -q 'cargo-binstall v0.11.1 is already installed'
 
 "./$1" binstall --no-confirm cargo-binstall@0.10.0 | grep -q -v 'cargo-binstall v0.10.0 is already installed'
 
 ## Test When 0.11.0 is installed but can be upgraded.
-"./$1" binstall --force --log-level debug --no-confirm cargo-binstall@0.11.0
+"./$1" binstall --no-confirm cargo-binstall@0.11.0
 "./$1" binstall --no-confirm cargo-binstall@0.11.0 | grep -q 'cargo-binstall v0.11.0 is already installed'
 "./$1" binstall --no-confirm cargo-binstall@^0.11.0 | grep -q -v 'cargo-binstall v0.11.0 is already installed'
