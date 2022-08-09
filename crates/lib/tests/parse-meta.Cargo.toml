@@ -1,0 +1,18 @@
+[package]
+name = "cargo-binstall-test"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+version = "1.2.3"
+
+[[bin]]
+name = "cargo-binstall"
+path = "src/main.rs"
+edition = "2021"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-fmt = "zip"
