@@ -2,8 +2,8 @@
 
 set -euxo pipefail
 
-bins="cargo-deb cargo-llvm-cov cargo-binstall"
-test_bins="cargo-deb cargo-llvm-cov"
+bins="cargo-llvm-cov cargo-binstall"
+test_bins="cargo-llvm-cov"
 
 unset CARGO_INSTALL_ROOT
 unset CARGO_HOME
