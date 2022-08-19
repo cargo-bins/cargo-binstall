@@ -1,4 +1,7 @@
-use std::process::{ExitCode, ExitStatus, Termination};
+use std::{
+    path::PathBuf,
+    process::{ExitCode, ExitStatus, Termination},
+};
 
 use compact_str::CompactString;
 use log::{error, warn};
@@ -265,6 +268,14 @@ pub enum BinstallError {
     )]
     NoViableTargets,
 
+    /// Bin file is not found.
+    ///
+    /// - Code: `binstall::binfile`
+    /// - Exit: 88
+    #[error("bin file {0} not found")]
+    #[diagnostic(severity(error), code(binstall::binfile))]
+    BinFileNotFound(PathBuf),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
     CrateContext {
@@ -298,6 +309,7 @@ impl BinstallError {
             OverrideOptionUsedWithMultiInstall { .. } => 85,
             UnspecifiedBinaries => 86,
             NoViableTargets => 87,
+            BinFileNotFound(_) => 88,
             CrateContext { error, .. } => error.exit_number(),
         };
 
