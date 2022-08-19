@@ -79,7 +79,10 @@ impl BinFile {
     }
 
     pub fn install_bin(&self) -> Result<(), BinstallError> {
-        // TODO: check if file already exists
+        if !self.source.try_exists()? {
+            return Err(BinstallError::BinFileNotFound(self.source.clone()));
+        }
+
         debug!(
             "Atomically install file from '{}' to '{}'",
             self.source.display(),

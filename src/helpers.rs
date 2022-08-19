@@ -271,8 +271,8 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
         dst.display()
     );
 
-    if fs::rename(src, dst).is_err() {
-        debug!("Attempting at atomically failed, fallback to creating tempfile.");
+    if let Err(err) = fs::rename(src, dst) {
+        debug!("Attempting at atomically failed: {err:#?}, fallback to creating tempfile.");
         // src and dst is not on the same filesystem/mountpoint.
         // Fallback to creating NamedTempFile on the parent dir of
         // dst.
