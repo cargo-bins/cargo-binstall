@@ -79,7 +79,7 @@ impl BinFile {
     }
 
     pub fn install_bin(&self) -> Result<(), BinstallError> {
-        if !self.source.exists() {
+        if !self.source.try_exists()? {
             return Err(BinstallError::BinFileNotFound(self.source.clone()));
         }
 
