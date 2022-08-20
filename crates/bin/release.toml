@@ -13,4 +13,3 @@ search = "^		version=\"[\\d.]+[.]0\""
 replace = "		version=\"{{version}}.0\""
 prerelease = false
 max = 1
-
