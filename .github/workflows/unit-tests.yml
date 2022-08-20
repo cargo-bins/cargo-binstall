@@ -27,7 +27,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Configure toolchain
       run: |
-        rustup toolchain install --profile minimal --no-self-update nightly
+        rustup toolchain install nightly --component rustfmt,clippy --no-self-update --profile minimal
         rustup default nightly
 
     - name: Configure caching
@@ -53,3 +53,9 @@ jobs:
     - name: Test (Windows)
       if: matrix.os == 'windows'
       run: cargo test --no-default-features --features native-tls
+
+    - name: fmt
+      run: cargo fmt --all --check
+
+    - name: clippy
+      run: cargo clippy --no-deps -- -D clippy::all
