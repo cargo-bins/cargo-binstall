@@ -3,9 +3,9 @@
 use std::{borrow, cmp, hash};
 
 use compact_str::CompactString;
-use reqwest::Url;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::helpers::statics::cratesio_url;
 
