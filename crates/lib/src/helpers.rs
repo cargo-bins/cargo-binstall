@@ -19,37 +19,26 @@ use tinytemplate::TinyTemplate;
 use tokio::task::block_in_place;
 use url::Url;
 
-mod async_extracter;
-pub use async_extracter::*;
-
-mod auto_abort_join_handle;
-pub use auto_abort_join_handle::AutoAbortJoinHandle;
-
-mod ui_thread;
-pub use ui_thread::UIThread;
-
-mod extracter;
-mod stream_readable;
-
-mod jobserver_client;
-pub use jobserver_client::*;
-
-mod tls_version;
-pub use tls_version::TLSVersion;
-
-mod crate_name;
-pub use crate_name::CrateName;
-
-mod signal;
-pub use signal::cancel_on_user_sig_term;
-
-mod version;
-pub use version::VersionReqExt;
+pub mod async_extracter;
+pub mod auto_abort_join_handle;
+pub mod crate_name;
+pub mod extracter;
+pub mod jobserver_client;
+pub mod signal;
+pub mod stream_readable;
+pub mod tls_version;
+pub mod ui_thread;
+pub mod version_ext;
 
 use crate::{
     errors::BinstallError,
+    helpers::async_extracter::{
+        extract_bin, extract_tar_based_stream, extract_tar_based_stream_and_visit, extract_zip,
+    },
     manifests::cargo_toml_binstall::{Meta, PkgFmt, PkgFmtDecomposed, TarBasedFmt},
 };
+
+use self::async_extracter::TarEntriesVisitor;
 
 pub fn cargo_home() -> Result<&'static Path, io::Error> {
     static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();

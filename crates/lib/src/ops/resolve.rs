@@ -15,7 +15,7 @@ use crate::{
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
     fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
-    helpers::{load_manifest_path, CrateName},
+    helpers::{crate_name::CrateName, load_manifest_path},
     manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
 

@@ -8,7 +8,7 @@ use reqwest::Client;
 
 use crate::{
     errors::BinstallError,
-    helpers::AutoAbortJoinHandle,
+    helpers::auto_abort_join_handle::AutoAbortJoinHandle,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 

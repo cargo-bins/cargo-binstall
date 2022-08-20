@@ -3,7 +3,8 @@ use std::io;
 use futures_util::future::pending;
 use tokio::signal;
 
-use super::{AutoAbortJoinHandle, BinstallError};
+use super::auto_abort_join_handle::AutoAbortJoinHandle;
+use crate::errors::BinstallError;
 
 /// This function will poll the handle while listening for ctrl_c,
 /// `SIGINT`, `SIGHUP`, `SIGTERM` and `SIGQUIT`.

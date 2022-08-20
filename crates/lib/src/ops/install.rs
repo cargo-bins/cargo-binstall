@@ -10,7 +10,7 @@ use crate::{
     bins,
     errors::BinstallError,
     fetchers::Fetcher,
-    helpers::LazyJobserverClient,
+    helpers::jobserver_client::LazyJobserverClient,
     manifests::{
         cargo_toml_binstall::Meta,
         crate_info::{CrateInfo, CrateSource},

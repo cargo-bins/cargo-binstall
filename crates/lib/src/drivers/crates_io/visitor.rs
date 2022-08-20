@@ -10,7 +10,8 @@ use tar::Entries;
 
 use super::vfs::Vfs;
 use crate::{
-    errors::BinstallError, helpers::TarEntriesVisitor, manifests::cargo_toml_binstall::Meta,
+    errors::BinstallError, helpers::async_extracter::TarEntriesVisitor,
+    manifests::cargo_toml_binstall::Meta,
 };
 
 #[derive(Debug)]
