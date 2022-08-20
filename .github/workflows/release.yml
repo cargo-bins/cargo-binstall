@@ -64,7 +64,7 @@ jobs:
       run: .github/scripts/pack-release-archives.sh
 
     - name: Publish release
-      uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
+      uses: softprops/action-gh-release@1e07f4398721186383de40550babbdf2b84acfc5
       with:
         tag_name: ${{ needs.info.outputs.version }}
         name: ${{ needs.info.outputs.version }}
