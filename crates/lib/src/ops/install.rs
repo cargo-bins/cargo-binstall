@@ -161,7 +161,7 @@ async fn install_from_source(
         .arg("--version")
         .arg(package.version)
         .arg("--target")
-        .arg(&*target);
+        .arg(target);
 
     if quiet {
         cmd.arg("--quiet");
