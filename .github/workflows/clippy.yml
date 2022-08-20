@@ -29,9 +29,10 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: ${{ runner.os }}-unit-tests-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-clippy-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-unit-tests
+          ${{ runner.os }}-unit-tests-${{ hashFiles('**/Cargo.lock') }}
 
     - name: fmt
       run: cargo fmt --all --check
