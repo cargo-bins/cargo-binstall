@@ -7,7 +7,8 @@ use serde::Serialize;
 
 use crate::{
     errors::BinstallError,
-    helpers::{atomic_install, atomic_symlink_file, Template},
+    fs::{atomic_install, atomic_symlink_file},
+    helpers::Template,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 

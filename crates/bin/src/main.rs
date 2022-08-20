@@ -11,8 +11,8 @@ use std::{
 use binstall::{
     errors::BinstallError,
     helpers::{
-        auto_abort_join_handle::AutoAbortJoinHandle, create_reqwest_client, get_install_path,
-        jobserver_client::LazyJobserverClient, signal::cancel_on_user_sig_term,
+        create_reqwest_client, get_install_path, jobserver_client::LazyJobserverClient,
+        signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle,
     },
     manifests::{
         binstall_crates_v1::Records,

@@ -19,7 +19,7 @@ use miette::Diagnostic;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::helpers::{create_if_not_exist, statics::cargo_home};
+use crate::{fs::create_if_not_exist, helpers::statics::cargo_home};
 
 use super::crate_info::CrateInfo;
 
