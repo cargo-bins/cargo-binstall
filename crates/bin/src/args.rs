@@ -244,7 +244,7 @@ pub fn parse() -> Result<Args, BinstallError> {
         };
 
         if !option.is_empty() {
-            return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
+            return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option });
         }
     }
 

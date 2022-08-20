@@ -99,7 +99,7 @@ impl CratesToml {
         }
 
         file.rewind()?;
-        c1.write_to_file(&mut *file)?;
+        c1.write_to_file(&mut file)?;
 
         Ok(())
     }
