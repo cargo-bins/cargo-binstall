@@ -136,12 +136,11 @@ mod linux {
     pub(super) async fn detect_targets_linux() -> Vec<String> {
         let (abi, libc) = parse_abi_and_libc();
 
-        match libc {
+        if Libc::Glibc = libc {
             // Glibc can only be dynamically linked.
             // If we can run this binary, then it means that the target
             // supports both glibc and musl.
-            Libc::Glibc => return create_targets_str(&["gnu", "musl"], abi),
-            _ => (),
+            return create_targets_str(&["gnu", "musl"], abi);
         }
 
         if let Ok(Output {
