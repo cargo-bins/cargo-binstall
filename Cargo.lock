@@ -171,7 +171,6 @@ dependencies = [
  "clap",
  "crates_io_api",
  "embed-resource",
- "guess_host_triple",
  "log",
  "miette",
  "mimalloc",

@@ -15,7 +15,6 @@ pub mod bins;
 pub mod ops;
 pub mod fetchers;
 pub mod metafiles;
-pub mod wasi;
 
 mod target;
 pub use target::*;

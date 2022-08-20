@@ -1,6 +1,6 @@
 use std::process::exit;
 
-use cargo_binstall::wasi::detect_wasi_runability;
+use detect_wasi::detect_wasi_runability;
 
 fn main() {
     if detect_wasi_runability().unwrap() {

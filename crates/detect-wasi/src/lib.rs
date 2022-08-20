@@ -1,10 +1,8 @@
-use std::{fs::File, io::Write, process::Command};
+use std::{fs::File, io::{Write, Result}, process::Command};
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
 use tempfile::tempdir;
-
-use crate::errors::BinstallError;
 
 const WASI_PROGRAM: &[u8] = include_bytes!("miniwasi.wasm");
 
@@ -21,7 +19,7 @@ const WASI_PROGRAM: &[u8] = include_bytes!("miniwasi.wasm");
 /// ```plain
 /// :wasi:M::\x00asm::/usr/bin/wasmtime:
 /// ```
-pub fn detect_wasi_runability() -> Result<bool, BinstallError> {
+pub fn detect_wasi_runability() -> Result<bool> {
     let progdir = tempdir()?;
     let prog = progdir.path().join("miniwasi.wasm");
 
