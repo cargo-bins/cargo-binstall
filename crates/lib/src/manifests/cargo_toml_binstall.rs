@@ -30,7 +30,7 @@ pub struct Meta {
 /// Metadata for binary installation use.
 ///
 /// Exposed via `[package.metadata]` in `Cargo.toml`
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgMeta {
     /// URL template for package downloads
@@ -79,7 +79,7 @@ impl PkgMeta {
 /// Target specific overrides for binary installation
 ///
 /// Exposed via `[package.metadata.TARGET]` in `Cargo.toml`
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgOverride {
     /// URL template override for package downloads
@@ -92,7 +92,7 @@ pub struct PkgOverride {
     pub bin_dir: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct BinMeta {
     /// Binary name
