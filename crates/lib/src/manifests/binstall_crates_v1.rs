@@ -1,93 +1,26 @@
+//! Binstall's `crates-v1.json` manifest.
+//!
+//! This manifest is used by Binstall to record which crates were installed, and may be used by
+//! other (third party) tooling to act upon these crates (e.g. upgrade them, list them, etc).
+//!
+//! The format is a series of JSON object concatenated together. It is _not_ NLJSON, though writing
+//! NLJSON to the file will be understood fine.
+
 use std::{
-    borrow, cmp,
     collections::{btree_set, BTreeSet},
-    fs, hash,
+    fs,
     io::{self, Seek, Write},
     iter::{IntoIterator, Iterator},
     path::{Path, PathBuf},
 };
 
-use compact_str::CompactString;
 use miette::Diagnostic;
-use semver::Version;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
-use url::Url;
 
-use crate::{cargo_home, cratesio_url, create_if_not_exist, FileLock};
+use crate::helpers::{cargo_home, create_if_not_exist, FileLock};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MetaData {
-    pub name: CompactString,
-    pub version_req: CompactString,
-    pub current_version: Version,
-    pub source: Source,
-    pub target: CompactString,
-    pub bins: Vec<CompactString>,
-
-    /// Forwards compatibility. Unknown keys from future versions
-    /// will be stored here and retained when the file is saved.
-    ///
-    /// We use an `Vec` here since it is never accessed in Rust.
-    #[serde(flatten, with = "tuple_vec_map")]
-    pub other: Vec<(CompactString, serde_json::Value)>,
-}
-
-impl borrow::Borrow<str> for MetaData {
-    fn borrow(&self) -> &str {
-        &self.name
-    }
-}
-
-impl PartialEq for MetaData {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-impl Eq for MetaData {}
-
-impl PartialOrd for MetaData {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.name.partial_cmp(&other.name)
-    }
-}
-
-impl Ord for MetaData {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.name.cmp(&other.name)
-    }
-}
-
-impl hash::Hash for MetaData {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: hash::Hasher,
-    {
-        self.name.hash(state)
-    }
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub enum SourceType {
-    Git,
-    Path,
-    Registry,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Source {
-    pub source_type: SourceType,
-    pub url: Url,
-}
-
-impl Source {
-    pub fn cratesio_registry() -> Source {
-        Self {
-            source_type: SourceType::Registry,
-            url: cratesio_url().clone(),
-        }
-    }
-}
+use super::crate_info::CrateInfo;
 
 #[derive(Debug, Diagnostic, Error)]
 pub enum Error {
@@ -100,7 +33,7 @@ pub enum Error {
 
 pub fn append_to_path<Iter>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Error>
 where
-    Iter: IntoIterator<Item = MetaData>,
+    Iter: IntoIterator<Item = CrateInfo>,
 {
     let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
     // Move the cursor to EOF
@@ -111,14 +44,14 @@ where
 
 pub fn append<Iter>(iter: Iter) -> Result<(), Error>
 where
-    Iter: IntoIterator<Item = MetaData>,
+    Iter: IntoIterator<Item = CrateInfo>,
 {
     append_to_path(default_path()?, iter)
 }
 
 pub fn write_to(
     file: &mut FileLock,
-    iter: &mut dyn Iterator<Item = MetaData>,
+    iter: &mut dyn Iterator<Item = CrateInfo>,
 ) -> Result<(), Error> {
     let writer = io::BufWriter::with_capacity(512, file);
 
@@ -145,7 +78,7 @@ pub fn default_path() -> Result<PathBuf, Error> {
 pub struct Records {
     file: FileLock,
     /// Use BTreeSet to dedup the metadata
-    data: BTreeSet<MetaData>,
+    data: BTreeSet<CrateInfo>,
 }
 
 impl Records {
@@ -186,7 +119,7 @@ impl Records {
         Ok(())
     }
 
-    pub fn get(&self, value: impl AsRef<str>) -> Option<&MetaData> {
+    pub fn get(&self, value: impl AsRef<str>) -> Option<&CrateInfo> {
         self.data.get(value.as_ref())
     }
 
@@ -198,11 +131,11 @@ impl Records {
     /// If the set did not have an equal element present, true is returned.
     /// If the set did have an equal element present, false is returned,
     /// and the entry is not updated.
-    pub fn insert(&mut self, value: MetaData) -> bool {
+    pub fn insert(&mut self, value: CrateInfo) -> bool {
         self.data.insert(value)
     }
 
-    pub fn replace(&mut self, value: MetaData) -> Option<MetaData> {
+    pub fn replace(&mut self, value: CrateInfo) -> Option<CrateInfo> {
         self.data.replace(value)
     }
 
@@ -210,7 +143,7 @@ impl Records {
         self.data.remove(value.as_ref())
     }
 
-    pub fn take(&mut self, value: impl AsRef<str>) -> Option<MetaData> {
+    pub fn take(&mut self, value: impl AsRef<str>) -> Option<CrateInfo> {
         self.data.take(value.as_ref())
     }
 
@@ -224,9 +157,9 @@ impl Records {
 }
 
 impl<'a> IntoIterator for &'a Records {
-    type Item = &'a MetaData;
+    type Item = &'a CrateInfo;
 
-    type IntoIter = btree_set::Iter<'a, MetaData>;
+    type IntoIter = btree_set::Iter<'a, CrateInfo>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.data.iter()
@@ -236,8 +169,10 @@ impl<'a> IntoIterator for &'a Records {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::target::TARGET;
+    use crate::{manifests::crate_info::CrateSource, target::TARGET};
 
+    use compact_str::CompactString;
+    use semver::Version;
     use tempfile::NamedTempFile;
 
     macro_rules! assert_records_eq {
@@ -257,29 +192,29 @@ mod test {
         let path = named_tempfile.path();
 
         let metadata_vec = [
-            MetaData {
+            CrateInfo {
                 name: "a".into(),
                 version_req: "*".into(),
                 current_version: Version::new(0, 1, 0),
-                source: Source::cratesio_registry(),
+                source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
                 other: Default::default(),
             },
-            MetaData {
+            CrateInfo {
                 name: "b".into(),
                 version_req: "0.1.0".into(),
                 current_version: Version::new(0, 1, 0),
-                source: Source::cratesio_registry(),
+                source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
                 other: Default::default(),
             },
-            MetaData {
+            CrateInfo {
                 name: "a".into(),
                 version_req: "*".into(),
                 current_version: Version::new(0, 2, 0),
-                source: Source::cratesio_registry(),
+                source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into()],
                 other: Default::default(),
@@ -306,11 +241,11 @@ mod test {
         // Drop the exclusive file lock
         drop(records);
 
-        let new_metadata = MetaData {
+        let new_metadata = CrateInfo {
             name: "b".into(),
             version_req: "0.1.0".into(),
             current_version: Version::new(0, 1, 1),
-            source: Source::cratesio_registry(),
+            source: CrateSource::cratesio_registry(),
             target,
             bins: vec!["1".into(), "2".into()],
             other: Default::default(),

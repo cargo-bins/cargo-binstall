@@ -1,5 +1,7 @@
-use std::cmp::min;
-use std::io::{self, BufRead, Read};
+use std::{
+    cmp::min,
+    io::{self, BufRead, Read},
+};
 
 use bytes::{Buf, Bytes};
 use futures_util::stream::{Stream, StreamExt};

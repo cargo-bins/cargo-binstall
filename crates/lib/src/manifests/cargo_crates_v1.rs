@@ -1,3 +1,12 @@
+//! Cargo's `.crates.toml` manifest.
+//!
+//! This manifest is used by Cargo to record which crates were installed by `cargo-install` and by
+//! other Cargo (first and third party) tooling to act upon these crates (e.g. upgrade them, list
+//! them, etc).
+//!
+//! Binstall writes to this manifest when installing a crate, for interoperability with the Cargo
+//! ecosystem.
+
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -11,8 +20,12 @@ use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{binstall_v1::MetaData, CrateVersionSource};
-use crate::{cargo_home, create_if_not_exist, FileLock};
+use crate::helpers::{cargo_home, create_if_not_exist, FileLock};
+
+use super::crate_info::CrateInfo;
+
+mod crate_version_source;
+use crate_version_source::*;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
@@ -71,7 +84,7 @@ impl CratesToml {
         iter: Iter,
     ) -> Result<(), CratesTomlParseError>
     where
-        Iter: IntoIterator<Item = &'a MetaData>,
+        Iter: IntoIterator<Item = &'a CrateInfo>,
     {
         let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
         let mut c1 = if file.metadata()?.len() != 0 {
@@ -92,7 +105,7 @@ impl CratesToml {
 
     pub fn append<'a, Iter>(iter: Iter) -> Result<(), CratesTomlParseError>
     where
-        Iter: IntoIterator<Item = &'a MetaData>,
+        Iter: IntoIterator<Item = &'a CrateInfo>,
     {
         Self::append_to_path(Self::default_path()?, iter)
     }
@@ -110,13 +123,13 @@ pub enum CratesTomlParseError {
     TomlWrite(#[from] toml_edit::easy::ser::Error),
 
     #[error(transparent)]
-    CvsParse(#[from] super::CvsParseError),
+    CvsParse(#[from] CvsParseError),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{super::binstall_v1, *};
-    use crate::target::TARGET;
+    use super::*;
+    use crate::{manifests::crate_info::CrateSource, target::TARGET};
 
     use semver::Version;
     use tempfile::TempDir;
@@ -128,11 +141,11 @@ mod tests {
 
         CratesToml::append_to_path(
             &path,
-            &[MetaData {
+            &[CrateInfo {
                 name: "cargo-binstall".into(),
                 version_req: "*".into(),
                 current_version: Version::new(0, 11, 1),
-                source: binstall_v1::Source::cratesio_registry(),
+                source: CrateSource::cratesio_registry(),
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
                 other: Default::default(),

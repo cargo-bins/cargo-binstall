@@ -1,6 +1,8 @@
-use std::collections::{hash_map::HashMap, hash_set::HashSet};
-use std::io;
-use std::path::Path;
+use std::{
+    collections::{hash_map::HashMap, hash_set::HashSet},
+    io,
+    path::Path,
+};
 
 use cargo_toml::AbstractFilesystem;
 

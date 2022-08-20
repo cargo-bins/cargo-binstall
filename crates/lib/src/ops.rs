@@ -1,14 +1,13 @@
+//! Concrete Binstall operations.
+
 use std::path::PathBuf;
 
 use semver::VersionReq;
 
-use crate::{metafiles::binstall_v1::MetaData, DesiredTargets, PkgOverride};
+use crate::{manifests::cargo_toml_binstall::PkgOverride, target::DesiredTargets};
 
-mod resolve;
-pub use resolve::*;
-
-mod install;
-pub use install::*;
+pub mod install;
+pub mod resolve;
 
 pub struct Options {
     pub no_symlinks: bool,

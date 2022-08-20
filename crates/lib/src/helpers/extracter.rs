@@ -1,6 +1,8 @@
-use std::fs::File;
-use std::io::{self, BufRead, Read};
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{self, BufRead, Read},
+    path::Path,
+};
 
 use bzip2::bufread::BzDecoder;
 use flate2::bufread::GzDecoder;
@@ -10,7 +12,7 @@ use xz2::bufread::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
-use crate::{BinstallError, TarBasedFmt};
+use crate::{errors::BinstallError, manifests::cargo_toml_binstall::TarBasedFmt};
 
 pub(super) fn create_tar_decoder(
     dat: impl BufRead + 'static,
@@ -24,9 +26,8 @@ pub(super) fn create_tar_decoder(
         Tgz => Box::new(GzDecoder::new(dat)),
         Txz => Box::new(XzDecoder::new(dat)),
         Tzstd => {
-            // The error can only come from raw::Decoder::with_dictionary
-            // as of zstd 0.10.2 and 0.11.2, which is specified
-            // as &[] by ZstdDecoder::new, thus ZstdDecoder::new
+            // The error can only come from raw::Decoder::with_dictionary as of zstd 0.10.2 and
+            // 0.11.2, which is specified as `&[]` by `ZstdDecoder::new`, thus `ZstdDecoder::new`
             // should not return any error.
             Box::new(ZstdDecoder::with_buffer(dat)?)
         }

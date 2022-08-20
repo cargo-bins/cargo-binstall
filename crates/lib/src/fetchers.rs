@@ -1,5 +1,4 @@
-use std::path::Path;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
 pub use gh_crate_meta::*;
@@ -7,7 +6,11 @@ pub use log::debug;
 pub use quickinstall::*;
 use reqwest::Client;
 
-use crate::{AutoAbortJoinHandle, BinstallError, PkgFmt, PkgMeta};
+use crate::{
+    errors::BinstallError,
+    helpers::AutoAbortJoinHandle,
+    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
+};
 
 mod gh_crate_meta;
 mod quickinstall;

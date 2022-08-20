@@ -8,14 +8,26 @@ use std::{
     time::{Duration, Instant},
 };
 
+use binstall::{
+    errors::BinstallError,
+    helpers::{
+        cancel_on_user_sig_term, create_reqwest_client, get_install_path, parse_version,
+        AutoAbortJoinHandle, CrateName, LazyJobserverClient, TLSVersion, UIThread, VersionReqExt,
+    },
+    manifests::{
+        binstall_crates_v1::Records,
+        cargo_crates_v1::CratesToml,
+        cargo_toml_binstall::{PkgFmt, PkgOverride},
+    },
+    ops::{self, resolve::Resolution},
+    target::get_desired_targets,
+};
 use clap::{builder::PossibleValue, AppSettings, Parser};
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use semver::VersionReq;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::{runtime::Runtime, task::block_in_place};
-
-use binstall::{ops, *};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -338,7 +350,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         // Load metadata
         let metadata = if !custom_install_path {
             debug!("Reading binstall/crates-v1.json");
-            Some(metafiles::binstall_v1::Records::load()?)
+            Some(Records::load()?)
         } else {
             None
         };
@@ -411,7 +423,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         let tasks: Vec<_> = crate_names
             .into_iter()
             .map(|(crate_name, current_version)| {
-                AutoAbortJoinHandle::spawn(ops::resolve(
+                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
                     binstall_opts.clone(),
                     crate_name,
                     current_version,
@@ -427,7 +439,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         let mut resolutions = Vec::with_capacity(tasks.len());
         for task in tasks {
             match task.await?? {
-                ops::Resolution::AlreadyUpToDate => {}
+                Resolution::AlreadyUpToDate => {}
                 res => resolutions.push(res),
             }
         }
@@ -443,7 +455,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
         resolutions
             .into_iter()
             .map(|resolution| {
-                AutoAbortJoinHandle::spawn(ops::install(
+                AutoAbortJoinHandle::spawn(ops::install::install(
                     resolution,
                     binstall_opts.clone(),
                     jobserver_client.clone(),
@@ -463,7 +475,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                 let install_path = install_path.clone();
 
                 AutoAbortJoinHandle::spawn(async move {
-                    let resolution = ops::resolve(
+                    let resolution = ops::resolve::resolve(
                         opts.clone(),
                         crate_name,
                         current_version,
@@ -474,7 +486,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
                     )
                     .await?;
 
-                    ops::install(resolution, opts, jobserver_client).await
+                    ops::install::install(resolution, opts, jobserver_client).await
                 })
             })
             .collect()
@@ -494,7 +506,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
             // create .cargo.
 
             debug!("Writing .crates.toml");
-            metafiles::v1::CratesToml::append(metadata_vec.iter())?;
+            CratesToml::append(metadata_vec.iter())?;
 
             debug!("Writing binstall/crates-v1.json");
             for metadata in metadata_vec {

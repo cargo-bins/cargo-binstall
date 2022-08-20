@@ -12,8 +12,11 @@ use semver::{Version, VersionReq};
 use super::Options;
 use crate::{
     bins,
+    drivers::fetch_crate_cratesio,
+    errors::BinstallError,
     fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
-    BinstallError, *,
+    helpers::{load_manifest_path, CrateName},
+    manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
 
 pub enum Resolution {

@@ -1,11 +1,9 @@
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::thread::available_parallelism;
+use std::{num::NonZeroUsize, sync::Arc, thread::available_parallelism};
 
 use jobserver::Client;
 use tokio::sync::OnceCell;
 
-use crate::BinstallError;
+use crate::errors::BinstallError;
 
 #[derive(Clone)]
 pub struct LazyJobserverClient(Arc<OnceCell<Client>>);

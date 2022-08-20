@@ -1,5 +1,4 @@
-use std::path::Path;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
 use log::debug;
@@ -8,8 +7,13 @@ use reqwest::Method;
 use tokio::task::JoinHandle;
 use url::Url;
 
+use crate::{
+    errors::BinstallError,
+    helpers::{download_and_extract, remote_exists},
+    manifests::cargo_toml_binstall::PkgFmt,
+};
+
 use super::Data;
-use crate::{download_and_extract, remote_exists, BinstallError, PkgFmt};
 
 const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";

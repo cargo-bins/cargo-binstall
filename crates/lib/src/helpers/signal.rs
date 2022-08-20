@@ -1,5 +1,6 @@
-use futures_util::future::pending;
 use std::io;
+
+use futures_util::future::pending;
 use tokio::signal;
 
 use super::{AutoAbortJoinHandle, BinstallError};

@@ -1,6 +1,4 @@
-use std::fs::File;
-use std::io;
-use std::ops;
+use std::{fs::File, io, ops};
 
 use fs4::FileExt;
 

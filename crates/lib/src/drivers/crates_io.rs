@@ -7,8 +7,13 @@ use reqwest::Client;
 use semver::VersionReq;
 use url::Url;
 
+use crate::{
+    errors::BinstallError,
+    helpers::download_tar_based_and_visit,
+    manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
+};
+
 use super::find_version;
-use crate::{helpers::*, BinstallError, Meta, TarBasedFmt};
 
 mod vfs;
 

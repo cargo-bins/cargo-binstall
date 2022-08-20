@@ -5,14 +5,23 @@ use compact_str::CompactString;
 use log::{debug, error, info};
 use tokio::{process::Command, task::block_in_place};
 
-use super::{MetaData, Options, Resolution};
-use crate::{bins, fetchers::Fetcher, metafiles::binstall_v1::Source, BinstallError, *};
+use super::{resolve::Resolution, Options};
+use crate::{
+    bins,
+    errors::BinstallError,
+    fetchers::Fetcher,
+    helpers::LazyJobserverClient,
+    manifests::{
+        cargo_toml_binstall::Meta,
+        crate_info::{CrateInfo, CrateSource},
+    },
+};
 
 pub async fn install(
     resolution: Resolution,
     opts: Arc<Options>,
     jobserver_client: LazyJobserverClient,
-) -> Result<Option<MetaData>, BinstallError> {
+) -> Result<Option<CrateInfo>, BinstallError> {
     match resolution {
         Resolution::AlreadyUpToDate => Ok(None),
         Resolution::Fetch {
@@ -36,11 +45,11 @@ pub async fn install(
             install_from_package(fetcher, opts, bin_path, bin_files)
                 .await
                 .map(|option| {
-                    option.map(|bins| MetaData {
+                    option.map(|bins| CrateInfo {
                         name,
                         version_req,
                         current_version,
-                        source: Source::cratesio_registry(),
+                        source: CrateSource::cratesio_registry(),
                         target,
                         bins,
                         other: Default::default(),

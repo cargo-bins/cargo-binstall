@@ -1,21 +1,9 @@
-//! # Advantages
-//!
-//! Using this mod has the following advantages over downloading
-//! to file then extracting:
-//!
-//!  - The code is pipelined instead of storing the downloaded file in memory
-//!    and extract it, except for `PkgFmt::Zip`, since `ZipArchiver::new`
-//!    requires `std::io::Seek`, so it fallbacks to writing the a file then
-//!    unzip it.
-//!  - Compressing/writing which takes a lot of CPU time will not block
-//!    the runtime anymore.
-//!  - For all `tar` based formats, it can extract only specified files and
-//!    process them in memory, without any disk I/O.
-
-use std::fmt::Debug;
-use std::fs;
-use std::io::{copy, Read, Seek};
-use std::path::Path;
+use std::{
+    fmt::Debug,
+    fs,
+    io::{copy, Read, Seek},
+    path::Path,
+};
 
 use bytes::Bytes;
 use futures_util::stream::Stream;
@@ -25,8 +13,9 @@ use tar::Entries;
 use tempfile::tempfile;
 use tokio::task::block_in_place;
 
+use crate::{errors::BinstallError, manifests::cargo_toml_binstall::TarBasedFmt};
+
 use super::{extracter::*, stream_readable::StreamReadable};
-use crate::{BinstallError, TarBasedFmt};
 
 pub async fn extract_bin<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
 where

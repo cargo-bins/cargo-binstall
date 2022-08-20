@@ -1,7 +1,7 @@
 use log::debug;
 use semver::VersionReq;
 
-use crate::BinstallError;
+use crate::errors::BinstallError;
 
 pub(super) trait Version {
     /// Return `None` on error.

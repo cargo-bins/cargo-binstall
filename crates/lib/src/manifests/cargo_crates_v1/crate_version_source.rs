@@ -7,7 +7,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use crate::cratesio_url;
+use crate::{
+    helpers::cratesio_url,
+    manifests::crate_info::{CrateInfo, CrateSource, SourceType},
+};
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CrateVersionSource {
@@ -16,8 +19,8 @@ pub struct CrateVersionSource {
     pub source: Source,
 }
 
-impl From<&super::binstall_v1::MetaData> for CrateVersionSource {
-    fn from(metadata: &super::binstall_v1::MetaData) -> Self {
+impl From<&CrateInfo> for CrateVersionSource {
+    fn from(metadata: &CrateInfo) -> Self {
         super::CrateVersionSource {
             name: metadata.name.clone(),
             version: metadata.current_version.clone(),
@@ -39,9 +42,9 @@ impl Source {
     }
 }
 
-impl From<&super::binstall_v1::Source> for Source {
-    fn from(source: &super::binstall_v1::Source) -> Self {
-        use super::binstall_v1::SourceType::*;
+impl From<&CrateSource> for Source {
+    fn from(source: &CrateSource) -> Self {
+        use SourceType::*;
 
         let url = source.url.clone();
 

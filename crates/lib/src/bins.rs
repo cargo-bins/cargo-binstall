@@ -5,7 +5,11 @@ use compact_str::CompactString;
 use log::debug;
 use serde::Serialize;
 
-use crate::{atomic_install, atomic_symlink_file, BinstallError, PkgFmt, PkgMeta, Template};
+use crate::{
+    errors::BinstallError,
+    helpers::{atomic_install, atomic_symlink_file, Template},
+    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
+};
 
 pub struct BinFile {
     pub base_name: CompactString,

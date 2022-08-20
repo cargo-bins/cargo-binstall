@@ -1,18 +1,19 @@
-use std::path::Path;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use log::{debug, warn};
 use once_cell::sync::OnceCell;
-use reqwest::Client;
-use reqwest::Method;
+use reqwest::{Client, Method};
 use serde::Serialize;
 use url::Url;
 
-use super::Data;
 use crate::{
-    download_and_extract, remote_exists, AutoAbortJoinHandle, BinstallError, PkgFmt, Template,
+    errors::BinstallError,
+    helpers::{download_and_extract, remote_exists, AutoAbortJoinHandle, Template},
+    manifests::cargo_toml_binstall::PkgFmt,
 };
+
+use super::Data;
 
 pub struct GhCrateMeta {
     client: Client,
@@ -151,8 +152,9 @@ impl<'c> Context<'c> {
 
 #[cfg(test)]
 mod test {
+    use crate::manifests::cargo_toml_binstall::{PkgFmt, PkgMeta};
+
     use super::{super::Data, Context};
-    use crate::{PkgFmt, PkgMeta};
     use url::Url;
 
     fn url(s: &str) -> Url {

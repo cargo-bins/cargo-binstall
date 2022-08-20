@@ -1,9 +1,10 @@
-use std::io::{BufRead, Cursor};
-use std::process::Output;
-use std::sync::Arc;
+use std::{
+    io::{BufRead, Cursor},
+    process::Output,
+    sync::Arc,
+};
 
-use tokio::process::Command;
-use tokio::sync::OnceCell;
+use tokio::{process::Command, sync::OnceCell};
 
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");

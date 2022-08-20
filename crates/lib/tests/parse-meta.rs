@@ -1,4 +1,4 @@
-use binstall::load_manifest_path;
+use binstall::helpers::load_manifest_path;
 use cargo_toml::Product;
 
 #[test]

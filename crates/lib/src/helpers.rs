@@ -1,10 +1,10 @@
-use std::env;
-use std::fmt::Debug;
-use std::fs;
-use std::io;
-use std::ops;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::{
+    env,
+    fmt::Debug,
+    fs, io, ops,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
@@ -18,8 +18,6 @@ use tempfile::NamedTempFile;
 use tinytemplate::TinyTemplate;
 use tokio::task::block_in_place;
 use url::Url;
-
-use crate::{BinstallError, Meta, PkgFmt, PkgFmtDecomposed, TarBasedFmt};
 
 mod async_extracter;
 pub use async_extracter::*;
@@ -53,6 +51,11 @@ pub use signal::cancel_on_user_sig_term;
 
 mod version;
 pub use version::VersionReqExt;
+
+use crate::{
+    errors::BinstallError,
+    manifests::cargo_toml_binstall::{Meta, PkgFmt, PkgFmtDecomposed, TarBasedFmt},
+};
 
 pub fn cargo_home() -> Result<&'static Path, io::Error> {
     static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();

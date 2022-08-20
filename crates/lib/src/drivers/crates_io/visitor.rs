@@ -1,5 +1,7 @@
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::{
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use cargo_toml::Manifest;
 use log::debug;
@@ -7,8 +9,9 @@ use tar::Entries;
 
 use super::vfs::Vfs;
 use crate::{
+    errors::BinstallError,
     helpers::{PathExt, TarEntriesVisitor},
-    BinstallError, Meta,
+    manifests::cargo_toml_binstall::Meta,
 };
 
 #[derive(Debug)]
