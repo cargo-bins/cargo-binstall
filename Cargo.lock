@@ -89,7 +89,7 @@ dependencies = [
  "dirs",
  "env_logger",
  "flate2",
- "fs4",
+ "flock",
  "futures-util",
  "guess_host_triple",
  "home",
@@ -349,6 +349,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "detect-wasi"
+version = "1.0.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "dirs"
 version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -460,6 +467,13 @@ dependencies = [
  "crc32fast",
  "libz-ng-sys",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flock"
+version = "1.0.0"
+dependencies = [
+ "fs4",
 ]
 
 [[package]]

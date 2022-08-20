@@ -19,7 +19,7 @@ compact_str = { version = "0.5.2", features = ["serde"] }
 crates_io_api = { version = "0.8.0", default-features = false }
 dirs = "4.0.0"
 flate2 = { version = "1.0.24", default-features = false }
-fs4 = "0.6.2"
+flock = { version = "1.0.0", path = "../flock" }
 futures-util = { version = "0.3.21", default-features = false }
 home = "0.5.3"
 itertools = "0.10.3"

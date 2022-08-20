@@ -14,11 +14,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use flock::FileLock;
 use miette::Diagnostic;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::helpers::{cargo_home, create_if_not_exist, FileLock};
+use crate::helpers::{cargo_home, create_if_not_exist};
 
 use super::crate_info::CrateInfo;
 

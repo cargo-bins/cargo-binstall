@@ -43,9 +43,6 @@ pub use tls_version::TLSVersion;
 mod crate_name;
 pub use crate_name::CrateName;
 
-mod flock;
-pub use flock::FileLock;
-
 mod signal;
 pub use signal::cancel_on_user_sig_term;
 

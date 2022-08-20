@@ -2,6 +2,8 @@
 members = [
     "crates/bin",
     "crates/lib",
+    "crates/detect-wasi",
+    "crates/flock",
 ]
 
 [profile.release]

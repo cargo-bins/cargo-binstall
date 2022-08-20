@@ -1,4 +1,8 @@
-use std::{fs::File, io::{Write, Result}, process::Command};
+use std::{
+    fs::File,
+    io::{Result, Write},
+    process::Command,
+};
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
