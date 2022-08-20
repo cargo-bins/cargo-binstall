@@ -24,7 +24,7 @@ jobs:
     name: unit tests on ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Configure toolchain
       run: |
         rustup toolchain install --profile minimal --no-self-update nightly
