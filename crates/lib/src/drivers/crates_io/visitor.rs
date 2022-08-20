@@ -5,13 +5,12 @@ use std::{
 
 use cargo_toml::Manifest;
 use log::debug;
+use normalize_path::NormalizePath;
 use tar::Entries;
 
 use super::vfs::Vfs;
 use crate::{
-    errors::BinstallError,
-    helpers::{PathExt, TarEntriesVisitor},
-    manifests::cargo_toml_binstall::Meta,
+    errors::BinstallError, helpers::TarEntriesVisitor, manifests::cargo_toml_binstall::Meta,
 };
 
 #[derive(Debug)]
@@ -41,7 +40,7 @@ impl TarEntriesVisitor for ManifestVisitor {
         for res in entries {
             let mut entry = res?;
             let path = entry.path()?;
-            let path = path.normalize_path();
+            let path = path.normalize();
 
             let path = if let Ok(path) = path.strip_prefix(&self.manifest_dir_path) {
                 path

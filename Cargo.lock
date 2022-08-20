@@ -97,6 +97,7 @@ dependencies = [
  "jobserver",
  "log",
  "miette",
+ "normalize-path",
  "once_cell",
  "reqwest",
  "scopeguard",
@@ -1009,6 +1010,10 @@ dependencies = [
  "security-framework-sys",
  "tempfile",
 ]
+
+[[package]]
+name = "normalize-path"
+version = "1.0.0"
 
 [[package]]
 name = "num-integer"

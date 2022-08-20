@@ -34,9 +34,6 @@ mod stream_readable;
 mod jobserver_client;
 pub use jobserver_client::*;
 
-mod path_ext;
-pub use path_ext::*;
-
 mod tls_version;
 pub use tls_version::TLSVersion;
 

@@ -1,14 +1,35 @@
-// Adapted from https://github.com/rust-lang/cargo/blob/fede83ccf973457de319ba6fa0e36ead454d2e20/src/cargo/util/paths.rs#L61
+//! Normalizes paths similarly to canonicalize, but without performing I/O.
+//!
+//! This is like Python's `os.path.normpath`.
+//!
+//! Initially adapted from [Cargo's implementation][cargo-paths].
+//!
+//! [cargo-paths]: https://github.com/rust-lang/cargo/blob/fede83ccf973457de319ba6fa0e36ead454d2e20/src/cargo/util/paths.rs#L61
+//!
+//! # Example
+//!
+//! ```
+//! use normalize_path::NormalizePath;
+//!
+//! assert_eq!(
+//!     Path::new("/A/foo/../B/./").normalize(),
+//!     Path::new("/A/B")
+//! );
+//! ```
 
 use std::{
     borrow::Cow,
     path::{Component, Path, PathBuf},
 };
 
-pub trait PathExt {
-    /// Similiar to `os.path.normpath`: It does not perform
-    /// any fs operation.
-    fn normalize_path(&self) -> Cow<'_, Path>;
+/// Extension trait to add `normalize_path` to std's [`Path`].
+pub trait NormalizePath {
+    /// Normalize a path without performing I/O.
+    ///
+    /// All redundant separator and up-level references are collapsed.
+    ///
+    /// However, this does not resolve links.
+    fn normalize(&self) -> Cow<'_, Path>;
 }
 
 fn is_normalized(path: &Path) -> bool {
@@ -24,8 +45,8 @@ fn is_normalized(path: &Path) -> bool {
     true
 }
 
-impl PathExt for Path {
-    fn normalize_path(&self) -> Cow<'_, Path> {
+impl NormalizePath for Path {
+    fn normalize(&self) -> Cow<'_, Path> {
         if is_normalized(self) {
             return Cow::Borrowed(self);
         }
