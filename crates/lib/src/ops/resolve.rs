@@ -3,11 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use cargo_toml::{Package, Product};
+use cargo_toml::{Manifest, Package, Product};
 use compact_str::{CompactString, ToCompactString};
 use log::{debug, info, warn};
 use reqwest::Client;
 use semver::{Version, VersionReq};
+use tokio::task::block_in_place;
 
 use super::Options;
 use crate::{
@@ -15,7 +16,6 @@ use crate::{
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
     fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
-    helpers::load_manifest_path,
     manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
 
@@ -274,4 +274,31 @@ fn collect_bin_files(
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     Ok(bin_files)
+}
+
+/// Load binstall metadata from the crate `Cargo.toml` at the provided path
+pub fn load_manifest_path<P: AsRef<Path>>(
+    manifest_path: P,
+) -> Result<Manifest<Meta>, BinstallError> {
+    block_in_place(|| {
+        let manifest_path = manifest_path.as_ref();
+        let manifest_path = if manifest_path.is_dir() {
+            manifest_path.join("Cargo.toml")
+        } else if manifest_path.is_file() {
+            manifest_path.into()
+        } else {
+            return Err(BinstallError::CargoManifestPath);
+        };
+
+        debug!(
+            "Reading manifest at local path: {}",
+            manifest_path.display()
+        );
+
+        // Load and parse manifest (this checks file system for binary output names)
+        let manifest = Manifest::<Meta>::from_path_with_metadata(manifest_path)?;
+
+        // Return metadata
+        Ok(manifest)
+    })
 }

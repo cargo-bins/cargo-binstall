@@ -4,11 +4,11 @@ use cargo_toml::Product;
 use compact_str::CompactString;
 use log::debug;
 use serde::Serialize;
+use tinytemplate::TinyTemplate;
 
 use crate::{
     errors::BinstallError,
     fs::{atomic_install, atomic_symlink_file},
-    helpers::Template,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -153,4 +153,10 @@ struct Context<'c> {
     pub binary_ext: &'c str,
 }
 
-impl<'c> Template for Context<'c> {}
+impl<'c> Context<'c> {
+    fn render(&self, template: &str) -> Result<String, BinstallError> {
+        let mut tt = TinyTemplate::new();
+        tt.add_template("path", template)?;
+        Ok(tt.render("path", self)?)
+    }
+}

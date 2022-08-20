@@ -5,13 +5,12 @@ use log::{debug, warn};
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Method};
 use serde::Serialize;
+use tinytemplate::TinyTemplate;
 use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{
-        download::download_and_extract, remote_exists, tasks::AutoAbortJoinHandle, Template,
-    },
+    helpers::{download::download_and_extract, remote::remote_exists, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::PkgFmt,
 };
 
@@ -127,8 +126,6 @@ struct Context<'c> {
     pub binary_ext: &'c str,
 }
 
-impl<'c> Template for Context<'c> {}
-
 impl<'c> Context<'c> {
     pub(self) fn from_data(data: &'c Data, archive_format: &'c str) -> Self {
         Self {
@@ -148,7 +145,10 @@ impl<'c> Context<'c> {
 
     pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
         debug!("Render {template:?} using context: {:?}", self);
-        Ok(Url::parse(&self.render(template)?)?)
+
+        let mut tt = TinyTemplate::new();
+        tt.add_template("path", template)?;
+        Ok(Url::parse(&tt.render("path", self)?)?)
     }
 }
 

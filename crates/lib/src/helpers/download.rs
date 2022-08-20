@@ -9,7 +9,7 @@ use crate::{
         async_extracter::{
             extract_bin, extract_tar_based_stream, extract_tar_based_stream_and_visit, extract_zip,
         },
-        create_request,
+        remote::create_request,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgFmtDecomposed, TarBasedFmt},
 };

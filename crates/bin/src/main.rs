@@ -11,7 +11,7 @@ use std::{
 use binstall::{
     errors::BinstallError,
     helpers::{
-        create_reqwest_client, get_install_path, jobserver_client::LazyJobserverClient,
+        jobserver_client::LazyJobserverClient, remote::create_reqwest_client,
         signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle,
     },
     manifests::{
@@ -32,6 +32,7 @@ use semver::VersionReq;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::{runtime::Runtime, task::block_in_place};
 
+mod install_path;
 mod tls_version;
 mod ui;
 
@@ -345,7 +346,8 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
 
     let (install_path, metadata, temp_dir) = block_in_place(|| -> Result<_> {
         // Compute install directory
-        let (install_path, custom_install_path) = get_install_path(opts.install_path.as_deref());
+        let (install_path, custom_install_path) =
+            install_path::get_install_path(opts.install_path.as_deref());
         let install_path = install_path.ok_or_else(|| {
             error!("No viable install path found of specified, try `--install-path`");
             miette!("No install path found or specified")

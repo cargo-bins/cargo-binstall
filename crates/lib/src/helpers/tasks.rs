@@ -7,7 +7,7 @@ use std::{
 
 use tokio::task::JoinHandle;
 
-use super::BinstallError;
+use crate::errors::BinstallError;
 
 #[derive(Debug)]
 pub struct AutoAbortJoinHandle<T>(JoinHandle<T>);

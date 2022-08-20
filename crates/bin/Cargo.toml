@@ -22,6 +22,7 @@ pkg-fmt = "zip"
 binstall = { path = "../lib" }
 clap = { version = "3.2.16", features = ["derive"] }
 crates_io_api = { version = "0.8.0", default-features = false }
+dirs = "4.0.0"
 log = "0.4.17"
 miette = "5.2.0"
 mimalloc = { version = "0.1.29", default-features = false, optional = true }

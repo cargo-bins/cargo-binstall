@@ -7,7 +7,7 @@ use bytes::{Buf, Bytes};
 use futures_util::stream::{Stream, StreamExt};
 use tokio::runtime::Handle;
 
-use super::BinstallError;
+use crate::errors::BinstallError;
 
 /// This wraps an AsyncIterator as a `Read`able.
 /// It must be used in non-async context only,
