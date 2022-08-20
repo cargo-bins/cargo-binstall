@@ -10,6 +10,7 @@
 //!
 //! ```
 //! use normalize_path::NormalizePath;
+//! use std::path::Path;
 //!
 //! assert_eq!(
 //!     Path::new("/A/foo/../B/./").normalize(),
