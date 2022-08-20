@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
 /// Binary format enumeration
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString)]
 #[serde(rename_all = "snake_case")]
 pub enum PkgFmt {
     /// Download format is TAR (uncompressed)
@@ -55,14 +55,14 @@ impl PkgFmt {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum PkgFmtDecomposed {
     Tar(TarBasedFmt),
     Bin,
     Zip,
 }
 
-#[derive(Debug, Display, Copy, Clone, PartialEq)]
+#[derive(Debug, Display, Copy, Clone, Eq, PartialEq)]
 pub enum TarBasedFmt {
     /// Download format is TAR (uncompressed)
     Tar,
