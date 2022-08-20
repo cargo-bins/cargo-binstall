@@ -1,7 +1,5 @@
 use std::{
-    env,
-    fmt::Debug,
-    fs, io, ops,
+    env, fs, io,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -11,7 +9,6 @@ use cargo_toml::Manifest;
 use compact_str::format_compact;
 use futures_util::stream::Stream;
 use log::debug;
-use once_cell::sync::{Lazy, OnceCell};
 use reqwest::{tls, Client, ClientBuilder, Method, Response};
 use serde::Serialize;
 use tempfile::NamedTempFile;
@@ -22,38 +19,19 @@ use url::Url;
 pub mod async_extracter;
 pub mod auto_abort_join_handle;
 pub mod crate_name;
+pub mod download;
 pub mod extracter;
 pub mod jobserver_client;
 pub mod signal;
+pub mod statics;
 pub mod stream_readable;
 pub mod tls_version;
 pub mod ui_thread;
 pub mod version_ext;
 
-use crate::{
-    errors::BinstallError,
-    helpers::async_extracter::{
-        extract_bin, extract_tar_based_stream, extract_tar_based_stream_and_visit, extract_zip,
-    },
-    manifests::cargo_toml_binstall::{Meta, PkgFmt, PkgFmtDecomposed, TarBasedFmt},
-};
+use crate::{errors::BinstallError, manifests::cargo_toml_binstall::Meta};
 
-use self::async_extracter::TarEntriesVisitor;
-
-pub fn cargo_home() -> Result<&'static Path, io::Error> {
-    static CARGO_HOME: OnceCell<PathBuf> = OnceCell::new();
-
-    CARGO_HOME
-        .get_or_try_init(home::cargo_home)
-        .map(ops::Deref::deref)
-}
-
-pub fn cratesio_url() -> &'static Url {
-    static CRATESIO: Lazy<Url, fn() -> Url> =
-        Lazy::new(|| url::Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
-
-    &*CRATESIO
-}
+use self::statics::cargo_home;
 
 /// Returned file is readable and writable.
 pub fn create_if_not_exist(path: impl AsRef<Path>) -> io::Result<fs::File> {
@@ -168,51 +146,6 @@ async fn create_request(
             err,
         })
         .map(Response::bytes_stream)
-}
-
-/// Download a file from the provided URL and extract it to the provided path.
-pub async fn download_and_extract<P: AsRef<Path>>(
-    client: &Client,
-    url: &Url,
-    fmt: PkgFmt,
-    path: P,
-) -> Result<(), BinstallError> {
-    let stream = create_request(client, url.clone()).await?;
-
-    let path = path.as_ref();
-    debug!("Downloading and extracting to: '{}'", path.display());
-
-    match fmt.decompose() {
-        PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
-        PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
-        PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
-    }
-
-    debug!("Download OK, extracted to: '{}'", path.display());
-
-    Ok(())
-}
-
-/// Download a file from the provided URL and extract part of it to
-/// the provided path.
-///
-///  * `filter` - If Some, then it will pass the path of the file to it
-///    and only extract ones which filter returns `true`.
-pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 'static>(
-    client: &Client,
-    url: Url,
-    fmt: TarBasedFmt,
-    visitor: V,
-) -> Result<V::Target, BinstallError> {
-    let stream = create_request(client, url).await?;
-
-    debug!("Downloading and extracting then in-memory processing");
-
-    let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
-
-    debug!("Download, extraction and in-memory procession OK");
-
-    Ok(ret)
 }
 
 /// Fetch install path from environment

@@ -8,7 +8,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::{
-    helpers::cratesio_url,
+    helpers::statics::cratesio_url,
     manifests::crate_info::{CrateInfo, CrateSource, SourceType},
 };
 

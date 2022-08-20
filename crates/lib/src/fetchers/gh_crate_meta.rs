@@ -10,7 +10,8 @@ use url::Url;
 use crate::{
     errors::BinstallError,
     helpers::{
-        auto_abort_join_handle::AutoAbortJoinHandle, download_and_extract, remote_exists, Template,
+        auto_abort_join_handle::AutoAbortJoinHandle, download::download_and_extract, remote_exists,
+        Template,
     },
     manifests::cargo_toml_binstall::PkgFmt,
 };

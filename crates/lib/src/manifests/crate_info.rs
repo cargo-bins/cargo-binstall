@@ -7,7 +7,7 @@ use reqwest::Url;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::helpers::cratesio_url;
+use crate::helpers::statics::cratesio_url;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CrateInfo {
