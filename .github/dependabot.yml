@@ -2,7 +2,29 @@
 
 version: 2
 updates:
-  - package-ecosystem: "cargo"
+  - package-ecosystem: "github-actions"
+    # Workflow files stored in the
+    # default location of `.github/workflows`
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/bin"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/detect-wasi"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/flock"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/lib"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/normalize-path"
+    schedule:
+      interval: "daily"
