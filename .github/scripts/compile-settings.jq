@@ -1,22 +1,22 @@
-if $for_release then {
+if true then {
   output: "release",
   profile: "release",
   # Use build-std to build a std library optimized for size and abort immediately on abort,
   # so that format string for `unwrap`/`expect`/`unreachable`/`panic` can be optimized out.
   args: ($matrix.release_build_args // "-Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"),
   features: ($matrix.release_features // []),
+  rustflags: ($matrix.release_rustflags // (
+    if $matrix.target == "aarch64-unknown-linux-musl" or $matrix.target == "armv7-unknown-linux-musleabihf"
+    then "-C link-arg=-lgcc -C link-arg=-static-libgcc"
+    else "" end
+  ))
 } else {
   output: "debug",
   profile: "dev",
   args: ($matrix.debug_build_args // ""),
   features: ($matrix.debug_features // ["rustls", "fancy-with-backtrace"]),
+  .rustflags: ($matrix.debug_rustflags // ""),
 } end
-|
-.rustflags = (
-  if $for_release and $matrix.target == "aarch64-unknown-linux-musl" or $matrix.target == "armv7-unknown-linux-musleabihf"
-  then "-C link-arg=-lgcc -Clink-arg=-static-libgcc"
-  else "" end
-)
 |
 .features = (
   if (.features | length > 0)

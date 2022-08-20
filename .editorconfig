@@ -11,5 +11,5 @@ insert_final_newline = true
 [tests/snapshots/*]
 trim_trailing_whitespace = false
 
-[*.{cff,yml}]
+[*.{cff,yml,jq}]
 indent_size = 2
