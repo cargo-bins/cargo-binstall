@@ -1,0 +1,40 @@
+name: Clippy
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_UNSTABLE_SPARSE_REGISTRY: "true"
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Configure toolchain
+      run: |
+        rustup toolchain install --profile minimal --no-self-update nightly
+        rustup default nightly
+
+    - name: Configure caching
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-unit-tests-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-unit-tests
+
+    - name: fmt
+      run: cargo fmt --all --check
+
+    - name: clippy
+      run: cargo clippy --no-deps -- -D clippy::all
