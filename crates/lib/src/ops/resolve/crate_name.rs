@@ -4,7 +4,7 @@ use compact_str::CompactString;
 use itertools::Itertools;
 use semver::{Error, VersionReq};
 
-use super::parse_version;
+use super::version_ext::VersionReqExt;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CrateName {
@@ -31,7 +31,7 @@ impl FromStr for CrateName {
         Ok(if let Some((name, version)) = s.split_once('@') {
             CrateName {
                 name: name.into(),
-                version_req: Some(parse_version(version)?),
+                version_req: Some(VersionReq::parse_from_cli(version)?),
             }
         } else {
             CrateName {

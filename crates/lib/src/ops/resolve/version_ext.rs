@@ -6,6 +6,14 @@ pub trait VersionReqExt {
     /// Return `true` if `self.matches(version)` returns `true`
     /// and the `version` is the latest one acceptable by `self`.
     fn is_latest_compatible(&self, version: &Version) -> bool;
+
+    /// Parse from CLI option.
+    ///
+    /// Notably, a bare version is treated as if preceded by `=`, not by `^` as in Cargo.toml
+    /// dependencies.
+    fn parse_from_cli(str: &str) -> Result<Self, semver::Error>
+    where
+        Self: Sized;
 }
 
 impl VersionReqExt for VersionReq {
@@ -41,6 +49,19 @@ impl VersionReqExt for VersionReq {
         }
 
         true
+    }
+
+    fn parse_from_cli(version: &str) -> Result<Self, semver::Error> {
+        if version
+            .chars()
+            .next()
+            .map(|ch| ch.is_ascii_digit())
+            .unwrap_or(false)
+        {
+            format_compact!("={version}").parse()
+        } else {
+            version.parse()
+        }
     }
 }
 

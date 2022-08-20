@@ -15,9 +15,16 @@ use crate::{
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
     fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
-    helpers::{crate_name::CrateName, load_manifest_path},
+    helpers::load_manifest_path,
     manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
+
+mod crate_name;
+#[doc(inline)]
+pub use crate_name::CrateName;
+mod version_ext;
+#[doc(inline)]
+pub use version_ext::VersionReqExt;
 
 pub enum Resolution {
     Fetch {

@@ -6,7 +6,6 @@ use std::{
 
 use bytes::Bytes;
 use cargo_toml::Manifest;
-use compact_str::format_compact;
 use futures_util::stream::Stream;
 use log::debug;
 use reqwest::{tls, Client, ClientBuilder, Method, Response};
@@ -18,16 +17,12 @@ use url::Url;
 
 pub mod async_extracter;
 pub mod auto_abort_join_handle;
-pub mod crate_name;
 pub mod download;
 pub mod extracter;
 pub mod jobserver_client;
 pub mod signal;
 pub mod statics;
 pub mod stream_readable;
-pub mod tls_version;
-pub mod ui_thread;
-pub mod version_ext;
 
 use crate::{errors::BinstallError, manifests::cargo_toml_binstall::Meta};
 
@@ -51,20 +46,6 @@ pub async fn await_task<T>(task: tokio::task::JoinHandle<miette::Result<T>>) -> 
     match task.await {
         Ok(res) => res,
         Err(join_err) => Err(BinstallError::from(join_err).into()),
-    }
-}
-
-pub fn parse_version(version: &str) -> Result<semver::VersionReq, semver::Error> {
-    // Treat 0.1.2 as =0.1.2
-    if version
-        .chars()
-        .next()
-        .map(|ch| ch.is_ascii_digit())
-        .unwrap_or(false)
-    {
-        format_compact!("={version}").parse()
-    } else {
-        version.parse()
     }
 }
 

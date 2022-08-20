@@ -5,7 +5,7 @@ use std::{
 
 use tokio::sync::mpsc;
 
-use crate::errors::BinstallError;
+use binstall::errors::BinstallError;
 
 #[derive(Debug)]
 struct UIThreadInner {

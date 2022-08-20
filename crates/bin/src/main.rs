@@ -11,15 +11,18 @@ use std::{
 use binstall::{
     errors::BinstallError,
     helpers::{
-        cancel_on_user_sig_term, create_reqwest_client, get_install_path, parse_version,
-        AutoAbortJoinHandle, CrateName, LazyJobserverClient, TLSVersion, UIThread, VersionReqExt,
+        auto_abort_join_handle::AutoAbortJoinHandle, create_reqwest_client, get_install_path,
+        jobserver_client::LazyJobserverClient, signal::cancel_on_user_sig_term,
     },
     manifests::{
         binstall_crates_v1::Records,
         cargo_crates_v1::CratesToml,
         cargo_toml_binstall::{PkgFmt, PkgOverride},
     },
-    ops::{self, resolve::Resolution},
+    ops::{
+        self,
+        resolve::{CrateName, Resolution, VersionReqExt},
+    },
     targets::get_desired_targets,
 };
 use clap::{builder::PossibleValue, AppSettings, Parser};
@@ -28,6 +31,9 @@ use miette::{miette, Result, WrapErr};
 use semver::VersionReq;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::{runtime::Runtime, task::block_in_place};
+
+mod tls_version;
+mod ui;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -62,7 +68,7 @@ struct Options {
     ///
     /// Cannot be used when multiple packages are installed at once, use the attached version
     /// syntax in that case.
-    #[clap(help_heading = "Package selection", long = "version", parse(try_from_str = parse_version))]
+    #[clap(help_heading = "Package selection", long = "version", parse(try_from_str = VersionReq::parse_from_cli))]
     version_req: Option<VersionReq>,
 
     /// Override binary target set.
@@ -156,7 +162,7 @@ struct Options {
     /// The default is not to require any minimum TLS version, and use the negotiated highest
     /// version available to both this client and the remote server.
     #[clap(help_heading = "Options", long, arg_enum, value_name = "VERSION")]
-    min_tls_version: Option<TLSVersion>,
+    min_tls_version: Option<tls_version::TLSVersion>,
 
     /// Print help information
     #[clap(help_heading = "Meta", short, long)]
@@ -335,7 +341,7 @@ async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
     .unwrap();
 
     // Initialize UI thread
-    let mut uithread = UIThread::new(!opts.no_confirm);
+    let mut uithread = ui::UIThread::new(!opts.no_confirm);
 
     let (install_path, metadata, temp_dir) = block_in_place(|| -> Result<_> {
         // Compute install directory
