@@ -19,7 +19,7 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-binstall = { path = "../lib" }
+binstall = { path = "../lib", version = "0.1.0" }
 clap = { version = "3.2.16", features = ["derive"] }
 crates_io_api = { version = "0.8.0", default-features = false }
 dirs = "4.0.0"
