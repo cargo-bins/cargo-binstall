@@ -20,7 +20,7 @@ use binstall::{
         cargo_toml_binstall::{PkgFmt, PkgOverride},
     },
     ops::{self, resolve::Resolution},
-    target::get_desired_targets,
+    targets::get_desired_targets,
 };
 use clap::{builder::PossibleValue, AppSettings, Parser};
 use log::{debug, error, info, warn, LevelFilter};

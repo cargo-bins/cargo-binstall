@@ -5,4 +5,4 @@ pub mod fetchers;
 pub mod helpers;
 pub mod manifests;
 pub mod ops;
-pub mod target;
+pub mod targets;

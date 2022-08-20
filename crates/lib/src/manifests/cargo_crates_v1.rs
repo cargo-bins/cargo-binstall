@@ -130,7 +130,7 @@ pub enum CratesTomlParseError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{manifests::crate_info::CrateSource, target::TARGET};
+    use crate::{manifests::crate_info::CrateSource, targets::TARGET};
 
     use semver::Version;
     use tempfile::TempDir;
