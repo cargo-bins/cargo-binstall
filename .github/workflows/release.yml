@@ -17,7 +17,7 @@ jobs:
     env:
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Extract tag from commit message
       id: version
       run: .github/scripts/extract-tag-from-release-commit.sh
@@ -32,7 +32,7 @@ jobs:
     needs: info
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Push release tag
       uses: mathieudutour/github-tag-action@v6.0
       with:
@@ -54,7 +54,7 @@ jobs:
     name: Package and release
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Get outputs
       uses: actions/download-artifact@v3
       with:
