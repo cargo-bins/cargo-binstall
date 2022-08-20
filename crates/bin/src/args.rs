@@ -1,14 +1,14 @@
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use binstall::{
+    errors::BinstallError,
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
 };
-use clap::{builder::PossibleValue, AppSettings, Parser};
+use clap::{builder::PossibleValue, AppSettings, ArgEnum, Parser};
 use log::LevelFilter;
+use reqwest::tls::Version;
 use semver::VersionReq;
-
-use crate::tls_version::TLSVersion;
 
 #[derive(Debug, Parser)]
 #[clap(version, about = "Install a Rust binary... from binaries!", setting = AppSettings::ArgRequiredElseHelp)]
@@ -159,23 +159,23 @@ pub struct Args {
     /// Set to `off` to disable logging completely, this will also
     /// disable output from `cargo-install`.
     #[clap(
-    help_heading = "Meta",
-    long,
-    default_value = "info",
-    value_name = "LEVEL",
-    possible_values = [
-        PossibleValue::new("trace").help(
-            "Set to `trace` to print very low priority, often extremely verbose information."
-        ),
-        PossibleValue::new("debug").help("Set to debug when submitting a bug report."),
-        PossibleValue::new("info").help("Set to info to only print useful information."),
-        PossibleValue::new("warn").help("Set to warn to only print on hazardous situations."),
-        PossibleValue::new("error").help("Set to error to only print serious errors."),
-        PossibleValue::new("off").help(
-            "Set to off to disable logging completely, this will also disable output from `cargo-install`."
-        ),
-    ]
-)]
+        help_heading = "Meta",
+        long,
+        default_value = "info",
+        value_name = "LEVEL",
+        possible_values = [
+            PossibleValue::new("trace").help(
+                "Set to `trace` to print very low priority, often extremely verbose information."
+            ),
+            PossibleValue::new("debug").help("Set to debug when submitting a bug report."),
+            PossibleValue::new("info").help("Set to info to only print useful information."),
+            PossibleValue::new("warn").help("Set to warn to only print on hazardous situations."),
+            PossibleValue::new("error").help("Set to error to only print serious errors."),
+            PossibleValue::new("off").help(
+                "Set to off to disable logging completely, this will also disable output from `cargo-install`."
+            ),
+        ]
+    )]
     pub log_level: LevelFilter,
 
     /// Equivalent to setting `log_level` to `off`.
@@ -183,4 +183,70 @@ pub struct Args {
     /// This would override the `log_level`.
     #[clap(help_heading = "Meta", short, long)]
     pub quiet: bool,
+}
+
+#[derive(Debug, Copy, Clone, ArgEnum)]
+pub enum TLSVersion {
+    #[clap(name = "1.2")]
+    Tls1_2,
+    #[clap(name = "1.3")]
+    Tls1_3,
+}
+
+impl From<TLSVersion> for Version {
+    fn from(ver: TLSVersion) -> Self {
+        match ver {
+            TLSVersion::Tls1_2 => Version::TLS_1_2,
+            TLSVersion::Tls1_3 => Version::TLS_1_3,
+        }
+    }
+}
+
+pub fn parse() -> Result<Args, BinstallError> {
+    // Filter extraneous arg when invoked by cargo
+    // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
+    // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
+    let mut args: Vec<OsString> = std::env::args_os().collect();
+    let args = if args.len() > 1 && args[1] == "binstall" {
+        // Equivalent to
+        //
+        //     args.remove(1);
+        //
+        // But is O(1)
+        args.swap(0, 1);
+        let mut args = args.into_iter();
+        drop(args.next().unwrap());
+
+        args
+    } else {
+        args.into_iter()
+    };
+
+    // Load options
+    let mut opts = Args::parse_from(args);
+    if opts.quiet {
+        opts.log_level = LevelFilter::Off;
+    }
+
+    if opts.crate_names.len() > 1 {
+        let option = if opts.version_req.is_some() {
+            "version"
+        } else if opts.manifest_path.is_some() {
+            "manifest-path"
+        } else if opts.bin_dir.is_some() {
+            "bin-dir"
+        } else if opts.pkg_fmt.is_some() {
+            "pkg-fmt"
+        } else if opts.pkg_url.is_some() {
+            "pkg-url"
+        } else {
+            ""
+        };
+
+        if !option.is_empty() {
+            return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
+        }
+    }
+
+    Ok(opts)
 }

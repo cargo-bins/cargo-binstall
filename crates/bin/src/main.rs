@@ -1,42 +1,58 @@
 use std::{
-    ffi::OsString,
-    fs,
-    mem::take,
-    path::Path,
     process::{ExitCode, Termination},
-    sync::Arc,
     time::{Duration, Instant},
 };
 
 use binstall::{
     errors::BinstallError,
     helpers::{
-        jobserver_client::LazyJobserverClient, remote::create_reqwest_client,
-        signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle,
+        jobserver_client::LazyJobserverClient, signal::cancel_on_user_sig_term,
+        tasks::AutoAbortJoinHandle,
     },
-    manifests::{
-        binstall_crates_v1::Records, cargo_crates_v1::CratesToml, cargo_toml_binstall::PkgOverride,
-    },
-    ops::{
-        self,
-        resolve::{CrateName, Resolution, VersionReqExt},
-    },
-    targets::get_desired_targets,
 };
-use clap::Parser;
-use log::{debug, error, info, warn, LevelFilter};
-use miette::{miette, Result, WrapErr};
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
-use tokio::{runtime::Runtime, task::block_in_place};
+use log::{debug, error, info};
+use tokio::runtime::Runtime;
 
 mod args;
+mod entry;
 mod install_path;
-mod tls_version;
 mod ui;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+fn main() -> MainExit {
+    // This must be the very first thing to happen
+    let jobserver_client = LazyJobserverClient::new();
+
+    let args = match args::parse() {
+        Ok(args) => args,
+        Err(err) => return MainExit::Error(err),
+    };
+
+    ui::logging(&args);
+
+    let start = Instant::now();
+
+    let result = {
+        let rt = Runtime::new().unwrap();
+        let handle =
+            AutoAbortJoinHandle::new(rt.spawn(entry::install_crates(args, jobserver_client)));
+        rt.block_on(cancel_on_user_sig_term(handle))
+    };
+
+    let done = start.elapsed();
+    debug!("run time: {done:?}");
+
+    result.map_or_else(MainExit::Error, |res| {
+        res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
+            err.downcast::<BinstallError>()
+                .map(MainExit::Error)
+                .unwrap_or_else(MainExit::Report)
+        })
+    })
+}
 
 enum MainExit {
     Success(Duration),
@@ -59,302 +75,4 @@ impl Termination for MainExit {
             }
         }
     }
-}
-
-fn main() -> MainExit {
-    // Create jobserver client
-    let jobserver_client = LazyJobserverClient::new();
-
-    let start = Instant::now();
-
-    let rt = Runtime::new().unwrap();
-    let handle = AutoAbortJoinHandle::new(rt.spawn(entry(jobserver_client)));
-    let result = rt.block_on(cancel_on_user_sig_term(handle));
-    drop(rt);
-
-    let done = start.elapsed();
-    debug!("run time: {done:?}");
-
-    result.map_or_else(MainExit::Error, |res| {
-        res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
-            err.downcast::<BinstallError>()
-                .map(MainExit::Error)
-                .unwrap_or_else(MainExit::Report)
-        })
-    })
-}
-
-async fn entry(jobserver_client: LazyJobserverClient) -> Result<()> {
-    // Filter extraneous arg when invoked by cargo
-    // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
-    // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
-    let mut args: Vec<OsString> = std::env::args_os().collect();
-    let args = if args.len() > 1 && args[1] == "binstall" {
-        // Equivalent to
-        //
-        //     args.remove(1);
-        //
-        // But is O(1)
-        args.swap(0, 1);
-        let mut args = args.into_iter();
-        drop(args.next().unwrap());
-
-        args
-    } else {
-        args.into_iter()
-    };
-
-    // Load options
-    let mut opts = args::Args::parse_from(args);
-    if opts.quiet {
-        opts.log_level = LevelFilter::Off;
-    }
-
-    let crate_names = take(&mut opts.crate_names);
-    if crate_names.len() > 1 {
-        let option = if opts.version_req.is_some() {
-            "version"
-        } else if opts.manifest_path.is_some() {
-            "manifest-path"
-        } else if opts.bin_dir.is_some() {
-            "bin-dir"
-        } else if opts.pkg_fmt.is_some() {
-            "pkg-fmt"
-        } else if opts.pkg_url.is_some() {
-            "pkg-url"
-        } else {
-            ""
-        };
-
-        if !option.is_empty() {
-            return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option }.into());
-        }
-    }
-
-    let cli_overrides = PkgOverride {
-        pkg_url: opts.pkg_url.take(),
-        pkg_fmt: opts.pkg_fmt.take(),
-        bin_dir: opts.bin_dir.take(),
-    };
-
-    // Launch target detection
-    let desired_targets = get_desired_targets(&opts.targets);
-
-    // Initialize reqwest client
-    let client = create_reqwest_client(opts.secure, opts.min_tls_version.map(|v| v.into()))?;
-
-    // Build crates.io api client
-    let crates_io_api_client = crates_io_api::AsyncClient::new(
-        "cargo-binstall (https://github.com/ryankurte/cargo-binstall)",
-        Duration::from_millis(100),
-    )
-    .expect("bug: invalid user agent");
-
-    // Setup logging
-    let mut log_config = ConfigBuilder::new();
-    log_config.add_filter_ignore("hyper".to_string());
-    log_config.add_filter_ignore("reqwest".to_string());
-    log_config.add_filter_ignore("rustls".to_string());
-    log_config.set_location_level(LevelFilter::Off);
-    TermLogger::init(
-        opts.log_level,
-        log_config.build(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )
-    .unwrap();
-
-    // Initialize UI thread
-    let mut uithread = ui::UIThread::new(!opts.no_confirm);
-
-    let (install_path, metadata, temp_dir) = block_in_place(|| -> Result<_> {
-        // Compute install directory
-        let (install_path, custom_install_path) =
-            install_path::get_install_path(opts.install_path.as_deref());
-        let install_path = install_path.ok_or_else(|| {
-            error!("No viable install path found of specified, try `--install-path`");
-            miette!("No install path found or specified")
-        })?;
-        fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
-        debug!("Using install path: {}", install_path.display());
-
-        // Load metadata
-        let metadata = if !custom_install_path {
-            debug!("Reading binstall/crates-v1.json");
-            Some(Records::load()?)
-        } else {
-            None
-        };
-
-        // Create a temporary directory for downloads etc.
-        //
-        // Put all binaries to a temporary directory under `dst` first, catching
-        // some failure modes (e.g., out of space) before touching the existing
-        // binaries. This directory will get cleaned up via RAII.
-        let temp_dir = tempfile::Builder::new()
-            .prefix("cargo-binstall")
-            .tempdir_in(&install_path)
-            .map_err(BinstallError::from)
-            .wrap_err("Creating a temporary directory failed.")?;
-
-        Ok((install_path, metadata, temp_dir))
-    })?;
-
-    // Remove installed crates
-    let crate_names = CrateName::dedup(crate_names)
-        .filter_map(|crate_name| {
-            match (
-                opts.force,
-                metadata.as_ref().and_then(|records| records.get(&crate_name.name)),
-                &crate_name.version_req,
-            ) {
-                (false, Some(metadata), Some(version_req))
-                    if version_req.is_latest_compatible(&metadata.current_version) =>
-                {
-                    debug!("Bailing out early because we can assume wanted is already installed from metafile");
-                    info!(
-                        "{} v{} is already installed, use --force to override",
-                        crate_name.name, metadata.current_version
-                    );
-                    None
-                }
-
-                // we have to assume that the version req could be *,
-                // and therefore a remote upgraded version could exist
-                (false, Some(metadata), _) => {
-                    Some((crate_name, Some(metadata.current_version.clone())))
-                }
-
-                _ => Some((crate_name, None)),
-            }
-        })
-        .collect::<Vec<_>>();
-
-    if crate_names.is_empty() {
-        debug!("Nothing to do");
-        return Ok(());
-    }
-
-    let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
-
-    // Create binstall_opts
-    let binstall_opts = Arc::new(ops::Options {
-        no_symlinks: opts.no_symlinks,
-        dry_run: opts.dry_run,
-        force: opts.force,
-        version_req: opts.version_req.take(),
-        manifest_path: opts.manifest_path.take(),
-        cli_overrides,
-        desired_targets,
-        quiet: opts.log_level == LevelFilter::Off,
-    });
-
-    let tasks: Vec<_> = if !opts.dry_run && !opts.no_confirm {
-        // Resolve crates
-        let tasks: Vec<_> = crate_names
-            .into_iter()
-            .map(|(crate_name, current_version)| {
-                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
-                    binstall_opts.clone(),
-                    crate_name,
-                    current_version,
-                    temp_dir_path.clone(),
-                    install_path.clone(),
-                    client.clone(),
-                    crates_io_api_client.clone(),
-                ))
-            })
-            .collect();
-
-        // Confirm
-        let mut resolutions = Vec::with_capacity(tasks.len());
-        for task in tasks {
-            match task.await?? {
-                Resolution::AlreadyUpToDate => {}
-                res => resolutions.push(res),
-            }
-        }
-
-        if resolutions.is_empty() {
-            debug!("Nothing to do");
-            return Ok(());
-        }
-
-        uithread.confirm().await?;
-
-        // Install
-        resolutions
-            .into_iter()
-            .map(|resolution| {
-                AutoAbortJoinHandle::spawn(ops::install::install(
-                    resolution,
-                    binstall_opts.clone(),
-                    jobserver_client.clone(),
-                ))
-            })
-            .collect()
-    } else {
-        // Resolve crates and install without confirmation
-        crate_names
-            .into_iter()
-            .map(|(crate_name, current_version)| {
-                let opts = binstall_opts.clone();
-                let temp_dir_path = temp_dir_path.clone();
-                let jobserver_client = jobserver_client.clone();
-                let client = client.clone();
-                let crates_io_api_client = crates_io_api_client.clone();
-                let install_path = install_path.clone();
-
-                AutoAbortJoinHandle::spawn(async move {
-                    let resolution = ops::resolve::resolve(
-                        opts.clone(),
-                        crate_name,
-                        current_version,
-                        temp_dir_path,
-                        install_path,
-                        client,
-                        crates_io_api_client,
-                    )
-                    .await?;
-
-                    ops::install::install(resolution, opts, jobserver_client).await
-                })
-            })
-            .collect()
-    };
-
-    let mut metadata_vec = Vec::with_capacity(tasks.len());
-    for task in tasks {
-        if let Some(metadata) = task.await?? {
-            metadata_vec.push(metadata);
-        }
-    }
-
-    block_in_place(|| {
-        if let Some(mut records) = metadata {
-            // If using standardised install path,
-            // then create_dir_all(&install_path) would also
-            // create .cargo.
-
-            debug!("Writing .crates.toml");
-            CratesToml::append(metadata_vec.iter())?;
-
-            debug!("Writing binstall/crates-v1.json");
-            for metadata in metadata_vec {
-                records.replace(metadata);
-            }
-            records.overwrite()?;
-        }
-
-        if opts.no_cleanup {
-            // Consume temp_dir without removing it from fs.
-            temp_dir.into_path();
-        } else {
-            temp_dir.close().unwrap_or_else(|err| {
-                warn!("Failed to clean up some resources: {err}");
-            });
-        }
-
-        Ok(())
-    })
 }

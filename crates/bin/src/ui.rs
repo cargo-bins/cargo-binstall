@@ -3,9 +3,13 @@ use std::{
     thread,
 };
 
+use log::LevelFilter;
+use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::mpsc;
 
 use binstall::errors::BinstallError;
+
+use crate::args::Args;
 
 #[derive(Debug)]
 struct UIThreadInner {
@@ -96,4 +100,20 @@ impl UIThread {
             Ok(())
         }
     }
+}
+
+pub fn logging(args: &Args) {
+    // Setup logging
+    let mut log_config = ConfigBuilder::new();
+    log_config.add_filter_ignore("hyper".to_string());
+    log_config.add_filter_ignore("reqwest".to_string());
+    log_config.add_filter_ignore("rustls".to_string());
+    log_config.set_location_level(LevelFilter::Off);
+    TermLogger::init(
+        args.log_level,
+        log_config.build(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )
+    .unwrap();
 }
