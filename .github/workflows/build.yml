@@ -84,7 +84,7 @@ jobs:
         jq \
           --argjson for_release '${{ toJSON(inputs.for_release) }}' \
           --argjson matrix '${{ toJSON(matrix) }}' \
-          -nrf ci-scripts/compile-settings.jq \
+          -nrf .github/scripts/compile-settings.jq \
         | tee -a $GITHUB_ENV
 
     - name: Configure caching
@@ -107,7 +107,7 @@ jobs:
 
     - name: Install deps
       if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && !startsWith(github.ref, 'refs/tags/v') }}
-      run: sudo ./ci-scripts/install-deps.sh
+      run: sudo .github/scripts/install-deps.sh
 
     - name: Build
       run: ${{ env.CTOOL }} build ${{ env.CARGS }}

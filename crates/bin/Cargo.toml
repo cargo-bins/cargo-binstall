@@ -1,0 +1,54 @@
+[package]
+name = "cargo-binstall"
+description = "Rust binary package installer for CI integration"
+repository = "https://github.com/ryankurte/cargo-binstall"
+documentation = "https://docs.rs/cargo-binstall"
+version = "0.12.0"
+rust-version = "1.61.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2021"
+license = "GPL-3.0"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-fmt = "zip"
+
+[dependencies]
+binstall = { path = "../lib", version = "0.1.0" }
+clap = { version = "3.2.16", features = ["derive"] }
+crates_io_api = { version = "0.8.0", default-features = false }
+dirs = "4.0.0"
+log = "0.4.17"
+miette = "5.2.0"
+mimalloc = { version = "0.1.29", default-features = false, optional = true }
+reqwest = { version = "0.11.11", default-features = false }
+semver = "1.0.13"
+simplelog = "0.12.0"
+tempfile = "3.3.0"
+tokio = { version = "1.20.1", features = ["rt-multi-thread"], default-features = false }
+
+[build-dependencies]
+embed-resource = "1.7.3"
+
+[features]
+default = ["static", "zlib-ng", "rustls", "fancy-no-backtrace"]
+
+mimalloc = ["dep:mimalloc"]
+
+static = ["binstall/static"]
+pkg-config = ["binstall/pkg-config"]
+
+zlib-ng = ["binstall/zlib-ng"]
+
+rustls = ["binstall/rustls"]
+native-tls = ["binstall/native-tls"]
+
+fancy-no-backtrace = ["miette/fancy-no-backtrace"]
+fancy-with-backtrace = ["fancy-no-backtrace", "miette/fancy"]
+
+log_release_max_level_info = ["log/release_max_level_info"]
