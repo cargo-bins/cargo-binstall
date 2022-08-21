@@ -86,11 +86,11 @@ dependencies = [
  "clap",
  "compact_str",
  "crates_io_api",
+ "detect-targets",
  "env_logger",
  "flate2",
  "flock",
  "futures-util",
- "guess_host_triple",
  "home",
  "itertools",
  "jobserver",
@@ -348,6 +348,14 @@ checksum = "51887d4adc7b564537b15adcfb307936f8075dfcd5f00dde9a9f1d29383682bc"
 dependencies = [
  "cfg-if",
  "once_cell",
+]
+
+[[package]]
+name = "detect-targets"
+version = "0.1.0"
+dependencies = [
+ "guess_host_triple",
+ "tokio",
 ]
 
 [[package]]

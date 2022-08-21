@@ -6,4 +6,5 @@ pub mod fs;
 pub mod helpers;
 pub mod manifests;
 pub mod ops;
-pub mod targets;
+
+pub use detect_targets as targets;

@@ -5,6 +5,7 @@ members = [
     "crates/detect-wasi",
     "crates/flock",
     "crates/normalize-path",
+    "crates/detect-targets",
 ]
 
 [profile.release]
