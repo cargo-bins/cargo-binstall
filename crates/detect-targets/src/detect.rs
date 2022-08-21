@@ -1,6 +1,6 @@
 use std::{
     io::{BufRead, Cursor},
-    process::Output,
+    process::{Output, Stdio},
 };
 
 use cfg_if::cfg_if;
@@ -66,7 +66,17 @@ pub async fn detect_targets() -> Vec<String> {
 /// Figure out what the host target is using `rustc`.
 /// If `rustc` is absent, then it would return `None`.
 async fn get_target_from_rustc() -> Option<String> {
-    let Output { status, stdout, .. } = Command::new("rustc").arg("-vV").output().await.ok()?;
+    let Output { status, stdout, .. } = Command::new("rustc")
+        .arg("-vV")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?
+        .wait_with_output()
+        .await
+        .ok()?;
+
     if !status.success() {
         return None;
     }
