@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-tokio = { version = "1.20.1", features = ["rt", "process", "sync"], default-features = false }
+tokio = { version = "1.20.1", features = ["rt", "process", "sync", "macros"], default-features = false }
 cfg-if = "1.0.0"
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
