@@ -43,14 +43,13 @@ impl DesiredTargets {
     }
 }
 
-/// If opts_targets is `Some`, then it will be used.
+/// If opts_targets is `Some`, then it will be parsed in the format of
+/// `$target1,$target2,...`.
 /// Otherwise, call `detect_targets` using `tokio::spawn` to detect targets.
 ///
 /// Since `detect_targets` internally spawns a process and wait for it,
-/// it's pretty costy.
-///
-/// Calling it through `tokio::spawn` would enable other tasks, such as
-/// fetching the crate tarballs, to be executed concurrently.
+/// it's pretty costy, it is recommended to run this fn ASAP and
+/// reuse the result.
 pub fn get_desired_targets(opts_targets: &Option<String>) -> DesiredTargets {
     if let Some(targets) = opts_targets.as_ref() {
         DesiredTargets::initialized(targets.split(',').map(|t| t.to_string()).collect())
