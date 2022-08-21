@@ -7,4 +7,4 @@ pub mod helpers;
 pub mod manifests;
 pub mod ops;
 
-pub use detect_targets as targets;
+pub use detect_targets::{get_desired_targets, DesiredTargets};

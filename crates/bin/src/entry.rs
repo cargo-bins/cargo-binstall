@@ -2,6 +2,7 @@ use std::{fs, path::Path, sync::Arc, time::Duration};
 
 use binstall::{
     errors::BinstallError,
+    get_desired_targets,
     helpers::{
         jobserver_client::LazyJobserverClient, remote::create_reqwest_client,
         tasks::AutoAbortJoinHandle,
@@ -13,7 +14,6 @@ use binstall::{
         self,
         resolve::{CrateName, Resolution, VersionReqExt},
     },
-    targets::get_desired_targets,
 };
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
