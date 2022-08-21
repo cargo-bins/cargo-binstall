@@ -33,36 +33,32 @@ pub async fn detect_targets() -> Vec<String> {
     if let Some(target) = get_target_from_rustc().await {
         let mut v = vec![target];
 
-        #[cfg(target_os = "linux")]
-        if v[0].contains("gnu") {
-            v.push(v[0].replace("gnu", "musl"));
+        cfg_if! {
+            if #[cfg(target_os = "linux")] {
+                if v[0].contains("gnu") {
+                    v.push(v[0].replace("gnu", "musl"));
+                }
+            } else if #[cfg(target_os = "macos")] {
+                if &*v[0] == macos::AARCH64 {
+                    v.push(macos::X86.into());
+                }
+            } else if #[cfg(target_os = "windows")] {
+                v.extend(windows::detect_alternative_targets(&v[0]));
+            }
         }
-
-        #[cfg(target_os = "macos")]
-        if &*v[0] == macos::AARCH64 {
-            v.push(macos::X86.into());
-        }
-
-        #[cfg(target_os = "windows")]
-        v.extend(windows::detect_alternative_targets(&v[0]));
 
         v
     } else {
-        #[cfg(target_os = "linux")]
-        {
-            linux::detect_targets_linux().await
-        }
-        #[cfg(target_os = "macos")]
-        {
-            macos::detect_targets_macos()
-        }
-        #[cfg(target_os = "windows")]
-        {
-            windows::detect_targets_windows()
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-        {
-            vec![TARGET.into()]
+        cfg_if! {
+            if #[cfg(target_os = "linux")] {
+                linux::detect_targets_linux().await
+            } else if #[cfg(target_os = "macos")] {
+                macos::detect_targets_macos()
+            } else if #[cfg(target_os = "windows")] {
+                windows::detect_targets_windows()
+            } else {
+                vec![TARGET.into()]
+            }
         }
     }
 }
