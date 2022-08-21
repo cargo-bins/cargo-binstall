@@ -12,6 +12,48 @@
 //!  - [`get_desired_targets`] provides the API to either
 //!    parse `$target1,$target2,...` override provided by the users,
 //!    or run [`detect_targets`] in the background using [`tokio::spawn`].
+//!
+//! # Example
+//!
+//! `detect_targets`:
+//!
+//! ```rust
+//! use detect_targets::detect_targets;
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() {
+//!
+//! let targets = detect_targets().await;
+//! eprintln!("Your platform supports targets: {targets:#?}");
+//! # }
+//! ```
+//!
+//! `get_desired_targets` with user override:
+//!
+//! ```rust
+//! use detect_targets::get_desired_targets;
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() {
+//!
+//! assert_eq!(
+//!     get_desired_targets(&Some("x86_64-apple-darwin,aarch64-apple-darwin".to_string())).get().await,
+//!     &["x86_64-apple-darwin", "aarch64-apple-darwin"],
+//! );
+//! # }
+//! ```
+//!
+//! `get_desired_targets` without user override:
+//!
+//! ```rust
+//! use detect_targets::get_desired_targets;
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() {
+//!
+//! eprintln!(
+//!     "Your platform supports targets: {:#?}",
+//!     get_desired_targets(&None).get().await
+//! );
+//! # }
+//! ```
 
 mod detect;
 pub use detect::detect_targets;
