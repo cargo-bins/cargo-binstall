@@ -29,7 +29,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     };
 
     // Launch target detection
-    let desired_targets = get_desired_targets(&args.targets);
+    let desired_targets = get_desired_targets(args.targets.as_deref());
 
     // Initialize reqwest client
     let client = create_reqwest_client(args.secure, args.min_tls_version.map(|v| v.into()))?;

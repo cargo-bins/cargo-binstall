@@ -50,8 +50,8 @@ impl DesiredTargets {
 /// Since `detect_targets` internally spawns a process and wait for it,
 /// it's pretty costy, it is recommended to run this fn ASAP and
 /// reuse the result.
-pub fn get_desired_targets(opts_targets: &Option<String>) -> DesiredTargets {
-    if let Some(targets) = opts_targets.as_ref() {
+pub fn get_desired_targets(opts_targets: Option<&str>) -> DesiredTargets {
+    if let Some(targets) = opts_targets {
         DesiredTargets::initialized(targets.split(',').map(|t| t.to_string()).collect())
     } else {
         DesiredTargets::auto_detect()

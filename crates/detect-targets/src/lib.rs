@@ -35,7 +35,7 @@
 //! # async fn main() {
 //!
 //! assert_eq!(
-//!     get_desired_targets(&Some("x86_64-apple-darwin,aarch64-apple-darwin".to_string())).get().await,
+//!     get_desired_targets(Some("x86_64-apple-darwin,aarch64-apple-darwin")).get().await,
 //!     &["x86_64-apple-darwin", "aarch64-apple-darwin"],
 //! );
 //! # }
@@ -50,7 +50,7 @@
 //!
 //! eprintln!(
 //!     "Your platform supports targets: {:#?}",
-//!     get_desired_targets(&None).get().await
+//!     get_desired_targets(None).get().await
 //! );
 //! # }
 //! ```
