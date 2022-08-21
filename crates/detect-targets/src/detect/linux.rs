@@ -18,7 +18,11 @@ pub(super) async fn detect_targets_linux() -> Vec<String> {
         status: _,
         stdout,
         stderr,
-    }) = Command::new("ldd").arg("--version").stdin(Stdio::null()).output().await
+    }) = Command::new("ldd")
+        .arg("--version")
+        .stdin(Stdio::null())
+        .output()
+        .await
     {
         let libc_version = if let Some(libc_version) = parse_libc_version_from_ldd_output(&stdout) {
             libc_version
