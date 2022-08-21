@@ -354,6 +354,7 @@ dependencies = [
 name = "detect-targets"
 version = "0.1.0"
 dependencies = [
+ "cfg-if",
  "guess_host_triple",
  "tokio",
 ]
