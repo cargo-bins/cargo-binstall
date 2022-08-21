@@ -3,7 +3,18 @@ use std::{
     process::Output,
 };
 
+use cfg_if::cfg_if;
 use tokio::process::Command;
+
+cfg_if! {
+    if #[cfg(target_os = "linux")] {
+        mod linux;
+    } else if #[cfg(target_os = "macos")] {
+        mod macos;
+    } else if #[cfg(target_os = "windows")] {
+        mod windows;
+    }
+}
 
 /// Detect the targets supported at runtime,
 /// which might be different from `TARGET` which is detected
@@ -69,12 +80,3 @@ async fn get_target_from_rustc() -> Option<String> {
         .filter_map(|line| line.ok())
         .find_map(|line| line.strip_prefix("host: ").map(|host| host.to_owned()))
 }
-
-#[cfg(target_os = "linux")]
-mod linux;
-
-#[cfg(target_os = "macos")]
-mod macos;
-
-#[cfg(target_os = "windows")]
-mod windows;
