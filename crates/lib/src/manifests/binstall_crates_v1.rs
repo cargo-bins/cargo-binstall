@@ -170,9 +170,10 @@ impl<'a> IntoIterator for &'a Records {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{manifests::crate_info::CrateSource, targets::TARGET};
+    use crate::manifests::crate_info::CrateSource;
 
     use compact_str::CompactString;
+    use detect_targets::TARGET;
     use semver::Version;
     use tempfile::NamedTempFile;
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use semver::VersionReq;
 
-use crate::{manifests::cargo_toml_binstall::PkgOverride, targets::DesiredTargets};
+use crate::{manifests::cargo_toml_binstall::PkgOverride, DesiredTargets};
 
 pub mod install;
 pub mod resolve;

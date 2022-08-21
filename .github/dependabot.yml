@@ -28,3 +28,7 @@ updates:
     directory: "/crates/normalize-path"
     schedule:
       interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/detect-target"
+    schedule:
+      interval: "daily"
