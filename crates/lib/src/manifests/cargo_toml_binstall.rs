@@ -62,6 +62,16 @@ impl Default for PkgMeta {
 }
 
 impl PkgMeta {
+    pub fn clone_without_overrides(&self) -> Self {
+        Self {
+            pkg_url: self.pkg_url.clone(),
+            pkg_fmt: self.pkg_fmt,
+            bin_dir: self.bin_dir.clone(),
+            pub_key: self.pub_key.clone(),
+            overrides: HashMap::new(),
+        }
+    }
+
     /// Merge configuration overrides into object
     pub fn merge(&mut self, pkg_override: &PkgOverride) {
         if let Some(o) = &pkg_override.pkg_url {
