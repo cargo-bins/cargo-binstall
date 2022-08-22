@@ -23,12 +23,14 @@ pub struct GhCrateMeta {
     resolution: OnceCell<(Url, PkgFmt)>,
 }
 
+type BaselineFindTask = AutoAbortJoinHandle<Result<Option<(Url, PkgFmt)>, BinstallError>>;
+
 impl GhCrateMeta {
-    async fn find_baseline(
+    fn launch_baseline_find_tasks(
         client: &Client,
         data: &Data,
         pkg_fmt: PkgFmt,
-    ) -> Result<Option<Url>, BinstallError> {
+    ) -> Vec<BaselineFindTask> {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(|ext| {
             let ctx = Context::from_data(data, ext);
@@ -36,23 +38,27 @@ impl GhCrateMeta {
         });
 
         // go check all potential URLs at once
-        let checks = urls
-            .map(|url| {
-                let client = client.clone();
+        urls.map(|url| {
+            let client = client.clone();
 
-                AutoAbortJoinHandle::spawn(async move {
-                    debug!("Checking for package at: '{url}'");
+            AutoAbortJoinHandle::spawn(async move {
+                debug!("Checking for package at: '{url}'");
 
-                    remote_exists(client, url.clone(), Method::HEAD)
-                        .await
-                        .map(|exists| exists.then_some(url))
-                })
+                remote_exists(client, url.clone(), Method::HEAD)
+                    .await
+                    .map(|exists| exists.then_some((url, pkg_fmt)))
             })
-            .collect::<Vec<_>>();
+        })
+        .collect()
+    }
 
-        // get the first URL that exists
-        for check in checks {
-            if let Some(url) = check.await?? {
+    async fn find_baseline(
+        client: &Client,
+        data: &Data,
+        pkg_fmt: PkgFmt,
+    ) -> Result<Option<Url>, BinstallError> {
+        for check in Self::launch_baseline_find_tasks(client, data, pkg_fmt) {
+            if let Some((url, _pkg_fmt)) = check.await?? {
                 if url.scheme() != "https" {
                     warn!(
                         "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
