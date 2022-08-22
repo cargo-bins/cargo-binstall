@@ -206,6 +206,9 @@ async fn resolve_inner(
             }
             meta.merge(&opts.cli_overrides);
 
+            // GhCrateMeta would automatically detect available pkg_fmt.
+            meta.pkg_fmt = Some(fetcher.pkg_fmt());
+
             // Generate temporary binary path
             let bin_path = temp_dir.join(format!("bin-{}", crate_name.name));
             debug!("Using temporary binary path: {}", bin_path.display());
