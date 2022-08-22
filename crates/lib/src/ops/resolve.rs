@@ -178,8 +178,8 @@ async fn resolve_inner(
         let mut target_meta = meta.clone();
 
         // Merge any overrides
-        if let Some(o) = target_meta.overrides.get(target).cloned() {
-            target_meta.merge(&o);
+        if let Some(o) = meta.overrides.get(target) {
+            target_meta.merge(o);
         }
 
         target_meta.merge(&opts.cli_overrides);
