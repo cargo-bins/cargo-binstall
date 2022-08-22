@@ -45,15 +45,14 @@ impl GhCrateMeta {
 
                     remote_exists(client, url.clone(), Method::HEAD)
                         .await
-                        .map(|exists| (url, exists))
+                        .map(|exists| exists.then_some(url))
                 })
             })
             .collect::<Vec<_>>();
 
         // get the first URL that exists
         for check in checks {
-            let (url, exists) = check.await??;
-            if exists {
+            if let Some(url) = check.await?? {
                 if url.scheme() != "https" {
                     warn!(
                         "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
