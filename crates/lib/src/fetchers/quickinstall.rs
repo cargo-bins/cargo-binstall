@@ -26,7 +26,7 @@ pub struct QuickInstall {
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    async fn new(client: &Client, data: &Data) -> Arc<Self> {
+    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = data.target.clone();

@@ -185,13 +185,13 @@ async fn resolve_inner(
         target_meta.merge(&opts.cli_overrides);
         debug!("Found metadata: {target_meta:?}");
 
-        let fetcher_data = Data {
+        let fetcher_data = Arc::new(Data {
             name: package.name.clone(),
             target: target.clone(),
             version: package.version.clone(),
             repo: package.repository.clone(),
             meta: target_meta,
-        };
+        });
 
         fetchers.add(GhCrateMeta::new(&client, &fetcher_data).await);
         fetchers.add(QuickInstall::new(&client, &fetcher_data).await);
