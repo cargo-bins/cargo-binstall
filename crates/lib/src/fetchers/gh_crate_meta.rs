@@ -33,7 +33,13 @@ impl GhCrateMeta {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(|ext| {
             let ctx = Context::from_data(&self.data, ext);
-            ctx.render_url(&self.data.meta.pkg_url).ok()
+            match ctx.render_url(&self.data.meta.pkg_url) {
+                Ok(url) => Some(url),
+                Err(err) => {
+                    warn!("Failed to render url for {ctx:#?}: {err:#?}");
+                    None
+                }
+            }
         });
 
         // go check all potential URLs at once
