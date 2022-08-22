@@ -37,7 +37,7 @@ pub struct PkgMeta {
     pub pkg_url: String,
 
     /// Format for package downloads
-    pub pkg_fmt: PkgFmt,
+    pub pkg_fmt: Option<PkgFmt>,
 
     /// Path template for binary files in packages
     pub bin_dir: String,
@@ -53,7 +53,7 @@ impl Default for PkgMeta {
     fn default() -> Self {
         Self {
             pkg_url: DEFAULT_PKG_URL.to_string(),
-            pkg_fmt: PkgFmt::default(),
+            pkg_fmt: None,
             bin_dir: DEFAULT_BIN_DIR.to_string(),
             pub_key: None,
             overrides: HashMap::new(),
@@ -62,13 +62,23 @@ impl Default for PkgMeta {
 }
 
 impl PkgMeta {
+    pub fn clone_without_overrides(&self) -> Self {
+        Self {
+            pkg_url: self.pkg_url.clone(),
+            pkg_fmt: self.pkg_fmt,
+            bin_dir: self.bin_dir.clone(),
+            pub_key: self.pub_key.clone(),
+            overrides: HashMap::new(),
+        }
+    }
+
     /// Merge configuration overrides into object
     pub fn merge(&mut self, pkg_override: &PkgOverride) {
         if let Some(o) = &pkg_override.pkg_url {
             self.pkg_url = o.clone();
         }
         if let Some(o) = &pkg_override.pkg_fmt {
-            self.pkg_fmt = *o;
+            self.pkg_fmt = Some(*o);
         }
         if let Some(o) = &pkg_override.bin_dir {
             self.bin_dir = o.clone();

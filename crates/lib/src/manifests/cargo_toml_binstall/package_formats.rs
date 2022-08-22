@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString};
+use strum_macros::{Display, EnumIter, EnumString};
 
 /// Binary format enumeration
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(
+    Debug, Display, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, EnumIter,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PkgFmt {
     /// Download format is TAR (uncompressed)

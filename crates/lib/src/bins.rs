@@ -42,7 +42,7 @@ impl BinFile {
         // Generate install paths
         // Source path is the download dir + the generated binary path
         let source_file_path = ctx.render(&data.meta.bin_dir)?;
-        let source = if data.meta.pkg_fmt == PkgFmt::Bin {
+        let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
             data.bin_path.clone()
         } else {
             data.bin_path.join(&source_file_path)

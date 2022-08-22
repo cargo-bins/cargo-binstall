@@ -18,7 +18,7 @@ mod quickinstall;
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
-    async fn new(client: &Client, data: &Data) -> Arc<Self>
+    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self>
     where
         Self: Sized;
 
@@ -37,6 +37,9 @@ pub trait Fetcher: Send + Sync {
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
+
+    /// Return finalized target meta.
+    fn target_meta(&self) -> PkgMeta;
 
     /// A short human-readable name or descriptor for the package source
     fn source_name(&self) -> CompactString;

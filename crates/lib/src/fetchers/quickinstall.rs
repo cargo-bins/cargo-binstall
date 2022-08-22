@@ -10,7 +10,7 @@ use url::Url;
 use crate::{
     errors::BinstallError,
     helpers::{download::download_and_extract, remote::remote_exists},
-    manifests::cargo_toml_binstall::PkgFmt,
+    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
 use super::Data;
@@ -22,11 +22,12 @@ pub struct QuickInstall {
     client: Client,
     package: String,
     target: String,
+    data: Arc<Data>,
 }
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    async fn new(client: &Client, data: &Data) -> Arc<Self> {
+    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = data.target.clone();
@@ -34,6 +35,7 @@ impl super::Fetcher for QuickInstall {
             client: client.clone(),
             package: format!("{crate_name}-{version}-{target}"),
             target,
+            data: data.clone(),
         })
     }
 
@@ -52,6 +54,12 @@ impl super::Fetcher for QuickInstall {
 
     fn pkg_fmt(&self) -> PkgFmt {
         PkgFmt::Tgz
+    }
+
+    fn target_meta(&self) -> PkgMeta {
+        let mut meta = self.data.meta.clone();
+        meta.pkg_fmt = Some(self.pkg_fmt());
+        meta
     }
 
     fn source_name(&self) -> CompactString {

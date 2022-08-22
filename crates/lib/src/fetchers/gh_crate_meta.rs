@@ -5,66 +5,81 @@ use log::{debug, warn};
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Method};
 use serde::Serialize;
+use strum::IntoEnumIterator;
 use tinytemplate::TinyTemplate;
 use url::Url;
 
 use crate::{
     errors::BinstallError,
     helpers::{download::download_and_extract, remote::remote_exists, tasks::AutoAbortJoinHandle},
-    manifests::cargo_toml_binstall::PkgFmt,
+    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
 use super::Data;
 
 pub struct GhCrateMeta {
     client: Client,
-    data: Data,
-    url: OnceCell<Url>,
+    data: Arc<Data>,
+    resolution: OnceCell<(Url, PkgFmt)>,
+}
+
+type BaselineFindTask = AutoAbortJoinHandle<Result<Option<(Url, PkgFmt)>, BinstallError>>;
+
+impl GhCrateMeta {
+    fn launch_baseline_find_tasks(
+        &self,
+        pkg_fmt: PkgFmt,
+    ) -> impl Iterator<Item = BaselineFindTask> + '_ {
+        // build up list of potential URLs
+        let urls = pkg_fmt.extensions().iter().filter_map(|ext| {
+            let ctx = Context::from_data(&self.data, ext);
+            match ctx.render_url(&self.data.meta.pkg_url) {
+                Ok(url) => Some(url),
+                Err(err) => {
+                    warn!("Failed to render url for {ctx:#?}: {err:#?}");
+                    None
+                }
+            }
+        });
+
+        // go check all potential URLs at once
+        urls.map(move |url| {
+            let client = self.client.clone();
+
+            AutoAbortJoinHandle::spawn(async move {
+                debug!("Checking for package at: '{url}'");
+
+                remote_exists(client, url.clone(), Method::HEAD)
+                    .await
+                    .map(|exists| exists.then_some((url, pkg_fmt)))
+            })
+        })
+    }
 }
 
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
-    async fn new(client: &Client, data: &Data) -> Arc<Self> {
+    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self> {
         Arc::new(Self {
             client: client.clone(),
             data: data.clone(),
-            url: OnceCell::new(),
+            resolution: OnceCell::new(),
         })
     }
 
     async fn find(&self) -> Result<bool, BinstallError> {
-        // build up list of potential URLs
-        let urls = self.data.meta.pkg_fmt.extensions().iter().map(|ext| {
-            let ctx = Context::from_data(&self.data, ext);
-            ctx.render_url(&self.data.meta.pkg_url)
-        });
+        let handles: Vec<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
+            self.launch_baseline_find_tasks(pkg_fmt).collect()
+        } else {
+            PkgFmt::iter()
+                .flat_map(|pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt))
+                .collect()
+        };
 
-        // go check all potential URLs at once
-        let checks = urls
-            .map(|url| {
-                let client = self.client.clone();
-                AutoAbortJoinHandle::spawn(async move {
-                    let url = url?;
-                    debug!("Checking for package at: '{url}'");
-                    remote_exists(client, url.clone(), Method::HEAD)
-                        .await
-                        .map(|exists| (url.clone(), exists))
-                })
-            })
-            .collect::<Vec<_>>();
-
-        // get the first URL that exists
-        for check in checks {
-            let (url, exists) = check.await??;
-            if exists {
-                if url.scheme() != "https" {
-                    warn!(
-                        "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
-                    );
-                }
-
-                debug!("Winning URL is {url}");
-                self.url.set(url).unwrap(); // find() is called first
+        for handle in handles {
+            if let Some((url, pkg_fmt)) = handle.await?? {
+                debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
+                self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
                 return Ok(true);
             }
         }
@@ -73,19 +88,25 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
-        let url = self.url.get().unwrap(); // find() is called first
+        let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
         debug!("Downloading package from: '{url}'");
-        download_and_extract(&self.client, url, self.pkg_fmt(), dst).await
+        download_and_extract(&self.client, url, *pkg_fmt, dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
-        self.data.meta.pkg_fmt
+        self.resolution.get().unwrap().1
+    }
+
+    fn target_meta(&self) -> PkgMeta {
+        let mut meta = self.data.meta.clone();
+        meta.pkg_fmt = Some(self.pkg_fmt());
+        meta
     }
 
     fn source_name(&self) -> CompactString {
-        self.url
+        self.resolution
             .get()
-            .map(|url| {
+            .map(|(url, _pkg_fmt)| {
                 if let Some(domain) = url.domain() {
                     domain.to_compact_string()
                 } else if let Some(host) = url.host_str() {
@@ -130,7 +151,7 @@ impl<'c> Context<'c> {
     pub(self) fn from_data(data: &'c Data, archive_format: &'c str) -> Self {
         Self {
             name: &data.name,
-            repo: data.repo.as_ref().map(|s| &s[..]),
+            repo: data.repo.as_deref(),
             target: &data.target,
             version: &data.version,
             format: archive_format,
@@ -271,7 +292,7 @@ mod test {
             pkg_url:
                 "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
                     .into(),
-            pkg_fmt: PkgFmt::Txz,
+            pkg_fmt: Some(PkgFmt::Txz),
             ..Default::default()
         };
 
@@ -294,7 +315,7 @@ mod test {
     fn no_archive() {
         let meta = PkgMeta {
             pkg_url: "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".into(),
-            pkg_fmt: PkgFmt::Bin,
+            pkg_fmt: Some(PkgFmt::Bin),
             ..Default::default()
         };
 

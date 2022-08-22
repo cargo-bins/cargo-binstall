@@ -160,7 +160,7 @@ async fn resolve_inner(
         }
     }
 
-    let (mut meta, binaries) = (
+    let (meta, binaries) = (
         package
             .metadata
             .as_ref()
@@ -175,23 +175,23 @@ async fn resolve_inner(
 
     for target in desired_targets {
         debug!("Building metadata for target: {target}");
-        let mut target_meta = meta.clone();
+        let mut target_meta = meta.clone_without_overrides();
 
         // Merge any overrides
-        if let Some(o) = target_meta.overrides.get(target).cloned() {
-            target_meta.merge(&o);
+        if let Some(o) = meta.overrides.get(target) {
+            target_meta.merge(o);
         }
 
         target_meta.merge(&opts.cli_overrides);
         debug!("Found metadata: {target_meta:?}");
 
-        let fetcher_data = Data {
+        let fetcher_data = Arc::new(Data {
             name: package.name.clone(),
             target: target.clone(),
             version: package.version.clone(),
             repo: package.repository.clone(),
             meta: target_meta,
-        };
+        });
 
         fetchers.add(GhCrateMeta::new(&client, &fetcher_data).await);
         fetchers.add(QuickInstall::new(&client, &fetcher_data).await);
@@ -200,11 +200,7 @@ async fn resolve_inner(
     let resolution = match fetchers.first_available().await {
         Some(fetcher) => {
             // Build final metadata
-            let fetcher_target = fetcher.target();
-            if let Some(o) = meta.overrides.get(&fetcher_target.to_owned()).cloned() {
-                meta.merge(&o);
-            }
-            meta.merge(&opts.cli_overrides);
+            let meta = fetcher.target_meta();
 
             // Generate temporary binary path
             let bin_path = temp_dir.join(format!("bin-{}", crate_name.name));
