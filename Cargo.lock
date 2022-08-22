@@ -288,9 +288,9 @@ dependencies = [
 
 [[package]]
 name = "compact_str"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5857fc4f27cd0fa2cd7c4a4fa780c0da3d898ae27e66bf6a719343e219e9a559"
+checksum = "bbe793f2e4f8b2b8295ea7dfd141260c0a5c9f6d25c91bde42efed76a47e0bfe"
 dependencies = [
  "castaway",
  "itoa",
