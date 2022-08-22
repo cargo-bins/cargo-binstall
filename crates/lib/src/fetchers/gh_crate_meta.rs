@@ -30,21 +30,22 @@ impl GhCrateMeta {
         pkg_fmt: PkgFmt,
     ) -> Result<Option<Url>, BinstallError> {
         // build up list of potential URLs
-        let urls = pkg_fmt.extensions().iter().map(|ext| {
+        let urls = pkg_fmt.extensions().iter().filter_map(|ext| {
             let ctx = Context::from_data(data, ext);
-            ctx.render_url(&data.meta.pkg_url)
+            ctx.render_url(&data.meta.pkg_url).ok()
         });
 
         // go check all potential URLs at once
         let checks = urls
             .map(|url| {
                 let client = client.clone();
+
                 AutoAbortJoinHandle::spawn(async move {
-                    let url = url?;
                     debug!("Checking for package at: '{url}'");
+
                     remote_exists(client, url.clone(), Method::HEAD)
                         .await
-                        .map(|exists| (url.clone(), exists))
+                        .map(|exists| (url, exists))
                 })
             })
             .collect::<Vec<_>>();
