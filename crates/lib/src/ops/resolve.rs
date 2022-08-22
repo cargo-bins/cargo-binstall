@@ -175,7 +175,7 @@ async fn resolve_inner(
 
     for target in desired_targets {
         debug!("Building metadata for target: {target}");
-        let mut target_meta = meta.clone();
+        let mut target_meta = meta.clone_without_overrides();
 
         // Merge any overrides
         if let Some(o) = meta.overrides.get(target) {
