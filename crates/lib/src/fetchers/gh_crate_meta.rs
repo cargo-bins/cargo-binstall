@@ -5,6 +5,7 @@ use log::{debug, warn};
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Method};
 use serde::Serialize;
+use strum::IntoEnumIterator;
 use tinytemplate::TinyTemplate;
 use url::Url;
 
@@ -18,22 +19,26 @@ use super::Data;
 
 pub struct GhCrateMeta {
     client: Client,
-    data: Data,
-    url: OnceCell<Url>,
+    data: Arc<Data>,
+    resolution: OnceCell<(Url, PkgFmt)>,
 }
 
 impl GhCrateMeta {
-    async fn find_baseline(&self, pkg_fmt: PkgFmt) -> Result<Option<Url>, BinstallError> {
+    async fn find_baseline(
+        client: &Client,
+        data: &Data,
+        pkg_fmt: PkgFmt,
+    ) -> Result<Option<Url>, BinstallError> {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().map(|ext| {
-            let ctx = Context::from_data(&self.data, ext);
-            ctx.render_url(&self.data.meta.pkg_url)
+            let ctx = Context::from_data(data, ext);
+            ctx.render_url(&data.meta.pkg_url)
         });
 
         // go check all potential URLs at once
         let checks = urls
             .map(|url| {
-                let client = self.client.clone();
+                let client = client.clone();
                 AutoAbortJoinHandle::spawn(async move {
                     let url = url?;
                     debug!("Checking for package at: '{url}'");
@@ -67,35 +72,62 @@ impl super::Fetcher for GhCrateMeta {
     async fn new(client: &Client, data: &Data) -> Arc<Self> {
         Arc::new(Self {
             client: client.clone(),
-            data: data.clone(),
-            url: OnceCell::new(),
+            data: Arc::new(data.clone()),
+            resolution: OnceCell::new(),
         })
     }
 
     async fn find(&self) -> Result<bool, BinstallError> {
-        if let Some(url) = self.find_baseline(self.data.meta.pkg_fmt).await? {
-            debug!("Winning URL is {url}");
-            self.url.set(url).unwrap(); // find() is called first
-            Ok(true)
+        if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
+            if let Some(url) = Self::find_baseline(&self.client, &self.data, pkg_fmt).await? {
+                debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
+                self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         } else {
+            let handles: Vec<_> = PkgFmt::iter()
+                .map(|pkg_fmt| {
+                    let client = self.client.clone();
+                    let data = self.data.clone();
+
+                    AutoAbortJoinHandle::spawn(async move {
+                        Ok::<_, BinstallError>(
+                            Self::find_baseline(&client, &data, pkg_fmt)
+                                .await?
+                                .map(|url| (url, pkg_fmt)),
+                        )
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                if let Some((url, pkg_fmt)) = handle.await?? {
+                    debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
+                    self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
+                    return Ok(true);
+                }
+            }
+
             Ok(false)
         }
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
-        let url = self.url.get().unwrap(); // find() is called first
+        let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
         debug!("Downloading package from: '{url}'");
-        download_and_extract(&self.client, url, self.pkg_fmt(), dst).await
+        download_and_extract(&self.client, url, *pkg_fmt, dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
-        self.data.meta.pkg_fmt
+        self.resolution.get().unwrap().1
     }
 
     fn source_name(&self) -> CompactString {
-        self.url
+        self.resolution
             .get()
-            .map(|url| {
+            .map(|(url, _pkg_fmt)| {
                 if let Some(domain) = url.domain() {
                     domain.to_compact_string()
                 } else if let Some(host) = url.host_str() {
@@ -281,7 +313,7 @@ mod test {
             pkg_url:
                 "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
                     .into(),
-            pkg_fmt: PkgFmt::Txz,
+            pkg_fmt: Some(PkgFmt::Txz),
             ..Default::default()
         };
 
@@ -304,7 +336,7 @@ mod test {
     fn no_archive() {
         let meta = PkgMeta {
             pkg_url: "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".into(),
-            pkg_fmt: PkgFmt::Bin,
+            pkg_fmt: Some(PkgFmt::Bin),
             ..Default::default()
         };
 
