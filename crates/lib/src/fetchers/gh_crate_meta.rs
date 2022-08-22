@@ -27,19 +27,18 @@ type BaselineFindTask = AutoAbortJoinHandle<Result<Option<(Url, PkgFmt)>, Binsta
 
 impl GhCrateMeta {
     fn launch_baseline_find_tasks(
-        client: &Client,
-        data: &Data,
+        &self,
         pkg_fmt: PkgFmt,
-    ) -> Vec<BaselineFindTask> {
+    ) -> impl Iterator<Item = BaselineFindTask> + '_ {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(|ext| {
-            let ctx = Context::from_data(data, ext);
-            ctx.render_url(&data.meta.pkg_url).ok()
+            let ctx = Context::from_data(&self.data, ext);
+            ctx.render_url(&self.data.meta.pkg_url).ok()
         });
 
         // go check all potential URLs at once
-        urls.map(|url| {
-            let client = client.clone();
+        urls.map(move |url| {
+            let client = self.client.clone();
 
             AutoAbortJoinHandle::spawn(async move {
                 debug!("Checking for package at: '{url}'");
@@ -49,27 +48,6 @@ impl GhCrateMeta {
                     .map(|exists| exists.then_some((url, pkg_fmt)))
             })
         })
-        .collect()
-    }
-
-    async fn find_baseline(
-        client: &Client,
-        data: &Data,
-        pkg_fmt: PkgFmt,
-    ) -> Result<Option<Url>, BinstallError> {
-        for check in Self::launch_baseline_find_tasks(client, data, pkg_fmt) {
-            if let Some((url, _pkg_fmt)) = check.await?? {
-                if url.scheme() != "https" {
-                    warn!(
-                        "URL is not HTTPS! This may become a hard error in the future, tell the upstream!"
-                    );
-                }
-
-                return Ok(Some(url));
-            }
-        }
-
-        Ok(None)
     }
 }
 
@@ -84,40 +62,23 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn find(&self) -> Result<bool, BinstallError> {
-        if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
-            if let Some(url) = Self::find_baseline(&self.client, &self.data, pkg_fmt).await? {
+        let handles: Vec<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
+            self.launch_baseline_find_tasks(pkg_fmt).collect()
+        } else {
+            PkgFmt::iter()
+                .flat_map(|pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt))
+                .collect()
+        };
+
+        for handle in handles {
+            if let Some((url, pkg_fmt)) = handle.await?? {
                 debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
                 self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
-                Ok(true)
-            } else {
-                Ok(false)
+                return Ok(true);
             }
-        } else {
-            let handles: Vec<_> = PkgFmt::iter()
-                .map(|pkg_fmt| {
-                    let client = self.client.clone();
-                    let data = self.data.clone();
-
-                    AutoAbortJoinHandle::spawn(async move {
-                        Ok::<_, BinstallError>(
-                            Self::find_baseline(&client, &data, pkg_fmt)
-                                .await?
-                                .map(|url| (url, pkg_fmt)),
-                        )
-                    })
-                })
-                .collect();
-
-            for handle in handles {
-                if let Some((url, pkg_fmt)) = handle.await?? {
-                    debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
-                    self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
-                    return Ok(true);
-                }
-            }
-
-            Ok(false)
         }
+
+        Ok(false)
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
