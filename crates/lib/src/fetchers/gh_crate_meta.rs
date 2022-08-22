@@ -178,7 +178,7 @@ impl<'c> Context<'c> {
     pub(self) fn from_data(data: &'c Data, archive_format: &'c str) -> Self {
         Self {
             name: &data.name,
-            repo: data.repo.as_ref().map(|s| &s[..]),
+            repo: data.repo.as_deref(),
             target: &data.target,
             version: &data.version,
             format: archive_format,
