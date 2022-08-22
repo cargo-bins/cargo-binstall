@@ -22,19 +22,10 @@ pub struct GhCrateMeta {
     url: OnceCell<Url>,
 }
 
-#[async_trait::async_trait]
-impl super::Fetcher for GhCrateMeta {
-    async fn new(client: &Client, data: &Data) -> Arc<Self> {
-        Arc::new(Self {
-            client: client.clone(),
-            data: data.clone(),
-            url: OnceCell::new(),
-        })
-    }
-
-    async fn find(&self) -> Result<bool, BinstallError> {
+impl GhCrateMeta {
+    async fn find_baseline(&self, pkg_fmt: PkgFmt) -> Result<Option<Url>, BinstallError> {
         // build up list of potential URLs
-        let urls = self.data.meta.pkg_fmt.extensions().iter().map(|ext| {
+        let urls = pkg_fmt.extensions().iter().map(|ext| {
             let ctx = Context::from_data(&self.data, ext);
             ctx.render_url(&self.data.meta.pkg_url)
         });
@@ -63,13 +54,32 @@ impl super::Fetcher for GhCrateMeta {
                     );
                 }
 
-                debug!("Winning URL is {url}");
-                self.url.set(url).unwrap(); // find() is called first
-                return Ok(true);
+                return Ok(Some(url));
             }
         }
 
-        Ok(false)
+        Ok(None)
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Fetcher for GhCrateMeta {
+    async fn new(client: &Client, data: &Data) -> Arc<Self> {
+        Arc::new(Self {
+            client: client.clone(),
+            data: data.clone(),
+            url: OnceCell::new(),
+        })
+    }
+
+    async fn find(&self) -> Result<bool, BinstallError> {
+        if let Some(url) = self.find_baseline(self.data.meta.pkg_fmt).await? {
+            debug!("Winning URL is {url}");
+            self.url.set(url).unwrap(); // find() is called first
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
