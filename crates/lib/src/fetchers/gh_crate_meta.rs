@@ -12,7 +12,7 @@ use url::Url;
 use crate::{
     errors::BinstallError,
     helpers::{download::download_and_extract, remote::remote_exists, tasks::AutoAbortJoinHandle},
-    manifests::cargo_toml_binstall::PkgFmt,
+    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
 use super::Data;
@@ -122,6 +122,12 @@ impl super::Fetcher for GhCrateMeta {
 
     fn pkg_fmt(&self) -> PkgFmt {
         self.resolution.get().unwrap().1
+    }
+
+    fn target_meta(&self) -> PkgMeta {
+        let mut meta = self.data.meta.clone();
+        meta.pkg_fmt = Some(self.pkg_fmt());
+        meta
     }
 
     fn source_name(&self) -> CompactString {
