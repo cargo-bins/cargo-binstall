@@ -1,0 +1,45 @@
+[package]
+publish = false
+name = "survey-index"
+description = "Tool to OCCASIONALLY survey the crates.io registry index for Binstall stats"
+repository = "https://github.com/ryankurte/cargo-binstall"
+version = "0.1.0"
+rust-version = "1.61.0"
+authors = ["Félix Saparelli <felix@passcod.name>"]
+edition = "2021"
+license = "GPL-3.0"
+
+[dependencies]
+binstall = { path = "../lib" }
+crates-index = "0.18.9"
+semver = "1.0.13"
+tracing = "0.1.36"
+rayon = "1.5.3"
+url = "2.2.2"
+tokio = { version = "1.20.1", features = ["full"] }
+sha2 = "0.10.2"
+
+[dependencies.clap]
+version = "3.2.17"
+features = ["cargo", "derive", "wrap_help"]
+
+[dependencies.miette]
+version = "5.3.0"
+features = ["fancy"]
+
+[dependencies.reqwest]
+version = "0.11.11"
+default-features = false
+features = [
+    "rustls-tls",
+    "trust-dns",
+]
+
+[dependencies.tracing-subscriber]
+version = "0.3.15"
+features = [
+	"env-filter",
+	"fmt",
+	"json",
+	"tracing-log",
+]

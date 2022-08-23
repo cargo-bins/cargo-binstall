@@ -6,6 +6,7 @@ members = [
     "crates/flock",
     "crates/normalize-path",
     "crates/detect-targets",
+    "crates/survey-index",
 ]
 
 [profile.release]
