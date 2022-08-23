@@ -44,7 +44,6 @@ async fn main() -> Result<()> {
     let crates = read_dir("./crates/")
         .into_diagnostic()?
         .map(|res| res.map(|e| e.path()))
-        .take(1)
         .collect::<Result<Vec<_>, _>>()
         .into_diagnostic()?;
     let total = crates.len();
