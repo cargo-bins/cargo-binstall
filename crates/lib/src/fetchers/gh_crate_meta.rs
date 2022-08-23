@@ -18,6 +18,7 @@ use crate::{
 use super::Data;
 
 mod hosting;
+use hosting::GitHostingServices;
 
 pub struct GhCrateMeta {
     client: Client,
@@ -28,14 +29,15 @@ pub struct GhCrateMeta {
 type BaselineFindTask = AutoAbortJoinHandle<Result<Option<(Url, PkgFmt)>, BinstallError>>;
 
 impl GhCrateMeta {
-    fn launch_baseline_find_tasks(
-        &self,
+    fn launch_baseline_find_tasks<'a>(
+        &'a self,
         pkg_fmt: PkgFmt,
-    ) -> impl Iterator<Item = BaselineFindTask> + '_ {
+        pkg_url: &'a str,
+    ) -> impl Iterator<Item = BaselineFindTask> + 'a {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(|ext| {
             let ctx = Context::from_data(&self.data, ext);
-            match ctx.render_url(&self.data.meta.pkg_url) {
+            match ctx.render_url(pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
                     warn!("Failed to render url for {ctx:#?}: {err:#?}");
@@ -70,11 +72,41 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn find(&self) -> Result<bool, BinstallError> {
+        let pkg_url = if let Some(pkg_url) = self.data.meta.pkg_url.as_deref() {
+            pkg_url
+        } else if let Some(repo) = self.data.repo.as_deref() {
+            if let Some(pkg_url) =
+                GitHostingServices::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
+            {
+                pkg_url
+            } else {
+                warn!(
+                    concat!(
+                        "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
+                        "Please ask the upstream to provide it for target {}."
+                    ),
+                    repo, self.data.target
+                );
+
+                return Ok(false);
+            }
+        } else {
+            warn!(
+                concat!(
+                    "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
+                    "Please ask the upstream to provide it for target {}."
+                ),
+                self.data.target
+            );
+
+            return Ok(false);
+        };
+
         let handles: Vec<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
-            self.launch_baseline_find_tasks(pkg_fmt).collect()
+            self.launch_baseline_find_tasks(pkg_fmt, pkg_url).collect()
         } else {
             PkgFmt::iter()
-                .flat_map(|pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt))
+                .flat_map(|pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt, pkg_url))
                 .collect()
         };
 
@@ -182,6 +214,8 @@ mod test {
     use super::{super::Data, Context};
     use url::Url;
 
+    const DEFAULT_PKG_URL: &str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }";
+
     fn url(s: &str) -> Url {
         Url::parse(s).unwrap()
     }
@@ -199,7 +233,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
-            ctx.render_url(&data.meta.pkg_url).unwrap(),
+            ctx.render_url(DEFAULT_PKG_URL).unwrap(),
             url("https://github.com/ryankurte/cargo-binstall/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
         );
     }
@@ -217,13 +251,14 @@ mod test {
         };
 
         let ctx = Context::from_data(&data, "tgz");
-        ctx.render_url(&data.meta.pkg_url).unwrap();
+        ctx.render_url(data.meta.pkg_url.as_deref().unwrap())
+            .unwrap();
     }
 
     #[test]
     fn no_repo_but_full_url() {
         let meta = PkgMeta {
-            pkg_url: format!("https://example.com{}", PkgMeta::default().pkg_url),
+            pkg_url: Some(format!("https://example.com{DEFAULT_PKG_URL}")),
             ..Default::default()
         };
 
@@ -237,7 +272,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
-            ctx.render_url(&data.meta.pkg_url).unwrap(),
+            ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
         );
     }
@@ -245,9 +280,9 @@ mod test {
     #[test]
     fn different_url() {
         let meta = PkgMeta {
-            pkg_url:
+            pkg_url: Some(
             "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }"
-                .into(),
+                .to_string()),
             ..Default::default()
         };
 
@@ -261,7 +296,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
-            ctx.render_url(&data.meta.pkg_url).unwrap(),
+            ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
         );
     }
@@ -269,7 +304,7 @@ mod test {
     #[test]
     fn deprecated_format() {
         let meta = PkgMeta {
-            pkg_url: "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".into(),
+            pkg_url: Some("{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".to_string()),
             ..Default::default()
         };
 
@@ -283,7 +318,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "tgz");
         assert_eq!(
-            ctx.render_url(&data.meta.pkg_url).unwrap(),
+            ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
         );
     }
@@ -291,9 +326,10 @@ mod test {
     #[test]
     fn different_ext() {
         let meta = PkgMeta {
-            pkg_url:
+            pkg_url: Some(
                 "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
-                    .into(),
+                    .to_string(),
+            ),
             pkg_fmt: Some(PkgFmt::Txz),
             ..Default::default()
         };
@@ -308,7 +344,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "txz");
         assert_eq!(
-            ctx.render_url(&data.meta.pkg_url).unwrap(),
+            ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz")
         );
     }
@@ -316,7 +352,7 @@ mod test {
     #[test]
     fn no_archive() {
         let meta = PkgMeta {
-            pkg_url: "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".into(),
+            pkg_url: Some("{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".to_string()),
             pkg_fmt: Some(PkgFmt::Bin),
             ..Default::default()
         };
@@ -331,7 +367,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "bin");
         assert_eq!(
-            ctx.render_url(&data.meta.pkg_url).unwrap(),
+            ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe")
         );
     }

@@ -15,7 +15,7 @@ fn parse_meta() {
     assert_eq!(&package.name, "cargo-binstall-test");
 
     assert_eq!(
-        &meta.pkg_url,
+        meta.pkg_url.as_deref().unwrap(),
         "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
     );
 
