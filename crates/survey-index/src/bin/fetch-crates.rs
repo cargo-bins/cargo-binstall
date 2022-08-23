@@ -12,6 +12,8 @@ use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;
 use url::Url;
 
+const CHUNK_SIZE: usize = 512;
+
 #[tokio::main]
 #[tracing::instrument]
 async fn main() -> Result<()> {
@@ -21,8 +23,9 @@ async fn main() -> Result<()> {
         .init();
 
     info!("Gathering all crates we need to fetch");
-    let mut all_latests = read_index()?;
-    info!(count=%all_latests.len(), "that's a lot of crates");
+    let all_latests = read_index()?;
+    let total = all_latests.len();
+    info!(%total, "that's a lot of crates");
 
     let client = Client::builder()
         .http2_prior_knowledge()
@@ -30,11 +33,19 @@ async fn main() -> Result<()> {
         .build()
         .into_diagnostic()?;
 
+    for (n, chunk) in all_latests.chunks(CHUNK_SIZE).enumerate() {
+        info!("Processing {n}th of {}", all_latests.len() / CHUNK_SIZE + 1);
+        get_a_bunch(client.clone(), n, total, chunk).await?;
+    }
+
+    Ok(())
+}
+
+async fn get_a_bunch(client: Client, n: usize, total: usize, chunk: &[IndexCrate]) -> Result<()> {
     let mut set = JoinSet::new();
 
-    let n = all_latests.len();
-    for (i, crate_version) in all_latests.into_iter().enumerate() {
-        set.spawn(crate_version.download(client.clone(), i, n));
+    for (i, crate_version) in chunk.into_iter().enumerate() {
+        set.spawn(crate_version.clone().download(client.clone(), n * CHUNK_SIZE + i, total));
     }
 
     while let Some(res) = set.join_next().await {
@@ -56,12 +67,12 @@ struct IndexCrate {
 
 impl IndexCrate {
     #[tracing::instrument(level = "debug")]
-    async fn download(self, client: Client, i: usize, n: usize) -> Result<()> {
-        info!(target=%self, "downloading {i}/{n}");
+    async fn download(self, client: Client, i: usize, total: usize) -> Result<()> {
+        info!(target=%self, "downloading {i}/{total}");
         Download::<Sha256>::new_with_checksum(client, self.url.clone(), self.checksum[..].to_vec())
             .and_extract(PkgFmt::Tgz, "./crates")
             .await?;
-        info!(target=%self, "downloaded {i}/{n}");
+        info!(target=%self, "downloaded {i}/{total}");
 
         Ok(())
     }
