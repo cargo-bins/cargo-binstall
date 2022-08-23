@@ -11,6 +11,20 @@ pub enum GitHostingServices {
     Unknown,
 }
 impl GitHostingServices {
+    pub fn guess_git_hosting_services(repo: &str) -> Result<Self, BinstallError> {
+        use GitHostingServices::*;
+
+        let url = Url::parse(repo)?;
+
+        match url.domain() {
+            Some(domain) if domain.starts_with("github") => Ok(GitHub),
+            Some(domain) if domain.starts_with("gitlab") => Ok(GitLab),
+            Some(domain) if domain == "bitbucket.org" => Ok(BitBucket),
+            Some(domain) if domain == "sourceforge.net" => Ok(SourceForge),
+            _ => Ok(Unknown),
+        }
+    }
+
     pub fn get_default_pkg_url_template(self) -> Option<&'static str> {
         use GitHostingServices::*;
 
@@ -21,17 +35,5 @@ impl GitHostingServices {
             SourceForge => Some("{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download"),
             Unknown  => None,
         }
-    }
-}
-
-pub fn guess_git_hosting_services(repo: &str) -> Result<GitHostingServices, BinstallError> {
-    let url = Url::parse(repo)?;
-
-    match url.domain() {
-        Some(domain) if domain.starts_with("github") => Ok(GitHostingServices::GitHub),
-        Some(domain) if domain.starts_with("gitlab") => Ok(GitHostingServices::GitLab),
-        Some(domain) if domain == "bitbucket.org" => Ok(GitHostingServices::BitBucket),
-        Some(domain) if domain == "sourceforge.net" => Ok(GitHostingServices::SourceForge),
-        _ => Ok(GitHostingServices::Unknown),
     }
 }
