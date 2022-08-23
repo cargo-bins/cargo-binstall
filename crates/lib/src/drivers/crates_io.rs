@@ -22,7 +22,7 @@ use visitor::ManifestVisitor;
 
 /// Fetch a crate Cargo.toml by name and version from crates.io
 pub async fn fetch_crate_cratesio(
-    client: &Client,
+    client: Client,
     crates_io_api_client: &AsyncClient,
     name: &str,
     version_req: &VersionReq,
