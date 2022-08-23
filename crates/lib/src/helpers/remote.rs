@@ -43,7 +43,7 @@ pub async fn remote_exists(
 }
 
 pub(crate) async fn create_request(
-    client: &Client,
+    client: Client,
     url: Url,
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     debug!("Downloading from: '{url}'");

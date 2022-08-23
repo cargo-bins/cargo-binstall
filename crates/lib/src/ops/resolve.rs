@@ -133,7 +133,7 @@ async fn resolve_inner(
         Some(manifest_path) => load_manifest_path(manifest_path)?,
         None => {
             fetch_crate_cratesio(
-                &client,
+                client.clone(),
                 &crates_io_api_client,
                 &crate_name.name,
                 &version_req,
