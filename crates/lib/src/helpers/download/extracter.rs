@@ -14,7 +14,7 @@ use zstd::stream::Decoder as ZstdDecoder;
 
 use crate::{errors::BinstallError, manifests::cargo_toml_binstall::TarBasedFmt};
 
-pub(super) fn create_tar_decoder(
+pub fn create_tar_decoder(
     dat: impl BufRead + 'static,
     fmt: TarBasedFmt,
 ) -> io::Result<Archive<Box<dyn Read>>> {
@@ -36,7 +36,7 @@ pub(super) fn create_tar_decoder(
     Ok(Archive::new(r))
 }
 
-pub(super) fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {
+pub fn unzip(dat: File, dst: &Path) -> Result<(), BinstallError> {
     debug!("Decompressing from zip archive to `{dst:?}`");
 
     let mut zip = ZipArchive::new(dat)?;

@@ -14,7 +14,6 @@ use tempfile::tempfile;
 use tokio::task::block_in_place;
 
 use crate::{errors::BinstallError, manifests::cargo_toml_binstall::TarBasedFmt};
-
 use super::{extracter::*, stream_readable::StreamReadable};
 
 pub async fn extract_bin<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
