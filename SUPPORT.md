@@ -66,7 +66,6 @@ For github, the `pkg-url` is set to
   - compatible with github tags / releases
 - containing a folder named `{ name }-{ target }-v{ version }`
   - so that prior binary files are not overwritten when manually executing `tar -xvf ...`
-- containing binary files in the form `{ bin }{ binary-ext }`
 
 If your package already uses this approach, you shouldn't need to set anything.
 
