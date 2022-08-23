@@ -1,3 +1,10 @@
+//! Fetch all latest non-pre crates from crates.io.
+//!
+//! Downloads them from the CDN so it doesn't hit crates.io itself, uses binstall's utilities to
+//! extract the tarballs in a streaming fashion, and puts everything in a ./crates/ folder.
+#![cfg_attr(not(tokio_unstable), allow(warnings))]
+#[cfg(not(tokio_unstable))] fn main() {}
+
 use std::{env, fmt::Display};
 
 use binstall::{helpers::download::Download, manifests::cargo_toml_binstall::PkgFmt};
@@ -7,6 +14,7 @@ use rayon::prelude::ParallelIterator;
 use reqwest::Client;
 use semver::Version;
 use sha2::Sha256;
+#[cfg(tokio_unstable)]
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -14,6 +22,7 @@ use url::Url;
 
 const CHUNK_SIZE: usize = 512;
 
+#[cfg(tokio_unstable)]
 #[tokio::main]
 #[tracing::instrument]
 async fn main() -> Result<()> {
@@ -41,6 +50,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[cfg(tokio_unstable)]
 async fn get_a_bunch(client: Client, n: usize, total: usize, chunk: &[IndexCrate]) -> Result<()> {
     let mut set = JoinSet::new();
 
