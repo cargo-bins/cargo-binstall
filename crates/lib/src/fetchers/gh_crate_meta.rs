@@ -17,6 +17,8 @@ use crate::{
 
 use super::Data;
 
+mod hosting;
+
 pub struct GhCrateMeta {
     client: Client,
     data: Arc<Data>,
