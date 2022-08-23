@@ -9,7 +9,7 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{download::download_and_extract, remote::remote_exists},
+    helpers::{download::Download, remote::remote_exists},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -49,7 +49,9 @@ impl super::Fetcher for QuickInstall {
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
         debug!("Downloading package from: '{url}'");
-        download_and_extract(&self.client, &Url::parse(&url)?, self.pkg_fmt(), dst).await
+        Download::new(&self.client, Url::parse(&url)?)
+            .and_extract(self.pkg_fmt(), dst)
+            .await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
