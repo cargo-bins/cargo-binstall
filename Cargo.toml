@@ -15,3 +15,9 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+[profile.fastdev]
+inherits = "dev"
+opt-level = 2
+lto = false
+incremental = true

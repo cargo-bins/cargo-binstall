@@ -18,6 +18,8 @@ rayon = "1.5.3"
 url = "2.2.2"
 tokio = { version = "1.20.1", features = ["full"] }
 sha2 = "0.10.2"
+cargo_toml = "0.11.5"
+serde_json = "1.0.85"
 
 [dependencies.clap]
 version = "3.2.17"
@@ -33,6 +35,12 @@ default-features = false
 features = [
     "rustls-tls",
     "trust-dns",
+]
+
+[dependencies.tokio-postgres]
+version = "0.7.7"
+features = [
+    "with-serde_json-1",
 ]
 
 [dependencies.tracing-subscriber]

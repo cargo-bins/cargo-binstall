@@ -3,7 +3,8 @@
 //! Downloads them from the CDN so it doesn't hit crates.io itself, uses binstall's utilities to
 //! extract the tarballs in a streaming fashion, and puts everything in a ./crates/ folder.
 #![cfg_attr(not(tokio_unstable), allow(warnings))]
-#[cfg(not(tokio_unstable))] fn main() {}
+#[cfg(not(tokio_unstable))]
+fn main() {}
 
 use std::{env, fmt::Display};
 
@@ -24,7 +25,6 @@ const CHUNK_SIZE: usize = 512;
 
 #[cfg(tokio_unstable)]
 #[tokio::main]
-#[tracing::instrument]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(env::var("RUST_LOG").unwrap_or("info".into()))
@@ -55,7 +55,11 @@ async fn get_a_bunch(client: Client, n: usize, total: usize, chunk: &[IndexCrate
     let mut set = JoinSet::new();
 
     for (i, crate_version) in chunk.into_iter().enumerate() {
-        set.spawn(crate_version.clone().download(client.clone(), n * CHUNK_SIZE + i, total));
+        set.spawn(
+            crate_version
+                .clone()
+                .download(client.clone(), n * CHUNK_SIZE + i, total),
+        );
     }
 
     while let Some(res) = set.join_next().await {
