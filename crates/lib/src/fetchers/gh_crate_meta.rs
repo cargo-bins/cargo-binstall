@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{download::download_and_extract, remote::remote_exists, tasks::AutoAbortJoinHandle},
+    helpers::{download::Download, remote::remote_exists, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::PkgFmt,
 };
 
@@ -75,7 +75,7 @@ impl super::Fetcher for GhCrateMeta {
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.url.get().unwrap(); // find() is called first
         debug!("Downloading package from: '{url}'");
-        download_and_extract(&self.client, url, self.pkg_fmt(), dst).await
+        Download::new(&self.client, url.clone()).and_extract(self.pkg_fmt(), dst).await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

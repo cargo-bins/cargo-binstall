@@ -18,9 +18,11 @@ clap = { version = "3.2.17", features = ["derive"] }
 compact_str = { version = "0.5.2", features = ["serde"] }
 crates_io_api = { version = "0.8.0", default-features = false }
 detect-targets = { version = "0.1.0", path = "../detect-targets" }
+digest = "0.10.3"
 flate2 = { version = "1.0.24", default-features = false }
 flock = { version = "0.1.0", path = "../flock" }
 futures-util = { version = "0.3.23", default-features = false }
+generic-array = "0.14.6"
 home = "0.5.3"
 itertools = "0.10.3"
 jobserver = "0.1.24"
