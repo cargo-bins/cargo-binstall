@@ -68,7 +68,7 @@ For github, the `pkg-url` is set to
 ]
 ```
 
-The first version does not overwrite different targets or versions when manually downloaded.
+The first 3 versions does not overwrite different targets or versions when manually downloaded.
 
 All `pkg-url` templates download binaries located at `{ repo }/releases/download/v{ version }/`, which
 is compatible with github tags / releases.
