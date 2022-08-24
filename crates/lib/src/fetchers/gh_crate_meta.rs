@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{borrow::Cow, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use log::{debug, warn};
@@ -83,13 +83,13 @@ impl super::Fetcher for GhCrateMeta {
             None
         };
 
-        let pkg_url = if let Some(pkg_url) = self.data.meta.pkg_url.as_deref() {
-            pkg_url
+        let pkg_urls = if let Some(pkg_url) = self.data.meta.pkg_url.as_deref() {
+            Cow::Owned(vec![pkg_url])
         } else if let Some(repo) = repo.as_ref() {
-            if let Some(pkg_url) =
+            if let Some(pkg_urls) =
                 GitHostingServices::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
             {
-                pkg_url
+                Cow::Borrowed(pkg_urls)
             } else {
                 warn!(
                     concat!(
@@ -114,8 +114,11 @@ impl super::Fetcher for GhCrateMeta {
         };
 
         let repo = repo.as_ref().map(Url::as_str);
-        let launch_baseline_find_tasks =
-            |pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo);
+        let launch_baseline_find_tasks = |pkg_fmt| {
+            pkg_urls
+                .iter()
+                .flat_map(move |pkg_url| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
+        };
 
         let handles: Vec<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
             launch_baseline_find_tasks(pkg_fmt).collect()
