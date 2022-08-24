@@ -60,14 +60,14 @@ For github, the `pkg-url` is set to
 "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }"
 ```
 
-or 
+which does not overwrite different targets or versions when manually downloaded
+
+or
 
 ```rust
 "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
 ```
 
-- an archive named `{ name }-{ target }-v{ version }.{ archive-format }`
-  - so that this does not overwrite different targets or versions when manually downloaded
 - located at `{ repo }/releases/download/v{ version }/`
   - compatible with github tags / releases
 - containing a folder named `{ name }-{ target }-v{ version }`
