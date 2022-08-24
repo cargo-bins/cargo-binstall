@@ -28,7 +28,9 @@ impl GitHostingServices {
 
         match self {
             GitHub => Some(&[
-                "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }"]),
+                "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }",
+                "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }",
+            ]),
             GitLab => Some(&["{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }.{ archive-format }"]),
             BitBucket => Some(&["{ repo }/downloads/{ name }-{ target }-v{ version }.{ archive-format }"]),
             SourceForge => Some(&["{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download"]),
