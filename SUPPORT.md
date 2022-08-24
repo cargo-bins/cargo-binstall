@@ -97,7 +97,7 @@ For bitbucket, the `pkg-url` is set to
 "{ repo }/downloads/{ name }-{ target }-v{ version }.{ archive-format }"
 ```
 
-You basically just upload the binary into bitbucket downloads page of your project,
+To setup the package for binstall, upload the binary into bitbucket downloads page of your project,
 with its name set to be `{ name }-{ target }-v{ version }.{ archive-format }`.
 
 #### SourceForge
@@ -108,8 +108,8 @@ For source forge, the `pkg-url` is set to
 "{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download"
 ```
 
-You just need to upload the binary to the file page of your project, under the directory
-`binaries/v{ version }` with the filename `{ name }-{ target }.{ archive-format }`.
+To setup the package for binstall, upload the binary to the file page of your project,
+under the directory `binaries/v{ version }` with the filename `{ name }-{ target }.{ archive-format }`.
 
 #### Others
 
