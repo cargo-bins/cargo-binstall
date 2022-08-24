@@ -75,7 +75,7 @@ or
 
 If your package already uses this approach, you shouldn't need to set anything.
 
-#### Gitlab
+#### GitLab
 
 For gitlab, the `pkg-url` is set to
 
@@ -89,7 +89,7 @@ This will attempt to find the release assets with `filepath` set to
 Note that this uses the [Permanent links to release assets](https://gitlab.kitware.com/help/user/project/releases/index#permanent-links-to-latest-release-assets) feature of gitlab, it requires you to
 create an asset as a link with a `filepath`, which can be set only using gitlab api as of the writing.
 
-#### bitbucket
+#### BitBucket
 
 For bitbucket, the `pkg-url` is set to
 
@@ -100,7 +100,7 @@ For bitbucket, the `pkg-url` is set to
 You basically just upload the binary into bitbucket downloads page of your project,
 with its name set to be `{ name }-{ target }-v{ version }.{ archive-format }`.
 
-#### source forge
+#### SourceForge
 
 For source forge, the `pkg-url` is set to
 
