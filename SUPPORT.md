@@ -47,6 +47,9 @@ By default, `binstall` will try all supported package format and would have `bin
 `"{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"` (where `bin` is the cargo binary name and
 `binary-ext` is `.exe` on windows and empty on other platforms).
 
+All binaries must contain a folder named `{ name }-{ target }-v{ version }` (so that prior binary
+files are not overwritten when manually executing `tar -xvf ...`).
+
 The default value for `pkg-url` will depend on the repository of the package.
 
 It is setup to work with github releases, gitlab releases, bitbucket downloads
@@ -68,10 +71,8 @@ or
 "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
 ```
 
-- located at `{ repo }/releases/download/v{ version }/`
-  - compatible with github tags / releases
-- containing a folder named `{ name }-{ target }-v{ version }`
-  - so that prior binary files are not overwritten when manually executing `tar -xvf ...`
+Both `pkg-url` template download binaries located at `{ repo }/releases/download/v{ version }/`, which
+is compatible with github tags / releases.
 
 If your package already uses this approach, you shouldn't need to set anything.
 
