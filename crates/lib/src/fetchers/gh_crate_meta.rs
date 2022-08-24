@@ -114,13 +114,14 @@ impl super::Fetcher for GhCrateMeta {
         };
 
         let repo = repo.as_ref().map(Url::as_str);
+        let launch_baseline_find_tasks =
+            |pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo);
 
         let handles: Vec<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
-            self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo)
-                .collect()
+            launch_baseline_find_tasks(pkg_fmt).collect()
         } else {
             PkgFmt::iter()
-                .flat_map(|pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
+                .flat_map(launch_baseline_find_tasks)
                 .collect()
         };
 
