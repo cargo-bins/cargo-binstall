@@ -60,18 +60,17 @@ and source forge downloads.
 For github, the `pkg-url` is set to
 
 ```rust
-"{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }"
+[
+    "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }",
+    "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }",
+    "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.{ archive-format }",
+    "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }",
+]
 ```
 
-which does not overwrite different targets or versions when manually downloaded
+The first version does not overwrite different targets or versions when manually downloaded.
 
-or
-
-```rust
-"{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
-```
-
-Both `pkg-url` template download binaries located at `{ repo }/releases/download/v{ version }/`, which
+All `pkg-url` templates download binaries located at `{ repo }/releases/download/v{ version }/`, which
 is compatible with github tags / releases.
 
 If your package already uses this approach, you shouldn't need to set anything.
@@ -81,13 +80,12 @@ If your package already uses this approach, you shouldn't need to set anything.
 For gitlab, the `pkg-url` is set to
 
 ```rust
-"{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }.{ archive-format }"
-```
-
-or
-
-```rust
-"{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }-v{ version }.{ archive-format }"
+[
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }-v{ version }.{ archive-format }",
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-v{ version }-{ target }.{ archive-format }",
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ version }-{ target }.{ archive-format }",
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }.{ archive-format }",
+]
 ```
 
 This will attempt to find the release assets with `filepath` set to
@@ -101,7 +99,11 @@ create an asset as a link with a `filepath`, which can be set only using gitlab 
 For bitbucket, the `pkg-url` is set to
 
 ```rust
-"{ repo }/downloads/{ name }-{ target }-v{ version }.{ archive-format }"
+[
+    "{ repo }/downloads/{ name }-{ target }-v{ version }.{ archive-format }",
+    "{ repo }/downloads/{ name }-v{ version }-{ target }.{ archive-format }",
+    "{ repo }/downloads/{ name }-{ version }-{ target }.{ archive-format }",
+]
 ```
 
 To setup the package for binstall, upload the binary into bitbucket downloads page of your project,
@@ -112,13 +114,12 @@ with its name set to be `{ name }-{ target }-v{ version }.{ archive-format }`.
 For source forge, the `pkg-url` is set to
 
 ```rust
-"{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download"
-```
-
-or
-
-```rust
-"{ repo }/files/binaries/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }/download"
+[
+    "{ repo }/files/binaries/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }/download",
+    "{ repo }/files/binaries/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }/download",
+    "{ repo }/files/binaries/v{ version }/{ name }-{ version }-{ target }.{ archive-format }/download",
+    "{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download",
+]
 ```
 
 To setup the package for binstall, upload the binary to the file page of your project,
