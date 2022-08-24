@@ -47,6 +47,8 @@ zlib-ng = ["binstall/zlib-ng"]
 rustls = ["binstall/rustls"]
 native-tls = ["binstall/native-tls"]
 
+trust-dns = ["binstall/trust-dns"]
+
 fancy-no-backtrace = ["miette/fancy-no-backtrace"]
 fancy-with-backtrace = ["fancy-no-backtrace", "miette/fancy"]
 
