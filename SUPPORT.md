@@ -84,6 +84,12 @@ For gitlab, the `pkg-url` is set to
 "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }.{ archive-format }"
 ```
 
+or
+
+```rust
+"{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }-v{ version }.{ archive-format }"
+```
+
 This will attempt to find the release assets with `filepath` set to
 `binaries/{ name }-{ target }.{ archive-format }`
 
@@ -107,6 +113,12 @@ For source forge, the `pkg-url` is set to
 
 ```rust
 "{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download"
+```
+
+or
+
+```rust
+"{ repo }/files/binaries/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }/download"
 ```
 
 To setup the package for binstall, upload the binary to the file page of your project,
