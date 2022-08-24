@@ -37,10 +37,11 @@ impl GhCrateMeta {
         &'a self,
         pkg_fmt: PkgFmt,
         pkg_url: &'a str,
+        repo: Option<&'a str>,
     ) -> impl Iterator<Item = BaselineFindTask> + 'a {
         // build up list of potential URLs
-        let urls = pkg_fmt.extensions().iter().filter_map(|ext| {
-            let ctx = Context::from_data(&self.data, ext);
+        let urls = pkg_fmt.extensions().iter().filter_map(move |ext| {
+            let ctx = Context::from_data_with_repo(&self.data, ext, repo);
             match ctx.render_url(pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
@@ -112,11 +113,14 @@ impl super::Fetcher for GhCrateMeta {
             return Ok(false);
         };
 
+        let repo = repo.as_ref().map(Url::as_str);
+
         let handles: Vec<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
-            self.launch_baseline_find_tasks(pkg_fmt, pkg_url).collect()
+            self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo)
+                .collect()
         } else {
             PkgFmt::iter()
-                .flat_map(|pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt, pkg_url))
+                .flat_map(|pkg_fmt| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
                 .collect()
         };
 
@@ -192,10 +196,14 @@ struct Context<'c> {
 }
 
 impl<'c> Context<'c> {
-    pub(self) fn from_data(data: &'c Data, archive_format: &'c str) -> Self {
+    pub(self) fn from_data_with_repo(
+        data: &'c Data,
+        archive_format: &'c str,
+        repo: Option<&'c str>,
+    ) -> Self {
         Self {
             name: &data.name,
-            repo: data.repo.as_deref(),
+            repo,
             target: &data.target,
             version: &data.version,
             format: archive_format,
@@ -206,6 +214,11 @@ impl<'c> Context<'c> {
                 ""
             },
         }
+    }
+
+    #[cfg(test)]
+    pub(self) fn from_data(data: &'c Data, archive_format: &'c str) -> Self {
+        Self::from_data_with_repo(data, archive_format, data.repo.as_deref())
     }
 
     pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
