@@ -42,6 +42,19 @@ pub async fn remote_exists(
     Ok(req.status().is_success())
 }
 
+pub async fn get_redirected_final_url(client: &Client, url: Url) -> Result<Url, BinstallError> {
+    let method = Method::HEAD;
+
+    let req = client
+        .request(method.clone(), url.clone())
+        .send()
+        .await
+        .and_then(Response::error_for_status)
+        .map_err(|err| BinstallError::Http { method, url, err })?;
+
+    Ok(req.url().clone())
+}
+
 pub(crate) async fn create_request(
     client: &Client,
     url: Url,

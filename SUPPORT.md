@@ -4,7 +4,10 @@
 `binstall` works with existing CI-built binary outputs, with configuration via `[package.metadata.binstall]` keys in the relevant crate manifest.
 When configuring `binstall` you can test against a local manifest with `--manifest-path=PATH` argument to use the crate and manifest at the provided `PATH`, skipping crate discovery and download.
 
-To get started, add a `[package.metadata.binstall]` section to your `Cargo.toml`. As an example, the default configuration would be:
+To get started, check the [default](#Defaults) first, only add a `[package.metadata.binstall]` section
+to your `Cargo.toml` if the default does not work for you.
+
+As an example, the configuration would be like this:
 
 ```toml
 [package.metadata.binstall]
@@ -40,17 +43,92 @@ pkg-fmt = "zip"
 
 ### Defaults
 
-By default `binstall` is setup to work with github releases, and expects to find:
+By default, `binstall` will try all supported package format and would have `bin-dir` set to
+`"{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"` (where `bin` is the cargo binary name and
+`binary-ext` is `.exe` on windows and empty on other platforms).
 
-- an archive named `{ name }-{ target }-v{ version }.{ archive-format }`
-  - so that this does not overwrite different targets or versions when manually downloaded
-- located at `{ repo }/releases/download/v{ version }/`
-  - compatible with github tags / releases
-- containing a folder named `{ name }-{ target }-v{ version }`
-  - so that prior binary files are not overwritten when manually executing `tar -xvf ...`
-- containing binary files in the form `{ bin }{ binary-ext }` (where `bin` is the cargo binary name and `binary-ext` is `.exe` on windows and empty on other platforms)
+All binaries must contain a folder named `{ name }-{ target }-v{ version }` (so that prior binary
+files are not overwritten when manually executing `tar -xvf ...`).
+
+The default value for `pkg-url` will depend on the repository of the package.
+
+It is setup to work with github releases, gitlab releases, bitbucket downloads
+and source forge downloads.
+
+#### Github
+
+For github, the `pkg-url` is set to
+
+```rust
+[
+    "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }",
+    "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }",
+    "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.{ archive-format }",
+    "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }",
+]
+```
+
+The first 3 versions does not overwrite different targets or versions when manually downloaded.
+
+All `pkg-url` templates download binaries located at `{ repo }/releases/download/v{ version }/`, which
+is compatible with github tags / releases.
 
 If your package already uses this approach, you shouldn't need to set anything.
+
+#### GitLab
+
+For gitlab, the `pkg-url` is set to
+
+```rust
+[
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }-v{ version }.{ archive-format }",
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-v{ version }-{ target }.{ archive-format }",
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ version }-{ target }.{ archive-format }",
+    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }.{ archive-format }",
+]
+```
+
+This will attempt to find the release assets with `filepath` set to
+`binaries/{ name }-{ target }.{ archive-format }`
+
+Note that this uses the [Permanent links to release assets](https://gitlab.kitware.com/help/user/project/releases/index#permanent-links-to-latest-release-assets) feature of gitlab, it requires you to
+create an asset as a link with a `filepath`, which can be set only using gitlab api as of the writing.
+
+#### BitBucket
+
+For bitbucket, the `pkg-url` is set to
+
+```rust
+[
+    "{ repo }/downloads/{ name }-{ target }-v{ version }.{ archive-format }",
+    "{ repo }/downloads/{ name }-v{ version }-{ target }.{ archive-format }",
+    "{ repo }/downloads/{ name }-{ version }-{ target }.{ archive-format }",
+]
+```
+
+To setup the package for binstall, upload the binary into bitbucket downloads page of your project,
+with its name set to be `{ name }-{ target }-v{ version }.{ archive-format }`.
+
+#### SourceForge
+
+For source forge, the `pkg-url` is set to
+
+```rust
+[
+    "{ repo }/files/binaries/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }/download",
+    "{ repo }/files/binaries/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }/download",
+    "{ repo }/files/binaries/v{ version }/{ name }-{ version }-{ target }.{ archive-format }/download",
+    "{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download",
+]
+```
+
+To setup the package for binstall, upload the binary to the file page of your project,
+under the directory `binaries/v{ version }` with the filename `{ name }-{ target }.{ archive-format }`.
+
+#### Others
+
+For all other situations, `binstall` does not provide a default `pkg-url` and you need to manually
+specify it.
 
 ### QuickInstall
 

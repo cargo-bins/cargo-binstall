@@ -11,10 +11,6 @@ pub use package_formats::*;
 
 mod package_formats;
 
-/// Default package path template (may be overridden in package Cargo.toml)
-pub const DEFAULT_PKG_URL: &str =
-    "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }";
-
 /// Default binary name template (may be overridden in package Cargo.toml)
 pub const DEFAULT_BIN_DIR: &str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
 
@@ -34,7 +30,7 @@ pub struct Meta {
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgMeta {
     /// URL template for package downloads
-    pub pkg_url: String,
+    pub pkg_url: Option<String>,
 
     /// Format for package downloads
     pub pkg_fmt: Option<PkgFmt>,
@@ -52,7 +48,7 @@ pub struct PkgMeta {
 impl Default for PkgMeta {
     fn default() -> Self {
         Self {
-            pkg_url: DEFAULT_PKG_URL.to_string(),
+            pkg_url: None,
             pkg_fmt: None,
             bin_dir: DEFAULT_BIN_DIR.to_string(),
             pub_key: None,
@@ -75,7 +71,7 @@ impl PkgMeta {
     /// Merge configuration overrides into object
     pub fn merge(&mut self, pkg_override: &PkgOverride) {
         if let Some(o) = &pkg_override.pkg_url {
-            self.pkg_url = o.clone();
+            self.pkg_url = Some(o.clone());
         }
         if let Some(o) = &pkg_override.pkg_fmt {
             self.pkg_fmt = Some(*o);
