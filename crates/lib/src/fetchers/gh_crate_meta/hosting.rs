@@ -11,12 +11,10 @@ pub enum GitHostingServices {
     Unknown,
 }
 impl GitHostingServices {
-    pub fn guess_git_hosting_services(repo: &str) -> Result<Self, BinstallError> {
+    pub fn guess_git_hosting_services(repo: &Url) -> Result<Self, BinstallError> {
         use GitHostingServices::*;
 
-        let url = Url::parse(repo)?;
-
-        match url.domain() {
+        match repo.domain() {
             Some(domain) if domain.starts_with("github") => Ok(GitHub),
             Some(domain) if domain.starts_with("gitlab") => Ok(GitLab),
             Some(domain) if domain == "bitbucket.org" => Ok(BitBucket),

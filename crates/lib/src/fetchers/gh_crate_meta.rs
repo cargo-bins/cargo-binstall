@@ -11,7 +11,11 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{download::download_and_extract, remote::remote_exists, tasks::AutoAbortJoinHandle},
+    helpers::{
+        download::download_and_extract,
+        remote::{get_redirected_final_url, remote_exists},
+        tasks::AutoAbortJoinHandle,
+    },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -72,9 +76,15 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn find(&self) -> Result<bool, BinstallError> {
+        let repo = if let Some(repo) = self.data.repo.as_deref() {
+            Some(get_redirected_final_url(&self.client, Url::parse(repo)?).await?)
+        } else {
+            None
+        };
+
         let pkg_url = if let Some(pkg_url) = self.data.meta.pkg_url.as_deref() {
             pkg_url
-        } else if let Some(repo) = self.data.repo.as_deref() {
+        } else if let Some(repo) = repo.as_ref() {
             if let Some(pkg_url) =
                 GitHostingServices::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
             {
