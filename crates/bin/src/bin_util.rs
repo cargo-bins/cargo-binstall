@@ -55,7 +55,7 @@ where
     F: Future<Output = T> + Send + 'static,
     T: Send + 'static,
 {
-    let rt = Runtime::new().unwrap();
+    let rt = Runtime::new()?;
     let handle = AutoAbortJoinHandle::new(rt.spawn(f));
     rt.block_on(cancel_on_user_sig_term(handle))
 }
