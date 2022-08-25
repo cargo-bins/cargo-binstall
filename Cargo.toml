@@ -14,3 +14,19 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+[profile.dev.build-override]
+opt-level = 0
+codegen-units = 1024
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false
+
+[profile.release.build-override]
+opt-level = 0
+codegen-units = 1024
+debug = false
+debug-assertions = false
+overflow-checks = false
+incremental = false
