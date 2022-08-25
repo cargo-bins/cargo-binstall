@@ -5,6 +5,7 @@ use std::{
 
 use binstall::errors::BinstallError;
 use log::{error, info};
+use miette::Result;
 
 pub enum MainExit {
     Success(Duration),
@@ -26,5 +27,17 @@ impl Termination for MainExit {
                 ExitCode::from(16)
             }
         }
+    }
+}
+
+impl MainExit {
+    pub fn new(result: Result<Result<()>, BinstallError>, done: Duration) -> Self {
+        result.map_or_else(MainExit::Error, |res| {
+            res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
+                err.downcast::<BinstallError>()
+                    .map(MainExit::Error)
+                    .unwrap_or_else(MainExit::Report)
+            })
+        })
     }
 }

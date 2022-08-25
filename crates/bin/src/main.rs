@@ -1,11 +1,8 @@
 use std::time::Instant;
 
-use binstall::{
-    errors::BinstallError,
-    helpers::{
-        jobserver_client::LazyJobserverClient, signal::cancel_on_user_sig_term,
-        tasks::AutoAbortJoinHandle,
-    },
+use binstall::helpers::{
+    jobserver_client::LazyJobserverClient, signal::cancel_on_user_sig_term,
+    tasks::AutoAbortJoinHandle,
 };
 use log::debug;
 use tokio::runtime::Runtime;
@@ -39,11 +36,5 @@ fn main() -> MainExit {
     let done = start.elapsed();
     debug!("run time: {done:?}");
 
-    result.map_or_else(MainExit::Error, |res| {
-        res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
-            err.downcast::<BinstallError>()
-                .map(MainExit::Error)
-                .unwrap_or_else(MainExit::Report)
-        })
-    })
+    MainExit::new(result, done)
 }
