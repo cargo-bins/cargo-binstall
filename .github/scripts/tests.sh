@@ -60,7 +60,7 @@ cargo binstall --help >/dev/null
 "./$1" binstall --no-confirm cargo-binstall@^0.11.0 | grep -q -v 'cargo-binstall v0.11.0 is already installed'
 
 # Test default GitLab pkg-url templates
-test_resources="$(dirname "$(realpath "$0")")"
+test_resources=".github/scripts"
 
 "./$1" binstall \
     --force \
