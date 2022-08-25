@@ -63,10 +63,13 @@ pub struct Data {
 
 type FetcherJoinHandle = AutoAbortJoinHandle<Result<bool, BinstallError>>;
 
-#[derive(Default)]
 pub struct MultiFetcher(Vec<(Arc<dyn Fetcher>, FetcherJoinHandle)>);
 
 impl MultiFetcher {
+    pub fn with_capacity(n: usize) -> Self {
+        Self(Vec::with_capacity(n))
+    }
+
     pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
         self.0.push((
             fetcher.clone(),
