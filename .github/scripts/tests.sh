@@ -61,6 +61,7 @@ cargo binstall --help >/dev/null
 
 # Test default GitLab pkg-url templates
 test_resources=".github/scripts"
+PATH="$test_resources/fake-cargo:$PATH"
 
 "./$1" binstall \
     --force \

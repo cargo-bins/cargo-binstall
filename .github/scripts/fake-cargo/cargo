@@ -1,0 +1,4 @@
+#!/bin/bash
+
+echo Always returns 1 to prevent use of "cargo-build"
+exit 1
