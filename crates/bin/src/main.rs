@@ -1,13 +1,13 @@
 use std::time::Instant;
 
-use binstall::helpers::{
-    jobserver_client::LazyJobserverClient, signal::cancel_on_user_sig_term,
-    tasks::AutoAbortJoinHandle,
-};
+use binstall::helpers::jobserver_client::LazyJobserverClient;
 use log::debug;
-use tokio::runtime::Runtime;
 
-use cargo_binstall::{args, bin_util::MainExit, entry, ui};
+use cargo_binstall::{
+    args,
+    bin_util::{run_tokio_main, MainExit},
+    entry, ui,
+};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -26,12 +26,7 @@ fn main() -> MainExit {
 
     let start = Instant::now();
 
-    let result = {
-        let rt = Runtime::new().unwrap();
-        let handle =
-            AutoAbortJoinHandle::new(rt.spawn(entry::install_crates(args, jobserver_client)));
-        rt.block_on(cancel_on_user_sig_term(handle))
-    };
+    let result = run_tokio_main(entry::install_crates(args, jobserver_client));
 
     let done = start.elapsed();
     debug!("run time: {done:?}");

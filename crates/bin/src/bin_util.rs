@@ -1,11 +1,14 @@
 use std::{
+    future::Future,
     process::{ExitCode, Termination},
     time::Duration,
 };
 
 use binstall::errors::BinstallError;
+use binstall::helpers::{signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle};
 use log::{error, info};
 use miette::Result;
+use tokio::runtime::Runtime;
 
 pub enum MainExit {
     Success(Duration),
@@ -40,4 +43,19 @@ impl MainExit {
             })
         })
     }
+}
+
+/// This function would start a tokio multithreading runtime,
+/// spawn a new task on it that runs `f`, then `block_on` it.
+///
+/// It will cancel the future if user requested cancellation
+/// via signal.
+pub fn run_tokio_main<F, T>(f: F) -> Result<T, BinstallError>
+where
+    F: Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    let rt = Runtime::new().unwrap();
+    let handle = AutoAbortJoinHandle::new(rt.spawn(f));
+    rt.block_on(cancel_on_user_sig_term(handle))
 }
