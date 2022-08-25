@@ -66,7 +66,6 @@ test_resources=".github/scripts"
     --force \
     --manifest-path "$test_resources/gitlab-test-Cargo.toml" \
     --log-level debug \
-    --targets x86_64-pc-windows-msvc \
     --no-confirm \
     cargo-binstall
 
@@ -75,6 +74,5 @@ test_resources=".github/scripts"
     --force \
     --manifest-path "$test_resources/bitbucket-test-Cargo.toml" \
     --log-level debug \
-    --targets x86_64-apple-darwin \
     --no-confirm \
     cargo-binstall
