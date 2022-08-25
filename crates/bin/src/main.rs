@@ -13,10 +13,7 @@ use binstall::{
 use log::{debug, error, info};
 use tokio::runtime::Runtime;
 
-mod args;
-mod entry;
-mod install_path;
-mod ui;
+use cargo_binstall::*;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
