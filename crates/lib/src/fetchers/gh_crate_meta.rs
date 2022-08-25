@@ -58,9 +58,11 @@ impl GhCrateMeta {
             AutoAbortJoinHandle::spawn(async move {
                 debug!("Checking for package at: '{url}'");
 
-                remote_exists(client, url.clone(), Method::HEAD)
-                    .await
-                    .map(|exists| exists.then_some((url, pkg_fmt)))
+                Ok(
+                    (remote_exists(client.clone(), url.clone(), Method::HEAD).await?
+                        || remote_exists(client, url.clone(), Method::GET).await?)
+                        .then_some((url, pkg_fmt)),
+                )
             })
         })
     }
