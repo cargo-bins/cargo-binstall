@@ -35,7 +35,7 @@ tokio = { version = "1.20.1", features = ["rt-multi-thread"], default-features =
 embed-resource = "1.7.3"
 
 [features]
-default = ["static", "zlib-ng", "rustls", "fancy-no-backtrace"]
+default = ["static", "zlib-ng", "rustls", "trust-dns", "fancy-no-backtrace"]
 
 mimalloc = ["dep:mimalloc"]
 
@@ -46,6 +46,8 @@ zlib-ng = ["binstall/zlib-ng"]
 
 rustls = ["binstall/rustls"]
 native-tls = ["binstall/native-tls"]
+
+trust-dns = ["binstall/trust-dns"]
 
 fancy-no-backtrace = ["miette/fancy-no-backtrace"]
 fancy-with-backtrace = ["fancy-no-backtrace", "miette/fancy"]
