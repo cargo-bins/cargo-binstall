@@ -108,6 +108,10 @@ pub fn logging(args: &Args) {
     log_config.add_filter_ignore("hyper".to_string());
     log_config.add_filter_ignore("reqwest".to_string());
     log_config.add_filter_ignore("rustls".to_string());
+
+    #[cfg(feature = "trust-dns")]
+    log_config.add_filter_ignore("trust_dns".to_string());
+
     log_config.set_location_level(LevelFilter::Off);
     TermLogger::init(
         args.log_level,
