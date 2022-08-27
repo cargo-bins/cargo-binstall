@@ -103,14 +103,19 @@ impl UIThread {
 }
 
 pub fn logging(args: &Args) {
+    let log_level = args.log_level;
+
     // Setup logging
     let mut log_config = ConfigBuilder::new();
-    log_config.add_filter_ignore("hyper".to_string());
-    log_config.add_filter_ignore("reqwest".to_string());
-    log_config.add_filter_ignore("rustls".to_string());
+
+    if log_level != LevelFilter::Trace {
+        log_config.add_filter_allow_str("binstall");
+        log_config.add_filter_allow_str("cargo_binstall");
+    }
+
     log_config.set_location_level(LevelFilter::Off);
     TermLogger::init(
-        args.log_level,
+        log_level,
         log_config.build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
