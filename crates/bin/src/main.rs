@@ -1,22 +1,13 @@
-use std::{
-    process::{ExitCode, Termination},
-    time::{Duration, Instant},
-};
+use std::time::Instant;
 
-use binstall::{
-    errors::BinstallError,
-    helpers::{
-        jobserver_client::LazyJobserverClient, signal::cancel_on_user_sig_term,
-        tasks::AutoAbortJoinHandle,
-    },
-};
-use log::{debug, error, info};
-use tokio::runtime::Runtime;
+use binstall::helpers::jobserver_client::LazyJobserverClient;
+use log::debug;
 
-mod args;
-mod entry;
-mod install_path;
-mod ui;
+use cargo_binstall::{
+    args,
+    bin_util::{run_tokio_main, MainExit},
+    entry, ui,
+};
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -35,44 +26,10 @@ fn main() -> MainExit {
 
     let start = Instant::now();
 
-    let result = {
-        let rt = Runtime::new().unwrap();
-        let handle =
-            AutoAbortJoinHandle::new(rt.spawn(entry::install_crates(args, jobserver_client)));
-        rt.block_on(cancel_on_user_sig_term(handle))
-    };
+    let result = run_tokio_main(entry::install_crates(args, jobserver_client));
 
     let done = start.elapsed();
     debug!("run time: {done:?}");
 
-    result.map_or_else(MainExit::Error, |res| {
-        res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
-            err.downcast::<BinstallError>()
-                .map(MainExit::Error)
-                .unwrap_or_else(MainExit::Report)
-        })
-    })
-}
-
-enum MainExit {
-    Success(Duration),
-    Error(BinstallError),
-    Report(miette::Report),
-}
-
-impl Termination for MainExit {
-    fn report(self) -> ExitCode {
-        match self {
-            Self::Success(spent) => {
-                info!("Done in {spent:?}");
-                ExitCode::SUCCESS
-            }
-            Self::Error(err) => err.report(),
-            Self::Report(err) => {
-                error!("Fatal error:");
-                eprintln!("{err:?}");
-                ExitCode::from(16)
-            }
-        }
-    }
+    MainExit::new(result, done)
 }
