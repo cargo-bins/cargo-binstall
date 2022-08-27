@@ -2,7 +2,7 @@
 //!
 //! This manifest defines how a particular binary crate may be installed by Binstall.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +42,7 @@ pub struct PkgMeta {
     pub pub_key: Option<String>,
 
     /// Target specific overrides
-    pub overrides: HashMap<String, PkgOverride>,
+    pub overrides: BTreeMap<String, PkgOverride>,
 }
 
 impl Default for PkgMeta {
@@ -52,7 +52,7 @@ impl Default for PkgMeta {
             pkg_fmt: None,
             bin_dir: DEFAULT_BIN_DIR.to_string(),
             pub_key: None,
-            overrides: HashMap::new(),
+            overrides: BTreeMap::new(),
         }
     }
 }
@@ -64,7 +64,7 @@ impl PkgMeta {
             pkg_fmt: self.pkg_fmt,
             bin_dir: self.bin_dir.clone(),
             pub_key: self.pub_key.clone(),
-            overrides: HashMap::new(),
+            overrides: BTreeMap::new(),
         }
     }
 
