@@ -1,6 +1,7 @@
 use std::{borrow::Cow, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
+use futures_util::stream::{FuturesUnordered, StreamExt};
 use log::{debug, warn};
 use once_cell::sync::OnceCell;
 use reqwest::{Client, Method};
@@ -122,7 +123,7 @@ impl super::Fetcher for GhCrateMeta {
                 .flat_map(move |pkg_url| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
         };
 
-        let handles: Vec<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
+        let mut handles: FuturesUnordered<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
             launch_baseline_find_tasks(pkg_fmt).collect()
         } else {
             PkgFmt::iter()
@@ -130,8 +131,8 @@ impl super::Fetcher for GhCrateMeta {
                 .collect()
         };
 
-        for handle in handles {
-            if let Some((url, pkg_fmt)) = handle.await?? {
+        while let Some(res) = handles.next().await {
+            if let Some((url, pkg_fmt)) = res?? {
                 debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
                 self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
                 return Ok(true);

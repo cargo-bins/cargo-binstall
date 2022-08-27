@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::HashMap, hash_set::HashSet},
+    collections::{hash_set::HashSet, BTreeMap},
     io,
     path::Path,
 };
@@ -10,14 +10,10 @@ use normalize_path::NormalizePath;
 /// This type stores the filesystem structure for the crate tarball
 /// extracted in memory and can be passed to
 /// `cargo_toml::Manifest::complete_from_abstract_filesystem`.
-#[derive(Debug)]
-pub(super) struct Vfs(HashMap<Box<Path>, HashSet<Box<str>>>);
+#[derive(Debug, Default)]
+pub(super) struct Vfs(BTreeMap<Box<Path>, HashSet<Box<str>>>);
 
 impl Vfs {
-    pub(super) fn new() -> Self {
-        Self(HashMap::with_capacity(16))
-    }
-
     /// * `path` - must be canonical, must not be empty.
     pub(super) fn add_path(&mut self, mut path: &Path) {
         while let Some(parent) = path.parent() {

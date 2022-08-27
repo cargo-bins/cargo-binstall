@@ -29,7 +29,7 @@ impl ManifestVisitor {
             // Cargo.toml is quite large usually.
             cargo_toml_content: Vec::with_capacity(2000),
             manifest_dir_path,
-            vfs: Vfs::new(),
+            vfs: Vfs::default(),
         }
     }
 }
