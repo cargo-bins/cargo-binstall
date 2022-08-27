@@ -58,3 +58,22 @@ cargo binstall --help >/dev/null
 "./$1" binstall --no-confirm cargo-binstall@0.11.0
 "./$1" binstall --no-confirm cargo-binstall@0.11.0 | grep -q 'cargo-binstall v0.11.0 is already installed'
 "./$1" binstall --no-confirm cargo-binstall@^0.11.0 | grep -q -v 'cargo-binstall v0.11.0 is already installed'
+
+# Test default GitLab pkg-url templates
+test_resources=".github/scripts"
+PATH="$test_resources/fake-cargo:$PATH"
+
+"./$1" binstall \
+    --force \
+    --manifest-path "$test_resources/gitlab-test-Cargo.toml" \
+    --log-level debug \
+    --no-confirm \
+    cargo-binstall
+
+# Test default BitBucket pkg-url templates
+"./$1" binstall \
+    --force \
+    --manifest-path "$test_resources/bitbucket-test-Cargo.toml" \
+    --log-level debug \
+    --no-confirm \
+    cargo-binstall
