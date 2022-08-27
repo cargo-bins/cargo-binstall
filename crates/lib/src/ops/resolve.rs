@@ -169,9 +169,9 @@ async fn resolve_inner(
         manifest.bin,
     );
 
-    let mut fetchers = MultiFetcher::default();
-
     let desired_targets = opts.desired_targets.get().await;
+
+    let mut fetchers = MultiFetcher::with_capacity(desired_targets.len() * 2);
 
     for target in desired_targets {
         debug!("Building metadata for target: {target}");
