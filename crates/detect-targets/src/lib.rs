@@ -35,7 +35,7 @@
 //! # async fn main() {
 //!
 //! assert_eq!(
-//!     get_desired_targets(Some(&[
+//!     get_desired_targets(Some(vec![
 //!         "x86_64-apple-darwin".to_string(),
 //!         "aarch64-apple-darwin".to_string(),
 //!     ])).get().await,
