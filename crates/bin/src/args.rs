@@ -60,7 +60,7 @@ pub struct Args {
         long,
         value_name = "TRIPLE"
     )]
-    pub targets: Option<String>,
+    pub targets: Option<Vec<String>>,
 
     /// Override Cargo.toml package manifest path.
     ///
