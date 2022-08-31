@@ -15,7 +15,7 @@ use crate::errors::BinstallError;
 /// `tokio::task::{block_in_place, spawn_blocking}` or
 /// `std::thread::spawn`.
 #[derive(Debug)]
-pub(super) struct StreamReadable<S> {
+pub struct StreamReadable<S> {
     stream: S,
     handle: Handle,
     bytes: Bytes,

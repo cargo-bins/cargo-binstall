@@ -5,17 +5,16 @@ use reqwest::{Client, Url};
 
 use crate::{
     errors::BinstallError,
-    helpers::{
-        async_extracter::{
-            extract_bin, extract_tar_based_stream, extract_tar_based_stream_and_visit, extract_zip,
-        },
-        remote::create_request,
-    },
+    helpers::remote::create_request,
     manifests::cargo_toml_binstall::{PkgFmt, PkgFmtDecomposed, TarBasedFmt},
 };
 
-use super::async_extracter::TarEntriesVisitor;
+pub use async_extracter::TarEntriesVisitor;
+use async_extracter::*;
 
+mod async_extracter;
+mod extracter;
+mod stream_readable;
 /// Download a file from the provided URL and extract it to the provided path.
 pub async fn download_and_extract<P: AsRef<Path>>(
     client: &Client,
