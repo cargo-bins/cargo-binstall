@@ -48,13 +48,13 @@ impl RepositoryHost {
             )),
             GitLab => Some(apply_filenames_to_paths(
                 &[
-                    "{ repo }/-/releases/{ version }/downloads/binaries/",
-                    "{ repo }/-/releases/v{ version }/downloads/binaries/",
+                    "{ repo }/-/releases/{ version }/downloads/binaries",
+                    "{ repo }/-/releases/v{ version }/downloads/binaries",
                 ],
                 &[full_filenames, noversion_filenames],
             )),
             BitBucket => Some(apply_filenames_to_paths(
-                &["{ repo }/downloads/"],
+                &["{ repo }/downloads"],
                 &[full_filenames],
             )),
             SourceForge => Some(
