@@ -55,80 +55,61 @@ The default value for `pkg-url` will depend on the repository of the package.
 It is setup to work with github releases, gitlab releases, bitbucket downloads
 and source forge downloads.
 
-#### Github
+If your package already uses any of these URLs, you shouldn't need to set anything.
 
-For github, the `pkg-url` is set to
+The URLs are derived from a set of filenames and a set of paths, which are
+"multiplied together": every filename appended to every path. The filenames
+are:
 
-```rust
-[
-    "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }",
-    "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }",
-    "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.{ archive-format }",
-    "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }",
-]
-```
+- `{ name }-{ target }-{ version }.{ archive-format }`
+- `{ name }-{ target }-v{ version }.{ archive-format }`
+- `{ name }-{ version }-{ target }.{ archive-format }`
+- `{ name }-v{ version }-{ target }.{ archive-format }`
+- `{ name }-{ version }-{ target }.{ archive-format }`
+- `{ name }-v{ version }-{ target }.{ archive-format }`
+- `{ name }-{ target }.{ archive-format }` ("versionless")
 
-The first 3 versions does not overwrite different targets or versions when manually downloaded.
+The paths are:
 
-All `pkg-url` templates download binaries located at `{ repo }/releases/download/v{ version }/`, which
-is compatible with github tags / releases.
+#### for GitHub
 
-If your package already uses this approach, you shouldn't need to set anything.
+- `{ repo }/releases/download/{ version }/`
+- `{ repo }/releases/download/v{ version }/`
 
-#### GitLab
+#### for GitLab
 
-For gitlab, the `pkg-url` is set to
+- `{ repo }/-/releases/{ version }/downloads/binaries/`
+- `{ repo }/-/releases/v{ version }/downloads/binaries/`
 
-```rust
-[
-    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }-v{ version }.{ archive-format }",
-    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-v{ version }-{ target }.{ archive-format }",
-    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ version }-{ target }.{ archive-format }",
-    "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }.{ archive-format }",
-]
-```
+Note that this uses the [Permanent links to release assets][gitlab-permalinks]
+feature of GitLab EE: it requires you to create an asset as a link with a
+`filepath`, which, as of writing, can only be set using GitLab's API.
 
-This will attempt to find the release assets with `filepath` set to
-`binaries/{ name }-{ target }.{ archive-format }`
+[gitlab-permalinks]: https://docs.gitlab.com/ee/user/project/releases/index.html#permanent-links-to-latest-release-assets
 
-Note that this uses the [Permanent links to release assets](https://gitlab.kitware.com/help/user/project/releases/index#permanent-links-to-latest-release-assets) feature of gitlab, it requires you to
-create an asset as a link with a `filepath`, which can be set only using gitlab api as of the writing.
+#### for BitBucket
 
-#### BitBucket
+- `{ repo }/downloads/`
 
-For bitbucket, the `pkg-url` is set to
+Binaries must be uploaded into the project's "Downloads" page on BitBucket.
 
-```rust
-[
-    "{ repo }/downloads/{ name }-{ target }-v{ version }.{ archive-format }",
-    "{ repo }/downloads/{ name }-v{ version }-{ target }.{ archive-format }",
-    "{ repo }/downloads/{ name }-{ version }-{ target }.{ archive-format }",
-]
-```
+Also note that as there are no per-release downloads, the "versionless"
+filename is not considered here.
 
-To setup the package for binstall, upload the binary into bitbucket downloads page of your project,
-with its name set to be `{ name }-{ target }-v{ version }.{ archive-format }`.
+#### for SourceForge
 
-#### SourceForge
+- `{ repo }/files/binaries/{ version }`
+- `{ repo }/files/binaries/v{ version }`
 
-For source forge, the `pkg-url` is set to
+The URLs also have `/download` appended as per SourceForge's schema.
 
-```rust
-[
-    "{ repo }/files/binaries/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }/download",
-    "{ repo }/files/binaries/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }/download",
-    "{ repo }/files/binaries/v{ version }/{ name }-{ version }-{ target }.{ archive-format }/download",
-    "{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download",
-]
-```
-
-To setup the package for binstall, upload the binary to the file page of your project,
-under the directory `binaries/v{ version }` with the filename `{ name }-{ target }.{ archive-format }`.
+Binary must be uploaded to the "File" page of your project, under the directory
+`binaries/v{ version }`.
 
 #### Others
 
-For all other situations, `binstall` does not provide a default `pkg-url` and you need to manually
-specify it.
+For all other situations, `binstall` does not provide a default `pkg-url` and
+you need to manually specify it.
 
 ### QuickInstall
 

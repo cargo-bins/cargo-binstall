@@ -25,7 +25,7 @@ where
     block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
-        let mut file = fs::File::create(&path)?;
+        let mut file = fs::File::create(path)?;
 
         // remove it unless the operation isn't aborted and no write
         // fails.

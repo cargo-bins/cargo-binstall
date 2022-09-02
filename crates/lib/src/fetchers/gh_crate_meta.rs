@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use futures_util::stream::{FuturesUnordered, StreamExt};
@@ -23,7 +23,7 @@ use crate::{
 use super::Data;
 
 mod hosting;
-use hosting::GitHostingServices;
+use hosting::RepositoryHost;
 
 pub struct GhCrateMeta {
     client: Client,
@@ -86,13 +86,13 @@ impl super::Fetcher for GhCrateMeta {
             None
         };
 
-        let pkg_urls = if let Some(pkg_url) = self.data.meta.pkg_url.as_deref() {
-            Cow::Owned(vec![pkg_url])
+        let pkg_urls = if let Some(pkg_url) = self.data.meta.pkg_url.clone() {
+            vec![pkg_url]
         } else if let Some(repo) = repo.as_ref() {
             if let Some(pkg_urls) =
-                GitHostingServices::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
+                RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
             {
-                Cow::Borrowed(pkg_urls)
+                pkg_urls
             } else {
                 warn!(
                     concat!(
