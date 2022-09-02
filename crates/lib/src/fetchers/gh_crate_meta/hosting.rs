@@ -57,13 +57,18 @@ impl RepositoryHost {
                 &["{ repo }/downloads/"],
                 &[full_filenames],
             )),
-            SourceForge => Some(apply_filenames_to_paths(
-                &[
-                    "{ repo }/files/binaries/{ version }",
-                    "{ repo }/files/binaries/v{ version }",
-                ],
-                &[full_filenames, noversion_filenames],
-            )),
+            SourceForge => Some(
+                apply_filenames_to_paths(
+                    &[
+                        "{ repo }/files/binaries/{ version }",
+                        "{ repo }/files/binaries/v{ version }",
+                    ],
+                    &[full_filenames, noversion_filenames],
+                )
+                .into_iter()
+                .map(|url| format!("{url}/download"))
+                .collect(),
+            ),
             Unknown => None,
         }
     }
