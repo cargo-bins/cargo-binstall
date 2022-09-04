@@ -18,15 +18,15 @@ mod extracter;
 mod stream_readable;
 
 #[derive(Debug)]
-pub struct Download<'client, D: Digest = NoDigest> {
-    client: &'client Client,
+pub struct Download<D: Digest = NoDigest> {
+    client: Client,
     url: Url,
     _digest: PhantomData<D>,
     _checksum: Vec<u8>,
 }
 
-impl<'client> Download<'client> {
-    pub fn new(client: &'client Client, url: Url) -> Self {
+impl Download {
+    pub fn new(client: Client, url: Url) -> Self {
         Self {
             client,
             url,
@@ -82,8 +82,8 @@ impl<'client> Download<'client> {
     }
 }
 
-impl<'client, D: Digest> Download<'client, D> {
-    pub fn new_with_checksum(client: &'client Client, url: Url, checksum: Vec<u8>) -> Self {
+impl<D: Digest> Download<D> {
+    pub fn new_with_checksum(client: Client, url: Url, checksum: Vec<u8>) -> Self {
         Self {
             client,
             url,
