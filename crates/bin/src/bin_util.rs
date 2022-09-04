@@ -4,8 +4,10 @@ use std::{
     time::Duration,
 };
 
-use binstall::errors::BinstallError;
-use binstall::helpers::{signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle};
+use binstall_lib::{
+    errors::BinstallError,
+    helpers::{signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle},
+};
 use log::{error, info};
 use miette::Result;
 use tokio::runtime::Runtime;

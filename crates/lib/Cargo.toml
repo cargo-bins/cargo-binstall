@@ -1,8 +1,8 @@
 [package]
-name = "binstall"
+name = "binstall-lib"
 description = "Library backend for cargo-binstall"
 repository = "https://github.com/cargo-bins/cargo-binstall"
-documentation = "https://docs.rs/binstall"
+documentation = "https://docs.rs/binstall-lib"
 version = "0.0.0"
 rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]

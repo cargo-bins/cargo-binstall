@@ -7,7 +7,7 @@ use log::LevelFilter;
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::mpsc;
 
-use binstall::errors::BinstallError;
+use binstall_lib::errors::BinstallError;
 
 use crate::args::Args;
 

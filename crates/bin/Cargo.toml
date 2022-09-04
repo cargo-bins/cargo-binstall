@@ -18,7 +18,7 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-binstall = { path = "../lib", version = "0.0.0" }
+binstall-lib = { path = "../lib", version = "0.0.0" }
 clap = { version = "3.2.17", features = ["derive"] }
 crates_io_api = { version = "0.8.0", default-features = false }
 dirs = "4.0.0"
@@ -39,15 +39,15 @@ default = ["static", "zlib-ng", "rustls", "trust-dns", "fancy-no-backtrace"]
 
 mimalloc = ["dep:mimalloc"]
 
-static = ["binstall/static"]
-pkg-config = ["binstall/pkg-config"]
+static = ["binstall-lib/static"]
+pkg-config = ["binstall-lib/pkg-config"]
 
-zlib-ng = ["binstall/zlib-ng"]
+zlib-ng = ["binstall-lib/zlib-ng"]
 
-rustls = ["binstall/rustls"]
-native-tls = ["binstall/native-tls"]
+rustls = ["binstall-lib/rustls"]
+native-tls = ["binstall-lib/native-tls"]
 
-trust-dns = ["binstall/trust-dns"]
+trust-dns = ["binstall-lib/trust-dns"]
 
 fancy-no-backtrace = ["miette/fancy-no-backtrace"]
 fancy-with-backtrace = ["fancy-no-backtrace", "miette/fancy"]
