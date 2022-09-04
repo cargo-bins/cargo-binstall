@@ -34,16 +34,29 @@ impl<'client> Download<'client> {
             _checksum: Vec::new(),
         }
     }
-}
 
-impl<'client, D: Digest> Download<'client, D> {
-    pub fn new_with_checksum(client: &'client Client, url: Url, checksum: Vec<u8>) -> Self {
-        Self {
-            client,
-            url,
-            _digest: PhantomData::default(),
-            _checksum: checksum,
-        }
+    /// Download a file from the provided URL and extract part of it to
+    /// the provided path.
+    ///
+    ///  * `filter` - If Some, then it will pass the path of the file to it
+    ///    and only extract ones which filter returns `true`.
+    ///
+    /// This does not support verifying a checksum due to the partial extraction
+    /// and will ignore one if specified.
+    pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
+        self,
+        fmt: TarBasedFmt,
+        visitor: V,
+    ) -> Result<V::Target, BinstallError> {
+        let stream = create_request(self.client, self.url).await?;
+
+        debug!("Downloading and extracting then in-memory processing");
+
+        let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
+
+        debug!("Download, extraction and in-memory procession OK");
+
+        Ok(ret)
     }
 
     /// Download a file from the provided URL and extract it to the provided path.
@@ -67,27 +80,19 @@ impl<'client, D: Digest> Download<'client, D> {
 
         Ok(())
     }
+}
 
-    /// Download a file from the provided URL and extract part of it to
-    /// the provided path.
-    ///
-    ///  * `filter` - If Some, then it will pass the path of the file to it
-    ///    and only extract ones which filter returns `true`.
-    pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
-        self,
-        fmt: TarBasedFmt,
-        visitor: V,
-    ) -> Result<V::Target, BinstallError> {
-        let stream = create_request(self.client, self.url).await?;
-
-        debug!("Downloading and extracting then in-memory processing");
-
-        let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
-
-        debug!("Download, extraction and in-memory procession OK");
-
-        Ok(ret)
+impl<'client, D: Digest> Download<'client, D> {
+    pub fn new_with_checksum(client: &'client Client, url: Url, checksum: Vec<u8>) -> Self {
+        Self {
+            client,
+            url,
+            _digest: PhantomData::default(),
+            _checksum: checksum,
+        }
     }
+
+    // TODO: implement checking the sum, may involve bringing (parts of) and_extract() back in here
 }
 
 #[derive(Clone, Copy, Debug, Default)]
