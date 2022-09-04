@@ -3,16 +3,17 @@ use url::Url;
 use crate::errors::BinstallError;
 
 #[derive(Copy, Clone, Debug)]
-pub enum GitHostingServices {
+pub enum RepositoryHost {
     GitHub,
     GitLab,
     BitBucket,
     SourceForge,
     Unknown,
 }
-impl GitHostingServices {
+
+impl RepositoryHost {
     pub fn guess_git_hosting_services(repo: &Url) -> Result<Self, BinstallError> {
-        use GitHostingServices::*;
+        use RepositoryHost::*;
 
         match repo.domain() {
             Some(domain) if domain.starts_with("github") => Ok(GitHub),
@@ -23,34 +24,60 @@ impl GitHostingServices {
         }
     }
 
-    pub fn get_default_pkg_url_template(self) -> Option<&'static [&'static str]> {
-        use GitHostingServices::*;
+    pub fn get_default_pkg_url_template(self) -> Option<Vec<String>> {
+        use RepositoryHost::*;
+
+        let full_filenames = &[
+            "{ name }-{ target }-v{ version }.{ archive-format }",
+            "{ name }-{ target }-{ version }.{ archive-format }",
+            "{ name }-{ version }-{ target }.{ archive-format }",
+            "{ name }-v{ version }-{ target }.{ archive-format }",
+            "{ name }-{ version }-{ target }.{ archive-format }",
+            "{ name }-v{ version }-{ target }.{ archive-format }",
+        ];
+
+        let noversion_filenames = &["{ name }-{ target }.{ archive-format }"];
 
         match self {
-            GitHub => Some(&[
-                "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }",
-                "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }",
-                "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.{ archive-format }",
-                "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }",
-            ]),
-            GitLab => Some(&[
-                "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }-v{ version }.{ archive-format }",
-                "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-v{ version }-{ target }.{ archive-format }",
-                "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ version }-{ target }.{ archive-format }",
-                "{ repo }/-/releases/v{ version }/downloads/binaries/{ name }-{ target }.{ archive-format }",
-            ]),
-            BitBucket => Some(&[
-                "{ repo }/downloads/{ name }-{ target }-v{ version }.{ archive-format }",
-                "{ repo }/downloads/{ name }-v{ version }-{ target }.{ archive-format }",
-                "{ repo }/downloads/{ name }-{ version }-{ target }.{ archive-format }",
-            ]),
-            SourceForge => Some(&[
-                "{ repo }/files/binaries/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }/download",
-                "{ repo }/files/binaries/v{ version }/{ name }-v{ version }-{ target }.{ archive-format }/download",
-                "{ repo }/files/binaries/v{ version }/{ name }-{ version }-{ target }.{ archive-format }/download",
-                "{ repo }/files/binaries/v{ version }/{ name }-{ target }.{ archive-format }/download",
-            ]),
-            Unknown  => None,
+            GitHub => Some(apply_filenames_to_paths(
+                &[
+                    "{ repo }/releases/download/{ version }",
+                    "{ repo }/releases/download/v{ version }",
+                ],
+                &[full_filenames, noversion_filenames],
+            )),
+            GitLab => Some(apply_filenames_to_paths(
+                &[
+                    "{ repo }/-/releases/{ version }/downloads/binaries",
+                    "{ repo }/-/releases/v{ version }/downloads/binaries",
+                ],
+                &[full_filenames, noversion_filenames],
+            )),
+            BitBucket => Some(apply_filenames_to_paths(
+                &["{ repo }/downloads"],
+                &[full_filenames],
+            )),
+            SourceForge => Some(
+                apply_filenames_to_paths(
+                    &[
+                        "{ repo }/files/binaries/{ version }",
+                        "{ repo }/files/binaries/v{ version }",
+                    ],
+                    &[full_filenames, noversion_filenames],
+                )
+                .into_iter()
+                .map(|url| format!("{url}/download"))
+                .collect(),
+            ),
+            Unknown => None,
         }
     }
+}
+
+fn apply_filenames_to_paths(paths: &[&str], filenames: &[&[&str]]) -> Vec<String> {
+    filenames
+        .iter()
+        .flat_map(|fs| fs.iter())
+        .flat_map(|filename| paths.iter().map(move |path| format!("{path}/{filename}")))
+        .collect()
 }

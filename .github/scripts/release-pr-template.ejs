@@ -1,0 +1,52 @@
+This is a release PR for version **<%= version.actual %>**<%
+    if (version.actual != version.desired) {
+%> (performing a <%= version.desired %> bump).<%
+    } else {
+%>.<%
+    }
+%>
+
+<% if (pr.mergeStrategy == "merge") { %>
+**Use a merge commit.**
+<% } else if (pr.mergeStrategy == "rebase") { %>
+**Use rebase merge.**
+<% } else if (pr.mergeStrategy == "squash") { %>
+**Use squash merge.**
+<% } else if (pr.mergeStrategy == "bors") { %>
+**Merge by commenting:**
+| bors r+ |
+|:-:|
+<% } %>
+
+<% if (crate.name == "cargo-binstall") { %>
+Upon merging, this will automatically build the CLI and create a GitHub release.
+<% } else { %>
+Upon merging, this will create the tag `<%= crate.name %>-<%= version.actual %>`.
+<% } %>
+
+You will still need to manually publish the cargo crate:
+
+```
+$ git pull
+$ git switch --detach v{version}
+$ cargo publish
+```
+
+<% if (pr.releaseNotes) { %>
+---
+
+_Edit release notes into the section below:_
+
+<!-- do not change or remove this heading -->
+### Release notes
+
+_Binstall is a tool to fetch and install Rust-based executables as binaries. It aims to be a drop-in replacement for \`cargo install\` in most cases. Install it today with \`cargo install cargo-binstall\`, from the binaries below, or if you already have it, upgrade with \`cargo binstall cargo-binstall\`._
+
+#### In this release:
+
+-
+
+#### Other changes:
+
+-
+<% } %>
