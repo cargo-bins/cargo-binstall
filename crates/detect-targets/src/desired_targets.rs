@@ -43,8 +43,7 @@ impl DesiredTargets {
     }
 }
 
-/// If opts_targets is `Some`, then it will be parsed in the format of
-/// `$target1,$target2,...`.
+/// If opts_targets is `Some`, then it will be used.
 /// Otherwise, call `detect_targets` using `tokio::spawn` to detect targets.
 ///
 /// Since `detect_targets` internally spawns a process and wait for it,
