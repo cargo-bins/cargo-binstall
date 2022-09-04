@@ -36,5 +36,5 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           version: ${{ inputs.version }}
           crate-path: crates/${{ inputs.crate }}
-          pr-release-notes: true
+          pr-release-notes: ${{ inputs.crate == 'bin' }}
           pr-template-file: .github/scripts/release-pr-template.ejs

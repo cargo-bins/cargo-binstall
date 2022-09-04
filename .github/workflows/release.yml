@@ -9,9 +9,10 @@ on:
 jobs:
   info:
     runs-on: ubuntu-latest
-    # the commit message will look like: `release: v{version} (#{pr-number})`
-    if: "startsWith(github.event.head_commit.message, 'release: v')"
+    # the commit message will look like: `release: {crate-name} v{version} (#{pr-number})`
+    if: "startsWith(github.event.head_commit.message, 'release: ')"
     outputs:
+      crate: ${{ steps.version.outputs.crate }}
       version: ${{ steps.version.outputs.version }}
       notes: ${{ fromJSON(steps.notes.outputs.notes_json) }}
     env:
@@ -33,7 +34,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Push release tag
+    - name: Push lib release tag
+      if: "! startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
+      uses: mathieudutour/github-tag-action@v6.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        custom_tag: ${{ needs.info.outputs.version }}
+        tag_prefix: ${{ needs.info.outputs.crate }}-
+    - name: Push cli release tag
+      if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
       uses: mathieudutour/github-tag-action@v6.0
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -41,12 +50,14 @@ jobs:
         tag_prefix: ''
 
   build:
+    if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
     needs: info # not really, but just so it fails fast
     uses: ./.github/workflows/build.yml
     with:
       for_release: true
 
   release:
+    if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
     needs:
       - info
       - tag
