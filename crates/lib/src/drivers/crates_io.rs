@@ -9,7 +9,7 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::download::download_tar_based_and_visit,
+    helpers::download::Download,
     manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
 };
 
@@ -52,11 +52,7 @@ pub async fn fetch_crate_cratesio(
 
     let manifest_dir_path: PathBuf = format!("{name}-{version_name}").into();
 
-    download_tar_based_and_visit(
-        client,
-        Url::parse(&crate_url)?,
-        TarBasedFmt::Tgz,
-        ManifestVisitor::new(manifest_dir_path),
-    )
-    .await
+    Download::new(client, Url::parse(&crate_url)?)
+        .and_visit_tar(TarBasedFmt::Tgz, ManifestVisitor::new(manifest_dir_path))
+        .await
 }
