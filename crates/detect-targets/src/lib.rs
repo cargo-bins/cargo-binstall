@@ -10,8 +10,8 @@
 //!  - [`detect_targets`] provides the API to get the target
 //!    at runtime, but the code is run on the current thread.
 //!  - [`get_desired_targets`] provides the API to either
-//!    parse `$target1,$target2,...` override provided by the users,
-//!    or run [`detect_targets`] in the background using [`tokio::spawn`].
+//!    use override provided by the users, or run [`detect_targets`]
+//!    in the background using [`tokio::spawn`].
 //!
 //! # Example
 //!
