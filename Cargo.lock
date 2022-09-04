@@ -1137,7 +1137,7 @@ dependencies = [
 
 [[package]]
 name = "normalize-path"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "num-integer"
