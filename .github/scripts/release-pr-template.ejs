@@ -29,7 +29,7 @@ You will still need to manually publish the cargo crate:
 ```
 $ git pull
 $ git switch --detach v{version}
-$ cargo publish
+$ cargo publish -p <%= crate.name %>
 ```
 
 <% if (pr.releaseNotes) { %>
