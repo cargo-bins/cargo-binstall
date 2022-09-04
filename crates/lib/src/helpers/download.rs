@@ -1,5 +1,6 @@
-use std::{fmt::Debug, path::Path};
+use std::{fmt::Debug, marker::PhantomData, path::Path};
 
+use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
 use log::debug;
 use reqwest::{Client, Url};
 
@@ -15,47 +16,98 @@ use async_extracter::*;
 mod async_extracter;
 mod extracter;
 mod stream_readable;
-/// Download a file from the provided URL and extract it to the provided path.
-pub async fn download_and_extract<P: AsRef<Path>>(
-    client: &Client,
-    url: &Url,
-    fmt: PkgFmt,
-    path: P,
-) -> Result<(), BinstallError> {
-    let stream = create_request(client, url.clone()).await?;
 
-    let path = path.as_ref();
-    debug!("Downloading and extracting to: '{}'", path.display());
+#[derive(Debug)]
+pub struct Download<'client, D: Digest = NoDigest> {
+    client: &'client Client,
+    url: Url,
+    _digest: PhantomData<D>,
+    _checksum: Vec<u8>,
+}
 
-    match fmt.decompose() {
-        PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
-        PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
-        PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+impl<'client> Download<'client> {
+    pub fn new(client: &'client Client, url: Url) -> Self {
+        Self {
+            client,
+            url,
+            _digest: PhantomData::default(),
+            _checksum: Vec::new(),
+        }
     }
 
-    debug!("Download OK, extracted to: '{}'", path.display());
+    /// Download a file from the provided URL and extract part of it to
+    /// the provided path.
+    ///
+    ///  * `filter` - If Some, then it will pass the path of the file to it
+    ///    and only extract ones which filter returns `true`.
+    ///
+    /// This does not support verifying a checksum due to the partial extraction
+    /// and will ignore one if specified.
+    pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
+        self,
+        fmt: TarBasedFmt,
+        visitor: V,
+    ) -> Result<V::Target, BinstallError> {
+        let stream = create_request(self.client, self.url).await?;
 
-    Ok(())
+        debug!("Downloading and extracting then in-memory processing");
+
+        let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
+
+        debug!("Download, extraction and in-memory procession OK");
+
+        Ok(ret)
+    }
+
+    /// Download a file from the provided URL and extract it to the provided path.
+    pub async fn and_extract(
+        self,
+        fmt: PkgFmt,
+        path: impl AsRef<Path>,
+    ) -> Result<(), BinstallError> {
+        let stream = create_request(self.client, self.url).await?;
+
+        let path = path.as_ref();
+        debug!("Downloading and extracting to: '{}'", path.display());
+
+        match fmt.decompose() {
+            PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
+            PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
+            PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+        }
+
+        debug!("Download OK, extracted to: '{}'", path.display());
+
+        Ok(())
+    }
 }
 
-/// Download a file from the provided URL and extract part of it to
-/// the provided path.
-///
-///  * `filter` - If Some, then it will pass the path of the file to it
-///    and only extract ones which filter returns `true`.
-pub async fn download_tar_based_and_visit<V: TarEntriesVisitor + Debug + Send + 'static>(
-    client: &Client,
-    url: Url,
-    fmt: TarBasedFmt,
-    visitor: V,
-) -> Result<V::Target, BinstallError> {
-    let stream = create_request(client, url).await?;
+impl<'client, D: Digest> Download<'client, D> {
+    pub fn new_with_checksum(client: &'client Client, url: Url, checksum: Vec<u8>) -> Self {
+        Self {
+            client,
+            url,
+            _digest: PhantomData::default(),
+            _checksum: checksum,
+        }
+    }
 
-    debug!("Downloading and extracting then in-memory processing");
-
-    let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
-
-    debug!("Download, extraction and in-memory procession OK");
-
-    Ok(ret)
+    // TODO: implement checking the sum, may involve bringing (parts of) and_extract() back in here
 }
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoDigest;
+
+impl FixedOutput for NoDigest {
+    fn finalize_into(self, _out: &mut Output<Self>) {}
+}
+
+impl OutputSizeUser for NoDigest {
+    type OutputSize = generic_array::typenum::U0;
+}
+
+impl Update for NoDigest {
+    fn update(&mut self, _data: &[u8]) {}
+}
+
+impl HashMarker for NoDigest {}
