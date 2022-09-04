@@ -2,6 +2,17 @@ name: Open a release PR
 on:
   workflow_dispatch:
     inputs:
+      crate:
+        description: Crate to release
+        required: true
+        type: choice
+        options:
+          - bin
+          - lib
+          - detect-targets
+          - detect-wasi
+          - flock
+          - normalize-path
       version:
         description: Version to release
         required: true
@@ -20,50 +31,10 @@ jobs:
         with:
           ref: main
 
-      - name: Extract info
-        run: |
-          set -euxo pipefail
-
-          branch_name="release-${{ inputs.version }}"
-          echo "branch_name=${branch_name}" >> $GITHUB_ENV
-
-      - name: Make release branch
-        run: git switch -c "${{ env.branch_name }}"
-
-      - name: Do release
-        run: |
-          set -euxo pipefail
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          cargo release \
-            --execute \
-            --no-push \
-            --no-tag \
-            --no-publish \
-            --no-confirm \
-            --verbose \
-            --config release.toml \
-            --allow-branch "${{ env.branch_name }}" \
-            --dependent-version upgrade \
-            "${{ inputs.version }}"
-
-      - name: Push new branch
-        run: |
-          set -euxo pipefail
-          git push origin "${{ env.branch_name }}"
-
-      - name: Create PR
-        run: |
-          set -euxo pipefail
-
-          nl=$'\n'
-          br=$'\n\n'
-          fence=$'```\n'
-          ecnef=$'\n```'
-
-          title='release: v${{ inputs.version }}'
-          body=$(sed 's/%version%/${{ inputs.version }}/g' .github/scripts/release-pr.txt)
-
-          gh pr create --title "$title" --body "$body" --base main --head "${{ env.branch_name }}" --label "release"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: cargo-bins/release-pr@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version: ${{ inputs.version }}
+          crate-name: crates/${{ inputs.crate }}
+          pr-release-notes: true
+          pr-template-file: .github/scripts/release-pr-template.ejs
