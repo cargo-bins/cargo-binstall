@@ -1,5 +1,5 @@
-pre-release-commit-message = "release: v{{version}}"
-tag-prefix = "cli-"
+pre-release-commit-message = "release: cargo-binstall v{{version}}"
+tag-prefix = ""
 tag-message = "cargo-binstall {{version}}"
 
 # We wait until the release CI is done before publishing,
