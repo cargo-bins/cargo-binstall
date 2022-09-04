@@ -16,7 +16,7 @@ use std::{
 };
 
 use compact_str::CompactString;
-use flock::FileLock;
+use fs_lock::FileLock;
 use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
