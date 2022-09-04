@@ -14,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use flock::FileLock;
+use fs_lock::FileLock;
 use miette::Diagnostic;
 use serde::Serialize;
 use thiserror::Error;

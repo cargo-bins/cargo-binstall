@@ -11,7 +11,7 @@ on:
           - lib
           - detect-targets
           - detect-wasi
-          - flock
+          - fs-lock
           - normalize-path
       version:
         description: Version to release

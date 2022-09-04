@@ -90,7 +90,7 @@ dependencies = [
  "digest",
  "env_logger",
  "flate2",
- "flock",
+ "fs-lock",
  "futures-util",
  "generic-array",
  "home",
@@ -531,13 +531,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "flock"
-version = "0.0.0"
-dependencies = [
- "fs4",
-]
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -566,6 +559,13 @@ checksum = "5fc25a87fa4fd2094bffb06925852034d90a17f0d1e05197d4956d3555752191"
 dependencies = [
  "matches",
  "percent-encoding",
+]
+
+[[package]]
+name = "fs-lock"
+version = "0.0.0"
+dependencies = [
+ "fs4",
 ]
 
 [[package]]
