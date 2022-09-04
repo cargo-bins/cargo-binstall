@@ -56,7 +56,7 @@ pub async fn get_redirected_final_url(client: &Client, url: Url) -> Result<Url, 
 }
 
 pub(crate) async fn create_request(
-    client: &Client,
+    client: Client,
     url: Url,
 ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
     debug!("Downloading from: '{url}'");
