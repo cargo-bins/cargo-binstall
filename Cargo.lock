@@ -77,7 +77,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "binstall"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -359,7 +359,7 @@ checksum = "3ee2393c4a91429dffb4bedf19f4d6abf27d8a732c8ce4980305d782e5426d57"
 
 [[package]]
 name = "detect-targets"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "detect-wasi"
-version = "1.0.0"
+version = "0.0.0"
 dependencies = [
  "tempfile",
 ]
@@ -501,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "flock"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "fs4",
 ]
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "normalize-path"
-version = "0.1.0"
+version = "0.0.0"
 
 [[package]]
 name = "num-integer"

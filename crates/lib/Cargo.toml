@@ -3,7 +3,7 @@ name = "binstall"
 description = "Library backend for cargo-binstall"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstall"
-version = "0.1.0"
+version = "0.0.0"
 rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -17,16 +17,16 @@ cargo_toml = "0.11.5"
 clap = { version = "3.2.17", features = ["derive"] }
 compact_str = { version = "0.6.0", features = ["serde"] }
 crates_io_api = { version = "0.8.0", default-features = false }
-detect-targets = { version = "0.1.0", path = "../detect-targets" }
+detect-targets = { version = "0.0.0", path = "../detect-targets" }
 flate2 = { version = "1.0.24", default-features = false }
-flock = { version = "0.1.0", path = "../flock" }
+flock = { version = "0.0.0", path = "../flock" }
 futures-util = { version = "0.3.23", default-features = false, features = ["std"] }
 home = "0.5.3"
 itertools = "0.10.3"
 jobserver = "0.1.24"
 log = { version = "0.4.17", features = ["std"] }
 miette = "5.3.0"
-normalize-path = { version = "0.1.0", path = "../normalize-path" }
+normalize-path = { version = "0.0.0", path = "../normalize-path" }
 once_cell = "1.13.0"
 reqwest = { version = "0.11.11", features = ["stream"], default-features = false }
 scopeguard = "1.1.0"
