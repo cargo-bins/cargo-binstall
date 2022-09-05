@@ -8,19 +8,13 @@ use url::Url;
 
 use crate::errors::BinstallError;
 
-pub fn create_reqwest_client(
-    secure: bool,
-    min_tls: Option<tls::Version>,
-) -> Result<Client, BinstallError> {
+pub fn create_reqwest_client(min_tls: Option<tls::Version>) -> Result<Client, BinstallError> {
     const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-    let mut builder = ClientBuilder::new().user_agent(USER_AGENT);
-
-    if secure {
-        builder = builder
-            .https_only(true)
-            .min_tls_version(tls::Version::TLS_1_2);
-    }
+    let mut builder = ClientBuilder::new()
+        .user_agent(USER_AGENT)
+        .https_only(true)
+        .min_tls_version(tls::Version::TLS_1_2);
 
     if let Some(ver) = min_tls {
         builder = builder.min_tls_version(ver);

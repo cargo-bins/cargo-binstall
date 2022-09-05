@@ -113,15 +113,8 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub install_path: Option<PathBuf>,
 
-    /// Enforce downloads over secure transports only.
-    ///
-    /// Insecure HTTP downloads will be removed completely in the future; in the meantime this
-    /// option forces a fail when the remote endpoint uses plaintext HTTP or insecure TLS suites.
-    ///
-    /// Without this option, plain HTTP will warn.
-    ///
-    /// Implies `--min-tls-version=1.2`.
-    #[clap(help_heading = "Options", long)]
+    /// Deprecated, here for back-compat only. Secure is now on by default.
+    #[clap(hide(true), long)]
     pub secure: bool,
 
     /// Force a crate to be installed even if it is already installed.

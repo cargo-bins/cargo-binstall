@@ -32,7 +32,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     let desired_targets = get_desired_targets(args.targets.take());
 
     // Initialize reqwest client
-    let client = create_reqwest_client(args.secure, args.min_tls_version.map(|v| v.into()))?;
+    let client = create_reqwest_client(args.min_tls_version.map(|v| v.into()))?;
 
     // Build crates.io api client
     let crates_io_api_client = crates_io_api::AsyncClient::new(
