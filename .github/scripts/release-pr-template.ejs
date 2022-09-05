@@ -21,14 +21,14 @@ This is a release PR for **<%= crate.name %>** version **<%= version.actual %>**
 <% if (crate.name == "cargo-binstall") { %>
 Upon merging, this will automatically build the CLI and create a GitHub release.
 <% } else { %>
-Upon merging, this will create the tag `<%= crate.name %>-<%= version.actual %>`.
+Upon merging, this will create the tag `<%= crate.name %>-v<%= version.actual %>`.
 <% } %>
 
 You will still need to manually publish the cargo crate:
 
 ```
 $ git pull
-$ git switch --detach <%= crate.name %>-<%= version.actual %>
+$ git switch --detach <%= crate.name %>-v<%= version.actual %>
 $ cargo publish -p <%= crate.name %>
 ```
 
