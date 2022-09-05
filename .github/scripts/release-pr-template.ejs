@@ -32,6 +32,9 @@ $ git switch --detach <%= crate.name %>-<%= version.actual %>
 $ cargo publish -p <%= crate.name %>
 ```
 
+**To trigger builds initially, close and then immediately re-open this PR once.**
+See cargo-bins/release-pr#8 for more on this limitation.
+
 <% if (pr.releaseNotes) { %>
 ---
 
