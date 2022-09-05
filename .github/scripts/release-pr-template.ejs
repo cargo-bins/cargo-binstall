@@ -19,21 +19,28 @@ This is a release PR for **<%= crate.name %>** version **<%= version.actual %>**
 <% } %>
 
 <% if (crate.name == "cargo-binstall") { %>
-Upon merging, this will automatically build the CLI and create a GitHub release.
-<% } else { %>
-Upon merging, this will create the tag `<%= crate.name %>-v<%= version.actual %>`.
-<% } %>
-
+Upon merging, this will automatically create the tag `v<%= version.actual %>`, build the CLI, and create a GitHub release.
 You will still need to manually publish the cargo crate:
 
 ```
+$ git switch main
+$ git pull
+$ git switch --detach v<%= version.actual %>
+$ cargo publish -p <%= crate.name %>
+```
+<% } else { %>
+Upon merging, this will create the tag `<%= crate.name %>-v<%= version.actual %>`.
+You will still need to manually publish the cargo crate:
+
+```
+$ git switch main
 $ git pull
 $ git switch --detach <%= crate.name %>-v<%= version.actual %>
 $ cargo publish -p <%= crate.name %>
 ```
+<% } %>
 
 **To trigger builds initially, close and then immediately re-open this PR once.**
-See cargo-bins/release-pr#8 for more on this limitation.
 
 <% if (pr.releaseNotes) { %>
 ---
