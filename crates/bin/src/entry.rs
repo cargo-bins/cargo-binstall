@@ -35,11 +35,8 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     let client = create_reqwest_client(args.min_tls_version.map(|v| v.into()))?;
 
     // Build crates.io api client
-    let crates_io_api_client = crates_io_api::AsyncClient::new(
-        "cargo-binstall (https://github.com/ryankurte/cargo-binstall)",
-        Duration::from_millis(100),
-    )
-    .expect("bug: invalid user agent");
+    let crates_io_api_client =
+        crates_io_api::AsyncClient::with_http_client(client.clone(), Duration::from_millis(100));
 
     // Initialize UI thread
     let mut uithread = UIThread::new(!args.no_confirm);
