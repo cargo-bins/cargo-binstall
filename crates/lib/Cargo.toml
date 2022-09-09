@@ -25,7 +25,7 @@ futures-util = { version = "0.3.23", default-features = false, features = ["std"
 generic-array = "0.14.6"
 home = "0.5.3"
 itertools = "0.10.3"
-jobserver = "0.1.24"
+jobslot = { version = "0.2.1", features = ["tokio"] }
 log = { version = "0.4.17", features = ["std"] }
 miette = "5.3.0"
 normalize-path = { version = "0.1.0", path = "../normalize-path" }

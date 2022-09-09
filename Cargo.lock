@@ -95,7 +95,7 @@ dependencies = [
  "generic-array",
  "home",
  "itertools",
- "jobserver",
+ "jobslot",
  "log",
  "miette",
  "normalize-path",
@@ -940,6 +940,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af25a77299a7f711a01975c35a6a424eb6862092cc2d6c72c4ed6cbc56dfc1fa"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "jobslot"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f0478230fe7c53cb89765785904f3cd9a1fb95f7d3261c343fe3248627e6060"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "scopeguard",
+ "tokio",
 ]
 
 [[package]]
