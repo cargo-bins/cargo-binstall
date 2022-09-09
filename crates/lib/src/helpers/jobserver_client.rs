@@ -1,6 +1,6 @@
 use std::{num::NonZeroUsize, sync::Arc, thread::available_parallelism};
 
-use jobserver::Client;
+use jobslot::Client;
 use tokio::sync::OnceCell;
 
 use crate::errors::BinstallError;

@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use cargo_toml::Package;
 use compact_str::CompactString;
@@ -151,10 +151,8 @@ async fn install_from_source(
         "Running `cargo install {} --version {} --target {target}`",
         package.name, package.version
     );
-    let mut command = process::Command::new("cargo");
-    jobserver_client.configure(&mut command);
 
-    let mut cmd = Command::from(command);
+    let mut cmd = Command::new("cargo");
 
     cmd.arg("install")
         .arg(package.name)
@@ -173,7 +171,8 @@ async fn install_from_source(
 
     let command_string = format!("{:?}", cmd);
 
-    let mut child = cmd.spawn()?;
+    let mut child = jobserver_client.configure_and_run(&mut cmd, |cmd| cmd.spawn())?;
+
     debug!("Spawned command pid={:?}", child.id());
 
     let status = child.wait().await?;
