@@ -35,7 +35,7 @@ tokio = { version = "1.20.1", features = ["rt-multi-thread"], default-features =
 embed-resource = "1.7.3"
 
 [features]
-default = ["static", "zlib-ng", "rustls", "trust-dns", "fancy-no-backtrace"]
+default = ["static", "rustls", "trust-dns", "fancy-no-backtrace"]
 
 mimalloc = ["dep:mimalloc"]
 
