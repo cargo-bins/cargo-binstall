@@ -13,7 +13,7 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 
 ## Installation
 
-To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)).
+To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)). We recommend using the pre-compiled ones because we optimise those more than a standard source build does.
 
 | OS      | Arch    | URL                                                          |
 | ------- | ------- | ------------------------------------------------------------ |
