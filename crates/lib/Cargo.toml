@@ -65,7 +65,7 @@ zstd = { version = "0.10.0", default-features = false }
 env_logger = "0.9.0"
 
 [features]
-default = ["static", "zlib-ng", "rustls"]
+default = ["static", "rustls"]
 
 static = ["bzip2/static", "xz2/static"]
 pkg-config = ["zstd/pkg-config"]
