@@ -2,8 +2,8 @@
 
 set -euxo pipefail
 
-bins="cargo-llvm-cov cargo-binstall"
-test_bins="cargo-llvm-cov"
+bins="b3sum cargo-binstall"
+test_bins="b3sum"
 
 unset CARGO_INSTALL_ROOT
 unset CARGO_HOME
@@ -14,7 +14,7 @@ unset CARGO_HOME
 
 # Test that the installed binaries can be run
 for bin in $test_bins; do
-    "$HOME/.cargo/bin/$bin" --help >/dev/null 2>/dev/null
+    "$HOME/.cargo/bin/$bin" --help
 done
 cargo binstall --help >/dev/null
 
