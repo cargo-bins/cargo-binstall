@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/bin",
-    "crates/lib",
+    "crates/binstalk",
     "crates/detect-wasi",
     "crates/fs-lock",
     "crates/normalize-path",

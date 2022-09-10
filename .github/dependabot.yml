@@ -13,15 +13,15 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
+    directory: "/crates/binstalk"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
     directory: "/crates/detect-wasi"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
     directory: "/crates/flock"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/lib"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"

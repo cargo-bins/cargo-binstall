@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use binstall::helpers::jobserver_client::LazyJobserverClient;
+use binstalk::helpers::jobserver_client::LazyJobserverClient;
 use log::debug;
 
 use cargo_binstall::{

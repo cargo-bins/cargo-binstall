@@ -1,6 +1,6 @@
 use std::{fs, path::Path, sync::Arc, time::Duration};
 
-use binstall::{
+use binstalk::{
     errors::BinstallError,
     get_desired_targets,
     helpers::{

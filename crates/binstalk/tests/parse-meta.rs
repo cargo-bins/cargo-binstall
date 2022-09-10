@@ -1,4 +1,4 @@
-use binstall::ops::resolve::load_manifest_path;
+use binstalk::ops::resolve::load_manifest_path;
 use cargo_toml::Product;
 
 #[test]

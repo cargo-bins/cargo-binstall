@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-use binstall::{
+use binstalk::{
     errors::BinstallError,
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},

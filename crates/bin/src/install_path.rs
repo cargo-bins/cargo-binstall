@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use binstall::helpers::statics::cargo_home;
+use binstalk::helpers::statics::cargo_home;
 use log::debug;
 
 /// Fetch install path from environment
