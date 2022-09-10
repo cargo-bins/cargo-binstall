@@ -17,7 +17,7 @@ unset CARGO_HOME
 
 # Test that the installed binaries can be run
 for bin in $test_bins; do
-    "$HOME/.cargo/bin/$bin" --help
+    "$HOME/.cargo/bin/$bin" --version
 done
 cargo binstall --help >/dev/null
 
