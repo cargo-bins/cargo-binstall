@@ -5,6 +5,9 @@ set -euxo pipefail
 bins="b3sum cargo-binstall"
 test_bins="b3sum"
 
+test_resources=".github/scripts"
+PATH="$test_resources/fake-cargo:$PATH"
+
 unset CARGO_INSTALL_ROOT
 unset CARGO_HOME
 
@@ -58,10 +61,6 @@ cargo binstall --help >/dev/null
 "./$1" binstall --no-confirm cargo-binstall@0.12.0
 "./$1" binstall --no-confirm cargo-binstall@0.12.0 | grep -q 'cargo-binstall v0.12.0 is already installed'
 "./$1" binstall --no-confirm cargo-binstall@^0.12.0 | grep -q -v 'cargo-binstall v0.12.0 is already installed'
-
-# Test default GitLab pkg-url templates
-test_resources=".github/scripts"
-PATH="$test_resources/fake-cargo:$PATH"
 
 "./$1" binstall \
     --force \
