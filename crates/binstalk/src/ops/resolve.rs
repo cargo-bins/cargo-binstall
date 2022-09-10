@@ -327,17 +327,11 @@ async fn download_extract_and_verify(
 fn collect_bin_files(
     fetcher: &dyn Fetcher,
     package: &Package<Meta>,
-    mut meta: PkgMeta,
+    meta: PkgMeta,
     binaries: Vec<Product>,
     bin_path: PathBuf,
     install_path: PathBuf,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
-    // Update meta
-    if fetcher.source_name() == "QuickInstall" {
-        // TODO: less of a hack?
-        meta.bin_dir = "{ bin }{ binary-ext }".to_string();
-    }
-
     // Check binaries
     if binaries.is_empty() {
         return Err(BinstallError::UnspecifiedBinaries);

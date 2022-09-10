@@ -36,7 +36,7 @@ pub struct PkgMeta {
     pub pkg_fmt: Option<PkgFmt>,
 
     /// Path template for binary files in packages
-    pub bin_dir: String,
+    pub bin_dir: Option<String>,
 
     /// Public key for package verification (base64 encoded)
     pub pub_key: Option<String>,
@@ -50,7 +50,7 @@ impl Default for PkgMeta {
         Self {
             pkg_url: None,
             pkg_fmt: None,
-            bin_dir: DEFAULT_BIN_DIR.to_string(),
+            bin_dir: None,
             pub_key: None,
             overrides: BTreeMap::new(),
         }
@@ -77,7 +77,7 @@ impl PkgMeta {
             self.pkg_fmt = Some(*o);
         }
         if let Some(o) = &pkg_override.bin_dir {
-            self.bin_dir = o.clone();
+            self.bin_dir = Some(o.clone());
         }
     }
 }
