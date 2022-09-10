@@ -63,7 +63,7 @@ zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzi
 # zstd is also depended by zip.
 # Since zip 0.6.2 depends on zstd 0.10.0, we also have to use 0.10.0 here,
 # otherwise there will be a link conflict.
-zstd = { version = "0.10.0", default-features = false }
+zstd = { version = "0.11.2", default-features = false }
 
 [dev-dependencies]
 env_logger = "0.9.0"
