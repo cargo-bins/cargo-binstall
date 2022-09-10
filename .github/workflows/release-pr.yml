@@ -8,7 +8,7 @@ on:
         type: choice
         options:
           - bin
-          - lib
+          - binstalk
           - detect-targets
           - detect-wasi
           - fs-lock
