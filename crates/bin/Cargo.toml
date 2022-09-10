@@ -9,7 +9,10 @@ authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
 license = "GPL-3.0"
 
+# These MUST remain even if they're not needed in recent versions because
+# OLD versions use them to upgrade
 [package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
 bin-dir = "{ bin }{ binary-ext }"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
