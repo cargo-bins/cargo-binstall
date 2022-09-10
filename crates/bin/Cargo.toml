@@ -18,7 +18,7 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-binstalk = { path = "../binstalk", version = "0.0.0" }
+binstalk = { path = "../binstalk", version = "0.1.0" }
 clap = { version = "3.2.17", features = ["derive"] }
 crates_io_api = { version = "0.8.1", default-features = false }
 dirs = "4.0.0"
