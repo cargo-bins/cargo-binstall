@@ -2,27 +2,27 @@
 
 set -euxo pipefail
 
-bins="cargo-llvm-cov cargo-binstall"
-test_bins="cargo-llvm-cov"
-
 unset CARGO_INSTALL_ROOT
 unset CARGO_HOME
 
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
-"./$1" binstall --log-level debug --no-confirm $bins
+"./$1" binstall --log-level debug --no-confirm b3sum cargo-binstall
 
 # Test that the installed binaries can be run
-for bin in $test_bins; do
-    "$HOME/.cargo/bin/$bin" --version
-done
+b3sum --version
+cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
+
+test_resources=".github/scripts"
 
 # Install binaries using `--manifest-path`
-"./$1" binstall --force --log-level debug --manifest-path crates/bin/Cargo.toml --no-confirm cargo-binstall
-"./$1" binstall --force --log-level debug --manifest-path crates/bin --no-confirm cargo-binstall
+"./$1" binstall --force --log-level debug --manifest-path "$test_resources/gitlab-test-Cargo.toml" --no-confirm cargo-binstall
 # Test that the installed binaries can be run
 cargo binstall --help >/dev/null
+
+# FIXME: test this some other way that is not dependent on the version being published!
+# "./$1" binstall --force --log-level debug --manifest-path crates/bin --no-confirm cargo-binstall
 
 min_tls=1.3
 [[ "${2:-}" == "Windows" ]] && min_tls=1.2 # WinTLS on GHA doesn't support 1.3 yet
@@ -57,8 +57,8 @@ cargo binstall --help >/dev/null
 "./$1" binstall --no-confirm cargo-binstall@0.12.0 | grep -q 'cargo-binstall v0.12.0 is already installed'
 "./$1" binstall --no-confirm cargo-binstall@^0.12.0 | grep -q -v 'cargo-binstall v0.12.0 is already installed'
 
-# Test default GitLab pkg-url templates
-test_resources=".github/scripts"
+# to force failure if falling back to source
+# FIXME: remove/replace once #136 lands
 PATH="$test_resources/fake-cargo:$PATH"
 
 "./$1" binstall \
