@@ -109,7 +109,7 @@ pub fn logging(args: &Args) {
     let mut log_config = ConfigBuilder::new();
 
     if log_level != LevelFilter::Trace {
-        log_config.add_filter_allow_str("binstall");
+        log_config.add_filter_allow_str("binstalk");
         log_config.add_filter_allow_str("cargo_binstall");
     }
 
