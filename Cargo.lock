@@ -80,6 +80,7 @@ name = "binstall"
 version = "0.0.0"
 dependencies = [
  "async-trait",
+ "binstall-tar",
  "bytes",
  "bzip2",
  "cargo_toml",
@@ -108,7 +109,6 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
- "tar",
  "tempfile",
  "thiserror",
  "tinytemplate",
@@ -119,6 +119,17 @@ dependencies = [
  "xz2",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "binstall-tar"
+version = "0.4.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01db907e07c37309ea816c183ffe548daaa66ef640a291408f232d6ca4089dbb"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
 ]
 
 [[package]]
@@ -1817,17 +1828,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "tar"
-version = "0.4.38"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b55807c0344e1e6c04d7c965f5289c39a8d94ae23ed5c0b57aabac549f871c6"
-dependencies = [
- "filetime",
- "libc",
- "xattr",
 ]
 
 [[package]]
