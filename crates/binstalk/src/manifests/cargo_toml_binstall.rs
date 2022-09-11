@@ -23,7 +23,7 @@ pub struct Meta {
 /// Metadata for binary installation use.
 ///
 /// Exposed via `[package.metadata]` in `Cargo.toml`
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgMeta {
     /// URL template for package downloads
@@ -40,18 +40,6 @@ pub struct PkgMeta {
 
     /// Target specific overrides
     pub overrides: BTreeMap<String, PkgOverride>,
-}
-
-impl Default for PkgMeta {
-    fn default() -> Self {
-        Self {
-            pkg_url: None,
-            pkg_fmt: None,
-            bin_dir: None,
-            pub_key: None,
-            overrides: BTreeMap::new(),
-        }
-    }
 }
 
 impl PkgMeta {
