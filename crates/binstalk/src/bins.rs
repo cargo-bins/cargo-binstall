@@ -8,6 +8,7 @@ use tinytemplate::TinyTemplate;
 
 use crate::{
     errors::BinstallError,
+    fetchers::gh_crate_meta::hosting,
     fs::{atomic_install, atomic_symlink_file},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -44,6 +45,16 @@ impl BinFile {
         let source_file_path = if let Some(bin_dir) = &data.meta.bin_dir {
             ctx.render(bin_dir)?
         } else {
+            let default_dirs = hosting::FULL_FILENAMES
+                .into_iter()
+                .chain(hosting::NOVERSION_FILENAMES)
+                .filter_map(|f| f.strip_suffix(".{ archive-format }"))
+                .chain([""])
+                .map(Path::new)
+                .map(|p| p.join("{ bin }{ binary-ext }"))
+            ;
+            // "{ bin }{ binary-ext }"
+            // "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
             todo!()
         };
 

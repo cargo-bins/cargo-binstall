@@ -11,9 +11,6 @@ pub use package_formats::*;
 
 mod package_formats;
 
-/// Default binary name template (may be overridden in package Cargo.toml)
-pub const DEFAULT_BIN_DIR: &str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
-
 /// `binstall` metadata container
 ///
 /// Required to nest metadata under `package.metadata.binstall`

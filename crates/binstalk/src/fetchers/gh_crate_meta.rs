@@ -22,7 +22,7 @@ use crate::{
 
 use super::Data;
 
-mod hosting;
+pub(crate) mod hosting;
 use hosting::RepositoryHost;
 
 pub struct GhCrateMeta {
