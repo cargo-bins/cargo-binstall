@@ -49,12 +49,12 @@ impl BinFile {
                 .into_iter()
                 .chain(hosting::NOVERSION_FILENAMES)
                 .filter_map(|f| f.strip_suffix(".{ archive-format }"))
-                .chain([""])
+                .chain(["", "bin"])
                 .map(Path::new)
-                .map(|p| p.join("{ bin }{ binary-ext }"))
-            ;
-            // "{ bin }{ binary-ext }"
-            // "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
+                .map(|p| p.join("{ bin }{ binary-ext }"));
+            // from hosting:: we get "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }" and variants
+            // from the chain we get "{ bin }{ binary-ext }" and "bin/{ bin }{ binary-ext }"
+
             todo!()
         };
 
