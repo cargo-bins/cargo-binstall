@@ -1,7 +1,7 @@
 use std::{
     fmt::Debug,
     fs,
-    io::{copy, Read, Seek},
+    io::{copy, Read},
     path::Path,
 };
 
@@ -10,8 +10,8 @@ use futures_util::stream::Stream;
 use log::debug;
 use scopeguard::{guard, ScopeGuard};
 use tar::Entries;
-use tempfile::tempfile;
 use tokio::task::block_in_place;
+use zip::read::stream::ZipStreamReader;
 
 use super::{extracter::*, stream_readable::StreamReadable};
 use crate::{errors::BinstallError, manifests::cargo_toml_binstall::TarBasedFmt};
@@ -48,18 +48,15 @@ where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     BinstallError: From<E>,
 {
-    let mut reader = StreamReadable::new(stream).await;
+    let reader = StreamReadable::new(stream).await;
     block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
-        let mut file = tempfile()?;
+        debug!("Decompressing from zip archive to `{path:?}`");
 
-        copy(&mut reader, &mut file)?;
+        ZipStreamReader::new(reader).extract(path)?;
 
-        // rewind it so that we can pass it to unzip
-        file.rewind()?;
-
-        unzip(file, path)
+        Ok(())
     })
 }
 
