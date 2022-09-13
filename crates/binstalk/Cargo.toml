@@ -52,18 +52,22 @@ trust-dns-resolver = { version = "0.21.2", optional = true, default-features = f
 url = { version = "2.2.2", features = ["serde"] }
 xz2 = "0.1.7"
 
+# Use a fork here since upstream has not published a new release for a long time
+# while many of its dependencies are updated.
+# Also becasue we need streaming extraction.
+#
 # Disable all features of zip except for features of compression algorithms:
 # Disabled features include:
 #  - aes-crypto: Enables decryption of files which were encrypted with AES, absolutely zero use for
 #    this crate.
 #  - time: Enables features using the [time](https://github.com/time-rs/time) crate,
 #    which is not used by this crate.
-zip = { version = "0.6.2", default-features = false, features = ["deflate", "bzip2", "zstd"] }
+zip = { package = "binstall-zip", version = "0.6.3", default-features = false, features = ["deflate", "bzip2", "zstd"] }
 
 # zstd is also depended by zip.
-# Since zip 0.6.2 depends on zstd 0.10.0, we also have to use 0.10.0 here,
+# Since zip 0.6.3 depends on zstd 0.11, we also have to use 0.11 here,
 # otherwise there will be a link conflict.
-zstd = { version = "0.10.0", default-features = false }
+zstd = { version = "0.11.2", default-features = false }
 
 [dev-dependencies]
 env_logger = "0.9.0"
