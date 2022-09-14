@@ -8,7 +8,6 @@ use reqwest::Client;
 
 use crate::{
     errors::BinstallError,
-    helpers::tasks::AutoAbortJoinHandle,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -63,46 +62,4 @@ pub struct Data {
     pub version: String,
     pub repo: Option<String>,
     pub meta: PkgMeta,
-}
-
-type FetcherJoinHandle = AutoAbortJoinHandle<Result<bool, BinstallError>>;
-
-pub struct MultiFetcher(Vec<(Arc<dyn Fetcher>, FetcherJoinHandle)>);
-
-impl MultiFetcher {
-    pub fn with_capacity(n: usize) -> Self {
-        Self(Vec::with_capacity(n))
-    }
-
-    pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
-        self.0.push((
-            fetcher.clone(),
-            AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
-        ));
-    }
-
-    pub async fn first_available(self) -> Option<Arc<dyn Fetcher>> {
-        for (fetcher, handle) in self.0 {
-            match handle.await {
-                Ok(Ok(true)) => return Some(fetcher),
-                Ok(Ok(false)) => (),
-                Ok(Err(err)) => {
-                    debug!(
-                        "Error while checking fetcher {}: {}",
-                        fetcher.source_name(),
-                        err
-                    );
-                }
-                Err(join_err) => {
-                    debug!(
-                        "Error while joining the task that checks the fetcher {}: {}",
-                        fetcher.source_name(),
-                        join_err
-                    );
-                }
-            }
-        }
-
-        None
-    }
 }
