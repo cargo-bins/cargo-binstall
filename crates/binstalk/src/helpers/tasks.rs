@@ -59,3 +59,9 @@ impl<T> Future for AutoAbortJoinHandle<T> {
             .map(|res| res.map_err(BinstallError::TaskJoinError))
     }
 }
+
+impl<T> AutoAbortJoinHandle<Result<T, BinstallError>> {
+    pub async fn flattened_join(self) -> Result<T, BinstallError> {
+        Ok(self.await??)
+    }
+}
