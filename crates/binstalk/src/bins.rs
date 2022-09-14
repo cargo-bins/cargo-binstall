@@ -83,10 +83,17 @@ impl BinFile {
         )
     }
 
-    pub fn install_bin(&self) -> Result<(), BinstallError> {
+    /// Return `Ok` if the source exists, otherwise `Err`.
+    pub fn check_source_exists(&self) -> Result<(), BinstallError> {
         if !self.source.try_exists()? {
-            return Err(BinstallError::BinFileNotFound(self.source.clone()));
+            Err(BinstallError::BinFileNotFound(self.source.clone()))
+        } else {
+            Ok(())
         }
+    }
+
+    pub fn install_bin(&self) -> Result<(), BinstallError> {
+        self.check_source_exists()?;
 
         debug!(
             "Atomically install file from '{}' to '{}'",
