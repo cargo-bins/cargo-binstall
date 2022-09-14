@@ -68,6 +68,10 @@ impl super::Fetcher for QuickInstall {
         CompactString::from("QuickInstall")
     }
 
+    fn fetcher_name(&self) -> CompactString {
+        CompactString::from("QuickInstall")
+    }
+
     fn is_third_party(&self) -> bool {
         true
     }

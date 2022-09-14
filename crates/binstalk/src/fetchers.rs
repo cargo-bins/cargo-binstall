@@ -44,6 +44,10 @@ pub trait Fetcher: Send + Sync {
     /// A short human-readable name or descriptor for the package source
     fn source_name(&self) -> CompactString;
 
+    /// A short human-readable name, must contains only characters
+    /// and numbers and it also must be unique.
+    fn fetcher_name(&self) -> CompactString;
+
     /// Should return true if the remote is from a third-party source
     fn is_third_party(&self) -> bool;
 
