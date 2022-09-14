@@ -62,6 +62,6 @@ impl<T> Future for AutoAbortJoinHandle<T> {
 
 impl<T> AutoAbortJoinHandle<Result<T, BinstallError>> {
     pub async fn flattened_join(self) -> Result<T, BinstallError> {
-        Ok(self.await??)
+        self.await?
     }
 }
