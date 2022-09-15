@@ -13,7 +13,7 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 
 ## Installation
 
-To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)). We recommend using the pre-compiled ones because we optimise those more than a standard source build does.
+To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)). We recommend using the pre-compiled ones because we optimize those more than a standard source build does.
 
 | OS      | Arch    | URL                                                          |
 | ------- | ------- | ------------------------------------------------------------ |
@@ -71,9 +71,9 @@ $ cargo binstall broot --pkg-url="https://github.com/Canop/broot/releases/downlo
     and often putting together actual _packages_ is overkill.
 - Why use the cargo manifest?
   - Crates already have these, and they already contain a significant portion of the required information.
-    Also there's this great and woefully underused (imo) `[package.metadata]` field.
+    Also, there's this great and woefully underused (IMO) `[package.metadata]` field.
 - Is this secure?
-  - Yes and also no? We're not (yet? [#1](https://github.com/cargo-bins/cargo-binstall/issues/1)) doing anything to verify the CI binaries are produced by the right person / organisation.
+  - Yes and also no? We're not (yet? [#1](https://github.com/cargo-bins/cargo-binstall/issues/1)) doing anything to verify the CI binaries are produced by the right person/organization.
     However, we're pulling data from crates.io and the cargo manifest, both of which are _already_ trusted entities, and this is
     functionally a replacement for `curl ... | bash` or `wget`-ing the same files, so, things can be improved but it's also fairly moot
 - What do the error codes mean?
@@ -83,4 +83,4 @@ $ cargo binstall broot --pkg-url="https://github.com/Canop/broot/releases/downlo
 
 ---
 
-If you have ideas / contributions or anything is not working the way you expect (in which case, please include an output with `--log-level debug`) and feel free to open an issue or PR.
+If you have ideas/contributions or anything is not working the way you expect (in which case, please include an output with `--log-level debug`) and feel free to open an issue or PR.
