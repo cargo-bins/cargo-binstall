@@ -6,6 +6,7 @@ use strum_macros::{Display, EnumIter, EnumString};
     Debug, Display, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, EnumIter,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(ascii_case_insensitive)]
 pub enum PkgFmt {
     /// Download format is TAR (uncompressed)
     Tar,
