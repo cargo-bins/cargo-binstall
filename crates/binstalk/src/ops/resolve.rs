@@ -5,6 +5,7 @@ use std::{
 
 use cargo_toml::{Manifest, Package, Product};
 use compact_str::{CompactString, ToCompactString};
+use itertools::Itertools;
 use log::{debug, info, warn};
 use reqwest::Client;
 use semver::{Version, VersionReq};
@@ -181,44 +182,49 @@ async fn resolve_inner(
     let mut handles: Vec<(Arc<dyn Fetcher>, JoinHandler)> =
         Vec::with_capacity(desired_targets.len() * 2);
 
-    for target in desired_targets {
-        debug!("Building metadata for target: {target}");
-        let mut target_meta = meta.clone_without_overrides();
+    handles.extend(
+        desired_targets
+            .iter()
+            .map(|target| {
+                debug!("Building metadata for target: {target}");
+                let mut target_meta = meta.clone_without_overrides();
 
-        // Merge any overrides
-        if let Some(o) = meta.overrides.get(target) {
-            target_meta.merge(o);
-        }
+                // Merge any overrides
+                if let Some(o) = meta.overrides.get(target) {
+                    target_meta.merge(o);
+                }
 
-        target_meta.merge(&opts.cli_overrides);
-        debug!("Found metadata: {target_meta:?}");
+                target_meta.merge(&opts.cli_overrides);
+                debug!("Found metadata: {target_meta:?}");
 
-        let fetcher_data = Arc::new(Data {
-            name: package.name.clone(),
-            target: target.clone(),
-            version: package.version.clone(),
-            repo: package.repository.clone(),
-            meta: target_meta,
-        });
+                let fetcher_data = Arc::new(Data {
+                    name: package.name.clone(),
+                    target: target.clone(),
+                    version: package.version.clone(),
+                    repo: package.repository.clone(),
+                    meta: target_meta,
+                });
 
-        // Generate temporary binary path
-        let bin_path = temp_dir.join(format!("bin-{}-{target}", crate_name.name));
+                // Generate temporary binary path
+                let bin_path = temp_dir.join(format!("bin-{}-{target}", crate_name.name));
 
-        handles.extend([GhCrateMeta::new, QuickInstall::new].map(|f| {
-            let fetcher = f(&client, &fetcher_data);
-
-            (
-                fetcher.clone(),
-                resolve_download_and_extract(
-                    fetcher,
-                    &bin_path,
-                    package.clone(),
-                    install_path.clone(),
-                    binaries.clone(),
-                ),
-            )
-        }));
-    }
+                (fetcher_data, bin_path)
+            })
+            .cartesian_product([GhCrateMeta::new, QuickInstall::new])
+            .map(|((fetcher_data, bin_path), f)| {
+                let fetcher = f(&client, &fetcher_data);
+                (
+                    fetcher.clone(),
+                    resolve_download_and_extract(
+                        fetcher,
+                        &bin_path,
+                        package.clone(),
+                        install_path.clone(),
+                        binaries.clone(),
+                    ),
+                )
+            }),
+    );
 
     for (fetcher, handle) in handles {
         match handle.flattened_join().await {
