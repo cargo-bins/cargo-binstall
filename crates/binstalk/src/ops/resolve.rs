@@ -178,8 +178,6 @@ async fn resolve_inner(
 
     let desired_targets = opts.desired_targets.get().await;
 
-    type JoinHandler = AutoAbortJoinHandle<Result<Option<Vec<bins::BinFile>>, BinstallError>>;
-
     let mut handles: Vec<(Arc<dyn Fetcher>, JoinHandler)> =
         Vec::with_capacity(desired_targets.len() * 2);
 
@@ -208,69 +206,16 @@ async fn resolve_inner(
 
         handles.extend([GhCrateMeta::new, QuickInstall::new].map(|f| {
             let fetcher = f(&client, &fetcher_data);
-            let bin_path = bin_path.join(&*fetcher.fetcher_name());
-            let package = Arc::clone(&package);
-            let install_path = Arc::clone(&install_path);
-            let binaries = binaries.clone();
 
             (
                 fetcher.clone(),
-                AutoAbortJoinHandle::spawn(async move {
-                    // Verify that this fetcher contains the package
-                    // we want.
-                    if !fetcher.find().await? {
-                        return Ok(None);
-                    }
-
-                    // Build final metadata
-                    let meta = fetcher.target_meta();
-
-                    let bin_files = collect_bin_files(
-                        fetcher.as_ref(),
-                        &package,
-                        meta,
-                        binaries,
-                        bin_path.clone(),
-                        install_path.to_path_buf(),
-                    )?;
-
-                    // Download and extract it.
-                    // If that fails, then ignore this fetcher.
-                    fetcher.fetch_and_extract(&bin_path).await?;
-
-                    #[cfg(incomplete)]
-                    {
-                        // Fetch and check package signature if available
-                        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
-                            debug!("Found public key: {pub_key}");
-
-                            // Generate signature file URL
-                            let mut sig_ctx = ctx.clone();
-                            sig_ctx.format = "sig".to_string();
-                            let sig_url = sig_ctx.render(&pkg_url)?;
-
-                            debug!("Fetching signature file: {sig_url}");
-
-                            // Download signature file
-                            let sig_path = temp_dir.join(format!("{pkg_name}.sig"));
-                            download(&sig_url, &sig_path).await?;
-
-                            // TODO: do the signature check
-                            unimplemented!()
-                        } else {
-                            warn!("No public key found, package signature could not be validated");
-                        }
-                    }
-
-                    // Verify that all the bin_files exist
-                    block_in_place(|| {
-                        for bin_file in bin_files.iter() {
-                            bin_file.check_source_exists()?;
-                        }
-
-                        Ok(Some(bin_files))
-                    })
-                }),
+                resolve_download_and_extract(
+                    fetcher,
+                    &bin_path,
+                    package.clone(),
+                    install_path.clone(),
+                    binaries.clone(),
+                ),
             )
         }));
     }
@@ -298,6 +243,76 @@ async fn resolve_inner(
     }
 
     Ok(Resolution::InstallFromSource { package })
+}
+
+type JoinHandler = AutoAbortJoinHandle<Result<Option<Vec<bins::BinFile>>, BinstallError>>;
+
+fn resolve_download_and_extract(
+    fetcher: Arc<dyn Fetcher>,
+    bin_path: &Path,
+    package: Arc<Package<Meta>>,
+    install_path: Arc<Path>,
+    // TODO: Use Arc<Vec<Product>>
+    binaries: Vec<Product>,
+) -> JoinHandler {
+    let bin_path = bin_path.join(&*fetcher.fetcher_name());
+
+    AutoAbortJoinHandle::spawn(async move {
+        // Verify that this fetcher contains the package
+        // we want.
+        if !fetcher.find().await? {
+            return Ok(None);
+        }
+
+        // Build final metadata
+        let meta = fetcher.target_meta();
+
+        let bin_files = collect_bin_files(
+            fetcher.as_ref(),
+            &package,
+            meta,
+            binaries,
+            bin_path.clone(),
+            install_path.to_path_buf(),
+        )?;
+
+        // Download and extract it.
+        // If that fails, then ignore this fetcher.
+        fetcher.fetch_and_extract(&bin_path).await?;
+
+        #[cfg(incomplete)]
+        {
+            // Fetch and check package signature if available
+            if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
+                debug!("Found public key: {pub_key}");
+
+                // Generate signature file URL
+                let mut sig_ctx = ctx.clone();
+                sig_ctx.format = "sig".to_string();
+                let sig_url = sig_ctx.render(&pkg_url)?;
+
+                debug!("Fetching signature file: {sig_url}");
+
+                // Download signature file
+                let sig_path = temp_dir.join(format!("{pkg_name}.sig"));
+                download(&sig_url, &sig_path).await?;
+
+                // TODO: do the signature check
+                unimplemented!()
+            } else {
+                warn!("No public key found, package signature could not be validated");
+            }
+        }
+
+        // Verify that all the bin_files exist
+        block_in_place(|| {
+            for bin_file in bin_files.iter() {
+                bin_file.check_source_exists()?;
+            }
+
+            Ok(Some(bin_files))
+        })
+    })
 }
 
 fn collect_bin_files(
