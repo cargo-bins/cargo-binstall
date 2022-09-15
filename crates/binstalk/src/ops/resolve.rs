@@ -97,7 +97,7 @@ pub async fn resolve(
 ) -> Result<Resolution, BinstallError> {
     let crate_name_name = crate_name.name.clone();
     let resolution = resolve_inner(
-        opts.clone(),
+        &opts,
         crate_name,
         curr_version,
         temp_dir,
@@ -114,7 +114,7 @@ pub async fn resolve(
 }
 
 async fn resolve_inner(
-    opts: Arc<Options>,
+    opts: &Options,
     crate_name: CrateName,
     curr_version: Option<Version>,
     temp_dir: Arc<Path>,
