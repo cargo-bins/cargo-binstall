@@ -208,8 +208,8 @@ async fn resolve_inner(
 
         handles.extend(
             [
-                GhCrateMeta::new(&client, &fetcher_data).await as Arc<dyn Fetcher>,
-                QuickInstall::new(&client, &fetcher_data).await as Arc<dyn Fetcher>,
+                GhCrateMeta::new(&client, &fetcher_data) as Arc<dyn Fetcher>,
+                QuickInstall::new(&client, &fetcher_data) as Arc<dyn Fetcher>,
             ]
             .map(|fetcher| {
                 let bin_path = bin_path.join(&*fetcher.fetcher_name());

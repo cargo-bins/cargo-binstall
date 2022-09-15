@@ -17,7 +17,7 @@ mod quickinstall;
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
-    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self>
+    fn new(client: &Client, data: &Arc<Data>) -> Arc<Self>
     where
         Self: Sized;
 
