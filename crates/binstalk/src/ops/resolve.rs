@@ -179,7 +179,7 @@ async fn resolve_inner(
 
     let desired_targets = opts.desired_targets.get().await;
 
-    let mut handles: Vec<(Arc<dyn Fetcher>, JoinHandler)> =
+    let mut handles: Vec<(Arc<dyn Fetcher>, ResolverHandler)> =
         Vec::with_capacity(desired_targets.len() * 2);
 
     handles.extend(
@@ -251,7 +251,7 @@ async fn resolve_inner(
     Ok(Resolution::InstallFromSource { package })
 }
 
-type JoinHandler = AutoAbortJoinHandle<Result<Option<Vec<bins::BinFile>>, BinstallError>>;
+type ResolverHandler = AutoAbortJoinHandle<Result<Option<Vec<bins::BinFile>>, BinstallError>>;
 
 fn resolve_download_and_extract(
     fetcher: Arc<dyn Fetcher>,
@@ -260,7 +260,7 @@ fn resolve_download_and_extract(
     install_path: Arc<Path>,
     // TODO: Use Arc<Vec<Product>>
     binaries: Vec<Product>,
-) -> JoinHandler {
+) -> ResolverHandler {
     let bin_path = bin_path.join(&*fetcher.fetcher_name());
 
     AutoAbortJoinHandle::spawn(async move {
