@@ -17,7 +17,8 @@ mod quickinstall;
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
-    fn new(client: &Client, data: &Arc<Data>) -> Arc<Self>
+    #[allow(clippy::new_ret_no_self)]
+    fn new(client: &Client, data: &Arc<Data>) -> Arc<dyn Fetcher>
     where
         Self: Sized;
 

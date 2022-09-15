@@ -71,7 +71,7 @@ impl GhCrateMeta {
 
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
-    fn new(client: &Client, data: &Arc<Data>) -> Arc<Self> {
+    fn new(client: &Client, data: &Arc<Data>) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client: client.clone(),
             data: data.clone(),
