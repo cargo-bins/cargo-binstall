@@ -75,7 +75,38 @@ pub struct Args {
     pub bin_dir: Option<String>,
 
     /// Override Cargo.toml package manifest pkg-fmt.
-    #[clap(help_heading = "Overrides", long)]
+    ///
+    /// The availiable package formats are:
+    ///
+    /// - tar: download format is TAR (uncompressed)
+    ///
+    /// - tbz2: Download format is TAR + Bzip2
+    ///
+    /// - tgz: Download format is TGZ (TAR + GZip)
+    ///
+    /// - txz: Download format is TAR + XZ
+    ///
+    /// - tzstd: Download format is TAR + Zstd
+    ///
+    /// - zip: Download format is Zip
+    ///
+    /// - bin: Download format is raw / binary
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        value_name = "PKG_FMT",
+        possible_values = [
+            PossibleValue::new("tar").help(
+                "Download format is TAR (uncompressed)."
+            ),
+            PossibleValue::new("tbz2").help("Download format is TAR + Bzip2."),
+            PossibleValue::new("tgz").help("Download format is TGZ (TAR + GZip)."),
+            PossibleValue::new("txz").help("Download format is TAR + XZ."),
+            PossibleValue::new("tzstd").help("Download format is TAR + Zstd."),
+            PossibleValue::new("zip").help("Download format is Zip."),
+            PossibleValue::new("bin").help("Download format is raw / binary."),
+        ]
+    )]
     pub pkg_fmt: Option<PkgFmt>,
 
     /// Override Cargo.toml package manifest pkg-url.
