@@ -146,7 +146,10 @@ async fn resolve_inner(
         }
     };
 
-    let package = Arc::new(manifest.package.unwrap());
+    let package = manifest
+        .package
+        .map(Arc::new)
+        .ok_or_else(|| BinstallError::CargoTomlMissingPackage(crate_name.name.clone()))?;
 
     if let Some(curr_version) = curr_version {
         let new_version =
