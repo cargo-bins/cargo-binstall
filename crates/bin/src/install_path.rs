@@ -10,10 +10,17 @@ use log::debug;
 /// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
 ///
 /// Return (install_path, is_custom_install_path)
-pub fn get_install_path<P: AsRef<Path>>(install_path: Option<P>) -> (Option<Arc<Path>>, bool) {
+pub fn get_install_path<P: AsRef<Path>>(
+    install_path: Option<P>,
+    cargo_roots: Option<P>,
+) -> (Option<Arc<Path>>, bool) {
     // Command line override first first
     if let Some(p) = install_path {
         return (Some(Arc::from(p.as_ref())), true);
+    }
+
+    if let Some(p) = cargo_roots {
+        return (Some(Arc::from(p.as_ref())), false);
     }
 
     // Environmental variables
