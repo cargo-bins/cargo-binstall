@@ -16,12 +16,12 @@ pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
     if let Some(p) = var_os("CARGO_INSTALL_ROOT") {
         let p = PathBuf::from(p);
         debug!("using CARGO_INSTALL_ROOT ({})", p.display());
-        return Some(p.join("bin"));
+        return Some(p);
     }
 
     if let Ok(p) = cargo_home() {
         debug!("using ({}) as cargo home", p.display());
-        Some(p.join("bin"))
+        Some(p)
     } else {
         None
     }
