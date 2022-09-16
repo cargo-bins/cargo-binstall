@@ -4,27 +4,13 @@ use std::{
     thread,
 };
 
-use log::LevelFilter;
+use log::{LevelFilter, STATIC_MAX_LEVEL};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::mpsc;
 
 use binstalk::errors::BinstallError;
 
 use crate::args::Args;
-
-const IS_RELEASE_BUILD: bool = !cfg!(debug_assertions);
-
-const MAX_LOG_LEVEL: LevelFilter = if IS_RELEASE_BUILD {
-    if cfg!(feature = "log_release_max_level_info") {
-        LevelFilter::Info
-    } else if cfg!(feature = "log_release_max_level_debug") {
-        LevelFilter::Debug
-    } else {
-        LevelFilter::Trace
-    }
-} else {
-    LevelFilter::Trace
-};
 
 #[derive(Debug)]
 struct UIThreadInner {
@@ -118,7 +104,7 @@ impl UIThread {
 }
 
 pub fn logging(args: &Args) {
-    let log_level = min(args.log_level, MAX_LOG_LEVEL);
+    let log_level = min(args.log_level, STATIC_MAX_LEVEL);
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();
