@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use binstalk::helpers::statics::cargo_home;
+use binstalk::home::cargo_home;
 use log::debug;
 
 pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
