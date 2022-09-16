@@ -56,3 +56,4 @@ fancy-no-backtrace = ["miette/fancy-no-backtrace"]
 fancy-with-backtrace = ["fancy-no-backtrace", "miette/fancy"]
 
 log_release_max_level_info = ["log/release_max_level_info"]
+log_release_max_level_debug = ["log/release_max_level_debug"]
