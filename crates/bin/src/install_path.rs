@@ -28,7 +28,7 @@ pub fn get_install_path<P: AsRef<Path>>(
     if let Some(p) = var_os("CARGO_INSTALL_ROOT") {
         let p = PathBuf::from(p);
         debug!("using CARGO_INSTALL_ROOT ({})", p.display());
-        return (Some(Arc::from(p.join("bin"))), true);
+        return (Some(Arc::from(p.join("bin"))), false);
     }
 
     if let Ok(p) = cargo_home() {
