@@ -7,6 +7,26 @@ use std::{
 use binstalk::helpers::statics::cargo_home;
 use log::debug;
 
+pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(p) = cargo_roots {
+        return Some(p);
+    }
+
+    // Environmental variables
+    if let Some(p) = var_os("CARGO_INSTALL_ROOT") {
+        let p = PathBuf::from(p);
+        debug!("using CARGO_INSTALL_ROOT ({})", p.display());
+        return Some(p.join("bin"));
+    }
+
+    if let Ok(p) = cargo_home() {
+        debug!("using ({}) as cargo home", p.display());
+        Some(p.join("bin"))
+    } else {
+        None
+    }
+}
+
 /// Fetch install path from environment
 /// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
 ///
@@ -20,20 +40,9 @@ pub fn get_install_path<P: AsRef<Path>>(
         return (Some(Arc::from(p.as_ref())), true);
     }
 
+    // Then cargo_roots
     if let Some(p) = cargo_roots {
-        return (Some(Arc::from(p.as_ref())), false);
-    }
-
-    // Environmental variables
-    if let Some(p) = var_os("CARGO_INSTALL_ROOT") {
-        let p = PathBuf::from(p);
-        debug!("using CARGO_INSTALL_ROOT ({})", p.display());
-        return (Some(Arc::from(p.join("bin"))), false);
-    }
-
-    if let Ok(p) = cargo_home() {
-        debug!("using ({}) as cargo home", p.display());
-        return (Some(p.join("bin").into()), false);
+        return (Some(Arc::from(p.as_ref().join("bin"))), false);
     }
 
     // Local executable dir if no cargo is found
