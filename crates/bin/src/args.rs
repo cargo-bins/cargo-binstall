@@ -144,6 +144,17 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub install_path: Option<PathBuf>,
 
+    /// Install binaries with a custom cargo root.
+    ///
+    /// By default, we use `$CARGO_INSTALL_ROOT` or `$CARGO_HOME` as the
+    /// cargo root and global metadata files are updated with the
+    /// package information.
+    ///
+    /// Specifying another path here would install the binaries and update
+    /// the metadata files inside the path you specified.
+    #[clap(help_heading = "Options", long)]
+    pub roots: Option<PathBuf>,
+
     /// Deprecated, here for back-compat only. Secure is now on by default.
     #[clap(hide(true), long)]
     pub secure: bool,
