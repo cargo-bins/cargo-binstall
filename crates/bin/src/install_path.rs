@@ -1,4 +1,5 @@
 use std::{
+    env::var_os,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -24,10 +25,10 @@ pub fn get_install_path<P: AsRef<Path>>(
     }
 
     // Environmental variables
-    if let Ok(p) = std::env::var("CARGO_INSTALL_ROOT") {
-        debug!("using CARGO_INSTALL_ROOT ({p})");
-        let b = PathBuf::from(p);
-        return (Some(Arc::from(b.join("bin"))), true);
+    if let Some(p) = var_os("CARGO_INSTALL_ROOT") {
+        let p = PathBuf::from(p);
+        debug!("using CARGO_INSTALL_ROOT ({})", p.display());
+        return (Some(Arc::from(p.join("bin"))), true);
     }
 
     if let Ok(p) = cargo_home() {
