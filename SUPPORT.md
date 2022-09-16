@@ -25,14 +25,14 @@ With the following configuration keys:
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
 Template variables use the format `{ VAR }` where `VAR` is the name of the variable, with the following variables available:
-- `name` is the name of the crate / package
+- `name` is the name of the crate/package
 - `version` is the crate version (per `--version` and the crate manifest)
 - `repo` is the repository linked in `Cargo.toml`
 - `bin` is the name of a specific binary, inferred from the crate configuration
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required()
 - `archive-format` is the filename extension of the package archive format
 - `binary-ext` is the string `.exe` if the `target` is for Windows, or the empty string otherwise
-- `format` is a soft-deprecated alias for `archive-format` in `pkg-url`, and for `binary-ext` in `bin-dir`; in the future this may warn at install time.
+- `format` is a soft-deprecated alias for `archive-format` in `pkg-url`, and alias for `binary-ext` in `bin-dir`; in the future, this may warn at install time.
 
 `pkg-url`, `pkg-fmt` and `bin-dir` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
@@ -43,7 +43,7 @@ pkg-fmt = "zip"
 
 ### Defaults
 
-By default, `binstall` will try all supported package format and would have `bin-dir` set to
+By default, `binstall` will try all supported package formats and would have `bin-dir` set to
 `"{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"` (where `bin` is the cargo binary name and
 `binary-ext` is `.exe` on windows and empty on other platforms).
 
@@ -52,7 +52,7 @@ files are not overwritten when manually executing `tar -xvf ...`).
 
 The default value for `pkg-url` will depend on the repository of the package.
 
-It is setup to work with github releases, gitlab releases, bitbucket downloads
+It is set up to work with GitHub releases, GitLab releases, bitbucket downloads
 and source forge downloads.
 
 If your package already uses any of these URLs, you shouldn't need to set anything.
@@ -91,7 +91,7 @@ feature of GitLab EE: it requires you to create an asset as a link with a
 
 - `{ repo }/downloads/`
 
-Binaries must be uploaded into the project's "Downloads" page on BitBucket.
+Binaries must be uploaded to the project's "Downloads" page on BitBucket.
 
 Also note that as there are no per-release downloads, the "versionless"
 filename is not considered here.
@@ -126,14 +126,14 @@ For example, the default configuration (as shown above) for a crate called `radi
 
 ####  If the package name does not match the crate name
 
-As is common with libraries / utilities (and the `radio-sx128x` example), this can be overridden by specifying the `pkg-url`:
+As is common with libraries/utilities (and the `radio-sx128x` example), this can be overridden by specifying the `pkg-url`:
 
 ```toml
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }"
 ```
 
-Which provides a download URL of: `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
+Which provides a download URL of `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
 
 
 ####  If the package structure differs from the default
