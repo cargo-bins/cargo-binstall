@@ -152,6 +152,8 @@ pub struct Args {
     ///
     /// Specifying another path here would install the binaries and update
     /// the metadata files inside the path you specified.
+    ///
+    /// NOTE that `--install-path` takes precedence over this option.
     #[clap(help_heading = "Options", long)]
     pub roots: Option<PathBuf>,
 
