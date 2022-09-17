@@ -175,8 +175,8 @@ impl super::Fetcher for GhCrateMeta {
             .unwrap_or_else(|| "invalid url".into())
     }
 
-    fn fetcher_name(&self) -> CompactString {
-        CompactString::from("GhCrateMeta")
+    fn fetcher_name(&self) -> &'static str {
+        "GhCrateMeta"
     }
 
     fn is_third_party(&self) -> bool {

@@ -49,7 +49,7 @@ pub trait Fetcher: Send + Sync {
     ///
     /// It is used to create a temporary dir where it is used for
     /// [`Fetcher::fetch_and_extract`].
-    fn fetcher_name(&self) -> CompactString;
+    fn fetcher_name(&self) -> &'static str;
 
     /// Should return true if the remote is from a third-party source
     fn is_third_party(&self) -> bool;
