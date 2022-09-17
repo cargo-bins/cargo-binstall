@@ -226,10 +226,10 @@ async fn resolve_inner(
                 ));
 
                 match download_extract_and_verify(
-                    fetcher.clone(),
+                    fetcher.as_ref(),
                     &bin_path,
-                    package.clone(),
-                    install_path.clone(),
+                    &package,
+                    &install_path,
                     binaries.clone(),
                 )
                 .await
@@ -268,18 +268,18 @@ async fn resolve_inner(
 
 ///  * `fetcher` - `fetcher.find()` must return `Ok(true)`.
 async fn download_extract_and_verify(
-    fetcher: Arc<dyn Fetcher>,
+    fetcher: &dyn Fetcher,
     bin_path: &Path,
-    package: Arc<Package<Meta>>,
-    install_path: Arc<Path>,
-    // TODO: Use Arc<Vec<Product>>
+    package: &Package<Meta>,
+    install_path: &Path,
+    // TODO: Use &[Product]
     binaries: Vec<Product>,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Build final metadata
     let meta = fetcher.target_meta();
 
     let bin_files = collect_bin_files(
-        fetcher.as_ref(),
+        fetcher,
         &package,
         meta,
         binaries,
