@@ -279,7 +279,7 @@ async fn download_extract_and_verify(
 
     let bin_files = collect_bin_files(
         fetcher,
-        &package,
+        package,
         meta,
         binaries,
         bin_path.to_path_buf(),
