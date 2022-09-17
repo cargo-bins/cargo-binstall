@@ -17,11 +17,12 @@ use std::{
 
 use compact_str::CompactString;
 use fs_lock::FileLock;
+use home::cargo_home;
 use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{fs::create_if_not_exist, helpers::statics::cargo_home};
+use crate::fs::create_if_not_exist;
 
 use super::crate_info::CrateInfo;
 

@@ -41,10 +41,17 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     // Initialize UI thread
     let mut uithread = UIThread::new(!args.no_confirm);
 
-    let (install_path, metadata, temp_dir) = block_in_place(|| -> Result<_> {
+    let (install_path, cargo_roots, metadata, temp_dir) = block_in_place(|| -> Result<_> {
+        // Compute cargo_roots
+        let cargo_roots =
+            install_path::get_cargo_roots_path(args.roots.take()).ok_or_else(|| {
+                error!("No viable cargo roots path found of specified, try `--roots`");
+                miette!("No cargo roots path found or specified")
+            })?;
+
         // Compute install directory
         let (install_path, custom_install_path) =
-            install_path::get_install_path(args.install_path.as_deref());
+            install_path::get_install_path(args.install_path.as_deref(), Some(&cargo_roots));
         let install_path = install_path.ok_or_else(|| {
             error!("No viable install path found of specified, try `--install-path`");
             miette!("No install path found or specified")
@@ -54,8 +61,12 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
 
         // Load metadata
         let metadata = if !custom_install_path {
-            debug!("Reading binstall/crates-v1.json");
-            Some(Records::load()?)
+            let metadata_dir = cargo_roots.join("binstall");
+            fs::create_dir_all(&metadata_dir).map_err(BinstallError::Io)?;
+            let manifest_path = metadata_dir.join("crates-v1.json");
+
+            debug!("Reading {}", manifest_path.display());
+            Some(Records::load_from_path(&manifest_path)?)
         } else {
             None
         };
@@ -71,7 +82,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
             .map_err(BinstallError::from)
             .wrap_err("Creating a temporary directory failed.")?;
 
-        Ok((install_path, metadata, temp_dir))
+        Ok((install_path, cargo_roots, metadata, temp_dir))
     })?;
 
     // Remove installed crates
@@ -206,12 +217,11 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
 
     block_in_place(|| {
         if let Some(mut records) = metadata {
-            // If using standardised install path,
-            // then create_dir_all(&install_path) would also
-            // create .cargo.
+            // The cargo manifest path is already created when loading
+            // metadata.
 
             debug!("Writing .crates.toml");
-            CratesToml::append(metadata_vec.iter())?;
+            CratesToml::append_to_path(cargo_roots.join(".crates.toml"), metadata_vec.iter())?;
 
             debug!("Writing binstall/crates-v1.json");
             for metadata in metadata_vec {

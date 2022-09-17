@@ -8,3 +8,4 @@ pub mod manifests;
 pub mod ops;
 
 pub use detect_targets::{get_desired_targets, DesiredTargets};
+pub use home;
