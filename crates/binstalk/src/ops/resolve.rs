@@ -179,8 +179,7 @@ async fn resolve_inner(
 
     let desired_targets = opts.desired_targets.get().await;
 
-    let mut handles: Vec<(Arc<dyn Fetcher>, PathBuf, _)> =
-        Vec::with_capacity(desired_targets.len() * 2);
+    let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(desired_targets.len() * 2);
 
     handles.extend(
         desired_targets
@@ -197,33 +196,35 @@ async fn resolve_inner(
                 target_meta.merge(&opts.cli_overrides);
                 debug!("Found metadata: {target_meta:?}");
 
-                let fetcher_data = Arc::new(Data {
+                Arc::new(Data {
                     name: package.name.clone(),
                     target: target.clone(),
                     version: package.version.clone(),
                     repo: package.repository.clone(),
                     meta: target_meta,
-                });
-
-                // Generate temporary binary path
-                let bin_path = temp_dir.join(format!("bin-{}-{target}", crate_name.name));
-
-                (fetcher_data, bin_path)
+                })
             })
             .cartesian_product([GhCrateMeta::new, QuickInstall::new])
-            .map(|((fetcher_data, bin_path), f)| {
+            .map(|(fetcher_data, f)| {
                 let fetcher = f(&client, &fetcher_data);
                 (
                     fetcher.clone(),
-                    bin_path,
                     AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
                 )
             }),
     );
 
-    for (fetcher, bin_path, handle) in handles {
+    for (fetcher, handle) in handles {
         match handle.flattened_join().await {
             Ok(true) => {
+                // Generate temporary binary path
+                let bin_path = temp_dir.join(format!(
+                    "bin-{}-{}-{}",
+                    crate_name.name,
+                    fetcher.target(),
+                    fetcher.fetcher_name()
+                ));
+
                 match download_extract_and_verify(
                     fetcher.clone(),
                     &bin_path,
@@ -274,8 +275,6 @@ async fn download_extract_and_verify(
     // TODO: Use Arc<Vec<Product>>
     binaries: Vec<Product>,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
-    let bin_path = bin_path.join(&*fetcher.fetcher_name());
-
     // Build final metadata
     let meta = fetcher.target_meta();
 
@@ -284,13 +283,13 @@ async fn download_extract_and_verify(
         &package,
         meta,
         binaries,
-        bin_path.clone(),
+        bin_path.to_path_buf(),
         install_path.to_path_buf(),
     )?;
 
     // Download and extract it.
     // If that fails, then ignore this fetcher.
-    fetcher.fetch_and_extract(&bin_path).await?;
+    fetcher.fetch_and_extract(bin_path).await?;
 
     #[cfg(incomplete)]
     {
