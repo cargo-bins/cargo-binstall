@@ -11,6 +11,9 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 [![GitHub tag](https://img.shields.io/github/tag/cargo-bins/cargo-binstall.svg)](https://github.com/cargo-bins/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
 
+NOTE that the docs below are for the `main` branch and may contain unreleased features,
+**[see docs for the latest version](https://crates.io/crates/cargo-binstall)**
+
 ## Installation
 
 To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)). We recommend using the pre-compiled ones because we optimize those more than a standard source build does.
