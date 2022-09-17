@@ -4,7 +4,7 @@ if $for_release then {
   # Use build-std to build a std library optimized for size and abort immediately on abort,
   # so that format string for `unwrap`/`expect`/`unreachable`/`panic` can be optimized out.
   args: ($matrix.release_build_args // "-Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"),
-  features: ($matrix.release_features // ["zlib-ng", "static", "rustls", "trust-dns", "fancy-no-backtrace"]),
+  features: ($matrix.release_features // ["zlib-ng", "static", "rustls", "trust-dns", "fancy-no-backtrace", "log_release_max_level_debug"]),
 } else {
   output: "debug",
   profile: "dev",

@@ -1,9 +1,10 @@
 use std::{
+    cmp::min,
     io::{self, BufRead, Write},
     thread,
 };
 
-use log::LevelFilter;
+use log::{LevelFilter, STATIC_MAX_LEVEL};
 use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::mpsc;
 
@@ -103,7 +104,7 @@ impl UIThread {
 }
 
 pub fn logging(args: &Args) {
-    let log_level = args.log_level;
+    let log_level = min(args.log_level, STATIC_MAX_LEVEL);
 
     // Setup logging
     let mut log_config = ConfigBuilder::new();
