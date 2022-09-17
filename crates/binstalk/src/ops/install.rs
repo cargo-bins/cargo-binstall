@@ -35,7 +35,7 @@ pub async fn install(
                     .version
                     .parse()
                     .map_err(|err| BinstallError::VersionParse {
-                        v: package.version.clone(),
+                        v: package.version,
                         err,
                     })?;
             let target = fetcher.target().into();

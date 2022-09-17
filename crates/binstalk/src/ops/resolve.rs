@@ -31,13 +31,13 @@ pub use version_ext::VersionReqExt;
 pub enum Resolution {
     Fetch {
         fetcher: Arc<dyn Fetcher>,
-        package: Arc<Package<Meta>>,
+        package: Package<Meta>,
         name: CompactString,
         version_req: CompactString,
         bin_files: Vec<bins::BinFile>,
     },
     InstallFromSource {
-        package: Arc<Package<Meta>>,
+        package: Package<Meta>,
     },
     AlreadyUpToDate,
 }
@@ -149,7 +149,6 @@ async fn resolve_inner(
 
     let package = manifest
         .package
-        .map(Arc::new)
         .ok_or_else(|| BinstallError::CargoTomlMissingPackage(crate_name.name.clone()))?;
 
     if let Some(curr_version) = curr_version {
