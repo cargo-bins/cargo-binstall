@@ -5,6 +5,7 @@ use std::{
 
 use cargo_toml::{Manifest, Package, Product};
 use compact_str::{CompactString, ToCompactString};
+use itertools::Itertools;
 use log::{debug, info, warn};
 use reqwest::Client;
 use semver::{Version, VersionReq};
@@ -15,7 +16,8 @@ use crate::{
     bins,
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
-    fetchers::{Data, Fetcher, GhCrateMeta, MultiFetcher, QuickInstall},
+    fetchers::{Data, Fetcher, GhCrateMeta, QuickInstall},
+    helpers::tasks::AutoAbortJoinHandle,
     manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
 
@@ -32,7 +34,6 @@ pub enum Resolution {
         package: Package<Meta>,
         name: CompactString,
         version_req: CompactString,
-        bin_path: PathBuf,
         bin_files: Vec<bins::BinFile>,
     },
     InstallFromSource {
@@ -95,8 +96,8 @@ pub async fn resolve(
     crates_io_api_client: crates_io_api::AsyncClient,
 ) -> Result<Resolution, BinstallError> {
     let crate_name_name = crate_name.name.clone();
-    resolve_inner(
-        opts,
+    let resolution = resolve_inner(
+        &opts,
         crate_name,
         curr_version,
         temp_dir,
@@ -105,11 +106,15 @@ pub async fn resolve(
         crates_io_api_client,
     )
     .await
-    .map_err(|err| err.crate_context(crate_name_name))
+    .map_err(|err| err.crate_context(crate_name_name))?;
+
+    resolution.print(&opts);
+
+    Ok(resolution)
 }
 
 async fn resolve_inner(
-    opts: Arc<Options>,
+    opts: &Options,
     crate_name: CrateName,
     curr_version: Option<Version>,
     temp_dir: Arc<Path>,
@@ -142,7 +147,9 @@ async fn resolve_inner(
         }
     };
 
-    let package = manifest.package.unwrap();
+    let package = manifest
+        .package
+        .ok_or_else(|| BinstallError::CargoTomlMissingPackage(crate_name.name.clone()))?;
 
     if let Some(curr_version) = curr_version {
         let new_version =
@@ -171,65 +178,150 @@ async fn resolve_inner(
 
     let desired_targets = opts.desired_targets.get().await;
 
-    let mut fetchers = MultiFetcher::with_capacity(desired_targets.len() * 2);
+    let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(desired_targets.len() * 2);
 
-    for target in desired_targets {
-        debug!("Building metadata for target: {target}");
-        let mut target_meta = meta.clone_without_overrides();
+    handles.extend(
+        desired_targets
+            .iter()
+            .map(|target| {
+                debug!("Building metadata for target: {target}");
+                let mut target_meta = meta.clone_without_overrides();
 
-        // Merge any overrides
-        if let Some(o) = meta.overrides.get(target) {
-            target_meta.merge(o);
-        }
+                // Merge any overrides
+                if let Some(o) = meta.overrides.get(target) {
+                    target_meta.merge(o);
+                }
 
-        target_meta.merge(&opts.cli_overrides);
-        debug!("Found metadata: {target_meta:?}");
+                target_meta.merge(&opts.cli_overrides);
+                debug!("Found metadata: {target_meta:?}");
 
-        let fetcher_data = Arc::new(Data {
-            name: package.name.clone(),
-            target: target.clone(),
-            version: package.version.clone(),
-            repo: package.repository.clone(),
-            meta: target_meta,
-        });
+                Arc::new(Data {
+                    name: package.name.clone(),
+                    target: target.clone(),
+                    version: package.version.clone(),
+                    repo: package.repository.clone(),
+                    meta: target_meta,
+                })
+            })
+            .cartesian_product([GhCrateMeta::new, QuickInstall::new])
+            .map(|(fetcher_data, f)| {
+                let fetcher = f(&client, &fetcher_data);
+                (
+                    fetcher.clone(),
+                    AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
+                )
+            }),
+    );
 
-        fetchers.add(GhCrateMeta::new(&client, &fetcher_data).await);
-        fetchers.add(QuickInstall::new(&client, &fetcher_data).await);
-    }
+    for (fetcher, handle) in handles {
+        match handle.flattened_join().await {
+            Ok(true) => {
+                // Generate temporary binary path
+                let bin_path = temp_dir.join(format!(
+                    "bin-{}-{}-{}",
+                    crate_name.name,
+                    fetcher.target(),
+                    fetcher.fetcher_name()
+                ));
 
-    let resolution = match fetchers.first_available().await {
-        Some(fetcher) => {
-            // Build final metadata
-            let meta = fetcher.target_meta();
-
-            // Generate temporary binary path
-            let bin_path = temp_dir.join(format!("bin-{}", crate_name.name));
-            debug!("Using temporary binary path: {}", bin_path.display());
-
-            let bin_files = collect_bin_files(
-                fetcher.as_ref(),
-                &package,
-                meta,
-                binaries,
-                bin_path.clone(),
-                install_path.to_path_buf(),
-            )?;
-
-            Resolution::Fetch {
-                fetcher,
-                package,
-                name: crate_name.name,
-                version_req: version_req.to_compact_string(),
-                bin_path,
-                bin_files,
+                match download_extract_and_verify(
+                    fetcher.as_ref(),
+                    &bin_path,
+                    &package,
+                    &install_path,
+                    binaries.clone(),
+                )
+                .await
+                {
+                    Ok(bin_files) => {
+                        return Ok(Resolution::Fetch {
+                            fetcher,
+                            package,
+                            name: crate_name.name,
+                            version_req: version_req.to_compact_string(),
+                            bin_files,
+                        })
+                    }
+                    Err(err) => {
+                        warn!(
+                            "Error while downloading and extracting from fetcher {}: {}",
+                            fetcher.source_name(),
+                            err
+                        );
+                    }
+                }
+            }
+            Ok(false) => (),
+            Err(err) => {
+                warn!(
+                    "Error while checking fetcher {}: {}",
+                    fetcher.source_name(),
+                    err
+                );
             }
         }
-        None => Resolution::InstallFromSource { package },
-    };
+    }
 
-    resolution.print(&opts);
+    Ok(Resolution::InstallFromSource { package })
+}
 
-    Ok(resolution)
+///  * `fetcher` - `fetcher.find()` must return `Ok(true)`.
+async fn download_extract_and_verify(
+    fetcher: &dyn Fetcher,
+    bin_path: &Path,
+    package: &Package<Meta>,
+    install_path: &Path,
+    // TODO: Use &[Product]
+    binaries: Vec<Product>,
+) -> Result<Vec<bins::BinFile>, BinstallError> {
+    // Build final metadata
+    let meta = fetcher.target_meta();
+
+    let bin_files = collect_bin_files(
+        fetcher,
+        package,
+        meta,
+        binaries,
+        bin_path.to_path_buf(),
+        install_path.to_path_buf(),
+    )?;
+
+    // Download and extract it.
+    // If that fails, then ignore this fetcher.
+    fetcher.fetch_and_extract(bin_path).await?;
+
+    #[cfg(incomplete)]
+    {
+        // Fetch and check package signature if available
+        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
+            debug!("Found public key: {pub_key}");
+
+            // Generate signature file URL
+            let mut sig_ctx = ctx.clone();
+            sig_ctx.format = "sig".to_string();
+            let sig_url = sig_ctx.render(&pkg_url)?;
+
+            debug!("Fetching signature file: {sig_url}");
+
+            // Download signature file
+            let sig_path = temp_dir.join(format!("{pkg_name}.sig"));
+            download(&sig_url, &sig_path).await?;
+
+            // TODO: do the signature check
+            unimplemented!()
+        } else {
+            warn!("No public key found, package signature could not be validated");
+        }
+    }
+
+    // Verify that all the bin_files exist
+    block_in_place(|| {
+        for bin_file in bin_files.iter() {
+            bin_file.check_source_exists()?;
+        }
+
+        Ok(bin_files)
+    })
 }
 
 fn collect_bin_files(

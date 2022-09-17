@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use cargo_toml::Package;
 use compact_str::CompactString;
@@ -9,7 +9,6 @@ use super::{resolve::Resolution, Options};
 use crate::{
     bins,
     errors::BinstallError,
-    fetchers::Fetcher,
     helpers::jobserver_client::LazyJobserverClient,
     manifests::{
         cargo_toml_binstall::Meta,
@@ -29,7 +28,6 @@ pub async fn install(
             package,
             name,
             version_req,
-            bin_path,
             bin_files,
         } => {
             let current_version =
@@ -42,19 +40,17 @@ pub async fn install(
                     })?;
             let target = fetcher.target().into();
 
-            install_from_package(fetcher, opts, bin_path, bin_files)
-                .await
-                .map(|option| {
-                    option.map(|bins| CrateInfo {
-                        name,
-                        version_req,
-                        current_version,
-                        source: CrateSource::cratesio_registry(),
-                        target,
-                        bins,
-                        other: Default::default(),
-                    })
+            install_from_package(opts, bin_files).await.map(|option| {
+                option.map(|bins| CrateInfo {
+                    name,
+                    version_req,
+                    current_version,
+                    source: CrateSource::cratesio_registry(),
+                    target,
+                    bins,
+                    other: Default::default(),
                 })
+            })
         }
         Resolution::InstallFromSource { package } => {
             let desired_targets = opts.desired_targets.get().await;
@@ -63,7 +59,7 @@ pub async fn install(
                 .ok_or(BinstallError::NoViableTargets)?;
 
             if !opts.dry_run {
-                install_from_source(package, target, jobserver_client, opts.quiet, opts.force)
+                install_from_source(&package, target, jobserver_client, opts.quiet, opts.force)
                     .await
                     .map(|_| None)
             } else {
@@ -78,42 +74,9 @@ pub async fn install(
 }
 
 async fn install_from_package(
-    fetcher: Arc<dyn Fetcher>,
     opts: Arc<Options>,
-    bin_path: PathBuf,
     bin_files: Vec<bins::BinFile>,
 ) -> Result<Option<Vec<CompactString>>, BinstallError> {
-    // Download package
-    if opts.dry_run {
-        info!("Dry run, not downloading package");
-    } else {
-        fetcher.fetch_and_extract(&bin_path).await?;
-    }
-
-    #[cfg(incomplete)]
-    {
-        // Fetch and check package signature if available
-        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
-            debug!("Found public key: {pub_key}");
-
-            // Generate signature file URL
-            let mut sig_ctx = ctx.clone();
-            sig_ctx.format = "sig".to_string();
-            let sig_url = sig_ctx.render(&pkg_url)?;
-
-            debug!("Fetching signature file: {sig_url}");
-
-            // Download signature file
-            let sig_path = temp_dir.join(format!("{pkg_name}.sig"));
-            download(&sig_url, &sig_path).await?;
-
-            // TODO: do the signature check
-            unimplemented!()
-        } else {
-            warn!("No public key found, package signature could not be validated");
-        }
-    }
-
     if opts.dry_run {
         info!("Dry run, not proceeding");
         return Ok(None);
@@ -139,7 +102,7 @@ async fn install_from_package(
 }
 
 async fn install_from_source(
-    package: Package<Meta>,
+    package: &Package<Meta>,
     target: &str,
     lazy_jobserver_client: LazyJobserverClient,
     quiet: bool,
@@ -155,9 +118,9 @@ async fn install_from_source(
     let mut cmd = Command::new("cargo");
 
     cmd.arg("install")
-        .arg(package.name)
+        .arg(&package.name)
         .arg("--version")
-        .arg(package.version)
+        .arg(&package.version)
         .arg("--target")
         .arg(target);
 

@@ -276,6 +276,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::binfile))]
     BinFileNotFound(PathBuf),
 
+    /// `Cargo.toml` of the crate does not have section "Package".
+    ///
+    /// - Code: `binstall::cargo_manifest`
+    /// - Exit: 89
+    #[error("Cargo.toml of crate {0} does not have section \"Package\"")]
+    #[diagnostic(severity(error), code(binstall::cargo_manifest))]
+    CargoTomlMissingPackage(CompactString),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
     CrateContext {
@@ -310,6 +318,7 @@ impl BinstallError {
             UnspecifiedBinaries => 86,
             NoViableTargets => 87,
             BinFileNotFound(_) => 88,
+            CargoTomlMissingPackage(_) => 89,
             CrateContext { error, .. } => error.exit_number(),
         };
 

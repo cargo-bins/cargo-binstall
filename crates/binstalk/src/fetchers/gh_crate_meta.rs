@@ -71,7 +71,7 @@ impl GhCrateMeta {
 
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
-    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self> {
+    fn new(client: &Client, data: &Arc<Data>) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client: client.clone(),
             data: data.clone(),
@@ -173,6 +173,10 @@ impl super::Fetcher for GhCrateMeta {
                 }
             })
             .unwrap_or_else(|| "invalid url".into())
+    }
+
+    fn fetcher_name(&self) -> &'static str {
+        "GhCrateMeta"
     }
 
     fn is_third_party(&self) -> bool {

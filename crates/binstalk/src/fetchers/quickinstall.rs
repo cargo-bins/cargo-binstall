@@ -27,7 +27,7 @@ pub struct QuickInstall {
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self> {
+    fn new(client: &Client, data: &Arc<Data>) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = data.target.clone();
@@ -66,6 +66,10 @@ impl super::Fetcher for QuickInstall {
 
     fn source_name(&self) -> CompactString {
         CompactString::from("QuickInstall")
+    }
+
+    fn fetcher_name(&self) -> &'static str {
+        "QuickInstall"
     }
 
     fn is_third_party(&self) -> bool {

@@ -8,7 +8,6 @@ use reqwest::Client;
 
 use crate::{
     errors::BinstallError,
-    helpers::tasks::AutoAbortJoinHandle,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -18,7 +17,8 @@ mod quickinstall;
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
-    async fn new(client: &Client, data: &Arc<Data>) -> Arc<Self>
+    #[allow(clippy::new_ret_no_self)]
+    fn new(client: &Client, data: &Arc<Data>) -> Arc<dyn Fetcher>
     where
         Self: Sized;
 
@@ -44,6 +44,13 @@ pub trait Fetcher: Send + Sync {
     /// A short human-readable name or descriptor for the package source
     fn source_name(&self) -> CompactString;
 
+    /// A short human-readable name, must contains only characters
+    /// and numbers and it also must be unique.
+    ///
+    /// It is used to create a temporary dir where it is used for
+    /// [`Fetcher::fetch_and_extract`].
+    fn fetcher_name(&self) -> &'static str;
+
     /// Should return true if the remote is from a third-party source
     fn is_third_party(&self) -> bool;
 
@@ -59,46 +66,4 @@ pub struct Data {
     pub version: String,
     pub repo: Option<String>,
     pub meta: PkgMeta,
-}
-
-type FetcherJoinHandle = AutoAbortJoinHandle<Result<bool, BinstallError>>;
-
-pub struct MultiFetcher(Vec<(Arc<dyn Fetcher>, FetcherJoinHandle)>);
-
-impl MultiFetcher {
-    pub fn with_capacity(n: usize) -> Self {
-        Self(Vec::with_capacity(n))
-    }
-
-    pub fn add(&mut self, fetcher: Arc<dyn Fetcher>) {
-        self.0.push((
-            fetcher.clone(),
-            AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
-        ));
-    }
-
-    pub async fn first_available(self) -> Option<Arc<dyn Fetcher>> {
-        for (fetcher, handle) in self.0 {
-            match handle.await {
-                Ok(Ok(true)) => return Some(fetcher),
-                Ok(Ok(false)) => (),
-                Ok(Err(err)) => {
-                    debug!(
-                        "Error while checking fetcher {}: {}",
-                        fetcher.source_name(),
-                        err
-                    );
-                }
-                Err(join_err) => {
-                    debug!(
-                        "Error while joining the task that checks the fetcher {}: {}",
-                        fetcher.source_name(),
-                        join_err
-                    );
-                }
-            }
-        }
-
-        None
-    }
 }

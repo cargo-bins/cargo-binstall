@@ -56,6 +56,12 @@ impl<T> Future for AutoAbortJoinHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut Pin::into_inner(self).0)
             .poll(cx)
-            .map(|res| res.map_err(BinstallError::TaskJoinError))
+            .map_err(BinstallError::TaskJoinError)
+    }
+}
+
+impl<T> AutoAbortJoinHandle<Result<T, BinstallError>> {
+    pub async fn flattened_join(self) -> Result<T, BinstallError> {
+        self.await?
     }
 }
