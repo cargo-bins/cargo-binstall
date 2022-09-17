@@ -46,6 +46,9 @@ pub trait Fetcher: Send + Sync {
 
     /// A short human-readable name, must contains only characters
     /// and numbers and it also must be unique.
+    ///
+    /// It is used to create a temporary dir where it is used for
+    /// [`Fetcher::fetch_and_extract`].
     fn fetcher_name(&self) -> CompactString;
 
     /// Should return true if the remote is from a third-party source
