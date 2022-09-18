@@ -8,6 +8,7 @@ rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
 license = "GPL-3.0"
+readme = "../../README.md"
 
 # These MUST remain even if they're not needed in recent versions because
 # OLD versions use them to upgrade
