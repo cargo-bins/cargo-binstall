@@ -11,8 +11,7 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 [![GitHub tag](https://img.shields.io/github/tag/cargo-bins/cargo-binstall.svg)](https://github.com/cargo-bins/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
 
-NOTE that the docs below are for the `main` branch and may contain unreleased features,
-**[see docs for the latest version](https://crates.io/crates/cargo-binstall)**
+You probably want to **[see this page as it was when the latest version was published](https://github.com/cargo-bins/cargo-binstall/tree/v0.13.1#readme)** for accurate documentation.
 
 ## Installation
 
@@ -80,7 +79,7 @@ $ cargo binstall broot --pkg-url="https://github.com/Canop/broot/releases/downlo
     However, we're pulling data from crates.io and the cargo manifest, both of which are _already_ trusted entities, and this is
     functionally a replacement for `curl ... | bash` or `wget`-ing the same files, so, things can be improved but it's also fairly moot
 - What do the error codes mean?
-  - You can find a full description of errors including exit codes here: <https://docs.rs/cargo-binstall/latest/cargo_binstall/errors/enum.BinstallError.html>
+  - You can find a full description of errors including exit codes here: <https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
 - Can I use it in CI?
   - Yes! For GitHub Actions, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has explicit support for selected tools and uses `cargo-binstall` for everything else.
 
