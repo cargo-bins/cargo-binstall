@@ -46,7 +46,7 @@ tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.3.0"
 thiserror = "1.0.32"
 tinytemplate = "1.2.1"
-tokio = { version = "1.20.1", features = ["macros", "rt", "process", "sync", "signal"], default-features = false }
+tokio = { version = "1.21.1", features = ["macros", "rt", "process", "sync", "signal"], default-features = false }
 toml_edit = { version = "0.14.4", features = ["easy"] }
 trust-dns-resolver = { version = "0.21.2", optional = true, default-features = false, features = ["dnssec-ring"] }
 url = { version = "2.2.2", features = ["serde"] }
