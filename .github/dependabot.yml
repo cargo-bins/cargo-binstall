@@ -9,6 +9,10 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
     directory: "/crates/bin"
     schedule:
       interval: "daily"
