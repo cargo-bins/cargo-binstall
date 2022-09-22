@@ -9,6 +9,10 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
     directory: "/crates/bin"
     schedule:
       interval: "daily"
@@ -21,7 +25,7 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/crates/flock"
+    directory: "/crates/fs-lock"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
@@ -29,6 +33,6 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/crates/detect-target"
+    directory: "/crates/detect-targets"
     schedule:
       interval: "daily"
