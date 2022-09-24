@@ -16,8 +16,6 @@ pub const FULL_FILENAMES: &[&str] = &[
     "{ name }-{ target }-{ version }.{ archive-format }",
     "{ name }-{ version }-{ target }.{ archive-format }",
     "{ name }-v{ version }-{ target }.{ archive-format }",
-    "{ name }-{ version }-{ target }.{ archive-format }",
-    "{ name }-v{ version }-{ target }.{ archive-format }",
 ];
 
 pub const NOVERSION_FILENAMES: &[&str] = &["{ name }-{ target }.{ archive-format }"];
