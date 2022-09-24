@@ -176,6 +176,11 @@ async fn resolve_inner(
         manifest.bin,
     );
 
+    // Check binaries
+    if binaries.is_empty() {
+        return Err(BinstallError::UnspecifiedBinaries);
+    }
+
     let desired_targets = opts.desired_targets.get().await;
 
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(desired_targets.len() * 2);
@@ -229,7 +234,7 @@ async fn resolve_inner(
                     &bin_path,
                     &package,
                     &install_path,
-                    binaries.clone(),
+                    &binaries,
                 )
                 .await
                 {
@@ -266,25 +271,16 @@ async fn resolve_inner(
 }
 
 ///  * `fetcher` - `fetcher.find()` must return `Ok(true)`.
+///  * `binaries` - must not be empty
 async fn download_extract_and_verify(
     fetcher: &dyn Fetcher,
     bin_path: &Path,
     package: &Package<Meta>,
     install_path: &Path,
-    // TODO: Use &[Product]
-    binaries: Vec<Product>,
+    binaries: &[Product],
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Build final metadata
     let meta = fetcher.target_meta();
-
-    let bin_files = collect_bin_files(
-        fetcher,
-        package,
-        meta,
-        binaries,
-        bin_path.to_path_buf(),
-        install_path.to_path_buf(),
-    )?;
 
     // Download and extract it.
     // If that fails, then ignore this fetcher.
@@ -316,6 +312,15 @@ async fn download_extract_and_verify(
 
     // Verify that all the bin_files exist
     block_in_place(|| {
+        let bin_files = collect_bin_files(
+            fetcher,
+            package,
+            meta,
+            binaries,
+            bin_path.to_path_buf(),
+            install_path.to_path_buf(),
+        )?;
+
         for bin_file in bin_files.iter() {
             bin_file.check_source_exists()?;
         }
@@ -324,19 +329,15 @@ async fn download_extract_and_verify(
     })
 }
 
+///  * `binaries` - must not be empty
 fn collect_bin_files(
     fetcher: &dyn Fetcher,
     package: &Package<Meta>,
     meta: PkgMeta,
-    binaries: Vec<Product>,
+    binaries: &[Product],
     bin_path: PathBuf,
     install_path: PathBuf,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
-    // Check binaries
-    if binaries.is_empty() {
-        return Err(BinstallError::UnspecifiedBinaries);
-    }
-
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
