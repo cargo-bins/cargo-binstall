@@ -7,12 +7,13 @@ unset CARGO_HOME
 
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
-"./$1" binstall --log-level debug --no-confirm b3sum cargo-binstall
+"./$1" binstall --log-level debug --no-confirm b3sum cargo-binstall cargo-watch
 
 # Test that the installed binaries can be run
 b3sum --version
 cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
+cargo watch -V
 
 test_resources=".github/scripts"
 
