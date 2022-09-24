@@ -18,7 +18,10 @@ pub const FULL_FILENAMES: &[&str] = &[
     "{ name }-v{ version }-{ target }.{ archive-format }",
 ];
 
-pub const NOVERSION_FILENAMES: &[&str] = &["{ name }-{ target }.{ archive-format }"];
+pub const NOVERSION_FILENAMES: &[&str] = &[
+    "{ name }-{ target }.{ archive-format }",
+    "{ name }.{ archive-format }",
+];
 
 impl RepositoryHost {
     pub fn guess_git_hosting_services(repo: &Url) -> Result<Self, BinstallError> {
