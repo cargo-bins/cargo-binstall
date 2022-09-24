@@ -24,6 +24,7 @@ pub struct BinFile {
 
 impl BinFile {
     /// Must be called after the archive is downloaded and extracted.
+    /// This function might uses blocking I/O.
     pub fn from_product(data: &Data, product: &Product) -> Result<Self, BinstallError> {
         let base_name = CompactString::from(product.name.clone().unwrap());
 
