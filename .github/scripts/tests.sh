@@ -15,7 +15,7 @@ cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
 cargo watch -V
 
-test_resources=".github/scripts"
+test_resources=".github/scripts/cargo-tomls"
 
 # Install binaries using `--manifest-path`
 "./$1" binstall --force --log-level debug --manifest-path "$test_resources/gitlab-test-Cargo.toml" --no-confirm cargo-binstall
