@@ -41,9 +41,3 @@ impl AbstractFilesystem for Vfs {
         Ok(self.0.get(&*rel_path).map(Clone::clone).unwrap_or_default())
     }
 }
-
-impl AbstractFilesystem for &Vfs {
-    fn file_names_in(&self, rel_path: &str) -> io::Result<HashSet<Box<str>>> {
-        (*self).file_names_in(rel_path)
-    }
-}
