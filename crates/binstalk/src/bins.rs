@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use cargo_toml::Product;
 use compact_str::CompactString;
@@ -8,7 +11,6 @@ use tinytemplate::TinyTemplate;
 
 use crate::{
     errors::BinstallError,
-    fetchers::gh_crate_meta::hosting,
     fs::{atomic_install, atomic_symlink_file},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -21,6 +23,7 @@ pub struct BinFile {
 }
 
 impl BinFile {
+    /// Must be called after the archive is downloaded and extracted.
     pub fn from_product(data: &Data, product: &Product) -> Result<Self, BinstallError> {
         let base_name = CompactString::from(product.name.clone().unwrap());
 
@@ -45,17 +48,30 @@ impl BinFile {
         let source_file_path = if let Some(bin_dir) = &data.meta.bin_dir {
             ctx.render(bin_dir)?
         } else {
-            let default_dirs = hosting::FULL_FILENAMES
-                .into_iter()
-                .chain(hosting::NOVERSION_FILENAMES)
-                .filter_map(|f| f.strip_suffix(".{ archive-format }"))
-                .chain(["", "bin"])
-                .map(Path::new)
-                .map(|p| p.join("{ bin }{ binary-ext }"));
-            // from hosting:: we get "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }" and variants
-            // from the chain we get "{ bin }{ binary-ext }" and "bin/{ bin }{ binary-ext }"
+            let name = ctx.name;
+            let target = ctx.target;
+            let version = ctx.version;
+            let bin = ctx.bin;
 
-            todo!()
+            let possible_dirs = [
+                format!("{name}-{target}-v{version}"),
+                format!("{name}-{target}-{version}"),
+                format!("{name}-{version}-{target}"),
+                format!("{name}-v{version}-{target}"),
+                format!("{name}-{target}"),
+                name.to_string(),
+            ];
+
+            let dir = possible_dirs
+                .into_iter()
+                .find(|dirname| Path::new(dirname).is_dir())
+                .map(Cow::Owned)
+                // Fallback to no dir
+                .unwrap_or_else(|| Cow::Borrowed("."));
+
+            debug!("Using dir = {dir}");
+
+            format!("{dir}/{bin}{binary_ext}")
         };
 
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
