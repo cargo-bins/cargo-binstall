@@ -71,7 +71,7 @@ pub struct BinFile {
 
 impl BinFile {
     pub fn from_product(
-        data: &Data,
+        data: &Data<'_>,
         product: &Product,
         bin_dir: &str,
     ) -> Result<Self, BinstallError> {
@@ -84,10 +84,10 @@ impl BinFile {
         };
 
         let ctx = Context {
-            name: &data.name,
-            repo: data.repo.as_ref().map(|s| &s[..]),
-            target: &data.target,
-            version: &data.version,
+            name: data.name,
+            repo: data.repo,
+            target: data.target,
+            version: data.version,
             bin: &base_name,
             format: binary_ext,
             binary_ext,
@@ -206,11 +206,11 @@ impl BinFile {
 }
 
 /// Data required to get bin paths
-pub struct Data {
-    pub name: String,
-    pub target: String,
-    pub version: String,
-    pub repo: Option<String>,
+pub struct Data<'a> {
+    pub name: &'a str,
+    pub target: &'a str,
+    pub version: &'a str,
+    pub repo: Option<&'a str>,
     pub meta: PkgMeta,
     pub bin_path: PathBuf,
     pub install_path: PathBuf,

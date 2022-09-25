@@ -345,10 +345,10 @@ fn collect_bin_files(
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
-        name: package.name.clone(),
-        target: fetcher.target().to_string(),
-        version: package.version.clone(),
-        repo: package.repository.clone(),
+        name: &package.name,
+        target: fetcher.target(),
+        version: &package.version,
+        repo: package.repository.as_deref(),
         meta,
         bin_path,
         install_path,
