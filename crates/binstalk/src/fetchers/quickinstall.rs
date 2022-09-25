@@ -61,7 +61,7 @@ impl super::Fetcher for QuickInstall {
     fn target_meta(&self) -> PkgMeta {
         let mut meta = self.data.meta.clone();
         meta.pkg_fmt = Some(self.pkg_fmt());
-        meta.bin_dir = Some("{ name }".to_string());
+        meta.bin_dir = Some("{ bin }{ binary-ext }".to_string());
         meta
     }
 
