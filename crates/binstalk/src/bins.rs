@@ -75,7 +75,7 @@ impl BinFile {
         product: &Product,
         bin_dir: &str,
     ) -> Result<Self, BinstallError> {
-        let base_name = CompactString::from(product.name.clone().unwrap());
+        let base_name = CompactString::from(product.name.as_deref().unwrap());
 
         let binary_ext = if data.target.contains("windows") {
             ".exe"
