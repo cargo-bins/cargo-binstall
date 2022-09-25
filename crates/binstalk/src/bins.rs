@@ -62,15 +62,20 @@ impl BinFile {
         let source_file_path = if let Some(bin_dir) = &data.meta.bin_dir {
             let path = ctx.render(bin_dir)?;
             let path_normalized = Path::new(&path).normalize();
-            if is_valid_path(&path_normalized) {
-                match path_normalized {
-                    Cow::Borrowed(..) => path,
-                    Cow::Owned(path) => path.to_string_lossy().into_owned(),
-                }
-            } else {
+
+            if path_normalized.components().next().is_none() {
+                return Err(BinstallError::EmptySourceFilePath);
+            }
+
+            if !is_valid_path(&path_normalized) {
                 return Err(BinstallError::InvalidSourceFilePath {
                     path: path_normalized.into_owned(),
                 });
+            }
+
+            match path_normalized {
+                Cow::Borrowed(..) => path,
+                Cow::Owned(path) => path.to_string_lossy().into_owned(),
             }
         } else {
             let name = ctx.name;
