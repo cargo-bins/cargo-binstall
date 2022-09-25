@@ -361,7 +361,7 @@ fn collect_bin_files(
 
     for bin in &bin_files {
         if !source_set.insert(&bin.source) {
-            return Err(BinstallError::WrongBinDir {
+            return Err(BinstallError::DuplicateSourceFilePath {
                 path: bin.source.clone(),
             });
         }

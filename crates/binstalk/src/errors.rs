@@ -290,7 +290,7 @@ pub enum BinstallError {
     /// - Exit: 90
     #[error("bin-dir configuration provided generates duplicate source path: {path}")]
     #[diagnostic(severity(error), code(binstall::cargo_manifest))]
-    WrongBinDir { path: PathBuf },
+    DuplicateSourceFilePath { path: PathBuf },
 
     /// bin-dir configuration provided generates source path outside
     /// of the temporary dir.
@@ -346,7 +346,7 @@ impl BinstallError {
             NoViableTargets => 87,
             BinFileNotFound(_) => 88,
             CargoTomlMissingPackage(_) => 89,
-            WrongBinDir { .. } => 90,
+            DuplicateSourceFilePath { .. } => 90,
             InvalidSourceFilePath { .. } => 91,
             EmptySourceFilePath => 92,
             CrateContext { error, .. } => error.exit_number(),
