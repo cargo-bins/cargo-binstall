@@ -169,7 +169,7 @@ async fn resolve_inner(
         }
     }
 
-    let (meta, binaries) = (
+    let (meta, mut binaries) = (
         package
             .metadata
             .as_ref()
@@ -177,6 +177,8 @@ async fn resolve_inner(
             .unwrap_or_default(),
         manifest.bin,
     );
+
+    binaries.retain(|product| product.name.is_some());
 
     // Check binaries
     if binaries.is_empty() {
