@@ -1,11 +1,12 @@
 use std::{
     borrow::Cow,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use cargo_toml::Product;
 use compact_str::CompactString;
 use log::debug;
+use normalize_path::NormalizePath;
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
 
@@ -14,6 +15,18 @@ use crate::{
     fs::{atomic_install, atomic_symlink_file},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
+
+/// Return true if the path does not look outside of current dir
+///
+///  * `path` - must be normalized before passing to this function
+fn is_valid_path(path: &Path) -> bool {
+    !matches!(
+        path.components().next(),
+        // normalized path cannot have curdir or parentdir,
+        // so checking prefix/rootdir is enough.
+        Some(Component::Prefix(..) | Component::RootDir)
+    )
+}
 
 pub struct BinFile {
     pub base_name: CompactString,
@@ -47,7 +60,18 @@ impl BinFile {
         // Generate install paths
         // Source path is the download dir + the generated binary path
         let source_file_path = if let Some(bin_dir) = &data.meta.bin_dir {
-            ctx.render(bin_dir)?
+            let path = ctx.render(bin_dir)?;
+            let path_normalized = Path::new(&path).normalize();
+            if is_valid_path(&path_normalized) {
+                match path_normalized {
+                    Cow::Borrowed(..) => path,
+                    Cow::Owned(path) => path.to_string_lossy().into_owned(),
+                }
+            } else {
+                return Err(BinstallError::InvalidSourceFilePath {
+                    path: path_normalized.into_owned(),
+                });
+            }
         } else {
             let name = ctx.name;
             let target = ctx.target;
