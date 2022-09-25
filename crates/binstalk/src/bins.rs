@@ -75,7 +75,7 @@ impl BinFile {
         product: &Product,
         bin_dir: &str,
     ) -> Result<Self, BinstallError> {
-        let base_name = CompactString::from(product.name.as_deref().unwrap());
+        let base_name = product.name.as_deref().unwrap();
 
         let binary_ext = if data.target.contains("windows") {
             ".exe"
@@ -88,7 +88,7 @@ impl BinFile {
             repo: data.repo,
             target: data.target,
             version: data.version,
-            bin: &base_name,
+            bin: base_name,
             format: binary_ext,
             binary_ext,
         };
@@ -130,7 +130,7 @@ impl BinFile {
             .join(&ctx.render("{ bin }{ binary-ext }")?);
 
         Ok(Self {
-            base_name,
+            base_name: CompactString::from(base_name),
             source,
             dest,
             link,
