@@ -77,7 +77,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "binstalk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "async-trait",
  "binstall-tar",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-binstall"
-version = "0.13.2"
+version = "0.13.3"
 dependencies = [
  "binstalk",
  "clap",
@@ -221,9 +221,9 @@ dependencies = [
 
 [[package]]
 name = "cargo_toml"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aecd74f843e919090741163a59948751f6f57b5a9b3d7a4a4d278e17b6a16cf"
+checksum = "c820ea238df9b9054d3401b1d441b4cd6f461646fc55cbc60fabf9d2088b7f3a"
 dependencies = [
  "serde",
  "toml",

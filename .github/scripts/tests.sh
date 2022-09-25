@@ -7,15 +7,16 @@ unset CARGO_HOME
 
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
-"./$1" binstall --log-level debug --no-confirm b3sum cargo-release cargo-binstall
+"./$1" binstall --log-level debug --no-confirm b3sum cargo-release cargo-binstall cargo-watch
 
 # Test that the installed binaries can be run
 b3sum --version
 cargo-release release --version
 cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
+cargo watch -V
 
-test_resources=".github/scripts"
+test_resources=".github/scripts/cargo-tomls"
 
 # Install binaries using `--manifest-path`
 "./$1" binstall --force --log-level debug --manifest-path "$test_resources/gitlab-test-Cargo.toml" --no-confirm cargo-binstall
