@@ -28,6 +28,40 @@ fn is_valid_path(path: &Path) -> bool {
     )
 }
 
+/// Must be called after the archive is downloaded and extracted.
+/// This function might uses blocking I/O.
+pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
+    let name = &data.name;
+    let target = &data.target;
+    let version = &data.version;
+
+    // Make sure to update
+    // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
+    // NOVERSION_FILENAMES} if you update this array.
+    let possible_dirs = [
+        format!("{name}-{target}-v{version}"),
+        format!("{name}-{target}-{version}"),
+        format!("{name}-{version}-{target}"),
+        format!("{name}-v{version}-{target}"),
+        format!("{name}-{target}"),
+        name.to_string(),
+    ];
+
+    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary_ext }");
+
+    possible_dirs
+        .into_iter()
+        .find(|dirname| Path::new(dirname).is_dir())
+        .map(|mut dir| {
+            dir.reserve_exact(1 + default_bin_dir_template.len());
+            dir += "/";
+            dir += &default_bin_dir_template;
+            Cow::Owned(dir)
+        })
+        // Fallback to no dir
+        .unwrap_or(default_bin_dir_template)
+}
+
 pub struct BinFile {
     pub base_name: CompactString,
     pub source: PathBuf,
@@ -36,10 +70,12 @@ pub struct BinFile {
 }
 
 impl BinFile {
-    /// Must be called after the archive is downloaded and extracted.
-    /// This function might uses blocking I/O.
-    pub fn from_product(data: &Data, product: &Product) -> Result<Self, BinstallError> {
-        let base_name = CompactString::from(product.name.clone().unwrap());
+    pub fn from_product(
+        data: &Data<'_>,
+        product: &Product,
+        bin_dir: &str,
+    ) -> Result<Self, BinstallError> {
+        let base_name = product.name.as_deref().unwrap();
 
         let binary_ext = if data.target.contains("windows") {
             ".exe"
@@ -48,63 +84,34 @@ impl BinFile {
         };
 
         let ctx = Context {
-            name: &data.name,
-            repo: data.repo.as_ref().map(|s| &s[..]),
-            target: &data.target,
-            version: &data.version,
-            bin: &base_name,
+            name: data.name,
+            repo: data.repo,
+            target: data.target,
+            version: data.version,
+            bin: base_name,
             format: binary_ext,
             binary_ext,
         };
 
         // Generate install paths
         // Source path is the download dir + the generated binary path
-        let source_file_path = if let Some(bin_dir) = &data.meta.bin_dir {
-            let path = ctx.render(bin_dir)?;
-            let path_normalized = Path::new(&path).normalize();
+        let path = ctx.render(bin_dir)?;
 
-            if path_normalized.components().next().is_none() {
-                return Err(BinstallError::EmptySourceFilePath);
-            }
+        let path_normalized = Path::new(&path).normalize();
 
-            if !is_valid_path(&path_normalized) {
-                return Err(BinstallError::InvalidSourceFilePath {
-                    path: path_normalized.into_owned(),
-                });
-            }
+        if path_normalized.components().next().is_none() {
+            return Err(BinstallError::EmptySourceFilePath);
+        }
 
-            match path_normalized {
-                Cow::Borrowed(..) => path,
-                Cow::Owned(path) => path.to_string_lossy().into_owned(),
-            }
-        } else {
-            let name = ctx.name;
-            let target = ctx.target;
-            let version = ctx.version;
-            let bin = ctx.bin;
+        if !is_valid_path(&path_normalized) {
+            return Err(BinstallError::InvalidSourceFilePath {
+                path: path_normalized.into_owned(),
+            });
+        }
 
-            // Make sure to update
-            // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
-            // NOVERSION_FILENAMES} if you update this array.
-            let possible_dirs = [
-                format!("{name}-{target}-v{version}"),
-                format!("{name}-{target}-{version}"),
-                format!("{name}-{version}-{target}"),
-                format!("{name}-v{version}-{target}"),
-                format!("{name}-{target}"),
-                name.to_string(),
-            ];
-
-            let dir = possible_dirs
-                .into_iter()
-                .find(|dirname| Path::new(dirname).is_dir())
-                .map(Cow::Owned)
-                // Fallback to no dir
-                .unwrap_or_else(|| Cow::Borrowed("."));
-
-            debug!("Using dir = {dir}");
-
-            format!("{dir}/{bin}{binary_ext}")
+        let source_file_path = match path_normalized {
+            Cow::Borrowed(..) => path,
+            Cow::Owned(path) => path.to_string_lossy().into_owned(),
         };
 
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
@@ -123,7 +130,7 @@ impl BinFile {
             .join(&ctx.render("{ bin }{ binary-ext }")?);
 
         Ok(Self {
-            base_name,
+            base_name: CompactString::from(base_name),
             source,
             dest,
             link,
@@ -199,11 +206,11 @@ impl BinFile {
 }
 
 /// Data required to get bin paths
-pub struct Data {
-    pub name: String,
-    pub target: String,
-    pub version: String,
-    pub repo: Option<String>,
+pub struct Data<'a> {
+    pub name: &'a str,
+    pub target: &'a str,
+    pub version: &'a str,
+    pub repo: Option<&'a str>,
     pub meta: PkgMeta,
     pub bin_path: PathBuf,
     pub install_path: PathBuf,

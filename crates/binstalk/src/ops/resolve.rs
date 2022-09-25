@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::BTreeSet,
     path::{Path, PathBuf},
     sync::Arc,
@@ -168,7 +169,7 @@ async fn resolve_inner(
         }
     }
 
-    let (meta, binaries) = (
+    let (meta, mut binaries) = (
         package
             .metadata
             .as_ref()
@@ -176,6 +177,8 @@ async fn resolve_inner(
             .unwrap_or_default(),
         manifest.bin,
     );
+
+    binaries.retain(|product| product.name.is_some());
 
     // Check binaries
     if binaries.is_empty() {
@@ -342,19 +345,26 @@ fn collect_bin_files(
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
-        name: package.name.clone(),
-        target: fetcher.target().to_string(),
-        version: package.version.clone(),
-        repo: package.repository.clone(),
+        name: &package.name,
+        target: fetcher.target(),
+        version: &package.version,
+        repo: package.repository.as_deref(),
         meta,
         bin_path,
         install_path,
     };
 
+    let bin_dir = bin_data
+        .meta
+        .bin_dir
+        .as_deref()
+        .map(Cow::Borrowed)
+        .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data));
+
     // Create bin_files
     let bin_files = binaries
         .iter()
-        .map(|p| bins::BinFile::from_product(&bin_data, p))
+        .map(|p| bins::BinFile::from_product(&bin_data, p, &bin_dir))
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let mut source_set = BTreeSet::new();
