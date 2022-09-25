@@ -303,6 +303,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::cargo_manifest))]
     InvalidSourceFilePath { path: PathBuf },
 
+    /// bin-dir configuration provided generates empty source path.
+    ///
+    /// - Code: `binstall::cargo_manifest`
+    /// - Exit: 92
+    #[error("bin-dir configuration provided generates empty source path")]
+    #[diagnostic(severity(error), code(binstall::cargo_manifest))]
+    EmptySourceFilePath,
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
     CrateContext {
@@ -340,6 +348,7 @@ impl BinstallError {
             CargoTomlMissingPackage(_) => 89,
             WrongBinDir { .. } => 90,
             InvalidSourceFilePath { .. } => 91,
+            EmptySourceFilePath => 92,
             CrateContext { error, .. } => error.exit_number(),
         };
 
