@@ -13,3 +13,4 @@ bin-dir = "{ bin }{ binary-ext }"
 
 [[bin]]
 name = "cargo-binstall"
+path = "src/main.rs"
