@@ -284,13 +284,24 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::cargo_manifest))]
     CargoTomlMissingPackage(CompactString),
 
-    /// bin-dir configuration provided by the crate or the user is wrong.
+    /// bin-dir configuration provided generates duplicate source path.
     ///
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 90
-    #[error("bin-dir configuration provided by the crate or the user is wrong, duplicate source path detected: {path}")]
+    #[error("bin-dir configuration provided generates duplicate source path: {path}")]
     #[diagnostic(severity(error), code(binstall::cargo_manifest))]
     WrongBinDir { path: PathBuf },
+
+    /// bin-dir configuration provided generates source path outside
+    /// of the temporary dir.
+    ///
+    /// - Code: `binstall::cargo_manifest`
+    /// - Exit: 91
+    #[error(
+        "bin-dir configuration provided generates source path outside of the temporary dir: {path}"
+    )]
+    #[diagnostic(severity(error), code(binstall::cargo_manifest))]
+    InvalidSourceFilePath { path: PathBuf },
 
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
@@ -328,6 +339,7 @@ impl BinstallError {
             BinFileNotFound(_) => 88,
             CargoTomlMissingPackage(_) => 89,
             WrongBinDir { .. } => 90,
+            InvalidSourceFilePath { .. } => 91,
             CrateContext { error, .. } => error.exit_number(),
         };
 
