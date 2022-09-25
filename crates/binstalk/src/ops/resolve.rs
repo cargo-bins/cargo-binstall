@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::BTreeSet,
     path::{Path, PathBuf},
     sync::Arc,
@@ -351,10 +352,17 @@ fn collect_bin_files(
         install_path,
     };
 
+    let bin_dir = bin_data
+        .meta
+        .bin_dir
+        .as_deref()
+        .map(Cow::Borrowed)
+        .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data));
+
     // Create bin_files
     let bin_files = binaries
         .iter()
-        .map(|p| bins::BinFile::from_product(&bin_data, p))
+        .map(|p| bins::BinFile::from_product(&bin_data, p, &*bin_dir))
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let mut source_set = BTreeSet::new();

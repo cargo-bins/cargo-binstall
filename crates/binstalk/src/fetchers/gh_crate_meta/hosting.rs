@@ -11,7 +11,7 @@ pub enum RepositoryHost {
     Unknown,
 }
 
-/// Make sure to update possible_dirs in `bins::BinFile`
+/// Make sure to update possible_dirs in `bins::infer_bin_dir_template`
 /// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
 pub const FULL_FILENAMES: &[&str] = &[
     "{ name }-{ target }-v{ version }.{ archive-format }",
