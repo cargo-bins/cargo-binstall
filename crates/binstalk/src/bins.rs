@@ -54,6 +54,9 @@ impl BinFile {
             let version = ctx.version;
             let bin = ctx.bin;
 
+            // Make sure to update
+            // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
+            // NOVERSION_FILENAMES} if you update this array.
             let possible_dirs = [
                 format!("{name}-{target}-v{version}"),
                 format!("{name}-{target}-{version}"),

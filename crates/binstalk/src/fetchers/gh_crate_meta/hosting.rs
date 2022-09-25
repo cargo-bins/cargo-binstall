@@ -11,8 +11,8 @@ pub enum RepositoryHost {
     Unknown,
 }
 
-// Make sure to update NOVERSION_FILENAMES if you update
-// FULL_FILENAMES
+/// Make sure to update possible_dirs in `bins::BinFile`
+/// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
 pub const FULL_FILENAMES: &[&str] = &[
     "{ name }-{ target }-v{ version }.{ archive-format }",
     "{ name }-{ target }-{ version }.{ archive-format }",
@@ -20,8 +20,6 @@ pub const FULL_FILENAMES: &[&str] = &[
     "{ name }-v{ version }-{ target }.{ archive-format }",
 ];
 
-// Make sure to update FULL_FILENAMES if you update
-// NOVERSION_FILENAMES
 pub const NOVERSION_FILENAMES: &[&str] = &[
     "{ name }-{ target }.{ archive-format }",
     "{ name }.{ archive-format }",
