@@ -364,7 +364,7 @@ fn collect_bin_files(
     // Create bin_files
     let bin_files = binaries
         .iter()
-        .map(|p| bins::BinFile::from_product(&bin_data, p, &*bin_dir))
+        .map(|p| bins::BinFile::from_product(&bin_data, p, &bin_dir))
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let mut source_set = BTreeSet::new();
