@@ -289,7 +289,7 @@ pub enum BinstallError {
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 90
     #[error("bin-dir configuration provided generates duplicate source path: {path}")]
-    #[diagnostic(severity(error), code(binstall::cargo_manifest))]
+    #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     DuplicateSourceFilePath { path: PathBuf },
 
     /// bin-dir configuration provided generates source path outside
@@ -300,7 +300,7 @@ pub enum BinstallError {
     #[error(
         "bin-dir configuration provided generates source path outside of the temporary dir: {path}"
     )]
-    #[diagnostic(severity(error), code(binstall::cargo_manifest))]
+    #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     InvalidSourceFilePath { path: PathBuf },
 
     /// bin-dir configuration provided generates empty source path.
@@ -308,7 +308,7 @@ pub enum BinstallError {
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 92
     #[error("bin-dir configuration provided generates empty source path")]
-    #[diagnostic(severity(error), code(binstall::cargo_manifest))]
+    #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     EmptySourceFilePath,
 
     /// A wrapped error providing the context of which crate the error is about.
