@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -355,6 +356,16 @@ fn collect_bin_files(
         .iter()
         .map(|p| bins::BinFile::from_product(&bin_data, p))
         .collect::<Result<Vec<_>, BinstallError>>()?;
+
+    let mut source_set = BTreeSet::new();
+
+    for bin in &bin_files {
+        if !source_set.insert(&bin.source) {
+            return Err(BinstallError::WrongBinDir {
+                path: bin.source.clone(),
+            });
+        }
+    }
 
     Ok(bin_files)
 }
