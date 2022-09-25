@@ -11,8 +11,8 @@ use crate::{
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
-mod gh_crate_meta;
-mod quickinstall;
+pub(crate) mod gh_crate_meta;
+pub(crate) mod quickinstall;
 
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {

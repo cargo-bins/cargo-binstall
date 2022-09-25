@@ -11,9 +11,6 @@ pub use package_formats::*;
 
 mod package_formats;
 
-/// Default binary name template (may be overridden in package Cargo.toml)
-pub const DEFAULT_BIN_DIR: &str = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }";
-
 /// `binstall` metadata container
 ///
 /// Required to nest metadata under `package.metadata.binstall`
@@ -26,7 +23,7 @@ pub struct Meta {
 /// Metadata for binary installation use.
 ///
 /// Exposed via `[package.metadata]` in `Cargo.toml`
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgMeta {
     /// URL template for package downloads
@@ -36,25 +33,13 @@ pub struct PkgMeta {
     pub pkg_fmt: Option<PkgFmt>,
 
     /// Path template for binary files in packages
-    pub bin_dir: String,
+    pub bin_dir: Option<String>,
 
     /// Public key for package verification (base64 encoded)
     pub pub_key: Option<String>,
 
     /// Target specific overrides
     pub overrides: BTreeMap<String, PkgOverride>,
-}
-
-impl Default for PkgMeta {
-    fn default() -> Self {
-        Self {
-            pkg_url: None,
-            pkg_fmt: None,
-            bin_dir: DEFAULT_BIN_DIR.to_string(),
-            pub_key: None,
-            overrides: BTreeMap::new(),
-        }
-    }
 }
 
 impl PkgMeta {
@@ -77,7 +62,7 @@ impl PkgMeta {
             self.pkg_fmt = Some(*o);
         }
         if let Some(o) = &pkg_override.bin_dir {
-            self.bin_dir = o.clone();
+            self.bin_dir = Some(o.clone());
         }
     }
 }

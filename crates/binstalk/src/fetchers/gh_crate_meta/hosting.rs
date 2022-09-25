@@ -11,6 +11,20 @@ pub enum RepositoryHost {
     Unknown,
 }
 
+/// Make sure to update possible_dirs in `bins::BinFile`
+/// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
+pub const FULL_FILENAMES: &[&str] = &[
+    "{ name }-{ target }-v{ version }.{ archive-format }",
+    "{ name }-{ target }-{ version }.{ archive-format }",
+    "{ name }-{ version }-{ target }.{ archive-format }",
+    "{ name }-v{ version }-{ target }.{ archive-format }",
+];
+
+pub const NOVERSION_FILENAMES: &[&str] = &[
+    "{ name }-{ target }.{ archive-format }",
+    "{ name }.{ archive-format }",
+];
+
 impl RepositoryHost {
     pub fn guess_git_hosting_services(repo: &Url) -> Result<Self, BinstallError> {
         use RepositoryHost::*;
@@ -27,35 +41,24 @@ impl RepositoryHost {
     pub fn get_default_pkg_url_template(self) -> Option<Vec<String>> {
         use RepositoryHost::*;
 
-        let full_filenames = &[
-            "{ name }-{ target }-v{ version }.{ archive-format }",
-            "{ name }-{ target }-{ version }.{ archive-format }",
-            "{ name }-{ version }-{ target }.{ archive-format }",
-            "{ name }-v{ version }-{ target }.{ archive-format }",
-            "{ name }-{ version }-{ target }.{ archive-format }",
-            "{ name }-v{ version }-{ target }.{ archive-format }",
-        ];
-
-        let noversion_filenames = &["{ name }-{ target }.{ archive-format }"];
-
         match self {
             GitHub => Some(apply_filenames_to_paths(
                 &[
                     "{ repo }/releases/download/{ version }",
                     "{ repo }/releases/download/v{ version }",
                 ],
-                &[full_filenames, noversion_filenames],
+                &[FULL_FILENAMES, NOVERSION_FILENAMES],
             )),
             GitLab => Some(apply_filenames_to_paths(
                 &[
                     "{ repo }/-/releases/{ version }/downloads/binaries",
                     "{ repo }/-/releases/v{ version }/downloads/binaries",
                 ],
-                &[full_filenames, noversion_filenames],
+                &[FULL_FILENAMES, NOVERSION_FILENAMES],
             )),
             BitBucket => Some(apply_filenames_to_paths(
                 &["{ repo }/downloads"],
-                &[full_filenames],
+                &[FULL_FILENAMES],
             )),
             SourceForge => Some(
                 apply_filenames_to_paths(
@@ -63,7 +66,7 @@ impl RepositoryHost {
                         "{ repo }/files/binaries/{ version }",
                         "{ repo }/files/binaries/v{ version }",
                     ],
-                    &[full_filenames, noversion_filenames],
+                    &[FULL_FILENAMES, NOVERSION_FILENAMES],
                 )
                 .into_iter()
                 .map(|url| format!("{url}/download"))

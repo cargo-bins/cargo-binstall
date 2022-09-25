@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use cargo_toml::Product;
 use compact_str::CompactString;
@@ -20,6 +23,8 @@ pub struct BinFile {
 }
 
 impl BinFile {
+    /// Must be called after the archive is downloaded and extracted.
+    /// This function might uses blocking I/O.
     pub fn from_product(data: &Data, product: &Product) -> Result<Self, BinstallError> {
         let base_name = CompactString::from(product.name.clone().unwrap());
 
@@ -41,7 +46,38 @@ impl BinFile {
 
         // Generate install paths
         // Source path is the download dir + the generated binary path
-        let source_file_path = ctx.render(&data.meta.bin_dir)?;
+        let source_file_path = if let Some(bin_dir) = &data.meta.bin_dir {
+            ctx.render(bin_dir)?
+        } else {
+            let name = ctx.name;
+            let target = ctx.target;
+            let version = ctx.version;
+            let bin = ctx.bin;
+
+            // Make sure to update
+            // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
+            // NOVERSION_FILENAMES} if you update this array.
+            let possible_dirs = [
+                format!("{name}-{target}-v{version}"),
+                format!("{name}-{target}-{version}"),
+                format!("{name}-{version}-{target}"),
+                format!("{name}-v{version}-{target}"),
+                format!("{name}-{target}"),
+                name.to_string(),
+            ];
+
+            let dir = possible_dirs
+                .into_iter()
+                .find(|dirname| Path::new(dirname).is_dir())
+                .map(Cow::Owned)
+                // Fallback to no dir
+                .unwrap_or_else(|| Cow::Borrowed("."));
+
+            debug!("Using dir = {dir}");
+
+            format!("{dir}/{bin}{binary_ext}")
+        };
+
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
             data.bin_path.clone()
         } else {
