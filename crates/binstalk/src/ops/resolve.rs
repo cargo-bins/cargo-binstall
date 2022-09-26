@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     collections::BTreeSet,
-    mem,
+    iter, mem,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -197,14 +197,10 @@ async fn resolve_inner(
             .iter()
             .map(|target| {
                 debug!("Building metadata for target: {target}");
-                let mut target_meta = meta.clone();
 
-                // Merge any overrides
-                if let Some(o) = overrides.get(target) {
-                    target_meta.merge(o);
-                }
+                let target_meta = meta
+                    .merge_overrides(iter::once(&opts.cli_overrides).chain(overrides.get(target)));
 
-                target_meta.merge(&opts.cli_overrides);
                 debug!("Found metadata: {target_meta:?}");
 
                 Arc::new(Data {
