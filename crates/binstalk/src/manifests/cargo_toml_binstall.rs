@@ -43,16 +43,6 @@ pub struct PkgMeta {
 }
 
 impl PkgMeta {
-    pub fn clone_without_overrides(&self) -> Self {
-        Self {
-            pkg_url: self.pkg_url.clone(),
-            pkg_fmt: self.pkg_fmt,
-            bin_dir: self.bin_dir.clone(),
-            pub_key: self.pub_key.clone(),
-            overrides: BTreeMap::new(),
-        }
-    }
-
     /// Merge configuration overrides into object
     pub fn merge(&mut self, pkg_override: &PkgOverride) {
         if let Some(o) = &pkg_override.pkg_url {
@@ -63,6 +53,36 @@ impl PkgMeta {
         }
         if let Some(o) = &pkg_override.bin_dir {
             self.bin_dir = Some(o.clone());
+        }
+    }
+
+    /// Merge configuration overrides into object
+    ///
+    ///  * `pkg_overrides` - ordered in preference
+    pub fn merge_overrides<'a, It>(&self, pkg_overrides: It) -> Self
+    where
+        It: IntoIterator<Item = &'a PkgOverride> + Clone,
+    {
+        Self {
+            pkg_url: pkg_overrides
+                .clone()
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.pkg_url.clone())
+                .or_else(|| self.pkg_url.clone()),
+
+            pkg_fmt: pkg_overrides
+                .clone()
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.pkg_fmt)
+                .or(self.pkg_fmt),
+
+            bin_dir: pkg_overrides
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.bin_dir.clone())
+                .or_else(|| self.bin_dir.clone()),
+
+            pub_key: self.pub_key.clone(),
+            overrides: Default::default(),
         }
     }
 }
