@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     collections::BTreeSet,
+    mem,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -169,7 +170,7 @@ async fn resolve_inner(
         }
     }
 
-    let (meta, mut binaries) = (
+    let (mut meta, mut binaries) = (
         package
             .metadata
             .as_ref()
@@ -189,15 +190,17 @@ async fn resolve_inner(
 
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(desired_targets.len() * 2);
 
+    let overrides = mem::take(&mut meta.overrides);
+
     handles.extend(
         desired_targets
             .iter()
             .map(|target| {
                 debug!("Building metadata for target: {target}");
-                let mut target_meta = meta.clone_without_overrides();
+                let mut target_meta = meta.clone();
 
                 // Merge any overrides
-                if let Some(o) = meta.overrides.get(target) {
+                if let Some(o) = overrides.get(target) {
                     target_meta.merge(o);
                 }
 
