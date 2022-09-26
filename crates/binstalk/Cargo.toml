@@ -49,7 +49,7 @@ tinytemplate = "1.2.1"
 tokio = { version = "1.21.1", features = ["macros", "rt", "process", "sync", "signal"], default-features = false }
 toml_edit = { version = "0.14.4", features = ["easy"] }
 trust-dns-resolver = { version = "0.21.2", optional = true, default-features = false, features = ["dnssec-ring"] }
-url = { version = "2.3.0", features = ["serde"] }
+url = { version = "2.3.1", features = ["serde"] }
 xz2 = "0.1.7"
 
 # Use a fork here since upstream has not published a new release for a long time
