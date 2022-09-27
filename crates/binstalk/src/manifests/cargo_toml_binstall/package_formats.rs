@@ -53,15 +53,7 @@ impl PkgFmt {
             PkgFmt::Tgz => &[".tgz", ".tar.gz"],
             PkgFmt::Txz => &[".txz", ".tar.xz"],
             PkgFmt::Tzstd => &[".tzstd", ".tzst", ".tar.zst"],
-            PkgFmt::Bin => {
-                if cfg!(unix) {
-                    &[".bin", ""]
-                } else if cfg!(windows) {
-                    &[".bin", ".exe"]
-                } else {
-                    &[".bin"]
-                }
-            }
+            PkgFmt::Bin => &[".bin", ".exe", ""],
             PkgFmt::Zip => &[".zip"],
         }
     }
