@@ -194,7 +194,7 @@ impl BinFile {
             // TODO: check if existing symlink is correct
             if link.exists() {
                 debug!("Remove link '{}'", link.display());
-                std::fs::remove_file(&link)?;
+                std::fs::remove_file(link)?;
             }
 
             let dest = self.link_dest();
