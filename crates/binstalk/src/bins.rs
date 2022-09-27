@@ -47,7 +47,7 @@ pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
         name.to_string(),
     ];
 
-    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary_ext }");
+    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
 
     possible_dirs
         .into_iter()
