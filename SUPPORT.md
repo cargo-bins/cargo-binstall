@@ -11,7 +11,7 @@ As an example, the configuration would be like this:
 
 ```toml
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }"
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"
 bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
 pkg-fmt = "tgz"
 ```
@@ -30,7 +30,8 @@ Template variables use the format `{ VAR }` where `VAR` is the name of the varia
 - `repo` is the repository linked in `Cargo.toml`
 - `bin` is the name of a specific binary, inferred from the crate configuration
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required()
-- `archive-format` is the filename extension of the package archive format
+- `archive-suffix` is the filename extension of the package archive format, e.g. `.tar.tgz` for tgz or `.exe`/`""` for bin.
+- `archive-format` is the filename extension of the package archive format, e.g. `tar.tgz` for tgz or `exe`/`""` for bin.
 - `binary-ext` is the string `.exe` if the `target` is for Windows, or the empty string otherwise
 - `format` is a soft-deprecated alias for `archive-format` in `pkg-url`, and alias for `binary-ext` in `bin-dir`; in the future, this may warn at install time.
 
@@ -61,13 +62,13 @@ The URLs are derived from a set of filenames and a set of paths, which are
 "multiplied together": every filename appended to every path. The filenames
 are:
 
-- `{ name }-{ target }-{ version }.{ archive-format }`
-- `{ name }-{ target }-v{ version }.{ archive-format }`
-- `{ name }-{ version }-{ target }.{ archive-format }`
-- `{ name }-v{ version }-{ target }.{ archive-format }`
-- `{ name }-{ version }-{ target }.{ archive-format }`
-- `{ name }-v{ version }-{ target }.{ archive-format }`
-- `{ name }-{ target }.{ archive-format }` ("versionless")
+- `{ name }-{ target }-{ version }{ archive-suffix }`
+- `{ name }-{ target }-v{ version }{ archive-suffix }`
+- `{ name }-{ version }-{ target }{ archive-suffix }`
+- `{ name }-v{ version }-{ target }{ archive-suffix }`
+- `{ name }-{ version }-{ target }{ archive-suffix }`
+- `{ name }-v{ version }-{ target }{ archive-suffix }`
+- `{ name }-{ target }{ archive-suffix }` ("versionless")
 
 The paths are:
 
@@ -130,7 +131,7 @@ As is common with libraries/utilities (and the `radio-sx128x` example), this can
 
 ```toml
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }"
+pkg-url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }{ archive-suffix }"
 ```
 
 Which provides a download URL of `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
