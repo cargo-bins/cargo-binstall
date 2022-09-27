@@ -238,6 +238,7 @@ async fn resolve_inner(
                     &package,
                     &install_path,
                     &binaries,
+                    opts.no_symlinks,
                 )
                 .await
                 {
@@ -281,6 +282,7 @@ async fn download_extract_and_verify(
     package: &Package<Meta>,
     install_path: &Path,
     binaries: &[Product],
+    no_symlinks: bool,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Build final metadata
     let meta = fetcher.target_meta();
@@ -322,6 +324,7 @@ async fn download_extract_and_verify(
             binaries,
             bin_path.to_path_buf(),
             install_path.to_path_buf(),
+            no_symlinks,
         )?;
 
         for bin_file in bin_files.iter() {
@@ -340,6 +343,7 @@ fn collect_bin_files(
     binaries: &[Product],
     bin_path: PathBuf,
     install_path: PathBuf,
+    no_symlinks: bool,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // List files to be installed
     // based on those found via Cargo.toml
@@ -363,7 +367,7 @@ fn collect_bin_files(
     // Create bin_files
     let bin_files = binaries
         .iter()
-        .map(|p| bins::BinFile::from_product(&bin_data, p, &bin_dir))
+        .map(|p| bins::BinFile::from_product(&bin_data, p, &bin_dir, no_symlinks))
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let mut source_set = BTreeSet::new();
