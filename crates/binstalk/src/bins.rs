@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    fs,
     path::{Component, Path, PathBuf},
 };
 
@@ -70,6 +71,8 @@ pub struct BinFile {
 }
 
 impl BinFile {
+    /// Must be called after the archive is downloaded and extracted.
+    /// This function might uses blocking I/O.
     pub fn from_product(
         data: &Data<'_>,
         product: &Product,
@@ -115,7 +118,12 @@ impl BinFile {
         };
 
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
-            data.bin_path.clone()
+            let source = data.bin_path.clone();
+
+            #[cfg(unix)]
+            fs::set_permissions(&source, std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
+
+            source
         } else {
             data.bin_path.join(&source_file_path)
         };
