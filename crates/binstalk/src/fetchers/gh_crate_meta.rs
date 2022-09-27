@@ -217,9 +217,15 @@ impl<'c> Context<'c> {
         archive_suffix: &'c str,
         repo: Option<&'c str>,
     ) -> Self {
-        debug_assert_eq!(archive_suffix.chars().next(), Some('.'));
+        let archive_format = if archive_suffix.is_empty() {
+            // Empty archive_suffix means PkgFmt::Bin
+            "bin"
+        } else {
+            debug_assert!(archive_suffix.starts_with('.'), "{archive_suffix}");
 
-        let archive_format = &archive_suffix[1..];
+            &archive_suffix[1..]
+        };
+
         Self {
             name: &data.name,
             repo,
