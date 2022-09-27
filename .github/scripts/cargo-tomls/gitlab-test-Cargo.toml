@@ -8,9 +8,6 @@ authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
 license = "GPL-3.0"
 
-[package.metadata.binstall]
-bin-dir = "{ bin }{ binary-ext }"
-
 [[bin]]
 name = "cargo-binstall"
 path = "src/main.rs"
