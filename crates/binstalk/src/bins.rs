@@ -118,12 +118,13 @@ impl BinFile {
         };
 
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
-            let source = data.bin_path.clone();
-
             #[cfg(unix)]
-            fs::set_permissions(&source, std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
+            fs::set_permissions(
+                &data.bin_path,
+                std::os::unix::fs::PermissionsExt::from_mode(0o755),
+            )?;
 
-            source
+            data.bin_path.clone()
         } else {
             data.bin_path.join(&source_file_path)
         };
