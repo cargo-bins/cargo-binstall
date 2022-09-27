@@ -327,11 +327,36 @@ async fn download_extract_and_verify(
             no_symlinks,
         )?;
 
-        for bin_file in bin_files.iter() {
-            bin_file.check_source_exists()?;
-        }
+        let name = &package.name;
 
-        Ok(bin_files)
+        binaries
+            .iter()
+            .zip(bin_files)
+            .filter_map(|(bin, bin_file)| {
+                match bin_file.check_source_exists() {
+                    Ok(()) => Some(Ok(bin_file)),
+
+                    // This binary is optional
+                    Err(err) => {
+                        let required_features = &bin.required_features;
+
+                        if required_features.is_empty() {
+                            // This bin is not optional, error
+                            Some(Err(err))
+                        } else {
+                            // Optional, print a warning and continue.
+                            let bin_name = bin.name.as_deref().unwrap();
+                            let features = required_features.join(",");
+                            warn!(
+                                "When resolving {name} bin {bin_name} is not found.\
+                                But since it requies features {features}, this bin is ignored."
+                            );
+                            None
+                        }
+                    }
+                }
+            })
+            .collect::<Result<Vec<bins::BinFile>, BinstallError>>()
     })
 }
 
