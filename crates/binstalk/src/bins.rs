@@ -93,30 +93,30 @@ impl BinFile {
             binary_ext,
         };
 
-        // Generate install paths
-        // Source path is the download dir + the generated binary path
-        let path = ctx.render(bin_dir)?;
-
-        let path_normalized = Path::new(&path).normalize();
-
-        if path_normalized.components().next().is_none() {
-            return Err(BinstallError::EmptySourceFilePath);
-        }
-
-        if !is_valid_path(&path_normalized) {
-            return Err(BinstallError::InvalidSourceFilePath {
-                path: path_normalized.into_owned(),
-            });
-        }
-
-        let source_file_path = match path_normalized {
-            Cow::Borrowed(..) => path,
-            Cow::Owned(path) => path.to_string_lossy().into_owned(),
-        };
-
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
             data.bin_path.clone()
         } else {
+            // Generate install paths
+            // Source path is the download dir + the generated binary path
+            let path = ctx.render(bin_dir)?;
+
+            let path_normalized = Path::new(&path).normalize();
+
+            if path_normalized.components().next().is_none() {
+                return Err(BinstallError::EmptySourceFilePath);
+            }
+
+            if !is_valid_path(&path_normalized) {
+                return Err(BinstallError::InvalidSourceFilePath {
+                    path: path_normalized.into_owned(),
+                });
+            }
+
+            let source_file_path = match path_normalized {
+                Cow::Borrowed(..) => path,
+                Cow::Owned(path) => path.to_string_lossy().into_owned(),
+            };
+
             data.bin_path.join(&source_file_path)
         };
 
