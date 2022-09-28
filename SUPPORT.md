@@ -31,7 +31,7 @@ Template variables use the format `{ VAR }` where `VAR` is the name of the varia
 - `bin` is the name of a specific binary, inferred from the crate configuration
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required()
 - `archive-suffix` is the filename extension of the package archive format that includes the prefix `.`, e.g. `.tar.tgz` for tgz or `.exe`/`""` for bin.
-- `archive-format` is the filename extension of the package archive format that does not include the prefix `.`, e.g. `tar.tgz` for tgz or `exe`/`""` for bin.
+- `archive-format` is the soft-deprecated filename extension of the package archive format that does not include the prefix `.`, e.g. `tar.tgz` for tgz or `exe`/`""` for bin.
 - `binary-ext` is the string `.exe` if the `target` is for Windows, or the empty string otherwise
 - `format` is a soft-deprecated alias for `archive-format` in `pkg-url`, and alias for `binary-ext` in `bin-dir`; in the future, this may warn at install time.
 
