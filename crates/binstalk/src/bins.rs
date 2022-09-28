@@ -68,11 +68,10 @@ pub struct BinFile {
     pub source: PathBuf,
     pub dest: PathBuf,
     pub link: PathBuf,
+    pub pkg_fmt: Option<PkgFmt>,
 }
 
 impl BinFile {
-    /// Must be called after the archive is downloaded and extracted.
-    /// This function might uses blocking I/O.
     pub fn from_product(
         data: &Data<'_>,
         product: &Product,
@@ -117,13 +116,9 @@ impl BinFile {
             Cow::Owned(path) => path.to_string_lossy().into_owned(),
         };
 
-        let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
-            #[cfg(unix)]
-            fs::set_permissions(
-                &data.bin_path,
-                std::os::unix::fs::PermissionsExt::from_mode(0o755),
-            )?;
+        let pkg_fmt = data.meta.pkg_fmt;
 
+        let source = if pkg_fmt == Some(PkgFmt::Bin) {
             data.bin_path.clone()
         } else {
             data.bin_path.join(&source_file_path)
@@ -143,6 +138,7 @@ impl BinFile {
             source,
             dest,
             link,
+            pkg_fmt,
         })
     }
 
@@ -181,6 +177,13 @@ impl BinFile {
             self.source.display(),
             self.dest.display()
         );
+
+        #[cfg(unix)]
+        fs::set_permissions(
+            &self.source,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )?;
+
         atomic_install(&self.source, &self.dest)?;
 
         Ok(())
