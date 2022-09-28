@@ -117,14 +117,7 @@ impl BinFile {
                 });
             }
 
-            let source_file_path = match &path_normalized {
-                // path is already in normalized form
-                Cow::Borrowed(..) => Cow::Owned(path),
-                // Use path_normalized
-                Cow::Owned(path) => path.to_string_lossy(),
-            };
-
-            data.bin_path.join(source_file_path.as_ref())
+            data.bin_path.join(path_normalized.as_ref())
         };
 
         // Destination at install dir + base-name{.extension}
