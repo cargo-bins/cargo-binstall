@@ -178,11 +178,13 @@ impl BinFile {
             self.dest.display()
         );
 
-        #[cfg(unix)]
-        fs::set_permissions(
-            &self.source,
-            std::os::unix::fs::PermissionsExt::from_mode(0o755),
-        )?;
+        if self.pkg_fmt == Some(PkgFmt::Bin) {
+            #[cfg(unix)]
+            fs::set_permissions(
+                &self.source,
+                std::os::unix::fs::PermissionsExt::from_mode(0o755),
+            )?;
+        }
 
         atomic_install(&self.source, &self.dest)?;
 
