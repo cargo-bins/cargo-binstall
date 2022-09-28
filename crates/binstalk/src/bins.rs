@@ -67,7 +67,7 @@ pub struct BinFile {
     pub base_name: CompactString,
     pub source: PathBuf,
     pub dest: PathBuf,
-    pub link: PathBuf,
+    pub link: Option<PathBuf>,
     pub pkg_fmt: Option<PkgFmt>,
 }
 
@@ -76,6 +76,7 @@ impl BinFile {
         data: &Data<'_>,
         product: &Product,
         bin_dir: &str,
+        no_symlinks: bool,
     ) -> Result<Self, BinstallError> {
         let base_name = product.name.as_deref().unwrap();
 
@@ -95,43 +96,49 @@ impl BinFile {
             binary_ext,
         };
 
-        // Generate install paths
-        // Source path is the download dir + the generated binary path
-        let path = ctx.render(bin_dir)?;
-
-        let path_normalized = Path::new(&path).normalize();
-
-        if path_normalized.components().next().is_none() {
-            return Err(BinstallError::EmptySourceFilePath);
-        }
-
-        if !is_valid_path(&path_normalized) {
-            return Err(BinstallError::InvalidSourceFilePath {
-                path: path_normalized.into_owned(),
-            });
-        }
-
-        let source_file_path = match path_normalized {
-            Cow::Borrowed(..) => path,
-            Cow::Owned(path) => path.to_string_lossy().into_owned(),
-        };
-
         let pkg_fmt = data.meta.pkg_fmt;
 
         let source = if pkg_fmt == Some(PkgFmt::Bin) {
             data.bin_path.clone()
         } else {
+            // Generate install paths
+            // Source path is the download dir + the generated binary path
+            let path = ctx.render(bin_dir)?;
+
+            let path_normalized = Path::new(&path).normalize();
+
+            if path_normalized.components().next().is_none() {
+                return Err(BinstallError::EmptySourceFilePath);
+            }
+
+            if !is_valid_path(&path_normalized) {
+                return Err(BinstallError::InvalidSourceFilePath {
+                    path: path_normalized.into_owned(),
+                });
+            }
+
+            let source_file_path = match path_normalized {
+                Cow::Borrowed(..) => path,
+                Cow::Owned(path) => path.to_string_lossy().into_owned(),
+            };
+
             data.bin_path.join(&source_file_path)
         };
 
-        // Destination path is the install dir + base-name-version{.extension}
-        let dest_file_path = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
-        let dest = data.install_path.join(dest_file_path);
-
-        // Link at install dir + base-name{.extension}
-        let link = data
+        // Destination at install dir + base-name{.extension}
+        let dest = data
             .install_path
             .join(&ctx.render("{ bin }{ binary-ext }")?);
+
+        let (dest, link) = if no_symlinks {
+            (dest, None)
+        } else {
+            // Destination path is the install dir + base-name-version{.extension}
+            let dest_file_path_with_ver = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
+            let dest_with_ver = data.install_path.join(dest_file_path_with_ver);
+
+            (dest_with_ver, Some(dest))
+        };
 
         Ok(Self {
             base_name: CompactString::from(base_name),
@@ -152,12 +159,16 @@ impl BinFile {
     }
 
     pub fn preview_link(&self) -> String {
-        format!(
-            "{} ({} -> {})",
-            self.base_name,
-            self.link.display(),
-            self.link_dest().display()
-        )
+        if let Some(link) = &self.link {
+            format!(
+                "{} ({} -> {})",
+                self.base_name,
+                link.display(),
+                self.link_dest().display()
+            )
+        } else {
+            String::new()
+        }
     }
 
     /// Return `Ok` if the source exists, otherwise `Err`.
@@ -192,20 +203,22 @@ impl BinFile {
     }
 
     pub fn install_link(&self) -> Result<(), BinstallError> {
-        // Remove existing symlink
-        // TODO: check if existing symlink is correct
-        if self.link.exists() {
-            debug!("Remove link '{}'", self.link.display());
-            std::fs::remove_file(&self.link)?;
-        }
+        if let Some(link) = &self.link {
+            // Remove existing symlink
+            // TODO: check if existing symlink is correct
+            if link.exists() {
+                debug!("Remove link '{}'", link.display());
+                std::fs::remove_file(link)?;
+            }
 
-        let dest = self.link_dest();
-        debug!(
-            "Create link '{}' pointing to '{}'",
-            self.link.display(),
-            dest.display()
-        );
-        atomic_symlink_file(dest, &self.link)?;
+            let dest = self.link_dest();
+            debug!(
+                "Create link '{}' pointing to '{}'",
+                link.display(),
+                dest.display()
+            );
+            atomic_symlink_file(dest, link)?;
+        }
 
         Ok(())
     }
