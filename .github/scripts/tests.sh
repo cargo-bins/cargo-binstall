@@ -7,7 +7,13 @@ unset CARGO_HOME
 
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
-"./$1" binstall --log-level debug --no-confirm b3sum cargo-release cargo-binstall cargo-watch miniserve
+"./$1" binstall --log-level debug --no-confirm \
+    b3sum \
+    cargo-release \
+    cargo-binstall \
+    cargo-watch \
+    miniserve \
+    sccache
 
 # Test that the installed binaries can be run
 b3sum --version
@@ -16,6 +22,7 @@ cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
 cargo watch -V
 miniserve -V
+sccache -V
 
 test_resources=".github/scripts/cargo-tomls"
 
