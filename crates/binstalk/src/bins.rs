@@ -45,6 +45,9 @@ pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
         format!("{name}-{version}-{target}"),
         format!("{name}-v{version}-{target}"),
         format!("{name}-{target}"),
+        // Ignore the following when updating hosting::{FULL_FILENAMES, NOVERSION_FILENAMES}
+        format!("{name}-{version}"),
+        format!("{name}-v{version}"),
         name.to_string(),
     ];
 
