@@ -22,7 +22,6 @@ cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
 cargo watch -V
 miniserve -V
-CARGO_HOME="$HOME/.cargo" sccache -V
 
 test_resources=".github/scripts/cargo-tomls"
 
