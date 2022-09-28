@@ -68,7 +68,6 @@ pub struct BinFile {
     pub source: PathBuf,
     pub dest: PathBuf,
     pub link: Option<PathBuf>,
-    pub pkg_fmt: Option<PkgFmt>,
 }
 
 impl BinFile {
@@ -96,9 +95,7 @@ impl BinFile {
             binary_ext,
         };
 
-        let pkg_fmt = data.meta.pkg_fmt;
-
-        let source = if pkg_fmt == Some(PkgFmt::Bin) {
+        let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
             data.bin_path.clone()
         } else {
             // Generate install paths
@@ -140,7 +137,6 @@ impl BinFile {
             source,
             dest,
             link,
-            pkg_fmt,
         })
     }
 
@@ -184,13 +180,11 @@ impl BinFile {
             self.dest.display()
         );
 
-        if self.pkg_fmt == Some(PkgFmt::Bin) {
-            #[cfg(unix)]
-            fs::set_permissions(
-                &self.source,
-                std::os::unix::fs::PermissionsExt::from_mode(0o755),
-            )?;
-        }
+        #[cfg(unix)]
+        fs::set_permissions(
+            &self.source,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )?;
 
         atomic_install(&self.source, &self.dest)?;
 
