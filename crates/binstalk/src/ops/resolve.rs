@@ -348,7 +348,7 @@ async fn download_extract_and_verify(
                             let bin_name = bin.name.as_deref().unwrap();
                             let features = required_features.join(",");
                             warn!(
-                                "When resolving {name} bin {bin_name} is not found.\
+                                "When resolving {name} bin {bin_name} is not found. \
                                 But since it requies features {features}, this bin is ignored."
                             );
                             None
