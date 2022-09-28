@@ -243,13 +243,21 @@ async fn resolve_inner(
                 .await
                 {
                     Ok(bin_files) => {
-                        return Ok(Resolution::Fetch {
-                            fetcher,
-                            package,
-                            name: crate_name.name,
-                            version_req: version_req.to_compact_string(),
-                            bin_files,
-                        })
+                        if !bin_files.is_empty() {
+                            return Ok(Resolution::Fetch {
+                                fetcher,
+                                package,
+                                name: crate_name.name,
+                                version_req: version_req.to_compact_string(),
+                                bin_files,
+                            });
+                        } else {
+                            warn!(
+                                "Error when checking binaries provided by fetcher {}: \
+                                The fetcher does not provide any optional binary",
+                                fetcher.source_name(),
+                            );
+                        }
                     }
                     Err(err) => {
                         warn!(
