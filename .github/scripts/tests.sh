@@ -22,7 +22,7 @@ cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
 cargo watch -V
 miniserve -V
-sccache -V
+sccache --help >/dev/null
 
 test_resources=".github/scripts/cargo-tomls"
 
