@@ -52,7 +52,7 @@ pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
 
     possible_dirs
         .into_iter()
-        .find(|dirname| Path::new(dirname).is_dir())
+        .find(|dirname| data.bin_path.join(dirname).is_dir())
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
             dir += "/";
