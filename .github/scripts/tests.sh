@@ -20,7 +20,8 @@ miniserve -V
 test_resources=".github/scripts/cargo-tomls"
 
 # Install binaries using `--manifest-path`
-"./$1" binstall --force --log-level debug --manifest-path "$test_resources/gitlab-test-Cargo.toml" --no-confirm cargo-binstall
+# Also test default github template
+"./$1" binstall --force --log-level debug --manifest-path "$test_resources/github-test-Cargo.toml" --no-confirm cargo-binstall
 # Test that the installed binaries can be run
 cargo binstall --help >/dev/null
 
@@ -64,6 +65,7 @@ cargo binstall --help >/dev/null
 # FIXME: remove/replace once #136 lands
 PATH="$test_resources/fake-cargo:$PATH"
 
+# Test default GitLab pkg-url templates
 "./$1" binstall \
     --force \
     --manifest-path "$test_resources/gitlab-test-Cargo.toml" \
@@ -75,6 +77,15 @@ PATH="$test_resources/fake-cargo:$PATH"
 "./$1" binstall \
     --force \
     --manifest-path "$test_resources/bitbucket-test-Cargo.toml" \
+    --log-level debug \
+    --no-confirm \
+    cargo-binstall
+
+# Test default Github pkg-url templates,
+# with bin-dir provided
+"./$1" binstall \
+    --force \
+    --manifest-path "$test_resources/github-test-Cargo2.toml" \
     --log-level debug \
     --no-confirm \
     cargo-binstall
