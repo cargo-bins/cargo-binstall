@@ -44,16 +44,17 @@ impl PkgFmt {
         }
     }
 
-    /// List of possible file extensions for the format.
+    /// List of possible file extensions for the format
+    /// (with prefix `.`).
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
-            PkgFmt::Tar => &["tar"],
-            PkgFmt::Tbz2 => &["tbz2", "tar.bz2"],
-            PkgFmt::Tgz => &["tgz", "tar.gz"],
-            PkgFmt::Txz => &["txz", "tar.xz"],
-            PkgFmt::Tzstd => &["tzstd", "tzst", "tar.zst"],
-            PkgFmt::Bin => &["bin", "exe"],
-            PkgFmt::Zip => &["zip"],
+            PkgFmt::Tar => &[".tar"],
+            PkgFmt::Tbz2 => &[".tbz2", ".tar.bz2"],
+            PkgFmt::Tgz => &[".tgz", ".tar.gz"],
+            PkgFmt::Txz => &[".txz", ".tar.xz"],
+            PkgFmt::Tzstd => &[".tzstd", ".tzst", ".tar.zst"],
+            PkgFmt::Bin => &[".bin", ".exe", ""],
+            PkgFmt::Zip => &[".zip"],
         }
     }
 }

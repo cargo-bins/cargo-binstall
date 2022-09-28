@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    fs,
     path::{Component, Path, PathBuf},
 };
 
@@ -47,7 +48,7 @@ pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
         name.to_string(),
     ];
 
-    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary_ext }");
+    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
 
     possible_dirs
         .into_iter()
@@ -67,6 +68,7 @@ pub struct BinFile {
     pub source: PathBuf,
     pub dest: PathBuf,
     pub link: Option<PathBuf>,
+    pub pkg_fmt: Option<PkgFmt>,
 }
 
 impl BinFile {
@@ -94,7 +96,9 @@ impl BinFile {
             binary_ext,
         };
 
-        let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
+        let pkg_fmt = data.meta.pkg_fmt;
+
+        let source = if pkg_fmt == Some(PkgFmt::Bin) {
             data.bin_path.clone()
         } else {
             // Generate install paths
@@ -113,12 +117,7 @@ impl BinFile {
                 });
             }
 
-            let source_file_path = match path_normalized {
-                Cow::Borrowed(..) => path,
-                Cow::Owned(path) => path.to_string_lossy().into_owned(),
-            };
-
-            data.bin_path.join(&source_file_path)
+            data.bin_path.join(path_normalized.as_ref())
         };
 
         // Destination at install dir + base-name{.extension}
@@ -141,6 +140,7 @@ impl BinFile {
             source,
             dest,
             link,
+            pkg_fmt,
         })
     }
 
@@ -183,6 +183,15 @@ impl BinFile {
             self.source.display(),
             self.dest.display()
         );
+
+        if self.pkg_fmt == Some(PkgFmt::Bin) {
+            #[cfg(unix)]
+            fs::set_permissions(
+                &self.source,
+                std::os::unix::fs::PermissionsExt::from_mode(0o755),
+            )?;
+        }
+
         atomic_install(&self.source, &self.dest)?;
 
         Ok(())

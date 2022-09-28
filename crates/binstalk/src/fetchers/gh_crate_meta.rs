@@ -203,6 +203,9 @@ struct Context<'c> {
     #[serde(rename = "archive-format")]
     pub archive_format: &'c str,
 
+    #[serde(rename = "archive-suffix")]
+    pub archive_suffix: &'c str,
+
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
     #[serde(rename = "binary-ext")]
     pub binary_ext: &'c str,
@@ -211,9 +214,18 @@ struct Context<'c> {
 impl<'c> Context<'c> {
     pub(self) fn from_data_with_repo(
         data: &'c Data,
-        archive_format: &'c str,
+        archive_suffix: &'c str,
         repo: Option<&'c str>,
     ) -> Self {
+        let archive_format = if archive_suffix.is_empty() {
+            // Empty archive_suffix means PkgFmt::Bin
+            "bin"
+        } else {
+            debug_assert!(archive_suffix.starts_with('.'), "{archive_suffix}");
+
+            &archive_suffix[1..]
+        };
+
         Self {
             name: &data.name,
             repo,
@@ -221,6 +233,7 @@ impl<'c> Context<'c> {
             version: &data.version,
             format: archive_format,
             archive_format,
+            archive_suffix,
             binary_ext: if data.target.contains("windows") {
                 ".exe"
             } else {
@@ -267,7 +280,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data, "tgz");
+        let ctx = Context::from_data(&data, ".tgz");
         assert_eq!(
             ctx.render_url(DEFAULT_PKG_URL).unwrap(),
             url("https://github.com/ryankurte/cargo-binstall/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
@@ -286,7 +299,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data, "tgz");
+        let ctx = Context::from_data(&data, ".tgz");
         ctx.render_url(data.meta.pkg_url.as_deref().unwrap())
             .unwrap();
     }
@@ -306,7 +319,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data, "tgz");
+        let ctx = Context::from_data(&data, ".tgz");
         assert_eq!(
             ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
@@ -330,7 +343,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data, "tgz");
+        let ctx = Context::from_data(&data, ".tgz");
         assert_eq!(
             ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
@@ -352,7 +365,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data, "tgz");
+        let ctx = Context::from_data(&data, ".tgz");
         assert_eq!(
             ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
@@ -378,7 +391,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data, "txz");
+        let ctx = Context::from_data(&data, ".txz");
         assert_eq!(
             ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz")
@@ -401,7 +414,7 @@ mod test {
             meta,
         };
 
-        let ctx = Context::from_data(&data, "bin");
+        let ctx = Context::from_data(&data, ".bin");
         assert_eq!(
             ctx.render_url(data.meta.pkg_url.as_deref().unwrap()).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe")

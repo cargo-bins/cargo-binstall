@@ -14,15 +14,15 @@ pub enum RepositoryHost {
 /// Make sure to update possible_dirs in `bins::infer_bin_dir_template`
 /// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
 pub const FULL_FILENAMES: &[&str] = &[
-    "{ name }-{ target }-v{ version }.{ archive-format }",
-    "{ name }-{ target }-{ version }.{ archive-format }",
-    "{ name }-{ version }-{ target }.{ archive-format }",
-    "{ name }-v{ version }-{ target }.{ archive-format }",
+    "{ name }-{ target }-v{ version }{ archive-suffix }",
+    "{ name }-{ target }-{ version }{ archive-suffix }",
+    "{ name }-{ version }-{ target }{ archive-suffix }",
+    "{ name }-v{ version }-{ target }{ archive-suffix }",
 ];
 
 pub const NOVERSION_FILENAMES: &[&str] = &[
-    "{ name }-{ target }.{ archive-format }",
-    "{ name }.{ archive-format }",
+    "{ name }-{ target }{ archive-suffix }",
+    "{ name }{ archive-suffix }",
 ];
 
 impl RepositoryHost {
