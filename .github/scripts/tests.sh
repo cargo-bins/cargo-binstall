@@ -12,11 +12,8 @@ unset CARGO_HOME
     cargo-release \
     cargo-binstall \
     cargo-watch \
-    miniserve
-
-if [ "$2" != "macos-latest" ]; then
-    "./$1" binstall --log-level debug --no-confirm sccache
-fi
+    miniserve \
+    sccache
 
 # Test that the installed binaries can be run
 b3sum --version
