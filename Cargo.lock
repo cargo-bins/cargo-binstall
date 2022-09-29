@@ -114,7 +114,6 @@ dependencies = [
  "bytes",
  "bzip2",
  "cargo_toml",
- "clap",
  "compact_str",
  "crates_io_api",
  "detect-targets",
