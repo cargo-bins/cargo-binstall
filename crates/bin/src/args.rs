@@ -5,13 +5,19 @@ use binstalk::{
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
 };
-use clap::{builder::PossibleValue, AppSettings, ArgEnum, Parser};
+use clap::{Parser, ValueEnum};
 use log::LevelFilter;
 use reqwest::tls::Version;
 use semver::VersionReq;
 
 #[derive(Debug, Parser)]
-#[clap(version, about = "Install a Rust binary... from binaries!", setting = AppSettings::ArgRequiredElseHelp)]
+#[clap(
+    version,
+    about = "Install a Rust binary... from binaries!",
+    arg_required_else_help(true),
+    // Avoid conflict with version_req
+    disable_version_flag(true),
+)]
 pub struct Args {
     /// Packages to install.
     ///
@@ -39,7 +45,11 @@ pub struct Args {
     ///
     /// Cannot be used when multiple packages are installed at once, use the attached version
     /// syntax in that case.
-    #[clap(help_heading = "Package selection", long = "version", parse(try_from_str = VersionReq::parse_from_cli))]
+    #[clap(
+        help_heading = "Package selection",
+        long = "version",
+        value_parser(VersionReq::parse_from_cli)
+    )]
     pub version_req: Option<VersionReq>,
 
     /// Override binary target set.
@@ -91,22 +101,7 @@ pub struct Args {
     /// - zip: Download format is Zip
     ///
     /// - bin: Download format is raw / binary
-    #[clap(
-        help_heading = "Overrides",
-        long,
-        value_name = "PKG_FMT",
-        possible_values = [
-            PossibleValue::new("tar").help(
-                "Download format is TAR (uncompressed)."
-            ),
-            PossibleValue::new("tbz2").help("Download format is TAR + Bzip2."),
-            PossibleValue::new("tgz").help("Download format is TGZ (TAR + GZip)."),
-            PossibleValue::new("txz").help("Download format is TAR + XZ."),
-            PossibleValue::new("tzstd").help("Download format is TAR + Zstd."),
-            PossibleValue::new("zip").help("Download format is Zip."),
-            PossibleValue::new("bin").help("Download format is raw / binary."),
-        ]
-    )]
+    #[clap(help_heading = "Overrides", long, value_name = "PKG_FMT")]
     pub pkg_fmt: Option<PkgFmt>,
 
     /// Override Cargo.toml package manifest pkg-url.
@@ -169,12 +164,8 @@ pub struct Args {
     ///
     /// The default is not to require any minimum TLS version, and use the negotiated highest
     /// version available to both this client and the remote server.
-    #[clap(help_heading = "Options", long, arg_enum, value_name = "VERSION")]
+    #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub min_tls_version: Option<TLSVersion>,
-
-    /// Print help information
-    #[clap(help_heading = "Meta", short, long)]
-    pub help: bool,
 
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
@@ -199,19 +190,7 @@ pub struct Args {
         help_heading = "Meta",
         long,
         default_value = "info",
-        value_name = "LEVEL",
-        possible_values = [
-            PossibleValue::new("trace").help(
-                "Set to `trace` to print very low priority, often extremely verbose information."
-            ),
-            PossibleValue::new("debug").help("Set to debug when submitting a bug report."),
-            PossibleValue::new("info").help("Set to info to only print useful information."),
-            PossibleValue::new("warn").help("Set to warn to only print on hazardous situations."),
-            PossibleValue::new("error").help("Set to error to only print serious errors."),
-            PossibleValue::new("off").help(
-                "Set to off to disable logging completely, this will also disable output from `cargo-install`."
-            ),
-        ]
+        value_name = "LEVEL"
     )]
     pub log_level: LevelFilter,
 
@@ -222,7 +201,7 @@ pub struct Args {
     pub quiet: bool,
 }
 
-#[derive(Debug, Copy, Clone, ArgEnum)]
+#[derive(Debug, Copy, Clone, ValueEnum)]
 pub enum TLSVersion {
     #[clap(name = "1.2")]
     Tls1_2,
