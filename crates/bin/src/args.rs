@@ -86,7 +86,7 @@ pub struct Args {
 
     /// Override Cargo.toml package manifest pkg-fmt.
     ///
-    /// The availiable package formats are:
+    /// The available package formats are:
     ///
     /// - tar: download format is TAR (uncompressed)
     ///
