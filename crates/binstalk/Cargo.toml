@@ -14,7 +14,7 @@ async-trait = "0.1.57"
 bytes = "1.2.1"
 bzip2 = "0.4.3"
 cargo_toml = "0.12.2"
-clap = { version = "3.2.22", features = ["derive"] }
+clap = { version = "4.0.2", features = ["derive"] }
 compact_str = { version = "0.6.0", features = ["serde"] }
 crates_io_api = { version = "0.8.1", default-features = false }
 detect-targets = { version = "0.1.2", path = "../detect-targets" }
