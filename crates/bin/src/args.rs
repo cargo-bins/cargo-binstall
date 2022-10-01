@@ -249,12 +249,6 @@ pub fn parse() -> Result<Args, BinstallError> {
             "version"
         } else if opts.manifest_path.is_some() {
             "manifest-path"
-        } else if opts.bin_dir.is_some() {
-            "bin-dir"
-        } else if opts.pkg_fmt.is_some() {
-            "pkg-fmt"
-        } else if opts.pkg_url.is_some() {
-            "pkg-url"
         } else {
             ""
         };
