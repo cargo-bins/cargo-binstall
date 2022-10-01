@@ -6,7 +6,11 @@ unset CARGO_INSTALL_ROOT
 
 crates="b3sum cargo-release cargo-binstall cargo-watch miniserve sccache"
 
-if [ "$2" != windows-latest ]; then
+if [[ "$2" == "windows*" ]]; then
+    # Install binaries using cargo-binstall
+    # shellcheck disable=SC2086
+    "./$1" --log-level debug --no-confirm $crates
+else
     export CARGO_HOME=/tmp/cargo-home-for-test
     export PATH="$CARGO_HOME/bin:$PATH"
     
@@ -17,10 +21,6 @@ if [ "$2" != windows-latest ]; then
     # Install binaries using cargo-binstall
     # shellcheck disable=SC2086
     cargo binstall --log-level debug --no-confirm $crates
-else
-    # Install binaries using cargo-binstall
-    # shellcheck disable=SC2086
-    "./$1" --log-level debug --no-confirm $crates
 fi
 
 # Test that the installed binaries can be run
