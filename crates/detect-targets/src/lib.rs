@@ -1,5 +1,11 @@
 //! Detect the target at the runtime.
 //!
+//! It runs `$CARGO -vV` if environment variable `CARGO` is present
+//! for cargo subcommands, otherwise it would try running `rustc -vV`.
+//!
+//! If both `rustc` isn't present on the system, it will fallback
+//! to using syscalls plus `ldd` on Linux to detect targets.
+//!
 //! Example use cases:
 //!  - The binary is built with musl libc to run on anywhere, but
 //!    the runtime supports glibc.
