@@ -5,7 +5,7 @@ set -euxo pipefail
 unset CARGO_INSTALL_ROOT
 
 export CARGO_HOME=/tmp/cargo-home-for-test
-export PATH="$CARGO_HOME:$PATH"
+export PATH="$CARGO_HOME/bin:$PATH"
 
 mkdir -p "$CARGO_HOME/bin"
 # Copy it to bin to test use of env var `CARGO`
