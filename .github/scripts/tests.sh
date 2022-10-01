@@ -4,22 +4,24 @@ set -euxo pipefail
 
 unset CARGO_INSTALL_ROOT
 
-export CARGO_HOME=/tmp/cargo-home-for-test
-export PATH="$CARGO_HOME/bin:$PATH"
+crates="b3sum cargo-release cargo-binstall cargo-watch miniserve sccache"
 
-mkdir -p "$CARGO_HOME/bin"
-# Copy it to bin to test use of env var `CARGO`
-cp "./$1" "$CARGO_HOME/bin/cargo-binstall"
-
-# Install binaries using cargo-binstall
-# shellcheck disable=SC2086
-cargo binstall --log-level debug --no-confirm \
-    b3sum \
-    cargo-release \
-    cargo-binstall \
-    cargo-watch \
-    miniserve \
-    sccache
+if [ "$2" != windows-latest ]; then
+    export CARGO_HOME=/tmp/cargo-home-for-test
+    export PATH="$CARGO_HOME/bin:$PATH"
+    
+    mkdir -p "$CARGO_HOME/bin"
+    # Copy it to bin to test use of env var `CARGO`
+    cp "./$1" "$CARGO_HOME/bin/cargo-binstall"
+    
+    # Install binaries using cargo-binstall
+    # shellcheck disable=SC2086
+    cargo binstall --log-level debug --no-confirm $crates
+else
+    # Install binaries using cargo-binstall
+    # shellcheck disable=SC2086
+    "./$1" --log-level debug --no-confirm $crates
+fi
 
 # Test that the installed binaries can be run
 b3sum --version
@@ -75,7 +77,7 @@ cargo binstall --help >/dev/null
 
 # to force failure if falling back to source
 # FIXME: remove/replace once #136 lands
-PATH="$test_resources/fake-cargo:$PATH"
+export PATH="$test_resources/fake-cargo:$PATH"
 
 # Test default GitLab pkg-url templates
 "./$1" binstall \
