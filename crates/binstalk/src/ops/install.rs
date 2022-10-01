@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Cow, env, ffi::OsStr, sync::Arc};
 
 use cargo_toml::Package;
 use compact_str::CompactString;
@@ -110,12 +110,18 @@ async fn install_from_source(
 ) -> Result<(), BinstallError> {
     let jobserver_client = lazy_jobserver_client.get().await?;
 
+    let cargo = env::var_os("CARGO")
+        .map(Cow::Owned)
+        .unwrap_or_else(|| Cow::Borrowed(OsStr::new("cargo")));
+
     debug!(
-        "Running `cargo install {} --version {} --target {target}`",
-        package.name, package.version
+        "Running `{} install {} --version {} --target {target}`",
+        cargo.to_string_lossy(),
+        package.name,
+        package.version
     );
 
-    let mut cmd = Command::new("cargo");
+    let mut cmd = Command::new(cargo);
 
     cmd.arg("install")
         .arg(&package.name)

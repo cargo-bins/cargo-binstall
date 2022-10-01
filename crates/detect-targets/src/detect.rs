@@ -1,4 +1,7 @@
 use std::{
+    borrow::Cow,
+    env,
+    ffi::OsStr,
     io::{BufRead, Cursor},
     process::{Output, Stdio},
 };
@@ -65,8 +68,17 @@ pub async fn detect_targets() -> Vec<String> {
 
 /// Figure out what the host target is using `rustc`.
 /// If `rustc` is absent, then it would return `None`.
+///
+/// If environment variable `CARGO` is present, then
+/// `$CARGO -vV` will be run instead.
+///
+/// Otherwise, it will run `rustc -vV` to detect target.
 async fn get_target_from_rustc() -> Option<String> {
-    let Output { status, stdout, .. } = Command::new("rustc")
+    let cmd = env::var_os("CARGO")
+        .map(Cow::Owned)
+        .unwrap_or_else(|| Cow::Borrowed(OsStr::new("rustc")));
+
+    let Output { status, stdout, .. } = Command::new(cmd)
         .arg("-vV")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
