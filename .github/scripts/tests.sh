@@ -3,11 +3,16 @@
 set -euxo pipefail
 
 unset CARGO_INSTALL_ROOT
-unset CARGO_HOME
+
+export CARGO_HOME=/tmp/cargo-home-for-test
+
+mkdir -p "$CARGO_HOME/bin"
+# Copy it to bin to test use of env var `CARGO`
+cp "./$1" "$CARGO_HOME/bin/cargo-binstall"
 
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
-"./$1" binstall --log-level debug --no-confirm \
+cargo binstall --log-level debug --no-confirm \
     b3sum \
     cargo-release \
     cargo-binstall \

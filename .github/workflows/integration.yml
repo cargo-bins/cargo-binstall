@@ -51,6 +51,4 @@ jobs:
     - name: Test
       shell: bash
       run: .github/scripts/tests.sh ${{ matrix.bin }} ${{ runner.os }}
-      env:
-        CARGO_HOME: /tmp/cargo-home-for-test/
 
