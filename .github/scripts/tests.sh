@@ -6,7 +6,7 @@ unset CARGO_INSTALL_ROOT
 
 crates="b3sum cargo-release cargo-binstall cargo-watch miniserve sccache"
 
-if [[ "$2" == "windows*" ]]; then
+if [ "$2" = "Windows" ]; then
     # Install binaries using cargo-binstall
     # shellcheck disable=SC2086
     "./$1" --log-level debug --no-confirm $crates
