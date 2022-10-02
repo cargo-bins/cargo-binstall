@@ -26,8 +26,8 @@ pub struct Args {
     /// Each value is either a crate name alone, or a crate name followed by @ and the version to
     /// install. The version syntax is as with the --version option.
     ///
-    /// When multiple names are provided, the --version option and any override options are
-    /// unavailable due to ambiguity.
+    /// When multiple names are provided, the --version option and override option
+    /// `manifest_path` is unavailable due to ambiguity.
     ///
     /// If duplicate names are provided, the last one (and their version requirement)
     /// is kept.
