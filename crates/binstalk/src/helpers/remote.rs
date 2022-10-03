@@ -10,7 +10,7 @@ use tokio::{
 
 use crate::errors::BinstallError;
 
-pub use reqwest::{tls, ClientBuilder, Method, RequestBuilder, Response};
+pub use reqwest::{tls, Method, RequestBuilder, Response};
 pub use url::Url;
 
 #[derive(Clone, Debug)]
@@ -24,7 +24,7 @@ impl Client {
     pub fn new(min_tls: Option<tls::Version>, delay: Duration) -> Result<Self, BinstallError> {
         const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
-        let mut builder = ClientBuilder::new()
+        let mut builder = reqwest::ClientBuilder::new()
             .user_agent(USER_AGENT)
             .https_only(true)
             .min_tls_version(tls::Version::TLS_1_2)
