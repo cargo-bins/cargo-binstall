@@ -14,7 +14,8 @@ pub fn create_reqwest_client(min_tls: Option<tls::Version>) -> Result<Client, Bi
     let mut builder = ClientBuilder::new()
         .user_agent(USER_AGENT)
         .https_only(true)
-        .min_tls_version(tls::Version::TLS_1_2);
+        .min_tls_version(tls::Version::TLS_1_2)
+        .tcp_nodelay(false);
 
     if let Some(ver) = min_tls {
         builder = builder.min_tls_version(ver);
