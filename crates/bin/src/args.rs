@@ -109,11 +109,11 @@ pub struct Args {
     pub pkg_url: Option<String>,
 
     /// Override the rate limit duration, the unit is milliseconds.
-    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(6).unwrap())]
+    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(5).unwrap())]
     pub rate_limit_duration: NonZeroU64,
 
     /// Override the number of requests allowed in the rate limit duration.
-    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(3).unwrap())]
+    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(2).unwrap())]
     pub rate_limit_request_count: NonZeroU64,
 
     /// Disable symlinking / versioned updates.
