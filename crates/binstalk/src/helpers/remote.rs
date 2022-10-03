@@ -55,35 +55,46 @@ impl Client {
         self.interval.lock().await.tick().await;
     }
 
-    pub async fn request(&self, method: Method, url: Url) -> RequestBuilder {
+    async fn request(&self, method: Method, url: Url) -> RequestBuilder {
         self.wait().await;
 
         self.client.request(method, url)
     }
 
-    pub async fn remote_exists(&self, url: Url, method: Method) -> Result<bool, BinstallError> {
-        let req = self
-            .request(method.clone(), url.clone())
+    async fn send_request(
+        &self,
+        method: Method,
+        url: Url,
+        error_for_status: bool,
+    ) -> Result<Response, BinstallError> {
+        self.request(method.clone(), url.clone())
             .await
             .send()
             .await
-            .map_err(|err| BinstallError::Http { method, url, err })?;
+            .and_then(|response| {
+                if error_for_status {
+                    response.error_for_status()
+                } else {
+                    Ok(response)
+                }
+            })
+            .map_err(|err| BinstallError::Http { method, url, err })
+    }
 
-        Ok(req.status().is_success())
+    pub async fn remote_exists(&self, url: Url, method: Method) -> Result<bool, BinstallError> {
+        Ok(self
+            .send_request(method, url, false)
+            .await?
+            .status()
+            .is_success())
     }
 
     pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, BinstallError> {
-        let method = Method::HEAD;
-
-        let req = self
-            .request(method.clone(), url.clone())
-            .await
-            .send()
-            .await
-            .and_then(Response::error_for_status)
-            .map_err(|err| BinstallError::Http { method, url, err })?;
-
-        Ok(req.url().clone())
+        Ok(self
+            .send_request(Method::HEAD, url, true)
+            .await?
+            .url()
+            .clone())
     }
 
     pub(crate) async fn create_request(
@@ -92,14 +103,8 @@ impl Client {
     ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
         debug!("Downloading from: '{url}'");
 
-        let method = Method::GET;
-
-        self.request(method.clone(), url.clone())
+        self.send_request(Method::GET, url, true)
             .await
-            .send()
-            .await
-            .and_then(|r| r.error_for_status())
-            .map_err(|err| BinstallError::Http { method, url, err })
             .map(Response::bytes_stream)
     }
 }
