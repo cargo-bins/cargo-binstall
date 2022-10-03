@@ -31,7 +31,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     // Initialize reqwest client
     let client = Client::new(
         args.min_tls_version.map(|v| v.into()),
-        Duration::from_millis(args.rate_limit_duration),
+        Duration::from_millis(args.rate_limit_duration.get()),
         args.rate_limit_request_count,
     )?;
 

@@ -109,8 +109,8 @@ pub struct Args {
     pub pkg_url: Option<String>,
 
     /// Override the rate limit duration, the unit is milliseconds.
-    #[clap(help_heading = "Overrides", long, default_value_t = 5)]
-    pub rate_limit_duration: u64,
+    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(5).unwrap())]
+    pub rate_limit_duration: NonZeroU64,
 
     /// Override the number of requests allowed in the rate limit duration.
     #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(20).unwrap())]
