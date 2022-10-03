@@ -19,7 +19,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// * `delay` - delay between launching next reqwests.
+    /// * `per` - must not be 0.
     pub fn new(
         min_tls: Option<tls::Version>,
         per: Duration,
