@@ -10,7 +10,6 @@ use cargo_toml::{Manifest, Package, Product};
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use log::{debug, info, warn};
-use reqwest::Client;
 use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
 
@@ -20,7 +19,7 @@ use crate::{
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
     fetchers::{Data, Fetcher, GhCrateMeta, QuickInstall},
-    helpers::tasks::AutoAbortJoinHandle,
+    helpers::{remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
 

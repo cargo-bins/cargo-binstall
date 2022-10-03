@@ -4,7 +4,6 @@ use compact_str::{CompactString, ToCompactString};
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use log::{debug, warn};
 use once_cell::sync::OnceCell;
-use reqwest::{Client, Method};
 use serde::Serialize;
 use strum::IntoEnumIterator;
 use tinytemplate::TinyTemplate;
@@ -14,7 +13,7 @@ use crate::{
     errors::BinstallError,
     helpers::{
         download::Download,
-        remote::{get_redirected_final_url, remote_exists},
+        remote::{Client, Method},
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -59,11 +58,9 @@ impl GhCrateMeta {
             AutoAbortJoinHandle::spawn(async move {
                 debug!("Checking for package at: '{url}'");
 
-                Ok(
-                    (remote_exists(client.clone(), url.clone(), Method::HEAD).await?
-                        || remote_exists(client, url.clone(), Method::GET).await?)
-                        .then_some((url, pkg_fmt)),
-                )
+                Ok((client.remote_exists(url.clone(), Method::HEAD).await?
+                    || client.remote_exists(url.clone(), Method::GET).await?)
+                    .then_some((url, pkg_fmt)))
             })
         })
     }
@@ -81,7 +78,11 @@ impl super::Fetcher for GhCrateMeta {
 
     async fn find(&self) -> Result<bool, BinstallError> {
         let repo = if let Some(repo) = self.data.repo.as_deref() {
-            Some(get_redirected_final_url(&self.client, Url::parse(repo)?).await?)
+            Some(
+                self.client
+                    .get_redirected_final_url(Url::parse(repo)?)
+                    .await?,
+            )
         } else {
             None
         };

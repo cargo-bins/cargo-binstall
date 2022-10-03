@@ -2,14 +2,15 @@ use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
 use log::debug;
-use reqwest::Client;
-use reqwest::Method;
 use tokio::task::JoinHandle;
 use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{download::Download, remote::remote_exists},
+    helpers::{
+        download::Download,
+        remote::{Client, Method},
+    },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -43,7 +44,9 @@ impl super::Fetcher for QuickInstall {
         let url = self.package_url();
         self.report();
         debug!("Checking for package at: '{url}'");
-        remote_exists(self.client.clone(), Url::parse(&url)?, Method::HEAD).await
+        self.client
+            .remote_exists(Url::parse(&url)?, Method::HEAD)
+            .await
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
@@ -114,6 +117,7 @@ impl QuickInstall {
 
             client
                 .request(Method::HEAD, url.clone())
+                .await
                 .send()
                 .await
                 .map_err(|err| BinstallError::Http {

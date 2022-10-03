@@ -2,12 +2,12 @@ use std::{ffi::OsString, path::PathBuf};
 
 use binstalk::{
     errors::BinstallError,
+    helpers::remote::tls::Version,
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
 };
 use clap::{Parser, ValueEnum};
 use log::LevelFilter;
-use reqwest::tls::Version;
 use semver::VersionReq;
 
 #[derive(Debug, Parser)]

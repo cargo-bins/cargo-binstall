@@ -3,10 +3,7 @@ use std::{fs, path::Path, sync::Arc, time::Duration};
 use binstalk::{
     errors::BinstallError,
     get_desired_targets,
-    helpers::{
-        jobserver_client::LazyJobserverClient, remote::create_reqwest_client,
-        tasks::AutoAbortJoinHandle,
-    },
+    helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
     manifests::{
         binstall_crates_v1::Records, cargo_crates_v1::CratesToml, cargo_toml_binstall::PkgOverride,
     },
@@ -17,7 +14,7 @@ use binstalk::{
 };
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
-use tokio::{task::block_in_place, time};
+use tokio::task::block_in_place;
 
 use crate::{args::Args, install_path, ui::UIThread};
 
@@ -35,11 +32,13 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     let desired_targets = get_desired_targets(args.targets.take());
 
     // Initialize reqwest client
-    let client = create_reqwest_client(args.min_tls_version.map(|v| v.into()))?;
+    let client = Client::new(args.min_tls_version.map(|v| v.into()), TASK_DELAY)?;
 
     // Build crates.io api client
-    let crates_io_api_client =
-        crates_io_api::AsyncClient::with_http_client(client.clone(), Duration::from_millis(100));
+    let crates_io_api_client = crates_io_api::AsyncClient::with_http_client(
+        client.get_inner().clone(),
+        Duration::from_millis(100),
+    );
 
     // Initialize UI thread
     let mut uithread = UIThread::new(!args.no_confirm);
@@ -141,9 +140,8 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         // Resolve crates
         let tasks: Vec<_> = crate_names
             .into_iter()
-            .enumerate()
-            .map(|(index, (crate_name, current_version))| {
-                let future = ops::resolve::resolve(
+            .map(|(crate_name, current_version)| {
+                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
                     binstall_opts.clone(),
                     crate_name,
                     current_version,
@@ -151,15 +149,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
                     install_path.clone(),
                     client.clone(),
                     crates_io_api_client.clone(),
-                );
-
-                let index: u32 = index.try_into().unwrap_or(u32::MAX);
-
-                AutoAbortJoinHandle::spawn(async move {
-                    time::sleep(TASK_DELAY * index).await;
-
-                    future.await
-                })
+                ))
             })
             .collect();
 
