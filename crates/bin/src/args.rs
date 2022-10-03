@@ -113,7 +113,7 @@ pub struct Args {
     pub rate_limit_duration: NonZeroU64,
 
     /// Override the number of requests allowed in the rate limit duration.
-    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(20).unwrap())]
+    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(1).unwrap())]
     pub rate_limit_request_count: NonZeroU64,
 
     /// Disable symlinking / versioned updates.
