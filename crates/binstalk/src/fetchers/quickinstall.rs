@@ -115,16 +115,7 @@ impl QuickInstall {
             let url = Url::parse(&stats_url)?;
             debug!("Sending installation report to quickinstall ({url})");
 
-            client
-                .request(Method::HEAD, url.clone())
-                .await
-                .send()
-                .await
-                .map_err(|err| BinstallError::Http {
-                    method: Method::HEAD,
-                    url,
-                    err,
-                })?;
+            client.remote_exists(url, Method::HEAD).await?;
 
             Ok(())
         })
