@@ -49,26 +49,16 @@ impl Client {
         &self.client
     }
 
-    /// Wait until rate limiting permits us to launch
-    /// the next request.
-    async fn wait(&self) {
-        self.interval.lock().await.tick().await;
-    }
-
-    async fn request(&self, method: Method, url: Url) -> RequestBuilder {
-        self.wait().await;
-
-        self.client.request(method, url)
-    }
-
     async fn send_request(
         &self,
         method: Method,
         url: Url,
         error_for_status: bool,
     ) -> Result<Response, BinstallError> {
-        self.request(method.clone(), url.clone())
-            .await
+        self.interval.lock().await.tick().await;
+
+        self.client
+            .request(method.clone(), url.clone())
             .send()
             .await
             .and_then(|response| {
