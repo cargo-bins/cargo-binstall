@@ -17,9 +17,12 @@ use binstalk::{
 };
 use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
-use tokio::task::block_in_place;
+use tokio::{task::block_in_place, time};
 
 use crate::{args::Args, install_path, ui::UIThread};
+
+/// The time to delay for tasks resolving crates.
+const TASK_DELAY: Duration = Duration::from_millis(200);
 
 pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
     let cli_overrides = PkgOverride {
@@ -138,8 +141,9 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         // Resolve crates
         let tasks: Vec<_> = crate_names
             .into_iter()
-            .map(|(crate_name, current_version)| {
-                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
+            .enumerate()
+            .map(|(index, (crate_name, current_version))| {
+                let future = ops::resolve::resolve(
                     binstall_opts.clone(),
                     crate_name,
                     current_version,
@@ -147,7 +151,15 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
                     install_path.clone(),
                     client.clone(),
                     crates_io_api_client.clone(),
-                ))
+                );
+
+                let index: u32 = index.try_into().unwrap_or(u32::MAX);
+
+                AutoAbortJoinHandle::spawn(async move {
+                    time::sleep(TASK_DELAY * index).await;
+
+                    future.await
+                })
             })
             .collect();
 
