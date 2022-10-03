@@ -108,9 +108,9 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long)]
     pub pkg_url: Option<String>,
 
-    /// Override the delay for each request, the unit is milliseconds.
+    /// Override the rate limit duration, the unit is milliseconds.
     #[clap(help_heading = "Overrides", long, default_value_t = 5)]
-    pub request_delay: u64,
+    pub rate_limit_duration: u64,
 
     /// Disable symlinking / versioned updates.
     ///
