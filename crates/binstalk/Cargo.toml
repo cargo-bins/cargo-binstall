@@ -47,7 +47,7 @@ thiserror = "1.0.37"
 tinytemplate = "1.2.1"
 tokio = { version = "1.21.2", features = ["macros", "rt", "process", "sync", "signal"], default-features = false }
 toml_edit = { version = "0.14.4", features = ["easy"] }
-tower = { version = "0.4.13", features = ["limit"] }
+tower = { version = "0.4.13", features = ["limit", "util"] }
 trust-dns-resolver = { version = "0.21.2", optional = true, default-features = false, features = ["dnssec-ring"] }
 url = { version = "2.3.1", features = ["serde"] }
 xz2 = "0.1.7"
