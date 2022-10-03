@@ -127,7 +127,7 @@ async fn install_from_source(
     cmd.arg("install")
         .arg(&package.name)
         .arg("--version")
-        .arg(&package.version())
+        .arg(package.version())
         .arg("--target")
         .arg(target);
 
