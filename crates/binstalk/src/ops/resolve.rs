@@ -156,8 +156,8 @@ async fn resolve_inner(
 
     if let Some(curr_version) = curr_version {
         let new_version =
-            Version::parse(&package.version).map_err(|err| BinstallError::VersionParse {
-                v: package.version.clone(),
+            Version::parse(package.version()).map_err(|err| BinstallError::VersionParse {
+                v: package.version().to_string(),
                 err,
             })?;
 
@@ -206,8 +206,8 @@ async fn resolve_inner(
                 Arc::new(Data {
                     name: package.name.clone(),
                     target: target.clone(),
-                    version: package.version.clone(),
-                    repo: package.repository.clone(),
+                    version: package.version().to_string(),
+                    repo: package.repository().map(ToString::to_string),
                     meta: target_meta,
                 })
             })
@@ -383,8 +383,8 @@ fn collect_bin_files(
     let bin_data = bins::Data {
         name: &package.name,
         target: fetcher.target(),
-        version: &package.version,
-        repo: package.repository.as_deref(),
+        version: package.version(),
+        repo: package.repository(),
         meta,
         bin_path,
         install_path,

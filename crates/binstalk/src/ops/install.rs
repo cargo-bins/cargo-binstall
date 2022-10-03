@@ -32,10 +32,10 @@ pub async fn install(
         } => {
             let current_version =
                 package
-                    .version
+                    .version()
                     .parse()
                     .map_err(|err| BinstallError::VersionParse {
-                        v: package.version,
+                        v: package.version().to_string(),
                         err,
                     })?;
             let target = fetcher.target().into();
@@ -65,7 +65,8 @@ pub async fn install(
             } else {
                 info!(
                     "Dry-run: running `cargo install {} --version {} --target {target}`",
-                    package.name, package.version
+                    package.name,
+                    package.version()
                 );
                 Ok(None)
             }
@@ -118,7 +119,7 @@ async fn install_from_source(
         "Running `{} install {} --version {} --target {target}`",
         cargo.to_string_lossy(),
         package.name,
-        package.version
+        package.version()
     );
 
     let mut cmd = Command::new(cargo);
@@ -126,7 +127,7 @@ async fn install_from_source(
     cmd.arg("install")
         .arg(&package.name)
         .arg("--version")
-        .arg(&package.version)
+        .arg(&package.version())
         .arg("--target")
         .arg(target);
 
