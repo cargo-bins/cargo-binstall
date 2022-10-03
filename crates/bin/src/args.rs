@@ -1,4 +1,4 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::{ffi::OsString, num::NonZeroU64, path::PathBuf};
 
 use binstalk::{
     errors::BinstallError,
@@ -111,6 +111,10 @@ pub struct Args {
     /// Override the rate limit duration, the unit is milliseconds.
     #[clap(help_heading = "Overrides", long, default_value_t = 5)]
     pub rate_limit_duration: u64,
+
+    /// Override the number of requests allowed in the rate limit duration.
+    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(20).unwrap())]
+    pub rate_limit_request_count: NonZeroU64,
 
     /// Disable symlinking / versioned updates.
     ///

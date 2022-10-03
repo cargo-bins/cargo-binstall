@@ -1,4 +1,4 @@
-use std::{env, sync::Arc, time::Duration};
+use std::{env, num::NonZeroU64, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use futures_util::stream::Stream;
@@ -20,7 +20,11 @@ pub struct Client {
 
 impl Client {
     /// * `delay` - delay between launching next reqwests.
-    pub fn new(min_tls: Option<tls::Version>, per: Duration) -> Result<Self, BinstallError> {
+    pub fn new(
+        min_tls: Option<tls::Version>,
+        per: Duration,
+        num_request: NonZeroU64,
+    ) -> Result<Self, BinstallError> {
         const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
         let mut builder = reqwest::ClientBuilder::new()
@@ -38,7 +42,9 @@ impl Client {
         Ok(Self {
             client: client.clone(),
             rate_limit: Arc::new(Mutex::new(
-                ServiceBuilder::new().rate_limit(20, per).service(client),
+                ServiceBuilder::new()
+                    .rate_limit(num_request.get(), per)
+                    .service(client),
             )),
         })
     }

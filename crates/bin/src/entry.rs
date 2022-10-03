@@ -32,6 +32,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     let client = Client::new(
         args.min_tls_version.map(|v| v.into()),
         Duration::from_millis(args.rate_limit_duration),
+        args.rate_limit_request_count,
     )?;
 
     // Build crates.io api client
