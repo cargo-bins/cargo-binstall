@@ -3,25 +3,23 @@ use std::{env, sync::Arc, time::Duration};
 use bytes::Bytes;
 use futures_util::stream::Stream;
 use log::debug;
-use tokio::{
-    sync::Mutex,
-    time::{interval, Interval, MissedTickBehavior},
-};
+use tokio::sync::Mutex;
+use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 
 use crate::errors::BinstallError;
 
-pub use reqwest::{tls, Method, RequestBuilder, Response};
+pub use reqwest::{tls, Method, Request, RequestBuilder, Response};
 pub use url::Url;
 
 #[derive(Clone, Debug)]
 pub struct Client {
     client: reqwest::Client,
-    interval: Arc<Mutex<Interval>>,
+    rate_limit: Arc<Mutex<RateLimit<reqwest::Client>>>,
 }
 
 impl Client {
     /// * `delay` - delay between launching next reqwests.
-    pub fn new(min_tls: Option<tls::Version>, delay: Duration) -> Result<Self, BinstallError> {
+    pub fn new(min_tls: Option<tls::Version>, per: Duration) -> Result<Self, BinstallError> {
         const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
         let mut builder = reqwest::ClientBuilder::new()
@@ -36,12 +34,11 @@ impl Client {
 
         let client = builder.build()?;
 
-        let mut interval = interval(delay);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
         Ok(Self {
-            client,
-            interval: Arc::new(Mutex::new(interval)),
+            client: client.clone(),
+            rate_limit: Arc::new(Mutex::new(
+                ServiceBuilder::new().rate_limit(20, per).service(client),
+            )),
         })
     }
 
@@ -55,11 +52,12 @@ impl Client {
         url: Url,
         error_for_status: bool,
     ) -> Result<Response, BinstallError> {
-        self.interval.lock().await.tick().await;
+        let mut rate_limit = self.rate_limit.lock().await;
 
-        self.client
-            .request(method.clone(), url.clone())
-            .send()
+        rate_limit
+            .ready()
+            .await?
+            .call(Request::new(method.clone(), url.clone()))
             .await
             .and_then(|response| {
                 if error_for_status {
