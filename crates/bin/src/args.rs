@@ -108,6 +108,10 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long)]
     pub pkg_url: Option<String>,
 
+    /// Override the delay for each request, the unit is milliseconds.
+    #[clap(help_heading = "Overrides", long, default_value_t = 100)]
+    pub request_delay: u64,
+
     /// Disable symlinking / versioned updates.
     ///
     /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and

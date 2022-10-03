@@ -18,9 +18,6 @@ use tokio::task::block_in_place;
 
 use crate::{args::Args, install_path, ui::UIThread};
 
-/// The time to delay for tasks resolving crates.
-const TASK_DELAY: Duration = Duration::from_millis(200);
-
 pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url.take(),
@@ -32,7 +29,10 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     let desired_targets = get_desired_targets(args.targets.take());
 
     // Initialize reqwest client
-    let client = Client::new(args.min_tls_version.map(|v| v.into()), TASK_DELAY)?;
+    let client = Client::new(
+        args.min_tls_version.map(|v| v.into()),
+        Duration::from_millis(args.request_delay),
+    )?;
 
     // Build crates.io api client
     let crates_io_api_client = crates_io_api::AsyncClient::with_http_client(
