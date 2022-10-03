@@ -3,12 +3,13 @@ use std::{env, sync::Arc, time::Duration};
 use bytes::Bytes;
 use futures_util::stream::Stream;
 use log::debug;
+use reqwest::{Request, Response};
 use tokio::sync::Mutex;
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 
 use crate::errors::BinstallError;
 
-pub use reqwest::{tls, Method, Request, RequestBuilder, Response};
+pub use reqwest::{tls, Method};
 pub use url::Url;
 
 #[derive(Clone, Debug)]
