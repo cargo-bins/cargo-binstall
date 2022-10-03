@@ -261,7 +261,6 @@ dependencies = [
  "log",
  "miette",
  "mimalloc",
- "reqwest",
  "semver",
  "simplelog",
  "tempfile",
