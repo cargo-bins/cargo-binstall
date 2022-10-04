@@ -1,6 +1,5 @@
 use std::{borrow::Cow, env, ffi::OsStr, sync::Arc};
 
-use cargo_toml::Package;
 use compact_str::CompactString;
 use log::{debug, error, info};
 use tokio::{process::Command, task::block_in_place};
@@ -10,10 +9,7 @@ use crate::{
     bins,
     errors::BinstallError,
     helpers::jobserver_client::LazyJobserverClient,
-    manifests::{
-        cargo_toml_binstall::Meta,
-        crate_info::{CrateInfo, CrateSource},
-    },
+    manifests::crate_info::{CrateInfo, CrateSource},
 };
 
 pub async fn install(
@@ -44,21 +40,26 @@ pub async fn install(
                 })
             })
         }
-        Resolution::InstallFromSource { package } => {
+        Resolution::InstallFromSource { name, version } => {
             let desired_targets = opts.desired_targets.get().await;
             let target = desired_targets
                 .first()
                 .ok_or(BinstallError::NoViableTargets)?;
 
             if !opts.dry_run {
-                install_from_source(&package, target, jobserver_client, opts.quiet, opts.force)
-                    .await
-                    .map(|_| None)
+                install_from_source(
+                    &name,
+                    &version,
+                    target,
+                    jobserver_client,
+                    opts.quiet,
+                    opts.force,
+                )
+                .await
+                .map(|_| None)
             } else {
                 info!(
-                    "Dry-run: running `cargo install {} --version {} --target {target}`",
-                    package.name,
-                    package.version()
+                    "Dry-run: running `cargo install {name} --version {version} --target {target}`",
                 );
                 Ok(None)
             }
@@ -95,7 +96,8 @@ async fn install_from_package(
 }
 
 async fn install_from_source(
-    package: &Package<Meta>,
+    name: &str,
+    version: &str,
     target: &str,
     lazy_jobserver_client: LazyJobserverClient,
     quiet: bool,
@@ -108,18 +110,16 @@ async fn install_from_source(
         .unwrap_or_else(|| Cow::Borrowed(OsStr::new("cargo")));
 
     debug!(
-        "Running `{} install {} --version {} --target {target}`",
+        "Running `{} install {name} --version {version} --target {target}`",
         cargo.to_string_lossy(),
-        package.name,
-        package.version()
     );
 
     let mut cmd = Command::new(cargo);
 
     cmd.arg("install")
-        .arg(&package.name)
+        .arg(name)
         .arg("--version")
-        .arg(package.version())
+        .arg(version)
         .arg("--target")
         .arg(target);
 

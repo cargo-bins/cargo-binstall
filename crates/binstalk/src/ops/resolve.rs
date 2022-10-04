@@ -40,7 +40,8 @@ pub enum Resolution {
         bin_files: Vec<bins::BinFile>,
     },
     InstallFromSource {
-        package: Package<Meta>,
+        name: CompactString,
+        version: CompactString,
     },
     AlreadyUpToDate,
 }
@@ -279,7 +280,10 @@ async fn resolve_inner(
         }
     }
 
-    Ok(Resolution::InstallFromSource { package })
+    Ok(Resolution::InstallFromSource {
+        name: crate_name.name,
+        version: package.version().to_compact_string(),
+    })
 }
 
 ///  * `fetcher` - `fetcher.find()` must return `Ok(true)`.
