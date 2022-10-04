@@ -157,7 +157,7 @@ async fn resolve_inner(
 
     let new_version =
         Version::parse(package.version()).map_err(|err| BinstallError::VersionParse {
-            v: package.version().to_string(),
+            v: package.version().to_compact_string(),
             err,
         })?;
 

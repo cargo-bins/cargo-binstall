@@ -153,7 +153,7 @@ pub enum BinstallError {
     #[error("version string '{v}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::parse))]
     VersionParse {
-        v: String,
+        v: CompactString,
         #[source]
         err: semver::Error,
     },
