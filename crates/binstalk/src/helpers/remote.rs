@@ -59,12 +59,16 @@ impl Client {
         url: Url,
         error_for_status: bool,
     ) -> Result<Response, BinstallError> {
-        let mut rate_limit = self.rate_limit.lock().await;
+        let request = Request::new(method.clone(), url.clone());
 
-        rate_limit
-            .ready()
-            .await?
-            .call(Request::new(method.clone(), url.clone()))
+        // Reduce critical section:
+        //  - Construct the request before locking
+        //  - Once the rate_limit is ready, call it and obtain
+        //    the future, then release the lock before
+        //    polling the future.
+        let future = self.rate_limit.lock().await.ready().await?.call(request);
+
+        future
             .await
             .and_then(|response| {
                 if error_for_status {
