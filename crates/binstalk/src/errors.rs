@@ -170,7 +170,7 @@ pub enum BinstallError {
     #[error("version requirement '{req}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::requirement))]
     VersionReq {
-        req: String,
+        req: CompactString,
         #[source]
         err: semver::Error,
     },
