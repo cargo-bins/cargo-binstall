@@ -34,7 +34,7 @@ pub use version_ext::VersionReqExt;
 pub enum Resolution {
     Fetch {
         fetcher: Arc<dyn Fetcher>,
-        package: Package<Meta>,
+        new_version: Version,
         name: CompactString,
         version_req: CompactString,
         bin_files: Vec<bins::BinFile>,
@@ -154,13 +154,13 @@ async fn resolve_inner(
         .package
         .ok_or_else(|| BinstallError::CargoTomlMissingPackage(crate_name.name.clone()))?;
 
-    if let Some(curr_version) = curr_version {
-        let new_version =
-            Version::parse(package.version()).map_err(|err| BinstallError::VersionParse {
-                v: package.version().to_string(),
-                err,
-            })?;
+    let new_version =
+        Version::parse(package.version()).map_err(|err| BinstallError::VersionParse {
+            v: package.version().to_string(),
+            err,
+        })?;
 
+    if let Some(curr_version) = curr_version {
         if new_version == curr_version {
             info!(
                 "{} v{curr_version} is already installed, use --force to override",
@@ -246,7 +246,7 @@ async fn resolve_inner(
                         if !bin_files.is_empty() {
                             return Ok(Resolution::Fetch {
                                 fetcher,
-                                package,
+                                new_version,
                                 name: crate_name.name,
                                 version_req: version_req.to_compact_string(),
                                 bin_files,

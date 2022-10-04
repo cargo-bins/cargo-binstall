@@ -25,26 +25,18 @@ pub async fn install(
         Resolution::AlreadyUpToDate => Ok(None),
         Resolution::Fetch {
             fetcher,
-            package,
+            new_version,
             name,
             version_req,
             bin_files,
         } => {
-            let current_version =
-                package
-                    .version()
-                    .parse()
-                    .map_err(|err| BinstallError::VersionParse {
-                        v: package.version().to_string(),
-                        err,
-                    })?;
             let target = fetcher.target().into();
 
             install_from_package(opts, bin_files).await.map(|option| {
                 option.map(|bins| CrateInfo {
                     name,
                     version_req,
-                    current_version,
+                    current_version: new_version,
                     source: CrateSource::cratesio_registry(),
                     target,
                     bins,
