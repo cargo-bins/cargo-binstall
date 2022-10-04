@@ -114,7 +114,7 @@ pub enum BinstallError {
         help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={crate_name}")
     )]
     CratesIoApi {
-        crate_name: String,
+        crate_name: CompactString,
         #[source]
         err: crates_io_api::Error,
     },
