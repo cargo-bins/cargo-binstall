@@ -194,7 +194,7 @@ pub enum BinstallError {
     #[error("no crate information available for '{crate_name}' version '{v}'")]
     #[diagnostic(severity(error), code(binstall::version::unavailable))]
     VersionUnavailable {
-        crate_name: String,
+        crate_name: CompactString,
         v: semver::Version,
     },
 
