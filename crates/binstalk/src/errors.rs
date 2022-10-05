@@ -114,7 +114,7 @@ pub enum BinstallError {
         help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={crate_name}")
     )]
     CratesIoApi {
-        crate_name: String,
+        crate_name: CompactString,
         #[source]
         err: crates_io_api::Error,
     },
@@ -153,7 +153,7 @@ pub enum BinstallError {
     #[error("version string '{v}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::parse))]
     VersionParse {
-        v: String,
+        v: CompactString,
         #[source]
         err: semver::Error,
     },
@@ -170,7 +170,7 @@ pub enum BinstallError {
     #[error("version requirement '{req}' is not semver")]
     #[diagnostic(severity(error), code(binstall::version::requirement))]
     VersionReq {
-        req: String,
+        req: CompactString,
         #[source]
         err: semver::Error,
     },
@@ -194,7 +194,7 @@ pub enum BinstallError {
     #[error("no crate information available for '{crate_name}' version '{v}'")]
     #[diagnostic(severity(error), code(binstall::version::unavailable))]
     VersionUnavailable {
-        crate_name: String,
+        crate_name: CompactString,
         v: semver::Version,
     },
 
