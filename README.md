@@ -15,7 +15,8 @@ You probably want to **[see this page as it was when the latest version was publ
 
 ## Installation
 
-To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)). We recommend using the pre-compiled ones because we optimize those more than a standard source build does.
+To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)), then extract it using `tar` or `unzip` and move it into `$HOME/.cargo/bin`.
+We recommend using the pre-compiled ones because we optimize those more than a standard source build does.
 
 | OS      | Arch    | URL                                                          |
 | ------- | ------- | ------------------------------------------------------------ |
