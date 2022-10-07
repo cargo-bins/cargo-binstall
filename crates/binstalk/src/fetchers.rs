@@ -4,10 +4,10 @@ use compact_str::CompactString;
 pub use gh_crate_meta::*;
 pub use log::debug;
 pub use quickinstall::*;
-use reqwest::Client;
 
 use crate::{
     errors::BinstallError,
+    helpers::remote::Client,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 

@@ -3,13 +3,14 @@ use std::path::PathBuf;
 use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
 use log::debug;
-use reqwest::Client;
 use semver::VersionReq;
-use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::download::Download,
+    helpers::{
+        download::Download,
+        remote::{Client, Url},
+    },
     manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
 };
 

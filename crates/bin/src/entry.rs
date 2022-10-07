@@ -3,10 +3,7 @@ use std::{fs, path::Path, sync::Arc, time::Duration};
 use binstalk::{
     errors::BinstallError,
     get_desired_targets,
-    helpers::{
-        jobserver_client::LazyJobserverClient, remote::create_reqwest_client,
-        tasks::AutoAbortJoinHandle,
-    },
+    helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
     manifests::{
         binstall_crates_v1::Records, cargo_crates_v1::CratesToml, cargo_toml_binstall::PkgOverride,
     },
@@ -31,12 +28,20 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     // Launch target detection
     let desired_targets = get_desired_targets(args.targets.take());
 
+    let rate_limit = args.rate_limit;
+
     // Initialize reqwest client
-    let client = create_reqwest_client(args.min_tls_version.map(|v| v.into()))?;
+    let client = Client::new(
+        args.min_tls_version.map(|v| v.into()),
+        Duration::from_millis(rate_limit.duration.get()),
+        rate_limit.request_count,
+    )?;
 
     // Build crates.io api client
-    let crates_io_api_client =
-        crates_io_api::AsyncClient::with_http_client(client.clone(), Duration::from_millis(100));
+    let crates_io_api_client = crates_io_api::AsyncClient::with_http_client(
+        client.get_inner().clone(),
+        Duration::from_millis(100),
+    );
 
     // Initialize UI thread
     let mut uithread = UIThread::new(!args.no_confirm);

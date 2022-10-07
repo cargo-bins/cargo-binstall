@@ -2,11 +2,10 @@ use std::{fmt::Debug, marker::PhantomData, path::Path};
 
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
 use log::debug;
-use reqwest::{Client, Url};
 
 use crate::{
     errors::BinstallError,
-    helpers::remote::create_request,
+    helpers::remote::{Client, Url},
     manifests::cargo_toml_binstall::{PkgFmt, PkgFmtDecomposed, TarBasedFmt},
 };
 
@@ -48,7 +47,7 @@ impl Download {
         fmt: TarBasedFmt,
         visitor: V,
     ) -> Result<V::Target, BinstallError> {
-        let stream = create_request(self.client, self.url).await?;
+        let stream = self.client.create_request(self.url).await?;
 
         debug!("Downloading and extracting then in-memory processing");
 
@@ -65,7 +64,7 @@ impl Download {
         fmt: PkgFmt,
         path: impl AsRef<Path>,
     ) -> Result<(), BinstallError> {
-        let stream = create_request(self.client, self.url).await?;
+        let stream = self.client.create_request(self.url).await?;
 
         let path = path.as_ref();
         debug!("Downloading and extracting to: '{}'", path.display());
