@@ -1,4 +1,10 @@
-use std::{ffi::OsString, num::NonZeroU64, path::PathBuf};
+use std::{
+    ffi::OsString,
+    fmt,
+    num::{NonZeroU64, ParseIntError},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use binstalk::{
     errors::BinstallError,
@@ -108,13 +114,20 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long)]
     pub pkg_url: Option<String>,
 
-    /// Override the rate limit duration, the unit is milliseconds.
-    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(5).unwrap())]
-    pub rate_limit_duration: NonZeroU64,
-
-    /// Override the number of requests allowed in the rate limit duration.
-    #[clap(help_heading = "Overrides", long, default_value_t = NonZeroU64::new(1).unwrap())]
-    pub rate_limit_request_count: NonZeroU64,
+    /// Override the rate limit duration.
+    ///
+    /// By default, cargo-binstall allows one request per 5 ms.
+    ///
+    /// Example:
+    ///
+    ///  - `6`: Set the duration to 6ms, allows one request per 6 ms.
+    ///
+    ///  - `6/2`: Set the duration to 6ms and request_count to 2,
+    ///    allows 2 requests per 6ms.
+    ///
+    /// Both duration and request count must not be 0.
+    #[clap(help_heading = "Overrides", long, default_value_t = RateLimit::default())]
+    pub rate_limit: RateLimit,
 
     /// Disable symlinking / versioned updates.
     ///
@@ -222,6 +235,45 @@ impl From<TLSVersion> for Version {
         match ver {
             TLSVersion::Tls1_2 => Version::TLS_1_2,
             TLSVersion::Tls1_3 => Version::TLS_1_3,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct RateLimit {
+    pub duration: NonZeroU64,
+    pub request_count: NonZeroU64,
+}
+
+impl fmt::Display for RateLimit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.duration, self.request_count)
+    }
+}
+
+impl FromStr for RateLimit {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(if let Some((first, second)) = s.split_once('/') {
+            Self {
+                duration: first.parse()?,
+                request_count: second.parse()?,
+            }
+        } else {
+            Self {
+                duration: s.parse()?,
+                ..Default::default()
+            }
+        })
+    }
+}
+
+impl Default for RateLimit {
+    fn default() -> Self {
+        Self {
+            duration: NonZeroU64::new(5).unwrap(),
+            request_count: NonZeroU64::new(1).unwrap(),
         }
     }
 }
