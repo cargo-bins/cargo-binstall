@@ -48,23 +48,23 @@ Package versions and targets may be specified using the `--version` and `--targe
 21:14:21 [INFO] Done in 6.212736s
 ```
 
-### Unsupported crates
+## Unsupported crates
 
-To install an unsupported crate, you may specify the Cargo.toml metadata entries for `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values [as documented below](#supporting-binary-installation).
+Nowadays, `cargo-binstall` is smart enough. All you need just passing the crate name.
+
+```shell
+cargo binstall --no-confirm --no-symlinks cargo-edit cargo-watch cargo-tarpaulin \
+    watchexec-cli cargo-outdated just fnm broot stylua
+```
+
+If your favorite package fails to install, you may specify the Cargo.toml metadata entries for `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values [as documented below](#supporting-binary-installation).
 
 For example:
+
 ```shell
 $ binstall \
   --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ archive-format }" \
   --pkg-fmt="txz" crate_name
-
-$ # fnm for x86_64-unknown-linux-gnu only
-$ cargo binstall fnm --pkg-url="https://github.com/Schniz/fnm/releases/download/v{ version }/fnm-linux.zip" \
-  --pkg-fmt zip --bin-dir "{ bin }" --install-path /opt
-
-$ # broot
-$ cargo binstall broot --pkg-url="https://github.com/Canop/broot/releases/download/v{ version }/broot_{ version }.zip" \
-  --pkg-fmt zip --bin-dir "{ target }/{ bin }" --install-path /opt
 ```
 
 ## FAQ
