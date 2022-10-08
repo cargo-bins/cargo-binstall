@@ -1,16 +1,27 @@
-use std::{env, num::NonZeroU64, sync::Arc, time::Duration};
+use std::{
+    env,
+    num::NonZeroU64,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use bytes::Bytes;
 use futures_util::stream::Stream;
-use log::debug;
-use reqwest::{Request, Response};
-use tokio::sync::Mutex;
+use httpdate::parse_http_date;
+use log::{debug, info};
+use reqwest::{
+    header::{HeaderMap, RETRY_AFTER},
+    Request, Response, StatusCode,
+};
+use tokio::{sync::Mutex, time::sleep};
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 
 use crate::errors::BinstallError;
 
 pub use reqwest::{tls, Method};
 pub use url::Url;
+
+const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 
 #[derive(Clone, Debug)]
 pub struct Client {
@@ -53,22 +64,47 @@ impl Client {
         &self.client
     }
 
+    async fn send_request_inner(
+        &self,
+        method: &Method,
+        url: &Url,
+    ) -> Result<Response, reqwest::Error> {
+        loop {
+            let request = Request::new(method.clone(), url.clone());
+
+            // Reduce critical section:
+            //  - Construct the request before locking
+            //  - Once the rate_limit is ready, call it and obtain
+            //    the future, then release the lock before
+            //    polling the future, which performs network I/O that could
+            //    take really long.
+            let future = self.rate_limit.lock().await.ready().await?.call(request);
+
+            let response = future.await?;
+
+            let status = response.status();
+
+            match (status, parse_header_retry_after(response.headers())) {
+                (
+                    // 503                            429
+                    StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS,
+                    Some(duration),
+                ) if duration <= MAX_RETRY_DURATION => {
+                    info!("Receiver status code {status}, will wait for {duration:#?} and retry");
+                    sleep(duration).await
+                }
+                _ => break Ok(response),
+            }
+        }
+    }
+
     async fn send_request(
         &self,
         method: Method,
         url: Url,
         error_for_status: bool,
     ) -> Result<Response, BinstallError> {
-        let request = Request::new(method.clone(), url.clone());
-
-        // Reduce critical section:
-        //  - Construct the request before locking
-        //  - Once the rate_limit is ready, call it and obtain
-        //    the future, then release the lock before
-        //    polling the future.
-        let future = self.rate_limit.lock().await.ready().await?.call(request);
-
-        future
+        self.send_request_inner(&method, &url)
             .await
             .and_then(|response| {
                 if error_for_status {
@@ -105,5 +141,32 @@ impl Client {
         self.send_request(Method::GET, url, true)
             .await
             .map(Response::bytes_stream)
+    }
+}
+
+fn parse_header_retry_after(headers: &HeaderMap) -> Option<Duration> {
+    let header = headers
+        .get_all(RETRY_AFTER)
+        .into_iter()
+        .last()?
+        .to_str()
+        .ok()?;
+
+    match header.parse::<u64>() {
+        Ok(dur) => Some(Duration::from_secs(dur)),
+        Err(_) => {
+            let system_time = parse_http_date(header).ok()?;
+
+            let retry_after_unix_timestamp =
+                system_time.duration_since(SystemTime::UNIX_EPOCH).ok()?;
+
+            let curr_time_unix_timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("SystemTime before UNIX EPOCH!");
+
+            // retry_after_unix_timestamp - curr_time_unix_timestamp
+            // If underflows, returns Duration::ZERO.
+            Some(retry_after_unix_timestamp.saturating_sub(curr_time_unix_timestamp))
+        }
     }
 }
