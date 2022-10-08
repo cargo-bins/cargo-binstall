@@ -77,7 +77,7 @@ impl UIThreadInner {
         self.confirm_rx
             .recv()
             .await
-            .unwrap_or(Err(BinstallError::UserAbort))
+            .unwrap_or_else(|| Err(BinstallError::UserAbort))
     }
 }
 
