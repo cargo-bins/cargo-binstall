@@ -124,6 +124,7 @@ dependencies = [
  "futures-util",
  "generic-array",
  "home",
+ "httpdate",
  "itertools",
  "jobslot",
  "log",
