@@ -12,7 +12,7 @@ if [ "$2" = "Windows" ]; then
     "./$1" --log-level debug --no-confirm $crates
 else
     export CARGO_HOME=/tmp/cargo-home-for-test
-    export PATH="/tmp/t/bin:$CARGO_HOME/bin:$PATH"
+    export PATH="$CARGO_HOME/bin:/tmp/t/bin:$PATH"
     
     mkdir -p "/tmp/t/bin"
     # Copy it to bin to test use of env var `CARGO`
@@ -21,6 +21,8 @@ else
     # Install binaries using cargo-binstall
     # shellcheck disable=SC2086
     cargo binstall --log-level debug --no-confirm $crates
+
+    rm -r /tmp/t
 fi
 
 # Test that the installed binaries can be run
