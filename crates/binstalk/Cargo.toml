@@ -23,6 +23,7 @@ fs-lock = { version = "0.1.0", path = "../fs-lock" }
 futures-util = { version = "0.3.23", default-features = false, features = ["std"] }
 generic-array = "0.14.6"
 home = "0.5.3"
+httpdate = "1.0.2"
 itertools = "0.10.5"
 jobslot = { version = "0.2.6", features = ["tokio"] }
 log = { version = "0.4.17", features = ["std"] }
@@ -45,7 +46,7 @@ tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.3.0"
 thiserror = "1.0.37"
 tinytemplate = "1.2.1"
-tokio = { version = "1.21.2", features = ["macros", "rt", "process", "sync", "signal"], default-features = false }
+tokio = { version = "1.21.2", features = ["macros", "rt", "process", "sync", "signal", "time"], default-features = false }
 toml_edit = { version = "0.14.4", features = ["easy"] }
 tower = { version = "0.4.13", features = ["limit", "util"] }
 trust-dns-resolver = { version = "0.21.2", optional = true, default-features = false, features = ["dnssec-ring"] }
