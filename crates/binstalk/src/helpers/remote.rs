@@ -22,6 +22,7 @@ pub use reqwest::{tls, Method};
 pub use url::Url;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
+const MAX_RETRY_COUNT: u8 = 3;
 
 #[derive(Clone, Debug)]
 pub struct Client {
@@ -69,6 +70,8 @@ impl Client {
         method: &Method,
         url: &Url,
     ) -> Result<Response, reqwest::Error> {
+        let mut count = 0;
+
         loop {
             let request = Request::new(method.clone(), url.clone());
 
@@ -89,12 +92,14 @@ impl Client {
                     // 503                            429
                     StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS,
                     Some(duration),
-                ) if duration <= MAX_RETRY_DURATION => {
+                ) if duration <= MAX_RETRY_DURATION && count < MAX_RETRY_COUNT => {
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
                     sleep(duration).await
                 }
                 _ => break Ok(response),
             }
+
+            count += 1;
         }
     }
 
