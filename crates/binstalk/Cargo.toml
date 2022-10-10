@@ -34,7 +34,7 @@ scopeguard = "1.1.0"
 semver = { version = "1.0.14", features = ["serde"] }
 serde = { version = "1.0.145", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
-serde_json = "1.0.83"
+serde_json = "1.0.86"
 strum = "0.24.1"
 strum_macros = "0.24.3"
 # Use a fork here since we need PAX support, but the upstream
