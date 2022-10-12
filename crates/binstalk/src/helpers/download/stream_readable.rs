@@ -92,17 +92,24 @@ where
     }
 }
 
+/// If `Ok(Some(bytes))` if returned, then `bytes.is_empty() == false`.
 async fn next_stream<S, E>(stream: &mut S) -> io::Result<Option<Bytes>>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin,
     BinstallError: From<E>,
 {
-    stream
-        .next()
-        .await
-        .transpose()
-        .map_err(BinstallError::from)
-        .map_err(io::Error::from)
+    loop {
+        let option = stream
+            .next()
+            .await
+            .transpose()
+            .map_err(BinstallError::from)?;
+
+        match option {
+            Some(bytes) if bytes.is_empty() => continue,
+            option => break Ok(option),
+        }
+    }
 }
 
 impl<S, E> BufRead for StreamReadable<S>
@@ -124,6 +131,7 @@ where
             })?;
 
             if let Some(new_bytes) = option {
+                // new_bytes are guaranteed to be non-empty.
                 *bytes = new_bytes;
             }
         }
