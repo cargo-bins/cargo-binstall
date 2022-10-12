@@ -1,7 +1,7 @@
 use std::{
     cmp::min,
     future::Future,
-    io::{self, BufRead, Read},
+    io::{self, BufRead, Read, Write},
     pin::Pin,
 };
 
@@ -30,6 +30,38 @@ impl<S> StreamReadable<S> {
             handle: Handle::current(),
             bytes: Bytes::new(),
             cancellation_future: Box::pin(wait_on_cancellation_signal()),
+        }
+    }
+}
+
+impl<S, E> StreamReadable<S>
+where
+    S: Stream<Item = Result<Bytes, E>> + Unpin,
+    BinstallError: From<E>,
+{
+    /// Copies from `self` to `writer`.
+    ///
+    /// Same as `io::copy` but does not allocate any internal buffer
+    /// since `self` is buffered.
+    pub(super) fn copy<W>(&mut self, mut writer: W) -> io::Result<()>
+    where
+        W: Write,
+    {
+        self.copy_inner(&mut writer)
+    }
+
+    fn copy_inner(&mut self, writer: &mut dyn Write) -> io::Result<()> {
+        loop {
+            let buf = self.fill_buf()?;
+            if buf.is_empty() {
+                // Eof
+                break Ok(());
+            }
+
+            writer.write_all(buf)?;
+
+            let n = buf.len();
+            self.consume(n);
         }
     }
 }
