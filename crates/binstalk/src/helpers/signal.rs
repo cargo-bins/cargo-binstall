@@ -29,7 +29,7 @@ pub async fn cancel_on_user_sig_term<T>(
     }
 }
 
-async fn wait_on_cancellation_signal() -> Result<(), BinstallError> {
+pub async fn wait_on_cancellation_signal() -> Result<(), BinstallError> {
     wait_on_cancellation_signal_inner()
         .await
         .map_err(BinstallError::Io)
