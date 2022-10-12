@@ -260,6 +260,9 @@ async fn resolve_inner(
                         }
                     }
                     Err(err) => {
+                        if let BinstallError::UserAbort = err {
+                            return Err(err);
+                        }
                         warn!(
                             "Error while downloading and extracting from fetcher {}: {}",
                             fetcher.source_name(),
