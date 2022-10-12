@@ -69,7 +69,11 @@ where
                 Some(Ok(new_bytes)) => *bytes = new_bytes,
                 Some(Err(e)) => {
                     let e: BinstallError = e.into();
-                    return Err(io::Error::new(io::ErrorKind::Other, e));
+
+                    return Err(match e {
+                        BinstallError::Io(io_error) => io_error,
+                        _ => io::Error::new(io::ErrorKind::Other, e),
+                    });
                 }
                 None => (),
             }
