@@ -24,12 +24,18 @@ pub async fn cancel_on_user_sig_term<T>(
     tokio::select! {
         res = handle => res,
         res = wait_on_cancellation_signal() => {
-            res.map_err(BinstallError::Io).and(Err(BinstallError::UserAbort))
+            res.and(Err(BinstallError::UserAbort))
         }
     }
 }
 
-async fn wait_on_cancellation_signal() -> Result<(), io::Error> {
+async fn wait_on_cancellation_signal() -> Result<(), BinstallError> {
+    wait_on_cancellation_signal_inner()
+        .await
+        .map_err(BinstallError::Io)
+}
+
+async fn wait_on_cancellation_signal_inner() -> Result<(), io::Error> {
     #[cfg(unix)]
     async fn inner() -> Result<(), io::Error> {
         unix::wait_on_cancellation_signal_unix().await
