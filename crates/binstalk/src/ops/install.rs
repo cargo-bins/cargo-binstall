@@ -121,7 +121,8 @@ async fn install_from_source(
         .arg("--version")
         .arg(version)
         .arg("--target")
-        .arg(target);
+        .arg(target)
+        .kill_on_drop(true);
 
     if quiet {
         cmd.arg("--quiet");
