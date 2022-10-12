@@ -22,7 +22,7 @@ flate2 = { version = "1.0.24", default-features = false }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
 futures-util = { version = "0.3.23", default-features = false, features = ["std"] }
 generic-array = "0.14.6"
-home = "0.5.3"
+home = "0.5.4"
 httpdate = "1.0.2"
 itertools = "0.10.5"
 jobslot = { version = "0.2.6", features = ["tokio"] }
