@@ -414,6 +414,9 @@ impl From<io::Error> for BinstallError {
 
 impl From<BinstallError> for io::Error {
     fn from(e: BinstallError) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, e)
+        match e {
+            BinstallError::Io(io_error) => io_error,
+            e => io::Error::new(io::ErrorKind::Other, e),
+        }
     }
 }
