@@ -1,4 +1,5 @@
 use std::{
+    io,
     path::PathBuf,
     process::{ExitCode, ExitStatus, Termination},
 };
@@ -99,7 +100,7 @@ pub enum BinstallError {
     /// - Exit: 74
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::io))]
-    Io(std::io::Error),
+    Io(io::Error),
 
     /// An error interacting with the crates.io API.
     ///
@@ -392,8 +393,8 @@ impl Termination for BinstallError {
     }
 }
 
-impl From<std::io::Error> for BinstallError {
-    fn from(err: std::io::Error) -> Self {
+impl From<io::Error> for BinstallError {
+    fn from(err: io::Error) -> Self {
         if err.get_ref().is_some() {
             let kind = err.kind();
 
@@ -404,9 +405,18 @@ impl From<std::io::Error> for BinstallError {
             inner
                 .downcast()
                 .map(|b| *b)
-                .unwrap_or_else(|err| BinstallError::Io(std::io::Error::new(kind, err)))
+                .unwrap_or_else(|err| BinstallError::Io(io::Error::new(kind, err)))
         } else {
             BinstallError::Io(err)
+        }
+    }
+}
+
+impl From<BinstallError> for io::Error {
+    fn from(e: BinstallError) -> io::Error {
+        match e {
+            BinstallError::Io(io_error) => io_error,
+            e => io::Error::new(io::ErrorKind::Other, e),
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::{
     fmt::Debug,
     fs,
-    io::{copy, Read, Seek},
+    io::{Read, Seek},
     path::Path,
 };
 
@@ -33,7 +33,7 @@ where
             fs::remove_file(path).ok();
         });
 
-        copy(&mut reader, &mut file)?;
+        reader.copy(&mut file)?;
 
         // Operation isn't aborted and all writes succeed,
         // disarm the remove_guard.
@@ -54,7 +54,7 @@ where
 
         let mut file = tempfile()?;
 
-        copy(&mut reader, &mut file)?;
+        reader.copy(&mut file)?;
 
         // rewind it so that we can pass it to unzip
         file.rewind()?;

@@ -1,7 +1,7 @@
 use std::io;
 
 use futures_util::future::pending;
-use tokio::signal;
+use tokio::{signal, sync::OnceCell};
 
 use super::tasks::AutoAbortJoinHandle;
 use crate::errors::BinstallError;
@@ -24,12 +24,25 @@ pub async fn cancel_on_user_sig_term<T>(
     tokio::select! {
         res = handle => res,
         res = wait_on_cancellation_signal() => {
-            res.map_err(BinstallError::Io).and(Err(BinstallError::UserAbort))
+            res
+        .map_err(BinstallError::Io)
+                .and(Err(BinstallError::UserAbort))
         }
     }
 }
 
-async fn wait_on_cancellation_signal() -> Result<(), io::Error> {
+/// If call to it returns `Ok(())`, then all calls to this function after
+/// that also returns `Ok(())`.
+pub async fn wait_on_cancellation_signal() -> Result<(), io::Error> {
+    static CANCELLED: OnceCell<()> = OnceCell::const_new();
+
+    CANCELLED
+        .get_or_try_init(wait_on_cancellation_signal_inner)
+        .await
+        .copied()
+}
+
+async fn wait_on_cancellation_signal_inner() -> Result<(), io::Error> {
     #[cfg(unix)]
     async fn inner() -> Result<(), io::Error> {
         unix::wait_on_cancellation_signal_unix().await
