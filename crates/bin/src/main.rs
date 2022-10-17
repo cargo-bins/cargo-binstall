@@ -22,14 +22,19 @@ fn main() -> MainExit {
         Err(err) => return MainExit::Error(err),
     };
 
-    ui::logging(&args);
+    if args.version {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        MainExit::Success(None)
+    } else {
+        ui::logging(&args);
 
-    let start = Instant::now();
+        let start = Instant::now();
 
-    let result = run_tokio_main(entry::install_crates(args, jobserver_client));
+        let result = run_tokio_main(entry::install_crates(args, jobserver_client));
 
-    let done = start.elapsed();
-    debug!("run time: {done:?}");
+        let done = start.elapsed();
+        debug!("run time: {done:?}");
 
-    MainExit::new(result, done)
+        MainExit::new(result, done)
+    }
 }
