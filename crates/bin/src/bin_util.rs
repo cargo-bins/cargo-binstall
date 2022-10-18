@@ -11,7 +11,7 @@ use miette::Result;
 use tokio::runtime::Runtime;
 
 pub enum MainExit {
-    Success(Duration),
+    Success(Option<Duration>),
     Error(BinstallError),
     Report(miette::Report),
 }
@@ -20,7 +20,9 @@ impl Termination for MainExit {
     fn report(self) -> ExitCode {
         match self {
             Self::Success(spent) => {
-                info!("Done in {spent:?}");
+                if let Some(spent) = spent {
+                    info!("Done in {spent:?}");
+                }
                 ExitCode::SUCCESS
             }
             Self::Error(err) => err.report(),
@@ -35,11 +37,12 @@ impl Termination for MainExit {
 impl MainExit {
     pub fn new(result: Result<Result<()>, BinstallError>, done: Duration) -> Self {
         result.map_or_else(MainExit::Error, |res| {
-            res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
-                err.downcast::<BinstallError>()
-                    .map(MainExit::Error)
-                    .unwrap_or_else(MainExit::Report)
-            })
+            res.map(|()| MainExit::Success(Some(done)))
+                .unwrap_or_else(|err| {
+                    err.downcast::<BinstallError>()
+                        .map(MainExit::Error)
+                        .unwrap_or_else(MainExit::Report)
+                })
         })
     }
 }
