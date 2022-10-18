@@ -13,7 +13,7 @@ license = "GPL-3.0"
 async-trait = "0.1.57"
 bytes = "1.2.1"
 bzip2 = "0.4.3"
-cargo_toml = "0.12.4"
+cargo_toml = "0.13.0"
 compact_str = { version = "0.6.0", features = ["serde"] }
 crates_io_api = { version = "0.8.1", default-features = false }
 detect-targets = { version = "0.1.2", path = "../detect-targets" }
