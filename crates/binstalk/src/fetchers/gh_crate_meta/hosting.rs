@@ -18,11 +18,16 @@ pub const FULL_FILENAMES: &[&str] = &[
     "{ name }-{ target }-{ version }{ archive-suffix }",
     "{ name }-{ version }-{ target }{ archive-suffix }",
     "{ name }-v{ version }-{ target }{ archive-suffix }",
+    "{ name }_{ target }_v{ version }{ archive-suffix }",
+    "{ name }_{ target }_{ version }{ archive-suffix }",
+    "{ name }_{ version }_{ target }{ archive-suffix }",
+    "{ name }_v{ version }_{ target }{ archive-suffix }",
 ];
 
 pub const NOVERSION_FILENAMES: &[&str] = &[
     "{ name }-{ target }{ archive-suffix }",
     "{ name }{ archive-suffix }",
+    "{ name }_{ target }{ archive-suffix }",
 ];
 
 impl RepositoryHost {
