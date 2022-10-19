@@ -10,7 +10,7 @@ edition = "2021"
 license = "GPL-3.0"
 
 [dependencies]
-async-trait = "0.1.57"
+async-trait = "0.1.58"
 bytes = "1.2.1"
 bzip2 = "0.4.3"
 cargo_toml = "0.13.0"
