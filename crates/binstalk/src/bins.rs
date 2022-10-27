@@ -121,9 +121,7 @@ impl BinFile {
         };
 
         // Destination at install dir + base-name{.extension}
-        let dest = data
-            .install_path
-            .join(&ctx.render("{ bin }{ binary-ext }")?);
+        let dest = data.install_path.join(ctx.render("{ bin }{ binary-ext }")?);
 
         let (dest, link) = if no_symlinks {
             (dest, None)
