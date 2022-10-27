@@ -36,14 +36,14 @@ jobs:
     - uses: actions/checkout@v3
     - name: Push lib release tag
       if: "! startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
-      uses: mathieudutour/github-tag-action@v6.0
+      uses: mathieudutour/github-tag-action@v6.1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ needs.info.outputs.version }}
         tag_prefix: ${{ needs.info.outputs.crate }}-
     - name: Push cli release tag
       if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
-      uses: mathieudutour/github-tag-action@v6.0
+      uses: mathieudutour/github-tag-action@v6.1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ needs.info.outputs.version }}
