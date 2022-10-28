@@ -132,7 +132,7 @@ async fn install_from_source(
         cmd.arg("--force");
     }
 
-    let command_string = format!("{:?}", cmd);
+    let command_string = format!("{cmd:?}");
 
     let mut child = jobserver_client.configure_and_run(&mut cmd, |cmd| cmd.spawn())?;
 
