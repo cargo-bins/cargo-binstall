@@ -18,10 +18,7 @@
 //! );
 //! ```
 
-use std::{
-    borrow::Cow,
-    path::{Component, Path, PathBuf},
-};
+use std::path::{Component, Path, PathBuf};
 
 /// Extension trait to add `normalize_path` to std's [`Path`].
 pub trait NormalizePath {
@@ -30,28 +27,19 @@ pub trait NormalizePath {
     /// All redundant separator and up-level references are collapsed.
     ///
     /// However, this does not resolve links.
-    fn normalize(&self) -> Cow<'_, Path>;
-}
+    fn normalize(&self) -> PathBuf;
 
-fn is_normalized(path: &Path) -> bool {
-    for component in path.components() {
-        match component {
-            Component::CurDir | Component::ParentDir => {
-                return false;
-            }
-            _ => continue,
-        }
-    }
-
-    true
+    /// Return `true` if the path is normalized.
+    ///
+    /// # Quirk
+    ///
+    /// If the path does not start with `./` but contains `./` in the middle,
+    /// then this function might returns `true`.
+    fn is_normalized(&self) -> bool;
 }
 
 impl NormalizePath for Path {
-    fn normalize(&self) -> Cow<'_, Path> {
-        if is_normalized(self) {
-            return Cow::Borrowed(self);
-        }
-
+    fn normalize(&self) -> PathBuf {
         let mut components = self.components().peekable();
         let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek() {
             let buf = PathBuf::from(c.as_os_str());
@@ -76,6 +64,20 @@ impl NormalizePath for Path {
                 }
             }
         }
-        Cow::Owned(ret)
+
+        ret
+    }
+
+    fn is_normalized(&self) -> bool {
+        for component in self.components() {
+            match component {
+                Component::CurDir | Component::ParentDir => {
+                    return false;
+                }
+                _ => continue,
+            }
+        }
+
+        true
     }
 }

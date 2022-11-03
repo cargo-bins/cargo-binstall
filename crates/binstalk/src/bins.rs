@@ -113,11 +113,11 @@ impl BinFile {
 
             if !is_valid_path(&path_normalized) {
                 return Err(BinstallError::InvalidSourceFilePath {
-                    path: path_normalized.into_owned(),
+                    path: path_normalized,
                 });
             }
 
-            data.bin_path.join(path_normalized.as_ref())
+            data.bin_path.join(&path_normalized)
         };
 
         // Destination at install dir + base-name{.extension}
