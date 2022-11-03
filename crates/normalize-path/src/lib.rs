@@ -31,24 +31,19 @@ pub trait NormalizePath {
     ///
     /// However, this does not resolve links.
     fn normalize(&self) -> Cow<'_, Path>;
-}
 
-fn is_normalized(path: &Path) -> bool {
-    for component in path.components() {
-        match component {
-            Component::CurDir | Component::ParentDir => {
-                return false;
-            }
-            _ => continue,
-        }
-    }
-
-    true
+    /// Return `true` if the path is normalized.
+    ///
+    /// # Quirk
+    ///
+    /// If the path does not start with `./` but contains `./` in the middle,
+    /// then this function might returns `true`.
+    fn is_normalized(&self) -> bool;
 }
 
 impl NormalizePath for Path {
     fn normalize(&self) -> Cow<'_, Path> {
-        if is_normalized(self) {
+        if self.is_normalized() {
             return Cow::Borrowed(self);
         }
 
@@ -77,5 +72,18 @@ impl NormalizePath for Path {
             }
         }
         Cow::Owned(ret)
+    }
+
+    fn is_normalized(&self) -> bool {
+        for component in self.components() {
+            match component {
+                Component::CurDir | Component::ParentDir => {
+                    return false;
+                }
+                _ => continue,
+            }
+        }
+
+        true
     }
 }
