@@ -18,4 +18,6 @@ pub struct Options {
     pub cli_overrides: PkgOverride,
     pub desired_targets: DesiredTargets,
     pub quiet: bool,
+    pub gh_crate_fetcher: bool,
+    pub quickinstall_fetcher: bool,
 }

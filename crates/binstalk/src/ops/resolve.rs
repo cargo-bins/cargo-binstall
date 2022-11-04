@@ -192,6 +192,14 @@ async fn resolve_inner(
 
     let overrides = mem::take(&mut meta.overrides);
 
+    type Fetchers = [Option<fn(&Client, &Arc<Data>) -> Arc<dyn Fetcher>>; 2];
+
+    let fetchers: Fetchers = [
+        opts.gh_crate_fetcher.then_some(GhCrateMeta::new),
+        opts.quickinstall_fetcher.then_some(QuickInstall::new),
+    ];
+    let fetchers = fetchers.into_iter().flatten();
+
     handles.extend(
         desired_targets
             .iter()
@@ -211,7 +219,7 @@ async fn resolve_inner(
                     meta: target_meta,
                 })
             })
-            .cartesian_product([GhCrateMeta::new, QuickInstall::new])
+            .cartesian_product(fetchers)
             .map(|(fetcher_data, f)| {
                 let fetcher = f(&client, &fetcher_data);
                 (

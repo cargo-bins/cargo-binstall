@@ -137,6 +137,8 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         cli_overrides,
         desired_targets,
         quiet: args.log_level == LevelFilter::Off,
+        gh_crate_fetcher: false,
+        quickinstall_fetcher: false,
     });
 
     let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
