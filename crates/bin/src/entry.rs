@@ -17,9 +17,42 @@ use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;
 
-use crate::{args::Args, install_path, ui::UIThread};
+use crate::{
+    args::{Args, Strategy},
+    install_path,
+    ui::UIThread,
+};
 
 pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
+    let strategies = args
+        .strategies
+        .take()
+        .map(|strategies| {
+            // Remove duplicate strategies
+
+            let mut v = vec![];
+
+            for strategy in strategies {
+                if !v.contains(&strategy) {
+                    v.push(strategy);
+                }
+            }
+
+            v
+        })
+        .unwrap_or_else(|| vec![Strategy::Release, Strategy::QuickInstall, Strategy::Compile]);
+
+    let disable_strategies = args.disable_strategies.take();
+
+    let strategies: Vec<Strategy> = if let Some(disable_strategies) = disable_strategies {
+        strategies
+            .into_iter()
+            .filter(|strategy| !disable_strategies.contains(strategy))
+            .collect()
+    } else {
+        strategies
+    };
+
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url.take(),
         pkg_fmt: args.pkg_fmt.take(),
