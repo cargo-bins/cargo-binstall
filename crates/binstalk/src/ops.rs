@@ -1,13 +1,20 @@
 //! Concrete Binstall operations.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use semver::VersionReq;
 
-use crate::{manifests::cargo_toml_binstall::PkgOverride, DesiredTargets};
+use crate::{
+    fetchers::{Data, Fetcher},
+    helpers::remote::Client,
+    manifests::cargo_toml_binstall::PkgOverride,
+    DesiredTargets,
+};
 
 pub mod install;
 pub mod resolve;
+
+pub type Resolver = fn(&Client, &Arc<Data>) -> Arc<dyn Fetcher>;
 
 pub struct Options {
     pub no_symlinks: bool,
@@ -18,6 +25,5 @@ pub struct Options {
     pub cli_overrides: PkgOverride,
     pub desired_targets: DesiredTargets,
     pub quiet: bool,
-    pub gh_crate_fetcher: bool,
-    pub quickinstall_fetcher: bool,
+    pub resolver: Vec<Resolver>,
 }

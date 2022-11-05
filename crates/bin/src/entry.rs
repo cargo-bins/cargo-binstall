@@ -2,6 +2,7 @@ use std::{fs, path::Path, sync::Arc, time::Duration};
 
 use binstalk::{
     errors::BinstallError,
+    fetchers::{Fetcher, GhCrateMeta, QuickInstall},
     get_desired_targets,
     helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
     manifests::{
@@ -137,8 +138,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         cli_overrides,
         desired_targets,
         quiet: args.log_level == LevelFilter::Off,
-        gh_crate_fetcher: false,
-        quickinstall_fetcher: false,
+        resolver: vec![GhCrateMeta::new, QuickInstall::new],
     });
 
     let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
