@@ -256,6 +256,7 @@ name = "cargo-binstall"
 version = "0.16.0"
 dependencies = [
  "binstalk",
+ "bitflags",
  "clap",
  "crates_io_api",
  "dirs",
