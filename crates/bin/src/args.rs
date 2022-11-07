@@ -130,7 +130,7 @@ pub struct Args {
     pub rate_limit: RateLimit,
 
     /// Specify the strategies to be used,
-    /// binstall would run the strategies specified in order.
+    /// binstall will run the strategies specified in order.
     ///
     /// Default value is "release,quick-install,compile".
     #[clap(help_heading = "Overrides", long)]
