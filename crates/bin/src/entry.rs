@@ -27,20 +27,20 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     let mut strategies = vec![];
 
     // Remove duplicate strategies
-
     for strategy in mem::take(&mut args.strategies) {
         if !strategies.contains(&strategy) {
             strategies.push(strategy);
         }
     }
 
+    // Default strategies if empty
     if strategies.is_empty() {
         strategies = vec![Strategy::Release, Strategy::QuickInstall, Strategy::Compile];
     }
 
-    let disable_strategies = args.disable_strategies.take();
+    let disable_strategies = mem::take(&mut args.disable_strategies);
 
-    let mut strategies: Vec<Strategy> = if let Some(disable_strategies) = disable_strategies {
+    let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
         strategies
             .into_iter()
             .filter(|strategy| !disable_strategies.contains(strategy))

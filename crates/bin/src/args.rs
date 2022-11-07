@@ -140,7 +140,7 @@ pub struct Args {
     /// If a strategy is specified in `--strategies` and `--disable-strategies`,
     /// then it will be removed.
     #[clap(help_heading = "Overrides", long)]
-    pub disable_strategies: Option<Vec<Strategy>>,
+    pub disable_strategies: Vec<Strategy>,
 
     /// Disable symlinking / versioned updates.
     ///
