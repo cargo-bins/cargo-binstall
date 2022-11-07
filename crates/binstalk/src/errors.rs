@@ -322,10 +322,10 @@ pub enum BinstallError {
 
     /// Fallback to `cargo-install` is disabled.
     ///
-    /// - Code: `binstall::strategies`
+    /// - Code: `binstall::no_fallback_to_cargo_install`
     /// - Exit: 94
     #[error("Fallback to cargo-install is disabled")]
-    #[diagnostic(severity(error), code(binstall::strategies))]
+    #[diagnostic(severity(error), code(binstall::no_fallback_to_cargo_install))]
     NoFallbackToCargoInstall,
 
     /// A wrapped error providing the context of which crate the error is about.
