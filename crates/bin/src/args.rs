@@ -132,7 +132,7 @@ pub struct Args {
     /// Specify the strategies to be used,
     /// binstall will run the strategies specified in order.
     ///
-    /// Default value is "release,quick-install,compile".
+    /// Default value is "crate-meta-data,quick-install,compile".
     #[clap(help_heading = "Overrides", long)]
     pub strategies: Vec<Strategy>,
 
