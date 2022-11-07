@@ -296,7 +296,7 @@ impl Default for RateLimit {
 pub enum Strategy {
     /// Attempt to download official pre-built artifacts using
     /// information provided in `Cargo.toml`.
-    Release,
+    CrateMetaData,
     /// Query third-party QuickInstall for the crates.
     QuickInstall,
     /// Build the crates from source using `cargo-build`.

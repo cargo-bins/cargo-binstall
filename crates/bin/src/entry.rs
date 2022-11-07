@@ -35,7 +35,11 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
 
     // Default strategies if empty
     if strategies.is_empty() {
-        strategies = vec![Strategy::Release, Strategy::QuickInstall, Strategy::Compile];
+        strategies = vec![
+            Strategy::CrateMetaData,
+            Strategy::QuickInstall,
+            Strategy::Compile,
+        ];
     }
 
     let disable_strategies = mem::take(&mut args.disable_strategies);
@@ -62,7 +66,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     let resolver: Vec<_> = strategies
         .into_iter()
         .map(|strategy| match strategy {
-            Strategy::Release => GhCrateMeta::new,
+            Strategy::CrateMetaData => GhCrateMeta::new,
             Strategy::QuickInstall => QuickInstall::new,
             Strategy::Compile => unreachable!(),
         })
