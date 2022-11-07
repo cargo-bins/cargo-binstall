@@ -11,6 +11,7 @@ license = "GPL-3.0"
 
 [dependencies]
 async-trait = "0.1.58"
+binstalk-manifests = { version = "0.1.0", path = "../binstalk-manifests" }
 bytes = "1.2.1"
 bzip2 = "0.4.3"
 cargo_toml = "0.13.0"
@@ -19,7 +20,6 @@ crates_io_api = { version = "0.8.1", default-features = false }
 detect-targets = { version = "0.1.2", path = "../detect-targets" }
 digest = "0.10.5"
 flate2 = { version = "1.0.24", default-features = false }
-fs-lock = { version = "0.1.0", path = "../fs-lock" }
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 generic-array = "0.14.6"
 home = "0.5.4"

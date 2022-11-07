@@ -2,6 +2,7 @@
 members = [
     "crates/bin",
     "crates/binstalk",
+    "crates/binstalk-manifests",
     "crates/detect-wasi",
     "crates/fs-lock",
     "crates/normalize-path",

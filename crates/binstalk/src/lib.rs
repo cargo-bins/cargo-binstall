@@ -4,7 +4,7 @@ pub mod errors;
 pub mod fetchers;
 pub mod fs;
 pub mod helpers;
-pub mod manifests;
+pub use binstalk_manifests as manifests;
 pub mod ops;
 
 pub use detect_targets::{get_desired_targets, DesiredTargets};

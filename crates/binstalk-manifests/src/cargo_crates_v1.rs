@@ -22,7 +22,7 @@ use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::fs::create_if_not_exist;
+use crate::helpers::create_if_not_exist;
 
 use super::crate_info::CrateInfo;
 
@@ -131,7 +131,7 @@ pub enum CratesTomlParseError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifests::crate_info::CrateSource;
+    use crate::crate_info::CrateSource;
 
     use detect_targets::TARGET;
     use semver::Version;

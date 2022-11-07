@@ -20,7 +20,7 @@ use miette::Diagnostic;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::fs::create_if_not_exist;
+use crate::helpers::create_if_not_exist;
 
 use super::crate_info::CrateInfo;
 
@@ -171,7 +171,7 @@ impl<'a> IntoIterator for &'a Records {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::manifests::crate_info::CrateSource;
+    use crate::crate_info::CrateSource;
 
     use compact_str::CompactString;
     use detect_targets::TARGET;

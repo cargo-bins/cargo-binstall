@@ -8,8 +8,8 @@ use thiserror::Error;
 use url::Url;
 
 use crate::{
-    helpers::statics::cratesio_url,
-    manifests::crate_info::{CrateInfo, CrateSource, SourceType},
+    crate_info::{CrateInfo, CrateSource, SourceType},
+    helpers::cratesio_url,
 };
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
