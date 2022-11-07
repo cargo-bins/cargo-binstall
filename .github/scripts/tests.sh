@@ -77,16 +77,13 @@ cargo binstall --help >/dev/null
 "./$1" binstall --no-confirm cargo-binstall@0.12.0 | grep -q 'cargo-binstall v0.12.0 is already installed'
 "./$1" binstall --no-confirm cargo-binstall@^0.12.0 | grep -q -v 'cargo-binstall v0.12.0 is already installed'
 
-# to force failure if falling back to source
-# FIXME: remove/replace once #136 lands
-export PATH="$test_resources/fake-cargo:$PATH"
-
 # Test default GitLab pkg-url templates
 "./$1" binstall \
     --force \
     --manifest-path "$test_resources/gitlab-test-Cargo.toml" \
     --log-level debug \
     --no-confirm \
+    --disable-strategies compile \
     cargo-binstall
 
 # Test default BitBucket pkg-url templates
@@ -95,6 +92,7 @@ export PATH="$test_resources/fake-cargo:$PATH"
     --manifest-path "$test_resources/bitbucket-test-Cargo.toml" \
     --log-level debug \
     --no-confirm \
+    --disable-strategies compile \
     cargo-binstall
 
 # Test default Github pkg-url templates,
@@ -104,4 +102,5 @@ export PATH="$test_resources/fake-cargo:$PATH"
     --manifest-path "$test_resources/github-test-Cargo2.toml" \
     --log-level debug \
     --no-confirm \
+    --disable-strategies compile \
     cargo-binstall
