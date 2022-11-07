@@ -312,6 +312,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     EmptySourceFilePath,
 
+    /// Invalid strategies configured.
+    ///
+    /// - Code: `binstall::strategies`
+    /// - Exit: 93
+    #[error("Invalid strategies configured: {0}")]
+    #[diagnostic(severity(error), code(binstall::strategies))]
+    InvalidStrategies(&'static &'static str),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
     CrateContext {
@@ -350,6 +358,7 @@ impl BinstallError {
             DuplicateSourceFilePath { .. } => 90,
             InvalidSourceFilePath { .. } => 91,
             EmptySourceFilePath => 92,
+            InvalidStrategies(..) => 93,
             CrateContext { error, .. } => error.exit_number(),
         };
 
