@@ -110,7 +110,6 @@ version = "0.4.1"
 dependencies = [
  "async-trait",
  "binstall-tar",
- "binstall-zip",
  "bytes",
  "bzip2",
  "cargo_toml",
@@ -148,6 +147,7 @@ dependencies = [
  "trust-dns-resolver",
  "url",
  "xz2",
+ "zip",
  "zstd",
 ]
 
@@ -160,20 +160,6 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
-]
-
-[[package]]
-name = "binstall-zip"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5eddcdebe8fe727d81b47734b3302ffa49a6fe50376fe6c52c609198c0709e5"
-dependencies = [
- "byteorder",
- "bzip2",
- "crc32fast",
- "crossbeam-utils",
- "flate2",
- "zstd",
 ]
 
 [[package]]
@@ -2560,6 +2546,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388c44dc09d76f1536602ead6d325eb532f5c122f17782bd57fb47baeeb767e2"
 dependencies = [
  "lzma-sys",
+]
+
+[[package]]
+name = "zip"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "537ce7411d25e54e8ae21a7ce0b15840e7bfcff15b51d697ec3266cc76bdf080"
+dependencies = [
+ "byteorder",
+ "bzip2",
+ "crc32fast",
+ "crossbeam-utils",
+ "flate2",
+ "zstd",
 ]
 
 [[package]]
