@@ -5,7 +5,7 @@ unset CARGO_INSTALL_ROOT
 
 ## Test --disable-strategies
 ## Must be run before `set -euxo pipefail` since this command will fail
-"./$1" binstall --no-confirm --disable-strategies quickinstall,compile cargo-update
+"./$1" binstall --no-confirm --disable-strategies quick-install,compile cargo-update
 exit_code="$?"
 
 if [ "$exit_code" != 94 ]; then
