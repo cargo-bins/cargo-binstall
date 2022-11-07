@@ -224,14 +224,14 @@ mod test {
             },
         ];
 
-        append_to_path(&path, metadata_vec.clone()).unwrap();
+        append_to_path(path, metadata_vec.clone()).unwrap();
 
         let mut iter = metadata_vec.into_iter();
         iter.next().unwrap();
 
         let mut metadata_set: BTreeSet<_> = iter.collect();
 
-        let mut records = Records::load_from_path(&path).unwrap();
+        let mut records = Records::load_from_path(path).unwrap();
         assert_records_eq!(&records, &metadata_set);
 
         records.remove("b");
@@ -239,7 +239,7 @@ mod test {
         records.overwrite().unwrap();
 
         metadata_set.remove("b");
-        let records = Records::load_from_path(&path).unwrap();
+        let records = Records::load_from_path(path).unwrap();
         assert_records_eq!(&records, &metadata_set);
         // Drop the exclusive file lock
         drop(records);
@@ -253,10 +253,10 @@ mod test {
             bins: vec!["1".into(), "2".into()],
             other: Default::default(),
         };
-        append_to_path(&path, [new_metadata.clone()]).unwrap();
+        append_to_path(path, [new_metadata.clone()]).unwrap();
         metadata_set.insert(new_metadata);
 
-        let records = Records::load_from_path(&path).unwrap();
+        let records = Records::load_from_path(path).unwrap();
         assert_records_eq!(&records, &metadata_set);
     }
 }
