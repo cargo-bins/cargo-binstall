@@ -320,6 +320,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::strategies))]
     InvalidStrategies(&'static &'static str),
 
+    /// Fallback to `cargo-install` is dissabled.
+    ///
+    /// - Code: `binstall::strategies`
+    /// - Exit: 94
+    #[error("Fallback to cargo-install is disabled")]
+    #[diagnostic(severity(error), code(binstall::strategies))]
+    NoFallbackToCargoInstall,
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error("for crate {crate_name}")]
     CrateContext {
@@ -359,6 +367,7 @@ impl BinstallError {
             InvalidSourceFilePath { .. } => 91,
             EmptySourceFilePath => 92,
             InvalidStrategies(..) => 93,
+            NoFallbackToCargoInstall => 94,
             CrateContext { error, .. } => error.exit_number(),
         };
 
