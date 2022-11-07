@@ -116,3 +116,11 @@ if [ "$exit_code" != 94 ]; then
     exit 1
 fi
 
+## Test --strategies
+"./$1" binstall --no-confirm --strategies crate-meta-data cargo-update
+exit_code="$?"
+
+if [ "$exit_code" != 94 ]; then
+    echo "Expected exit code 94, but actual exit code $exit_code"
+    exit 1
+fi
