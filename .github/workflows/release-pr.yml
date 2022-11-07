@@ -9,6 +9,7 @@ on:
         options:
           - bin
           - binstalk
+          - binstalk-manifests
           - detect-targets
           - detect-wasi
           - fs-lock
