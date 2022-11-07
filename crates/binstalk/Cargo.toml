@@ -34,10 +34,7 @@ reqwest = { version = "0.11.12", features = ["stream", "gzip", "brotli", "deflat
 scopeguard = "1.1.0"
 semver = { version = "1.0.14", features = ["serde"] }
 serde = { version = "1.0.147", features = ["derive"] }
-serde-tuple-vec-map = "1.0.1"
-serde_json = "1.0.87"
 strum = "0.24.1"
-strum_macros = "0.24.3"
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
 #
@@ -48,7 +45,6 @@ thiserror = "1.0.37"
 tinytemplate = "1.2.1"
 # parking_lot - for OnceCell::const_new
 tokio = { version = "1.21.2", features = ["macros", "rt", "process", "sync", "signal", "time", "parking_lot"], default-features = false }
-toml_edit = { version = "0.15.0", features = ["easy"] }
 tower = { version = "0.4.13", features = ["limit", "util"] }
 trust-dns-resolver = { version = "0.21.2", optional = true, default-features = false, features = ["dnssec-ring"] }
 url = { version = "2.3.1", features = ["serde"] }
