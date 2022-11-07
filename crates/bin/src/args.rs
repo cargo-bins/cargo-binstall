@@ -134,7 +134,7 @@ pub struct Args {
     ///
     /// Default value is "release,quick-install,compile".
     #[clap(help_heading = "Overrides", long)]
-    pub strategies: Option<Vec<Strategy>>,
+    pub strategies: Vec<Strategy>,
 
     /// Disable the strategies specified.
     /// If a strategy is specified in `--strategies` and `--disable-strategies`,

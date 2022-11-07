@@ -1,4 +1,4 @@
-use std::{fs, path::Path, sync::Arc, time::Duration};
+use std::{fs, mem, path::Path, sync::Arc, time::Duration};
 
 use binstalk::{
     errors::BinstallError,
@@ -24,23 +24,19 @@ use crate::{
 };
 
 pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
-    let strategies = args
-        .strategies
-        .take()
-        .map(|strategies| {
-            // Remove duplicate strategies
+    let mut strategies = vec![];
 
-            let mut v = vec![];
+    // Remove duplicate strategies
 
-            for strategy in strategies {
-                if !v.contains(&strategy) {
-                    v.push(strategy);
-                }
-            }
+    for strategy in mem::take(&mut args.strategies) {
+        if !strategies.contains(&strategy) {
+            strategies.push(strategy);
+        }
+    }
 
-            v
-        })
-        .unwrap_or_else(|| vec![Strategy::Release, Strategy::QuickInstall, Strategy::Compile]);
+    if strategies.is_empty() {
+        strategies = vec![Strategy::Release, Strategy::QuickInstall, Strategy::Compile];
+    }
 
     let disable_strategies = args.disable_strategies.take();
 
