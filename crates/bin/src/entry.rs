@@ -44,7 +44,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
 
     let disable_strategies = args.disable_strategies.take();
 
-    let strategies: Vec<Strategy> = if let Some(disable_strategies) = disable_strategies {
+    let mut strategies: Vec<Strategy> = if let Some(disable_strategies) = disable_strategies {
         strategies
             .into_iter()
             .filter(|strategy| !disable_strategies.contains(strategy))
@@ -52,6 +52,25 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     } else {
         strategies
     };
+
+    if strategies.is_empty() {
+        return Err(BinstallError::InvalidStrategies(&"No strategy is provided").into());
+    }
+
+    let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
+
+    if cargo_install_fallback {
+        strategies.pop().unwrap();
+    }
+
+    let resolver: Vec<_> = strategies
+        .into_iter()
+        .map(|strategy| match strategy {
+            Strategy::Release => GhCrateMeta::new,
+            Strategy::QuickInstall => QuickInstall::new,
+            Strategy::Compile => unreachable!(),
+        })
+        .collect();
 
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url.take(),
@@ -171,7 +190,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         cli_overrides,
         desired_targets,
         quiet: args.log_level == LevelFilter::Off,
-        resolver: vec![GhCrateMeta::new, QuickInstall::new],
+        resolver,
     });
 
     let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
@@ -242,7 +261,13 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
                     )
                     .await?;
 
-                    ops::install::install(resolution, opts, jobserver_client).await
+                    if !cargo_install_fallback
+                        && matches!(resolution, Resolution::InstallFromSource { .. })
+                    {
+                        Err(BinstallError::NoFallbackToCargoInstall)
+                    } else {
+                        ops::install::install(resolution, opts, jobserver_client).await
+                    }
                 })
             })
             .collect()
