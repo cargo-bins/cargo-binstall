@@ -133,13 +133,13 @@ pub struct Args {
     /// binstall will run the strategies specified in order.
     ///
     /// Default value is "crate-meta-data,quick-install,compile".
-    #[clap(help_heading = "Overrides", long)]
+    #[clap(help_heading = "Overrides", long, value_delimiter(','))]
     pub strategies: Vec<Strategy>,
 
     /// Disable the strategies specified.
     /// If a strategy is specified in `--strategies` and `--disable-strategies`,
     /// then it will be removed.
-    #[clap(help_heading = "Overrides", long)]
+    #[clap(help_heading = "Overrides", long, value_delimiter(','))]
     pub disable_strategies: Vec<Strategy>,
 
     /// Disable symlinking / versioned updates.
