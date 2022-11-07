@@ -1,8 +1,19 @@
 #!/bin/bash
 
-set -euxo pipefail
-
 unset CARGO_INSTALL_ROOT
+
+
+## Test --disable-strategies
+## Must be run before `set -euxo pipefail` since this command will fail
+"./$1" binstall --no-confirm --disable-strategies compile cargo-update
+exit_code="$?"
+
+if [ "$exit_code" != 94 ]; then
+    echo "Expected exit code 94, but actual exit code $exit_code"
+    exit 1
+fi
+
+set -euxo pipefail
 
 crates="b3sum cargo-release cargo-binstall cargo-watch miniserve sccache"
 
