@@ -13,13 +13,12 @@ use tar::Entries;
 use tempfile::tempfile;
 use tokio::task::block_in_place;
 
-use super::{extracter::*, stream_readable::StreamReadable};
-use crate::{errors::BinstallError, manifests::cargo_toml_binstall::TarBasedFmt};
+use super::{extracter::*, stream_readable::StreamReadable, DownloadError, TarBasedFmt};
 
-pub async fn extract_bin<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
+pub async fn extract_bin<S, E>(stream: S, path: &Path) -> Result<(), DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     let mut reader = StreamReadable::new(stream).await;
     block_in_place(move || {
@@ -43,10 +42,10 @@ where
     })
 }
 
-pub async fn extract_zip<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
+pub async fn extract_zip<S, E>(stream: S, path: &Path) -> Result<(), DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     let mut reader = StreamReadable::new(stream).await;
     block_in_place(move || {
@@ -67,10 +66,10 @@ pub async fn extract_tar_based_stream<S, E>(
     stream: S,
     path: &Path,
     fmt: TarBasedFmt,
-) -> Result<(), BinstallError>
+) -> Result<(), DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     let reader = StreamReadable::new(stream).await;
     block_in_place(move || {
@@ -89,19 +88,19 @@ where
 pub trait TarEntriesVisitor {
     type Target;
 
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
-    fn finish(self) -> Result<Self::Target, BinstallError>;
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), DownloadError>;
+    fn finish(self) -> Result<Self::Target, DownloadError>;
 }
 
 pub async fn extract_tar_based_stream_and_visit<S, V, E>(
     stream: S,
     fmt: TarBasedFmt,
     mut visitor: V,
-) -> Result<V::Target, BinstallError>
+) -> Result<V::Target, DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     V: TarEntriesVisitor + Debug + Send + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     let reader = StreamReadable::new(stream).await;
     block_in_place(move || {

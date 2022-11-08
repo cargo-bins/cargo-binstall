@@ -109,35 +109,52 @@ name = "binstalk"
 version = "0.4.1"
 dependencies = [
  "async-trait",
+ "binstalk-downloader",
  "binstalk-manifests",
- "binstall-tar",
- "bytes",
- "bzip2",
+ "binstalk-signal",
  "cargo_toml",
  "compact_str",
  "crates_io_api",
  "detect-targets",
- "digest",
  "env_logger",
- "flate2",
  "futures-util",
- "generic-array",
  "home",
- "httpdate",
  "itertools",
  "jobslot",
  "log",
  "miette",
  "normalize-path",
  "once_cell",
- "reqwest",
- "scopeguard",
  "semver",
  "serde",
  "strum",
  "tempfile",
  "thiserror",
  "tinytemplate",
+ "tokio",
+ "url",
+ "xz2",
+]
+
+[[package]]
+name = "binstalk-downloader"
+version = "0.1.0"
+dependencies = [
+ "binstalk-manifests",
+ "binstalk-signal",
+ "binstall-tar",
+ "bytes",
+ "bzip2",
+ "digest",
+ "flate2",
+ "futures-util",
+ "generic-array",
+ "httpdate",
+ "log",
+ "reqwest",
+ "scopeguard",
+ "tempfile",
+ "thiserror",
  "tokio",
  "tower",
  "trust-dns-resolver",
@@ -167,6 +184,14 @@ dependencies = [
  "thiserror",
  "toml_edit",
  "url",
+]
+
+[[package]]
+name = "binstalk-signal"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "tokio",
 ]
 
 [[package]]

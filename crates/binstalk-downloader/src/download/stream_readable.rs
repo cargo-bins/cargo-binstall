@@ -5,11 +5,12 @@ use std::{
     pin::Pin,
 };
 
+use binstalk_signal::wait_on_cancellation_signal;
 use bytes::{Buf, Bytes};
 use futures_util::stream::{Stream, StreamExt};
 use tokio::runtime::Handle;
 
-use crate::{errors::BinstallError, helpers::signal::wait_on_cancellation_signal};
+use super::DownloadError;
 
 /// This wraps an AsyncIterator as a `Read`able.
 /// It must be used in non-async context only,
@@ -37,7 +38,7 @@ impl<S> StreamReadable<S> {
 impl<S, E> StreamReadable<S>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     /// Copies from `self` to `writer`.
     ///
@@ -69,7 +70,7 @@ where
 impl<S, E> Read for StreamReadable<S>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
@@ -96,14 +97,14 @@ where
 async fn next_stream<S, E>(stream: &mut S) -> io::Result<Option<Bytes>>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     loop {
         let option = stream
             .next()
             .await
             .transpose()
-            .map_err(BinstallError::from)?;
+            .map_err(DownloadError::from)?;
 
         match option {
             Some(bytes) if bytes.is_empty() => continue,
@@ -115,7 +116,7 @@ where
 impl<S, E> BufRead for StreamReadable<S>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         let bytes = &mut self.bytes;
@@ -125,7 +126,7 @@ where
                 tokio::select! {
                     res = next_stream(&mut self.stream) => res,
                     res = self.cancellation_future.as_mut() => {
-                        Err(res.err().unwrap_or_else(|| io::Error::from(BinstallError::UserAbort)))
+                        Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))
                     },
                 }
             })?;

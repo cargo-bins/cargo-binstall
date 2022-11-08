@@ -53,7 +53,7 @@ pub async fn fetch_crate_cratesio(
 
     let manifest_dir_path: PathBuf = format!("{name}-{version_name}").into();
 
-    Download::new(client, Url::parse(&crate_url)?)
+    Ok(Download::new(client, Url::parse(&crate_url)?)
         .and_visit_tar(TarBasedFmt::Tgz, ManifestVisitor::new(manifest_dir_path))
-        .await
+        .await?)
 }

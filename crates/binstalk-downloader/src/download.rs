@@ -1,20 +1,68 @@
-use std::{fmt::Debug, marker::PhantomData, path::Path};
+use std::{fmt::Debug, io, marker::PhantomData, path::Path};
 
+use binstalk_manifests::cargo_toml_binstall::{PkgFmt, PkgFmtDecomposed, TarBasedFmt};
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
 use log::debug;
+use thiserror::Error as ThisError;
 
-use crate::{
-    errors::BinstallError,
-    helpers::remote::{Client, Url},
-    manifests::cargo_toml_binstall::{PkgFmt, PkgFmtDecomposed, TarBasedFmt},
-};
+pub use tar::Entries;
+pub use zip::result::ZipError;
 
+use crate::remote::{Client, Error as RemoteError, Url};
+
+mod async_extracter;
 pub use async_extracter::TarEntriesVisitor;
 use async_extracter::*;
 
-mod async_extracter;
 mod extracter;
 mod stream_readable;
+
+#[derive(Debug, ThisError)]
+pub enum DownloadError {
+    #[error(transparent)]
+    Unzip(#[from] ZipError),
+
+    #[error(transparent)]
+    Remote(#[from] RemoteError),
+
+    /// A generic I/O error.
+    ///
+    /// - Code: `binstall::io`
+    /// - Exit: 74
+    #[error(transparent)]
+    Io(io::Error),
+
+    #[error("installation cancelled by user")]
+    UserAbort,
+}
+
+impl From<io::Error> for DownloadError {
+    fn from(err: io::Error) -> Self {
+        if err.get_ref().is_some() {
+            let kind = err.kind();
+
+            let inner = err
+                .into_inner()
+                .expect("err.get_ref() returns Some, so err.into_inner() should also return Some");
+
+            inner
+                .downcast()
+                .map(|b| *b)
+                .unwrap_or_else(|err| DownloadError::Io(io::Error::new(kind, err)))
+        } else {
+            DownloadError::Io(err)
+        }
+    }
+}
+
+impl From<DownloadError> for io::Error {
+    fn from(e: DownloadError) -> io::Error {
+        match e {
+            DownloadError::Io(io_error) => io_error,
+            e => io::Error::new(io::ErrorKind::Other, e),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Download<D: Digest = NoDigest> {
@@ -46,7 +94,7 @@ impl Download {
         self,
         fmt: TarBasedFmt,
         visitor: V,
-    ) -> Result<V::Target, BinstallError> {
+    ) -> Result<V::Target, DownloadError> {
         let stream = self.client.create_request(self.url).await?;
 
         debug!("Downloading and extracting then in-memory processing");
@@ -63,7 +111,7 @@ impl Download {
         self,
         fmt: PkgFmt,
         path: impl AsRef<Path>,
-    ) -> Result<(), BinstallError> {
+    ) -> Result<(), DownloadError> {
         let stream = self.client.create_request(self.url).await?;
 
         let path = path.as_ref();
