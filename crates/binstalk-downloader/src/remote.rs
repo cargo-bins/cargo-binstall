@@ -49,6 +49,8 @@ pub struct Client {
 
 impl Client {
     /// * `per` - must not be 0.
+    /// * `num_request` - maximum number of requests to be processed for
+    ///   each `per` duration.
     pub fn new(
         min_tls: Option<tls::Version>,
         per: Duration,
@@ -78,6 +80,7 @@ impl Client {
         })
     }
 
+    /// Return inner reqwest client.
     pub fn get_inner(&self) -> &reqwest::Client {
         &self.client
     }
@@ -138,6 +141,7 @@ impl Client {
             .map_err(|err| Error::Http(HttpError { method, url, err }))
     }
 
+    /// Check if remote exists using `method`.
     pub async fn remote_exists(&self, url: Url, method: Method) -> Result<bool, Error> {
         Ok(self
             .send_request(method, url, false)
@@ -146,6 +150,7 @@ impl Client {
             .is_success())
     }
 
+    /// Attempt to get final redirected url.
     pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
         Ok(self
             .send_request(Method::HEAD, url, true)
@@ -154,7 +159,9 @@ impl Client {
             .clone())
     }
 
-    pub(crate) async fn create_request(
+    /// Create `GET` request to `url` and return a stream of the response data.
+    /// On status code other than 200, it will return an error.
+    pub async fn get_stream(
         &self,
         url: Url,
     ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {

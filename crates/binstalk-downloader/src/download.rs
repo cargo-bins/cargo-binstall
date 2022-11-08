@@ -82,20 +82,19 @@ impl Download {
         }
     }
 
-    /// Download a file from the provided URL and extract part of it to
-    /// the provided path.
-    ///
-    ///  * `filter` - If Some, then it will pass the path of the file to it
-    ///    and only extract ones which filter returns `true`.
+    /// Download a file from the provided URL and process them in memory.
     ///
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
+    ///
+    /// NOTE that this function internally calls
+    /// [`binstalk_signal::wait_on_cancellation_signal`] to be cancellable.
     pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
         self,
         fmt: TarBasedFmt,
         visitor: V,
     ) -> Result<V::Target, DownloadError> {
-        let stream = self.client.create_request(self.url).await?;
+        let stream = self.client.get_stream(self.url).await?;
 
         debug!("Downloading and extracting then in-memory processing");
 
@@ -107,12 +106,15 @@ impl Download {
     }
 
     /// Download a file from the provided URL and extract it to the provided path.
+    ///
+    /// NOTE that this function internally calls
+    /// [`binstalk_signal::wait_on_cancellation_signal`] to be cancellable.
     pub async fn and_extract(
         self,
         fmt: PkgFmt,
         path: impl AsRef<Path>,
     ) -> Result<(), DownloadError> {
-        let stream = self.client.create_request(self.url).await?;
+        let stream = self.client.get_stream(self.url).await?;
 
         let path = path.as_ref();
         debug!("Downloading and extracting to: '{}'", path.display());
