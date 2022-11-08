@@ -35,7 +35,7 @@ tempfile = "3.3.0"
 tokio = { version = "1.21.2", features = ["rt-multi-thread"], default-features = false }
 
 [build-dependencies]
-embed-resource = "1.7.3"
+embed-resource = "1.7.4"
 
 [features]
 default = ["static", "rustls", "trust-dns", "fancy-no-backtrace"]
