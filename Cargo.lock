@@ -109,6 +109,7 @@ name = "binstalk"
 version = "0.4.1"
 dependencies = [
  "async-trait",
+ "binstalk-manifests",
  "binstall-tar",
  "bytes",
  "bzip2",
@@ -119,7 +120,6 @@ dependencies = [
  "digest",
  "env_logger",
  "flate2",
- "fs-lock",
  "futures-util",
  "generic-array",
  "home",
@@ -134,21 +134,39 @@ dependencies = [
  "scopeguard",
  "semver",
  "serde",
- "serde-tuple-vec-map",
- "serde_json",
  "strum",
- "strum_macros",
  "tempfile",
  "thiserror",
  "tinytemplate",
  "tokio",
- "toml_edit",
  "tower",
  "trust-dns-resolver",
  "url",
  "xz2",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "binstalk-manifests"
+version = "0.1.0"
+dependencies = [
+ "compact_str",
+ "detect-targets",
+ "fs-lock",
+ "home",
+ "miette",
+ "once_cell",
+ "semver",
+ "serde",
+ "serde-tuple-vec-map",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "tempfile",
+ "thiserror",
+ "toml_edit",
+ "url",
 ]
 
 [[package]]
