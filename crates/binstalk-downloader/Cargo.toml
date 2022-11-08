@@ -28,7 +28,7 @@ scopeguard = "1.1.0"
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.3.0"
 thiserror = "1.0.37"
-tokio = { version = "1.21.2", features = ["rt-multi-thread", "sync", "time"], default-features = false }
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread", "sync", "time"], default-features = false }
 tower = { version = "0.4.13", features = ["limit", "util"] }
 trust-dns-resolver = { version = "0.21.2", optional = true, default-features = false, features = ["dnssec-ring"] }
 url = "2.3.1"
