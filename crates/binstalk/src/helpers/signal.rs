@@ -1,7 +1,9 @@
-use binstalk_signal::{ignore_signals, wait_on_cancellation_signal};
+use binstalk_signal::ignore_signals;
 
 use super::tasks::AutoAbortJoinHandle;
 use crate::errors::BinstallError;
+
+pub use binstalk_signal::wait_on_cancellation_signal;
 
 /// This function will poll the handle while listening for ctrl_c,
 /// `SIGINT`, `SIGHUP`, `SIGTERM` and `SIGQUIT`.

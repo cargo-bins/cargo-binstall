@@ -1,16 +1,13 @@
 use std::{
     cmp::min,
-    future::Future,
     io::{self, BufRead, Read, Write},
-    pin::Pin,
 };
 
-use binstalk_signal::wait_on_cancellation_signal;
 use bytes::{Buf, Bytes};
 use futures_util::stream::{Stream, StreamExt};
 use tokio::runtime::Handle;
 
-use super::DownloadError;
+use super::{CancellationFuture, DownloadError};
 
 /// This wraps an AsyncIterator as a `Read`able.
 /// It must be used in non-async context only,
@@ -21,16 +18,16 @@ pub struct StreamReadable<S> {
     stream: S,
     handle: Handle,
     bytes: Bytes,
-    cancellation_future: Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>,
+    cancellation_future: CancellationFuture,
 }
 
 impl<S> StreamReadable<S> {
-    pub(super) async fn new(stream: S) -> Self {
+    pub(super) async fn new(stream: S, cancellation_future: CancellationFuture) -> Self {
         Self {
             stream,
             handle: Handle::current(),
             bytes: Bytes::new(),
-            cancellation_future: Box::pin(wait_on_cancellation_signal()),
+            cancellation_future,
         }
     }
 }
@@ -123,11 +120,15 @@ where
 
         if !bytes.has_remaining() {
             let option = self.handle.block_on(async {
-                tokio::select! {
-                    res = next_stream(&mut self.stream) => res,
-                    res = self.cancellation_future.as_mut() => {
-                        Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))
-                    },
+                if let Some(cancellation_future) = self.cancellation_future.as_mut() {
+                    tokio::select! {
+                        res = next_stream(&mut self.stream) => res,
+                        res = cancellation_future => {
+                            Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))
+                        },
+                    }
+                } else {
+                    next_stream(&mut self.stream).await
                 }
             })?;
 

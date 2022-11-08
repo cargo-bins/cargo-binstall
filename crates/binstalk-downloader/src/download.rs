@@ -1,4 +1,4 @@
-use std::{fmt::Debug, io, marker::PhantomData, path::Path};
+use std::{fmt::Debug, future::Future, io, marker::PhantomData, path::Path, pin::Pin};
 
 use binstalk_manifests::cargo_toml_binstall::{PkgFmt, PkgFmtDecomposed, TarBasedFmt};
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
@@ -16,6 +16,8 @@ use async_extracter::*;
 
 mod extracter;
 mod stream_readable;
+
+pub type CancellationFuture = Option<Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>>;
 
 #[derive(Debug, ThisError)]
 pub enum DownloadError {
@@ -87,18 +89,20 @@ impl Download {
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
     ///
-    /// NOTE that this function internally calls
-    /// [`binstalk_signal::wait_on_cancellation_signal`] to be cancellable.
+    /// `cancellation_future` can be used to cancel the extraction and return
+    /// [`DownloadError::UserAbort`] error.
     pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
         self,
         fmt: TarBasedFmt,
         visitor: V,
+        cancellation_future: CancellationFuture,
     ) -> Result<V::Target, DownloadError> {
         let stream = self.client.get_stream(self.url).await?;
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
+        let ret =
+            extract_tar_based_stream_and_visit(stream, fmt, visitor, cancellation_future).await?;
 
         debug!("Download, extraction and in-memory procession OK");
 
@@ -107,12 +111,13 @@ impl Download {
 
     /// Download a file from the provided URL and extract it to the provided path.
     ///
-    /// NOTE that this function internally calls
-    /// [`binstalk_signal::wait_on_cancellation_signal`] to be cancellable.
+    /// `cancellation_future` can be used to cancel the extraction and return
+    /// [`DownloadError::UserAbort`] error.
     pub async fn and_extract(
         self,
         fmt: PkgFmt,
         path: impl AsRef<Path>,
+        cancellation_future: CancellationFuture,
     ) -> Result<(), DownloadError> {
         let stream = self.client.get_stream(self.url).await?;
 
@@ -120,9 +125,11 @@ impl Download {
         debug!("Downloading and extracting to: '{}'", path.display());
 
         match fmt.decompose() {
-            PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
-            PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
-            PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+            PkgFmtDecomposed::Tar(fmt) => {
+                extract_tar_based_stream(stream, path, fmt, cancellation_future).await?
+            }
+            PkgFmtDecomposed::Bin => extract_bin(stream, path, cancellation_future).await?,
+            PkgFmtDecomposed::Zip => extract_zip(stream, path, cancellation_future).await?,
         }
 
         debug!("Download OK, extracted to: '{}'", path.display());
