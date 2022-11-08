@@ -1,6 +1,5 @@
-use std::io;
+use std::{future::pending, io};
 
-use futures_util::future::pending;
 use tokio::{signal, sync::OnceCell};
 
 pub fn ignore_signals() -> io::Result<()> {

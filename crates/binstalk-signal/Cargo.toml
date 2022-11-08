@@ -10,6 +10,5 @@ edition = "2021"
 license = "GPL-3.0"
 
 [dependencies]
-futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 # parking_lot - for OnceCell::const_new
 tokio = { version = "1.21.2", features = ["macros", "sync", "signal", "parking_lot"], default-features = false }
