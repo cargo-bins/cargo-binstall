@@ -17,6 +17,10 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
+    directory: "/crates/binstalk-manifests"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
     directory: "/crates/binstalk"
     schedule:
       interval: "daily"
