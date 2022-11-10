@@ -101,7 +101,7 @@ struct Logger;
 impl Logger {
     fn init(log_level: LevelFilter) {
         log::set_max_level(log_level);
-        log::set_boxed_logger(Box::new(Self)).unwrap();
+        log::set_logger(&Self).unwrap();
     }
 }
 
