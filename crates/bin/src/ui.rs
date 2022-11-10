@@ -1,12 +1,16 @@
 use std::{
     cmp::min,
     io::{self, BufRead, Write},
+    iter::repeat,
     thread,
 };
 
 use log::{LevelFilter, STATIC_MAX_LEVEL};
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::sync::mpsc;
+use tracing::subscriber::set_global_default;
+use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
+use tracing_log::{log_tracer::LogTracer, AsTrace};
+use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
 
 use binstalk::errors::BinstallError;
 
@@ -103,23 +107,45 @@ impl UIThread {
     }
 }
 
-pub fn logging(args: &Args) {
+pub fn logging(args: &Args) -> WorkerGuard {
+    // Calculate log_level
     let log_level = min(args.log_level, STATIC_MAX_LEVEL);
 
-    // Setup logging
-    let mut log_config = ConfigBuilder::new();
+    let allowed_targets =
+        (log_level != LevelFilter::Trace).then_some(["binstalk", "cargo_binstall"]);
 
-    if log_level != LevelFilter::Trace {
-        log_config.add_filter_allow_str("binstalk");
-        log_config.add_filter_allow_str("cargo_binstall");
-    }
+    // Forward log to tracing
+    //
+    // P.S. We omit the log filtering here since LogTracer does not
+    // support `add_filter_allow_str`.
+    LogTracer::builder()
+        .with_max_level(log_level)
+        .init()
+        .unwrap();
 
-    log_config.set_location_level(LevelFilter::Off);
-    TermLogger::init(
-        log_level,
-        log_config.build(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )
-    .unwrap();
+    // Setup non-blocking stdout
+    let (non_blocking, guard) = NonBlockingBuilder::default()
+        .lossy(false)
+        .finish(io::stdout());
+
+    // Build fmt subscriber
+    let log_level = log_level.as_trace();
+    let subscriber = fmt()
+        .with_writer(non_blocking)
+        .with_max_level(log_level)
+        .compact()
+        .finish();
+
+    // Builder layer for filtering
+    let filter_layer = allowed_targets.map(|allowed_targets| {
+        Targets::new().with_targets(allowed_targets.into_iter().zip(repeat(log_level)))
+    });
+
+    // Builder final subscriber with filtering
+    let subscriber = subscriber.with(filter_layer);
+
+    // Setup global subscriber
+    set_global_default(subscriber).unwrap();
+
+    guard
 }

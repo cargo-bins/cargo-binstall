@@ -26,7 +26,7 @@ fn main() -> MainExit {
         println!("{}", env!("CARGO_PKG_VERSION"));
         MainExit::Success(None)
     } else {
-        ui::logging(&args);
+        let _guard = ui::logging(&args);
 
         let start = Instant::now();
 
