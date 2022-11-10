@@ -6,7 +6,6 @@ use std::{
 
 use binstalk::errors::BinstallError;
 use binstalk::helpers::{signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle};
-use log::{error, info};
 use miette::Result;
 use tokio::runtime::Runtime;
 
@@ -21,13 +20,13 @@ impl Termination for MainExit {
         match self {
             Self::Success(spent) => {
                 if let Some(spent) = spent {
-                    info!("Done in {spent:?}");
+                    println!("Done in {spent:?}");
                 }
                 ExitCode::SUCCESS
             }
             Self::Error(err) => err.report(),
             Self::Report(err) => {
-                error!("Fatal error:\n{err:?}");
+                eprintln!("Fatal error:\n{err:?}");
                 ExitCode::from(16)
             }
         }
