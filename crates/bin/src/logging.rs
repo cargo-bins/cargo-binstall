@@ -148,23 +148,24 @@ pub fn logging(args: &Args) -> WorkerGuard {
 
     // Build fmt subscriber
     let log_level = log_level.as_trace();
-    let subscriber_builder = fmt()
-        .with_writer(non_blocking)
-        .with_max_level(log_level)
-        .compact()
-        // Disable time, target, file, line_num, thread name/ids to make the
-        // output more readable
-        .without_time()
-        .with_target(false)
-        .with_file(false)
-        .with_line_number(false)
-        .with_thread_names(false)
-        .with_thread_ids(false);
+    let subscriber_builder = fmt().with_writer(non_blocking).with_max_level(log_level);
 
     let subscriber: Box<dyn Subscriber + Send + Sync> = if args.json_output {
         Box::new(subscriber_builder.json().finish())
     } else {
-        Box::new(subscriber_builder.finish())
+        Box::new(
+            subscriber_builder
+                .compact()
+                // Disable time, target, file, line_num, thread name/ids to make the
+                // output more readable
+                .without_time()
+                .with_target(false)
+                .with_file(false)
+                .with_line_number(false)
+                .with_thread_names(false)
+                .with_thread_ids(false)
+                .finish(),
+        )
     };
 
     // Builder layer for filtering
