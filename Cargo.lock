@@ -267,6 +267,7 @@ dependencies = [
  "log",
  "miette",
  "mimalloc",
+ "once_cell",
  "semver",
  "tempfile",
  "tokio",
