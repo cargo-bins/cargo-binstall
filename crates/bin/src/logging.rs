@@ -122,11 +122,6 @@ impl Log for Logger {
         // which makes the log really hard to read.
         if self.enabled(record.metadata()) {
             dispatcher::get_default(|dispatch| {
-                let filter_meta = record.as_trace();
-                if !dispatch.enabled(&filter_meta) {
-                    return;
-                }
-
                 let (_, keys, meta) = loglevel_to_cs(record.level());
 
                 dispatch.event(&Event::new(
