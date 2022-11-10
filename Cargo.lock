@@ -272,6 +272,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-appender",
+ "tracing-core",
  "tracing-log",
  "tracing-subscriber",
 ]
