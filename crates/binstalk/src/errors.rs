@@ -1,5 +1,5 @@
 use std::{
-    io,
+    io::{self, Write},
     path::PathBuf,
     process::{ExitCode, ExitStatus, Termination},
 };
@@ -382,9 +382,9 @@ impl Termination for BinstallError {
     fn report(self) -> ExitCode {
         let code = self.exit_code();
         if let BinstallError::UserAbort = self {
-            println!("Installation cancelled");
+            writeln!(io::stdout(), "Installation cancelled").ok();
         } else {
-            eprintln!("Fatal error:\n{:?}", Report::new(self));
+            writeln!(io::stderr(), "Fatal error:\n{:?}", Report::new(self)).ok();
         }
 
         code
