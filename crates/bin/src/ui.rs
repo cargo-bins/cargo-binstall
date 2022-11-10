@@ -5,7 +5,7 @@ use std::{
     thread,
 };
 
-use log::{LevelFilter, STATIC_MAX_LEVEL};
+use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
 use tokio::sync::mpsc;
 use tracing::subscriber::set_global_default;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
@@ -107,21 +107,80 @@ impl UIThread {
     }
 }
 
+struct Logger {
+    inner: LogTracer,
+    allowed_targets: Option<&'static [&'static str]>,
+}
+
+impl Logger {
+    fn init(log_level: LevelFilter, allowed_targets: Option<&'static [&'static str]>) {
+        log::set_max_level(log_level);
+        log::set_boxed_logger(Box::new(Self {
+            inner: Default::default(),
+            allowed_targets,
+        }))
+        .unwrap();
+    }
+}
+
+impl Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        if metadata.level() > log::max_level() {
+            // First, check the log record against the current max level enabled.
+            false
+        } else if let Some(allowed_targets) = self.allowed_targets {
+            // Keep only targets allowed
+
+            for allowed_target in allowed_targets {
+                // Use starts_with to emulate behavior of simplelog
+                if metadata.target().starts_with(allowed_target) {
+                    return true;
+                }
+            }
+
+            false
+        } else {
+            true
+        }
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        if self.enabled(record.metadata()) {
+            // Construct new record without line, module to make output easier
+            // to read.
+            //
+            // On LevelFilter::Trace, output all these information.
+
+            let new_record = (record.level() != LevelFilter::Trace).then(|| {
+                log::Record::builder()
+                    .args(*record.args())
+                    .level(record.level())
+                    .target(record.target())
+                    .build()
+            });
+
+            self.inner.log(new_record.as_ref().unwrap_or(record));
+            //self.inner.log(record);
+        }
+    }
+
+    fn flush(&self) {
+        self.inner.flush()
+    }
+}
+
 pub fn logging(args: &Args) -> WorkerGuard {
     // Calculate log_level
     let log_level = min(args.log_level, STATIC_MAX_LEVEL);
 
-    let allowed_targets =
-        (log_level != LevelFilter::Trace).then_some(["binstalk", "cargo_binstall"]);
+    let allowed_targets: Option<&[&str]> =
+        (log_level != LevelFilter::Trace).then_some(&["binstalk", "cargo_binstall"]);
 
     // Forward log to tracing
     //
     // P.S. We omit the log filtering here since LogTracer does not
     // support `add_filter_allow_str`.
-    LogTracer::builder()
-        .with_max_level(log_level)
-        .init()
-        .unwrap();
+    Logger::init(log_level, allowed_targets);
 
     // Setup non-blocking stdout
     let (non_blocking, guard) = NonBlockingBuilder::default()
@@ -146,7 +205,7 @@ pub fn logging(args: &Args) -> WorkerGuard {
 
     // Builder layer for filtering
     let filter_layer = allowed_targets.map(|allowed_targets| {
-        Targets::new().with_targets(allowed_targets.into_iter().zip(repeat(log_level)))
+        Targets::new().with_targets(allowed_targets.iter().copied().zip(repeat(log_level)))
     });
 
     // Builder final subscriber with filtering
