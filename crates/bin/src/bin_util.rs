@@ -1,5 +1,6 @@
 use std::{
     future::Future,
+    io::{self, Write},
     process::{ExitCode, Termination},
     time::Duration,
 };
@@ -20,13 +21,13 @@ impl Termination for MainExit {
         match self {
             Self::Success(spent) => {
                 if let Some(spent) = spent {
-                    println!("Done in {spent:?}");
+                    writeln!(io::stdout(), "Done in {spent:?}").ok();
                 }
                 ExitCode::SUCCESS
             }
             Self::Error(err) => err.report(),
             Self::Report(err) => {
-                eprintln!("Fatal error:\n{err:?}");
+                writeln!(io::stderr(), "Fatal error:\n{err:?}").ok();
                 ExitCode::from(16)
             }
         }
