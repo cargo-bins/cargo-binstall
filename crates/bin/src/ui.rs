@@ -134,6 +134,14 @@ pub fn logging(args: &Args) -> WorkerGuard {
         .with_writer(non_blocking)
         .with_max_level(log_level)
         .compact()
+        // Disable time, target, file, line_num, thread name/ids to make the
+        // output more readable
+        .without_time()
+        .with_target(false)
+        .with_file(false)
+        .with_line_number(false)
+        .with_thread_names(false)
+        .with_thread_ids(false)
         .finish();
 
     // Builder layer for filtering
