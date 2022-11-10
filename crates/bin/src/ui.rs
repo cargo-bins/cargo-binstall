@@ -16,7 +16,7 @@ use tracing::{
 };
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_core::{identify_callsite, metadata::Kind};
-use tracing_log::{log_tracer::LogTracer, AsTrace};
+use tracing_log::AsTrace;
 use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
 
 use binstalk::errors::BinstallError;
@@ -114,22 +114,6 @@ impl UIThread {
     }
 }
 
-struct Logger {
-    inner: LogTracer,
-    allowed_targets: Option<&'static [&'static str]>,
-}
-
-impl Logger {
-    fn init(log_level: LevelFilter, allowed_targets: Option<&'static [&'static str]>) {
-        log::set_max_level(log_level);
-        log::set_boxed_logger(Box::new(Self {
-            inner: Default::default(),
-            allowed_targets,
-        }))
-        .unwrap();
-    }
-}
-
 struct Fields {
     message: field::Field,
 }
@@ -209,24 +193,23 @@ fn loglevel_to_cs(
     }
 }
 
+struct Logger;
+
+impl Logger {
+    fn init(log_level: LevelFilter) {
+        log::set_max_level(log_level);
+        log::set_boxed_logger(Box::new(Self)).unwrap();
+    }
+}
+
 impl Log for Logger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         if metadata.level() > log::max_level() {
             // First, check the log record against the current max level enabled.
             false
-        } else if let Some(allowed_targets) = self.allowed_targets {
-            // Keep only targets allowed
-
-            for allowed_target in allowed_targets {
-                // Use starts_with to emulate behavior of simplelog
-                if metadata.target().starts_with(allowed_target) {
-                    return true;
-                }
-            }
-
-            false
         } else {
-            true
+            // Check if the current `tracing` dispatcher cares about this.
+            dispatcher::get_default(|dispatch| dispatch.enabled(&metadata.as_trace()))
         }
     }
 
@@ -250,9 +233,7 @@ impl Log for Logger {
         }
     }
 
-    fn flush(&self) {
-        self.inner.flush()
-    }
+    fn flush(&self) {}
 }
 
 pub fn logging(args: &Args) -> WorkerGuard {
@@ -263,10 +244,7 @@ pub fn logging(args: &Args) -> WorkerGuard {
         (log_level != LevelFilter::Trace).then_some(&["binstalk", "cargo_binstall"]);
 
     // Forward log to tracing
-    //
-    // P.S. We omit the log filtering here since LogTracer does not
-    // support `add_filter_allow_str`.
-    Logger::init(log_level, allowed_targets);
+    Logger::init(log_level);
 
     // Setup non-blocking stdout
     let (non_blocking, guard) = NonBlockingBuilder::default()
