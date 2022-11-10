@@ -15,6 +15,8 @@ use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberEx
 
 use crate::args::Args;
 
+// Shamelessly taken from tracing-log
+
 struct Fields {
     message: field::Field,
 }
@@ -115,6 +117,9 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &log::Record<'_>) {
+        // Dispatch manually instead of using methods provided by tracing-log
+        // to avoid having fields "log.target = ..." in the log message,
+        // which makes the log really hard to read.
         if self.enabled(record.metadata()) {
             dispatcher::get_default(|dispatch| {
                 let filter_meta = record.as_trace();
