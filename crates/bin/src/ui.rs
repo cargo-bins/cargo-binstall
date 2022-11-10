@@ -240,8 +240,8 @@ pub fn logging(args: &Args) -> WorkerGuard {
     // Calculate log_level
     let log_level = min(args.log_level, STATIC_MAX_LEVEL);
 
-    let allowed_targets: Option<&[&str]> =
-        (log_level != LevelFilter::Trace).then_some(&["binstalk", "cargo_binstall"]);
+    let allowed_targets =
+        (log_level != LevelFilter::Trace).then_some(["binstalk", "cargo_binstall"]);
 
     // Forward log to tracing
     Logger::init(log_level);
@@ -269,7 +269,7 @@ pub fn logging(args: &Args) -> WorkerGuard {
 
     // Builder layer for filtering
     let filter_layer = allowed_targets.map(|allowed_targets| {
-        Targets::new().with_targets(allowed_targets.iter().copied().zip(repeat(log_level)))
+        Targets::new().with_targets(allowed_targets.into_iter().zip(repeat(log_level)))
     });
 
     // Builder final subscriber with filtering
