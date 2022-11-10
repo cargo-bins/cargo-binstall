@@ -67,6 +67,12 @@ $ binstall \
   --pkg-fmt="txz" crate_name
 ```
 
+## Upgrade installed crates
+
+The most ergonomic way to upgrade the installed crates is with [`cargo-update`](https://github.com/nabijaczleweli/cargo-update). `cargo-update` automatically uses `cargo-binstall` to install the updates if `cargo-binstall` is present.
+
+Supported crates such as `cargo-binstall` itself can also be updated with `cargo-binstall` as in the example in [Installation](#installation) above.
+
 ## FAQ
 
 - Why use this?
