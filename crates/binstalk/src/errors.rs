@@ -5,7 +5,6 @@ use std::{
 };
 
 use compact_str::CompactString;
-use log::{error, warn};
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tokio::task;
@@ -383,10 +382,9 @@ impl Termination for BinstallError {
     fn report(self) -> ExitCode {
         let code = self.exit_code();
         if let BinstallError::UserAbort = self {
-            warn!("Installation cancelled");
+            println!("Installation cancelled");
         } else {
-            error!("Fatal error:");
-            eprintln!("{:?}", Report::new(self));
+            eprintln!("Fatal error:\n{:?}", Report::new(self));
         }
 
         code
