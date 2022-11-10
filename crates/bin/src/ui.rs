@@ -6,9 +6,16 @@ use std::{
 };
 
 use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
+use once_cell::sync::Lazy;
 use tokio::sync::mpsc;
-use tracing::subscriber::set_global_default;
+use tracing::{
+    callsite::Callsite,
+    dispatcher, field,
+    subscriber::{self, set_global_default},
+    Event, Level, Metadata,
+};
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
+use tracing_core::{identify_callsite, metadata::Kind};
 use tracing_log::{log_tracer::LogTracer, AsTrace};
 use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
 
@@ -123,6 +130,85 @@ impl Logger {
     }
 }
 
+struct Fields {
+    message: field::Field,
+}
+
+static FIELD_NAMES: &[&str] = &["message"];
+
+impl Fields {
+    fn new(cs: &'static dyn Callsite) -> Self {
+        let fieldset = cs.metadata().fields();
+        let message = fieldset.field("message").unwrap();
+        Fields { message }
+    }
+}
+
+macro_rules! log_cs {
+    ($level:expr, $cs:ident, $meta:ident, $fields:ident, $ty:ident) => {
+        struct $ty;
+        static $cs: $ty = $ty;
+        static $meta: Metadata<'static> = Metadata::new(
+            "log event",
+            "log",
+            $level,
+            None,
+            None,
+            None,
+            field::FieldSet::new(FIELD_NAMES, identify_callsite!(&$cs)),
+            Kind::EVENT,
+        );
+        static $fields: Lazy<Fields> = Lazy::new(|| Fields::new(&$cs));
+
+        impl Callsite for $ty {
+            fn set_interest(&self, _: subscriber::Interest) {}
+            fn metadata(&self) -> &'static Metadata<'static> {
+                &$meta
+            }
+        }
+    };
+}
+
+log_cs!(
+    Level::TRACE,
+    TRACE_CS,
+    TRACE_META,
+    TRACE_FIELDS,
+    TraceCallsite
+);
+log_cs!(
+    Level::DEBUG,
+    DEBUG_CS,
+    DEBUG_META,
+    DEBUG_FIELDS,
+    DebugCallsite
+);
+log_cs!(Level::INFO, INFO_CS, INFO_META, INFO_FIELDS, InfoCallsite);
+log_cs!(Level::WARN, WARN_CS, WARN_META, WARN_FIELDS, WarnCallsite);
+log_cs!(
+    Level::ERROR,
+    ERROR_CS,
+    ERROR_META,
+    ERROR_FIELDS,
+    ErrorCallsite
+);
+
+fn loglevel_to_cs(
+    level: log::Level,
+) -> (
+    &'static dyn Callsite,
+    &'static Fields,
+    &'static Metadata<'static>,
+) {
+    match level {
+        log::Level::Trace => (&TRACE_CS, &*TRACE_FIELDS, &TRACE_META),
+        log::Level::Debug => (&DEBUG_CS, &*DEBUG_FIELDS, &DEBUG_META),
+        log::Level::Info => (&INFO_CS, &*INFO_FIELDS, &INFO_META),
+        log::Level::Warn => (&WARN_CS, &*WARN_FIELDS, &WARN_META),
+        log::Level::Error => (&ERROR_CS, &*ERROR_FIELDS, &ERROR_META),
+    }
+}
+
 impl Log for Logger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         if metadata.level() > log::max_level() {
@@ -146,21 +232,21 @@ impl Log for Logger {
 
     fn log(&self, record: &log::Record<'_>) {
         if self.enabled(record.metadata()) {
-            // Construct new record without line, module to make output easier
-            // to read.
-            //
-            // On LevelFilter::Trace, output all these information.
+            dispatcher::get_default(|dispatch| {
+                let filter_meta = record.as_trace();
+                if !dispatch.enabled(&filter_meta) {
+                    return;
+                }
 
-            let new_record = (record.level() != LevelFilter::Trace).then(|| {
-                log::Record::builder()
-                    .args(*record.args())
-                    .level(record.level())
-                    .target(record.target())
-                    .build()
+                let (_, keys, meta) = loglevel_to_cs(record.level());
+
+                dispatch.event(&Event::new(
+                    meta,
+                    &meta
+                        .fields()
+                        .value_set(&[(&keys.message, Some(record.args() as &dyn field::Value))]),
+                ));
             });
-
-            self.inner.log(new_record.as_ref().unwrap_or(record));
-            //self.inner.log(record);
         }
     }
 
