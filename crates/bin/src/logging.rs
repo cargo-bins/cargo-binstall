@@ -80,19 +80,13 @@ log_cs!(
     ErrorCallsite
 );
 
-fn loglevel_to_cs(
-    level: log::Level,
-) -> (
-    &'static dyn Callsite,
-    &'static Fields,
-    &'static Metadata<'static>,
-) {
+fn loglevel_to_cs(level: log::Level) -> (&'static Fields, &'static Metadata<'static>) {
     match level {
-        log::Level::Trace => (&TRACE_CS, &*TRACE_FIELDS, &TRACE_META),
-        log::Level::Debug => (&DEBUG_CS, &*DEBUG_FIELDS, &DEBUG_META),
-        log::Level::Info => (&INFO_CS, &*INFO_FIELDS, &INFO_META),
-        log::Level::Warn => (&WARN_CS, &*WARN_FIELDS, &WARN_META),
-        log::Level::Error => (&ERROR_CS, &*ERROR_FIELDS, &ERROR_META),
+        log::Level::Trace => (&*TRACE_FIELDS, &TRACE_META),
+        log::Level::Debug => (&*DEBUG_FIELDS, &DEBUG_META),
+        log::Level::Info => (&*INFO_FIELDS, &INFO_META),
+        log::Level::Warn => (&*WARN_FIELDS, &WARN_META),
+        log::Level::Error => (&*ERROR_FIELDS, &ERROR_META),
     }
 }
 
@@ -122,7 +116,7 @@ impl Log for Logger {
         // which makes the log really hard to read.
         if self.enabled(record.metadata()) {
             dispatcher::get_default(|dispatch| {
-                let (_, keys, meta) = loglevel_to_cs(record.level());
+                let (keys, meta) = loglevel_to_cs(record.level());
 
                 dispatch.event(&Event::new(
                     meta,
