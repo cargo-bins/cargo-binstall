@@ -9,7 +9,7 @@ use tracing::{
     Event, Level, Metadata,
 };
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
-use tracing_core::{identify_callsite, metadata::Kind};
+use tracing_core::{identify_callsite, metadata::Kind, subscriber::Subscriber};
 use tracing_log::AsTrace;
 use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
 
@@ -154,7 +154,7 @@ pub fn logging(args: &Args) -> WorkerGuard {
 
     // Build fmt subscriber
     let log_level = log_level.as_trace();
-    let subscriber = fmt()
+    let subscriber_builder = fmt()
         .with_writer(non_blocking)
         .with_max_level(log_level)
         .compact()
@@ -165,8 +165,13 @@ pub fn logging(args: &Args) -> WorkerGuard {
         .with_file(false)
         .with_line_number(false)
         .with_thread_names(false)
-        .with_thread_ids(false)
-        .finish();
+        .with_thread_ids(false);
+
+    let subscriber: Box<dyn Subscriber + Send + Sync> = if args.json_output {
+        Box::new(subscriber_builder.json().finish())
+    } else {
+        Box::new(subscriber_builder.finish())
+    };
 
     // Builder layer for filtering
     let filter_layer = allowed_targets.map(|allowed_targets| {
