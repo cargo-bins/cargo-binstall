@@ -1,8 +1,8 @@
 use std::{borrow::Cow, env, ffi::OsStr, sync::Arc};
 
 use compact_str::CompactString;
-use log::{debug, error, info};
 use tokio::{process::Command, task::block_in_place};
+use tracing::{debug, error, info};
 
 use super::{resolve::Resolution, Options};
 use crate::{

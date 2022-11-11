@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
-use log::debug;
 use semver::VersionReq;
+use tracing::debug;
 
 use crate::{
     errors::BinstallError,

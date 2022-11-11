@@ -2,7 +2,6 @@ use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
 pub use gh_crate_meta::*;
-pub use log::debug;
 pub use quickinstall::*;
 
 use crate::{

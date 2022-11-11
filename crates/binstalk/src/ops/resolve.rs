@@ -9,9 +9,9 @@ use std::{
 use cargo_toml::{Manifest, Package, Product};
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
-use log::{debug, info, warn};
 use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
+use tracing::{debug, info, warn};
 
 use super::Options;
 use crate::{

@@ -6,10 +6,10 @@ use std::{
 
 use cargo_toml::Product;
 use compact_str::CompactString;
-use log::debug;
 use normalize_path::NormalizePath;
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
+use tracing::debug;
 
 use crate::{
     errors::BinstallError,
