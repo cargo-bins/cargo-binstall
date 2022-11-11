@@ -155,7 +155,7 @@ pub fn logging(args: &Args) -> WorkerGuard {
     } else {
         Box::new(
             subscriber_builder
-                .compact()
+                .with_ansi(true)
                 // Disable time, target, file, line_num, thread name/ids to make the
                 // output more readable
                 .without_time()
