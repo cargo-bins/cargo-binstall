@@ -8,6 +8,8 @@
 //!   [Binstall's `.crates-v1.json`][binstall_crates_v1]);
 //! - manifests that specify which packages _to_ install (currently none).
 
+mod helpers;
+
 pub mod binstall_crates_v1;
 pub mod cargo_crates_v1;
 pub mod cargo_toml_binstall;

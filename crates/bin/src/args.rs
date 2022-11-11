@@ -201,6 +201,10 @@ pub struct Args {
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub min_tls_version: Option<TLSVersion>,
 
+    /// Print logs in json format to be parsable.
+    #[clap(help_heading = "Options", long)]
+    pub json_output: bool,
+
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
     pub version: bool,
