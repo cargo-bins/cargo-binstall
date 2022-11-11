@@ -11,7 +11,6 @@ on:
           - binstalk
           - binstalk-manifests
           - binstalk-downloader
-          - binstalk-signal
           - detect-targets
           - detect-wasi
           - fs-lock

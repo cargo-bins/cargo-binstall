@@ -29,10 +29,6 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-signal"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
     directory: "/crates/detect-wasi"
     schedule:
       interval: "daily"
