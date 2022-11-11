@@ -129,6 +129,19 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long, default_value_t = RateLimit::default())]
     pub rate_limit: RateLimit,
 
+    /// Specify the strategies to be used,
+    /// binstall will run the strategies specified in order.
+    ///
+    /// Default value is "crate-meta-data,quick-install,compile".
+    #[clap(help_heading = "Overrides", long, value_delimiter(','))]
+    pub strategies: Vec<Strategy>,
+
+    /// Disable the strategies specified.
+    /// If a strategy is specified in `--strategies` and `--disable-strategies`,
+    /// then it will be removed.
+    #[clap(help_heading = "Overrides", long, value_delimiter(','))]
+    pub disable_strategies: Vec<Strategy>,
+
     /// Disable symlinking / versioned updates.
     ///
     /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and
@@ -280,6 +293,18 @@ impl Default for RateLimit {
             request_count: NonZeroU64::new(1).unwrap(),
         }
     }
+}
+
+/// Strategy for installing the package
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum)]
+pub enum Strategy {
+    /// Attempt to download official pre-built artifacts using
+    /// information provided in `Cargo.toml`.
+    CrateMetaData,
+    /// Query third-party QuickInstall for the crates.
+    QuickInstall,
+    /// Build the crates from source using `cargo-build`.
+    Compile,
 }
 
 pub fn parse() -> Result<Args, BinstallError> {

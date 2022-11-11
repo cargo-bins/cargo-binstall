@@ -1,7 +1,8 @@
-use std::{fs, path::Path, sync::Arc, time::Duration};
+use std::{fs, mem, path::Path, sync::Arc, time::Duration};
 
 use binstalk::{
     errors::BinstallError,
+    fetchers::{Fetcher, GhCrateMeta, QuickInstall},
     get_desired_targets,
     helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
     manifests::{
@@ -16,9 +17,61 @@ use log::{debug, error, info, warn, LevelFilter};
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;
 
-use crate::{args::Args, install_path, ui::UIThread};
+use crate::{
+    args::{Args, Strategy},
+    install_path,
+    ui::UIThread,
+};
 
 pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
+    let mut strategies = vec![];
+
+    // Remove duplicate strategies
+    for strategy in mem::take(&mut args.strategies) {
+        if !strategies.contains(&strategy) {
+            strategies.push(strategy);
+        }
+    }
+
+    // Default strategies if empty
+    if strategies.is_empty() {
+        strategies = vec![
+            Strategy::CrateMetaData,
+            Strategy::QuickInstall,
+            Strategy::Compile,
+        ];
+    }
+
+    let disable_strategies = mem::take(&mut args.disable_strategies);
+
+    let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
+        strategies
+            .into_iter()
+            .filter(|strategy| !disable_strategies.contains(strategy))
+            .collect()
+    } else {
+        strategies
+    };
+
+    if strategies.is_empty() {
+        return Err(BinstallError::InvalidStrategies(&"No strategy is provided").into());
+    }
+
+    let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
+
+    if cargo_install_fallback {
+        strategies.pop().unwrap();
+    }
+
+    let resolver: Vec<_> = strategies
+        .into_iter()
+        .map(|strategy| match strategy {
+            Strategy::CrateMetaData => GhCrateMeta::new,
+            Strategy::QuickInstall => QuickInstall::new,
+            Strategy::Compile => unreachable!(),
+        })
+        .collect();
+
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url.take(),
         pkg_fmt: args.pkg_fmt.take(),
@@ -138,6 +191,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         cli_overrides,
         desired_targets,
         quiet: args.log_level == LevelFilter::Off,
+        resolver,
     });
 
     let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
@@ -208,7 +262,13 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
                     )
                     .await?;
 
-                    ops::install::install(resolution, opts, jobserver_client).await
+                    if !cargo_install_fallback
+                        && matches!(resolution, Resolution::InstallFromSource { .. })
+                    {
+                        Err(BinstallError::NoFallbackToCargoInstall)
+                    } else {
+                        ops::install::install(resolution, opts, jobserver_client).await
+                    }
                 })
             })
             .collect()

@@ -18,7 +18,7 @@ use crate::{
     bins,
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
-    fetchers::{Data, Fetcher, GhCrateMeta, QuickInstall},
+    fetchers::{Data, Fetcher},
     helpers::{remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
@@ -211,7 +211,7 @@ async fn resolve_inner(
                     meta: target_meta,
                 })
             })
-            .cartesian_product([GhCrateMeta::new, QuickInstall::new])
+            .cartesian_product(&opts.resolver)
             .map(|(fetcher_data, f)| {
                 let fetcher = f(&client, &fetcher_data);
                 (
