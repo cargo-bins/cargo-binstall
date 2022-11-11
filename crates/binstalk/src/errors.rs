@@ -4,6 +4,10 @@ use std::{
     process::{ExitCode, ExitStatus, Termination},
 };
 
+use binstalk_downloader::{
+    download::{DownloadError, ZipError},
+    remote::{Error as RemoteError, HttpError, ReqwestError},
+};
 use compact_str::CompactString;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
@@ -47,7 +51,7 @@ pub enum BinstallError {
     /// - Exit: 66
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::unzip))]
-    Unzip(#[from] zip::result::ZipError),
+    Unzip(#[from] ZipError),
 
     /// A rendering error in a template.
     ///
@@ -65,7 +69,7 @@ pub enum BinstallError {
     /// - Exit: 68
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::reqwest))]
-    Reqwest(#[from] reqwest::Error),
+    Reqwest(#[from] ReqwestError),
 
     /// An HTTP request failed.
     ///
@@ -74,14 +78,9 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::http`
     /// - Exit: 69
-    #[error("could not {method} {url}")]
+    #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::http))]
-    Http {
-        method: reqwest::Method,
-        url: url::Url,
-        #[source]
-        err: reqwest::Error,
-    },
+    Http(#[from] HttpError),
 
     /// A subprocess failed.
     ///
@@ -415,6 +414,30 @@ impl From<BinstallError> for io::Error {
         match e {
             BinstallError::Io(io_error) => io_error,
             e => io::Error::new(io::ErrorKind::Other, e),
+        }
+    }
+}
+
+impl From<RemoteError> for BinstallError {
+    fn from(e: RemoteError) -> Self {
+        use RemoteError::*;
+
+        match e {
+            Reqwest(reqwest_error) => reqwest_error.into(),
+            Http(http_error) => http_error.into(),
+        }
+    }
+}
+
+impl From<DownloadError> for BinstallError {
+    fn from(e: DownloadError) -> Self {
+        use DownloadError::*;
+
+        match e {
+            Unzip(zip_error) => zip_error.into(),
+            Remote(remote_error) => remote_error.into(),
+            Io(io_error) => io_error.into(),
+            UserAbort => BinstallError::UserAbort,
         }
     }
 }

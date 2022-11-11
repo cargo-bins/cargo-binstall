@@ -13,15 +13,20 @@ use tar::Entries;
 use tempfile::tempfile;
 use tokio::task::block_in_place;
 
-use super::{extracter::*, stream_readable::StreamReadable};
-use crate::{errors::BinstallError, manifests::cargo_toml_binstall::TarBasedFmt};
+use super::{
+    extracter::*, stream_readable::StreamReadable, CancellationFuture, DownloadError, TarBasedFmt,
+};
 
-pub async fn extract_bin<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
+pub async fn extract_bin<S, E>(
+    stream: S,
+    path: &Path,
+    cancellation_future: CancellationFuture,
+) -> Result<(), DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
-    let mut reader = StreamReadable::new(stream).await;
+    let mut reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
@@ -43,12 +48,16 @@ where
     })
 }
 
-pub async fn extract_zip<S, E>(stream: S, path: &Path) -> Result<(), BinstallError>
+pub async fn extract_zip<S, E>(
+    stream: S,
+    path: &Path,
+    cancellation_future: CancellationFuture,
+) -> Result<(), DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
-    let mut reader = StreamReadable::new(stream).await;
+    let mut reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
@@ -67,12 +76,13 @@ pub async fn extract_tar_based_stream<S, E>(
     stream: S,
     path: &Path,
     fmt: TarBasedFmt,
-) -> Result<(), BinstallError>
+    cancellation_future: CancellationFuture,
+) -> Result<(), DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
-    let reader = StreamReadable::new(stream).await;
+    let reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
         fs::create_dir_all(path.parent().unwrap())?;
 
@@ -89,21 +99,22 @@ where
 pub trait TarEntriesVisitor {
     type Target;
 
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError>;
-    fn finish(self) -> Result<Self::Target, BinstallError>;
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), DownloadError>;
+    fn finish(self) -> Result<Self::Target, DownloadError>;
 }
 
 pub async fn extract_tar_based_stream_and_visit<S, V, E>(
     stream: S,
     fmt: TarBasedFmt,
     mut visitor: V,
-) -> Result<V::Target, BinstallError>
+    cancellation_future: CancellationFuture,
+) -> Result<V::Target, DownloadError>
 where
     S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
     V: TarEntriesVisitor + Debug + Send + 'static,
-    BinstallError: From<E>,
+    DownloadError: From<E>,
 {
-    let reader = StreamReadable::new(stream).await;
+    let reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
         debug!("Extracting from {fmt} archive to process it in memory");
 

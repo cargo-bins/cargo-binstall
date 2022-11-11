@@ -1,0 +1,70 @@
+[package]
+name = "binstalk-downloader"
+description = "The binstall toolkit for downloading and extracting file"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/binstalk-downloader"
+version = "0.1.0"
+rust-version = "1.61.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2021"
+license = "GPL-3.0"
+
+[dependencies]
+binstalk-manifests = { version = "0.1.0", path = "../binstalk-manifests" }
+bytes = "1.2.1"
+bzip2 = "0.4.3"
+digest = "0.10.5"
+flate2 = { version = "1.0.24", default-features = false }
+futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
+generic-array = "0.14.6"
+httpdate = "1.0.2"
+log = { version = "0.4.17", features = ["std"] }
+reqwest = { version = "0.11.12", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
+scopeguard = "1.1.0"
+# Use a fork here since we need PAX support, but the upstream
+# does not hav the PR merged yet.
+#
+#tar = "0.4.38"
+tar = { package = "binstall-tar", version = "0.4.39" }
+tempfile = "3.3.0"
+thiserror = "1.0.37"
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread", "sync", "time"], default-features = false }
+tower = { version = "0.4.13", features = ["limit", "util"] }
+trust-dns-resolver = { version = "0.21.2", optional = true, default-features = false, features = ["dnssec-ring"] }
+url = "2.3.1"
+
+xz2 = "0.1.7"
+
+# Disable all features of zip except for features of compression algorithms:
+# Disabled features include:
+#  - aes-crypto: Enables decryption of files which were encrypted with AES, absolutely zero use for
+#    this crate.
+#  - time: Enables features using the [time](https://github.com/time-rs/time) crate,
+#    which is not used by this crate.
+zip = { version = "0.6.3", default-features = false, features = ["deflate", "bzip2", "zstd"] }
+
+# zstd is also depended by zip.
+# Since zip 0.6.3 depends on zstd 0.11, we also have to use 0.11 here,
+# otherwise there will be a link conflict.
+zstd = { version = "0.11.2", default-features = false }
+
+[features]
+default = ["static", "rustls"]
+
+static = ["bzip2/static", "xz2/static"]
+pkg-config = ["zstd/pkg-config"]
+
+zlib-ng = ["flate2/zlib-ng"]
+
+rustls = [
+    "reqwest/rustls-tls",
+
+    # Enable the following features only if trust-dns-resolver is enabled.
+    "trust-dns-resolver?/dns-over-rustls",
+    # trust-dns-resolver currently supports https with rustls
+    "trust-dns-resolver?/dns-over-https-rustls",
+]
+native-tls = ["reqwest/native-tls", "trust-dns-resolver?/dns-over-native-tls"]
+
+# Enable trust-dns-resolver so that features on it will also be enabled.
+trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]

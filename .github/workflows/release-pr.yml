@@ -10,6 +10,7 @@ on:
           - bin
           - binstalk
           - binstalk-manifests
+          - binstalk-downloader
           - detect-targets
           - detect-wasi
           - fs-lock

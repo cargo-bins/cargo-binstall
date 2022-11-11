@@ -14,6 +14,7 @@ use crate::{
     helpers::{
         download::Download,
         remote::{Client, Method},
+        signal::wait_on_cancellation_signal,
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -146,9 +147,9 @@ impl super::Fetcher for GhCrateMeta {
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
         debug!("Downloading package from: '{url}' dst:{dst:?} fmt:{pkg_fmt:?}");
-        Download::new(self.client.clone(), url.clone())
-            .and_extract(*pkg_fmt, dst)
-            .await
+        Ok(Download::new(self.client.clone(), url.clone())
+            .and_extract(*pkg_fmt, dst, Some(Box::pin(wait_on_cancellation_signal())))
+            .await?)
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

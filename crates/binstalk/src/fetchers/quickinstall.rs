@@ -10,6 +10,7 @@ use crate::{
     helpers::{
         download::Download,
         remote::{Client, Method},
+        signal::wait_on_cancellation_signal,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -44,17 +45,22 @@ impl super::Fetcher for QuickInstall {
         let url = self.package_url();
         self.report();
         debug!("Checking for package at: '{url}'");
-        self.client
+        Ok(self
+            .client
             .remote_exists(Url::parse(&url)?, Method::HEAD)
-            .await
+            .await?)
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
         let url = self.package_url();
         debug!("Downloading package from: '{url}'");
-        Download::new(self.client.clone(), Url::parse(&url)?)
-            .and_extract(self.pkg_fmt(), dst)
-            .await
+        Ok(Download::new(self.client.clone(), Url::parse(&url)?)
+            .and_extract(
+                self.pkg_fmt(),
+                dst,
+                Some(Box::pin(wait_on_cancellation_signal())),
+            )
+            .await?)
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
