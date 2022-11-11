@@ -11,7 +11,7 @@ use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
 
 use super::Options;
 use crate::{
@@ -89,6 +89,7 @@ impl Resolution {
     }
 }
 
+#[instrument(skip_all)]
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
