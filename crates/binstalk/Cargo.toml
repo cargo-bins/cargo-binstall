@@ -13,7 +13,6 @@ license = "GPL-3.0"
 async-trait = "0.1.58"
 binstalk-downloader = { version = "0.1.0", path = "../binstalk-downloader" }
 binstalk-manifests = { version = "0.1.0", path = "../binstalk-manifests" }
-binstalk-signal = { version = "0.1.0", path = "../binstalk-signal" }
 cargo_toml = "0.13.0"
 compact_str = { version = "0.6.0", features = ["serde"] }
 crates_io_api = { version = "0.8.1", default-features = false }

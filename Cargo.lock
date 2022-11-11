@@ -111,7 +111,6 @@ dependencies = [
  "async-trait",
  "binstalk-downloader",
  "binstalk-manifests",
- "binstalk-signal",
  "cargo_toml",
  "compact_str",
  "crates_io_api",
@@ -183,13 +182,6 @@ dependencies = [
  "thiserror",
  "toml_edit",
  "url",
-]
-
-[[package]]
-name = "binstalk-signal"
-version = "0.1.0"
-dependencies = [
- "tokio",
 ]
 
 [[package]]
@@ -2084,7 +2076,6 @@ dependencies = [
  "memchr",
  "mio",
  "num_cpus",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
