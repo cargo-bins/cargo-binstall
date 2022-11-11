@@ -31,7 +31,8 @@ strum = "0.24.1"
 tempfile = "3.3.0"
 thiserror = "1.0.37"
 tinytemplate = "1.2.1"
-tokio = { version = "1.21.2", features = ["rt", "process", "sync"], default-features = false }
+# parking_lot for `tokio::sync::OnceCell::const_new`
+tokio = { version = "1.21.2", features = ["rt", "process", "sync", "signal", "parking_lot"], default-features = false }
 url = { version = "2.3.1", features = ["serde"] }
 xz2 = "0.1.7"
 
