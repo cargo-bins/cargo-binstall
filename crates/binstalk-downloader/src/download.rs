@@ -2,8 +2,8 @@ use std::{fmt::Debug, future::Future, io, marker::PhantomData, path::Path, pin::
 
 use binstalk_manifests::cargo_toml_binstall::{PkgFmtDecomposed, TarBasedFmt};
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
-use log::debug;
 use thiserror::Error as ThisError;
+use tracing::debug;
 
 pub use binstalk_manifests::cargo_toml_binstall::PkgFmt;
 pub use tar::Entries;

@@ -8,7 +8,6 @@ use std::{
 use bytes::Bytes;
 use futures_util::stream::{Stream, StreamExt};
 use httpdate::parse_http_date;
-use log::{debug, info};
 use reqwest::{
     header::{HeaderMap, RETRY_AFTER},
     Request, Response, StatusCode,
@@ -16,6 +15,7 @@ use reqwest::{
 use thiserror::Error as ThisError;
 use tokio::{sync::Mutex, time::sleep};
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
+use tracing::{debug, info};
 
 pub use reqwest::{tls, Error as ReqwestError, Method};
 pub use url::Url;

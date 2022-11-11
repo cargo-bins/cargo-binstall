@@ -7,11 +7,11 @@ use std::{
 
 use bytes::Bytes;
 use futures_util::stream::Stream;
-use log::debug;
 use scopeguard::{guard, ScopeGuard};
 use tar::Entries;
 use tempfile::tempfile;
 use tokio::task::block_in_place;
+use tracing::debug;
 
 use super::{
     extracter::*, stream_readable::StreamReadable, CancellationFuture, DownloadError, TarBasedFmt,
