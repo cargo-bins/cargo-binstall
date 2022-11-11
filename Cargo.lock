@@ -147,7 +147,6 @@ dependencies = [
  "futures-util",
  "generic-array",
  "httpdate",
- "log",
  "reqwest",
  "scopeguard",
  "tempfile",
