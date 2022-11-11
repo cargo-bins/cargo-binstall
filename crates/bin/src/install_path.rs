@@ -5,7 +5,7 @@ use std::{
 };
 
 use binstalk::home::cargo_home;
-use log::debug;
+use tracing::debug;
 
 pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
     if let Some(p) = cargo_roots {
