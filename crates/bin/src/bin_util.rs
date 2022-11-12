@@ -1,6 +1,5 @@
 use std::{
     future::Future,
-    io::{self, Write},
     process::{ExitCode, Termination},
     time::Duration,
 };
@@ -9,6 +8,7 @@ use binstalk::errors::BinstallError;
 use binstalk::helpers::{signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle};
 use miette::Result;
 use tokio::runtime::Runtime;
+use tracing::{error, info};
 
 pub enum MainExit {
     Success(Option<Duration>),
@@ -21,13 +21,13 @@ impl Termination for MainExit {
         match self {
             Self::Success(spent) => {
                 if let Some(spent) = spent {
-                    writeln!(io::stdout(), "Done in {spent:?}").ok();
+                    info!("Done in {spent:?}");
                 }
                 ExitCode::SUCCESS
             }
             Self::Error(err) => err.report(),
             Self::Report(err) => {
-                writeln!(io::stderr(), "Fatal error:\n{err:?}").ok();
+                error!("Fatal error:\n{err:?}");
                 ExitCode::from(16)
             }
         }
