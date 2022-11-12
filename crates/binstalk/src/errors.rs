@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Write},
+    io,
     path::PathBuf,
     process::{ExitCode, ExitStatus, Termination},
 };
@@ -12,6 +12,7 @@ use compact_str::CompactString;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tokio::task;
+use tracing::{error, info};
 
 /// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
@@ -399,9 +400,9 @@ impl Termination for BinstallError {
     fn report(self) -> ExitCode {
         let code = self.exit_code();
         if let BinstallError::UserAbort = self {
-            writeln!(io::stdout(), "Installation cancelled").ok();
+            info!("Installation cancelled");
         } else {
-            writeln!(io::stderr(), "Fatal error:\n{:?}", Report::new(self)).ok();
+            error!("Fatal error:\n{:?}", Report::new(self));
         }
 
         code
