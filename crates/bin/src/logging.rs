@@ -2,6 +2,7 @@ use std::{cmp::min, iter::repeat};
 
 use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
 use once_cell::sync::Lazy;
+use supports_color::{on as supports_color_on_stream, Stream::Stdout};
 use tracing::{
     callsite::Callsite,
     dispatcher, field,
@@ -147,19 +148,23 @@ pub fn logging(args: &Args) {
     let subscriber: Box<dyn Subscriber + Send + Sync> = if args.json_output {
         Box::new(subscriber_builder.json().finish())
     } else {
-        Box::new(
-            subscriber_builder
-                .with_ansi(true)
-                // Disable time, target, file, line_num, thread name/ids to make the
-                // output more readable
-                .without_time()
-                .with_target(false)
-                .with_file(false)
-                .with_line_number(false)
-                .with_thread_names(false)
-                .with_thread_ids(false)
-                .finish(),
-        )
+        // Disable time, target, file, line_num, thread name/ids to make the
+        // output more readable
+        let subscriber_builder = subscriber_builder
+            .without_time()
+            .with_target(false)
+            .with_file(false)
+            .with_line_number(false)
+            .with_thread_names(false)
+            .with_thread_ids(false);
+
+        // subscriber_builder defaults to write to io::stdout(),
+        // so tests whether it supports color.
+        let stdout_supports_color = supports_color_on_stream(Stdout)
+            .map(|color_level| color_level.has_basic)
+            .unwrap_or_default();
+
+        Box::new(subscriber_builder.with_ansi(stdout_supports_color).finish())
     };
 
     // Builder layer for filtering
