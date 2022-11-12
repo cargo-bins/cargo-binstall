@@ -1,4 +1,4 @@
-use std::{cmp::min, io, iter::repeat};
+use std::{cmp::min, iter::repeat};
 
 use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
 use once_cell::sync::Lazy;
@@ -8,7 +8,6 @@ use tracing::{
     subscriber::{self, set_global_default},
     Event, Level, Metadata,
 };
-use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_core::{identify_callsite, metadata::Kind, subscriber::Subscriber};
 use tracing_log::AsTrace;
 use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
@@ -131,7 +130,7 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-pub fn logging(args: &Args) -> WorkerGuard {
+pub fn logging(args: &Args) {
     // Calculate log_level
     let log_level = min(args.log_level, STATIC_MAX_LEVEL);
 
@@ -141,14 +140,9 @@ pub fn logging(args: &Args) -> WorkerGuard {
     // Forward log to tracing
     Logger::init(log_level);
 
-    // Setup non-blocking stdout
-    let (non_blocking, guard) = NonBlockingBuilder::default()
-        .lossy(false)
-        .finish(io::stdout());
-
     // Build fmt subscriber
     let log_level = log_level.as_trace();
-    let subscriber_builder = fmt().with_writer(non_blocking).with_max_level(log_level);
+    let subscriber_builder = fmt().with_max_level(log_level);
 
     let subscriber: Box<dyn Subscriber + Send + Sync> = if args.json_output {
         Box::new(subscriber_builder.json().finish())
@@ -178,6 +172,4 @@ pub fn logging(args: &Args) -> WorkerGuard {
 
     // Setup global subscriber
     set_global_default(subscriber).unwrap();
-
-    guard
 }
