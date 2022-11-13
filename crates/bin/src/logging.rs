@@ -1,14 +1,14 @@
-use std::{cmp::min, io, iter::repeat};
+use std::{cmp::min, iter::repeat};
 
 use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
 use once_cell::sync::Lazy;
+use supports_color::{on as supports_color_on_stream, Stream::Stdout};
 use tracing::{
     callsite::Callsite,
     dispatcher, field,
     subscriber::{self, set_global_default},
     Event, Level, Metadata,
 };
-use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_core::{identify_callsite, metadata::Kind, subscriber::Subscriber};
 use tracing_log::AsTrace;
 use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
@@ -131,7 +131,7 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-pub fn logging(args: &Args) -> WorkerGuard {
+pub fn logging(args: &Args) {
     // Calculate log_level
     let log_level = min(args.log_level, STATIC_MAX_LEVEL);
 
@@ -141,31 +141,30 @@ pub fn logging(args: &Args) -> WorkerGuard {
     // Forward log to tracing
     Logger::init(log_level);
 
-    // Setup non-blocking stdout
-    let (non_blocking, guard) = NonBlockingBuilder::default()
-        .lossy(false)
-        .finish(io::stdout());
-
     // Build fmt subscriber
     let log_level = log_level.as_trace();
-    let subscriber_builder = fmt().with_writer(non_blocking).with_max_level(log_level);
+    let subscriber_builder = fmt().with_max_level(log_level);
 
     let subscriber: Box<dyn Subscriber + Send + Sync> = if args.json_output {
         Box::new(subscriber_builder.json().finish())
     } else {
-        Box::new(
-            subscriber_builder
-                .compact()
-                // Disable time, target, file, line_num, thread name/ids to make the
-                // output more readable
-                .without_time()
-                .with_target(false)
-                .with_file(false)
-                .with_line_number(false)
-                .with_thread_names(false)
-                .with_thread_ids(false)
-                .finish(),
-        )
+        // Disable time, target, file, line_num, thread name/ids to make the
+        // output more readable
+        let subscriber_builder = subscriber_builder
+            .without_time()
+            .with_target(false)
+            .with_file(false)
+            .with_line_number(false)
+            .with_thread_names(false)
+            .with_thread_ids(false);
+
+        // subscriber_builder defaults to write to io::stdout(),
+        // so tests whether it supports color.
+        let stdout_supports_color = supports_color_on_stream(Stdout)
+            .map(|color_level| color_level.has_basic)
+            .unwrap_or_default();
+
+        Box::new(subscriber_builder.with_ansi(stdout_supports_color).finish())
     };
 
     // Builder layer for filtering
@@ -178,6 +177,4 @@ pub fn logging(args: &Args) -> WorkerGuard {
 
     // Setup global subscriber
     set_global_default(subscriber).unwrap();
-
-    guard
 }
