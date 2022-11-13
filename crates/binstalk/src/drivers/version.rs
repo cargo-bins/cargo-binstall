@@ -1,5 +1,5 @@
-use log::debug;
 use semver::VersionReq;
+use tracing::debug;
 
 use crate::errors::BinstallError;
 

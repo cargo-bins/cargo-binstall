@@ -4,8 +4,8 @@ use std::{
 };
 
 use cargo_toml::Manifest;
-use log::debug;
 use normalize_path::NormalizePath;
+use tracing::debug;
 
 use super::vfs::Vfs;
 use crate::{

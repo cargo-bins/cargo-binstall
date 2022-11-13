@@ -1,7 +1,7 @@
 use std::{fs, io, path::Path};
 
-use log::debug;
 use tempfile::NamedTempFile;
+use tracing::debug;
 
 /// Atomically install a file.
 ///

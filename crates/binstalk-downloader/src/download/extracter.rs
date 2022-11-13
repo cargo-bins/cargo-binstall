@@ -6,8 +6,8 @@ use std::{
 
 use bzip2::bufread::BzDecoder;
 use flate2::bufread::GzDecoder;
-use log::debug;
 use tar::Archive;
+use tracing::debug;
 use xz2::bufread::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
