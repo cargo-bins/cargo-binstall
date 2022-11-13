@@ -3,8 +3,6 @@ use cargo_toml::Product;
 
 #[test]
 fn parse_meta() {
-    let _ = env_logger::builder().is_test(true).try_init();
-
     let mut manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     manifest_dir.push_str("/tests/parse-meta.Cargo.toml");
 

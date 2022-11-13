@@ -13,9 +13,10 @@ use binstalk::{
         resolve::{CrateName, Resolution, VersionReqExt},
     },
 };
-use log::{debug, error, info, warn, LevelFilter};
+use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;
+use tracing::{debug, error, info, warn};
 
 use crate::{
     args::{Args, Strategy},

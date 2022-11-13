@@ -2,8 +2,8 @@ use std::{fmt::Debug, future::Future, io, marker::PhantomData, path::Path, pin::
 
 use binstalk_manifests::cargo_toml_binstall::{PkgFmtDecomposed, TarBasedFmt};
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
-use log::debug;
 use thiserror::Error as ThisError;
+use tracing::{debug, instrument};
 
 pub use binstalk_manifests::cargo_toml_binstall::PkgFmt;
 pub use tar::Entries;
@@ -92,6 +92,7 @@ impl Download {
     ///
     /// `cancellation_future` can be used to cancel the extraction and return
     /// [`DownloadError::UserAbort`] error.
+    #[instrument(skip(visitor, cancellation_future))]
     pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
         self,
         fmt: TarBasedFmt,
@@ -114,6 +115,7 @@ impl Download {
     ///
     /// `cancellation_future` can be used to cancel the extraction and return
     /// [`DownloadError::UserAbort`] error.
+    #[instrument(skip(path, cancellation_future))]
     pub async fn and_extract(
         self,
         fmt: PkgFmt,

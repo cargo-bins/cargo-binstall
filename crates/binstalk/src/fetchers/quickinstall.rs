@@ -1,8 +1,8 @@
 use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
-use log::debug;
 use tokio::task::JoinHandle;
+use tracing::debug;
 use url::Url;
 
 use crate::{

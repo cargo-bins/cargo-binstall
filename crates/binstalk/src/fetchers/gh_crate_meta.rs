@@ -2,11 +2,11 @@ use std::{path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use futures_util::stream::{FuturesUnordered, StreamExt};
-use log::{debug, warn};
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use strum::IntoEnumIterator;
 use tinytemplate::TinyTemplate;
+use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
