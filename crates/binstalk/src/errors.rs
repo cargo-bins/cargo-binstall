@@ -443,7 +443,7 @@ impl From<RemoteError> for BinstallError {
 
         match e {
             Reqwest(reqwest_error) => reqwest_error.into(),
-            Http(http_error) => http_error.into(),
+            Http(http_error) => (*http_error).into(),
         }
     }
 }
