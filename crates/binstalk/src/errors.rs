@@ -160,23 +160,6 @@ pub enum BinstallError {
         err: semver::Error,
     },
 
-    /// A version requirement is not valid.
-    ///
-    /// This is usually provided via the `--version` option.
-    ///
-    /// Note that we use the [`semver`] crate, which parses Cargo version requirement syntax; they
-    /// may be slightly different from other semver requirements expressions implementations.
-    ///
-    /// - Code: `binstall::version::requirement`
-    /// - Exit: 81
-    #[error("version requirement '{req}' is not semver")]
-    #[diagnostic(severity(error), code(binstall::version::requirement))]
-    VersionReq {
-        req: CompactString,
-        #[source]
-        err: semver::Error,
-    },
-
     /// No available version matches the requirements.
     ///
     /// This may be the case when using the `--version` option.
@@ -344,7 +327,6 @@ impl BinstallError {
             CargoManifestPath => 77,
             CargoManifest { .. } => 78,
             VersionParse { .. } => 80,
-            VersionReq { .. } => 81,
             VersionMismatch { .. } => 82,
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
