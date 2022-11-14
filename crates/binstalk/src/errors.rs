@@ -9,6 +9,7 @@ use binstalk_downloader::{
     remote::{Error as RemoteError, HttpError, ReqwestError},
 };
 use compact_str::CompactString;
+use crates_io_api::Error as CratesIoApiError;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tinytemplate::error::Error as TinyTemplateError;
@@ -117,7 +118,7 @@ pub enum BinstallError {
     CratesIoApi {
         crate_name: CompactString,
         #[source]
-        err: crates_io_api::Error,
+        err: Box<CratesIoApiError>,
     },
 
     /// The override path to the cargo manifest is invalid or cannot be resolved.
