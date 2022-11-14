@@ -81,7 +81,7 @@ pub enum BinstallError {
     /// - Exit: 69
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::http))]
-    Http(#[from] HttpError),
+    Http(#[from] Box<HttpError>),
 
     /// A subprocess failed.
     ///
@@ -443,7 +443,7 @@ impl From<RemoteError> for BinstallError {
 
         match e {
             Reqwest(reqwest_error) => reqwest_error.into(),
-            Http(http_error) => (*http_error).into(),
+            Http(http_error) => http_error.into(),
         }
     }
 }
