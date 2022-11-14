@@ -188,17 +188,6 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::version::mismatch))]
     VersionMismatch { req: semver::VersionReq },
 
-    /// The crates.io API doesn't have manifest metadata for the given version.
-    ///
-    /// - Code: `binstall::version::unavailable`
-    /// - Exit: 83
-    #[error("no crate information available for '{crate_name}' version '{v}'")]
-    #[diagnostic(severity(error), code(binstall::version::unavailable))]
-    VersionUnavailable {
-        crate_name: CompactString,
-        v: semver::Version,
-    },
-
     /// The crate@version syntax was used at the same time as the --version option.
     ///
     /// You can't do that as it's ambiguous which should apply.
@@ -356,7 +345,6 @@ impl BinstallError {
             VersionParse { .. } => 80,
             VersionReq { .. } => 81,
             VersionMismatch { .. } => 82,
-            VersionUnavailable { .. } => 83,
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
             UnspecifiedBinaries => 86,
