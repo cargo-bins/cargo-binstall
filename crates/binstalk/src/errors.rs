@@ -319,7 +319,7 @@ pub enum BinstallError {
     NoFallbackToCargoInstall,
 
     /// A wrapped error providing the context of which crate the error is about.
-    #[error("for crate {crate_name}")]
+    #[error("For crate {crate_name}: {error}")]
     CrateContext {
         #[source]
         error: Box<BinstallError>,
