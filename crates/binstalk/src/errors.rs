@@ -11,6 +11,7 @@ use binstalk_downloader::{
 use compact_str::CompactString;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
+use tinytemplate::error::Error as TinyTemplateError;
 use tokio::task;
 use tracing::{error, warn};
 
@@ -60,7 +61,7 @@ pub enum BinstallError {
     /// - Exit: 67
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::template))]
-    Template(#[from] tinytemplate::error::Error),
+    Template(Box<TinyTemplateError>),
 
     /// A generic error from our HTTP client, reqwest.
     ///
@@ -458,5 +459,11 @@ impl From<DownloadError> for BinstallError {
             Io(io_error) => io_error.into(),
             UserAbort => BinstallError::UserAbort,
         }
+    }
+}
+
+impl From<TinyTemplateError> for BinstallError {
+    fn from(e: TinyTemplateError) -> Self {
+        BinstallError::Template(Box::new(e))
     }
 }
