@@ -29,7 +29,7 @@ pub enum Error {
     Reqwest(#[from] reqwest::Error),
 
     #[error(transparent)]
-    Http(HttpError),
+    Http(Box<HttpError>),
 }
 
 #[derive(Debug, ThisError)]
@@ -138,7 +138,7 @@ impl Client {
                     Ok(response)
                 }
             })
-            .map_err(|err| Error::Http(HttpError { method, url, err }))
+            .map_err(|err| Error::Http(Box::new(HttpError { method, url, err })))
     }
 
     /// Check if remote exists using `method`.

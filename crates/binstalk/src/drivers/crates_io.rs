@@ -38,7 +38,7 @@ pub async fn fetch_crate_cratesio(
         .await
         .map_err(|err| BinstallError::CratesIoApi {
             crate_name: name.into(),
-            err,
+            err: Box::new(err),
         })?;
 
     // Locate matching version

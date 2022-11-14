@@ -9,8 +9,10 @@ use binstalk_downloader::{
     remote::{Error as RemoteError, HttpError, ReqwestError},
 };
 use compact_str::CompactString;
+use crates_io_api::Error as CratesIoApiError;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
+use tinytemplate::error::Error as TinyTemplateError;
 use tokio::task;
 use tracing::{error, warn};
 
@@ -60,7 +62,7 @@ pub enum BinstallError {
     /// - Exit: 67
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::template))]
-    Template(#[from] tinytemplate::error::Error),
+    Template(Box<TinyTemplateError>),
 
     /// A generic error from our HTTP client, reqwest.
     ///
@@ -81,7 +83,7 @@ pub enum BinstallError {
     /// - Exit: 69
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::http))]
-    Http(#[from] HttpError),
+    Http(#[from] Box<HttpError>),
 
     /// A subprocess failed.
     ///
@@ -116,7 +118,7 @@ pub enum BinstallError {
     CratesIoApi {
         crate_name: CompactString,
         #[source]
-        err: crates_io_api::Error,
+        err: Box<CratesIoApiError>,
     },
 
     /// The override path to the cargo manifest is invalid or cannot be resolved.
@@ -158,23 +160,6 @@ pub enum BinstallError {
         err: semver::Error,
     },
 
-    /// A version requirement is not valid.
-    ///
-    /// This is usually provided via the `--version` option.
-    ///
-    /// Note that we use the [`semver`] crate, which parses Cargo version requirement syntax; they
-    /// may be slightly different from other semver requirements expressions implementations.
-    ///
-    /// - Code: `binstall::version::requirement`
-    /// - Exit: 81
-    #[error("version requirement '{req}' is not semver")]
-    #[diagnostic(severity(error), code(binstall::version::requirement))]
-    VersionReq {
-        req: CompactString,
-        #[source]
-        err: semver::Error,
-    },
-
     /// No available version matches the requirements.
     ///
     /// This may be the case when using the `--version` option.
@@ -186,17 +171,6 @@ pub enum BinstallError {
     #[error("no version matching requirement '{req}'")]
     #[diagnostic(severity(error), code(binstall::version::mismatch))]
     VersionMismatch { req: semver::VersionReq },
-
-    /// The crates.io API doesn't have manifest metadata for the given version.
-    ///
-    /// - Code: `binstall::version::unavailable`
-    /// - Exit: 83
-    #[error("no crate information available for '{crate_name}' version '{v}'")]
-    #[diagnostic(severity(error), code(binstall::version::unavailable))]
-    VersionUnavailable {
-        crate_name: CompactString,
-        v: semver::Version,
-    },
 
     /// The crate@version syntax was used at the same time as the --version option.
     ///
@@ -328,7 +302,7 @@ pub enum BinstallError {
     NoFallbackToCargoInstall,
 
     /// A wrapped error providing the context of which crate the error is about.
-    #[error("for crate {crate_name}")]
+    #[error("For crate {crate_name}: {error}")]
     CrateContext {
         #[source]
         error: Box<BinstallError>,
@@ -353,9 +327,7 @@ impl BinstallError {
             CargoManifestPath => 77,
             CargoManifest { .. } => 78,
             VersionParse { .. } => 80,
-            VersionReq { .. } => 81,
             VersionMismatch { .. } => 82,
-            VersionUnavailable { .. } => 83,
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
             UnspecifiedBinaries => 86,
@@ -458,5 +430,11 @@ impl From<DownloadError> for BinstallError {
             Io(io_error) => io_error.into(),
             UserAbort => BinstallError::UserAbort,
         }
+    }
+}
+
+impl From<TinyTemplateError> for BinstallError {
+    fn from(e: TinyTemplateError) -> Self {
+        BinstallError::Template(Box::new(e))
     }
 }
