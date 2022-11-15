@@ -1,12 +1,13 @@
 use std::time::Instant;
 
 use binstalk::helpers::jobserver_client::LazyJobserverClient;
-use log::debug;
+use tracing::debug;
 
 use cargo_binstall::{
     args,
     bin_util::{run_tokio_main, MainExit},
-    entry, ui,
+    entry,
+    logging::logging,
 };
 
 #[cfg(feature = "mimalloc")]
@@ -26,7 +27,7 @@ fn main() -> MainExit {
         println!("{}", env!("CARGO_PKG_VERSION"));
         MainExit::Success(None)
     } else {
-        ui::logging(&args);
+        logging(&args);
 
         let start = Instant::now();
 

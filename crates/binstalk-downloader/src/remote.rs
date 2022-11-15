@@ -6,23 +6,40 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures_util::stream::Stream;
+use futures_util::stream::{Stream, StreamExt};
 use httpdate::parse_http_date;
-use log::{debug, info};
 use reqwest::{
     header::{HeaderMap, RETRY_AFTER},
     Request, Response, StatusCode,
 };
+use thiserror::Error as ThisError;
 use tokio::{sync::Mutex, time::sleep};
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
+use tracing::{debug, info};
 
-use crate::errors::BinstallError;
-
-pub use reqwest::{tls, Method};
+pub use reqwest::{tls, Error as ReqwestError, Method};
 pub use url::Url;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
+
+#[derive(Debug, ThisError)]
+pub enum Error {
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    Http(Box<HttpError>),
+}
+
+#[derive(Debug, ThisError)]
+#[error("could not {method} {url}: {err}")]
+pub struct HttpError {
+    method: reqwest::Method,
+    url: url::Url,
+    #[source]
+    err: reqwest::Error,
+}
 
 #[derive(Clone, Debug)]
 pub struct Client {
@@ -32,11 +49,13 @@ pub struct Client {
 
 impl Client {
     /// * `per` - must not be 0.
+    /// * `num_request` - maximum number of requests to be processed for
+    ///   each `per` duration.
     pub fn new(
         min_tls: Option<tls::Version>,
         per: Duration,
         num_request: NonZeroU64,
-    ) -> Result<Self, BinstallError> {
+    ) -> Result<Self, Error> {
         const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
         let mut builder = reqwest::ClientBuilder::new()
@@ -61,6 +80,7 @@ impl Client {
         })
     }
 
+    /// Return inner reqwest client.
     pub fn get_inner(&self) -> &reqwest::Client {
         &self.client
     }
@@ -69,7 +89,7 @@ impl Client {
         &self,
         method: &Method,
         url: &Url,
-    ) -> Result<Response, reqwest::Error> {
+    ) -> Result<Response, ReqwestError> {
         let mut count = 0;
 
         loop {
@@ -108,7 +128,7 @@ impl Client {
         method: Method,
         url: Url,
         error_for_status: bool,
-    ) -> Result<Response, BinstallError> {
+    ) -> Result<Response, Error> {
         self.send_request_inner(&method, &url)
             .await
             .and_then(|response| {
@@ -118,10 +138,11 @@ impl Client {
                     Ok(response)
                 }
             })
-            .map_err(|err| BinstallError::Http { method, url, err })
+            .map_err(|err| Error::Http(Box::new(HttpError { method, url, err })))
     }
 
-    pub async fn remote_exists(&self, url: Url, method: Method) -> Result<bool, BinstallError> {
+    /// Check if remote exists using `method`.
+    pub async fn remote_exists(&self, url: Url, method: Method) -> Result<bool, Error> {
         Ok(self
             .send_request(method, url, false)
             .await?
@@ -129,7 +150,8 @@ impl Client {
             .is_success())
     }
 
-    pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, BinstallError> {
+    /// Attempt to get final redirected url.
+    pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
         Ok(self
             .send_request(Method::HEAD, url, true)
             .await?
@@ -137,15 +159,17 @@ impl Client {
             .clone())
     }
 
-    pub(crate) async fn create_request(
+    /// Create `GET` request to `url` and return a stream of the response data.
+    /// On status code other than 200, it will return an error.
+    pub async fn get_stream(
         &self,
         url: Url,
-    ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, BinstallError> {
+    ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
         debug!("Downloading from: '{url}'");
 
         self.send_request(Method::GET, url, true)
             .await
-            .map(Response::bytes_stream)
+            .map(|response| response.bytes_stream().map(|res| res.map_err(Error::from)))
     }
 }
 

@@ -1,16 +1,16 @@
 use std::{
-    io::Read,
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 
 use cargo_toml::Manifest;
-use log::debug;
 use normalize_path::NormalizePath;
-use tar::Entries;
+use tracing::debug;
 
 use super::vfs::Vfs;
 use crate::{
-    errors::BinstallError, helpers::download::TarEntriesVisitor,
+    errors::BinstallError,
+    helpers::download::{DownloadError, Entries, TarEntriesVisitor},
     manifests::cargo_toml_binstall::Meta,
 };
 
@@ -37,7 +37,7 @@ impl ManifestVisitor {
 impl TarEntriesVisitor for ManifestVisitor {
     type Target = Manifest<Meta>;
 
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), BinstallError> {
+    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), DownloadError> {
         for res in entries {
             let mut entry = res?;
             let path = entry.path()?;
@@ -71,16 +71,20 @@ impl TarEntriesVisitor for ManifestVisitor {
     }
 
     /// Load binstall metadata using the extracted information stored in memory.
-    fn finish(self) -> Result<Self::Target, BinstallError> {
-        debug!("Loading manifest directly from extracted file");
-
-        // Load and parse manifest
-        let mut manifest = Manifest::from_slice_with_metadata(&self.cargo_toml_content)?;
-
-        // Checks vfs for binary output names
-        manifest.complete_from_abstract_filesystem(&self.vfs)?;
-
-        // Return metadata
-        Ok(manifest)
+    fn finish(self) -> Result<Self::Target, DownloadError> {
+        Ok(load_manifest(&self.cargo_toml_content, &self.vfs).map_err(io::Error::from)?)
     }
+}
+
+fn load_manifest(slice: &[u8], vfs: &Vfs) -> Result<Manifest<Meta>, BinstallError> {
+    debug!("Loading manifest directly from extracted file");
+
+    // Load and parse manifest
+    let mut manifest = Manifest::from_slice_with_metadata(slice)?;
+
+    // Checks vfs for binary output names
+    manifest.complete_from_abstract_filesystem(vfs)?;
+
+    // Return metadata
+    Ok(manifest)
 }

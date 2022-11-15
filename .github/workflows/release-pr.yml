@@ -10,6 +10,7 @@ on:
           - bin
           - binstalk
           - binstalk-manifests
+          - binstalk-downloader
           - detect-targets
           - detect-wasi
           - fs-lock
@@ -35,7 +36,7 @@ jobs:
         with:
           tool: cargo-release
 
-      - uses: cargo-bins/release-pr@v1
+      - uses: cargo-bins/release-pr@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           version: ${{ inputs.version }}

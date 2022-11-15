@@ -9,16 +9,16 @@ use std::{
 use cargo_toml::{Manifest, Package, Product};
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
-use log::{debug, info, warn};
 use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
+use tracing::{debug, info, instrument, warn};
 
 use super::Options;
 use crate::{
     bins,
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
-    fetchers::{Data, Fetcher, GhCrateMeta, QuickInstall},
+    fetchers::{Data, Fetcher},
     helpers::{remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{Meta, PkgMeta},
 };
@@ -89,6 +89,7 @@ impl Resolution {
     }
 }
 
+#[instrument(skip_all)]
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
@@ -211,7 +212,7 @@ async fn resolve_inner(
                     meta: target_meta,
                 })
             })
-            .cartesian_product([GhCrateMeta::new, QuickInstall::new])
+            .cartesian_product(&opts.resolver)
             .map(|(fetcher_data, f)| {
                 let fetcher = f(&client, &fetcher_data);
                 (

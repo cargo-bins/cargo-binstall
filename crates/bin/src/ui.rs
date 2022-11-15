@@ -1,16 +1,10 @@
 use std::{
-    cmp::min,
     io::{self, BufRead, Write},
     thread,
 };
 
-use log::{LevelFilter, STATIC_MAX_LEVEL};
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
-use tokio::sync::mpsc;
-
 use binstalk::errors::BinstallError;
-
-use crate::args::Args;
+use tokio::sync::mpsc;
 
 #[derive(Debug)]
 struct UIThreadInner {
@@ -101,25 +95,4 @@ impl UIThread {
             Ok(())
         }
     }
-}
-
-pub fn logging(args: &Args) {
-    let log_level = min(args.log_level, STATIC_MAX_LEVEL);
-
-    // Setup logging
-    let mut log_config = ConfigBuilder::new();
-
-    if log_level != LevelFilter::Trace {
-        log_config.add_filter_allow_str("binstalk");
-        log_config.add_filter_allow_str("cargo_binstall");
-    }
-
-    log_config.set_location_level(LevelFilter::Off);
-    TermLogger::init(
-        log_level,
-        log_config.build(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )
-    .unwrap();
 }

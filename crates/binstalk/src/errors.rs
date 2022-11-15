@@ -4,11 +4,17 @@ use std::{
     process::{ExitCode, ExitStatus, Termination},
 };
 
+use binstalk_downloader::{
+    download::{DownloadError, ZipError},
+    remote::{Error as RemoteError, HttpError, ReqwestError},
+};
 use compact_str::CompactString;
-use log::{error, warn};
+use crates_io_api::Error as CratesIoApiError;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
+use tinytemplate::error::Error as TinyTemplateError;
 use tokio::task;
+use tracing::{error, warn};
 
 /// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
@@ -48,7 +54,7 @@ pub enum BinstallError {
     /// - Exit: 66
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::unzip))]
-    Unzip(#[from] zip::result::ZipError),
+    Unzip(#[from] ZipError),
 
     /// A rendering error in a template.
     ///
@@ -56,7 +62,7 @@ pub enum BinstallError {
     /// - Exit: 67
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::template))]
-    Template(#[from] tinytemplate::error::Error),
+    Template(Box<TinyTemplateError>),
 
     /// A generic error from our HTTP client, reqwest.
     ///
@@ -66,7 +72,7 @@ pub enum BinstallError {
     /// - Exit: 68
     #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::reqwest))]
-    Reqwest(#[from] reqwest::Error),
+    Reqwest(#[from] ReqwestError),
 
     /// An HTTP request failed.
     ///
@@ -75,14 +81,9 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::http`
     /// - Exit: 69
-    #[error("could not {method} {url}")]
+    #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::http))]
-    Http {
-        method: reqwest::Method,
-        url: url::Url,
-        #[source]
-        err: reqwest::Error,
-    },
+    Http(#[from] Box<HttpError>),
 
     /// A subprocess failed.
     ///
@@ -117,7 +118,7 @@ pub enum BinstallError {
     CratesIoApi {
         crate_name: CompactString,
         #[source]
-        err: crates_io_api::Error,
+        err: Box<CratesIoApiError>,
     },
 
     /// The override path to the cargo manifest is invalid or cannot be resolved.
@@ -159,23 +160,6 @@ pub enum BinstallError {
         err: semver::Error,
     },
 
-    /// A version requirement is not valid.
-    ///
-    /// This is usually provided via the `--version` option.
-    ///
-    /// Note that we use the [`semver`] crate, which parses Cargo version requirement syntax; they
-    /// may be slightly different from other semver requirements expressions implementations.
-    ///
-    /// - Code: `binstall::version::requirement`
-    /// - Exit: 81
-    #[error("version requirement '{req}' is not semver")]
-    #[diagnostic(severity(error), code(binstall::version::requirement))]
-    VersionReq {
-        req: CompactString,
-        #[source]
-        err: semver::Error,
-    },
-
     /// No available version matches the requirements.
     ///
     /// This may be the case when using the `--version` option.
@@ -187,17 +171,6 @@ pub enum BinstallError {
     #[error("no version matching requirement '{req}'")]
     #[diagnostic(severity(error), code(binstall::version::mismatch))]
     VersionMismatch { req: semver::VersionReq },
-
-    /// The crates.io API doesn't have manifest metadata for the given version.
-    ///
-    /// - Code: `binstall::version::unavailable`
-    /// - Exit: 83
-    #[error("no crate information available for '{crate_name}' version '{v}'")]
-    #[diagnostic(severity(error), code(binstall::version::unavailable))]
-    VersionUnavailable {
-        crate_name: CompactString,
-        v: semver::Version,
-    },
 
     /// The crate@version syntax was used at the same time as the --version option.
     ///
@@ -312,8 +285,24 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     EmptySourceFilePath,
 
+    /// Invalid strategies configured.
+    ///
+    /// - Code: `binstall::strategies`
+    /// - Exit: 93
+    #[error("Invalid strategies configured: {0}")]
+    #[diagnostic(severity(error), code(binstall::strategies))]
+    InvalidStrategies(&'static &'static str),
+
+    /// Fallback to `cargo-install` is disabled.
+    ///
+    /// - Code: `binstall::no_fallback_to_cargo_install`
+    /// - Exit: 94
+    #[error("Fallback to cargo-install is disabled")]
+    #[diagnostic(severity(error), code(binstall::no_fallback_to_cargo_install))]
+    NoFallbackToCargoInstall,
+
     /// A wrapped error providing the context of which crate the error is about.
-    #[error("for crate {crate_name}")]
+    #[error("For crate {crate_name}: {error}")]
     CrateContext {
         #[source]
         error: Box<BinstallError>,
@@ -338,9 +327,7 @@ impl BinstallError {
             CargoManifestPath => 77,
             CargoManifest { .. } => 78,
             VersionParse { .. } => 80,
-            VersionReq { .. } => 81,
             VersionMismatch { .. } => 82,
-            VersionUnavailable { .. } => 83,
             SuperfluousVersionOption => 84,
             OverrideOptionUsedWithMultiInstall { .. } => 85,
             UnspecifiedBinaries => 86,
@@ -350,6 +337,8 @@ impl BinstallError {
             DuplicateSourceFilePath { .. } => 90,
             InvalidSourceFilePath { .. } => 91,
             EmptySourceFilePath => 92,
+            InvalidStrategies(..) => 93,
+            NoFallbackToCargoInstall => 94,
             CrateContext { error, .. } => error.exit_number(),
         };
 
@@ -385,8 +374,7 @@ impl Termination for BinstallError {
         if let BinstallError::UserAbort = self {
             warn!("Installation cancelled");
         } else {
-            error!("Fatal error:");
-            eprintln!("{:?}", Report::new(self));
+            error!("Fatal error:\n{:?}", Report::new(self));
         }
 
         code
@@ -418,5 +406,35 @@ impl From<BinstallError> for io::Error {
             BinstallError::Io(io_error) => io_error,
             e => io::Error::new(io::ErrorKind::Other, e),
         }
+    }
+}
+
+impl From<RemoteError> for BinstallError {
+    fn from(e: RemoteError) -> Self {
+        use RemoteError::*;
+
+        match e {
+            Reqwest(reqwest_error) => reqwest_error.into(),
+            Http(http_error) => http_error.into(),
+        }
+    }
+}
+
+impl From<DownloadError> for BinstallError {
+    fn from(e: DownloadError) -> Self {
+        use DownloadError::*;
+
+        match e {
+            Unzip(zip_error) => zip_error.into(),
+            Remote(remote_error) => remote_error.into(),
+            Io(io_error) => io_error.into(),
+            UserAbort => BinstallError::UserAbort,
+        }
+    }
+}
+
+impl From<TinyTemplateError> for BinstallError {
+    fn from(e: TinyTemplateError) -> Self {
+        BinstallError::Template(Box::new(e))
     }
 }

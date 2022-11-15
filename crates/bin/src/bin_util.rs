@@ -6,9 +6,9 @@ use std::{
 
 use binstalk::errors::BinstallError;
 use binstalk::helpers::{signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle};
-use log::{error, info};
 use miette::Result;
 use tokio::runtime::Runtime;
+use tracing::{error, info};
 
 pub enum MainExit {
     Success(Option<Duration>),
