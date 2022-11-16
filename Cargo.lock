@@ -110,7 +110,7 @@ version = "0.4.1"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
- "binstalk-manifests",
+ "binstalk-manifests-types",
  "cargo_toml",
  "compact_str",
  "crates_io_api",
