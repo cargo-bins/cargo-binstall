@@ -28,6 +28,7 @@ use crate::helpers::create_if_not_exist;
 use super::crate_info::CrateInfo;
 
 #[derive(Debug, Diagnostic, Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),

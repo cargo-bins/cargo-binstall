@@ -114,6 +114,7 @@ impl CratesToml {
 }
 
 #[derive(Debug, Diagnostic, Error)]
+#[non_exhaustive]
 pub enum CratesTomlParseError {
     #[error(transparent)]
     Io(#[from] io::Error),

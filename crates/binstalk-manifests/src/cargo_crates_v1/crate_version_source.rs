@@ -88,6 +88,7 @@ impl FromStr for CrateVersionSource {
 }
 
 #[derive(Debug, Diagnostic, Error)]
+#[non_exhaustive]
 pub enum CvsParseError {
     #[error(transparent)]
     UrlParse(#[from] url::ParseError),
