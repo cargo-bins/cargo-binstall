@@ -10,7 +10,7 @@ edition = "2021"
 license = "GPL-3.0"
 
 [dependencies]
-binstalk-manifests-types = { version = "0.1.0", path = "../binstalk-manifests-types" }
+binstalk-types = { version = "0.1.0", path = "../binstalk-types" }
 bytes = "1.2.1"
 bzip2 = "0.4.3"
 digest = "0.10.5"

@@ -110,7 +110,7 @@ version = "0.4.1"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
- "binstalk-manifests-types",
+ "binstalk-types",
  "cargo_toml",
  "compact_str",
  "crates_io_api",
@@ -138,7 +138,7 @@ dependencies = [
 name = "binstalk-downloader"
 version = "0.1.0"
 dependencies = [
- "binstalk-manifests-types",
+ "binstalk-types",
  "binstall-tar",
  "bytes",
  "bzip2",
@@ -165,7 +165,7 @@ dependencies = [
 name = "binstalk-manifests"
 version = "0.1.0"
 dependencies = [
- "binstalk-manifests-types",
+ "binstalk-types",
  "compact_str",
  "detect-targets",
  "fs-lock",
@@ -182,7 +182,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "binstalk-manifests-types"
+name = "binstalk-types"
 version = "0.1.0"
 dependencies = [
  "compact_str",

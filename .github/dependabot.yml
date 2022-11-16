@@ -21,7 +21,7 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-manifests-types"
+    directory: "/crates/binstalk-types"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"

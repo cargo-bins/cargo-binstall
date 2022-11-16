@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-binstalk-manifests-types = { version = "0.1.0", path = "../binstalk-manifests-types" }
+binstalk-types = { version = "0.1.0", path = "../binstalk-types" }
 compact_str = { version = "0.6.0", features = ["serde"] }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
 home = "0.5.4"

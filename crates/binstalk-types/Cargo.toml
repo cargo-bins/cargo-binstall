@@ -1,5 +1,5 @@
 [package]
-name = "binstalk-manifests-types"
+name = "binstalk-types"
 description = "The binstall toolkit that contains basic types to cooperate with binstalk-manifests"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-manifests-types"

@@ -10,7 +10,7 @@ on:
           - bin
           - binstalk
           - binstalk-manifests
-          - binstalk-manifests-types
+          - binstalk-types
           - binstalk-downloader
           - detect-targets
           - detect-wasi
