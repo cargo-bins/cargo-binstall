@@ -70,8 +70,8 @@ impl FromStr for CrateVersionSource {
                     ["registry", url] => Source::Registry(Url::parse(url)?),
                     [kind, arg] => {
                         return Err(CvsParseError::UnknownSourceType {
-                            kind: kind.to_string(),
-                            arg: arg.to_string(),
+                            kind: kind.to_string().into_boxed_str(),
+                            arg: arg.to_string().into_boxed_str(),
                         })
                     }
                     _ => return Err(CvsParseError::BadSource),
@@ -97,7 +97,7 @@ pub enum CvsParseError {
     VersionParse(#[from] semver::Error),
 
     #[error("unknown source type {kind}+{arg}")]
-    UnknownSourceType { kind: String, arg: String },
+    UnknownSourceType { kind: Box<str>, arg: Box<str> },
 
     #[error("bad source format")]
     BadSource,
