@@ -23,9 +23,7 @@ use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::helpers::create_if_not_exist;
-
-use super::crate_info::CrateInfo;
+use crate::{crate_info::CrateInfo, helpers::create_if_not_exist};
 
 #[derive(Debug, Diagnostic, Error)]
 #[non_exhaustive]
