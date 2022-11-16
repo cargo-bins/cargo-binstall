@@ -5,13 +5,13 @@ use binstalk::{
     fetchers::{Fetcher, GhCrateMeta, QuickInstall},
     get_desired_targets,
     helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
-    manifests::{
-        binstall_crates_v1::Records, cargo_crates_v1::CratesToml, cargo_toml_binstall::PkgOverride,
-    },
     ops::{
         self,
         resolve::{CrateName, Resolution, VersionReqExt},
     },
+};
+use binstalk_manifests::{
+    binstall_crates_v1::Records, cargo_crates_v1::CratesToml, cargo_toml_binstall::PkgOverride,
 };
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
