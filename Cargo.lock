@@ -138,7 +138,7 @@ dependencies = [
 name = "binstalk-downloader"
 version = "0.1.0"
 dependencies = [
- "binstalk-manifests",
+ "binstalk-manifests-types",
  "binstall-tar",
  "bytes",
  "bzip2",
