@@ -19,3 +19,6 @@ serde_json = "1.0.87"
 strum = "0.24.1"
 strum_macros = "0.24.3"
 url = { version = "2.3.1", features = ["serde"] }
+
+[dev-dependencies]
+serde_test = "1.0.147"
