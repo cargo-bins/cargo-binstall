@@ -123,10 +123,22 @@ pub enum CratesTomlParseError {
     TomlParse(#[from] toml_edit::easy::de::Error),
 
     #[error(transparent)]
-    TomlWrite(#[from] toml_edit::easy::ser::Error),
+    TomlWrite(Box<toml_edit::easy::ser::Error>),
 
     #[error(transparent)]
-    CvsParse(#[from] CvsParseError),
+    CvsParse(Box<CvsParseError>),
+}
+
+impl From<CvsParseError> for CratesTomlParseError {
+    fn from(e: CvsParseError) -> Self {
+        CratesTomlParseError::CvsParse(Box::new(e))
+    }
+}
+
+impl From<toml_edit::easy::ser::Error> for CratesTomlParseError {
+    fn from(e: toml_edit::easy::ser::Error) -> Self {
+        CratesTomlParseError::TomlWrite(Box::new(e))
+    }
 }
 
 #[cfg(test)]
