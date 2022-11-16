@@ -13,4 +13,4 @@ mod helpers;
 pub mod binstall_crates_v1;
 pub mod cargo_crates_v1;
 
-pub use binstalk_manifests_types::{cargo_toml_binstall, crate_info};
+pub use binstalk_types::{cargo_toml_binstall, crate_info};

@@ -1,11 +1,11 @@
 use std::{fmt::Debug, future::Future, io, marker::PhantomData, path::Path, pin::Pin};
 
-use binstalk_manifests_types::cargo_toml_binstall::{PkgFmtDecomposed, TarBasedFmt};
+use binstalk_types::cargo_toml_binstall::{PkgFmtDecomposed, TarBasedFmt};
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
-pub use binstalk_manifests_types::cargo_toml_binstall::PkgFmt;
+pub use binstalk_types::cargo_toml_binstall::PkgFmt;
 pub use tar::Entries;
 pub use zip::result::ZipError;
 

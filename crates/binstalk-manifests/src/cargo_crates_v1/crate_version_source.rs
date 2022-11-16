@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
-use binstalk_manifests_types::crate_info::cratesio_url;
+use binstalk_types::crate_info::cratesio_url;
 use compact_str::CompactString;
 use miette::Diagnostic;
 use semver::Version;
