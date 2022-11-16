@@ -173,6 +173,7 @@ dependencies = [
  "miette",
  "semver",
  "serde",
+ "serde-tuple-vec-map",
  "serde_json",
  "tempfile",
  "thiserror",
@@ -188,9 +189,6 @@ dependencies = [
  "once_cell",
  "semver",
  "serde",
- "serde-tuple-vec-map",
- "serde_json",
- "serde_test",
  "strum",
  "strum_macros",
  "url",
@@ -1811,15 +1809,6 @@ name = "serde_path_to_error"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "184c643044780f7ceb59104cef98a5a6f12cb2288a7bc701ab93a362b49fd47d"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "serde_test"
-version = "1.0.147"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "641666500e4e6fba7b91b73651a375cb53579468ab3c38389289b802797cad94"
 dependencies = [
  "serde",
 ]

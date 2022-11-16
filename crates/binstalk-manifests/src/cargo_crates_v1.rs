@@ -151,7 +151,6 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
-                other: Default::default(),
             }],
         )
         .unwrap();
