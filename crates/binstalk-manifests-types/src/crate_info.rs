@@ -3,11 +3,17 @@
 use std::{borrow, cmp, hash};
 
 use compact_str::CompactString;
+use once_cell::sync::Lazy;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::helpers::cratesio_url;
+pub fn cratesio_url() -> &'static Url {
+    static CRATESIO: Lazy<Url, fn() -> Url> =
+        Lazy::new(|| Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
+
+    &CRATESIO
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CrateInfo {

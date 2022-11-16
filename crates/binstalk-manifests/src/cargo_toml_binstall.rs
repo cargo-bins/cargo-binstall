@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 #[doc(inline)]
 pub use package_formats::*;
 
-mod package_formats;
+#[doc(inline)]
+pub use binstalk_manifests_types::package_formats;
 
 /// `binstall` metadata container
 ///

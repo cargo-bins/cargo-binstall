@@ -3,6 +3,7 @@ members = [
     "crates/bin",
     "crates/binstalk",
     "crates/binstalk-manifests",
+    "crates/binstalk-manifests-types",
     "crates/binstalk-downloader",
     "crates/detect-wasi",
     "crates/fs-lock",

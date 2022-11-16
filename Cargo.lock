@@ -165,11 +165,26 @@ dependencies = [
 name = "binstalk-manifests"
 version = "0.1.0"
 dependencies = [
+ "binstalk-manifests-types",
  "compact_str",
  "detect-targets",
  "fs-lock",
  "home",
  "miette",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "toml_edit",
+ "url",
+]
+
+[[package]]
+name = "binstalk-manifests-types"
+version = "0.1.0"
+dependencies = [
+ "compact_str",
  "once_cell",
  "semver",
  "serde",
@@ -177,9 +192,6 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
- "tempfile",
- "thiserror",
- "toml_edit",
  "url",
 ]
 

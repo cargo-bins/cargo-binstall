@@ -1,5 +1,6 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
+use binstalk_manifests_types::crate_info::cratesio_url;
 use compact_str::CompactString;
 use miette::Diagnostic;
 use semver::Version;
@@ -7,10 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use crate::{
-    crate_info::{CrateInfo, CrateSource, SourceType},
-    helpers::cratesio_url,
-};
+use crate::crate_info::{CrateInfo, CrateSource, SourceType};
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CrateVersionSource {
