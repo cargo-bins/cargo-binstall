@@ -410,8 +410,6 @@ impl PackageInfo {
         crates_io_api_client: crates_io_api::AsyncClient,
     ) -> Result<Option<Self>, BinstallError> {
         // Fetch crate via crates.io, git, or use a local manifest path
-        // TODO: work out which of these to do based on `opts.name`
-        // TODO: support git-based fetches (whole repo name rather than just crate name)
         let manifest = match opts.manifest_path.as_ref() {
             Some(manifest_path) => load_manifest_path(manifest_path)?,
             None => {
