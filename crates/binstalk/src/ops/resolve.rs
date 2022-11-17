@@ -188,7 +188,7 @@ async fn resolve_inner(
     }
 
     let desired_targets = opts.desired_targets.get().await;
-    let resolvers = &opts.resolver;
+    let resolvers = &opts.resolvers;
 
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
         Vec::with_capacity(desired_targets.len() * resolvers.len());
