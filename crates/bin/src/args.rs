@@ -157,7 +157,7 @@ pub struct Args {
     pub dry_run: bool,
 
     /// Disable interactive mode / confirmation prompts.
-    #[clap(help_heading = "Options", long)]
+    #[clap(help_heading = "Options", short = 'y', long)]
     pub no_confirm: bool,
 
     /// Do not cleanup temporary files.
