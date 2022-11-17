@@ -7,6 +7,8 @@
 //! NLJSON to the file will be understood fine.
 
 use std::{
+    borrow::Borrow,
+    cmp,
     collections::{btree_set, BTreeSet},
     fs,
     io::{self, Seek, Write},
@@ -14,17 +16,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
 use miette::Diagnostic;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::helpers::create_if_not_exist;
-
-use super::crate_info::CrateInfo;
+use crate::{crate_info::CrateInfo, helpers::create_if_not_exist};
 
 #[derive(Debug, Diagnostic, Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -33,28 +35,27 @@ pub enum Error {
     SerdeJsonParse(#[from] serde_json::Error),
 }
 
-pub fn append_to_path<Iter>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Error>
+pub fn append_to_path<Iter, T>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Error>
 where
-    Iter: IntoIterator<Item = CrateInfo>,
+    Iter: IntoIterator<Item = T>,
+    Data: From<T>,
 {
     let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
     // Move the cursor to EOF
     file.seek(io::SeekFrom::End(0))?;
 
-    write_to(&mut file, &mut iter.into_iter())
+    write_to(&mut file, &mut iter.into_iter().map(Data::from))
 }
 
-pub fn append<Iter>(iter: Iter) -> Result<(), Error>
+pub fn append<Iter, T>(iter: Iter) -> Result<(), Error>
 where
-    Iter: IntoIterator<Item = CrateInfo>,
+    Iter: IntoIterator<Item = T>,
+    Data: From<T>,
 {
     append_to_path(default_path()?, iter)
 }
 
-pub fn write_to(
-    file: &mut FileLock,
-    iter: &mut dyn Iterator<Item = CrateInfo>,
-) -> Result<(), Error> {
+pub fn write_to(file: &mut FileLock, iter: &mut dyn Iterator<Item = Data>) -> Result<(), Error> {
     let writer = io::BufWriter::with_capacity(512, file);
 
     let mut ser = serde_json::Serializer::new(writer);
@@ -76,11 +77,74 @@ pub fn default_path() -> Result<PathBuf, Error> {
     Ok(dir.join("crates-v1.json"))
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Data {
+    #[serde(flatten)]
+    pub crate_info: CrateInfo,
+
+    /// Forwards compatibility. Unknown keys from future versions
+    /// will be stored here and retained when the file is saved.
+    ///
+    /// We use an `Vec` here since it is never accessed in Rust.
+    #[serde(flatten, with = "tuple_vec_map")]
+    pub other: Vec<(CompactString, serde_json::Value)>,
+}
+
+impl From<CrateInfo> for Data {
+    fn from(crate_info: CrateInfo) -> Self {
+        Self {
+            crate_info,
+            other: Vec::new(),
+        }
+    }
+}
+
+impl From<Data> for CrateInfo {
+    fn from(data: Data) -> Self {
+        data.crate_info
+    }
+}
+
+impl Borrow<str> for Data {
+    fn borrow(&self) -> &str {
+        &self.crate_info.name
+    }
+}
+
+impl PartialEq for Data {
+    fn eq(&self, other: &Self) -> bool {
+        self.crate_info.name == other.crate_info.name
+    }
+}
+impl PartialEq<CrateInfo> for Data {
+    fn eq(&self, other: &CrateInfo) -> bool {
+        self.crate_info.name == other.name
+    }
+}
+impl PartialEq<Data> for CrateInfo {
+    fn eq(&self, other: &Data) -> bool {
+        self.name == other.crate_info.name
+    }
+}
+impl Eq for Data {}
+
+impl PartialOrd for Data {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Data {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.crate_info.name.cmp(&other.crate_info.name)
+    }
+}
+
 #[derive(Debug)]
 pub struct Records {
     file: FileLock,
     /// Use BTreeSet to dedup the metadata
-    data: BTreeSet<CrateInfo>,
+    data: BTreeSet<Data>,
 }
 
 impl Records {
@@ -122,7 +186,7 @@ impl Records {
     }
 
     pub fn get(&self, value: impl AsRef<str>) -> Option<&CrateInfo> {
-        self.data.get(value.as_ref())
+        self.data.get(value.as_ref()).map(|data| &data.crate_info)
     }
 
     pub fn contains(&self, value: impl AsRef<str>) -> bool {
@@ -134,11 +198,12 @@ impl Records {
     /// If the set did have an equal element present, false is returned,
     /// and the entry is not updated.
     pub fn insert(&mut self, value: CrateInfo) -> bool {
-        self.data.insert(value)
+        self.data.insert(Data::from(value))
     }
 
+    /// Return the previous `CrateInfo` for the package if there is any.
     pub fn replace(&mut self, value: CrateInfo) -> Option<CrateInfo> {
-        self.data.replace(value)
+        self.data.replace(Data::from(value)).map(CrateInfo::from)
     }
 
     pub fn remove(&mut self, value: impl AsRef<str>) -> bool {
@@ -146,7 +211,7 @@ impl Records {
     }
 
     pub fn take(&mut self, value: impl AsRef<str>) -> Option<CrateInfo> {
-        self.data.take(value.as_ref())
+        self.data.take(value.as_ref()).map(CrateInfo::from)
     }
 
     pub fn len(&self) -> usize {
@@ -159,9 +224,9 @@ impl Records {
 }
 
 impl<'a> IntoIterator for &'a Records {
-    type Item = &'a CrateInfo;
+    type Item = &'a Data;
 
-    type IntoIter = btree_set::Iter<'a, CrateInfo>;
+    type IntoIter = btree_set::Iter<'a, Data>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.data.iter()
@@ -202,7 +267,6 @@ mod test {
                 source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
-                other: Default::default(),
             },
             CrateInfo {
                 name: "b".into(),
@@ -211,7 +275,6 @@ mod test {
                 source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
-                other: Default::default(),
             },
             CrateInfo {
                 name: "a".into(),
@@ -220,7 +283,6 @@ mod test {
                 source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into()],
-                other: Default::default(),
             },
         ];
 
@@ -234,11 +296,11 @@ mod test {
         let mut records = Records::load_from_path(path).unwrap();
         assert_records_eq!(&records, &metadata_set);
 
-        records.remove("b");
-        assert_eq!(records.len(), metadata_set.len() - 1);
+        assert!(records.remove("b"));
+        metadata_set.remove("b");
+        assert_eq!(records.len(), metadata_set.len());
         records.overwrite().unwrap();
 
-        metadata_set.remove("b");
         let records = Records::load_from_path(path).unwrap();
         assert_records_eq!(&records, &metadata_set);
         // Drop the exclusive file lock
@@ -251,7 +313,6 @@ mod test {
             source: CrateSource::cratesio_registry(),
             target,
             bins: vec!["1".into(), "2".into()],
-            other: Default::default(),
         };
         append_to_path(path, [new_metadata.clone()]).unwrap();
         metadata_set.insert(new_metadata);

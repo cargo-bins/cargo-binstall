@@ -1,0 +1,19 @@
+[package]
+name = "binstalk-types"
+description = "The binstall toolkit that contains basic types for binstalk crates"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/binstalk-types"
+version = "0.1.0"
+rust-version = "1.61.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+compact_str = { version = "0.6.0", features = ["serde"] }
+once_cell = "1.16.0"
+semver = { version = "1.0.14", features = ["serde"] }
+serde = { version = "1.0.147", features = ["derive"] }
+strum = "0.24.1"
+strum_macros = "0.24.3"
+url = { version = "2.3.1", features = ["serde"] }

@@ -6,10 +6,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+mod package_formats;
 #[doc(inline)]
 pub use package_formats::*;
-
-mod package_formats;
 
 /// `binstall` metadata container
 ///

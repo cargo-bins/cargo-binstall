@@ -3,11 +3,17 @@
 use std::{borrow, cmp, hash};
 
 use compact_str::CompactString;
+use once_cell::sync::Lazy;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::helpers::cratesio_url;
+pub fn cratesio_url() -> &'static Url {
+    static CRATESIO: Lazy<Url, fn() -> Url> =
+        Lazy::new(|| Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
+
+    &CRATESIO
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CrateInfo {
@@ -17,13 +23,6 @@ pub struct CrateInfo {
     pub source: CrateSource,
     pub target: CompactString,
     pub bins: Vec<CompactString>,
-
-    /// Forwards compatibility. Unknown keys from future versions
-    /// will be stored here and retained when the file is saved.
-    ///
-    /// We use an `Vec` here since it is never accessed in Rust.
-    #[serde(flatten, with = "tuple_vec_map")]
-    pub other: Vec<(CompactString, serde_json::Value)>,
 }
 
 impl borrow::Borrow<str> for CrateInfo {

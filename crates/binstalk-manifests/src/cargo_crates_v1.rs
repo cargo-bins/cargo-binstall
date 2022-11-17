@@ -114,6 +114,7 @@ impl CratesToml {
 }
 
 #[derive(Debug, Diagnostic, Error)]
+#[non_exhaustive]
 pub enum CratesTomlParseError {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -122,10 +123,22 @@ pub enum CratesTomlParseError {
     TomlParse(#[from] toml_edit::easy::de::Error),
 
     #[error(transparent)]
-    TomlWrite(#[from] toml_edit::easy::ser::Error),
+    TomlWrite(Box<toml_edit::easy::ser::Error>),
 
     #[error(transparent)]
-    CvsParse(#[from] CvsParseError),
+    CvsParse(Box<CvsParseError>),
+}
+
+impl From<CvsParseError> for CratesTomlParseError {
+    fn from(e: CvsParseError) -> Self {
+        CratesTomlParseError::CvsParse(Box::new(e))
+    }
+}
+
+impl From<toml_edit::easy::ser::Error> for CratesTomlParseError {
+    fn from(e: toml_edit::easy::ser::Error) -> Self {
+        CratesTomlParseError::TomlWrite(Box::new(e))
+    }
 }
 
 #[cfg(test)]
@@ -151,7 +164,6 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
-                other: Default::default(),
             }],
         )
         .unwrap();

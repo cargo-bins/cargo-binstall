@@ -1,5 +1,6 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
+use binstalk_types::crate_info::cratesio_url;
 use compact_str::CompactString;
 use miette::Diagnostic;
 use semver::Version;
@@ -7,10 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use crate::{
-    crate_info::{CrateInfo, CrateSource, SourceType},
-    helpers::cratesio_url,
-};
+use crate::crate_info::{CrateInfo, CrateSource, SourceType};
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct CrateVersionSource {
@@ -72,8 +70,8 @@ impl FromStr for CrateVersionSource {
                     ["registry", url] => Source::Registry(Url::parse(url)?),
                     [kind, arg] => {
                         return Err(CvsParseError::UnknownSourceType {
-                            kind: kind.to_string(),
-                            arg: arg.to_string(),
+                            kind: kind.to_string().into_boxed_str(),
+                            arg: arg.to_string().into_boxed_str(),
                         })
                     }
                     _ => return Err(CvsParseError::BadSource),
@@ -90,6 +88,7 @@ impl FromStr for CrateVersionSource {
 }
 
 #[derive(Debug, Diagnostic, Error)]
+#[non_exhaustive]
 pub enum CvsParseError {
     #[error(transparent)]
     UrlParse(#[from] url::ParseError),
@@ -98,7 +97,7 @@ pub enum CvsParseError {
     VersionParse(#[from] semver::Error),
 
     #[error("unknown source type {kind}+{arg}")]
-    UnknownSourceType { kind: String, arg: String },
+    UnknownSourceType { kind: Box<str>, arg: Box<str> },
 
     #[error("bad source format")]
     BadSource,
