@@ -47,24 +47,29 @@ impl RepositoryHost {
         use RepositoryHost::*;
 
         match self {
-            GitHub => Some(apply_filenames_to_paths(
-                &[
-                    "{ repo }/releases/download/{ version }",
-                    "{ repo }/releases/download/v{ version }",
-                ],
-                &[FULL_FILENAMES, NOVERSION_FILENAMES],
-            )),
-            GitLab => Some(apply_filenames_to_paths(
-                &[
-                    "{ repo }/-/releases/{ version }/downloads/binaries",
-                    "{ repo }/-/releases/v{ version }/downloads/binaries",
-                ],
-                &[FULL_FILENAMES, NOVERSION_FILENAMES],
-            )),
-            BitBucket => Some(apply_filenames_to_paths(
-                &["{ repo }/downloads"],
-                &[FULL_FILENAMES],
-            )),
+            GitHub => Some(
+                apply_filenames_to_paths(
+                    &[
+                        "{ repo }/releases/download/{ version }",
+                        "{ repo }/releases/download/v{ version }",
+                    ],
+                    &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                )
+                .collect(),
+            ),
+            GitLab => Some(
+                apply_filenames_to_paths(
+                    &[
+                        "{ repo }/-/releases/{ version }/downloads/binaries",
+                        "{ repo }/-/releases/v{ version }/downloads/binaries",
+                    ],
+                    &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                )
+                .collect(),
+            ),
+            BitBucket => {
+                Some(apply_filenames_to_paths(&["{ repo }/downloads"], &[FULL_FILENAMES]).collect())
+            }
             SourceForge => Some(
                 apply_filenames_to_paths(
                     &[
@@ -73,7 +78,6 @@ impl RepositoryHost {
                     ],
                     &[FULL_FILENAMES, NOVERSION_FILENAMES],
                 )
-                .into_iter()
                 .map(|url| format!("{url}/download"))
                 .collect(),
             ),
@@ -82,10 +86,12 @@ impl RepositoryHost {
     }
 }
 
-fn apply_filenames_to_paths(paths: &[&str], filenames: &[&[&str]]) -> Vec<String> {
+fn apply_filenames_to_paths<'a>(
+    paths: &'a [&'a str],
+    filenames: &'a [&'a [&'a str]],
+) -> impl Iterator<Item = String> + 'a {
     filenames
         .iter()
         .flat_map(|fs| fs.iter())
         .flat_map(|filename| paths.iter().map(move |path| format!("{path}/{filename}")))
-        .collect()
 }
