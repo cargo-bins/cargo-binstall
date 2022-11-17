@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use cargo_toml::{Manifest, Product};
+use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use semver::{Version, VersionReq};
@@ -322,7 +322,7 @@ async fn download_extract_and_verify(
                             Some(Err(err))
                         } else {
                             // Optional, print a warning and continue.
-                            let bin_name = bin.name.as_deref().unwrap();
+                            let bin_name = bin.name.as_str();
                             let features = required_features.iter().format(",");
                             warn!(
                                 "When resolving {name} bin {bin_name} is not found. \
@@ -368,7 +368,7 @@ fn collect_bin_files(
     let bin_files = package_info
         .binaries
         .iter()
-        .map(|p| bins::BinFile::new(&bin_data, p.name.as_deref().unwrap(), &bin_dir, no_symlinks))
+        .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &bin_dir, no_symlinks))
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let mut source_set = BTreeSet::new();
@@ -386,12 +386,17 @@ fn collect_bin_files(
 
 struct PackageInfo {
     meta: PkgMeta,
-    binaries: Vec<Product>,
+    binaries: Vec<Bin>,
     name: CompactString,
     version_str: CompactString,
     version: Version,
     repo: Option<String>,
     overrides: BTreeMap<String, PkgOverride>,
+}
+
+struct Bin {
+    name: String,
+    required_features: Vec<String>,
 }
 
 impl PackageInfo {
@@ -439,16 +444,23 @@ impl PackageInfo {
             }
         }
 
-        let (mut meta, mut binaries) = (
+        let (mut meta, binaries): (_, Vec<Bin>) = (
             package
                 .metadata
                 .take()
                 .and_then(|mut m| m.binstall.take())
                 .unwrap_or_default(),
-            manifest.bin,
+            manifest
+                .bin
+                .into_iter()
+                .filter_map(|p| {
+                    p.name.map(|name| Bin {
+                        name,
+                        required_features: p.required_features,
+                    })
+                })
+                .collect(),
         );
-
-        binaries.retain(|product| product.name.is_some());
 
         // Check binaries
         if binaries.is_empty() {
