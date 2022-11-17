@@ -254,7 +254,6 @@ async fn resolve_inner(
 }
 
 ///  * `fetcher` - `fetcher.find()` must return `Ok(true)`.
-///  * `binaries` - must not be empty
 async fn download_extract_and_verify(
     fetcher: &dyn Fetcher,
     bin_path: &Path,
@@ -338,7 +337,6 @@ async fn download_extract_and_verify(
     })
 }
 
-///  * `binaries` - must not be empty
 fn collect_bin_files(
     fetcher: &dyn Fetcher,
     package_info: &PackageInfo,
