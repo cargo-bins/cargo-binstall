@@ -122,22 +122,30 @@ impl Download {
         path: impl AsRef<Path>,
         cancellation_future: CancellationFuture,
     ) -> Result<(), DownloadError> {
-        let stream = self.client.get_stream(self.url).await?;
+        async fn inner(
+            this: Download,
+            fmt: PkgFmt,
+            path: &Path,
+            cancellation_future: CancellationFuture,
+        ) -> Result<(), DownloadError> {
+            let stream = this.client.get_stream(this.url).await?;
 
-        let path = path.as_ref();
-        debug!("Downloading and extracting to: '{}'", path.display());
+            debug!("Downloading and extracting to: '{}'", path.display());
 
-        match fmt.decompose() {
-            PkgFmtDecomposed::Tar(fmt) => {
-                extract_tar_based_stream(stream, path, fmt, cancellation_future).await?
+            match fmt.decompose() {
+                PkgFmtDecomposed::Tar(fmt) => {
+                    extract_tar_based_stream(stream, path, fmt, cancellation_future).await?
+                }
+                PkgFmtDecomposed::Bin => extract_bin(stream, path, cancellation_future).await?,
+                PkgFmtDecomposed::Zip => extract_zip(stream, path, cancellation_future).await?,
             }
-            PkgFmtDecomposed::Bin => extract_bin(stream, path, cancellation_future).await?,
-            PkgFmtDecomposed::Zip => extract_zip(stream, path, cancellation_future).await?,
+
+            debug!("Download OK, extracted to: '{}'", path.display());
+
+            Ok(())
         }
 
-        debug!("Download OK, extracted to: '{}'", path.display());
-
-        Ok(())
+        inner(self, fmt, path.as_ref(), cancellation_future).await
     }
 }
 
