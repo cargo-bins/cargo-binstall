@@ -258,12 +258,12 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
-    // Build final metadata
-    let meta = fetcher.target_meta();
-
     // Download and extract it.
     // If that fails, then ignore this fetcher.
     fetcher.fetch_and_extract(bin_path).await?;
+
+    // Build final metadata
+    let meta = fetcher.target_meta();
 
     #[cfg(incomplete)]
     {
@@ -295,8 +295,8 @@ async fn download_extract_and_verify(
             fetcher,
             package_info,
             meta,
-            bin_path.to_path_buf(),
-            install_path.to_path_buf(),
+            bin_path,
+            install_path,
             no_symlinks,
         )?;
 
@@ -339,8 +339,8 @@ fn collect_bin_files(
     fetcher: &dyn Fetcher,
     package_info: &PackageInfo,
     meta: PkgMeta,
-    bin_path: PathBuf,
-    install_path: PathBuf,
+    bin_path: &Path,
+    install_path: &Path,
     no_symlinks: bool,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // List files to be installed
