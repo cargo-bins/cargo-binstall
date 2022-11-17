@@ -26,4 +26,5 @@ pub struct Options {
     pub desired_targets: DesiredTargets,
     pub quiet: bool,
     pub resolvers: Vec<Resolver>,
+    pub cargo_install_fallback: bool,
 }

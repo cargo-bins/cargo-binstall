@@ -193,6 +193,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         desired_targets,
         quiet: args.log_level == LevelFilter::Off,
         resolvers,
+        cargo_install_fallback,
     });
 
     let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
@@ -263,13 +264,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
                     )
                     .await?;
 
-                    if !cargo_install_fallback
-                        && matches!(resolution, Resolution::InstallFromSource { .. })
-                    {
-                        Err(BinstallError::NoFallbackToCargoInstall)
-                    } else {
-                        ops::install::install(resolution, opts, jobserver_client).await
-                    }
+                    ops::install::install(resolution, opts, jobserver_client).await
                 })
             })
             .collect()

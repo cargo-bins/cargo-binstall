@@ -243,10 +243,14 @@ async fn resolve_inner(
         }
     }
 
-    Ok(Resolution::InstallFromSource {
-        name: package_info.name,
-        version: package_info.version_str,
-    })
+    if opts.cargo_install_fallback {
+        Ok(Resolution::InstallFromSource {
+            name: package_info.name,
+            version: package_info.version_str,
+        })
+    } else {
+        Err(BinstallError::NoFallbackToCargoInstall)
+    }
 }
 
 ///  * `fetcher` - `fetcher.find()` must return `Ok(true)`.
