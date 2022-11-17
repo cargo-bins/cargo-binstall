@@ -13,7 +13,7 @@ license = "GPL-3.0"
 binstalk-types = { version = "0.1.0", path = "../binstalk-types" }
 bytes = "1.2.1"
 bzip2 = "0.4.3"
-digest = "0.10.5"
+digest = "0.10.6"
 flate2 = { version = "1.0.24", default-features = false }
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 generic-array = "0.14.6"
