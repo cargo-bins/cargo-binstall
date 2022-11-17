@@ -263,6 +263,7 @@ mod test {
     use crate::manifests::cargo_toml_binstall::{PkgFmt, PkgMeta};
 
     use super::{super::Data, Context};
+    use compact_str::ToCompactString;
     use url::Url;
 
     const DEFAULT_PKG_URL: &str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }";
@@ -275,9 +276,9 @@ mod test {
     fn defaults() {
         let meta = PkgMeta::default();
         let data = Data {
-            name: "cargo-binstall".to_string(),
+            name: "cargo-binstall".to_compact_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
-            version: "1.2.3".to_string(),
+            version: "1.2.3".to_compact_string(),
             repo: Some("https://github.com/ryankurte/cargo-binstall".to_string()),
             meta,
         };
@@ -294,9 +295,9 @@ mod test {
     fn no_repo() {
         let meta = PkgMeta::default();
         let data = Data {
-            name: "cargo-binstall".to_string(),
+            name: "cargo-binstall".to_compact_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
-            version: "1.2.3".to_string(),
+            version: "1.2.3".to_compact_string(),
             repo: None,
             meta,
         };
@@ -314,9 +315,9 @@ mod test {
         };
 
         let data = Data {
-            name: "cargo-binstall".to_string(),
+            name: "cargo-binstall".to_compact_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
-            version: "1.2.3".to_string(),
+            version: "1.2.3".to_compact_string(),
             repo: None,
             meta,
         };
@@ -338,9 +339,9 @@ mod test {
         };
 
         let data = Data {
-            name: "radio-sx128x".to_string(),
+            name: "radio-sx128x".to_compact_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
-            version: "0.14.1-alpha.5".to_string(),
+            version: "0.14.1-alpha.5".to_compact_string(),
             repo: Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
             meta,
         };
@@ -360,9 +361,9 @@ mod test {
         };
 
         let data = Data {
-            name: "radio-sx128x".to_string(),
+            name: "radio-sx128x".to_compact_string(),
             target: "x86_64-unknown-linux-gnu".to_string(),
-            version: "0.14.1-alpha.5".to_string(),
+            version: "0.14.1-alpha.5".to_compact_string(),
             repo: Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
             meta,
         };
@@ -386,9 +387,9 @@ mod test {
         };
 
         let data = Data {
-            name: "cargo-watch".to_string(),
+            name: "cargo-watch".to_compact_string(),
             target: "aarch64-apple-darwin".to_string(),
-            version: "9.0.0".to_string(),
+            version: "9.0.0".to_compact_string(),
             repo: Some("https://github.com/watchexec/cargo-watch".to_string()),
             meta,
         };
@@ -409,9 +410,9 @@ mod test {
         };
 
         let data = Data {
-            name: "cargo-watch".to_string(),
+            name: "cargo-watch".to_compact_string(),
             target: "aarch64-pc-windows-msvc".to_string(),
-            version: "9.0.0".to_string(),
+            version: "9.0.0".to_compact_string(),
             repo: Some("https://github.com/watchexec/cargo-watch".to_string()),
             meta,
         };

@@ -166,9 +166,9 @@ async fn resolve_inner(
                 debug!("Found metadata: {target_meta:?}");
 
                 Arc::new(Data {
-                    name: package_info.name.to_string(),
+                    name: package_info.name.clone(),
                     target: target.clone(),
-                    version: package_info.version.to_string(),
+                    version: package_info.version_str.clone(),
                     repo: package_info.repo.clone(),
                     meta: target_meta,
                 })

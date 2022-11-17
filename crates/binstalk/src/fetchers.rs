@@ -60,9 +60,9 @@ pub trait Fetcher: Send + Sync {
 /// Data required to fetch a package
 #[derive(Clone, Debug)]
 pub struct Data {
-    pub name: String,
+    pub name: CompactString,
     pub target: String,
-    pub version: String,
+    pub version: CompactString,
     pub repo: Option<String>,
     pub meta: PkgMeta,
 }
