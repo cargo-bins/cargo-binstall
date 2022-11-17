@@ -73,7 +73,7 @@ pub struct BinFile {
 }
 
 impl BinFile {
-    pub fn from_product(
+    pub fn new(
         data: &Data<'_>,
         base_name: &str,
         bin_dir: &str,
