@@ -119,7 +119,7 @@ pub async fn resolve(
 
 async fn resolve_inner(
     opts: &Options,
-    crate_name: CrateName,
+    mut crate_name: CrateName,
     curr_version: Option<Version>,
     temp_dir: Arc<Path>,
     install_path: Arc<Path>,
@@ -128,8 +128,8 @@ async fn resolve_inner(
 ) -> Result<Resolution, BinstallError> {
     info!("Resolving package: '{}'", crate_name);
 
-    let version_req: VersionReq = match (&crate_name.version_req, &opts.version_req) {
-        (Some(version), None) => version.clone(),
+    let version_req: VersionReq = match (crate_name.version_req.take(), &opts.version_req) {
+        (Some(version), None) => version,
         (None, Some(version)) => version.clone(),
         (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
         (None, None) => VersionReq::STAR,
@@ -138,7 +138,7 @@ async fn resolve_inner(
     // Fetch crate via crates.io, git, or use a local manifest path
     // TODO: work out which of these to do based on `opts.name`
     // TODO: support git-based fetches (whole repo name rather than just crate name)
-    let manifest = match opts.manifest_path.clone() {
+    let manifest = match opts.manifest_path.as_ref() {
         Some(manifest_path) => load_manifest_path(manifest_path)?,
         None => {
             fetch_crate_cratesio(
@@ -151,7 +151,7 @@ async fn resolve_inner(
         }
     };
 
-    let package = manifest
+    let mut package = manifest
         .package
         .ok_or_else(|| BinstallError::CargoTomlMissingPackage(crate_name.name.clone()))?;
 
@@ -174,8 +174,8 @@ async fn resolve_inner(
     let (mut meta, mut binaries) = (
         package
             .metadata
-            .as_ref()
-            .and_then(|m| m.binstall.clone())
+            .take()
+            .and_then(|mut m| m.binstall.take())
             .unwrap_or_default(),
         manifest.bin,
     );
