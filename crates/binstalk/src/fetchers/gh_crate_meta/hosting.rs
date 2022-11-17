@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use url::Url;
 
 use crate::errors::BinstallError;
@@ -93,5 +94,6 @@ fn apply_filenames_to_paths<'a>(
     filenames
         .iter()
         .flat_map(|fs| fs.iter())
-        .flat_map(|filename| paths.iter().map(move |path| format!("{path}/{filename}")))
+        .cartesian_product(paths.iter())
+        .map(|(filename, path)| format!("{path}/{filename}"))
 }
