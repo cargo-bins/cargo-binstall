@@ -188,8 +188,10 @@ async fn resolve_inner(
     }
 
     let desired_targets = opts.desired_targets.get().await;
+    let resolvers = &opts.resolver;
 
-    let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(desired_targets.len() * 2);
+    let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
+        Vec::with_capacity(desired_targets.len() * resolvers.len());
 
     let overrides = mem::take(&mut meta.overrides);
 
@@ -212,7 +214,7 @@ async fn resolve_inner(
                     meta: target_meta,
                 })
             })
-            .cartesian_product(&opts.resolver)
+            .cartesian_product(resolvers)
             .map(|(fetcher_data, f)| {
                 let fetcher = f(&client, &fetcher_data);
                 (
