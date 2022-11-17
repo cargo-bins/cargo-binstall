@@ -1,12 +1,12 @@
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     iter, mem,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use cargo_toml::{Manifest, Package, Product};
+use cargo_toml::{Manifest, Product};
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use semver::{Version, VersionReq};
@@ -20,7 +20,7 @@ use crate::{
     errors::BinstallError,
     fetchers::{Data, Fetcher},
     helpers::{remote::Client, tasks::AutoAbortJoinHandle},
-    manifests::cargo_toml_binstall::{Meta, PkgMeta},
+    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
 };
 
 mod crate_name;
@@ -119,7 +119,7 @@ pub async fn resolve(
 
 async fn resolve_inner(
     opts: &Options,
-    mut crate_name: CrateName,
+    crate_name: CrateName,
     curr_version: Option<Version>,
     temp_dir: Arc<Path>,
     install_path: Arc<Path>,
@@ -128,64 +128,24 @@ async fn resolve_inner(
 ) -> Result<Resolution, BinstallError> {
     info!("Resolving package: '{}'", crate_name);
 
-    let version_req: VersionReq = match (crate_name.version_req.take(), &opts.version_req) {
+    let version_req: VersionReq = match (crate_name.version_req, &opts.version_req) {
         (Some(version), None) => version,
         (None, Some(version)) => version.clone(),
         (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
         (None, None) => VersionReq::STAR,
     };
 
-    // Fetch crate via crates.io, git, or use a local manifest path
-    // TODO: work out which of these to do based on `opts.name`
-    // TODO: support git-based fetches (whole repo name rather than just crate name)
-    let manifest = match opts.manifest_path.as_ref() {
-        Some(manifest_path) => load_manifest_path(manifest_path)?,
-        None => {
-            fetch_crate_cratesio(
-                client.clone(),
-                &crates_io_api_client,
-                &crate_name.name,
-                &version_req,
-            )
-            .await?
-        }
+    let version_req_str = version_req.to_compact_string();
+
+    let Some(package_info) = PackageInfo::resolve(opts,
+        crate_name.name,
+        curr_version,
+        version_req,
+        client.clone(),
+        crates_io_api_client).await?
+    else {
+        return Ok(Resolution::AlreadyUpToDate)
     };
-
-    let mut package = manifest
-        .package
-        .ok_or_else(|| BinstallError::CargoTomlMissingPackage(crate_name.name.clone()))?;
-
-    let new_version =
-        Version::parse(package.version()).map_err(|err| BinstallError::VersionParse {
-            v: package.version().to_compact_string(),
-            err,
-        })?;
-
-    if let Some(curr_version) = curr_version {
-        if new_version == curr_version {
-            info!(
-                "{} v{curr_version} is already installed, use --force to override",
-                crate_name.name
-            );
-            return Ok(Resolution::AlreadyUpToDate);
-        }
-    }
-
-    let (mut meta, mut binaries) = (
-        package
-            .metadata
-            .take()
-            .and_then(|mut m| m.binstall.take())
-            .unwrap_or_default(),
-        manifest.bin,
-    );
-
-    binaries.retain(|product| product.name.is_some());
-
-    // Check binaries
-    if binaries.is_empty() {
-        return Err(BinstallError::UnspecifiedBinaries);
-    }
 
     let desired_targets = opts.desired_targets.get().await;
     let resolvers = &opts.resolvers;
@@ -193,24 +153,23 @@ async fn resolve_inner(
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
         Vec::with_capacity(desired_targets.len() * resolvers.len());
 
-    let overrides = mem::take(&mut meta.overrides);
-
     handles.extend(
         desired_targets
             .iter()
             .map(|target| {
                 debug!("Building metadata for target: {target}");
 
-                let target_meta = meta
-                    .merge_overrides(iter::once(&opts.cli_overrides).chain(overrides.get(target)));
+                let target_meta = package_info.meta.merge_overrides(
+                    iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
+                );
 
                 debug!("Found metadata: {target_meta:?}");
 
                 Arc::new(Data {
-                    name: package.name.clone(),
+                    name: package_info.name.to_string(),
                     target: target.clone(),
-                    version: package.version().to_string(),
-                    repo: package.repository().map(ToString::to_string),
+                    version: package_info.version.to_string(),
+                    repo: package_info.repo.clone(),
                     meta: target_meta,
                 })
             })
@@ -230,7 +189,7 @@ async fn resolve_inner(
                 // Generate temporary binary path
                 let bin_path = temp_dir.join(format!(
                     "bin-{}-{}-{}",
-                    crate_name.name,
+                    package_info.name,
                     fetcher.target(),
                     fetcher.fetcher_name()
                 ));
@@ -238,9 +197,8 @@ async fn resolve_inner(
                 match download_extract_and_verify(
                     fetcher.as_ref(),
                     &bin_path,
-                    &package,
+                    &package_info,
                     &install_path,
-                    &binaries,
                     opts.no_symlinks,
                 )
                 .await
@@ -249,9 +207,9 @@ async fn resolve_inner(
                         if !bin_files.is_empty() {
                             return Ok(Resolution::Fetch {
                                 fetcher,
-                                new_version,
-                                name: crate_name.name,
-                                version_req: version_req.to_compact_string(),
+                                new_version: package_info.version,
+                                name: package_info.name,
+                                version_req: version_req_str,
                                 bin_files,
                             });
                         } else {
@@ -286,8 +244,8 @@ async fn resolve_inner(
     }
 
     Ok(Resolution::InstallFromSource {
-        name: crate_name.name,
-        version: package.version().to_compact_string(),
+        name: package_info.name,
+        version: package_info.version_str,
     })
 }
 
@@ -296,9 +254,8 @@ async fn resolve_inner(
 async fn download_extract_and_verify(
     fetcher: &dyn Fetcher,
     bin_path: &Path,
-    package: &Package<Meta>,
+    package_info: &PackageInfo,
     install_path: &Path,
-    binaries: &[Product],
     no_symlinks: bool,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Build final metadata
@@ -336,17 +293,17 @@ async fn download_extract_and_verify(
     block_in_place(|| {
         let bin_files = collect_bin_files(
             fetcher,
-            package,
+            package_info,
             meta,
-            binaries,
             bin_path.to_path_buf(),
             install_path.to_path_buf(),
             no_symlinks,
         )?;
 
-        let name = &package.name;
+        let name = &package_info.name;
 
-        binaries
+        package_info
+            .binaries
             .iter()
             .zip(bin_files)
             .filter_map(|(bin, bin_file)| {
@@ -380,9 +337,8 @@ async fn download_extract_and_verify(
 ///  * `binaries` - must not be empty
 fn collect_bin_files(
     fetcher: &dyn Fetcher,
-    package: &Package<Meta>,
+    package_info: &PackageInfo,
     meta: PkgMeta,
-    binaries: &[Product],
     bin_path: PathBuf,
     install_path: PathBuf,
     no_symlinks: bool,
@@ -390,10 +346,10 @@ fn collect_bin_files(
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
-        name: &package.name,
+        name: &package_info.name,
         target: fetcher.target(),
-        version: package.version(),
-        repo: package.repository(),
+        version: &package_info.version_str,
+        repo: package_info.repo.as_deref(),
         meta,
         bin_path,
         install_path,
@@ -407,7 +363,8 @@ fn collect_bin_files(
         .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data));
 
     // Create bin_files
-    let bin_files = binaries
+    let bin_files = package_info
+        .binaries
         .iter()
         .map(|p| bins::BinFile::from_product(&bin_data, p, &bin_dir, no_symlinks))
         .collect::<Result<Vec<_>, BinstallError>>()?;
@@ -423,6 +380,89 @@ fn collect_bin_files(
     }
 
     Ok(bin_files)
+}
+
+struct PackageInfo {
+    meta: PkgMeta,
+    binaries: Vec<Product>,
+    name: CompactString,
+    version_str: CompactString,
+    version: Version,
+    repo: Option<String>,
+    overrides: BTreeMap<String, PkgOverride>,
+}
+
+impl PackageInfo {
+    /// Return `None` if already up-to-date.
+    async fn resolve(
+        opts: &Options,
+        name: CompactString,
+        curr_version: Option<Version>,
+        version_req: VersionReq,
+        client: Client,
+        crates_io_api_client: crates_io_api::AsyncClient,
+    ) -> Result<Option<Self>, BinstallError> {
+        // Fetch crate via crates.io, git, or use a local manifest path
+        // TODO: work out which of these to do based on `opts.name`
+        // TODO: support git-based fetches (whole repo name rather than just crate name)
+        let manifest = match opts.manifest_path.as_ref() {
+            Some(manifest_path) => load_manifest_path(manifest_path)?,
+            None => {
+                fetch_crate_cratesio(client, &crates_io_api_client, &name, &version_req).await?
+            }
+        };
+
+        let Some(mut package) = manifest.package else {
+            return Err(BinstallError::CargoTomlMissingPackage(name));
+        };
+
+        let new_version_str = package.version().to_compact_string();
+        let new_version = match Version::parse(&new_version_str) {
+            Ok(new_version) => new_version,
+            Err(err) => {
+                return Err(BinstallError::VersionParse {
+                    v: new_version_str,
+                    err,
+                })
+            }
+        };
+
+        if let Some(curr_version) = curr_version {
+            if new_version == curr_version {
+                info!(
+                    "{} v{curr_version} is already installed, use --force to override",
+                    name
+                );
+                return Ok(None);
+            }
+        }
+
+        let (mut meta, mut binaries) = (
+            package
+                .metadata
+                .take()
+                .and_then(|mut m| m.binstall.take())
+                .unwrap_or_default(),
+            manifest.bin,
+        );
+
+        binaries.retain(|product| product.name.is_some());
+
+        // Check binaries
+        if binaries.is_empty() {
+            Err(BinstallError::UnspecifiedBinaries)
+        } else {
+            Ok(Some(Self {
+                overrides: mem::take(&mut meta.overrides),
+                meta,
+                binaries,
+                name,
+                version_str: new_version_str,
+                version: new_version,
+                repo: package.repository().map(ToString::to_string),
+            }))
+        }
+    }
 }
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
