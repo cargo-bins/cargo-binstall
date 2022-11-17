@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     iter, mem,
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
@@ -320,7 +320,7 @@ async fn download_extract_and_verify(
                         } else {
                             // Optional, print a warning and continue.
                             let bin_name = bin.name.as_deref().unwrap();
-                            let features = required_features.join(",");
+                            let features = required_features.iter().format(",");
                             warn!(
                                 "When resolving {name} bin {bin_name} is not found. \
                                 But since it requies features {features}, this bin is ignored."
