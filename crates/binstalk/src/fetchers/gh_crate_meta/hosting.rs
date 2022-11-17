@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use url::Url;
 
 use crate::errors::BinstallError;
@@ -53,6 +54,7 @@ impl RepositoryHost {
                     "{ repo }/releases/download/v{ version }",
                 ],
                 &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                "",
             )),
             GitLab => Some(apply_filenames_to_paths(
                 &[
@@ -60,32 +62,31 @@ impl RepositoryHost {
                     "{ repo }/-/releases/v{ version }/downloads/binaries",
                 ],
                 &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                "",
             )),
             BitBucket => Some(apply_filenames_to_paths(
                 &["{ repo }/downloads"],
                 &[FULL_FILENAMES],
+                "",
             )),
-            SourceForge => Some(
-                apply_filenames_to_paths(
-                    &[
-                        "{ repo }/files/binaries/{ version }",
-                        "{ repo }/files/binaries/v{ version }",
-                    ],
-                    &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                )
-                .into_iter()
-                .map(|url| format!("{url}/download"))
-                .collect(),
-            ),
+            SourceForge => Some(apply_filenames_to_paths(
+                &[
+                    "{ repo }/files/binaries/{ version }",
+                    "{ repo }/files/binaries/v{ version }",
+                ],
+                &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                "/download",
+            )),
             Unknown => None,
         }
     }
 }
 
-fn apply_filenames_to_paths(paths: &[&str], filenames: &[&[&str]]) -> Vec<String> {
+fn apply_filenames_to_paths(paths: &[&str], filenames: &[&[&str]], suffix: &str) -> Vec<String> {
     filenames
         .iter()
         .flat_map(|fs| fs.iter())
-        .flat_map(|filename| paths.iter().map(move |path| format!("{path}/{filename}")))
+        .cartesian_product(paths.iter())
+        .map(|(filename, path)| format!("{path}/{filename}{suffix}"))
         .collect()
 }

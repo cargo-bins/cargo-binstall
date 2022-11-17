@@ -25,6 +25,9 @@ use thiserror::Error;
 
 use crate::{crate_info::CrateInfo, helpers::create_if_not_exist};
 
+/// Buffer size for loading and writing binstall_crates_v1 manifest.
+const BUFFER_SIZE: usize = 4096 * 5;
+
 #[derive(Debug, Diagnostic, Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -56,7 +59,7 @@ where
 }
 
 pub fn write_to(file: &mut FileLock, iter: &mut dyn Iterator<Item = Data>) -> Result<(), Error> {
-    let writer = io::BufWriter::with_capacity(512, file);
+    let writer = io::BufWriter::with_capacity(BUFFER_SIZE, file);
 
     let mut ser = serde_json::Serializer::new(writer);
 
@@ -149,7 +152,7 @@ pub struct Records {
 
 impl Records {
     fn load_impl(&mut self) -> Result<(), Error> {
-        let reader = io::BufReader::with_capacity(1024, &mut self.file);
+        let reader = io::BufReader::with_capacity(BUFFER_SIZE, &mut self.file);
         let stream_deser = serde_json::Deserializer::from_reader(reader).into_iter();
 
         for res in stream_deser {

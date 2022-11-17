@@ -4,7 +4,6 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use cargo_toml::Product;
 use compact_str::CompactString;
 use normalize_path::NormalizePath;
 use serde::Serialize;
@@ -74,14 +73,12 @@ pub struct BinFile {
 }
 
 impl BinFile {
-    pub fn from_product(
+    pub fn new(
         data: &Data<'_>,
-        product: &Product,
+        base_name: &str,
         bin_dir: &str,
         no_symlinks: bool,
     ) -> Result<Self, BinstallError> {
-        let base_name = product.name.as_deref().unwrap();
-
         let binary_ext = if data.target.contains("windows") {
             ".exe"
         } else {
@@ -99,7 +96,7 @@ impl BinFile {
         };
 
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
-            data.bin_path.clone()
+            data.bin_path.to_path_buf()
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
@@ -229,8 +226,8 @@ pub struct Data<'a> {
     pub version: &'a str,
     pub repo: Option<&'a str>,
     pub meta: PkgMeta,
-    pub bin_path: PathBuf,
-    pub install_path: PathBuf,
+    pub bin_path: &'a Path,
+    pub install_path: &'a Path,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -64,7 +64,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         strategies.pop().unwrap();
     }
 
-    let resolver: Vec<_> = strategies
+    let resolvers: Vec<_> = strategies
         .into_iter()
         .map(|strategy| match strategy {
             Strategy::CrateMetaData => GhCrateMeta::new,
@@ -192,7 +192,8 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         cli_overrides,
         desired_targets,
         quiet: args.log_level == LevelFilter::Off,
-        resolver,
+        resolvers,
+        cargo_install_fallback,
     });
 
     let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
@@ -263,13 +264,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
                     )
                     .await?;
 
-                    if !cargo_install_fallback
-                        && matches!(resolution, Resolution::InstallFromSource { .. })
-                    {
-                        Err(BinstallError::NoFallbackToCargoInstall)
-                    } else {
-                        ops::install::install(resolution, opts, jobserver_client).await
-                    }
+                    ops::install::install(resolution, opts, jobserver_client).await
                 })
             })
             .collect()

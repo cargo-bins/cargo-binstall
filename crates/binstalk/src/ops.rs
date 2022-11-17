@@ -25,5 +25,6 @@ pub struct Options {
     pub cli_overrides: PkgOverride,
     pub desired_targets: DesiredTargets,
     pub quiet: bool,
-    pub resolver: Vec<Resolver>,
+    pub resolvers: Vec<Resolver>,
+    pub cargo_install_fallback: bool,
 }
