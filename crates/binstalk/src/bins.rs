@@ -99,7 +99,7 @@ impl BinFile {
         };
 
         let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
-            data.bin_path.clone()
+            data.bin_path.to_path_buf()
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
@@ -229,8 +229,8 @@ pub struct Data<'a> {
     pub version: &'a str,
     pub repo: Option<&'a str>,
     pub meta: PkgMeta,
-    pub bin_path: PathBuf,
-    pub install_path: PathBuf,
+    pub bin_path: &'a Path,
+    pub install_path: &'a Path,
 }
 
 #[derive(Clone, Debug, Serialize)]
