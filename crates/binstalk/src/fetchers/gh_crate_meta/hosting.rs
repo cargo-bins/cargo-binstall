@@ -48,52 +48,45 @@ impl RepositoryHost {
         use RepositoryHost::*;
 
         match self {
-            GitHub => Some(
-                apply_filenames_to_paths(
-                    &[
-                        "{ repo }/releases/download/{ version }",
-                        "{ repo }/releases/download/v{ version }",
-                    ],
-                    &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                )
-                .collect(),
-            ),
-            GitLab => Some(
-                apply_filenames_to_paths(
-                    &[
-                        "{ repo }/-/releases/{ version }/downloads/binaries",
-                        "{ repo }/-/releases/v{ version }/downloads/binaries",
-                    ],
-                    &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                )
-                .collect(),
-            ),
-            BitBucket => {
-                Some(apply_filenames_to_paths(&["{ repo }/downloads"], &[FULL_FILENAMES]).collect())
-            }
-            SourceForge => Some(
-                apply_filenames_to_paths(
-                    &[
-                        "{ repo }/files/binaries/{ version }",
-                        "{ repo }/files/binaries/v{ version }",
-                    ],
-                    &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                )
-                .map(|url| format!("{url}/download"))
-                .collect(),
-            ),
+            GitHub => Some(apply_filenames_to_paths(
+                &[
+                    "{ repo }/releases/download/{ version }",
+                    "{ repo }/releases/download/v{ version }",
+                ],
+                &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                "",
+            )),
+            GitLab => Some(apply_filenames_to_paths(
+                &[
+                    "{ repo }/-/releases/{ version }/downloads/binaries",
+                    "{ repo }/-/releases/v{ version }/downloads/binaries",
+                ],
+                &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                "",
+            )),
+            BitBucket => Some(apply_filenames_to_paths(
+                &["{ repo }/downloads"],
+                &[FULL_FILENAMES],
+                "",
+            )),
+            SourceForge => Some(apply_filenames_to_paths(
+                &[
+                    "{ repo }/files/binaries/{ version }",
+                    "{ repo }/files/binaries/v{ version }",
+                ],
+                &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                "/download",
+            )),
             Unknown => None,
         }
     }
 }
 
-fn apply_filenames_to_paths<'a>(
-    paths: &'a [&'a str],
-    filenames: &'a [&'a [&'a str]],
-) -> impl Iterator<Item = String> + 'a {
+fn apply_filenames_to_paths(paths: &[&str], filenames: &[&[&str]], suffix: &str) -> Vec<String> {
     filenames
         .iter()
         .flat_map(|fs| fs.iter())
         .cartesian_product(paths.iter())
-        .map(|(filename, path)| format!("{path}/{filename}"))
+        .map(|(filename, path)| format!("{path}/{filename}{suffix}"))
+        .collect()
 }
