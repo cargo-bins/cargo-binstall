@@ -1,7 +1,6 @@
 use std::{
     env::var_os,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use binstalk::home::cargo_home;
@@ -34,15 +33,15 @@ pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
 pub fn get_install_path<P: AsRef<Path>>(
     install_path: Option<P>,
     cargo_roots: Option<P>,
-) -> (Option<Arc<Path>>, bool) {
+) -> (Option<PathBuf>, bool) {
     // Command line override first first
     if let Some(p) = install_path {
-        return (Some(Arc::from(p.as_ref())), true);
+        return (Some(p.as_ref().to_owned()), true);
     }
 
     // Then cargo_roots
     if let Some(p) = cargo_roots {
-        return (Some(Arc::from(p.as_ref().join("bin"))), false);
+        return (Some(p.as_ref().join("bin")), false);
     }
 
     // Local executable dir if no cargo is found
@@ -52,5 +51,5 @@ pub fn get_install_path<P: AsRef<Path>>(
         debug!("Fallback to {}", d.display());
     }
 
-    (dir.map(Arc::from), true)
+    (dir, true)
 }

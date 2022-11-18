@@ -1,4 +1,4 @@
-use std::{fs, mem, path::Path, sync::Arc, time::Duration};
+use std::{fs, mem, sync::Arc, time::Duration};
 
 use binstalk::{
     errors::BinstallError,
@@ -13,6 +13,7 @@ use binstalk::{
 use binstalk_manifests::{
     binstall_crates_v1::Records, cargo_crates_v1::CratesToml, cargo_toml_binstall::PkgOverride,
 };
+use crates_io_api::AsyncClient as CratesIoApiClient;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;
@@ -94,10 +95,8 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
     .map_err(BinstallError::from)?;
 
     // Build crates.io api client
-    let crates_io_api_client = crates_io_api::AsyncClient::with_http_client(
-        client.get_inner().clone(),
-        Duration::from_millis(100),
-    );
+    let crates_io_api_client =
+        CratesIoApiClient::with_http_client(client.get_inner().clone(), Duration::from_millis(100));
 
     let (install_path, cargo_roots, metadata, temp_dir) = block_in_place(|| -> Result<_> {
         // Compute cargo_roots
@@ -178,20 +177,26 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         return Ok(());
     }
 
-    let temp_dir_path: Arc<Path> = Arc::from(temp_dir.path());
-
     // Create binstall_opts
     let binstall_opts = Arc::new(ops::Options {
         no_symlinks: args.no_symlinks,
         dry_run: args.dry_run,
         force: args.force,
+        quiet: args.log_level == LevelFilter::Off,
+
         version_req: args.version_req.take(),
         manifest_path: args.manifest_path.take(),
         cli_overrides,
+
         desired_targets,
-        quiet: args.log_level == LevelFilter::Off,
         resolvers,
         cargo_install_fallback,
+
+        temp_dir: temp_dir.path().to_owned(),
+        install_path,
+        client,
+        crates_io_api_client,
+        jobserver_client,
     });
 
     let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
@@ -203,10 +208,6 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
                     binstall_opts.clone(),
                     crate_name,
                     current_version,
-                    temp_dir_path.clone(),
-                    install_path.clone(),
-                    client.clone(),
-                    crates_io_api_client.clone(),
                 ))
             })
             .collect();
@@ -232,11 +233,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         resolutions
             .into_iter()
             .map(|resolution| {
-                AutoAbortJoinHandle::spawn(ops::install::install(
-                    resolution,
-                    binstall_opts.clone(),
-                    jobserver_client.clone(),
-                ))
+                AutoAbortJoinHandle::spawn(ops::install::install(resolution, binstall_opts.clone()))
             })
             .collect()
     } else {
@@ -245,25 +242,12 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
             .into_iter()
             .map(|(crate_name, current_version)| {
                 let opts = binstall_opts.clone();
-                let temp_dir_path = temp_dir_path.clone();
-                let jobserver_client = jobserver_client.clone();
-                let client = client.clone();
-                let crates_io_api_client = crates_io_api_client.clone();
-                let install_path = install_path.clone();
 
                 AutoAbortJoinHandle::spawn(async move {
-                    let resolution = ops::resolve::resolve(
-                        opts.clone(),
-                        crate_name,
-                        current_version,
-                        temp_dir_path,
-                        install_path,
-                        client,
-                        crates_io_api_client,
-                    )
-                    .await?;
+                    let resolution =
+                        ops::resolve::resolve(opts.clone(), crate_name, current_version).await?;
 
-                    ops::install::install(resolution, opts, jobserver_client).await
+                    ops::install::install(resolution, opts).await
                 })
             })
             .collect()

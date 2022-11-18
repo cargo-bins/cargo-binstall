@@ -16,7 +16,6 @@ use crate::{
 pub async fn install(
     resolution: Resolution,
     opts: Arc<Options>,
-    jobserver_client: LazyJobserverClient,
 ) -> Result<Option<CrateInfo>, BinstallError> {
     match resolution {
         Resolution::AlreadyUpToDate => Ok(None),
@@ -51,7 +50,7 @@ pub async fn install(
                     &name,
                     &version,
                     target,
-                    jobserver_client,
+                    &opts.jobserver_client,
                     opts.quiet,
                     opts.force,
                 )
@@ -99,7 +98,7 @@ async fn install_from_source(
     name: &str,
     version: &str,
     target: &str,
-    lazy_jobserver_client: LazyJobserverClient,
+    lazy_jobserver_client: &LazyJobserverClient,
     quiet: bool,
     force: bool,
 ) -> Result<(), BinstallError> {

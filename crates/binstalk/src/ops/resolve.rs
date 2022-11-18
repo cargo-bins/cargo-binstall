@@ -8,6 +8,7 @@ use std::{
 
 use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
+use crates_io_api::AsyncClient as CratesIoApiClient;
 use itertools::Itertools;
 use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
@@ -94,23 +95,11 @@ pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
-    temp_dir: Arc<Path>,
-    install_path: Arc<Path>,
-    client: Client,
-    crates_io_api_client: crates_io_api::AsyncClient,
 ) -> Result<Resolution, BinstallError> {
     let crate_name_name = crate_name.name.clone();
-    let resolution = resolve_inner(
-        &opts,
-        crate_name,
-        curr_version,
-        temp_dir,
-        install_path,
-        client,
-        crates_io_api_client,
-    )
-    .await
-    .map_err(|err| err.crate_context(crate_name_name))?;
+    let resolution = resolve_inner(&opts, crate_name, curr_version)
+        .await
+        .map_err(|err| err.crate_context(crate_name_name))?;
 
     resolution.print(&opts);
 
@@ -121,10 +110,6 @@ async fn resolve_inner(
     opts: &Options,
     crate_name: CrateName,
     curr_version: Option<Version>,
-    temp_dir: Arc<Path>,
-    install_path: Arc<Path>,
-    client: Client,
-    crates_io_api_client: crates_io_api::AsyncClient,
 ) -> Result<Resolution, BinstallError> {
     info!("Resolving package: '{}'", crate_name);
 
@@ -141,8 +126,8 @@ async fn resolve_inner(
         crate_name.name,
         curr_version,
         version_req,
-        client.clone(),
-        crates_io_api_client).await?
+        opts.client.clone(),
+        &opts.crates_io_api_client).await?
     else {
         return Ok(Resolution::AlreadyUpToDate)
     };
@@ -175,7 +160,7 @@ async fn resolve_inner(
             })
             .cartesian_product(resolvers)
             .map(|(fetcher_data, f)| {
-                let fetcher = f(&client, &fetcher_data);
+                let fetcher = f(&opts.client, &fetcher_data);
                 (
                     fetcher.clone(),
                     AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
@@ -187,7 +172,7 @@ async fn resolve_inner(
         match handle.flattened_join().await {
             Ok(true) => {
                 // Generate temporary binary path
-                let bin_path = temp_dir.join(format!(
+                let bin_path = opts.temp_dir.join(format!(
                     "bin-{}-{}-{}",
                     package_info.name,
                     fetcher.target(),
@@ -198,7 +183,7 @@ async fn resolve_inner(
                     fetcher.as_ref(),
                     &bin_path,
                     &package_info,
-                    &install_path,
+                    &opts.install_path,
                     opts.no_symlinks,
                 )
                 .await
@@ -407,14 +392,12 @@ impl PackageInfo {
         curr_version: Option<Version>,
         version_req: VersionReq,
         client: Client,
-        crates_io_api_client: crates_io_api::AsyncClient,
+        crates_io_api_client: &CratesIoApiClient,
     ) -> Result<Option<Self>, BinstallError> {
         // Fetch crate via crates.io, git, or use a local manifest path
         let manifest = match opts.manifest_path.as_ref() {
             Some(manifest_path) => load_manifest_path(manifest_path)?,
-            None => {
-                fetch_crate_cratesio(client, &crates_io_api_client, &name, &version_req).await?
-            }
+            None => fetch_crate_cratesio(client, crates_io_api_client, &name, &version_req).await?,
         };
 
         let Some(mut package) = manifest.package else {
