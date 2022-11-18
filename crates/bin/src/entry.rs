@@ -99,9 +99,6 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         Duration::from_millis(100),
     );
 
-    // Initialize UI thread
-    let mut uithread = UIThread::new(!args.no_confirm);
-
     let (install_path, cargo_roots, metadata, temp_dir) = block_in_place(|| -> Result<_> {
         // Compute cargo_roots
         let cargo_roots =
@@ -228,7 +225,8 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
             return Ok(());
         }
 
-        uithread.confirm().await?;
+        // Initialize UI thread
+        UIThread::new(!args.no_confirm).confirm().await?;
 
         // Install
         resolutions
