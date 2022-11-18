@@ -30,13 +30,13 @@ pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
 /// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
 ///
 /// Return (install_path, is_custom_install_path)
-pub fn get_install_path<P: AsRef<Path>>(
-    install_path: Option<P>,
-    cargo_roots: Option<P>,
+pub fn get_install_path(
+    install_path: Option<PathBuf>,
+    cargo_roots: Option<impl AsRef<Path>>,
 ) -> (Option<PathBuf>, bool) {
     // Command line override first first
     if let Some(p) = install_path {
-        return (Some(p.as_ref().to_owned()), true);
+        return (Some(p), true);
     }
 
     // Then cargo_roots

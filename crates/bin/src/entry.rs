@@ -108,7 +108,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
 
         // Compute install directory
         let (install_path, custom_install_path) =
-            install_path::get_install_path(args.install_path.as_deref(), Some(&cargo_roots));
+            install_path::get_install_path(args.install_path.take(), Some(&cargo_roots));
         let install_path = install_path.ok_or_else(|| {
             error!("No viable install path found of specified, try `--install-path`");
             miette!("No install path found or specified")
