@@ -25,6 +25,10 @@ use crate::{
 };
 
 pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
+    // Launch target detection
+    let desired_targets = get_desired_targets(args.targets.take());
+
+    // Compute strategies
     let mut strategies = vec![];
 
     // Remove duplicate strategies
@@ -78,9 +82,6 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         pkg_fmt: args.pkg_fmt.take(),
         bin_dir: args.bin_dir.take(),
     };
-
-    // Launch target detection
-    let desired_targets = get_desired_targets(args.targets.take());
 
     let rate_limit = args.rate_limit;
 
