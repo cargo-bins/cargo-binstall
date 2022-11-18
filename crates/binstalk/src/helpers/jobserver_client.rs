@@ -1,12 +1,11 @@
-use std::{num::NonZeroUsize, sync::Arc, thread::available_parallelism};
+use std::{num::NonZeroUsize, thread::available_parallelism};
 
 use jobslot::Client;
 use tokio::sync::OnceCell;
 
 use crate::errors::BinstallError;
 
-#[derive(Clone)]
-pub struct LazyJobserverClient(Arc<OnceCell<Client>>);
+pub struct LazyJobserverClient(OnceCell<Client>);
 
 impl LazyJobserverClient {
     /// This must be called at the start of the program since
@@ -19,7 +18,7 @@ impl LazyJobserverClient {
         // It doesn't do anything that is actually unsafe, like
         // dereferencing pointer.
         let opt = unsafe { Client::from_env() };
-        Self(Arc::new(OnceCell::new_with(opt)))
+        Self(OnceCell::new_with(opt))
     }
 
     pub async fn get(&self) -> Result<&Client, BinstallError> {
