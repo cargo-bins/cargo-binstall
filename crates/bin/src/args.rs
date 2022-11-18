@@ -312,7 +312,7 @@ pub fn parse() -> Result<Args, BinstallError> {
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
     let mut args: Vec<OsString> = std::env::args_os().collect();
-    let args = if args.len() > 1 && args[1] == "binstall" {
+    let args = if args.get(1).map(|arg| arg == "binstall").unwrap_or_default() {
         // Equivalent to
         //
         //     args.remove(1);
