@@ -1,5 +1,4 @@
 use semver::VersionReq;
-use tracing::debug;
 
 use crate::errors::BinstallError;
 
@@ -38,7 +37,6 @@ pub(super) fn find_version<Item: Version, VersionIter: Iterator<Item = Item>>(
 
             // Filter by version match
             if version_req.matches(&ver) {
-                debug!("Version: {:?}", ver);
                 Some((item, ver))
             } else {
                 None
