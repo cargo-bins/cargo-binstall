@@ -1,6 +1,7 @@
-use std::{future::Future, path::Path, sync::Arc};
+use std::{future::Future, iter, ops::Deref, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
+use either::Either;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use once_cell::sync::OnceCell;
 use serde::Serialize;
@@ -87,13 +88,13 @@ impl super::Fetcher for GhCrateMeta {
             None
         };
 
-        let pkg_urls = if let Some(pkg_url) = self.data.meta.pkg_url.clone() {
-            vec![pkg_url]
+        let pkg_urls = if let Some(pkg_url) = self.data.meta.pkg_url.as_deref() {
+            Either::Left(pkg_url)
         } else if let Some(repo) = repo.as_ref() {
             if let Some(pkg_urls) =
                 RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
             {
-                pkg_urls
+                Either::Right(pkg_urls)
             } else {
                 warn!(
                     concat!(
@@ -119,9 +120,11 @@ impl super::Fetcher for GhCrateMeta {
 
         let repo = repo.as_ref().map(|u| u.as_str().trim_end_matches('/'));
         let launch_baseline_find_tasks = |pkg_fmt| {
-            pkg_urls
-                .iter()
-                .flat_map(move |pkg_url| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
+            match &pkg_urls {
+                Either::Left(pkg_url) => Either::Left(iter::once(*pkg_url)),
+                Either::Right(pkg_urls) => Either::Right(pkg_urls.iter().map(Deref::deref)),
+            }
+            .flat_map(move |pkg_url| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
         };
 
         let mut handles: FuturesUnordered<_> = if let Some(pkg_fmt) = self.data.meta.pkg_fmt {
