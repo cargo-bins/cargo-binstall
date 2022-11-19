@@ -19,7 +19,7 @@ pub async fn confirm() -> Result<(), BinstallError> {
             {
                 let mut stdout = io::stdout().lock();
 
-                writeln!(&mut stdout, "Do you wish to continue? yes/[no]\n? ").unwrap();
+                write!(&mut stdout, "Do you wish to continue? yes/[no]\n? ").unwrap();
                 stdout.flush().unwrap();
             }
 
