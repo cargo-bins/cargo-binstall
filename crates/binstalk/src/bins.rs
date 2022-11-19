@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
-    fs,
-    path::{Component, Path, PathBuf},
+    fmt, fs,
+    path::{self, Component, Path, PathBuf},
 };
 
 use compact_str::CompactString;
@@ -138,26 +138,20 @@ impl BinFile {
         })
     }
 
-    pub fn preview_bin(&self) -> String {
-        format!(
-            "{} ({} -> {})",
-            self.base_name,
-            self.source.file_name().unwrap().to_string_lossy(),
-            self.dest.display()
-        )
+    pub fn preview_bin(&self) -> impl fmt::Display + '_ {
+        LazyFormat {
+            base_name: &self.base_name,
+            source: self.source.file_name().unwrap().to_string_lossy(),
+            dest: self.dest.display(),
+        }
     }
 
-    pub fn preview_link(&self) -> String {
-        if let Some(link) = &self.link {
-            format!(
-                "{} ({} -> {})",
-                self.base_name,
-                link.display(),
-                self.link_dest().display()
-            )
-        } else {
-            String::new()
-        }
+    pub fn preview_link(&self) -> impl fmt::Display + '_ {
+        OptionalLazyFormat(self.link.as_ref().map(|link| LazyFormat {
+            base_name: &self.base_name,
+            source: link.display(),
+            dest: self.link_dest().display(),
+        }))
     }
 
     /// Return `Ok` if the source exists, otherwise `Err`.
@@ -251,5 +245,29 @@ impl<'c> Context<'c> {
         let mut tt = TinyTemplate::new();
         tt.add_template("path", template)?;
         Ok(tt.render("path", self)?)
+    }
+}
+
+struct LazyFormat<'a, S: fmt::Display> {
+    base_name: &'a str,
+    source: S,
+    dest: path::Display<'a>,
+}
+
+impl<S: fmt::Display> fmt::Display for LazyFormat<'_, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({} -> {})", self.base_name, self.source, self.dest)
+    }
+}
+
+struct OptionalLazyFormat<'a, S: fmt::Display>(Option<LazyFormat<'a, S>>);
+
+impl<S: fmt::Display> fmt::Display for OptionalLazyFormat<'_, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(lazy_format) = self.0.as_ref() {
+            fmt::Display::fmt(lazy_format, f)
+        } else {
+            Ok(())
+        }
     }
 }
