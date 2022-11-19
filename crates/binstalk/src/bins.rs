@@ -31,29 +31,30 @@ fn is_valid_path(path: &Path) -> bool {
 /// Must be called after the archive is downloaded and extracted.
 /// This function might uses blocking I/O.
 pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
-    let name = &data.name;
-    let target = &data.target;
-    let version = &data.version;
+    let name = data.name;
+    let target = data.target;
+    let version = data.version;
 
     // Make sure to update
     // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
     // NOVERSION_FILENAMES} if you update this array.
-    let possible_dirs = [
-        format!("{name}-{target}-v{version}"),
-        format!("{name}-{target}-{version}"),
-        format!("{name}-{version}-{target}"),
-        format!("{name}-v{version}-{target}"),
-        format!("{name}-{target}"),
+    let gen_possible_dirs: [for<'r> fn(&'r str, &'r str, &'r str) -> String; 8] = [
+        |name, target, version| format!("{name}-{target}-v{version}"),
+        |name, target, version| format!("{name}-{target}-{version}"),
+        |name, target, version| format!("{name}-{version}-{target}"),
+        |name, target, version| format!("{name}-v{version}-{target}"),
+        |name, target, _version| format!("{name}-{target}"),
         // Ignore the following when updating hosting::{FULL_FILENAMES, NOVERSION_FILENAMES}
-        format!("{name}-{version}"),
-        format!("{name}-v{version}"),
-        name.to_string(),
+        |name, _target, version| format!("{name}-{version}"),
+        |name, _target, version| format!("{name}-v{version}"),
+        |name, _target, _version| name.to_string(),
     ];
 
     let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
 
-    possible_dirs
+    gen_possible_dirs
         .into_iter()
+        .map(|gen_possible_dir| gen_possible_dir(name, target, version))
         .find(|dirname| data.bin_path.join(dirname).is_dir())
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
