@@ -157,7 +157,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     })?;
 
     // Remove installed crates
-    let crate_names = CrateName::dedup(&args.crate_names)
+    let crate_names = CrateName::dedup(args.crate_names)
     .filter_map(|crate_name| {
         match (
             args.force,

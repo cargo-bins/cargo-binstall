@@ -43,8 +43,7 @@ impl FromStr for CrateName {
 }
 
 impl CrateName {
-    pub fn dedup(crate_names: &[Self]) -> impl Iterator<Item = Self> {
-        let mut crate_names = crate_names.to_vec();
+    pub fn dedup(mut crate_names: Vec<Self>) -> impl Iterator<Item = Self> {
         crate_names.sort_by(|x, y| x.name.cmp(&y.name));
         crate_names.into_iter().coalesce(|previous, current| {
             if previous.name == current.name {
@@ -62,7 +61,7 @@ mod tests {
 
     macro_rules! assert_dedup {
         ([ $( ( $input_name:expr, $input_version:expr ) ),*  ], [ $( ( $output_name:expr, $output_version:expr ) ),*  ]) => {
-            let input_crate_names = [$( CrateName {
+            let input_crate_names = vec![$( CrateName {
                 name: $input_name.into(),
                 version_req: Some($input_version.parse().unwrap())
             }, )*];
@@ -72,7 +71,7 @@ mod tests {
             }, )*];
             output_crate_names.sort_by(|x, y| x.name.cmp(&y.name));
 
-            let crate_names: Vec<_> = CrateName::dedup(&input_crate_names).collect();
+            let crate_names: Vec<_> = CrateName::dedup(input_crate_names).collect();
             assert_eq!(crate_names, output_crate_names);
         };
     }
