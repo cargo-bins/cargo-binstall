@@ -28,33 +28,11 @@ use crate::{
 };
 
 pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
-    // Launch target detection
-    let desired_targets = get_desired_targets(args.targets);
-
     // Compute strategies
     let (resolvers, cargo_install_fallback) =
         compute_resolvers(args.strategies, args.disable_strategies)?;
 
-    let cli_overrides = PkgOverride {
-        pkg_url: args.pkg_url,
-        pkg_fmt: args.pkg_fmt,
-        bin_dir: args.bin_dir,
-    };
-
-    let rate_limit = args.rate_limit;
-
-    // Initialize reqwest client
-    let client = Client::new(
-        args.min_tls_version.map(|v| v.into()),
-        Duration::from_millis(rate_limit.duration.get()),
-        rate_limit.request_count,
-    )
-    .map_err(BinstallError::from)?;
-
-    // Build crates.io api client
-    let crates_io_api_client =
-        CratesIoApiClient::with_http_client(client.get_inner().clone(), Duration::from_millis(100));
-
+    // Compute paths
     let (install_path, cargo_roots, metadata, temp_dir) =
         compute_paths_and_load_manifests(args.roots, args.install_path)?;
 
@@ -65,6 +43,30 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         debug!("Nothing to do");
         return Ok(());
     }
+
+    // Launch target detection
+    let desired_targets = get_desired_targets(args.targets);
+
+    // Computer cli_overrides
+    let cli_overrides = PkgOverride {
+        pkg_url: args.pkg_url,
+        pkg_fmt: args.pkg_fmt,
+        bin_dir: args.bin_dir,
+    };
+
+    // Initialize reqwest client
+    let rate_limit = args.rate_limit;
+
+    let client = Client::new(
+        args.min_tls_version.map(|v| v.into()),
+        Duration::from_millis(rate_limit.duration.get()),
+        rate_limit.request_count,
+    )
+    .map_err(BinstallError::from)?;
+
+    // Build crates.io api client
+    let crates_io_api_client =
+        CratesIoApiClient::with_http_client(client.get_inner().clone(), Duration::from_millis(100));
 
     // Create binstall_opts
     let binstall_opts = Arc::new(ops::Options {
