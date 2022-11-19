@@ -1,4 +1,4 @@
-use std::{fs, sync::Arc, time::Duration};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use binstalk::{
     errors::BinstallError,
@@ -55,48 +55,8 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     let crates_io_api_client =
         CratesIoApiClient::with_http_client(client.get_inner().clone(), Duration::from_millis(100));
 
-    let (install_path, cargo_roots, metadata, temp_dir) = block_in_place(|| -> Result<_> {
-        // Compute cargo_roots
-        let cargo_roots = install_path::get_cargo_roots_path(args.roots).ok_or_else(|| {
-            error!("No viable cargo roots path found of specified, try `--roots`");
-            miette!("No cargo roots path found or specified")
-        })?;
-
-        // Compute install directory
-        let (install_path, custom_install_path) =
-            install_path::get_install_path(args.install_path, Some(&cargo_roots));
-        let install_path = install_path.ok_or_else(|| {
-            error!("No viable install path found of specified, try `--install-path`");
-            miette!("No install path found or specified")
-        })?;
-        fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
-        debug!("Using install path: {}", install_path.display());
-
-        // Load metadata
-        let metadata = if !custom_install_path {
-            let metadata_dir = cargo_roots.join("binstall");
-            fs::create_dir_all(&metadata_dir).map_err(BinstallError::Io)?;
-            let manifest_path = metadata_dir.join("crates-v1.json");
-
-            debug!("Reading {}", manifest_path.display());
-            Some(Records::load_from_path(&manifest_path)?)
-        } else {
-            None
-        };
-
-        // Create a temporary directory for downloads etc.
-        //
-        // Put all binaries to a temporary directory under `dst` first, catching
-        // some failure modes (e.g., out of space) before touching the existing
-        // binaries. This directory will get cleaned up via RAII.
-        let temp_dir = tempfile::Builder::new()
-            .prefix("cargo-binstall")
-            .tempdir_in(&install_path)
-            .map_err(BinstallError::from)
-            .wrap_err("Creating a temporary directory failed.")?;
-
-        Ok((install_path, cargo_roots, metadata, temp_dir))
-    })?;
+    let (install_path, cargo_roots, metadata, temp_dir) =
+        compute_paths_and_load_manifests(args.roots, args.install_path)?;
 
     // Remove installed crates
     let crate_names = CrateName::dedup(args.crate_names)
@@ -315,4 +275,53 @@ fn compute_resolvers(
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     Ok((resolvers, cargo_install_fallback))
+}
+
+/// Return (install_path, cargo_roots, metadata, temp_dir)
+fn compute_paths_and_load_manifests(
+    roots: Option<PathBuf>,
+    install_path: Option<PathBuf>,
+) -> Result<(PathBuf, PathBuf, Option<Records>, tempfile::TempDir)> {
+    block_in_place(|| {
+        // Compute cargo_roots
+        let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
+            error!("No viable cargo roots path found of specified, try `--roots`");
+            miette!("No cargo roots path found or specified")
+        })?;
+
+        // Compute install directory
+        let (install_path, custom_install_path) =
+            install_path::get_install_path(install_path, Some(&cargo_roots));
+        let install_path = install_path.ok_or_else(|| {
+            error!("No viable install path found of specified, try `--install-path`");
+            miette!("No install path found or specified")
+        })?;
+        fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
+        debug!("Using install path: {}", install_path.display());
+
+        // Load metadata
+        let metadata = if !custom_install_path {
+            let metadata_dir = cargo_roots.join("binstall");
+            fs::create_dir_all(&metadata_dir).map_err(BinstallError::Io)?;
+            let manifest_path = metadata_dir.join("crates-v1.json");
+
+            debug!("Reading {}", manifest_path.display());
+            Some(Records::load_from_path(&manifest_path)?)
+        } else {
+            None
+        };
+
+        // Create a temporary directory for downloads etc.
+        //
+        // Put all binaries to a temporary directory under `dst` first, catching
+        // some failure modes (e.g., out of space) before touching the existing
+        // binaries. This directory will get cleaned up via RAII.
+        let temp_dir = tempfile::Builder::new()
+            .prefix("cargo-binstall")
+            .tempdir_in(&install_path)
+            .map_err(BinstallError::from)
+            .wrap_err("Creating a temporary directory failed.")?;
+
+        Ok((install_path, cargo_roots, metadata, temp_dir))
+    })
 }
