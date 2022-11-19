@@ -1,4 +1,4 @@
-use std::{fs, mem, sync::Arc, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 
 use binstalk::{
     errors::BinstallError,
@@ -25,15 +25,15 @@ use crate::{
     ui::UIThread,
 };
 
-pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
+pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
     // Launch target detection
-    let desired_targets = get_desired_targets(args.targets.take());
+    let desired_targets = get_desired_targets(args.targets);
 
     // Compute strategies
     let mut strategies = vec![];
 
     // Remove duplicate strategies
-    for strategy in mem::take(&mut args.strategies) {
+    for strategy in args.strategies {
         if !strategies.contains(&strategy) {
             strategies.push(strategy);
         }
@@ -48,7 +48,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         ];
     }
 
-    let disable_strategies = mem::take(&mut args.disable_strategies);
+    let disable_strategies = args.disable_strategies;
 
     let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
         strategies
@@ -79,9 +79,9 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         .collect();
 
     let cli_overrides = PkgOverride {
-        pkg_url: args.pkg_url.take(),
-        pkg_fmt: args.pkg_fmt.take(),
-        bin_dir: args.bin_dir.take(),
+        pkg_url: args.pkg_url,
+        pkg_fmt: args.pkg_fmt,
+        bin_dir: args.bin_dir,
     };
 
     let rate_limit = args.rate_limit;
@@ -100,15 +100,14 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
 
     let (install_path, cargo_roots, metadata, temp_dir) = block_in_place(|| -> Result<_> {
         // Compute cargo_roots
-        let cargo_roots =
-            install_path::get_cargo_roots_path(args.roots.take()).ok_or_else(|| {
-                error!("No viable cargo roots path found of specified, try `--roots`");
-                miette!("No cargo roots path found or specified")
-            })?;
+        let cargo_roots = install_path::get_cargo_roots_path(args.roots).ok_or_else(|| {
+            error!("No viable cargo roots path found of specified, try `--roots`");
+            miette!("No cargo roots path found or specified")
+        })?;
 
         // Compute install directory
         let (install_path, custom_install_path) =
-            install_path::get_install_path(args.install_path.take(), Some(&cargo_roots));
+            install_path::get_install_path(args.install_path, Some(&cargo_roots));
         let install_path = install_path.ok_or_else(|| {
             error!("No viable install path found of specified, try `--install-path`");
             miette!("No install path found or specified")
@@ -184,8 +183,8 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         force: args.force,
         quiet: args.log_level == LevelFilter::Off,
 
-        version_req: args.version_req.take(),
-        manifest_path: args.manifest_path.take(),
+        version_req: args.version_req,
+        manifest_path: args.manifest_path,
         cli_overrides,
 
         desired_targets,
@@ -199,7 +198,12 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         jobserver_client,
     });
 
-    let tasks: Vec<_> = if !args.dry_run && !args.no_confirm {
+    // Destruct args before any async function to reduce size of the future
+    let dry_run = args.dry_run;
+    let no_confirm = args.no_confirm;
+    let no_cleanup = args.no_cleanup;
+
+    let tasks: Vec<_> = if !dry_run && !no_confirm {
         // Resolve crates
         let tasks: Vec<_> = crate_names
             .into_iter()
@@ -227,7 +231,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
         }
 
         // Initialize UI thread
-        UIThread::new(!args.no_confirm).confirm().await?;
+        UIThread::new(!no_confirm).confirm().await?;
 
         // Install
         resolutions
@@ -275,7 +279,7 @@ pub async fn install_crates(mut args: Args, jobserver_client: LazyJobserverClien
             records.overwrite()?;
         }
 
-        if args.no_cleanup {
+        if no_cleanup {
             // Consume temp_dir without removing it from fs.
             temp_dir.into_path();
         } else {
