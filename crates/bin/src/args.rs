@@ -15,6 +15,7 @@ use binstalk::{
 use clap::{Parser, ValueEnum};
 use log::LevelFilter;
 use semver::VersionReq;
+use strum_macros::EnumCount;
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -296,7 +297,7 @@ impl Default for RateLimit {
 }
 
 /// Strategy for installing the package
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum, EnumCount)]
 pub enum Strategy {
     /// Attempt to download official pre-built artifacts using
     /// information provided in `Cargo.toml`.
