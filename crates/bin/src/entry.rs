@@ -59,34 +59,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         compute_paths_and_load_manifests(args.roots, args.install_path)?;
 
     // Remove installed crates
-    let crate_names = CrateName::dedup(args.crate_names)
-    .filter_map(|crate_name| {
-        match (
-            args.force,
-            metadata.as_ref().and_then(|records| records.get(&crate_name.name)),
-            &crate_name.version_req,
-        ) {
-            (false, Some(metadata), Some(version_req))
-                if version_req.is_latest_compatible(&metadata.current_version) =>
-            {
-                debug!("Bailing out early because we can assume wanted is already installed from metafile");
-                info!(
-                    "{} v{} is already installed, use --force to override",
-                    crate_name.name, metadata.current_version
-                );
-                None
-            }
-
-            // we have to assume that the version req could be *,
-            // and therefore a remote upgraded version could exist
-            (false, Some(metadata), _) => {
-                Some((crate_name, Some(metadata.current_version.clone())))
-            }
-
-            _ => Some((crate_name, None)),
-        }
-    })
-    .collect::<Vec<_>>();
+    let crate_names = filter_out_installed_crates(args.crate_names, args.force, metadata.as_ref());
 
     if crate_names.is_empty() {
         debug!("Nothing to do");
@@ -324,4 +297,40 @@ fn compute_paths_and_load_manifests(
 
         Ok((install_path, cargo_roots, metadata, temp_dir))
     })
+}
+
+/// Return vec of (crate_name, current_version)
+fn filter_out_installed_crates(
+    crate_names: Vec<CrateName>,
+    force: bool,
+    metadata: Option<&Records>,
+) -> Vec<(CrateName, Option<semver::Version>)> {
+    CrateName::dedup(crate_names)
+    .filter_map(|crate_name| {
+        match (
+            force,
+            metadata.and_then(|records| records.get(&crate_name.name)),
+            &crate_name.version_req,
+        ) {
+            (false, Some(metadata), Some(version_req))
+                if version_req.is_latest_compatible(&metadata.current_version) =>
+            {
+                debug!("Bailing out early because we can assume wanted is already installed from metafile");
+                info!(
+                    "{} v{} is already installed, use --force to override",
+                    crate_name.name, metadata.current_version
+                );
+                None
+            }
+
+            // we have to assume that the version req could be *,
+            // and therefore a remote upgraded version could exist
+            (false, Some(metadata), _) => {
+                Some((crate_name, Some(metadata.current_version.clone())))
+            }
+
+            _ => Some((crate_name, None)),
+        }
+    })
+    .collect()
 }
