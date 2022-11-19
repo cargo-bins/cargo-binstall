@@ -115,6 +115,7 @@ dependencies = [
  "compact_str",
  "crates_io_api",
  "detect-targets",
+ "either",
  "futures-util",
  "home",
  "itertools",
