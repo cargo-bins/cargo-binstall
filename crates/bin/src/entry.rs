@@ -8,6 +8,7 @@ use binstalk::{
     ops::{
         self,
         resolve::{CrateName, Resolution, VersionReqExt},
+        Resolver,
     },
 };
 use binstalk_manifests::{
@@ -81,14 +82,16 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         strategies.pop().unwrap();
     }
 
-    let resolvers: Vec<_> = strategies
+    let resolvers = strategies
         .into_iter()
         .map(|strategy| match strategy {
-            Strategy::CrateMetaData => GhCrateMeta::new,
-            Strategy::QuickInstall => QuickInstall::new,
-            Strategy::Compile => unreachable!(),
+            Strategy::CrateMetaData => Ok(GhCrateMeta::new as Resolver),
+            Strategy::QuickInstall => Ok(QuickInstall::new as Resolver),
+            Strategy::Compile => Err(BinstallError::InvalidStrategies(
+                &"Compile strategy must be the last one",
+            )),
         })
-        .collect();
+        .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url,
