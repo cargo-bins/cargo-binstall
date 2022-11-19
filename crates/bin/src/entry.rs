@@ -37,9 +37,10 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         compute_paths_and_load_manifests(args.roots, args.install_path)?;
 
     // Remove installed crates
-    let crate_names = filter_out_installed_crates(args.crate_names, args.force, metadata.as_ref());
+    let mut crate_names =
+        filter_out_installed_crates(args.crate_names, args.force, metadata.as_ref()).peekable();
 
-    if crate_names.is_empty() {
+    if crate_names.peek().is_none() {
         debug!("Nothing to do");
         return Ok(());
     }
@@ -306,9 +307,9 @@ fn filter_out_installed_crates(
     crate_names: Vec<CrateName>,
     force: bool,
     metadata: Option<&Records>,
-) -> Vec<(CrateName, Option<semver::Version>)> {
+) -> impl Iterator<Item = (CrateName, Option<semver::Version>)> + '_ {
     CrateName::dedup(crate_names)
-    .filter_map(|crate_name| {
+    .filter_map(move |crate_name| {
         match (
             force,
             metadata.and_then(|records| records.get(&crate_name.name)),
@@ -334,5 +335,4 @@ fn filter_out_installed_crates(
             _ => Some((crate_name, None)),
         }
     })
-    .collect()
 }
