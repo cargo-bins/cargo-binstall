@@ -13,8 +13,6 @@ use tracing_core::{identify_callsite, metadata::Kind, subscriber::Subscriber};
 use tracing_log::AsTrace;
 use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
 
-use crate::args::Args;
-
 // Shamelessly taken from tracing-log
 
 struct Fields {
@@ -131,9 +129,9 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-pub fn logging(args: &Args) {
+pub fn logging(log_level: LevelFilter, json_output: bool) {
     // Calculate log_level
-    let log_level = min(args.log_level, STATIC_MAX_LEVEL);
+    let log_level = min(log_level, STATIC_MAX_LEVEL);
 
     let allowed_targets =
         (log_level != LevelFilter::Trace).then_some(["binstalk", "cargo_binstall"]);
@@ -145,7 +143,7 @@ pub fn logging(args: &Args) {
     let log_level = log_level.as_trace();
     let subscriber_builder = fmt().with_max_level(log_level);
 
-    let subscriber: Box<dyn Subscriber + Send + Sync> = if args.json_output {
+    let subscriber: Box<dyn Subscriber + Send + Sync> = if json_output {
         Box::new(subscriber_builder.json().finish())
     } else {
         // Disable time, target, file, line_num, thread name/ids to make the
