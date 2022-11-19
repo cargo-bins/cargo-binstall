@@ -45,7 +45,7 @@ pub(super) fn find_version<Item: Version, VersionIter: Iterator<Item = Item>>(
             }
         })
         // Return highest version
-        .max_by_key(|(_item, ver)| ver.clone())
+        .max_by(|(_item_x, ver_x), (_item_y, ver_y)| ver_x.cmp(ver_y))
         .ok_or(BinstallError::VersionMismatch {
             req: version_req.clone(),
         })

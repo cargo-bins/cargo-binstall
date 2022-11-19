@@ -1,7 +1,6 @@
 use std::{
     env::var_os,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use binstalk::home::cargo_home;
@@ -31,18 +30,18 @@ pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
 /// roughly follows <https://doc.rust-lang.org/cargo/commands/cargo-install.html#description>
 ///
 /// Return (install_path, is_custom_install_path)
-pub fn get_install_path<P: AsRef<Path>>(
-    install_path: Option<P>,
-    cargo_roots: Option<P>,
-) -> (Option<Arc<Path>>, bool) {
+pub fn get_install_path(
+    install_path: Option<PathBuf>,
+    cargo_roots: Option<impl AsRef<Path>>,
+) -> (Option<PathBuf>, bool) {
     // Command line override first first
     if let Some(p) = install_path {
-        return (Some(Arc::from(p.as_ref())), true);
+        return (Some(p), true);
     }
 
     // Then cargo_roots
     if let Some(p) = cargo_roots {
-        return (Some(Arc::from(p.as_ref().join("bin"))), false);
+        return (Some(p.as_ref().join("bin")), false);
     }
 
     // Local executable dir if no cargo is found
@@ -52,5 +51,5 @@ pub fn get_install_path<P: AsRef<Path>>(
         debug!("Fallback to {}", d.display());
     }
 
-    (dir.map(Arc::from), true)
+    (dir, true)
 }

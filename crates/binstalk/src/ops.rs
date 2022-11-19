@@ -2,11 +2,12 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use crates_io_api::AsyncClient as CratesIoApiClient;
 use semver::VersionReq;
 
 use crate::{
     fetchers::{Data, Fetcher},
-    helpers::remote::Client,
+    helpers::{jobserver_client::LazyJobserverClient, remote::Client},
     manifests::cargo_toml_binstall::PkgOverride,
     DesiredTargets,
 };
@@ -20,11 +21,19 @@ pub struct Options {
     pub no_symlinks: bool,
     pub dry_run: bool,
     pub force: bool,
+    pub quiet: bool,
+
     pub version_req: Option<VersionReq>,
     pub manifest_path: Option<PathBuf>,
     pub cli_overrides: PkgOverride,
+
     pub desired_targets: DesiredTargets,
-    pub quiet: bool,
     pub resolvers: Vec<Resolver>,
     pub cargo_install_fallback: bool,
+
+    pub temp_dir: PathBuf,
+    pub install_path: PathBuf,
+    pub client: Client,
+    pub crates_io_api_client: CratesIoApiClient,
+    pub jobserver_client: LazyJobserverClient,
 }

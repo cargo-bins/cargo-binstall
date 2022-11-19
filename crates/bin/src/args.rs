@@ -15,6 +15,7 @@ use binstalk::{
 use clap::{Parser, ValueEnum};
 use log::LevelFilter;
 use semver::VersionReq;
+use strum_macros::EnumCount;
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -296,7 +297,7 @@ impl Default for RateLimit {
 }
 
 /// Strategy for installing the package
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum, EnumCount)]
 pub enum Strategy {
     /// Attempt to download official pre-built artifacts using
     /// information provided in `Cargo.toml`.
@@ -312,7 +313,7 @@ pub fn parse() -> Result<Args, BinstallError> {
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
     let mut args: Vec<OsString> = std::env::args_os().collect();
-    let args = if args.len() > 1 && args[1] == "binstall" {
+    let args = if args.get(1).map(|arg| arg == "binstall").unwrap_or_default() {
         // Equivalent to
         //
         //     args.remove(1);

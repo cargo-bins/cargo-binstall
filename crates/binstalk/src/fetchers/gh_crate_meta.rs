@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{future::Future, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use futures_util::stream::{FuturesUnordered, StreamExt};
@@ -15,7 +15,6 @@ use crate::{
         download::Download,
         remote::{Client, Method},
         signal::wait_on_cancellation_signal,
-        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -31,7 +30,7 @@ pub struct GhCrateMeta {
     resolution: OnceCell<(Url, PkgFmt)>,
 }
 
-type BaselineFindTask = AutoAbortJoinHandle<Result<Option<(Url, PkgFmt)>, BinstallError>>;
+type FindTaskRes = Result<Option<(Url, PkgFmt)>, BinstallError>;
 
 impl GhCrateMeta {
     fn launch_baseline_find_tasks<'a>(
@@ -39,7 +38,7 @@ impl GhCrateMeta {
         pkg_fmt: PkgFmt,
         pkg_url: &'a str,
         repo: Option<&'a str>,
-    ) -> impl Iterator<Item = BaselineFindTask> + 'a {
+    ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'a> + 'a {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(move |ext| {
             let ctx = Context::from_data_with_repo(&self.data, ext, repo);
@@ -56,13 +55,13 @@ impl GhCrateMeta {
         urls.map(move |url| {
             let client = self.client.clone();
 
-            AutoAbortJoinHandle::spawn(async move {
+            async move {
                 debug!("Checking for package at: '{url}'");
 
                 Ok((client.remote_exists(url.clone(), Method::HEAD).await?
                     || client.remote_exists(url.clone(), Method::GET).await?)
                     .then_some((url, pkg_fmt)))
-            })
+            }
         })
     }
 }
@@ -134,7 +133,7 @@ impl super::Fetcher for GhCrateMeta {
         };
 
         while let Some(res) = handles.next().await {
-            if let Some((url, pkg_fmt)) = res?? {
+            if let Some((url, pkg_fmt)) = res? {
                 debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
                 self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
                 return Ok(true);
