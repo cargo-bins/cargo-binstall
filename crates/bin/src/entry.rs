@@ -24,7 +24,7 @@ use tracing::{debug, error, info, warn};
 use crate::{
     args::{Args, Strategy},
     install_path,
-    ui::UIThread,
+    ui::confirm,
 };
 
 pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
@@ -123,8 +123,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
             return Ok(());
         }
 
-        // Initialize UI thread
-        UIThread::new(!no_confirm).confirm().await?;
+        confirm().await?;
 
         // Install
         resolutions
