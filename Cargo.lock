@@ -295,6 +295,8 @@ dependencies = [
  "mimalloc",
  "once_cell",
  "semver",
+ "strum",
+ "strum_macros",
  "supports-color",
  "tempfile",
  "tokio",
