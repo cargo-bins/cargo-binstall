@@ -36,11 +36,7 @@ pub(super) fn find_version<Item: Version, VersionIter: Iterator<Item = Item>>(
             let ver = item.get_version()?;
 
             // Filter by version match
-            if version_req.matches(&ver) {
-                Some((item, ver))
-            } else {
-                None
-            }
+            version_req.matches(&ver).then_some((item, ver))
         })
         // Return highest version
         .max_by(|(_item_x, ver_x), (_item_y, ver_y)| ver_x.cmp(ver_y))
