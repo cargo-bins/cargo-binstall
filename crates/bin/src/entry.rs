@@ -99,7 +99,6 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     let tasks: Vec<_> = if !dry_run && !no_confirm {
         // Resolve crates
         let tasks: Vec<_> = crate_names
-            .into_iter()
             .map(|(crate_name, current_version)| {
                 AutoAbortJoinHandle::spawn(ops::resolve::resolve(
                     binstall_opts.clone(),
@@ -136,7 +135,6 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     } else {
         // Resolve crates and install without confirmation
         crate_names
-            .into_iter()
             .map(|(crate_name, current_version)| {
                 let opts = binstall_opts.clone();
 
