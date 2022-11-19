@@ -43,9 +43,8 @@ impl TarEntriesVisitor for ManifestVisitor {
             let path = entry.path()?;
             let path = path.normalize();
 
-            let path = if let Ok(path) = path.strip_prefix(&self.manifest_dir_path) {
-                path
-            } else {
+            let Ok(path) = path.strip_prefix(&self.manifest_dir_path)
+                else {
                 // The path is outside of the curr dir (manifest dir),
                 // ignore it.
                 continue;
