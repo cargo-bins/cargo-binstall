@@ -32,66 +32,8 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     let desired_targets = get_desired_targets(args.targets);
 
     // Compute strategies
-    let mut strategies = vec![];
-
-    // Remove duplicate strategies
-    for strategy in args.strategies {
-        if strategies.len() == Strategy::COUNT {
-            // All variants of Strategy is present in strategies,
-            // there is no need to continue since all the remaining
-            // args.strategies must be present in stratetgies.
-            break;
-        }
-        if !strategies.contains(&strategy) {
-            strategies.push(strategy);
-        }
-    }
-
-    // Default strategies if empty
-    if strategies.is_empty() {
-        strategies = vec![
-            Strategy::CrateMetaData,
-            Strategy::QuickInstall,
-            Strategy::Compile,
-        ];
-    }
-
-    let mut disable_strategies = args.disable_strategies;
-
-    let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
-        // Since order doesn't matter, we can sort it and remove all duplicates
-        // to speedup checking.
-        disable_strategies.sort_unstable();
-        disable_strategies.dedup();
-
-        strategies
-            .into_iter()
-            .filter(|strategy| !disable_strategies.contains(strategy))
-            .collect()
-    } else {
-        strategies
-    };
-
-    if strategies.is_empty() {
-        return Err(BinstallError::InvalidStrategies(&"No strategy is provided").into());
-    }
-
-    let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
-
-    if cargo_install_fallback {
-        strategies.pop().unwrap();
-    }
-
-    let resolvers = strategies
-        .into_iter()
-        .map(|strategy| match strategy {
-            Strategy::CrateMetaData => Ok(GhCrateMeta::new as Resolver),
-            Strategy::QuickInstall => Ok(QuickInstall::new as Resolver),
-            Strategy::Compile => Err(BinstallError::InvalidStrategies(
-                &"Compile strategy must be the last one",
-            )),
-        })
-        .collect::<Result<Vec<_>, BinstallError>>()?;
+    let (resolvers, cargo_install_fallback) =
+        compute_resolvers(args.strategies, args.disable_strategies)?;
 
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url,
@@ -305,4 +247,72 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
         Ok(())
     })
+}
+
+/// Return (resolvers, cargo_install_fallback)
+fn compute_resolvers(
+    input_strategies: Vec<Strategy>,
+    mut disable_strategies: Vec<Strategy>,
+) -> Result<(Vec<Resolver>, bool), BinstallError> {
+    // Compute strategies
+    let mut strategies = vec![];
+
+    // Remove duplicate strategies
+    for strategy in input_strategies {
+        if strategies.len() == Strategy::COUNT {
+            // All variants of Strategy is present in strategies,
+            // there is no need to continue since all the remaining
+            // args.strategies must be present in stratetgies.
+            break;
+        }
+        if !strategies.contains(&strategy) {
+            strategies.push(strategy);
+        }
+    }
+
+    // Default strategies if empty
+    if strategies.is_empty() {
+        strategies = vec![
+            Strategy::CrateMetaData,
+            Strategy::QuickInstall,
+            Strategy::Compile,
+        ];
+    }
+
+    let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
+        // Since order doesn't matter, we can sort it and remove all duplicates
+        // to speedup checking.
+        disable_strategies.sort_unstable();
+        disable_strategies.dedup();
+
+        strategies
+            .into_iter()
+            .filter(|strategy| !disable_strategies.contains(strategy))
+            .collect()
+    } else {
+        strategies
+    };
+
+    if strategies.is_empty() {
+        return Err(BinstallError::InvalidStrategies(&"No strategy is provided"));
+    }
+
+    let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
+
+    if cargo_install_fallback {
+        strategies.pop().unwrap();
+    }
+
+    let resolvers = strategies
+        .into_iter()
+        .map(|strategy| match strategy {
+            Strategy::CrateMetaData => Ok(GhCrateMeta::new as Resolver),
+            Strategy::QuickInstall => Ok(QuickInstall::new as Resolver),
+            Strategy::Compile => Err(BinstallError::InvalidStrategies(
+                &"Compile strategy must be the last one",
+            )),
+        })
+        .collect::<Result<Vec<_>, BinstallError>>()?;
+
+    Ok((resolvers, cargo_install_fallback))
 }
