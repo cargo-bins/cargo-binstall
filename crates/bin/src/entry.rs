@@ -16,6 +16,7 @@ use binstalk_manifests::{
 use crates_io_api::AsyncClient as CratesIoApiClient;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
+use strum::EnumCount;
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
@@ -34,6 +35,12 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
     // Remove duplicate strategies
     for strategy in args.strategies {
+        if strategies.len() == Strategy::COUNT {
+            // All variants of Strategy is present in strategies,
+            // there is no need to continue since all the remaining
+            // args.strategies must be present in stratetgies.
+            break;
+        }
         if !strategies.contains(&strategy) {
             strategies.push(strategy);
         }
@@ -48,9 +55,14 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         ];
     }
 
-    let disable_strategies = args.disable_strategies;
+    let mut disable_strategies = args.disable_strategies;
 
     let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
+        // Since order doesn't matter, we can sort it and remove all duplicates
+        // to speedup checking.
+        disable_strategies.sort_unstable();
+        disable_strategies.dedup();
+
         strategies
             .into_iter()
             .filter(|strategy| !disable_strategies.contains(strategy))
