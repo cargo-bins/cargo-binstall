@@ -59,6 +59,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     let rate_limit = args.rate_limit;
 
     let client = Client::new(
+        concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
         args.min_tls_version.map(|v| v.into()),
         Duration::from_millis(rate_limit.duration.get()),
         rate_limit.request_count,

@@ -1,5 +1,4 @@
 use std::{
-    env,
     num::NonZeroU64,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -52,32 +51,40 @@ impl Client {
     /// * `num_request` - maximum number of requests to be processed for
     ///   each `per` duration.
     pub fn new(
+        user_agent: impl AsRef<str>,
         min_tls: Option<tls::Version>,
         per: Duration,
         num_request: NonZeroU64,
     ) -> Result<Self, Error> {
-        const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+        fn inner(
+            user_agent: &str,
+            min_tls: Option<tls::Version>,
+            per: Duration,
+            num_request: NonZeroU64,
+        ) -> Result<Client, Error> {
+            let mut builder = reqwest::ClientBuilder::new()
+                .user_agent(user_agent)
+                .https_only(true)
+                .min_tls_version(tls::Version::TLS_1_2)
+                .tcp_nodelay(false);
 
-        let mut builder = reqwest::ClientBuilder::new()
-            .user_agent(USER_AGENT)
-            .https_only(true)
-            .min_tls_version(tls::Version::TLS_1_2)
-            .tcp_nodelay(false);
+            if let Some(ver) = min_tls {
+                builder = builder.min_tls_version(ver);
+            }
 
-        if let Some(ver) = min_tls {
-            builder = builder.min_tls_version(ver);
+            let client = builder.build()?;
+
+            Ok(Client {
+                client: client.clone(),
+                rate_limit: Arc::new(Mutex::new(
+                    ServiceBuilder::new()
+                        .rate_limit(num_request.get(), per)
+                        .service(client),
+                )),
+            })
         }
 
-        let client = builder.build()?;
-
-        Ok(Self {
-            client: client.clone(),
-            rate_limit: Arc::new(Mutex::new(
-                ServiceBuilder::new()
-                    .rate_limit(num_request.get(), per)
-                    .service(client),
-            )),
-        })
+        inner(user_agent.as_ref(), min_tls, per, num_request)
     }
 
     /// Return inner reqwest client.
