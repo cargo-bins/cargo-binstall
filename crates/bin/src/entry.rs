@@ -185,22 +185,20 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
 /// Return (resolvers, cargo_install_fallback)
 fn compute_resolvers(
-    input_strategies: Vec<Strategy>,
+    mut strategies: Vec<Strategy>,
     mut disable_strategies: Vec<Strategy>,
 ) -> Result<(Vec<Resolver>, bool), BinstallError> {
-    // Compute strategies
-    let mut strategies = vec![];
+    // Whether specific variant of Strategy is present
+    let mut is_variant_present = [false; Strategy::COUNT];
 
-    // Remove duplicate strategies
-    for strategy in input_strategies {
-        if strategies.len() == Strategy::COUNT {
-            // All variants of Strategy is present in strategies,
-            // there is no need to continue since all the remaining
-            // args.strategies must be present in stratetgies.
-            break;
-        }
-        if !strategies.contains(&strategy) {
-            strategies.push(strategy);
+    for strategy in &strategies {
+        let index = *strategy as u8 as usize;
+        if is_variant_present[index] {
+            return Err(BinstallError::InvalidStrategies(
+                &"--strategies should not contain duplicate strategy",
+            ));
+        } else {
+            is_variant_present[index] = true;
         }
     }
 
