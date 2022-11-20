@@ -228,7 +228,9 @@ fn compute_resolvers(
     }
 
     if strategies.is_empty() {
-        return Err(BinstallError::InvalidStrategies(&"No strategy is provided"));
+        return Err(BinstallError::InvalidStrategies(
+            &"You have disabled all strategies",
+        ));
     }
 
     let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
