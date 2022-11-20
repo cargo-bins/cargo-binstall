@@ -188,15 +188,22 @@ fn compute_resolvers(
     mut strategies: Vec<Strategy>,
     mut disable_strategies: Vec<Strategy>,
 ) -> Result<(Vec<Resolver>, bool), BinstallError> {
+    let dup_strategy_err =
+        BinstallError::InvalidStrategies(&"--strategies should not contain duplicate strategy");
+
+    if strategies.len() > Strategy::COUNT {
+        // If len of strategies is larger than number of variants of Strategy,
+        // then there must be duplicates by pieon hole principle.
+        return Err(dup_strategy_err);
+    }
+
     // Whether specific variant of Strategy is present
     let mut is_variant_present = [false; Strategy::COUNT];
 
     for strategy in &strategies {
         let index = *strategy as u8 as usize;
         if is_variant_present[index] {
-            return Err(BinstallError::InvalidStrategies(
-                &"--strategies should not contain duplicate strategy",
-            ));
+            return Err(dup_strategy_err);
         } else {
             is_variant_present[index] = true;
         }
