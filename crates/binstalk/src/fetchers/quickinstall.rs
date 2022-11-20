@@ -15,7 +15,7 @@ use crate::{
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
-use super::Data;
+use super::{Data, TargetData};
 
 const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
@@ -24,18 +24,24 @@ pub struct QuickInstall {
     client: Client,
     package: String,
     data: Arc<Data>,
+    target_data: Arc<TargetData>,
 }
 
 #[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
-    fn new(client: &Client, data: &Arc<Data>) -> Arc<dyn super::Fetcher> {
+    fn new(
+        client: Client,
+        data: Arc<Data>,
+        target_data: Arc<TargetData>,
+    ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
-        let target = &data.target;
+        let target = &target_data.target;
         Arc::new(Self {
-            client: client.clone(),
+            client,
             package: format!("{crate_name}-{version}-{target}"),
-            data: data.clone(),
+            data,
+            target_data,
         })
     }
 
@@ -66,7 +72,7 @@ impl super::Fetcher for QuickInstall {
     }
 
     fn target_meta(&self) -> PkgMeta {
-        let mut meta = self.data.meta.clone();
+        let mut meta = self.target_data.meta.clone();
         meta.pkg_fmt = Some(self.pkg_fmt());
         meta.bin_dir = Some("{ bin }{ binary-ext }".to_string());
         meta
@@ -85,7 +91,7 @@ impl super::Fetcher for QuickInstall {
     }
 
     fn target(&self) -> &str {
-        &self.data.target
+        &self.target_data.target
     }
 }
 

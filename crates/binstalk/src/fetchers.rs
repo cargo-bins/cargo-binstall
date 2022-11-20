@@ -17,7 +17,7 @@ pub(crate) mod quickinstall;
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
     #[allow(clippy::new_ret_no_self)]
-    fn new(client: &Client, data: &Arc<Data>) -> Arc<dyn Fetcher>
+    fn new(client: Client, data: Arc<Data>, target_data: Arc<TargetData>) -> Arc<dyn Fetcher>
     where
         Self: Sized;
 
@@ -61,8 +61,13 @@ pub trait Fetcher: Send + Sync {
 #[derive(Clone, Debug)]
 pub struct Data {
     pub name: CompactString,
-    pub target: String,
     pub version: CompactString,
     pub repo: Option<String>,
+}
+
+/// Target specific data required to fetch a package
+#[derive(Clone, Debug)]
+pub struct TargetData {
+    pub target: String,
     pub meta: PkgMeta,
 }

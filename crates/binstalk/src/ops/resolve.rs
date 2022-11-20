@@ -19,7 +19,7 @@ use crate::{
     bins,
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
-    fetchers::{Data, Fetcher},
+    fetchers::{Data, Fetcher, TargetData},
     helpers::{remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
 };
@@ -138,6 +138,12 @@ async fn resolve_inner(
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
         Vec::with_capacity(desired_targets.len() * resolvers.len());
 
+    let data = Arc::new(Data {
+        name: package_info.name.clone(),
+        version: package_info.version_str.clone(),
+        repo: package_info.repo.clone(),
+    });
+
     handles.extend(
         desired_targets
             .iter()
@@ -150,17 +156,14 @@ async fn resolve_inner(
 
                 debug!("Found metadata: {target_meta:?}");
 
-                Arc::new(Data {
-                    name: package_info.name.clone(),
+                Arc::new(TargetData {
                     target: target.clone(),
-                    version: package_info.version_str.clone(),
-                    repo: package_info.repo.clone(),
                     meta: target_meta,
                 })
             })
             .cartesian_product(resolvers)
-            .map(|(fetcher_data, f)| {
-                let fetcher = f(&opts.client, &fetcher_data);
+            .map(|(target_data, f)| {
+                let fetcher = f(opts.client.clone(), data.clone(), target_data.clone());
                 (
                     fetcher.clone(),
                     AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
