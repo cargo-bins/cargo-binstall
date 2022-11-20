@@ -225,12 +225,12 @@ fn compute_resolvers(
         disable_strategies.dedup();
 
         strategies.retain(|strategy| !disable_strategies.contains(strategy));
-    }
 
-    if strategies.is_empty() {
-        return Err(BinstallError::InvalidStrategies(
-            &"You have disabled all strategies",
-        ));
+        if strategies.is_empty() {
+            return Err(BinstallError::InvalidStrategies(
+                &"You have disabled all strategies",
+            ));
+        }
     }
 
     let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
