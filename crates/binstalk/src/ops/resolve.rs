@@ -58,17 +58,15 @@ impl Resolution {
                     fetcher.source_name()
                 );
 
-                if fetcher.is_third_party() {
-                    warn!(
-                        "The package will be downloaded from third-party source {}",
-                        fetcher.source_name()
-                    );
-                } else {
-                    info!(
-                        "The package will be downloaded from {}",
-                        fetcher.source_name()
-                    );
-                }
+                warn!(
+                    "The package will be downloaded from {}{}",
+                    if fetcher.is_third_party() {
+                        "third-party source "
+                    } else {
+                        ""
+                    },
+                    fetcher.source_name()
+                );
 
                 info!("This will install the following binaries:");
                 for file in bin_files {
