@@ -23,7 +23,6 @@ const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 pub struct QuickInstall {
     client: Client,
     package: String,
-    data: Arc<Data>,
     target_data: Arc<TargetData>,
 }
 
@@ -40,7 +39,6 @@ impl super::Fetcher for QuickInstall {
         Arc::new(Self {
             client,
             package: format!("{crate_name}-{version}-{target}"),
-            data,
             target_data,
         })
     }
