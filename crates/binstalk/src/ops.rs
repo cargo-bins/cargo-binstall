@@ -6,7 +6,7 @@ use crates_io_api::AsyncClient as CratesIoApiClient;
 use semver::VersionReq;
 
 use crate::{
-    fetchers::{Data, Fetcher},
+    fetchers::{Data, Fetcher, TargetData},
     helpers::{jobserver_client::LazyJobserverClient, remote::Client},
     manifests::cargo_toml_binstall::PkgOverride,
     DesiredTargets,
@@ -15,7 +15,7 @@ use crate::{
 pub mod install;
 pub mod resolve;
 
-pub type Resolver = fn(&Client, &Arc<Data>) -> Arc<dyn Fetcher>;
+pub type Resolver = fn(Client, Arc<Data>, Arc<TargetData>) -> Arc<dyn Fetcher>;
 
 pub struct Options {
     pub no_symlinks: bool,

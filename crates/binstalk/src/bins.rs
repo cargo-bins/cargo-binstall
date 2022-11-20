@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
-    fs,
-    path::{Component, Path, PathBuf},
+    fmt, fs,
+    path::{self, Component, Path, PathBuf},
 };
 
 use compact_str::CompactString;
@@ -31,29 +31,30 @@ fn is_valid_path(path: &Path) -> bool {
 /// Must be called after the archive is downloaded and extracted.
 /// This function might uses blocking I/O.
 pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
-    let name = &data.name;
-    let target = &data.target;
-    let version = &data.version;
+    let name = data.name;
+    let target = data.target;
+    let version = data.version;
 
     // Make sure to update
     // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
     // NOVERSION_FILENAMES} if you update this array.
-    let possible_dirs = [
-        format!("{name}-{target}-v{version}"),
-        format!("{name}-{target}-{version}"),
-        format!("{name}-{version}-{target}"),
-        format!("{name}-v{version}-{target}"),
-        format!("{name}-{target}"),
+    let gen_possible_dirs: [for<'r> fn(&'r str, &'r str, &'r str) -> String; 8] = [
+        |name, target, version| format!("{name}-{target}-v{version}"),
+        |name, target, version| format!("{name}-{target}-{version}"),
+        |name, target, version| format!("{name}-{version}-{target}"),
+        |name, target, version| format!("{name}-v{version}-{target}"),
+        |name, target, _version| format!("{name}-{target}"),
         // Ignore the following when updating hosting::{FULL_FILENAMES, NOVERSION_FILENAMES}
-        format!("{name}-{version}"),
-        format!("{name}-v{version}"),
-        name.to_string(),
+        |name, _target, version| format!("{name}-{version}"),
+        |name, _target, version| format!("{name}-v{version}"),
+        |name, _target, _version| name.to_string(),
     ];
 
     let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
 
-    possible_dirs
+    gen_possible_dirs
         .into_iter()
+        .map(|gen_possible_dir| gen_possible_dir(name, target, version))
         .find(|dirname| data.bin_path.join(dirname).is_dir())
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
@@ -138,26 +139,20 @@ impl BinFile {
         })
     }
 
-    pub fn preview_bin(&self) -> String {
-        format!(
-            "{} ({} -> {})",
-            self.base_name,
-            self.source.file_name().unwrap().to_string_lossy(),
-            self.dest.display()
-        )
+    pub fn preview_bin(&self) -> impl fmt::Display + '_ {
+        LazyFormat {
+            base_name: &self.base_name,
+            source: self.source.file_name().unwrap().to_string_lossy(),
+            dest: self.dest.display(),
+        }
     }
 
-    pub fn preview_link(&self) -> String {
-        if let Some(link) = &self.link {
-            format!(
-                "{} ({} -> {})",
-                self.base_name,
-                link.display(),
-                self.link_dest().display()
-            )
-        } else {
-            String::new()
-        }
+    pub fn preview_link(&self) -> impl fmt::Display + '_ {
+        OptionalLazyFormat(self.link.as_ref().map(|link| LazyFormat {
+            base_name: &self.base_name,
+            source: link.display(),
+            dest: self.link_dest().display(),
+        }))
     }
 
     /// Return `Ok` if the source exists, otherwise `Err`.
@@ -251,5 +246,29 @@ impl<'c> Context<'c> {
         let mut tt = TinyTemplate::new();
         tt.add_template("path", template)?;
         Ok(tt.render("path", self)?)
+    }
+}
+
+struct LazyFormat<'a, S: fmt::Display> {
+    base_name: &'a str,
+    source: S,
+    dest: path::Display<'a>,
+}
+
+impl<S: fmt::Display> fmt::Display for LazyFormat<'_, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({} -> {})", self.base_name, self.source, self.dest)
+    }
+}
+
+struct OptionalLazyFormat<'a, S: fmt::Display>(Option<LazyFormat<'a, S>>);
+
+impl<S: fmt::Display> fmt::Display for OptionalLazyFormat<'_, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(lazy_format) = self.0.as_ref() {
+            fmt::Display::fmt(lazy_format, f)
+        } else {
+            Ok(())
+        }
     }
 }

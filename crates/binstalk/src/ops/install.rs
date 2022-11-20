@@ -28,7 +28,7 @@ pub async fn install(
         } => {
             let target = fetcher.target().into();
 
-            install_from_package(opts, bin_files).await.map(|option| {
+            install_from_package(opts, bin_files).map(|option| {
                 option.map(|bins| CrateInfo {
                     name,
                     version_req,
@@ -66,7 +66,7 @@ pub async fn install(
     }
 }
 
-async fn install_from_package(
+fn install_from_package(
     opts: Arc<Options>,
     bin_files: Vec<bins::BinFile>,
 ) -> Result<Option<Vec<CompactString>>, BinstallError> {

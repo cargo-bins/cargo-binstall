@@ -19,7 +19,7 @@ use crate::{
     bins,
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
-    fetchers::{Data, Fetcher},
+    fetchers::{Data, Fetcher, TargetData},
     helpers::{remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
 };
@@ -58,17 +58,15 @@ impl Resolution {
                     fetcher.source_name()
                 );
 
-                if fetcher.is_third_party() {
-                    warn!(
-                        "The package will be downloaded from third-party source {}",
-                        fetcher.source_name()
-                    );
-                } else {
-                    info!(
-                        "The package will be downloaded from {}",
-                        fetcher.source_name()
-                    );
-                }
+                warn!(
+                    "The package will be downloaded from {}{}",
+                    if fetcher.is_third_party() {
+                        "third-party source "
+                    } else {
+                        ""
+                    },
+                    fetcher.source_name()
+                );
 
                 info!("This will install the following binaries:");
                 for file in bin_files {
@@ -138,6 +136,12 @@ async fn resolve_inner(
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
         Vec::with_capacity(desired_targets.len() * resolvers.len());
 
+    let data = Arc::new(Data {
+        name: package_info.name.clone(),
+        version: package_info.version_str.clone(),
+        repo: package_info.repo.clone(),
+    });
+
     handles.extend(
         desired_targets
             .iter()
@@ -150,17 +154,14 @@ async fn resolve_inner(
 
                 debug!("Found metadata: {target_meta:?}");
 
-                Arc::new(Data {
-                    name: package_info.name.clone(),
+                Arc::new(TargetData {
                     target: target.clone(),
-                    version: package_info.version_str.clone(),
-                    repo: package_info.repo.clone(),
                     meta: target_meta,
                 })
             })
             .cartesian_product(resolvers)
-            .map(|(fetcher_data, f)| {
-                let fetcher = f(&opts.client, &fetcher_data);
+            .map(|(target_data, f)| {
+                let fetcher = f(opts.client.clone(), data.clone(), target_data);
                 (
                     fetcher.clone(),
                     AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
