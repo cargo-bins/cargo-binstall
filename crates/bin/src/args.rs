@@ -298,14 +298,15 @@ impl Default for RateLimit {
 
 /// Strategy for installing the package
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum, EnumCount)]
+#[repr(u8)]
 pub enum Strategy {
     /// Attempt to download official pre-built artifacts using
     /// information provided in `Cargo.toml`.
-    CrateMetaData,
+    CrateMetaData = 0,
     /// Query third-party QuickInstall for the crates.
-    QuickInstall,
+    QuickInstall = 1,
     /// Build the crates from source using `cargo-build`.
-    Compile,
+    Compile = 2,
 }
 
 pub fn parse() -> Result<Args, BinstallError> {
