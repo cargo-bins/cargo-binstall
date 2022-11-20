@@ -211,19 +211,14 @@ fn compute_resolvers(
         ];
     }
 
-    let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
+    if !disable_strategies.is_empty() {
         // Since order doesn't matter, we can sort it and remove all duplicates
         // to speedup checking.
         disable_strategies.sort_unstable();
         disable_strategies.dedup();
 
-        strategies
-            .into_iter()
-            .filter(|strategy| !disable_strategies.contains(strategy))
-            .collect()
-    } else {
-        strategies
-    };
+        strategies.retain(|strategy| !disable_strategies.contains(strategy));
+    }
 
     if strategies.is_empty() {
         return Err(BinstallError::InvalidStrategies(&"No strategy is provided"));
