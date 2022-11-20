@@ -193,7 +193,7 @@ fn compute_resolvers(
 
     if strategies.len() > Strategy::COUNT {
         // If len of strategies is larger than number of variants of Strategy,
-        // then there must be duplicates by pieon hole principle.
+        // then there must be duplicates by pigeon hole principle.
         return Err(dup_strategy_err);
     }
 
