@@ -163,7 +163,7 @@ async fn resolve_inner(
             })
             .cartesian_product(resolvers)
             .map(|(target_data, f)| {
-                let fetcher = f(opts.client.clone(), data.clone(), target_data.clone());
+                let fetcher = f(opts.client.clone(), data.clone(), target_data);
                 (
                     fetcher.clone(),
                     AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
