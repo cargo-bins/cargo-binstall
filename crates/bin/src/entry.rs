@@ -218,12 +218,15 @@ fn compute_resolvers(
         ];
     }
 
+    // Filter out all disabled strategies
     if !disable_strategies.is_empty() {
         // Since order doesn't matter, we can sort it and remove all duplicates
         // to speedup checking.
         disable_strategies.sort_unstable();
         disable_strategies.dedup();
 
+        // disable_strategies.len() <= Strategy::COUNT, of which is faster
+        // to just use [T]::contains rather than [T]::binary_search
         strategies.retain(|strategy| !disable_strategies.contains(strategy));
 
         if strategies.is_empty() {
