@@ -298,6 +298,7 @@ impl Default for RateLimit {
 
 /// Strategy for installing the package
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum, EnumCount)]
+#[repr(u8)]
 pub enum Strategy {
     /// Attempt to download official pre-built artifacts using
     /// information provided in `Cargo.toml`.

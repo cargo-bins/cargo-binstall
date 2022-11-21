@@ -185,22 +185,27 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
 /// Return (resolvers, cargo_install_fallback)
 fn compute_resolvers(
-    input_strategies: Vec<Strategy>,
+    mut strategies: Vec<Strategy>,
     mut disable_strategies: Vec<Strategy>,
 ) -> Result<(Vec<Resolver>, bool), BinstallError> {
-    // Compute strategies
-    let mut strategies = vec![];
+    let dup_strategy_err =
+        BinstallError::InvalidStrategies("--strategies should not contain duplicate strategy");
 
-    // Remove duplicate strategies
-    for strategy in input_strategies {
-        if strategies.len() == Strategy::COUNT {
-            // All variants of Strategy is present in strategies,
-            // there is no need to continue since all the remaining
-            // args.strategies must be present in stratetgies.
-            break;
-        }
-        if !strategies.contains(&strategy) {
-            strategies.push(strategy);
+    if strategies.len() > Strategy::COUNT {
+        // If len of strategies is larger than number of variants of Strategy,
+        // then there must be duplicates by pigeon hole principle.
+        return Err(dup_strategy_err);
+    }
+
+    // Whether specific variant of Strategy is present
+    let mut is_variant_present = [false; Strategy::COUNT];
+
+    for strategy in &strategies {
+        let index = *strategy as u8 as usize;
+        if is_variant_present[index] {
+            return Err(dup_strategy_err);
+        } else {
+            is_variant_present[index] = true;
         }
     }
 
@@ -213,22 +218,22 @@ fn compute_resolvers(
         ];
     }
 
-    let mut strategies: Vec<Strategy> = if !disable_strategies.is_empty() {
+    // Filter out all disabled strategies
+    if !disable_strategies.is_empty() {
         // Since order doesn't matter, we can sort it and remove all duplicates
         // to speedup checking.
         disable_strategies.sort_unstable();
         disable_strategies.dedup();
 
-        strategies
-            .into_iter()
-            .filter(|strategy| !disable_strategies.contains(strategy))
-            .collect()
-    } else {
-        strategies
-    };
+        // disable_strategies.len() <= Strategy::COUNT, of which is faster
+        // to just use [T]::contains rather than [T]::binary_search
+        strategies.retain(|strategy| !disable_strategies.contains(strategy));
 
-    if strategies.is_empty() {
-        return Err(BinstallError::InvalidStrategies(&"No strategy is provided"));
+        if strategies.is_empty() {
+            return Err(BinstallError::InvalidStrategies(
+                "You have disabled all strategies",
+            ));
+        }
     }
 
     let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
@@ -243,7 +248,7 @@ fn compute_resolvers(
             Strategy::CrateMetaData => Ok(GhCrateMeta::new as Resolver),
             Strategy::QuickInstall => Ok(QuickInstall::new as Resolver),
             Strategy::Compile => Err(BinstallError::InvalidStrategies(
-                &"Compile strategy must be the last one",
+                "Compile strategy must be the last one",
             )),
         })
         .collect::<Result<Vec<_>, BinstallError>>()?;
