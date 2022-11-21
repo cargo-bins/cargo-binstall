@@ -75,10 +75,10 @@ jobs:
       run: |
          mkdir -p $universal
          lipo -create -output $universal/cargo-binstall $aarch64/cargo-binstall $x86_64/cargo-binstall
-       env:
-         universal: outputs/universal-apple-darwin.cargo-binstall
-         aarch64: outputs/aarch64-apple-darwin.cargo-binstall
-         x86_64: outputs/x86_64-apple-darwin.cargo-binstall
+      env:
+        universal: outputs/universal-apple-darwin.cargo-binstall
+        aarch64: outputs/aarch64-apple-darwin.cargo-binstall
+        x86_64: outputs/x86_64-apple-darwin.cargo-binstall
 
     - name: Pack archives
       run: .github/scripts/pack-release-archives.sh
