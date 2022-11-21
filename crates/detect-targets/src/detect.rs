@@ -43,8 +43,10 @@ pub async fn detect_targets() -> Vec<String> {
                 }
             } else if #[cfg(target_os = "macos")] {
                 if &*v[0] == macos::AARCH64 {
-                    v.push(macos::X86.into());
+                    v.push(macos::X86.to_string());
                 }
+
+                v.push(macos::UNIVERSAL.to_string());
             } else if #[cfg(target_os = "windows")] {
                 v.extend(windows::detect_alternative_targets(&v[0]));
             }
