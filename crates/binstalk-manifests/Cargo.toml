@@ -18,7 +18,7 @@ miette = "5.4.1"
 semver = { version = "1.0.14", features = ["serde"] }
 serde = { version = "1.0.147", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
-serde_json = "1.0.87"
+serde_json = "1.0.88"
 thiserror = "1.0.37"
 toml_edit = { version = "0.15.0", features = ["easy"] }
 url = { version = "2.3.1", features = ["serde"] }
