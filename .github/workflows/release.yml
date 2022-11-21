@@ -72,7 +72,7 @@ jobs:
         path: outputs/
 
     - name: Create universal binary for MacOS
-       run: |
+      run: |
          mkdir -p $universal
          lipo -create -output $universal/cargo-binstall $aarch64/cargo-binstall $x86_64/cargo-binstall
        env:
