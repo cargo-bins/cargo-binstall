@@ -291,7 +291,7 @@ pub enum BinstallError {
     /// - Exit: 93
     #[error("Invalid strategies configured: {0}")]
     #[diagnostic(severity(error), code(binstall::strategies))]
-    InvalidStrategies(&'static &'static str),
+    InvalidStrategies(&'static str),
 
     /// Fallback to `cargo-install` is disabled.
     ///

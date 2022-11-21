@@ -189,7 +189,7 @@ fn compute_resolvers(
     mut disable_strategies: Vec<Strategy>,
 ) -> Result<(Vec<Resolver>, bool), BinstallError> {
     let dup_strategy_err =
-        BinstallError::InvalidStrategies(&"--strategies should not contain duplicate strategy");
+        BinstallError::InvalidStrategies("--strategies should not contain duplicate strategy");
 
     if strategies.len() > Strategy::COUNT {
         // If len of strategies is larger than number of variants of Strategy,
@@ -231,7 +231,7 @@ fn compute_resolvers(
 
         if strategies.is_empty() {
             return Err(BinstallError::InvalidStrategies(
-                &"You have disabled all strategies",
+                "You have disabled all strategies",
             ));
         }
     }
@@ -248,7 +248,7 @@ fn compute_resolvers(
             Strategy::CrateMetaData => Ok(GhCrateMeta::new as Resolver),
             Strategy::QuickInstall => Ok(QuickInstall::new as Resolver),
             Strategy::Compile => Err(BinstallError::InvalidStrategies(
-                &"Compile strategy must be the last one",
+                "Compile strategy must be the last one",
             )),
         })
         .collect::<Result<Vec<_>, BinstallError>>()?;
