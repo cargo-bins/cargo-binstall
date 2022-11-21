@@ -9,10 +9,16 @@ pub(super) fn detect_alternative_targets(target: &str) -> impl Iterator<Item = S
     let is_aarch64 = target == AARCH64;
     let is_x86 = target == X86;
 
-    is_aarch64
-        .then(|| X86.to_string())
-        .into_iter()
-        .chain((is_aarch64 || is_x86).then(|| UNIVERSAL.to_string()))
+    if is_aarch64 {
+        [Some(X86), Some(UNIVERSAL)]
+    } else if is_x86 {
+        [Some(UNIVERSAL), None]
+    } else {
+        [None, None]
+    }
+    .into_iter()
+    .flatten()
+    .map(ToString::to_string)
 }
 
 pub(super) fn detect_targets_macos() -> Vec<String> {
