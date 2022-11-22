@@ -122,4 +122,28 @@ jobs:
         retention-days: 1
         name: "${{ matrix.target }}.${{ env.CBIN }}"
         path: "${{ env.CBIN }}"
-
+  macos_universal_bin:
+    needs: build
+    runs-on: macos-latest
+    env:
+      aarch64: aarch64-apple-darwin.cargo-binstall
+      x86_64: x86_64-apple-darwin.cargo-binstall
+    steps:
+    - name: Download aarch64 artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ env.aarch64 }}
+        path: ${{ env.aarch64 }}
+    - name: Download x86-64 artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ env.x86_64 }}
+        path: ${{ env.x86_64 }}
+    - name: Create universal binary for MacOS
+      run: lipo -create -output cargo-binstall $aarch64/cargo-binstall $x86_64/cargo-binstall
+    - name: Upload output
+      uses: actions/upload-artifact@v3
+      with:
+        retention-days: 1
+        name: universal-apple-darwin.cargo-binstall
+        path: cargo-binstall
