@@ -29,7 +29,7 @@ if $for_release then {
 .features = (
   if ($matrix."use-cross" // false)
   then .features // ["zstd-thin"]
-  else .features
+  else .features end
 )
 |
 .features = (
