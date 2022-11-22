@@ -125,16 +125,20 @@ jobs:
   macos_universal_bin:
     needs: build
     runs-on: macos-latest
+    env:
+      aarch64: aarch64-apple-darwin.cargo-binstall
+      x86_64: x86_64-apple-darwin.cargo-binstall
     steps:
-    - name: Get outputs
+    - name: Download aarch64 artifact
       uses: actions/download-artifact@v3
       with:
-        path: outputs/
+        name: ${{ env.aarch64 }}
+    - name: Download x86-64 artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ env.x86_64 }}
     - name: Create universal binary for MacOS
       run: lipo -create -output cargo-binstall $aarch64/cargo-binstall $x86_64/cargo-binstall
-      env:
-        aarch64: outputs/aarch64-apple-darwin.cargo-binstall
-        x86_64: outputs/x86_64-apple-darwin.cargo-binstall
     - name: Upload output
       uses: actions/upload-artifact@v3
       with:
