@@ -46,7 +46,7 @@ zip = { version = "0.6.3", default-features = false, features = ["deflate", "bzi
 # zstd is also depended by zip.
 # Since zip 0.6.3 depends on zstd 0.11, we also have to use 0.11 here,
 # otherwise there will be a link conflict.
-zstd = { version = "0.11.2", default-features = false, features = ["thin"] }
+zstd = { version = "0.11.2", default-features = false }
 
 [features]
 default = ["static", "rustls"]
@@ -69,3 +69,5 @@ native-tls = ["reqwest/native-tls", "trust-dns-resolver?/dns-over-native-tls"]
 
 # Enable trust-dns-resolver so that features on it will also be enabled.
 trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]
+
+zstd-thin = ["zstd/thin"]
