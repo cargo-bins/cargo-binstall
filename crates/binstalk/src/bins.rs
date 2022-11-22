@@ -142,7 +142,7 @@ impl BinFile {
     pub fn preview_bin(&self) -> impl fmt::Display + '_ {
         LazyFormat {
             base_name: &self.base_name,
-            source: self.source.file_name().unwrap().to_string_lossy(),
+            source: Path::new(self.source.file_name().unwrap()).display(),
             dest: self.dest.display(),
         }
     }
@@ -249,21 +249,21 @@ impl<'c> Context<'c> {
     }
 }
 
-struct LazyFormat<'a, S: fmt::Display> {
+struct LazyFormat<'a> {
     base_name: &'a str,
-    source: S,
+    source: path::Display<'a>,
     dest: path::Display<'a>,
 }
 
-impl<S: fmt::Display> fmt::Display for LazyFormat<'_, S> {
+impl fmt::Display for LazyFormat<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ({} -> {})", self.base_name, self.source, self.dest)
     }
 }
 
-struct OptionalLazyFormat<'a, S: fmt::Display>(Option<LazyFormat<'a, S>>);
+struct OptionalLazyFormat<'a>(Option<LazyFormat<'a>>);
 
-impl<S: fmt::Display> fmt::Display for OptionalLazyFormat<'_, S> {
+impl fmt::Display for OptionalLazyFormat<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(lazy_format) = self.0.as_ref() {
             fmt::Display::fmt(lazy_format, f)
