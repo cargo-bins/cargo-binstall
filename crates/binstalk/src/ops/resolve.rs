@@ -239,7 +239,10 @@ async fn resolve_inner(
     }
 }
 
-///  * `fetcher` - `fetcher.find()` must return `Ok(true)`.
+///  * `fetcher` - `fetcher.find()` must have returned `Ok(true)`.
+///
+/// Can return empty Vec if all `BinFile` is optional and does not exist
+/// in the archive downloaded.
 async fn download_extract_and_verify(
     fetcher: &dyn Fetcher,
     bin_path: &Path,
@@ -278,7 +281,7 @@ async fn download_extract_and_verify(
         }
     }
 
-    // Verify that all the bin_files exist
+    // Verify that all non-optional bin_files exist
     block_in_place(|| {
         let bin_files = collect_bin_files(
             fetcher,
@@ -430,7 +433,7 @@ impl PackageInfo {
             package
                 .metadata
                 .take()
-                .and_then(|mut m| m.binstall.take())
+                .and_then(|m| m.binstall)
                 .unwrap_or_default(),
             manifest
                 .bin
@@ -465,12 +468,13 @@ impl PackageInfo {
 pub fn load_manifest_path<P: AsRef<Path>>(
     manifest_path: P,
 ) -> Result<Manifest<Meta>, BinstallError> {
+    let manifest_path = manifest_path.as_ref();
+
     block_in_place(|| {
-        let manifest_path = manifest_path.as_ref();
         let manifest_path = if manifest_path.is_dir() {
-            manifest_path.join("Cargo.toml")
+            Cow::Owned(manifest_path.join("Cargo.toml"))
         } else if manifest_path.is_file() {
-            manifest_path.into()
+            Cow::Borrowed(manifest_path)
         } else {
             return Err(BinstallError::CargoManifestPath);
         };

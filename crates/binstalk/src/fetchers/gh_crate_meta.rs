@@ -124,7 +124,10 @@ impl super::Fetcher for GhCrateMeta {
             return Ok(false);
         };
 
-        let repo = repo.as_ref().map(|u| u.as_str().trim_end_matches('/'));
+        // Convert Option<Url> to Option<String> to reduce size of future.
+        let repo = repo.map(String::from);
+        let repo = repo.as_deref().map(|u| u.trim_end_matches('/'));
+
         let launch_baseline_find_tasks = |pkg_fmt| {
             match &pkg_urls {
                 Either::Left(pkg_url) => Either::Left(iter::once(*pkg_url)),
