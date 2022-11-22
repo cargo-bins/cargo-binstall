@@ -133,10 +133,12 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: ${{ env.aarch64 }}
+        path: ${{ env.aarch64 }}
     - name: Download x86-64 artifact
       uses: actions/download-artifact@v3
       with:
         name: ${{ env.x86_64 }}
+        path: ${{ env.aarch64 }}
     - name: Create universal binary for MacOS
       run: lipo -create -output cargo-binstall $aarch64/cargo-binstall $x86_64/cargo-binstall
     - name: Upload output
