@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-downloader"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "binstalk-types",
  "binstall-tar",
@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "binstalk-types",
  "compact_str",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-types"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "compact_str",
  "once_cell",
