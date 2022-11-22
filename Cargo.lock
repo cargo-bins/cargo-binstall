@@ -117,7 +117,7 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "binstalk"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
