@@ -3,14 +3,14 @@ name = "binstalk-manifests"
 description = "The binstall toolkit for manipulating with manifest"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-manifests"
-version = "0.1.0"
+version = "0.0.0"
 rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-binstalk-types = { version = "0.1.0", path = "../binstalk-types" }
+binstalk-types = { version = "0.0.0", path = "../binstalk-types" }
 compact_str = { version = "0.6.1", features = ["serde"] }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
 home = "0.5.4"
