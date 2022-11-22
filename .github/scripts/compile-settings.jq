@@ -27,6 +27,12 @@ if $for_release then {
 )
 |
 .features = (
+  if ($matrix."use-cross" // false)
+  then .features // ["zstd-thin"]
+  else .features
+)
+|
+.features = (
   if (.features | length > 0)
   then "--no-default-features --features \(.features | join(","))"
   else "" end
