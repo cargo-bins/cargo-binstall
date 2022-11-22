@@ -69,3 +69,5 @@ native-tls = ["reqwest/native-tls", "trust-dns-resolver?/dns-over-native-tls"]
 
 # Enable trust-dns-resolver so that features on it will also be enabled.
 trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]
+
+zstd-thin = ["zstd/thin"]

@@ -60,6 +60,8 @@ native-tls = ["binstalk/native-tls"]
 
 trust-dns = ["binstalk/trust-dns"]
 
+zstd-thin = ["binstalk/zstd-thin"]
+
 fancy-no-backtrace = ["miette/fancy-no-backtrace"]
 fancy-with-backtrace = ["fancy-no-backtrace", "miette/fancy"]
 

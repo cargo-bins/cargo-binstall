@@ -49,3 +49,5 @@ rustls = ["crates_io_api/rustls", "binstalk-downloader/rustls"]
 native-tls = ["binstalk-downloader/native-tls"]
 
 trust-dns = ["binstalk-downloader/trust-dns"]
+
+zstd-thin = ["binstalk-downloader/zstd-thin"]
