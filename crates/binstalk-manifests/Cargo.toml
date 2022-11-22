@@ -11,14 +11,14 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 binstalk-types = { version = "0.1.0", path = "../binstalk-types" }
-compact_str = { version = "0.6.0", features = ["serde"] }
+compact_str = { version = "0.6.1", features = ["serde"] }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
 home = "0.5.4"
 miette = "5.4.1"
 semver = { version = "1.0.14", features = ["serde"] }
 serde = { version = "1.0.147", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
-serde_json = "1.0.88"
+serde_json = "1.0.89"
 thiserror = "1.0.37"
 toml_edit = { version = "0.15.0", features = ["easy"] }
 url = { version = "2.3.1", features = ["serde"] }
