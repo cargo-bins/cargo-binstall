@@ -77,14 +77,17 @@ cargo binstall --help >/dev/null
 "./$1" binstall --no-confirm cargo-binstall@0.12.0 | grep -q 'cargo-binstall v0.12.0 is already installed'
 "./$1" binstall --no-confirm cargo-binstall@^0.12.0 | grep -q -v 'cargo-binstall v0.12.0 is already installed'
 
-# Test default GitLab pkg-url templates
-"./$1" binstall \
-    --force \
-    --manifest-path "$test_resources/gitlab-test-Cargo.toml" \
-    --log-level debug \
-    --no-confirm \
-    --disable-strategies compile \
-    cargo-binstall
+# Disabled since gitlab now requries to be logined just to download
+# artifacts.
+#
+# # Test default GitLab pkg-url templates
+# "./$1" binstall \
+#     --force \
+#     --manifest-path "$test_resources/gitlab-test-Cargo.toml" \
+#     --log-level debug \
+#     --no-confirm \
+#     --disable-strategies compile \
+#     cargo-binstall
 
 # Test default BitBucket pkg-url templates
 "./$1" binstall \
