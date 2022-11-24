@@ -21,7 +21,7 @@ either = "1.8.0"
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 home = "0.5.4"
 itertools = "0.10.5"
-jobslot = { version = "0.2.6", features = ["tokio"] }
+jobslot = { version = "0.2.8", features = ["tokio"] }
 miette = "5.5.0"
 normalize-path = { version = "0.2.0", path = "../normalize-path" }
 once_cell = "1.16.0"
