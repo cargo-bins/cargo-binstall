@@ -44,9 +44,10 @@ xz2 = "0.1.7"
 zip = { version = "0.6.3", default-features = false, features = ["deflate", "bzip2", "zstd"] }
 
 # zstd is also depended by zip.
-# Since zip 0.6.3 depends on zstd 0.11, we also have to use 0.11 here,
-# otherwise there will be a link conflict.
-zstd = { version = "0.11.2", default-features = false }
+# Since zip 0.6.3 depends on zstd 0.11, we can use 0.12.0 here
+# because it uses the same zstd-sys version.
+# Otherwise there will be a link conflict.
+zstd = { version = "0.12.0", default-features = false }
 
 [features]
 default = ["static", "rustls"]
