@@ -40,7 +40,7 @@ impl GhCrateMeta {
         pkg_fmt: PkgFmt,
         pkg_url: &'a str,
         repo: Option<&'a str>,
-    ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'a> + 'a {
+    ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(move |ext| {
             let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
