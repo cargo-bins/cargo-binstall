@@ -1,10 +1,23 @@
 use std::{
-    io::{self, BufRead, Write},
+    io::{self, BufRead, StdinLock, Write},
     thread,
 };
 
 use binstalk::errors::BinstallError;
 use tokio::sync::oneshot;
+
+fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String) -> io::Result<()> {
+    {
+        let mut stdout = io::stdout().lock();
+
+        write!(&mut stdout, "Do you wish to continue? yes/[no]\n? ")?;
+        stdout.flush()?;
+    }
+
+    stdin.read_line(input)?;
+
+    Ok(())
+}
 
 pub async fn confirm() -> Result<(), BinstallError> {
     let (tx, rx) = oneshot::channel();
@@ -16,14 +29,9 @@ pub async fn confirm() -> Result<(), BinstallError> {
         let mut input = String::with_capacity(16);
 
         let res = loop {
-            {
-                let mut stdout = io::stdout().lock();
-
-                write!(&mut stdout, "Do you wish to continue? yes/[no]\n? ").unwrap();
-                stdout.flush().unwrap();
+            if ask_for_confirm(&mut stdin, &mut input).is_err() {
+                break false;
             }
-
-            stdin.read_line(&mut input).unwrap();
 
             match input.as_str().trim() {
                 "yes" | "y" | "YES" | "Y" => break true,
