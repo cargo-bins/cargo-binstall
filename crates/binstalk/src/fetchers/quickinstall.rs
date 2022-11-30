@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
@@ -47,7 +47,12 @@ impl super::Fetcher for QuickInstall {
         AutoAbortJoinHandle::spawn(async move {
             let this = self.clone();
             tokio::spawn(async move {
-                let _ = this.report().await;
+                if let Err(err) = this.report().await {
+                    warn!(
+                        "Failed to send quickinstall report for package {}: {err}",
+                        this.package
+                    )
+                }
             });
 
             let url = self.package_url();
