@@ -1,7 +1,6 @@
 use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
-use tokio::task::JoinHandle;
 use tracing::debug;
 use url::Url;
 
@@ -46,8 +45,12 @@ impl super::Fetcher for QuickInstall {
 
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
+            let this = self.clone();
+            tokio::spawn(async move {
+                let _ = this.report().await;
+            });
+
             let url = self.package_url();
-            self.report();
             debug!("Checking for package at: '{url}'");
             Ok(self
                 .client
@@ -113,22 +116,17 @@ impl QuickInstall {
         )
     }
 
-    pub fn report(&self) -> JoinHandle<Result<(), BinstallError>> {
-        let stats_url = self.stats_url();
-        let client = self.client.clone();
+    pub async fn report(&self) -> Result<(), BinstallError> {
+        if cfg!(debug_assertions) {
+            debug!("Not sending quickinstall report in debug mode");
+            return Ok(());
+        }
 
-        tokio::spawn(async move {
-            if cfg!(debug_assertions) {
-                debug!("Not sending quickinstall report in debug mode");
-                return Ok(());
-            }
+        let url = Url::parse(&self.stats_url())?;
+        debug!("Sending installation report to quickinstall ({url})");
 
-            let url = Url::parse(&stats_url)?;
-            debug!("Sending installation report to quickinstall ({url})");
+        self.client.remote_exists(url, Method::HEAD).await?;
 
-            client.remote_exists(url, Method::HEAD).await?;
-
-            Ok(())
-        })
+        Ok(())
     }
 }
