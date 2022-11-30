@@ -20,7 +20,7 @@ use crate::{
     drivers::fetch_crate_cratesio,
     errors::BinstallError,
     fetchers::{Data, Fetcher, TargetData},
-    helpers::{remote::Client, tasks::AutoAbortJoinHandle},
+    helpers::remote::Client,
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
 };
 
@@ -162,10 +162,7 @@ async fn resolve_inner(
             .cartesian_product(resolvers)
             .map(|(target_data, f)| {
                 let fetcher = f(opts.client.clone(), data.clone(), target_data);
-                (
-                    fetcher.clone(),
-                    AutoAbortJoinHandle::spawn(async move { fetcher.find().await }),
-                )
+                (fetcher.clone(), fetcher.find())
             }),
     );
 

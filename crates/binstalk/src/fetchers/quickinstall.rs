@@ -11,6 +11,7 @@ use crate::{
         download::Download,
         remote::{Client, Method},
         signal::wait_on_cancellation_signal,
+        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -43,14 +44,16 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    async fn find(&self) -> Result<bool, BinstallError> {
-        let url = self.package_url();
-        self.report();
-        debug!("Checking for package at: '{url}'");
-        Ok(self
-            .client
-            .remote_exists(Url::parse(&url)?, Method::HEAD)
-            .await?)
+    fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
+        AutoAbortJoinHandle::spawn(async move {
+            let url = self.package_url();
+            self.report();
+            debug!("Checking for package at: '{url}'");
+            Ok(self
+                .client
+                .remote_exists(Url::parse(&url)?, Method::HEAD)
+                .await?)
+        })
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {

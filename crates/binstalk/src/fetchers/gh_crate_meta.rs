@@ -16,6 +16,7 @@ use crate::{
         download::Download,
         remote::{Client, Method},
         signal::wait_on_cancellation_signal,
+        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -83,26 +84,27 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    async fn find(&self) -> Result<bool, BinstallError> {
-        let repo = if let Some(repo) = self.data.repo.as_deref() {
-            Some(
-                self.client
-                    .get_redirected_final_url(Url::parse(repo)?)
-                    .await?,
-            )
-        } else {
-            None
-        };
-
-        let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-            Either::Left(pkg_url)
-        } else if let Some(repo) = repo.as_ref() {
-            if let Some(pkg_urls) =
-                RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
-            {
-                Either::Right(pkg_urls)
+    fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
+        AutoAbortJoinHandle::spawn(async move {
+            let repo = if let Some(repo) = self.data.repo.as_deref() {
+                Some(
+                    self.client
+                        .get_redirected_final_url(Url::parse(repo)?)
+                        .await?,
+                )
             } else {
-                warn!(
+                None
+            };
+
+            let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+                Either::Left(pkg_url)
+            } else if let Some(repo) = repo.as_ref() {
+                if let Some(pkg_urls) =
+                    RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
+                {
+                    Either::Right(pkg_urls)
+                } else {
+                    warn!(
                     concat!(
                         "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
                         "Please ask the upstream to provide it for target {}."
@@ -110,10 +112,10 @@ impl super::Fetcher for GhCrateMeta {
                     repo, self.target_data.target
                 );
 
-                return Ok(false);
-            }
-        } else {
-            warn!(
+                    return Ok(false);
+                }
+            } else {
+                warn!(
                 concat!(
                     "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
                     "Please ask the upstream to provide it for target {}."
@@ -121,39 +123,44 @@ impl super::Fetcher for GhCrateMeta {
                 self.target_data.target
             );
 
-            return Ok(false);
-        };
+                return Ok(false);
+            };
 
-        // Convert Option<Url> to Option<String> to reduce size of future.
-        let repo = repo.map(String::from);
-        let repo = repo.as_deref().map(|u| u.trim_end_matches('/'));
+            // Convert Option<Url> to Option<String> to reduce size of future.
+            let repo = repo.map(String::from);
+            let repo = repo.as_deref().map(|u| u.trim_end_matches('/'));
 
-        let launch_baseline_find_tasks = |pkg_fmt| {
-            match &pkg_urls {
-                Either::Left(pkg_url) => Either::Left(iter::once(*pkg_url)),
-                Either::Right(pkg_urls) => Either::Right(pkg_urls.iter().map(Deref::deref)),
+            // Use reference to self to fix error of closure
+            // launch_baseline_find_tasks which moves `this`
+            let this = &self;
+
+            let launch_baseline_find_tasks = |pkg_fmt| {
+                match &pkg_urls {
+                    Either::Left(pkg_url) => Either::Left(iter::once(*pkg_url)),
+                    Either::Right(pkg_urls) => Either::Right(pkg_urls.iter().map(Deref::deref)),
+                }
+                .flat_map(move |pkg_url| this.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
+            };
+
+            let mut handles: FuturesUnordered<_> =
+                if let Some(pkg_fmt) = self.target_data.meta.pkg_fmt {
+                    launch_baseline_find_tasks(pkg_fmt).collect()
+                } else {
+                    PkgFmt::iter()
+                        .flat_map(launch_baseline_find_tasks)
+                        .collect()
+                };
+
+            while let Some(res) = handles.next().await {
+                if let Some((url, pkg_fmt)) = res? {
+                    debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
+                    self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
+                    return Ok(true);
+                }
             }
-            .flat_map(move |pkg_url| self.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
-        };
 
-        let mut handles: FuturesUnordered<_> = if let Some(pkg_fmt) = self.target_data.meta.pkg_fmt
-        {
-            launch_baseline_find_tasks(pkg_fmt).collect()
-        } else {
-            PkgFmt::iter()
-                .flat_map(launch_baseline_find_tasks)
-                .collect()
-        };
-
-        while let Some(res) = handles.next().await {
-            if let Some((url, pkg_fmt)) = res? {
-                debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
-                self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
+            Ok(false)
+        })
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
