@@ -20,11 +20,13 @@ pub async fn cancel_on_user_sig_term<T>(
     ignore_signals()?;
 
     tokio::select! {
-        res = handle => res,
+        biased;
+
         res = wait_on_cancellation_signal() => {
             res.map_err(BinstallError::Io)
                 .and(Err(BinstallError::UserAbort))
         }
+        res = handle => res,
     }
 }
 
@@ -59,6 +61,8 @@ async fn wait_on_cancellation_signal_inner() -> Result<(), io::Error> {
     }
 
     tokio::select! {
+        biased;
+
         res = signal::ctrl_c() => res,
         res = inner() => res,
     }
@@ -72,6 +76,8 @@ mod unix {
     /// Same as [`wait_on_cancellation_signal`] but is only available on unix.
     pub async fn wait_on_cancellation_signal_unix() -> Result<(), io::Error> {
         tokio::select! {
+            biased;
+
             res = wait_for_signal_unix(SignalKind::interrupt()) => res,
             res = wait_for_signal_unix(SignalKind::hangup()) => res,
             res = wait_for_signal_unix(SignalKind::terminate()) => res,
