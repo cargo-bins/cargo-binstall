@@ -45,15 +45,19 @@ impl super::Fetcher for QuickInstall {
 
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
-            let this = self.clone();
-            tokio::spawn(async move {
-                if let Err(err) = this.report().await {
-                    warn!(
-                        "Failed to send quickinstall report for package {}: {err}",
-                        this.package
-                    )
-                }
-            });
+            if cfg!(debug_assertions) {
+                debug!("Not sending quickinstall report in debug mode");
+            } else {
+                let this = self.clone();
+                tokio::spawn(async move {
+                    if let Err(err) = this.report().await {
+                        warn!(
+                            "Failed to send quickinstall report for package {}: {err}",
+                            this.package
+                        )
+                    }
+                });
+            }
 
             let url = self.package_url();
             debug!("Checking for package at: '{url}'");
@@ -122,11 +126,6 @@ impl QuickInstall {
     }
 
     pub async fn report(&self) -> Result<(), BinstallError> {
-        if cfg!(debug_assertions) {
-            debug!("Not sending quickinstall report in debug mode");
-            return Ok(());
-        }
-
         let url = Url::parse(&self.stats_url())?;
         debug!("Sending installation report to quickinstall ({url})");
 
