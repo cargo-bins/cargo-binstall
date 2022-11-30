@@ -6,7 +6,7 @@ pub use quickinstall::*;
 
 use crate::{
     errors::BinstallError,
-    helpers::remote::Client,
+    helpers::{remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -32,7 +32,7 @@ pub trait Fetcher: Send + Sync {
     ///
     /// Must return `true` if a package is available, `false` if none is, and reserve errors to
     /// fatal conditions only.
-    async fn find(&self) -> Result<bool, BinstallError>;
+    fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>>;
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;

@@ -1,8 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
-use tokio::task::JoinHandle;
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
@@ -11,6 +10,7 @@ use crate::{
         download::Download,
         remote::{Client, Method},
         signal::wait_on_cancellation_signal,
+        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -43,14 +43,29 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    async fn find(&self) -> Result<bool, BinstallError> {
-        let url = self.package_url();
-        self.report();
-        debug!("Checking for package at: '{url}'");
-        Ok(self
-            .client
-            .remote_exists(Url::parse(&url)?, Method::HEAD)
-            .await?)
+    fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
+        AutoAbortJoinHandle::spawn(async move {
+            if cfg!(debug_assertions) {
+                debug!("Not sending quickinstall report in debug mode");
+            } else {
+                let this = self.clone();
+                tokio::spawn(async move {
+                    if let Err(err) = this.report().await {
+                        warn!(
+                            "Failed to send quickinstall report for package {}: {err}",
+                            this.package
+                        )
+                    }
+                });
+            }
+
+            let url = self.package_url();
+            debug!("Checking for package at: '{url}'");
+            Ok(self
+                .client
+                .remote_exists(Url::parse(&url)?, Method::HEAD)
+                .await?)
+        })
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
@@ -110,22 +125,12 @@ impl QuickInstall {
         )
     }
 
-    pub fn report(&self) -> JoinHandle<Result<(), BinstallError>> {
-        let stats_url = self.stats_url();
-        let client = self.client.clone();
+    pub async fn report(&self) -> Result<(), BinstallError> {
+        let url = Url::parse(&self.stats_url())?;
+        debug!("Sending installation report to quickinstall ({url})");
 
-        tokio::spawn(async move {
-            if cfg!(debug_assertions) {
-                debug!("Not sending quickinstall report in debug mode");
-                return Ok(());
-            }
+        self.client.remote_exists(url, Method::HEAD).await?;
 
-            let url = Url::parse(&stats_url)?;
-            debug!("Sending installation report to quickinstall ({url})");
-
-            client.remote_exists(url, Method::HEAD).await?;
-
-            Ok(())
-        })
+        Ok(())
     }
 }
