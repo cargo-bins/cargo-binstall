@@ -122,10 +122,12 @@ where
             let option = self.handle.block_on(async {
                 if let Some(cancellation_future) = self.cancellation_future.as_mut() {
                     tokio::select! {
-                        res = next_stream(&mut self.stream) => res,
+                        biased;
+
                         res = cancellation_future => {
                             Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))
                         },
+                        res = next_stream(&mut self.stream) => res,
                     }
                 } else {
                     next_stream(&mut self.stream).await
