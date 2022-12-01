@@ -24,6 +24,14 @@ pub struct CratesIoApiError {
     pub err: crates_io_api::Error,
 }
 
+#[derive(Debug, Error)]
+#[error("version string '{v}' is not semver: {err}")]
+pub struct VersionParseError {
+    pub v: CompactString,
+    #[source]
+    pub err: semver::Error,
+}
+
 /// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
 #[non_exhaustive]
@@ -159,13 +167,9 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::version::parse`
     /// - Exit: 80
-    #[error("version string '{v}' is not semver")]
+    #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::version::parse))]
-    VersionParse {
-        v: CompactString,
-        #[source]
-        err: semver::Error,
-    },
+    VersionParse(#[from] Box<VersionParseError>),
 
     /// No available version matches the requirements.
     ///
