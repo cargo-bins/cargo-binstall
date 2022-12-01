@@ -32,6 +32,14 @@ pub struct VersionParseError {
     pub err: semver::Error,
 }
 
+#[derive(Debug, Error)]
+#[error("For crate {crate_name}: {err}")]
+pub struct CrateContextError {
+    pub crate_name: CompactString,
+    #[source]
+    pub err: BinstallError,
+}
+
 /// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
 #[non_exhaustive]
@@ -313,12 +321,8 @@ pub enum BinstallError {
     NoFallbackToCargoInstall,
 
     /// A wrapped error providing the context of which crate the error is about.
-    #[error("For crate {crate_name}: {error}")]
-    CrateContext {
-        #[source]
-        error: Box<BinstallError>,
-        crate_name: CompactString,
-    },
+    #[error(transparent)]
+    CrateContext(Box<CrateContextError>),
 }
 
 impl BinstallError {
@@ -350,7 +354,7 @@ impl BinstallError {
             EmptySourceFilePath => 92,
             InvalidStrategies(..) => 93,
             NoFallbackToCargoInstall => 94,
-            CrateContext { error, .. } => error.exit_number(),
+            CrateContext(context) => context.err.exit_number(),
         };
 
         // reserved codes
@@ -372,10 +376,10 @@ impl BinstallError {
 
     /// Add crate context to the error
     pub fn crate_context(self, crate_name: impl Into<CompactString>) -> Self {
-        Self::CrateContext {
-            error: Box::new(self),
+        Self::CrateContext(Box::new(CrateContextError {
+            err: self,
             crate_name: crate_name.into(),
-        }
+        }))
     }
 }
 
