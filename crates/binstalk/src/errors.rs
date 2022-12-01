@@ -35,9 +35,9 @@ pub struct VersionParseError {
 #[derive(Debug, Error)]
 #[error("For crate {crate_name}: {err}")]
 pub struct CrateContextError {
-    pub crate_name: CompactString,
+    crate_name: CompactString,
     #[source]
-    pub err: BinstallError,
+    err: BinstallError,
 }
 
 /// Error kinds emitted by cargo-binstall.
