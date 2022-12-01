@@ -13,12 +13,14 @@ use std::{
     io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
 use miette::Diagnostic;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -111,6 +113,20 @@ impl CratesToml {
     {
         Self::append_to_path(Self::default_path()?, iter)
     }
+
+    /// Return BTreeMap with crate name as key and its corresponding version
+    /// as value.
+    pub fn collect_into_crates_versions(
+        self,
+    ) -> Result<BTreeMap<CompactString, Version>, CratesTomlParseError> {
+        self.v1
+            .into_keys()
+            .map(|s| {
+                let cvs = CrateVersionSource::from_str(&s)?;
+                Ok((cvs.name, cvs.version))
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -167,5 +183,17 @@ mod tests {
             }],
         )
         .unwrap();
+
+        let crates = CratesToml::load_from_path(&path)
+            .unwrap()
+            .collect_into_crates_versions()
+            .unwrap();
+
+        assert_eq!(crates.len(), 1);
+
+        assert_eq!(
+            crates.get("cargo-binstall").unwrap(),
+            &Version::new(0, 11, 1)
+        );
     }
 }
