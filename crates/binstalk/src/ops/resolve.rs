@@ -18,7 +18,7 @@ use super::Options;
 use crate::{
     bins,
     drivers::fetch_crate_cratesio,
-    errors::BinstallError,
+    errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
     helpers::remote::Client,
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
@@ -409,10 +409,11 @@ impl PackageInfo {
         let new_version = match Version::parse(&new_version_str) {
             Ok(new_version) => new_version,
             Err(err) => {
-                return Err(BinstallError::VersionParse {
+                return Err(Box::new(VersionParseError {
                     v: new_version_str,
                     err,
                 })
+                .into())
             }
         };
 

@@ -131,8 +131,6 @@ async fn install_from_source(
         cmd.arg("--force");
     }
 
-    let command_string = format!("{cmd:?}");
-
     let mut child = jobserver_client.configure_and_run(&mut cmd, |cmd| cmd.spawn())?;
 
     debug!("Spawned command pid={:?}", child.id());
@@ -144,7 +142,7 @@ async fn install_from_source(
     } else {
         error!("Cargo errored! {status:?}");
         Err(BinstallError::SubProcess {
-            command: command_string,
+            command: format!("{cmd:?}").into_boxed_str(),
             status,
         })
     }

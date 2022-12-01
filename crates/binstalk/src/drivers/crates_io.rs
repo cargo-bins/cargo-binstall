@@ -6,7 +6,7 @@ use semver::VersionReq;
 use tracing::debug;
 
 use crate::{
-    errors::BinstallError,
+    errors::{BinstallError, CratesIoApiError},
     helpers::{
         download::Download,
         remote::{Client, Url},
@@ -33,14 +33,12 @@ pub async fn fetch_crate_cratesio(
     debug!("Looking up crate information");
 
     // Fetch online crate information
-    let base_info =
-        crates_io_api_client
-            .get_crate(name)
-            .await
-            .map_err(|err| BinstallError::CratesIoApi {
-                crate_name: name.into(),
-                err: Box::new(err),
-            })?;
+    let base_info = crates_io_api_client.get_crate(name).await.map_err(|err| {
+        Box::new(CratesIoApiError {
+            crate_name: name.into(),
+            err,
+        })
+    })?;
 
     // Locate matching version
     let version_iter = base_info.versions.iter().filter(|v| !v.yanked);

@@ -8,13 +8,37 @@ use binstalk_downloader::{
     download::{DownloadError, ZipError},
     remote::{Error as RemoteError, HttpError, ReqwestError},
 };
+use cargo_toml::Error as CargoTomlError;
 use compact_str::CompactString;
-use crates_io_api::Error as CratesIoApiError;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tinytemplate::error::Error as TinyTemplateError;
 use tokio::task;
 use tracing::{error, warn};
+
+#[derive(Debug, Error)]
+#[error("crates.io API error for {crate_name}: {err}")]
+pub struct CratesIoApiError {
+    pub crate_name: CompactString,
+    #[source]
+    pub err: crates_io_api::Error,
+}
+
+#[derive(Debug, Error)]
+#[error("version string '{v}' is not semver: {err}")]
+pub struct VersionParseError {
+    pub v: CompactString,
+    #[source]
+    pub err: semver::Error,
+}
+
+#[derive(Debug, Error)]
+#[error("For crate {crate_name}: {err}")]
+pub struct CrateContextError {
+    crate_name: CompactString,
+    #[source]
+    err: BinstallError,
+}
 
 /// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
@@ -93,7 +117,10 @@ pub enum BinstallError {
     /// - Exit: 70
     #[error("subprocess {command} errored with {status}")]
     #[diagnostic(severity(error), code(binstall::subprocess))]
-    SubProcess { command: String, status: ExitStatus },
+    SubProcess {
+        command: Box<str>,
+        status: ExitStatus,
+    },
 
     /// A generic I/O error.
     ///
@@ -109,17 +136,13 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::crates_io_api`
     /// - Exit: 76
-    #[error("crates.io API error")]
+    #[error(transparent)]
     #[diagnostic(
         severity(error),
         code(binstall::crates_io_api),
-        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={crate_name}")
+        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={}", .0.crate_name)
     )]
-    CratesIoApi {
-        crate_name: CompactString,
-        #[source]
-        err: Box<CratesIoApiError>,
-    },
+    CratesIoApi(#[from] Box<CratesIoApiError>),
 
     /// The override path to the cargo manifest is invalid or cannot be resolved.
     ///
@@ -143,7 +166,7 @@ pub enum BinstallError {
         code(binstall::cargo_manifest),
         help("If you used --manifest-path, check the Cargo.toml syntax.")
     )]
-    CargoManifest(#[from] cargo_toml::Error),
+    CargoManifest(Box<CargoTomlError>),
 
     /// A version is not valid semver.
     ///
@@ -152,13 +175,9 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::version::parse`
     /// - Exit: 80
-    #[error("version string '{v}' is not semver")]
+    #[error(transparent)]
     #[diagnostic(severity(error), code(binstall::version::parse))]
-    VersionParse {
-        v: CompactString,
-        #[source]
-        err: semver::Error,
-    },
+    VersionParse(#[from] Box<VersionParseError>),
 
     /// No available version matches the requirements.
     ///
@@ -302,12 +321,8 @@ pub enum BinstallError {
     NoFallbackToCargoInstall,
 
     /// A wrapped error providing the context of which crate the error is about.
-    #[error("For crate {crate_name}: {error}")]
-    CrateContext {
-        #[source]
-        error: Box<BinstallError>,
-        crate_name: CompactString,
-    },
+    #[error(transparent)]
+    CrateContext(Box<CrateContextError>),
 }
 
 impl BinstallError {
@@ -339,7 +354,7 @@ impl BinstallError {
             EmptySourceFilePath => 92,
             InvalidStrategies(..) => 93,
             NoFallbackToCargoInstall => 94,
-            CrateContext { error, .. } => error.exit_number(),
+            CrateContext(context) => context.err.exit_number(),
         };
 
         // reserved codes
@@ -361,10 +376,10 @@ impl BinstallError {
 
     /// Add crate context to the error
     pub fn crate_context(self, crate_name: impl Into<CompactString>) -> Self {
-        Self::CrateContext {
-            error: Box::new(self),
+        Self::CrateContext(Box::new(CrateContextError {
+            err: self,
             crate_name: crate_name.into(),
-        }
+        }))
     }
 }
 
@@ -436,5 +451,11 @@ impl From<DownloadError> for BinstallError {
 impl From<TinyTemplateError> for BinstallError {
     fn from(e: TinyTemplateError) -> Self {
         BinstallError::Template(Box::new(e))
+    }
+}
+
+impl From<CargoTomlError> for BinstallError {
+    fn from(e: CargoTomlError) -> Self {
+        BinstallError::CargoManifest(Box::new(e))
     }
 }
