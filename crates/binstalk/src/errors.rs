@@ -8,6 +8,7 @@ use binstalk_downloader::{
     download::{DownloadError, ZipError},
     remote::{Error as RemoteError, HttpError, ReqwestError},
 };
+use cargo_toml::Error as CargoTomlError;
 use compact_str::CompactString;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
@@ -149,7 +150,7 @@ pub enum BinstallError {
         code(binstall::cargo_manifest),
         help("If you used --manifest-path, check the Cargo.toml syntax.")
     )]
-    CargoManifest(#[from] cargo_toml::Error),
+    CargoManifest(Box<CargoTomlError>),
 
     /// A version is not valid semver.
     ///
@@ -442,5 +443,11 @@ impl From<DownloadError> for BinstallError {
 impl From<TinyTemplateError> for BinstallError {
     fn from(e: TinyTemplateError) -> Self {
         BinstallError::Template(Box::new(e))
+    }
+}
+
+impl From<CargoTomlError> for BinstallError {
+    fn from(e: CargoTomlError) -> Self {
+        BinstallError::CargoManifest(Box::new(e))
     }
 }
