@@ -15,6 +15,5 @@ pub mod cargo_crates_v1;
 
 pub use binstalk_types::{cargo_toml_binstall, crate_info};
 pub use compact_str::CompactString;
-pub use fs_lock::FileLock;
 pub use semver::Version;
 pub use url::Url;
