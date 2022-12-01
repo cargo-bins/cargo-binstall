@@ -100,7 +100,10 @@ pub enum BinstallError {
     /// - Exit: 70
     #[error("subprocess {command} errored with {status}")]
     #[diagnostic(severity(error), code(binstall::subprocess))]
-    SubProcess { command: String, status: ExitStatus },
+    SubProcess {
+        command: Box<str>,
+        status: ExitStatus,
+    },
 
     /// A generic I/O error.
     ///

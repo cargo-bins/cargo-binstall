@@ -144,7 +144,7 @@ async fn install_from_source(
     } else {
         error!("Cargo errored! {status:?}");
         Err(BinstallError::SubProcess {
-            command: command_string,
+            command: command_string.into_boxed_str(),
             status,
         })
     }
