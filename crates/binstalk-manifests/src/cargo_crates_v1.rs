@@ -52,7 +52,7 @@ impl CratesToml {
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
-        let file = File::open(path)?;
+        let file = FileLock::new_shared(File::open(path)?)?;
         Self::load_from_reader(file)
     }
 
