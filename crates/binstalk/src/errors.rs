@@ -9,12 +9,19 @@ use binstalk_downloader::{
     remote::{Error as RemoteError, HttpError, ReqwestError},
 };
 use compact_str::CompactString;
-use crates_io_api::Error as CratesIoApiError;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tinytemplate::error::Error as TinyTemplateError;
 use tokio::task;
 use tracing::{error, warn};
+
+#[derive(Debug, Error)]
+#[error("crates.io API error for {crate_name}: {err}")]
+pub struct CratesIoApiError {
+    pub crate_name: CompactString,
+    #[source]
+    pub err: crates_io_api::Error,
+}
 
 /// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
@@ -109,17 +116,13 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::crates_io_api`
     /// - Exit: 76
-    #[error("crates.io API error")]
+    #[error(transparent)]
     #[diagnostic(
         severity(error),
         code(binstall::crates_io_api),
-        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={crate_name}")
+        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={}", .0.crate_name)
     )]
-    CratesIoApi {
-        crate_name: CompactString,
-        #[source]
-        err: Box<CratesIoApiError>,
-    },
+    CratesIoApi(#[from] Box<CratesIoApiError>),
 
     /// The override path to the cargo manifest is invalid or cannot be resolved.
     ///
