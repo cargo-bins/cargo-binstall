@@ -207,6 +207,32 @@ mod tests {
             crates.get("cargo-binstall").unwrap(),
             &Version::new(0, 11, 1)
         );
+
+        // Update
+        CratesToml::append_to_path(
+            &path,
+            &[CrateInfo {
+                name: "cargo-binstall".into(),
+                version_req: "*".into(),
+                current_version: Version::new(0, 12, 0),
+                source: CrateSource::cratesio_registry(),
+                target: TARGET.into(),
+                bins: vec!["cargo-binstall".into()],
+            }],
+        )
+        .unwrap();
+
+        let crates = CratesToml::load_from_path(&path)
+            .unwrap()
+            .collect_into_crates_versions()
+            .unwrap();
+
+        assert_eq!(crates.len(), 1);
+
+        assert_eq!(
+            crates.get("cargo-binstall").unwrap(),
+            &Version::new(0, 12, 0)
+        );
     }
 
     #[test]
