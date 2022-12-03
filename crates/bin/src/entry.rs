@@ -20,7 +20,6 @@ use binstalk_manifests::{
 use crates_io_api::AsyncClient as CratesIoApiClient;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
-use strum::EnumCount;
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
@@ -31,9 +30,21 @@ use crate::{
 };
 
 pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
-    // Compute strategies
-    let (resolvers, cargo_install_fallback) =
-        compute_resolvers(args.strategies, args.disable_strategies)?;
+    // Compute Resolvers
+    let mut cargo_install_fallback = false;
+
+    let resolvers: Vec<_> = args
+        .strategies
+        .into_iter()
+        .filter_map(|strategy| match strategy {
+            Strategy::CrateMetaData => Some(GhCrateMeta::new as Resolver),
+            Strategy::QuickInstall => Some(QuickInstall::new as Resolver),
+            Strategy::Compile => {
+                cargo_install_fallback = true;
+                None
+            }
+        })
+        .collect();
 
     // Compute paths
     let (install_path, cargo_roots, metadata, temp_dir) =
@@ -184,79 +195,6 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
         Ok(())
     })
-}
-
-/// Return (resolvers, cargo_install_fallback)
-fn compute_resolvers(
-    mut strategies: Vec<Strategy>,
-    mut disable_strategies: Vec<Strategy>,
-) -> Result<(Vec<Resolver>, bool), BinstallError> {
-    let dup_strategy_err =
-        BinstallError::InvalidStrategies("--strategies should not contain duplicate strategy");
-
-    if strategies.len() > Strategy::COUNT {
-        // If len of strategies is larger than number of variants of Strategy,
-        // then there must be duplicates by pigeon hole principle.
-        return Err(dup_strategy_err);
-    }
-
-    // Whether specific variant of Strategy is present
-    let mut is_variant_present = [false; Strategy::COUNT];
-
-    for strategy in &strategies {
-        let index = *strategy as u8 as usize;
-        if is_variant_present[index] {
-            return Err(dup_strategy_err);
-        } else {
-            is_variant_present[index] = true;
-        }
-    }
-
-    // Default strategies if empty
-    if strategies.is_empty() {
-        strategies = vec![
-            Strategy::CrateMetaData,
-            Strategy::QuickInstall,
-            Strategy::Compile,
-        ];
-    }
-
-    // Filter out all disabled strategies
-    if !disable_strategies.is_empty() {
-        // Since order doesn't matter, we can sort it and remove all duplicates
-        // to speedup checking.
-        disable_strategies.sort_unstable();
-        disable_strategies.dedup();
-
-        // disable_strategies.len() <= Strategy::COUNT, of which is faster
-        // to just use [T]::contains rather than [T]::binary_search
-        strategies.retain(|strategy| !disable_strategies.contains(strategy));
-
-        if strategies.is_empty() {
-            return Err(BinstallError::InvalidStrategies(
-                "You have disabled all strategies",
-            ));
-        }
-    }
-
-    let cargo_install_fallback = *strategies.last().unwrap() == Strategy::Compile;
-
-    if cargo_install_fallback {
-        strategies.pop().unwrap();
-    }
-
-    let resolvers = strategies
-        .into_iter()
-        .map(|strategy| match strategy {
-            Strategy::CrateMetaData => Ok(GhCrateMeta::new as Resolver),
-            Strategy::QuickInstall => Ok(QuickInstall::new as Resolver),
-            Strategy::Compile => Err(BinstallError::InvalidStrategies(
-                "Compile strategy must be the last one",
-            )),
-        })
-        .collect::<Result<Vec<_>, BinstallError>>()?;
-
-    Ok((resolvers, cargo_install_fallback))
 }
 
 type Metadata = (BinstallCratesV1Records, BTreeMap<CompactString, Version>);
