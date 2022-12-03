@@ -196,4 +196,31 @@ mod tests {
             &Version::new(0, 11, 1)
         );
     }
+
+    #[test]
+    fn test_loading() {
+        let raw_data = br#"
+[v1]
+"alacritty 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["alacritty"]
+"cargo-audit 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-audit"]
+"cargo-binstall 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-binstall"]
+"cargo-criterion 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-criterion"]
+"cargo-edit 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-add", "cargo-rm", "cargo-set-version", "cargo-upgrade"]
+"cargo-expand 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-expand"]
+"cargo-geiger 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-geiger"]
+"cargo-hack 0.5.15 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-hack"]
+"cargo-nextest 0.9.26 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-nextest"]
+"cargo-supply-chain 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-supply-chain"]
+"cargo-tarpaulin 0.20.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-tarpaulin"]
+"cargo-update 8.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-install-update", "cargo-install-update-config"]
+"cargo-watch 8.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-watch"]
+"cargo-with 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-with"]
+"cross 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = ["cross", "cross-util"]
+"irust 1.63.3 (registry+https://github.com/rust-lang/crates.io-index)" = ["irust"]
+"tokei 12.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = ["tokei"]
+"xargo 0.3.26 (registry+https://github.com/rust-lang/crates.io-index)" = ["xargo", "xargo-check"]
+        "#;
+
+        CratesToml::load_from_reader(raw_data.as_slice()).unwrap();
+    }
 }
