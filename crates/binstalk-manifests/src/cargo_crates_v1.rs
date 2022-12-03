@@ -13,7 +13,6 @@ use std::{
     io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use compact_str::CompactString;
@@ -131,12 +130,16 @@ impl CratesToml {
     pub fn collect_into_crates_versions(
         self,
     ) -> Result<BTreeMap<CompactString, Version>, CratesTomlParseError> {
+        fn parse_name_ver(s: &str) -> Result<(CompactString, Version), CvsParseError> {
+            match s.splitn(3, ' ').collect::<Vec<_>>()[..] {
+                [name, version, _source] => Ok((CompactString::new(name), version.parse()?)),
+                _ => Err(CvsParseError::BadFormat),
+            }
+        }
+
         self.v1
             .into_iter()
-            .map(|(s, _bins)| {
-                let cvs = CrateVersionSource::from_str(&s)?;
-                Ok((cvs.name, cvs.version))
-            })
+            .map(|(s, _bins)| parse_name_ver(&s).map_err(CratesTomlParseError::from))
             .collect()
     }
 }
