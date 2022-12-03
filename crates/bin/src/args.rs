@@ -14,6 +14,7 @@ use binstalk::{
 use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use log::LevelFilter;
 use semver::VersionReq;
+use strum::EnumCount;
 use strum_macros::EnumCount;
 
 #[derive(Debug, Parser)]
@@ -38,10 +39,10 @@ pub struct Args {
     /// If duplicate names are provided, the last one (and their version requirement)
     /// is kept.
     #[clap(
-    help_heading = "Package selection",
-    value_name = "crate[@version]",
-    required_unless_present_any = ["version", "help"],
-)]
+        help_heading = "Package selection",
+        value_name = "crate[@version]",
+        required_unless_present_any = ["version", "help"],
+    )]
     pub crate_names: Vec<CrateName>,
 
     /// Package version to install.
@@ -334,6 +335,9 @@ pub fn parse() -> Args {
         opts.log_level = LevelFilter::Off;
     }
 
+    // Ensure no conflict
+    let mut command = Args::command();
+
     if opts.crate_names.len() > 1 {
         let option = if opts.version_req.is_some() {
             "version"
@@ -349,10 +353,76 @@ pub fn parse() -> Args {
 You cannot use --{option} and specify multiple packages at the same time. Do one or the other."#
             );
 
-            Args::command()
-                .error(ErrorKind::ArgumentConflict, msg)
-                .exit();
+            command.error(ErrorKind::ArgumentConflict, msg).exit();
         }
+    }
+
+    // Check strategies for duplicates
+    let mut new_dup_strategy_err = || {
+        command.error(
+            ErrorKind::TooManyValues,
+            "--strategies should not contain duplicate strategy",
+        )
+    };
+
+    if opts.strategies.len() > Strategy::COUNT {
+        // If len of strategies is larger than number of variants of Strategy,
+        // then there must be duplicates by pigeon hole principle.
+        new_dup_strategy_err().exit()
+    }
+
+    // Whether specific variant of Strategy is present
+    let mut is_variant_present = [false; Strategy::COUNT];
+
+    for strategy in &opts.strategies {
+        let index = *strategy as u8 as usize;
+        if is_variant_present[index] {
+            new_dup_strategy_err().exit()
+        } else {
+            is_variant_present[index] = true;
+        }
+    }
+
+    // Default strategies if empty
+    if opts.strategies.is_empty() {
+        opts.strategies = vec![
+            Strategy::CrateMetaData,
+            Strategy::QuickInstall,
+            Strategy::Compile,
+        ];
+    }
+
+    // Filter out all disabled strategies
+    if !opts.disable_strategies.is_empty() {
+        // Since order doesn't matter, we can sort it and remove all duplicates
+        // to speedup checking.
+        opts.disable_strategies.sort_unstable();
+        opts.disable_strategies.dedup();
+
+        // disable_strategies.len() <= Strategy::COUNT, of which is faster
+        // to just use [Strategy]::contains rather than
+        // [Strategy]::binary_search
+        opts.strategies
+            .retain(|strategy| !opts.disable_strategies.contains(strategy));
+
+        if opts.strategies.is_empty() {
+            command
+                .error(ErrorKind::TooFewValues, "You have disabled all strategies")
+                .exit()
+        }
+
+        // Free disable_strategies as it will not be used again.
+        opts.disable_strategies = Vec::new();
+    }
+
+    // Ensure that Strategy::Compile is specified as the last strategy
+    if opts.strategies[..(opts.strategies.len() - 1)].contains(&Strategy::Compile) {
+        command
+            .error(
+                ErrorKind::InvalidValue,
+                "Compile strategy must be the last one",
+            )
+            .exit()
     }
 
     opts
