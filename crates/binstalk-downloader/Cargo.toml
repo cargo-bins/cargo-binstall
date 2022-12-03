@@ -28,6 +28,7 @@ tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.3.0"
 thiserror = "1.0.37"
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread", "sync", "time"], default-features = false }
+tokio-tar = "0.3.0"
 tower = { version = "0.4.13", features = ["limit", "util"] }
 tracing = "0.1.37"
 trust-dns-resolver = { version = "0.22.0", optional = true, default-features = false, features = ["dnssec-ring"] }
