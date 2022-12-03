@@ -282,14 +282,6 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     EmptySourceFilePath,
 
-    /// Invalid strategies configured.
-    ///
-    /// - Code: `binstall::strategies`
-    /// - Exit: 93
-    #[error("Invalid strategies configured: {0}")]
-    #[diagnostic(severity(error), code(binstall::strategies))]
-    InvalidStrategies(&'static str),
-
     /// Fallback to `cargo-install` is disabled.
     ///
     /// - Code: `binstall::no_fallback_to_cargo_install`
@@ -329,7 +321,6 @@ impl BinstallError {
             DuplicateSourceFilePath { .. } => 90,
             InvalidSourceFilePath { .. } => 91,
             EmptySourceFilePath => 92,
-            InvalidStrategies(..) => 93,
             NoFallbackToCargoInstall => 94,
             CrateContext(context) => context.err.exit_number(),
         };
