@@ -427,3 +427,13 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
 
     opts
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn verify_cli() {
+        Args::command().debug_assert()
+    }
+}
