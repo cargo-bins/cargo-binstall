@@ -94,6 +94,9 @@ impl Download {
     ///
     /// `cancellation_future` can be used to cancel the extraction and return
     /// [`DownloadError::UserAbort`] error.
+    ///
+    /// NOTE that this API does not support gnu extension sparse file unlike
+    /// [`Download::and_extract`].
     #[instrument(skip(visitor, cancellation_future))]
     pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
         self,
