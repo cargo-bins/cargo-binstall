@@ -348,12 +348,15 @@ pub fn parse() -> Args {
         };
 
         if !option.is_empty() {
-            let msg = format!(
-                r#"override option used with multi package syntax.
+            command
+                .error(
+                    ErrorKind::ArgumentConflict,
+                    format_args!(
+                        r#"override option used with multi package syntax.
 You cannot use --{option} and specify multiple packages at the same time. Do one or the other."#
-            );
-
-            command.error(ErrorKind::ArgumentConflict, msg).exit();
+                    ),
+                )
+                .exit();
         }
     }
 
