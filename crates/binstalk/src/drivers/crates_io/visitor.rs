@@ -1,16 +1,17 @@
 use std::{
-    io::{self, Read},
+    io,
     path::{Path, PathBuf},
 };
 
 use cargo_toml::Manifest;
 use normalize_path::NormalizePath;
+use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use super::vfs::Vfs;
 use crate::{
     errors::BinstallError,
-    helpers::download::{DownloadError, Entries, TarEntriesVisitor},
+    helpers::download::{DownloadError, TarEntriesVisitor, TarEntry},
     manifests::cargo_toml_binstall::Meta,
 };
 
@@ -34,36 +35,36 @@ impl ManifestVisitor {
     }
 }
 
+#[async_trait::async_trait]
 impl TarEntriesVisitor for ManifestVisitor {
     type Target = Manifest<Meta>;
 
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), DownloadError> {
-        for res in entries {
-            let mut entry = res?;
-            let path = entry.path()?;
-            let path = path.normalize();
+    async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError> {
+        let path = entry.path()?;
+        let path = path.normalize();
 
-            let Ok(path) = path.strip_prefix(&self.manifest_dir_path)
-                else {
+        let Ok(path) = path.strip_prefix(&self.manifest_dir_path)
+            else {
                 // The path is outside of the curr dir (manifest dir),
                 // ignore it.
-                continue;
+                return Ok(())
             };
 
-            if path == Path::new("Cargo.toml")
-                || path == Path::new("src/main.rs")
-                || path.starts_with("src/bin")
-            {
-                self.vfs.add_path(path);
-            }
+        if path == Path::new("Cargo.toml")
+            || path == Path::new("src/main.rs")
+            || path.starts_with("src/bin")
+        {
+            self.vfs.add_path(path);
+        }
 
-            if path == Path::new("Cargo.toml") {
-                // Since it is possible for the same Cargo.toml to appear
-                // multiple times using `tar --keep-old-files`, here we
-                // clear the buffer first before reading into it.
-                self.cargo_toml_content.clear();
-                entry.read_to_end(&mut self.cargo_toml_content)?;
-            }
+        if path == Path::new("Cargo.toml") {
+            // Since it is possible for the same Cargo.toml to appear
+            // multiple times using `tar --keep-old-files`, here we
+            // clear the buffer first before reading into it.
+            self.cargo_toml_content.clear();
+            self.cargo_toml_content
+                .reserve_exact(entry.size()?.try_into().unwrap_or(usize::MAX));
+            entry.read_to_end(&mut self.cargo_toml_content).await?;
         }
 
         Ok(())
