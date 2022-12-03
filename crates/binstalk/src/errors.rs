@@ -32,11 +32,12 @@ pub struct VersionParseError {
     pub err: semver::Error,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Diagnostic, Error)]
 #[error("For crate {crate_name}: {err}")]
 pub struct CrateContextError {
     crate_name: CompactString,
     #[source]
+    #[diagnostic(transparent)]
     err: BinstallError,
 }
 
@@ -292,6 +293,7 @@ pub enum BinstallError {
 
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
+    #[diagnostic(transparent)]
     CrateContext(Box<CrateContextError>),
 }
 
