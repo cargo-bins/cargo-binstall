@@ -59,11 +59,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "942c7cd7ae39e91bde4820d74132e9862e62c2f386c3aa90ccf55949f5bad63a"
 dependencies = [
  "brotli",
+ "bzip2",
  "flate2",
  "futures-core",
  "memchr",
  "pin-project-lite",
  "tokio",
+ "xz2",
+ "zstd 0.11.2+zstd.1.5.2",
+ "zstd-safe 5.0.2+zstd.1.5.2",
 ]
 
 [[package]]
@@ -150,6 +154,7 @@ dependencies = [
 name = "binstalk-downloader"
 version = "0.1.0"
 dependencies = [
+ "async-compression",
  "async-trait",
  "binstalk-types",
  "binstall-tar",
