@@ -43,12 +43,13 @@ impl TarEntriesVisitor for ManifestVisitor {
         let path = entry.path()?;
         let path = path.normalize();
 
-        let Ok(path) = path.strip_prefix(&self.manifest_dir_path)
-            else {
-                // The path is outside of the curr dir (manifest dir),
-                // ignore it.
-                return Ok(())
-            };
+        let path = if let Ok(path) = path.strip_prefix(&self.manifest_dir_path) {
+            path
+        } else {
+            // The path is outside of the curr dir (manifest dir),
+            // ignore it.
+            return Ok(());
+        };
 
         if path == Path::new("Cargo.toml")
             || path == Path::new("src/main.rs")
