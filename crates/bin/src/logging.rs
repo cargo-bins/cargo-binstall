@@ -1,4 +1,4 @@
-use std::{cmp::min, iter::repeat};
+use std::{cmp::min, io, iter::repeat};
 
 use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
 use once_cell::sync::Lazy;
@@ -11,7 +11,11 @@ use tracing::{
 };
 use tracing_core::{identify_callsite, metadata::Kind, subscriber::Subscriber};
 use tracing_log::AsTrace;
-use tracing_subscriber::{filter::targets::Targets, fmt::fmt, layer::SubscriberExt};
+use tracing_subscriber::{
+    filter::targets::Targets,
+    fmt::{fmt, MakeWriter},
+    layer::SubscriberExt,
+};
 
 // Shamelessly taken from tracing-log
 
@@ -129,6 +133,54 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
+struct ErrorFreeWriter;
+
+impl io::Write for &ErrorFreeWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        io::stdout().write(buf).or_else(|err| {
+            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            // Behave as if writing to /dev/null so that logging system
+            // would keep working.
+            Ok(buf.len())
+        })
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        io::stdout().write_all(buf).or_else(|err| {
+            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            // Behave as if writing to /dev/null so that logging system
+            // would keep working.
+            Ok(())
+        })
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        io::stdout().write_vectored(bufs).or_else(|err| {
+            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            // Behave as if writing to /dev/null so that logging system
+            // would keep working.
+            Ok(bufs.iter().map(|io_slice| io_slice.len()).sum())
+        })
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        io::stdout().flush().or_else(|err| {
+            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            // Behave as if writing to /dev/null so that logging system
+            // would keep working.
+            Ok(())
+        })
+    }
+}
+
+impl<'a> MakeWriter<'a> for ErrorFreeWriter {
+    type Writer = &'a Self;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self
+    }
+}
+
 pub fn logging(log_level: LevelFilter, json_output: bool) {
     // Calculate log_level
     let log_level = min(log_level, STATIC_MAX_LEVEL);
@@ -141,7 +193,7 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
 
     // Build fmt subscriber
     let log_level = log_level.as_trace();
-    let subscriber_builder = fmt().with_max_level(log_level);
+    let subscriber_builder = fmt().with_max_level(log_level).with_writer(ErrorFreeWriter);
 
     let subscriber: Box<dyn Subscriber + Send + Sync> = if json_output {
         Box::new(subscriber_builder.json().finish())
