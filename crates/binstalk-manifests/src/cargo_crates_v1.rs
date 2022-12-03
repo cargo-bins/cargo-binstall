@@ -13,12 +13,14 @@ use std::{
     io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
 use miette::Diagnostic;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -31,7 +33,8 @@ use crate_version_source::*;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
-    v1: BTreeMap<String, Vec<CompactString>>,
+    #[serde(with = "tuple_vec_map")]
+    v1: Vec<(String, Vec<CompactString>)>,
 }
 
 impl CratesToml {
@@ -50,12 +53,22 @@ impl CratesToml {
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
-        let file = File::open(path)?;
+        let file = FileLock::new_shared(File::open(path)?)?;
         Self::load_from_reader(file)
     }
 
+    /// Only use it when you know that the crate is not in the manifest.
+    /// Otherwise, you need to call [`CratesToml::remove`] first.
     pub fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<CompactString>) {
-        self.v1.insert(cvs.to_string(), bins);
+        self.v1.push((cvs.to_string(), bins));
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.v1.retain(|(s, _bin)| {
+            s.split_once(' ')
+                .map(|(crate_name, _rest)| crate_name != name)
+                .unwrap_or_default()
+        });
     }
 
     pub fn write(&self) -> Result<(), CratesTomlParseError> {
@@ -96,6 +109,7 @@ impl CratesToml {
         };
 
         for metadata in iter {
+            c1.remove(&metadata.name);
             c1.insert(&CrateVersionSource::from(metadata), metadata.bins.clone());
         }
 
@@ -110,6 +124,20 @@ impl CratesToml {
         Iter: IntoIterator<Item = &'a CrateInfo>,
     {
         Self::append_to_path(Self::default_path()?, iter)
+    }
+
+    /// Return BTreeMap with crate name as key and its corresponding version
+    /// as value.
+    pub fn collect_into_crates_versions(
+        self,
+    ) -> Result<BTreeMap<CompactString, Version>, CratesTomlParseError> {
+        self.v1
+            .into_iter()
+            .map(|(s, _bins)| {
+                let cvs = CrateVersionSource::from_str(&s)?;
+                Ok((cvs.name, cvs.version))
+            })
+            .collect()
     }
 }
 
@@ -167,5 +195,70 @@ mod tests {
             }],
         )
         .unwrap();
+
+        let crates = CratesToml::load_from_path(&path)
+            .unwrap()
+            .collect_into_crates_versions()
+            .unwrap();
+
+        assert_eq!(crates.len(), 1);
+
+        assert_eq!(
+            crates.get("cargo-binstall").unwrap(),
+            &Version::new(0, 11, 1)
+        );
+
+        // Update
+        CratesToml::append_to_path(
+            &path,
+            &[CrateInfo {
+                name: "cargo-binstall".into(),
+                version_req: "*".into(),
+                current_version: Version::new(0, 12, 0),
+                source: CrateSource::cratesio_registry(),
+                target: TARGET.into(),
+                bins: vec!["cargo-binstall".into()],
+            }],
+        )
+        .unwrap();
+
+        let crates = CratesToml::load_from_path(&path)
+            .unwrap()
+            .collect_into_crates_versions()
+            .unwrap();
+
+        assert_eq!(crates.len(), 1);
+
+        assert_eq!(
+            crates.get("cargo-binstall").unwrap(),
+            &Version::new(0, 12, 0)
+        );
+    }
+
+    #[test]
+    fn test_loading() {
+        let raw_data = br#"
+[v1]
+"alacritty 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["alacritty"]
+"cargo-audit 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-audit"]
+"cargo-binstall 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-binstall"]
+"cargo-criterion 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-criterion"]
+"cargo-edit 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-add", "cargo-rm", "cargo-set-version", "cargo-upgrade"]
+"cargo-expand 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-expand"]
+"cargo-geiger 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-geiger"]
+"cargo-hack 0.5.15 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-hack"]
+"cargo-nextest 0.9.26 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-nextest"]
+"cargo-supply-chain 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-supply-chain"]
+"cargo-tarpaulin 0.20.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-tarpaulin"]
+"cargo-update 8.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-install-update", "cargo-install-update-config"]
+"cargo-watch 8.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-watch"]
+"cargo-with 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-with"]
+"cross 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = ["cross", "cross-util"]
+"irust 1.63.3 (registry+https://github.com/rust-lang/crates.io-index)" = ["irust"]
+"tokei 12.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = ["tokei"]
+"xargo 0.3.26 (registry+https://github.com/rust-lang/crates.io-index)" = ["xargo", "xargo-check"]
+        "#;
+
+        CratesToml::load_from_reader(raw_data.as_slice()).unwrap();
     }
 }
