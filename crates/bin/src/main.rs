@@ -18,10 +18,7 @@ fn main() -> MainExit {
     // This must be the very first thing to happen
     let jobserver_client = LazyJobserverClient::new();
 
-    let args = match args::parse() {
-        Ok(args) => args,
-        Err(err) => return MainExit::Error(err),
-    };
+    let args = args::parse();
 
     if args.version {
         println!("{}", env!("CARGO_PKG_VERSION"));

@@ -205,28 +205,6 @@ pub enum BinstallError {
     )]
     SuperfluousVersionOption,
 
-    /// An override option is used when multiple packages are to be installed.
-    ///
-    /// This is raised when more than one package name is provided and any of:
-    ///
-    /// - `--version`
-    /// - `--manifest-path`
-    /// - `--bin-dir`
-    /// - `--pkg-fmt`
-    /// - `--pkg-url`
-    ///
-    /// is provided.
-    ///
-    /// - Code: `binstall::conflict::overrides`
-    /// - Exit: 85
-    #[error("override option used with multi package syntax")]
-    #[diagnostic(
-        severity(error),
-        code(binstall::conflict::overrides),
-        help("You cannot use --{option} and specify multiple packages at the same time. Do one or the other.")
-    )]
-    OverrideOptionUsedWithMultiInstall { option: &'static str },
-
     /// No binaries were found for the crate.
     ///
     /// When installing, either the binaries are specified in the crate's Cargo.toml, or they're
@@ -304,14 +282,6 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     EmptySourceFilePath,
 
-    /// Invalid strategies configured.
-    ///
-    /// - Code: `binstall::strategies`
-    /// - Exit: 93
-    #[error("Invalid strategies configured: {0}")]
-    #[diagnostic(severity(error), code(binstall::strategies))]
-    InvalidStrategies(&'static str),
-
     /// Fallback to `cargo-install` is disabled.
     ///
     /// - Code: `binstall::no_fallback_to_cargo_install`
@@ -344,7 +314,6 @@ impl BinstallError {
             VersionParse { .. } => 80,
             VersionMismatch { .. } => 82,
             SuperfluousVersionOption => 84,
-            OverrideOptionUsedWithMultiInstall { .. } => 85,
             UnspecifiedBinaries => 86,
             NoViableTargets => 87,
             BinFileNotFound(_) => 88,
@@ -352,7 +321,6 @@ impl BinstallError {
             DuplicateSourceFilePath { .. } => 90,
             InvalidSourceFilePath { .. } => 91,
             EmptySourceFilePath => 92,
-            InvalidStrategies(..) => 93,
             NoFallbackToCargoInstall => 94,
             CrateContext(context) => context.err.exit_number(),
         };
