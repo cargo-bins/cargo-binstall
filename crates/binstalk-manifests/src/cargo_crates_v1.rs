@@ -57,8 +57,18 @@ impl CratesToml {
         Self::load_from_reader(file)
     }
 
+    /// Only use it when you know that the crate is not in the manifest.
+    /// Otherwise, you need to call [`CratesToml::remove`] first.
     pub fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<CompactString>) {
         self.v1.push((cvs.to_string(), bins));
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.v1.retain(|(s, _bin)| {
+            s.split_once(' ')
+                .map(|(crate_name, _rest)| crate_name != name)
+                .unwrap_or_default()
+        });
     }
 
     pub fn write(&self) -> Result<(), CratesTomlParseError> {
@@ -99,6 +109,7 @@ impl CratesToml {
         };
 
         for metadata in iter {
+            c1.remove(&metadata.name);
             c1.insert(&CrateVersionSource::from(metadata), metadata.bins.clone());
         }
 
