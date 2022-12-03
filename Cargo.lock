@@ -165,6 +165,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-tar",
+ "tokio-util",
  "tower",
  "tracing",
  "trust-dns-resolver",
