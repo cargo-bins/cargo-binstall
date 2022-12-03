@@ -7,12 +7,11 @@ use std::{
 };
 
 use binstalk::{
-    errors::BinstallError,
     helpers::remote::tls::Version,
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
 };
-use clap::{Parser, ValueEnum};
+use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use log::LevelFilter;
 use semver::VersionReq;
 use strum_macros::EnumCount;
@@ -309,7 +308,7 @@ pub enum Strategy {
     Compile,
 }
 
-pub fn parse() -> Result<Args, BinstallError> {
+pub fn parse() -> Args {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
@@ -345,9 +344,16 @@ pub fn parse() -> Result<Args, BinstallError> {
         };
 
         if !option.is_empty() {
-            return Err(BinstallError::OverrideOptionUsedWithMultiInstall { option });
+            let msg = format!(
+                r#"override option used with multi package syntax.
+You cannot use --{option} and specify multiple packages at the same time. Do one or the other."#
+            );
+
+            Args::command()
+                .error(ErrorKind::ArgumentConflict, msg)
+                .exit();
         }
     }
 
-    Ok(opts)
+    opts
 }
