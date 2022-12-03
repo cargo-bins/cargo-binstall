@@ -314,7 +314,7 @@ fn filter_out_installed_crates(
             }
 
             // The version req is "*" thus a remote upgraded version could exist
-            (false, Some(curr_version), _) => {
+            (false, Some(curr_version), None) => {
                 Some((crate_name, Some(curr_version.clone())))
             }
 
