@@ -33,7 +33,8 @@ use crate_version_source::*;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml {
-    v1: BTreeMap<String, Vec<CompactString>>,
+    #[serde(with = "tuple_vec_map")]
+    v1: Vec<(String, Vec<CompactString>)>,
 }
 
 impl CratesToml {
@@ -57,7 +58,7 @@ impl CratesToml {
     }
 
     pub fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<CompactString>) {
-        self.v1.insert(cvs.to_string(), bins);
+        self.v1.push((cvs.to_string(), bins));
     }
 
     pub fn write(&self) -> Result<(), CratesTomlParseError> {
@@ -120,8 +121,8 @@ impl CratesToml {
         self,
     ) -> Result<BTreeMap<CompactString, Version>, CratesTomlParseError> {
         self.v1
-            .into_keys()
-            .map(|s| {
+            .into_iter()
+            .map(|(s, _bins)| {
                 let cvs = CrateVersionSource::from_str(&s)?;
                 Ok((cvs.name, cvs.version))
             })
