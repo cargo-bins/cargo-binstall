@@ -11,14 +11,13 @@ use super::{
     extracter::*, stream_readable::StreamReadable, CancellationFuture, DownloadError, TarBasedFmt,
 };
 
-pub async fn extract_bin<S, E>(
+pub async fn extract_bin<S>(
     stream: S,
     path: &Path,
     cancellation_future: CancellationFuture,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    DownloadError: From<E>,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + 'static,
 {
     let mut reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
@@ -42,14 +41,13 @@ where
     })
 }
 
-pub async fn extract_zip<S, E>(
+pub async fn extract_zip<S>(
     stream: S,
     path: &Path,
     cancellation_future: CancellationFuture,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    DownloadError: From<E>,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + 'static,
 {
     let mut reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
@@ -66,15 +64,14 @@ where
     })
 }
 
-pub async fn extract_tar_based_stream<S, E>(
+pub async fn extract_tar_based_stream<S>(
     stream: S,
     path: &Path,
     fmt: TarBasedFmt,
     cancellation_future: CancellationFuture,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    DownloadError: From<E>,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + 'static,
 {
     let reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {

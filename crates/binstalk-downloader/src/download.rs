@@ -145,7 +145,11 @@ impl Download {
             path: &Path,
             cancellation_future: CancellationFuture,
         ) -> Result<(), DownloadError> {
-            let stream = this.client.get_stream(this.url).await?;
+            let stream = this
+                .client
+                .get_stream(this.url)
+                .await?
+                .map(|res| res.map_err(DownloadError::from));
 
             debug!("Downloading and extracting to: '{}'", path.display());
 
