@@ -9,8 +9,8 @@ use tokio_util::io::StreamReader;
 use tracing::debug;
 
 use super::{
-    extracter::*, stream_readable::StreamReadable, zip_extraction::extract_zip_entry,
-    CancellationFuture, DownloadError, TarBasedFmt, ZipError,
+    await_on_option, extracter::*, stream_readable::StreamReadable,
+    zip_extraction::extract_zip_entry, CancellationFuture, DownloadError, TarBasedFmt, ZipError,
 };
 
 pub async fn extract_bin<S>(
@@ -64,15 +64,11 @@ where
         Ok(())
     });
 
-    if let Some(cancellation_future) = cancellation_future {
-        tokio::select! {
-            res = extract_future => res,
-            res = cancellation_future => {
-                Err(res.err().map(DownloadError::from).unwrap_or(DownloadError::UserAbort))
-            }
+    tokio::select! {
+        res = extract_future => res,
+        res = await_on_option(cancellation_future) => {
+            Err(res.err().map(DownloadError::from).unwrap_or(DownloadError::UserAbort))
         }
-    } else {
-        extract_future.await
     }
 }
 

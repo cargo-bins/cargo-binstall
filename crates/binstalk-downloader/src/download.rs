@@ -22,6 +22,9 @@ mod stream_readable;
 mod zip_extraction;
 pub use zip_extraction::ZipError;
 
+mod utils;
+use utils::await_on_option;
+
 pub type CancellationFuture = Option<Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>>;
 
 #[derive(Debug, ThisError)]
@@ -114,15 +117,11 @@ impl Download {
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let ret = if let Some(cancellation_future) = cancellation_future {
-            tokio::select! {
-                res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
-                res = cancellation_future => {
-                    Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))?
-                }
+        let ret = tokio::select! {
+            res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
+            res = await_on_option(cancellation_future) => {
+                Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))?
             }
-        } else {
-            extract_tar_based_stream_and_visit(stream, fmt, visitor).await?
         };
 
         debug!("Download, extraction and in-memory procession OK");
