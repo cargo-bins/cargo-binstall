@@ -19,11 +19,10 @@ pub use async_tar_visitor::*;
 mod extracter;
 mod stream_readable;
 
-pub type CancellationFuture = Option<Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>>;
+mod zip_extraction;
+pub use zip_extraction::ZipError;
 
-#[derive(Debug, ThisError)]
-#[error(transparent)]
-pub struct ZipError(zip::result::ZipError);
+pub type CancellationFuture = Option<Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>>;
 
 #[derive(Debug, ThisError)]
 pub enum DownloadError {
