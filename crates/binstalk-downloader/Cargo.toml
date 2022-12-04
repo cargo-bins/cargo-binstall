@@ -40,14 +40,6 @@ url = "2.3.1"
 
 xz2 = "0.1.7"
 
-# Disable all features of zip except for features of compression algorithms:
-# Disabled features include:
-#  - aes-crypto: Enables decryption of files which were encrypted with AES, absolutely zero use for
-#    this crate.
-#  - time: Enables features using the [time](https://github.com/time-rs/time) crate,
-#    which is not used by this crate.
-zip = { version = "0.6.3", default-features = false, features = ["deflate", "bzip2", "zstd"] }
-
 # zstd is also depended by zip.
 # Since zip 0.6.3 depends on zstd 0.11, we can use 0.12.0 here
 # because it uses the same zstd-sys version.
