@@ -118,10 +118,12 @@ impl Download {
         debug!("Downloading and extracting then in-memory processing");
 
         let ret = tokio::select! {
-            res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
+            biased;
+
             res = await_on_option(cancellation_future) => {
                 Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))?
             }
+            res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
         };
 
         debug!("Download, extraction and in-memory procession OK");

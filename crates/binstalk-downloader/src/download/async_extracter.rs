@@ -65,10 +65,12 @@ where
     });
 
     tokio::select! {
-        res = extract_future => res,
+        biased;
+
         res = await_on_option(cancellation_future) => {
             Err(res.err().map(DownloadError::from).unwrap_or(DownloadError::UserAbort))
         }
+        res = extract_future => res,
     }
 }
 
