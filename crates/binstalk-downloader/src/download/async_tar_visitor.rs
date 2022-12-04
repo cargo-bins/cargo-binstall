@@ -91,7 +91,7 @@ pub trait TarEntriesVisitor: Send + Sync {
     fn finish(self) -> Result<Self::Target, DownloadError>;
 }
 
-pub async fn extract_tar_based_stream_and_visit<S, V>(
+pub(crate) async fn extract_tar_based_stream_and_visit<S, V>(
     stream: S,
     fmt: TarBasedFmt,
     mut visitor: V,

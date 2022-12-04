@@ -1,4 +1,4 @@
-use std::{fmt::Debug, future::Future, io, marker::PhantomData, path::Path, pin::Pin};
+use std::{fmt::Debug, io, marker::PhantomData, path::Path};
 
 use binstalk_types::cargo_toml_binstall::{PkgFmtDecomposed, TarBasedFmt};
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
@@ -14,7 +14,8 @@ mod async_extracter;
 use async_extracter::*;
 
 mod async_tar_visitor;
-pub use async_tar_visitor::*;
+use async_tar_visitor::extract_tar_based_stream_and_visit;
+pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
 
 mod extracter;
 mod stream_readable;
@@ -23,9 +24,6 @@ mod zip_extraction;
 pub use zip_extraction::ZipError;
 
 mod utils;
-use utils::await_on_option;
-
-pub type CancellationFuture = Option<Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>>;
 
 #[derive(Debug, ThisError)]
 pub enum DownloadError {
@@ -102,12 +100,11 @@ impl Download {
     ///
     /// NOTE that this API does not support gnu extension sparse file unlike
     /// [`Download::and_extract`].
-    #[instrument(skip(visitor, cancellation_future))]
+    #[instrument(skip(visitor))]
     pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
         self,
         fmt: TarBasedFmt,
         visitor: V,
-        cancellation_future: CancellationFuture,
     ) -> Result<V::Target, DownloadError> {
         let stream = self
             .client
@@ -117,14 +114,7 @@ impl Download {
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let ret = tokio::select! {
-            biased;
-
-            res = await_on_option(cancellation_future) => {
-                Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))?
-            }
-            res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
-        };
+        let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
         debug!("Download, extraction and in-memory procession OK");
 
@@ -135,19 +125,13 @@ impl Download {
     ///
     /// `cancellation_future` can be used to cancel the extraction and return
     /// [`DownloadError::UserAbort`] error.
-    #[instrument(skip(path, cancellation_future))]
+    #[instrument(skip(path))]
     pub async fn and_extract(
         self,
         fmt: PkgFmt,
         path: impl AsRef<Path>,
-        cancellation_future: CancellationFuture,
     ) -> Result<(), DownloadError> {
-        async fn inner(
-            this: Download,
-            fmt: PkgFmt,
-            path: &Path,
-            cancellation_future: CancellationFuture,
-        ) -> Result<(), DownloadError> {
+        async fn inner(this: Download, fmt: PkgFmt, path: &Path) -> Result<(), DownloadError> {
             let stream = this
                 .client
                 .get_stream(this.url)
@@ -157,11 +141,9 @@ impl Download {
             debug!("Downloading and extracting to: '{}'", path.display());
 
             match fmt.decompose() {
-                PkgFmtDecomposed::Tar(fmt) => {
-                    extract_tar_based_stream(stream, path, fmt, cancellation_future).await?
-                }
-                PkgFmtDecomposed::Bin => extract_bin(stream, path, cancellation_future).await?,
-                PkgFmtDecomposed::Zip => extract_zip(stream, path, cancellation_future).await?,
+                PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
+                PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
+                PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
             }
 
             debug!("Download OK, extracted to: '{}'", path.display());
@@ -169,7 +151,7 @@ impl Download {
             Ok(())
         }
 
-        inner(self, fmt, path.as_ref(), cancellation_future).await
+        inner(self, fmt, path.as_ref()).await
     }
 }
 

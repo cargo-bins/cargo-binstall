@@ -1,74 +1,28 @@
-use std::{
-    cmp::min,
-    io::{self, BufRead, Read, Write},
-};
+use std::io::{self, BufRead, Read};
 
 use bytes::{Buf, Bytes};
-use futures_util::stream::{Stream, StreamExt};
-use tokio::runtime::Handle;
-
-use super::{await_on_option, CancellationFuture, DownloadError};
+use tokio::sync::mpsc;
 
 /// This wraps an AsyncIterator as a `Read`able.
 /// It must be used in non-async context only,
 /// meaning you have to use it with
 /// `tokio::task::{block_in_place, spawn_blocking}` or
 /// `std::thread::spawn`.
-pub struct StreamReadable<S> {
-    stream: S,
-    handle: Handle,
+pub struct StreamReadable {
+    rx: mpsc::Receiver<Bytes>,
     bytes: Bytes,
-    cancellation_future: CancellationFuture,
 }
 
-impl<S> StreamReadable<S> {
-    pub(super) async fn new(stream: S, cancellation_future: CancellationFuture) -> Self {
+impl StreamReadable {
+    pub(super) fn new(rx: mpsc::Receiver<Bytes>) -> Self {
         Self {
-            stream,
-            handle: Handle::current(),
+            rx,
             bytes: Bytes::new(),
-            cancellation_future,
         }
     }
 }
 
-impl<S, E> StreamReadable<S>
-where
-    S: Stream<Item = Result<Bytes, E>> + Unpin,
-    DownloadError: From<E>,
-{
-    /// Copies from `self` to `writer`.
-    ///
-    /// Same as `io::copy` but does not allocate any internal buffer
-    /// since `self` is buffered.
-    pub(super) fn copy<W>(&mut self, mut writer: W) -> io::Result<()>
-    where
-        W: Write,
-    {
-        self.copy_inner(&mut writer)
-    }
-
-    fn copy_inner(&mut self, writer: &mut dyn Write) -> io::Result<()> {
-        loop {
-            let buf = self.fill_buf()?;
-            if buf.is_empty() {
-                // Eof
-                break Ok(());
-            }
-
-            writer.write_all(buf)?;
-
-            let n = buf.len();
-            self.consume(n);
-        }
-    }
-}
-
-impl<S, E> Read for StreamReadable<S>
-where
-    S: Stream<Item = Result<Bytes, E>> + Unpin,
-    DownloadError: From<E>,
-{
+impl Read for StreamReadable {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
@@ -82,60 +36,26 @@ where
 
         // copy_to_slice requires the bytes to have enough remaining bytes
         // to fill buf.
-        let n = min(buf.len(), bytes.remaining());
+        let n = buf.len().min(bytes.remaining());
 
+        // <Bytes as Buf>::copy_to_slice copies and consumes the bytes
         bytes.copy_to_slice(&mut buf[..n]);
 
         Ok(n)
     }
 }
 
-/// If `Ok(Some(bytes))` if returned, then `bytes.is_empty() == false`.
-async fn next_stream<S, E>(stream: &mut S) -> io::Result<Option<Bytes>>
-where
-    S: Stream<Item = Result<Bytes, E>> + Unpin,
-    DownloadError: From<E>,
-{
-    loop {
-        let option = stream
-            .next()
-            .await
-            .transpose()
-            .map_err(DownloadError::from)?;
-
-        match option {
-            Some(bytes) if bytes.is_empty() => continue,
-            option => break Ok(option),
-        }
-    }
-}
-
-impl<S, E> BufRead for StreamReadable<S>
-where
-    S: Stream<Item = Result<Bytes, E>> + Unpin,
-    DownloadError: From<E>,
-{
+impl BufRead for StreamReadable {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         let bytes = &mut self.bytes;
 
         if !bytes.has_remaining() {
-            let option = self.handle.block_on(async {
-                let cancellation_future = self.cancellation_future.as_mut();
-                tokio::select! {
-                    biased;
-
-                    res = await_on_option(cancellation_future) => {
-                        Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))
-                    },
-                    res = next_stream(&mut self.stream) => res,
-                }
-            })?;
-
-            if let Some(new_bytes) = option {
+            if let Some(new_bytes) = self.rx.blocking_recv() {
                 // new_bytes are guaranteed to be non-empty.
                 *bytes = new_bytes;
             }
         }
+
         Ok(&*bytes)
     }
 

@@ -1,13 +1,18 @@
 use std::{
-    io,
+    io::Write,
     path::{Component, Path, PathBuf},
 };
 
 use async_zip::{read::ZipEntryReader, ZipEntryExt};
+use bytes::{Bytes, BytesMut};
+use futures_util::future::{try_join, TryFutureExt};
 use thiserror::Error as ThisError;
-use tokio::{fs, io::AsyncRead, task::spawn_blocking};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    sync::mpsc,
+};
 
-use super::DownloadError;
+use super::{utils::asyncify, DownloadError};
 
 #[derive(Debug, ThisError)]
 enum ZipErrorInner {
@@ -31,6 +36,7 @@ impl ZipError {
 pub(super) async fn extract_zip_entry<R>(
     entry: ZipEntryReader<'_, R>,
     path: &Path,
+    buf: &mut BytesMut,
 ) -> Result<(), DownloadError>
 where
     R: AsyncRead + Unpin + Send + Sync,
@@ -68,29 +74,80 @@ where
         })
         .await?;
     } else {
+        // Use channel size = 5 to minimize the waiting time in the extraction task
+        let (tx, mut rx) = mpsc::channel::<Bytes>(5);
+
         // This entry is a file.
-        let mut outfile = asyncify(move || {
-            if let Some(p) = outpath.parent() {
-                std::fs::create_dir_all(p)?;
-            }
-            let outfile = std::fs::File::create(&outpath)?;
+        try_join(
+            asyncify(move || {
+                if let Some(p) = outpath.parent() {
+                    std::fs::create_dir_all(p)?;
+                }
+                let mut outfile = std::fs::File::create(&outpath)?;
 
-            if let Some(perms) = perms {
-                outfile.set_permissions(perms)?;
-            }
+                while let Some(bytes) = rx.blocking_recv() {
+                    outfile.write_all(&bytes)?;
+                }
 
-            Ok(outfile)
-        })
-        .await
-        .map(fs::File::from_std)?;
+                outfile.flush()?;
 
-        entry
-            .copy_to_end_crc(&mut outfile, 64 * 1024)
-            .await
-            .map_err(ZipError::from_inner)?;
+                if let Some(perms) = perms {
+                    outfile.set_permissions(perms)?;
+                }
+
+                Ok(())
+            })
+            .err_into(),
+            copy_file_to_mpsc(entry, tx, buf)
+                .map_err(ZipError::from_inner)
+                .map_err(DownloadError::from),
+        )
+        .await?;
     }
 
     Ok(())
+}
+
+async fn copy_file_to_mpsc<R>(
+    mut entry: ZipEntryReader<'_, R>,
+    tx: mpsc::Sender<Bytes>,
+    buf: &mut BytesMut,
+) -> Result<(), async_zip::error::ZipError>
+where
+    R: AsyncRead + Unpin + Send + Sync,
+{
+    // Since BytesMut does not have a max cap, if AsyncReadExt::read_buf returns
+    // 0 then it means Eof.
+    while entry.read_buf(buf).await? != 0 {
+        // Ensure AsyncReadExt::read_buf can read at least 4096B to avoid
+        // frequent expensive read syscalls.
+        //
+        // Performs this reserve before sending the buf over mpsc queue to
+        // increase the possibility of reusing the previous allocation.
+        //
+        // NOTE: `BytesMut` only reuses the previous allocation if it is the
+        // only one holds the reference to it, which is either on the first
+        // iteration or all the `Bytes` in the mpsc queue has been consumed,
+        // written to the file and dropped.
+        //
+        // Since reading from entry would have to wait for external file I/O,
+        // this would give the blocking thread some time to flush `Bytes`
+        // out.
+        //
+        // If all `Bytes` are flushed out, then we can reuse the allocation here.
+        buf.reserve(4096);
+
+        if tx.send(buf.split().freeze()).await.is_err() {
+            // Same reason as extract_with_blocking_decoder
+            break;
+        }
+    }
+
+    if entry.compare_crc() {
+        Ok(())
+    } else {
+        Err(async_zip::error::ZipError::CRC32CheckError)
+    }
 }
 
 /// Ensure the file path is safe to use as a [`Path`].
@@ -131,19 +188,4 @@ fn check_filename_and_normalize(filename: &str) -> Option<PathBuf> {
     }
 
     Some(path)
-}
-
-/// Copied from tokio https://docs.rs/tokio/latest/src/tokio/fs/mod.rs.html#132
-async fn asyncify<F, T>(f: F) -> io::Result<T>
-where
-    F: FnOnce() -> io::Result<T> + Send + 'static,
-    T: Send + 'static,
-{
-    match spawn_blocking(f).await {
-        Ok(res) => res,
-        Err(_) => Err(io::Error::new(
-            io::ErrorKind::Other,
-            "background task failed",
-        )),
-    }
 }
