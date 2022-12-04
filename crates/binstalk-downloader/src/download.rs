@@ -7,7 +7,6 @@ use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::PkgFmt;
-pub use zip::result::ZipError;
 
 use crate::remote::{Client, Error as RemoteError, Url};
 
@@ -21,6 +20,10 @@ mod extracter;
 mod stream_readable;
 
 pub type CancellationFuture = Option<Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>>;
+
+#[derive(Debug, ThisError)]
+#[error(transparent)]
+pub struct ZipError(zip::result::ZipError);
 
 #[derive(Debug, ThisError)]
 pub enum DownloadError {

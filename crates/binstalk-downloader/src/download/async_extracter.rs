@@ -50,7 +50,7 @@ where
     S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + 'static,
 {
     let mut reader = StreamReadable::new(stream, cancellation_future).await;
-    block_in_place(move || {
+    block_in_place(move || -> Result<(), DownloadError> {
         fs::create_dir_all(path.parent().unwrap())?;
 
         let mut file = tempfile()?;
@@ -60,7 +60,7 @@ where
         // rewind it so that we can pass it to unzip
         file.rewind()?;
 
-        unzip(file, path)
+        unzip(file, path).map_err(DownloadError::from)
     })
 }
 

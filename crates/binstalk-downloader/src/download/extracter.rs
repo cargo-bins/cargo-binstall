@@ -12,7 +12,7 @@ use xz2::bufread::XzDecoder;
 use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
-use super::{DownloadError, TarBasedFmt};
+use super::{TarBasedFmt, ZipError};
 
 pub fn create_tar_decoder(
     dat: impl BufRead + 'static,
@@ -36,11 +36,15 @@ pub fn create_tar_decoder(
     Ok(Archive::new(r))
 }
 
-pub fn unzip(dat: File, dst: &Path) -> Result<(), DownloadError> {
+pub fn unzip(dat: File, dst: &Path) -> Result<(), ZipError> {
     debug!("Decompressing from zip archive to `{dst:?}`");
 
-    let mut zip = ZipArchive::new(dat)?;
-    zip.extract(dst)?;
+    let inner = move || {
+        let mut zip = ZipArchive::new(dat)?;
+        zip.extract(dst)?;
 
-    Ok(())
+        Ok(())
+    };
+
+    inner().map_err(ZipError)
 }
