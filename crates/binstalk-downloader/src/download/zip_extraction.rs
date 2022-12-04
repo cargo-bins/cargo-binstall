@@ -57,8 +57,8 @@ where
     }
 
     if raw_filename.ends_with('/') {
+        // This entry is a dir.
         asyncify(move || {
-            // This entry is a dir.
             std::fs::create_dir_all(&outpath)?;
             if let Some(perms) = perms {
                 std::fs::set_permissions(&outpath, perms)?;
