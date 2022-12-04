@@ -2,18 +2,20 @@ use std::{fmt::Debug, future::Future, io, marker::PhantomData, path::Path, pin::
 
 use binstalk_types::cargo_toml_binstall::{PkgFmtDecomposed, TarBasedFmt};
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
+use futures_util::stream::StreamExt;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::PkgFmt;
-pub use tar::Entries;
 pub use zip::result::ZipError;
 
 use crate::remote::{Client, Error as RemoteError, Url};
 
 mod async_extracter;
-pub use async_extracter::TarEntriesVisitor;
 use async_extracter::*;
+
+mod async_tar_visitor;
+pub use async_tar_visitor::*;
 
 mod extracter;
 mod stream_readable;
@@ -92,6 +94,9 @@ impl Download {
     ///
     /// `cancellation_future` can be used to cancel the extraction and return
     /// [`DownloadError::UserAbort`] error.
+    ///
+    /// NOTE that this API does not support gnu extension sparse file unlike
+    /// [`Download::and_extract`].
     #[instrument(skip(visitor, cancellation_future))]
     pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
         self,
@@ -99,12 +104,24 @@ impl Download {
         visitor: V,
         cancellation_future: CancellationFuture,
     ) -> Result<V::Target, DownloadError> {
-        let stream = self.client.get_stream(self.url).await?;
+        let stream = self
+            .client
+            .get_stream(self.url)
+            .await?
+            .map(|res| res.map_err(DownloadError::from));
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let ret =
-            extract_tar_based_stream_and_visit(stream, fmt, visitor, cancellation_future).await?;
+        let ret = if let Some(cancellation_future) = cancellation_future {
+            tokio::select! {
+                res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
+                res = cancellation_future => {
+                    Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))?
+                }
+            }
+        } else {
+            extract_tar_based_stream_and_visit(stream, fmt, visitor).await?
+        };
 
         debug!("Download, extraction and in-memory procession OK");
 

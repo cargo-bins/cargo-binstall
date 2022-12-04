@@ -1,14 +1,8 @@
-use std::{
-    fmt::Debug,
-    fs,
-    io::{Read, Seek},
-    path::Path,
-};
+use std::{fs, io::Seek, path::Path};
 
 use bytes::Bytes;
 use futures_util::stream::Stream;
 use scopeguard::{guard, ScopeGuard};
-use tar::Entries;
 use tempfile::tempfile;
 use tokio::task::block_in_place;
 use tracing::debug;
@@ -91,35 +85,5 @@ where
         create_tar_decoder(reader, fmt)?.unpack(path)?;
 
         Ok(())
-    })
-}
-
-/// Visitor must iterate over all entries.
-/// Entires can be in arbitary order.
-pub trait TarEntriesVisitor {
-    type Target;
-
-    fn visit<R: Read>(&mut self, entries: Entries<'_, R>) -> Result<(), DownloadError>;
-    fn finish(self) -> Result<Self::Target, DownloadError>;
-}
-
-pub async fn extract_tar_based_stream_and_visit<S, V, E>(
-    stream: S,
-    fmt: TarBasedFmt,
-    mut visitor: V,
-    cancellation_future: CancellationFuture,
-) -> Result<V::Target, DownloadError>
-where
-    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    V: TarEntriesVisitor + Debug + Send + 'static,
-    DownloadError: From<E>,
-{
-    let reader = StreamReadable::new(stream, cancellation_future).await;
-    block_in_place(move || {
-        debug!("Extracting from {fmt} archive to process it in memory");
-
-        let mut tar = create_tar_decoder(reader, fmt)?;
-        visitor.visit(tar.entries()?)?;
-        visitor.finish()
     })
 }
