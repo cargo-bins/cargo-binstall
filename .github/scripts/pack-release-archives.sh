@@ -8,7 +8,7 @@ for o in outputs/*; do
 
   target=$(basename "$o" | cut -d. -f1)
   if grep -qE '(apple|windows)' <<< "$target"; then
-    zip "../cargo-binstall-${target}.zip" *
+    zip -9 "../cargo-binstall-${target}.zip" *
   else
     tar cv * | gzip -9 > "../cargo-binstall-${target}.tgz"
   fi
