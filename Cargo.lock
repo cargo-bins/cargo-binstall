@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "binstalk-types",
  "compact_str",
