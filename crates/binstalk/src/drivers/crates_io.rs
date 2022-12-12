@@ -10,7 +10,6 @@ use crate::{
     helpers::{
         download::Download,
         remote::{Client, Url},
-        signal::wait_on_cancellation_signal,
     },
     manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
 };
@@ -54,10 +53,6 @@ pub async fn fetch_crate_cratesio(
     let manifest_dir_path: PathBuf = format!("{name}-{version_name}").into();
 
     Ok(Download::new(client, Url::parse(&crate_url)?)
-        .and_visit_tar(
-            TarBasedFmt::Tgz,
-            ManifestVisitor::new(manifest_dir_path),
-            Some(Box::pin(wait_on_cancellation_signal())),
-        )
+        .and_visit_tar(TarBasedFmt::Tgz, ManifestVisitor::new(manifest_dir_path))
         .await?)
 }

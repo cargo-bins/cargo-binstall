@@ -1,16 +1,22 @@
-use std::future::{pending, Future};
+use std::{future::Future, io};
 
-/// Await on `future` if it is not `None`, or call [`pending`]
-/// so that this branch would never get selected again.
-///
-/// Designed to use with [`tokio::select`].
-pub(super) async fn await_on_option<Fut, R>(future: Option<Fut>) -> R
+use tokio::task;
+
+/// Copied from tokio https://docs.rs/tokio/latest/src/tokio/fs/mod.rs.html#132
+pub(super) fn asyncify<F, T>(f: F) -> impl Future<Output = io::Result<T>> + Send + Sync + 'static
 where
-    Fut: Future<Output = R>,
+    F: FnOnce() -> io::Result<T> + Send + 'static,
+    T: Send + 'static,
 {
-    if let Some(future) = future {
-        future.await
-    } else {
-        pending().await
+    async fn inner<T: Send + 'static>(handle: task::JoinHandle<io::Result<T>>) -> io::Result<T> {
+        match handle.await {
+            Ok(res) => res,
+            Err(err) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("background task failed: {err}"),
+            )),
+        }
     }
+
+    inner(task::spawn_blocking(f))
 }

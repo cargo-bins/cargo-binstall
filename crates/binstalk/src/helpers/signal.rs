@@ -3,7 +3,7 @@ use std::{future::pending, io};
 use super::tasks::AutoAbortJoinHandle;
 use crate::errors::BinstallError;
 
-use tokio::{signal, sync::OnceCell};
+use tokio::signal;
 
 /// This function will poll the handle while listening for ctrl_c,
 /// `SIGINT`, `SIGHUP`, `SIGTERM` and `SIGQUIT`.
@@ -30,7 +30,7 @@ pub async fn cancel_on_user_sig_term<T>(
     }
 }
 
-pub fn ignore_signals() -> io::Result<()> {
+fn ignore_signals() -> io::Result<()> {
     #[cfg(unix)]
     unix::ignore_signals_on_unix()?;
 
@@ -39,16 +39,7 @@ pub fn ignore_signals() -> io::Result<()> {
 
 /// If call to it returns `Ok(())`, then all calls to this function after
 /// that also returns `Ok(())`.
-pub async fn wait_on_cancellation_signal() -> Result<(), io::Error> {
-    static CANCELLED: OnceCell<()> = OnceCell::const_new();
-
-    CANCELLED
-        .get_or_try_init(wait_on_cancellation_signal_inner)
-        .await
-        .copied()
-}
-
-async fn wait_on_cancellation_signal_inner() -> Result<(), io::Error> {
+async fn wait_on_cancellation_signal() -> Result<(), io::Error> {
     #[cfg(unix)]
     async fn inner() -> Result<(), io::Error> {
         unix::wait_on_cancellation_signal_unix().await
@@ -56,16 +47,10 @@ async fn wait_on_cancellation_signal_inner() -> Result<(), io::Error> {
 
     #[cfg(not(unix))]
     async fn inner() -> Result<(), io::Error> {
-        // Use pending here so that tokio::select! would just skip this branch.
-        pending().await
+        signal::ctrl_c().await
     }
 
-    tokio::select! {
-        biased;
-
-        res = signal::ctrl_c() => res,
-        res = inner() => res,
-    }
+    inner().await
 }
 
 #[cfg(unix)]

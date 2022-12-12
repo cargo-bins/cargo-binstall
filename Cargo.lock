@@ -199,7 +199,6 @@ dependencies = [
  "generic-array",
  "httpdate",
  "reqwest",
- "scopeguard",
  "tempfile",
  "thiserror",
  "tokio",
