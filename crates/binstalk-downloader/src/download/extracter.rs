@@ -1,18 +1,12 @@
-use std::{
-    fs::File,
-    io::{self, BufRead, Read},
-    path::Path,
-};
+use std::io::{self, BufRead, Read};
 
 use bzip2::bufread::BzDecoder;
 use flate2::bufread::GzDecoder;
 use tar::Archive;
-use tracing::debug;
 use xz2::bufread::XzDecoder;
-use zip::read::ZipArchive;
 use zstd::stream::Decoder as ZstdDecoder;
 
-use super::{DownloadError, TarBasedFmt};
+use super::TarBasedFmt;
 
 pub fn create_tar_decoder(
     dat: impl BufRead + 'static,
@@ -34,13 +28,4 @@ pub fn create_tar_decoder(
     };
 
     Ok(Archive::new(r))
-}
-
-pub fn unzip(dat: File, dst: &Path) -> Result<(), DownloadError> {
-    debug!("Decompressing from zip archive to `{dst:?}`");
-
-    let mut zip = ZipArchive::new(dat)?;
-    zip.extract(dst)?;
-
-    Ok(())
 }

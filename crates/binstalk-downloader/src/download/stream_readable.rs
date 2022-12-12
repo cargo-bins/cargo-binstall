@@ -7,7 +7,7 @@ use bytes::{Buf, Bytes};
 use futures_util::stream::{Stream, StreamExt};
 use tokio::runtime::Handle;
 
-use super::{CancellationFuture, DownloadError};
+use super::{await_on_option, CancellationFuture, DownloadError};
 
 /// This wraps an AsyncIterator as a `Read`able.
 /// It must be used in non-async context only,
@@ -120,17 +120,14 @@ where
 
         if !bytes.has_remaining() {
             let option = self.handle.block_on(async {
-                if let Some(cancellation_future) = self.cancellation_future.as_mut() {
-                    tokio::select! {
-                        biased;
+                let cancellation_future = self.cancellation_future.as_mut();
+                tokio::select! {
+                    biased;
 
-                        res = cancellation_future => {
-                            Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))
-                        },
-                        res = next_stream(&mut self.stream) => res,
-                    }
-                } else {
-                    next_stream(&mut self.stream).await
+                    res = await_on_option(cancellation_future) => {
+                        Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))
+                    },
+                    res = next_stream(&mut self.stream) => res,
                 }
             })?;
 

@@ -7,7 +7,6 @@ use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::PkgFmt;
-pub use zip::result::ZipError;
 
 use crate::remote::{Client, Error as RemoteError, Url};
 
@@ -19,6 +18,12 @@ pub use async_tar_visitor::*;
 
 mod extracter;
 mod stream_readable;
+
+mod zip_extraction;
+pub use zip_extraction::ZipError;
+
+mod utils;
+use utils::await_on_option;
 
 pub type CancellationFuture = Option<Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>>;
 
@@ -112,15 +117,13 @@ impl Download {
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let ret = if let Some(cancellation_future) = cancellation_future {
-            tokio::select! {
-                res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
-                res = cancellation_future => {
-                    Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))?
-                }
+        let ret = tokio::select! {
+            biased;
+
+            res = await_on_option(cancellation_future) => {
+                Err(res.err().unwrap_or_else(|| io::Error::from(DownloadError::UserAbort)))?
             }
-        } else {
-            extract_tar_based_stream_and_visit(stream, fmt, visitor).await?
+            res = extract_tar_based_stream_and_visit(stream, fmt, visitor) => res?,
         };
 
         debug!("Download, extraction and in-memory procession OK");
@@ -145,7 +148,11 @@ impl Download {
             path: &Path,
             cancellation_future: CancellationFuture,
         ) -> Result<(), DownloadError> {
-            let stream = this.client.get_stream(this.url).await?;
+            let stream = this
+                .client
+                .get_stream(this.url)
+                .await?
+                .map(|res| res.map_err(DownloadError::from));
 
             debug!("Downloading and extracting to: '{}'", path.display());
 

@@ -1,24 +1,25 @@
-use std::{fs, io::Seek, path::Path};
+use std::{fs, path::Path};
 
+use async_zip::read::stream::ZipFileReader;
 use bytes::Bytes;
 use futures_util::stream::Stream;
 use scopeguard::{guard, ScopeGuard};
-use tempfile::tempfile;
 use tokio::task::block_in_place;
+use tokio_util::io::StreamReader;
 use tracing::debug;
 
 use super::{
-    extracter::*, stream_readable::StreamReadable, CancellationFuture, DownloadError, TarBasedFmt,
+    await_on_option, extracter::*, stream_readable::StreamReadable,
+    zip_extraction::extract_zip_entry, CancellationFuture, DownloadError, TarBasedFmt, ZipError,
 };
 
-pub async fn extract_bin<S, E>(
+pub async fn extract_bin<S>(
     stream: S,
     path: &Path,
     cancellation_future: CancellationFuture,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    DownloadError: From<E>,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + 'static,
 {
     let mut reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
@@ -42,39 +43,45 @@ where
     })
 }
 
-pub async fn extract_zip<S, E>(
+pub async fn extract_zip<S>(
     stream: S,
     path: &Path,
     cancellation_future: CancellationFuture,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    DownloadError: From<E>,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync + 'static,
 {
-    let mut reader = StreamReadable::new(stream, cancellation_future).await;
-    block_in_place(move || {
-        fs::create_dir_all(path.parent().unwrap())?;
+    debug!("Decompressing from zip archive to `{}`", path.display());
 
-        let mut file = tempfile()?;
+    let extract_future = Box::pin(async move {
+        let reader = StreamReader::new(stream);
+        let mut zip = ZipFileReader::new(reader);
 
-        reader.copy(&mut file)?;
+        while let Some(entry) = zip.entry_reader().await.map_err(ZipError::from_inner)? {
+            extract_zip_entry(entry, path).await?;
+        }
 
-        // rewind it so that we can pass it to unzip
-        file.rewind()?;
+        Ok(())
+    });
 
-        unzip(file, path)
-    })
+    tokio::select! {
+        biased;
+
+        res = await_on_option(cancellation_future) => {
+            Err(res.err().map(DownloadError::from).unwrap_or(DownloadError::UserAbort))
+        }
+        res = extract_future => res,
+    }
 }
 
-pub async fn extract_tar_based_stream<S, E>(
+pub async fn extract_tar_based_stream<S>(
     stream: S,
     path: &Path,
     fmt: TarBasedFmt,
     cancellation_future: CancellationFuture,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, E>> + Unpin + 'static,
-    DownloadError: From<E>,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + 'static,
 {
     let reader = StreamReadable::new(stream, cancellation_future).await;
     block_in_place(move || {
