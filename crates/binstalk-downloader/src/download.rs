@@ -1,12 +1,12 @@
 use std::{fmt::Debug, io, marker::PhantomData, path::Path};
 
-use binstalk_types::cargo_toml_binstall::{PkgFmtDecomposed, TarBasedFmt};
+use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
 use futures_util::stream::StreamExt;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
-pub use binstalk_types::cargo_toml_binstall::PkgFmt;
+pub use binstalk_types::cargo_toml_binstall::{PkgFmt, TarBasedFmt};
 
 use crate::remote::{Client, Error as RemoteError, Url};
 
