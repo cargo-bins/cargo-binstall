@@ -86,11 +86,7 @@ impl super::Fetcher for GhCrateMeta {
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
             let repo = if let Some(repo) = self.data.repo.as_deref() {
-                Some(
-                    self.client
-                        .get_redirected_final_url(Url::parse(repo)?)
-                        .await?,
-                )
+                Some(Box::pin(self.client.get_redirected_final_url(Url::parse(repo)?)).await?)
             } else {
                 None
             };
