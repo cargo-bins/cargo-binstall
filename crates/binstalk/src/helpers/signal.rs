@@ -41,16 +41,12 @@ fn ignore_signals() -> io::Result<()> {
 /// that also returns `Ok(())`.
 async fn wait_on_cancellation_signal() -> Result<(), io::Error> {
     #[cfg(unix)]
-    async fn inner() -> Result<(), io::Error> {
-        unix::wait_on_cancellation_signal_unix().await
-    }
+    unix::wait_on_cancellation_signal_unix().await?;
 
     #[cfg(not(unix))]
-    async fn inner() -> Result<(), io::Error> {
-        signal::ctrl_c().await
-    }
+    signal::ctrl_c().await?;
 
-    inner().await
+    Ok(())
 }
 
 #[cfg(unix)]
