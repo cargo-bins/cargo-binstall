@@ -210,7 +210,7 @@ dependencies = [
  "trust-dns-resolver",
  "url",
  "xz2",
- "zstd 0.12.0+zstd.1.5.2",
+ "zstd 0.12.1+zstd.1.5.2",
 ]
 
 [[package]]
@@ -3013,9 +3013,9 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.12.0+zstd.1.5.2"
+version = "0.12.1+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8148aa921e9d53217ab9322f8553bd130f7ae33489db68b381d76137d2e6374"
+checksum = "5c947d2adc84ff9a59f2e3c03b81aa4128acf28d6ad7d56273f7e8af14e47bea"
 dependencies = [
  "zstd-safe 6.0.2+zstd.1.5.2",
 ]
