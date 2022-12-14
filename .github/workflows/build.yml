@@ -28,7 +28,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-20.04
             debug_features: [ rustls, pkg-config ]
           - target: x86_64-apple-darwin
             os: macos-latest
@@ -49,7 +49,7 @@ jobs:
             os: ubuntu-latest
             use-cross: true
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-20.04
             use-cross: true
 
     runs-on: ${{ matrix.os }}
