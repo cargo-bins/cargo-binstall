@@ -152,6 +152,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
+name = "beef"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "binstalk"
 version = "0.6.0"
 dependencies = [
@@ -216,6 +225,7 @@ dependencies = [
 name = "binstalk-manifests"
 version = "0.1.1"
 dependencies = [
+ "beef",
  "binstalk-types",
  "compact_str",
  "detect-targets",
