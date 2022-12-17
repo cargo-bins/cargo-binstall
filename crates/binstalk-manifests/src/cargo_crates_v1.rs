@@ -108,8 +108,15 @@ impl CratesToml {
         };
 
         for metadata in iter {
-            c1.remove(&metadata.name);
-            c1.insert(&CrateVersionSource::from(metadata), metadata.bins.clone());
+            let name = &metadata.name;
+            let version = &metadata.current_version;
+            let source = Source::from(&metadata.source);
+
+            c1.remove(name);
+            c1.v1.push((
+                format!("{name} {version} ({source})"),
+                metadata.bins.clone(),
+            ));
         }
 
         file.rewind()?;
