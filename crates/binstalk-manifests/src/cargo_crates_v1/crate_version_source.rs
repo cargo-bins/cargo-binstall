@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
-use binstalk_types::crate_info::cratesio_url;
+use binstalk_types::{crate_info::cratesio_url, maybe_owned::MaybeOwned};
 use compact_str::CompactString;
 use miette::Diagnostic;
 use semver::Version;
@@ -29,14 +29,14 @@ impl From<&CrateInfo> for CrateVersionSource {
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Source {
-    Git(Url),
-    Path(Url),
-    Registry(Url),
+    Git(MaybeOwned<'static, Url>),
+    Path(MaybeOwned<'static, Url>),
+    Registry(MaybeOwned<'static, Url>),
 }
 
 impl Source {
     pub fn cratesio_registry() -> Source {
-        Self::Registry(cratesio_url().clone())
+        Self::Registry(MaybeOwned::Borrowed(cratesio_url()))
     }
 }
 
@@ -65,9 +65,9 @@ impl FromStr for CrateVersionSource {
                     .splitn(2, '+')
                     .collect::<Vec<_>>()[..]
                 {
-                    ["git", url] => Source::Git(Url::parse(url)?),
-                    ["path", url] => Source::Path(Url::parse(url)?),
-                    ["registry", url] => Source::Registry(Url::parse(url)?),
+                    ["git", url] => Source::Git(Url::parse(url)?.into()),
+                    ["path", url] => Source::Path(Url::parse(url)?.into()),
+                    ["registry", url] => Source::Registry(Url::parse(url)?.into()),
                     [kind, arg] => {
                         return Err(CvsParseError::UnknownSourceType {
                             kind: kind.to_string().into_boxed_str(),
