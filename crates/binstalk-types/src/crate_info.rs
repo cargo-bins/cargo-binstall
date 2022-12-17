@@ -3,6 +3,7 @@
 use std::{borrow, cmp, hash};
 
 use compact_str::CompactString;
+use maybe_owned::MaybeOwned;
 use once_cell::sync::Lazy;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -69,14 +70,14 @@ pub enum SourceType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CrateSource {
     pub source_type: SourceType,
-    pub url: Url,
+    pub url: MaybeOwned<'static, Url>,
 }
 
 impl CrateSource {
     pub fn cratesio_registry() -> CrateSource {
         Self {
             source_type: SourceType::Registry,
-            url: cratesio_url().clone(),
+            url: MaybeOwned::Borrowed(cratesio_url()),
         }
     }
 }
