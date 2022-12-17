@@ -237,6 +237,7 @@ name = "binstalk-types"
 version = "0.1.0"
 dependencies = [
  "compact_str",
+ "maybe-owned",
  "once_cell",
  "semver",
  "serde",
@@ -1340,6 +1341,15 @@ name = "matches"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
+
+[[package]]
+name = "maybe-owned"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4facc753ae494aeb6e3c22f839b158aebd4f9270f55cd3c79906c45476c47ab4"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "memchr"
