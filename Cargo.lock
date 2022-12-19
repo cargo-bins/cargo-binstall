@@ -81,9 +81,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.59"
+version = "0.1.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31e6e93155431f3931513b243d371981bb2770112b370c82745a1d19d2f99364"
+checksum = "677d1d8ab452a3936018a687b20e6f7cf5363d713b732b8884001317b0e48aa3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -348,7 +348,7 @@ dependencies = [
  "semver",
  "strum",
  "strum_macros",
- "supports-color",
+ "supports-color 2.0.0",
  "tempfile",
  "tokio",
  "tracing",
@@ -1358,7 +1358,7 @@ dependencies = [
  "miette-derive",
  "once_cell",
  "owo-colors",
- "supports-color",
+ "supports-color 1.3.1",
  "supports-hyperlinks",
  "supports-unicode",
  "terminal_size",
@@ -2191,6 +2191,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ba6faf2ca7ee42fdd458f4347ae0a9bd6bcc445ad7cb57ad82b383f18870d6f"
 dependencies = [
  "atty",
+ "is_ci",
+]
+
+[[package]]
+name = "supports-color"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4950e7174bffabe99455511c39707310e7e9b440364a2fcb1cc21521be57b354"
+dependencies = [
+ "is-terminal",
  "is_ci",
 ]
 
