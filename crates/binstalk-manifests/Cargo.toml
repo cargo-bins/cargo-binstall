@@ -19,7 +19,7 @@ semver = { version = "1.0.16", features = ["serde"] }
 serde = { version = "1.0.151", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
 serde_json = "1.0.91"
-thiserror = "1.0.37"
+thiserror = "1.0.38"
 toml_edit = { version = "0.15.0", features = ["easy"] }
 url = { version = "2.3.1", features = ["serde"] }
 

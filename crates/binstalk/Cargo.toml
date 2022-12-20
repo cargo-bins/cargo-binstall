@@ -29,7 +29,7 @@ semver = { version = "1.0.16", features = ["serde"] }
 serde = { version = "1.0.151", features = ["derive"] }
 strum = "0.24.1"
 tempfile = "3.3.0"
-thiserror = "1.0.37"
+thiserror = "1.0.38"
 tinytemplate = "1.2.1"
 # parking_lot for `tokio::sync::OnceCell::const_new`
 tokio = { version = "1.23.0", features = ["rt", "process", "sync", "signal", "parking_lot"], default-features = false }
