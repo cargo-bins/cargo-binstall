@@ -26,7 +26,7 @@ pub enum Resolution {
     AlreadyUpToDate,
 }
 impl Resolution {
-    pub(super) fn print(&self, opts: &Options) {
+    pub fn print(&self, opts: &Options) {
         match self {
             Resolution::Fetch(ResolutionFetch {
                 fetcher,
