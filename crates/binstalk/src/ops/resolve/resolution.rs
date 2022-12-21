@@ -36,41 +36,8 @@ pub enum Resolution {
 impl Resolution {
     pub fn print(&self, opts: &Options) {
         match self {
-            Resolution::Fetch(ResolutionFetch {
-                fetcher,
-                bin_files,
-                name,
-                new_version,
-                ..
-            }) => {
-                let fetcher_target = fetcher.target();
-                // Prompt user for confirmation
-                debug!(
-                    "Found a binary install source: {} ({fetcher_target})",
-                    fetcher.source_name()
-                );
-
-                warn!(
-                    "The package {name} v{new_version} will be downloaded from {}{}",
-                    if fetcher.is_third_party() {
-                        "third-party source "
-                    } else {
-                        ""
-                    },
-                    fetcher.source_name()
-                );
-
-                info!("This will install the following binaries:");
-                for file in bin_files {
-                    info!("  - {}", file.preview_bin());
-                }
-
-                if !opts.no_symlinks {
-                    info!("And create (or update) the following symlinks:");
-                    for file in bin_files {
-                        info!("  - {}", file.preview_link());
-                    }
-                }
+            Resolution::Fetch(fetch) => {
+                fetch.print(opts);
             }
             Resolution::InstallFromSource(ResolutionSource { name, version }) => {
                 warn!("The package {name} v{version} will be installed from source (with cargo)",)
@@ -106,6 +73,42 @@ impl ResolutionFetch {
                 .map(|bin| bin.base_name)
                 .collect(),
         })
+    }
+
+    pub fn print(&self, opts: &Options) {
+        let fetcher = &self.fetcher;
+        let bin_files = &self.bin_files;
+        let name = &self.name;
+        let new_version = &self.new_version;
+
+        let fetcher_target = fetcher.target();
+        // Prompt user for confirmation
+        debug!(
+            "Found a binary install source: {} ({fetcher_target})",
+            fetcher.source_name()
+        );
+
+        warn!(
+            "The package {name} v{new_version} will be downloaded from {}{}",
+            if fetcher.is_third_party() {
+                "third-party source "
+            } else {
+                ""
+            },
+            fetcher.source_name()
+        );
+
+        info!("This will install the following binaries:");
+        for file in bin_files {
+            info!("  - {}", file.preview_bin());
+        }
+
+        if !opts.no_symlinks {
+            info!("And create (or update) the following symlinks:");
+            for file in bin_files {
+                info!("  - {}", file.preview_link());
+            }
+        }
     }
 }
 
