@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env, ffi::OsStr, sync::Arc};
+use std::{borrow::Cow, env, ffi::OsStr, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use semver::Version;
@@ -132,7 +132,7 @@ impl ResolutionInstallFromSource {
 
             debug!(
                 "Running `{} install {name} --version {version} --target {target}`",
-                cargo.to_string_lossy(),
+                Path::new(&cargo).display(),
             );
 
             let mut cmd = Command::new(cargo);
