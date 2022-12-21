@@ -81,12 +81,7 @@ impl Resolution {
 }
 
 impl ResolutionFetch {
-    pub fn install(self, opts: &Options) -> Result<Option<CrateInfo>, BinstallError> {
-        if opts.dry_run {
-            info!("Dry run, not proceeding");
-            return Ok(None);
-        }
-
+    pub fn install(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
         info!("Installing binaries...");
         for file in &self.bin_files {
             file.install_bin()?;
@@ -99,7 +94,7 @@ impl ResolutionFetch {
             }
         }
 
-        Ok(Some(CrateInfo {
+        Ok(CrateInfo {
             name: self.name,
             version_req: self.version_req,
             current_version: self.new_version,
@@ -110,7 +105,7 @@ impl ResolutionFetch {
                 .into_iter()
                 .map(|bin| bin.base_name)
                 .collect(),
-        }))
+        })
     }
 }
 

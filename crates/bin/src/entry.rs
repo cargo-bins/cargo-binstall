@@ -123,18 +123,24 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         .collect();
 
     // Confirm
-    let mut resolutions = Vec::with_capacity(tasks.len());
+    let mut resolution_fetchs = Vec::new();
+    let mut resolution_sources = Vec::new();
+
     for task in tasks {
         match task.await?? {
             Resolution::AlreadyUpToDate => {}
             resolution => {
                 resolution.print(&binstall_opts);
-                resolutions.push(resolution)
+                match resolution {
+                    Resolution::Fetch(fetch) => resolution_fetchs.push(fetch),
+                    Resolution::InstallFromSource(source) => resolution_sources.push(source),
+                    Resolution::AlreadyUpToDate => unreachable!(),
+                }
             }
         }
     }
 
-    if resolutions.is_empty() {
+    if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
         debug!("Nothing to do");
         return Ok(());
     }
@@ -143,49 +149,52 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         confirm().await?;
     }
 
-    let tasks: Vec<_> = 
-        // Install
-        resolutions
-            .into_iter()
-            .map(|resolution| {
-                AutoAbortJoinHandle::spawn(ops::install::install(resolution, binstall_opts.clone()))
-            })
-            .collect()
-    ;
+    if dry_run {
+        info!("Dry run, not proceeding");
+    } else if !resolution_fetchs.is_empty() {
+        block_in_place(|| -> Result<()> {
+            let metadata_vec = resolution_fetchs
+                .into_iter()
+                .map(|fetch| fetch.install(&binstall_opts))
+                .collect::<Result<Vec<_>, BinstallError>>()?;
 
-    let mut metadata_vec = Vec::with_capacity(tasks.len());
-    for task in tasks {
-        if let Some(metadata) = task.await?? {
-            metadata_vec.push(metadata);
-        }
+            if let Some((mut cargo_binstall_metadata, _)) = metadata {
+                // The cargo manifest path is already created when loading
+                // metadata.
+
+                debug!("Writing .crates.toml");
+                CratesToml::append_to_path(cargo_roots.join(".crates.toml"), metadata_vec.iter())?;
+
+                debug!("Writing binstall/crates-v1.json");
+                for metadata in metadata_vec {
+                    cargo_binstall_metadata.replace(metadata);
+                }
+                cargo_binstall_metadata.overwrite()?;
+            }
+
+            if no_cleanup {
+                // Consume temp_dir without removing it from fs.
+                temp_dir.into_path();
+            } else {
+                temp_dir.close().unwrap_or_else(|err| {
+                    warn!("Failed to clean up some resources: {err}");
+                });
+            }
+
+            Ok(())
+        })?;
     }
 
-    block_in_place(|| {
-        if let Some((mut cargo_binstall_metadata, _)) = metadata {
-            // The cargo manifest path is already created when loading
-            // metadata.
+    let tasks: Vec<_> = resolution_sources
+        .into_iter()
+        .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
+        .collect();
 
-            debug!("Writing .crates.toml");
-            CratesToml::append_to_path(cargo_roots.join(".crates.toml"), metadata_vec.iter())?;
+    for task in tasks {
+        task.await??;
+    }
 
-            debug!("Writing binstall/crates-v1.json");
-            for metadata in metadata_vec {
-                cargo_binstall_metadata.replace(metadata);
-            }
-            cargo_binstall_metadata.overwrite()?;
-        }
-
-        if no_cleanup {
-            // Consume temp_dir without removing it from fs.
-            temp_dir.into_path();
-        } else {
-            temp_dir.close().unwrap_or_else(|err| {
-                warn!("Failed to clean up some resources: {err}");
-            });
-        }
-
-        Ok(())
-    })
+    Ok(())
 }
 
 type Metadata = (BinstallCratesV1Records, BTreeMap<CompactString, Version>);

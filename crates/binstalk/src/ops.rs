@@ -12,7 +12,6 @@ use crate::{
     DesiredTargets,
 };
 
-pub mod install;
 pub mod resolve;
 
 pub type Resolver = fn(Client, Arc<Data>, Arc<TargetData>) -> Arc<dyn Fetcher>;
