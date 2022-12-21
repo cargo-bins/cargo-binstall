@@ -22,14 +22,14 @@ pub struct ResolutionFetch {
     pub bin_files: Vec<bins::BinFile>,
 }
 
-pub struct ResolutionInstallFromSource {
+pub struct ResolutionSource {
     pub name: CompactString,
     pub version: CompactString,
 }
 
 pub enum Resolution {
     Fetch(ResolutionFetch),
-    InstallFromSource(ResolutionInstallFromSource),
+    InstallFromSource(ResolutionSource),
     AlreadyUpToDate,
 }
 
@@ -72,7 +72,7 @@ impl Resolution {
                     }
                 }
             }
-            Resolution::InstallFromSource(ResolutionInstallFromSource { name, version }) => {
+            Resolution::InstallFromSource(ResolutionSource { name, version }) => {
                 warn!("The package {name} v{version} will be installed from source (with cargo)",)
             }
             Resolution::AlreadyUpToDate => (),
@@ -109,7 +109,7 @@ impl ResolutionFetch {
     }
 }
 
-impl ResolutionInstallFromSource {
+impl ResolutionSource {
     pub async fn install(self, opts: Arc<Options>) -> Result<(), BinstallError> {
         let desired_targets = opts.desired_targets.get().await;
         let target = desired_targets

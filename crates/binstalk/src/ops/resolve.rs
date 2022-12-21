@@ -34,7 +34,7 @@ pub use version_ext::VersionReqExt;
 
 mod resolution;
 #[doc(inline)]
-pub use resolution::{Resolution, ResolutionFetch, ResolutionInstallFromSource};
+pub use resolution::{Resolution, ResolutionFetch, ResolutionSource};
 
 #[instrument(skip_all)]
 pub async fn resolve(
@@ -173,7 +173,7 @@ async fn resolve_inner(
     }
 
     if opts.cargo_install_fallback {
-        Ok(Resolution::InstallFromSource(ResolutionInstallFromSource {
+        Ok(Resolution::InstallFromSource(ResolutionSource {
             name: package_info.name,
             version: package_info.version_str,
         }))
