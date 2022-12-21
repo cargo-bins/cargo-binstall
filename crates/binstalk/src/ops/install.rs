@@ -4,7 +4,10 @@ use compact_str::CompactString;
 use tokio::{process::Command, task::block_in_place};
 use tracing::{debug, error, info, instrument};
 
-use super::{resolve::Resolution, Options};
+use super::{
+    resolve::{Resolution, ResolutionFetch},
+    Options,
+};
 use crate::{
     bins,
     errors::BinstallError,
@@ -19,13 +22,13 @@ pub async fn install(
 ) -> Result<Option<CrateInfo>, BinstallError> {
     match resolution {
         Resolution::AlreadyUpToDate => Ok(None),
-        Resolution::Fetch {
+        Resolution::Fetch(ResolutionFetch {
             fetcher,
             new_version,
             name,
             version_req,
             bin_files,
-        } => {
+        }) => {
             let target = fetcher.target().into();
 
             install_from_package(opts, bin_files).map(|option| {

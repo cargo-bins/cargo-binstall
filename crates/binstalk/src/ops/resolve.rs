@@ -34,7 +34,7 @@ pub use version_ext::VersionReqExt;
 
 mod resolution;
 #[doc(inline)]
-pub use resolution::Resolution;
+pub use resolution::{Resolution, ResolutionFetch};
 
 #[instrument(skip_all)]
 pub async fn resolve(
@@ -136,13 +136,13 @@ async fn resolve_inner(
                 {
                     Ok(bin_files) => {
                         if !bin_files.is_empty() {
-                            return Ok(Resolution::Fetch {
+                            return Ok(Resolution::Fetch(ResolutionFetch {
                                 fetcher,
                                 new_version: package_info.version,
                                 name: package_info.name,
                                 version_req: version_req_str,
                                 bin_files,
-                            });
+                            }));
                         } else {
                             warn!(
                                 "Error when checking binaries provided by fetcher {}: \

@@ -7,14 +7,16 @@ use tracing::{debug, info, warn};
 use super::Options;
 use crate::{bins, fetchers::Fetcher};
 
+pub struct ResolutionFetch {
+    pub fetcher: Arc<dyn Fetcher>,
+    pub new_version: Version,
+    pub name: CompactString,
+    pub version_req: CompactString,
+    pub bin_files: Vec<bins::BinFile>,
+}
+
 pub enum Resolution {
-    Fetch {
-        fetcher: Arc<dyn Fetcher>,
-        new_version: Version,
-        name: CompactString,
-        version_req: CompactString,
-        bin_files: Vec<bins::BinFile>,
-    },
+    Fetch(ResolutionFetch),
     InstallFromSource {
         name: CompactString,
         version: CompactString,
@@ -24,9 +26,9 @@ pub enum Resolution {
 impl Resolution {
     pub(super) fn print(&self, opts: &Options) {
         match self {
-            Resolution::Fetch {
+            Resolution::Fetch(ResolutionFetch {
                 fetcher, bin_files, ..
-            } => {
+            }) => {
                 let fetcher_target = fetcher.target();
                 // Prompt user for confirmation
                 debug!(
