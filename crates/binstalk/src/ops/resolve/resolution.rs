@@ -39,8 +39,8 @@ impl Resolution {
             Resolution::Fetch(fetch) => {
                 fetch.print(opts);
             }
-            Resolution::InstallFromSource(ResolutionSource { name, version }) => {
-                warn!("The package {name} v{version} will be installed from source (with cargo)",)
+            Resolution::InstallFromSource(source) => {
+                source.print();
             }
             Resolution::AlreadyUpToDate => (),
         }
@@ -173,5 +173,12 @@ impl ResolutionSource {
             info!("Dry-run: running `{cmd:?}`");
             Ok(())
         }
+    }
+
+    pub fn print(&self) {
+        warn!(
+            "The package {} v{} will be installed from source (with cargo)",
+            self.name, self.version
+        )
     }
 }
