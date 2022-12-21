@@ -1,16 +1,17 @@
 use std::{borrow::Cow, env, ffi::OsStr, path::Path, sync::Arc};
 
+use command_group::AsyncCommandGroup;
 use compact_str::{CompactString, ToCompactString};
 use semver::Version;
 use tokio::process::Command;
 use tracing::{debug, error, info, warn};
 
-use super::Options;
 use crate::{
     bins,
     errors::BinstallError,
     fetchers::Fetcher,
     manifests::crate_info::{CrateInfo, CrateSource},
+    ops::Options,
 };
 
 pub struct ResolutionFetch {
@@ -153,7 +154,8 @@ impl ResolutionInstallFromSource {
                 cmd.arg("--force");
             }
 
-            let mut child = jobserver_client.configure_and_run(&mut cmd, |cmd| cmd.spawn())?;
+            let mut child =
+                jobserver_client.configure_and_run(&mut cmd, |cmd| cmd.group_spawn())?;
 
             debug!("Spawned command pid={:?}", child.id());
 
