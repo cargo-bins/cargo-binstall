@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
-use compact_str::CompactString;
+use compact_str::{CompactString, ToCompactString};
 use semver::Version;
 use tracing::{debug, info, warn};
 
 use super::Options;
-use crate::{bins, fetchers::Fetcher};
+use crate::{
+    bins,
+    errors::BinstallError,
+    fetchers::Fetcher,
+    manifests::crate_info::{CrateInfo, CrateSource},
+};
 
 pub struct ResolutionFetch {
     pub fetcher: Arc<dyn Fetcher>,
@@ -25,6 +30,7 @@ pub enum Resolution {
     InstallFromSource(ResolutionInstallFromSource),
     AlreadyUpToDate,
 }
+
 impl Resolution {
     pub fn print(&self, opts: &Options) {
         match self {
@@ -69,5 +75,39 @@ impl Resolution {
             }
             Resolution::AlreadyUpToDate => (),
         }
+    }
+}
+
+impl ResolutionFetch {
+    pub fn install(self, opts: &Options) -> Result<Option<CrateInfo>, BinstallError> {
+        if opts.dry_run {
+            info!("Dry run, not proceeding");
+            return Ok(None);
+        }
+
+        info!("Installing binaries...");
+        for file in &self.bin_files {
+            file.install_bin()?;
+        }
+
+        // Generate symlinks
+        if !opts.no_symlinks {
+            for file in &self.bin_files {
+                file.install_link()?;
+            }
+        }
+
+        Ok(Some(CrateInfo {
+            name: self.name,
+            version_req: self.version_req,
+            current_version: self.new_version,
+            source: CrateSource::cratesio_registry(),
+            target: self.fetcher.target().to_compact_string(),
+            bins: self
+                .bin_files
+                .into_iter()
+                .map(|bin| bin.base_name)
+                .collect(),
+        }))
     }
 }

@@ -1,18 +1,15 @@
 use std::{borrow::Cow, env, ffi::OsStr, sync::Arc};
 
-use compact_str::CompactString;
 use tokio::{process::Command, task::block_in_place};
 use tracing::{debug, error, info, instrument};
 
 use super::{
-    resolve::{Resolution, ResolutionFetch, ResolutionInstallFromSource},
+    resolve::{Resolution, ResolutionInstallFromSource},
     Options,
 };
 use crate::{
-    bins,
-    errors::BinstallError,
-    helpers::jobserver_client::LazyJobserverClient,
-    manifests::crate_info::{CrateInfo, CrateSource},
+    errors::BinstallError, helpers::jobserver_client::LazyJobserverClient,
+    manifests::crate_info::CrateInfo,
 };
 
 #[instrument(skip_all)]
@@ -22,26 +19,7 @@ pub async fn install(
 ) -> Result<Option<CrateInfo>, BinstallError> {
     match resolution {
         Resolution::AlreadyUpToDate => Ok(None),
-        Resolution::Fetch(ResolutionFetch {
-            fetcher,
-            new_version,
-            name,
-            version_req,
-            bin_files,
-        }) => {
-            let target = fetcher.target().into();
-
-            install_from_package(opts, bin_files).map(|option| {
-                option.map(|bins| CrateInfo {
-                    name,
-                    version_req,
-                    current_version: new_version,
-                    source: CrateSource::cratesio_registry(),
-                    target,
-                    bins,
-                })
-            })
-        }
+        Resolution::Fetch(resolution_fetch) => block_in_place(|| resolution_fetch.install(&opts)),
         Resolution::InstallFromSource(ResolutionInstallFromSource { name, version }) => {
             let desired_targets = opts.desired_targets.get().await;
             let target = desired_targets
@@ -67,34 +45,6 @@ pub async fn install(
             }
         }
     }
-}
-
-fn install_from_package(
-    opts: Arc<Options>,
-    bin_files: Vec<bins::BinFile>,
-) -> Result<Option<Vec<CompactString>>, BinstallError> {
-    if opts.dry_run {
-        info!("Dry run, not proceeding");
-        return Ok(None);
-    }
-
-    info!("Installing binaries...");
-    block_in_place(|| {
-        for file in &bin_files {
-            file.install_bin()?;
-        }
-
-        // Generate symlinks
-        if !opts.no_symlinks {
-            for file in &bin_files {
-                file.install_link()?;
-            }
-        }
-
-        Ok(Some(
-            bin_files.into_iter().map(|bin| bin.base_name).collect(),
-        ))
-    })
 }
 
 async fn install_from_source(
