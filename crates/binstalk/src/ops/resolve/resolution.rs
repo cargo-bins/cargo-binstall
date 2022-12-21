@@ -1,8 +1,9 @@
-use std::sync::Arc;
+use std::{borrow::Cow, env, ffi::OsStr, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use semver::Version;
-use tracing::{debug, info, warn};
+use tokio::process::Command;
+use tracing::{debug, error, info, warn};
 
 use super::Options;
 use crate::{
@@ -109,5 +110,67 @@ impl ResolutionFetch {
                 .map(|bin| bin.base_name)
                 .collect(),
         }))
+    }
+}
+
+impl ResolutionInstallFromSource {
+    pub async fn install(self, opts: Arc<Options>) -> Result<(), BinstallError> {
+        let desired_targets = opts.desired_targets.get().await;
+        let target = desired_targets
+            .first()
+            .ok_or(BinstallError::NoViableTargets)?;
+
+        let name = &self.name;
+        let version = &self.version;
+
+        if !opts.dry_run {
+            let jobserver_client = opts.jobserver_client.get().await?;
+
+            let cargo = env::var_os("CARGO")
+                .map(Cow::Owned)
+                .unwrap_or_else(|| Cow::Borrowed(OsStr::new("cargo")));
+
+            debug!(
+                "Running `{} install {name} --version {version} --target {target}`",
+                cargo.to_string_lossy(),
+            );
+
+            let mut cmd = Command::new(cargo);
+
+            cmd.arg("install")
+                .arg(name)
+                .arg("--version")
+                .arg(version)
+                .arg("--target")
+                .arg(target)
+                .kill_on_drop(true);
+
+            if opts.quiet {
+                cmd.arg("--quiet");
+            }
+
+            if opts.force {
+                cmd.arg("--force");
+            }
+
+            let mut child = jobserver_client.configure_and_run(&mut cmd, |cmd| cmd.spawn())?;
+
+            debug!("Spawned command pid={:?}", child.id());
+
+            let status = child.wait().await?;
+            if status.success() {
+                info!("Cargo finished successfully");
+                Ok(())
+            } else {
+                error!("Cargo errored! {status:?}");
+                Err(BinstallError::SubProcess {
+                    command: format!("{cmd:?}").into_boxed_str(),
+                    status,
+                })
+            }
+        } else {
+            info!("Dry-run: running `cargo install {name} --version {version} --target {target}`",);
+            Ok(())
+        }
     }
 }
