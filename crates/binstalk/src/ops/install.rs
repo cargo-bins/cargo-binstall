@@ -5,7 +5,7 @@ use tokio::{process::Command, task::block_in_place};
 use tracing::{debug, error, info, instrument};
 
 use super::{
-    resolve::{Resolution, ResolutionFetch},
+    resolve::{Resolution, ResolutionFetch, ResolutionInstallFromSource},
     Options,
 };
 use crate::{
@@ -42,7 +42,7 @@ pub async fn install(
                 })
             })
         }
-        Resolution::InstallFromSource { name, version } => {
+        Resolution::InstallFromSource(ResolutionInstallFromSource { name, version }) => {
             let desired_targets = opts.desired_targets.get().await;
             let target = desired_targets
                 .first()

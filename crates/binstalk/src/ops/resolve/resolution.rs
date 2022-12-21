@@ -15,12 +15,14 @@ pub struct ResolutionFetch {
     pub bin_files: Vec<bins::BinFile>,
 }
 
+pub struct ResolutionInstallFromSource {
+    pub name: CompactString,
+    pub version: CompactString,
+}
+
 pub enum Resolution {
     Fetch(ResolutionFetch),
-    InstallFromSource {
-        name: CompactString,
-        version: CompactString,
-    },
+    InstallFromSource(ResolutionInstallFromSource),
     AlreadyUpToDate,
 }
 impl Resolution {
@@ -58,7 +60,7 @@ impl Resolution {
                     }
                 }
             }
-            Resolution::InstallFromSource { .. } => {
+            Resolution::InstallFromSource(..) => {
                 warn!("The package will be installed from source (with cargo)",)
             }
             Resolution::AlreadyUpToDate => (),

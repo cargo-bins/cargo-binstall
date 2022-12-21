@@ -34,7 +34,7 @@ pub use version_ext::VersionReqExt;
 
 mod resolution;
 #[doc(inline)]
-pub use resolution::{Resolution, ResolutionFetch};
+pub use resolution::{Resolution, ResolutionFetch, ResolutionInstallFromSource};
 
 #[instrument(skip_all)]
 pub async fn resolve(
@@ -175,10 +175,10 @@ async fn resolve_inner(
     }
 
     if opts.cargo_install_fallback {
-        Ok(Resolution::InstallFromSource {
+        Ok(Resolution::InstallFromSource(ResolutionInstallFromSource {
             name: package_info.name,
             version: package_info.version_str,
-        })
+        }))
     } else {
         Err(BinstallError::NoFallbackToCargoInstall)
     }
