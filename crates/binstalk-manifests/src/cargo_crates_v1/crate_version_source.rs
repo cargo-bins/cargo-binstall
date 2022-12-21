@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
-use binstalk_types::crate_info::cratesio_url;
+use binstalk_types::{crate_info::cratesio_url, maybe_owned::MaybeOwned};
 use compact_str::CompactString;
 use miette::Diagnostic;
 use semver::Version;
@@ -14,37 +14,45 @@ use crate::crate_info::{CrateInfo, CrateSource, SourceType};
 pub struct CrateVersionSource {
     pub name: CompactString,
     pub version: Version,
-    pub source: Source,
+    pub source: Source<'static>,
 }
 
 impl From<&CrateInfo> for CrateVersionSource {
     fn from(metadata: &CrateInfo) -> Self {
+        use SourceType::*;
+
+        let url = metadata.source.url.clone();
+
         super::CrateVersionSource {
             name: metadata.name.clone(),
             version: metadata.current_version.clone(),
-            source: Source::from(&metadata.source),
+            source: match metadata.source.source_type {
+                Git => Source::Git(url),
+                Path => Source::Path(url),
+                Registry => Source::Registry(url),
+            },
         }
     }
 }
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Source {
-    Git(Url),
-    Path(Url),
-    Registry(Url),
+pub enum Source<'a> {
+    Git(MaybeOwned<'a, Url>),
+    Path(MaybeOwned<'a, Url>),
+    Registry(MaybeOwned<'a, Url>),
 }
 
-impl Source {
-    pub fn cratesio_registry() -> Source {
-        Self::Registry(cratesio_url().clone())
+impl Source<'static> {
+    pub fn cratesio_registry() -> Self {
+        Self::Registry(MaybeOwned::Borrowed(cratesio_url()))
     }
 }
 
-impl From<&CrateSource> for Source {
-    fn from(source: &CrateSource) -> Self {
+impl<'a> From<&'a CrateSource> for Source<'a> {
+    fn from(source: &'a CrateSource) -> Self {
         use SourceType::*;
 
-        let url = source.url.clone();
+        let url = MaybeOwned::Borrowed(source.url.as_ref());
 
         match source.source_type {
             Git => Self::Git(url),
@@ -65,9 +73,9 @@ impl FromStr for CrateVersionSource {
                     .splitn(2, '+')
                     .collect::<Vec<_>>()[..]
                 {
-                    ["git", url] => Source::Git(Url::parse(url)?),
-                    ["path", url] => Source::Path(Url::parse(url)?),
-                    ["registry", url] => Source::Registry(Url::parse(url)?),
+                    ["git", url] => Source::Git(Url::parse(url)?.into()),
+                    ["path", url] => Source::Path(Url::parse(url)?.into()),
+                    ["registry", url] => Source::Registry(Url::parse(url)?.into()),
                     [kind, arg] => {
                         return Err(CvsParseError::UnknownSourceType {
                             kind: kind.to_string().into_boxed_str(),
@@ -117,7 +125,7 @@ impl fmt::Display for CrateVersionSource {
     }
 }
 
-impl fmt::Display for Source {
+impl fmt::Display for Source<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Source::Git(url) => write!(f, "git+{url}"),

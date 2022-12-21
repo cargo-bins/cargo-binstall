@@ -15,6 +15,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use beef::Cow;
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
@@ -31,12 +32,12 @@ mod crate_version_source;
 use crate_version_source::*;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct CratesToml {
+pub struct CratesToml<'a> {
     #[serde(with = "tuple_vec_map")]
-    v1: Vec<(String, Vec<CompactString>)>,
+    v1: Vec<(String, Cow<'a, [CompactString]>)>,
 }
 
-impl CratesToml {
+impl CratesToml<'_> {
     pub fn default_path() -> Result<PathBuf, CratesTomlParseError> {
         Ok(cargo_home()?.join(".crates.toml"))
     }
@@ -48,7 +49,7 @@ impl CratesToml {
     pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
         let mut vec = Vec::new();
         reader.read_to_end(&mut vec)?;
-        Ok(toml_edit::easy::from_slice(&vec)?)
+        Ok(toml::from_slice(&vec)?)
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
@@ -59,7 +60,7 @@ impl CratesToml {
     /// Only use it when you know that the crate is not in the manifest.
     /// Otherwise, you need to call [`CratesToml::remove`] first.
     pub fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<CompactString>) {
-        self.v1.push((cvs.to_string(), bins));
+        self.v1.push((cvs.to_string(), Cow::owned(bins)));
     }
 
     pub fn remove(&mut self, name: &str) {
@@ -75,7 +76,7 @@ impl CratesToml {
     }
 
     pub fn write_to_writer<W: io::Write>(&self, mut writer: W) -> Result<(), CratesTomlParseError> {
-        let data = toml_edit::easy::to_vec(&self)?;
+        let data = toml::to_vec(&self)?;
         writer.write_all(&data)?;
         Ok(())
     }
@@ -108,8 +109,15 @@ impl CratesToml {
         };
 
         for metadata in iter {
-            c1.remove(&metadata.name);
-            c1.insert(&CrateVersionSource::from(metadata), metadata.bins.clone());
+            let name = &metadata.name;
+            let version = &metadata.current_version;
+            let source = Source::from(&metadata.source);
+
+            c1.remove(name);
+            c1.v1.push((
+                format!("{name} {version} ({source})"),
+                Cow::borrowed(&metadata.bins),
+            ));
         }
 
         file.rewind()?;
@@ -151,10 +159,10 @@ pub enum CratesTomlParseError {
     Io(#[from] io::Error),
 
     #[error(transparent)]
-    TomlParse(#[from] toml_edit::easy::de::Error),
+    TomlParse(#[from] toml::de::Error),
 
     #[error(transparent)]
-    TomlWrite(Box<toml_edit::easy::ser::Error>),
+    TomlWrite(Box<toml::ser::Error>),
 
     #[error(transparent)]
     CvsParse(Box<CvsParseError>),
@@ -166,8 +174,8 @@ impl From<CvsParseError> for CratesTomlParseError {
     }
 }
 
-impl From<toml_edit::easy::ser::Error> for CratesTomlParseError {
-    fn from(e: toml_edit::easy::ser::Error) -> Self {
+impl From<toml::ser::Error> for CratesTomlParseError {
+    fn from(e: toml::ser::Error) -> Self {
         CratesTomlParseError::TomlWrite(Box::new(e))
     }
 }
