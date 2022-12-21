@@ -119,38 +119,39 @@ impl ResolutionInstallFromSource {
         let name = &self.name;
         let version = &self.version;
 
+        let cargo = env::var_os("CARGO")
+            .map(Cow::Owned)
+            .unwrap_or_else(|| Cow::Borrowed(OsStr::new("cargo")));
+
+        debug!(
+            "Running `{} install {name} --version {version} --target {target}`",
+            Path::new(&cargo).display(),
+        );
+
+        let mut cmd = Command::new(cargo);
+
+        cmd.arg("install")
+            .arg(name)
+            .arg("--version")
+            .arg(version)
+            .arg("--target")
+            .arg(target)
+            .kill_on_drop(true);
+
+        if opts.quiet {
+            cmd.arg("--quiet");
+        }
+
+        if opts.force {
+            cmd.arg("--force");
+        }
+
         if !opts.dry_run {
-            let jobserver_client = opts.jobserver_client.get().await?;
-
-            let cargo = env::var_os("CARGO")
-                .map(Cow::Owned)
-                .unwrap_or_else(|| Cow::Borrowed(OsStr::new("cargo")));
-
-            debug!(
-                "Running `{} install {name} --version {version} --target {target}`",
-                Path::new(&cargo).display(),
-            );
-
-            let mut cmd = Command::new(cargo);
-
-            cmd.arg("install")
-                .arg(name)
-                .arg("--version")
-                .arg(version)
-                .arg("--target")
-                .arg(target)
-                .kill_on_drop(true);
-
-            if opts.quiet {
-                cmd.arg("--quiet");
-            }
-
-            if opts.force {
-                cmd.arg("--force");
-            }
-
-            let mut child =
-                jobserver_client.configure_and_run(&mut cmd, |cmd| cmd.group_spawn())?;
+            let mut child = opts
+                .jobserver_client
+                .get()
+                .await?
+                .configure_and_run(&mut cmd, |cmd| cmd.group_spawn())?;
 
             debug!("Spawned command pid={:?}", child.id());
 
@@ -166,7 +167,7 @@ impl ResolutionInstallFromSource {
                 })
             }
         } else {
-            info!("Dry-run: running `cargo install {name} --version {version} --target {target}`",);
+            info!("Dry-run: running `{cmd:?}`");
             Ok(())
         }
     }
