@@ -29,7 +29,11 @@ impl Resolution {
     pub(super) fn print(&self, opts: &Options) {
         match self {
             Resolution::Fetch(ResolutionFetch {
-                fetcher, bin_files, ..
+                fetcher,
+                bin_files,
+                name,
+                new_version,
+                ..
             }) => {
                 let fetcher_target = fetcher.target();
                 // Prompt user for confirmation
@@ -39,7 +43,7 @@ impl Resolution {
                 );
 
                 warn!(
-                    "The package will be downloaded from {}{}",
+                    "The package {name} v{new_version} will be downloaded from {}{}",
                     if fetcher.is_third_party() {
                         "third-party source "
                     } else {
@@ -60,8 +64,8 @@ impl Resolution {
                     }
                 }
             }
-            Resolution::InstallFromSource(..) => {
-                warn!("The package will be installed from source (with cargo)",)
+            Resolution::InstallFromSource(ResolutionInstallFromSource { name, version }) => {
+                warn!("The package {name} v{version} will be installed from source (with cargo)",)
             }
             Resolution::AlreadyUpToDate => (),
         }
