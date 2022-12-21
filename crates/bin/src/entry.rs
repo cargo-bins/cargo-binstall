@@ -122,7 +122,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         })
         .collect();
 
-    // Confirm
+    // Collect results
     let mut resolution_fetchs = Vec::new();
     let mut resolution_sources = Vec::new();
 
@@ -145,6 +145,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         return Ok(());
     }
 
+    // Confirm
     if !dry_run && !no_confirm {
         confirm().await?;
     }
