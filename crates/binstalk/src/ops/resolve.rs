@@ -43,17 +43,15 @@ pub async fn resolve(
     curr_version: Option<Version>,
 ) -> Result<Resolution, BinstallError> {
     let crate_name_name = crate_name.name.clone();
-    let resolution = resolve_inner(&opts, crate_name, curr_version)
+    let resolution = resolve_inner(opts, crate_name, curr_version)
         .await
         .map_err(|err| err.crate_context(crate_name_name))?;
-
-    resolution.print(&opts);
 
     Ok(resolution)
 }
 
 async fn resolve_inner(
-    opts: &Options,
+    opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
 ) -> Result<Resolution, BinstallError> {
@@ -68,7 +66,7 @@ async fn resolve_inner(
 
     let version_req_str = version_req.to_compact_string();
 
-    let Some(package_info) = PackageInfo::resolve(opts,
+    let Some(package_info) = PackageInfo::resolve(&opts,
         crate_name.name,
         curr_version,
         version_req,

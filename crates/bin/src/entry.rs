@@ -111,34 +111,39 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     let no_confirm = args.no_confirm;
     let no_cleanup = args.no_cleanup;
 
-    let tasks: Vec<_> = if !dry_run && !no_confirm {
-        // Resolve crates
-        let tasks: Vec<_> = crate_names
-            .map(|(crate_name, current_version)| {
-                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
-                    binstall_opts.clone(),
-                    crate_name,
-                    current_version,
-                ))
-            })
-            .collect();
+    // Resolve crates
+    let tasks: Vec<_> = crate_names
+        .map(|(crate_name, current_version)| {
+            AutoAbortJoinHandle::spawn(ops::resolve::resolve(
+                binstall_opts.clone(),
+                crate_name,
+                current_version,
+            ))
+        })
+        .collect();
 
-        // Confirm
-        let mut resolutions = Vec::with_capacity(tasks.len());
-        for task in tasks {
-            match task.await?? {
-                Resolution::AlreadyUpToDate => {}
-                res => resolutions.push(res),
+    // Confirm
+    let mut resolutions = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        match task.await?? {
+            Resolution::AlreadyUpToDate => {}
+            resolution => {
+                resolution.print(&binstall_opts);
+                resolutions.push(resolution)
             }
         }
+    }
 
-        if resolutions.is_empty() {
-            debug!("Nothing to do");
-            return Ok(());
-        }
+    if resolutions.is_empty() {
+        debug!("Nothing to do");
+        return Ok(());
+    }
 
+    if !dry_run && !no_confirm {
         confirm().await?;
+    }
 
+    let tasks: Vec<_> = 
         // Install
         resolutions
             .into_iter()
@@ -146,21 +151,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
                 AutoAbortJoinHandle::spawn(ops::install::install(resolution, binstall_opts.clone()))
             })
             .collect()
-    } else {
-        // Resolve crates and install without confirmation
-        crate_names
-            .map(|(crate_name, current_version)| {
-                let opts = binstall_opts.clone();
-
-                AutoAbortJoinHandle::spawn(async move {
-                    let resolution =
-                        ops::resolve::resolve(opts.clone(), crate_name, current_version).await?;
-
-                    ops::install::install(resolution, opts).await
-                })
-            })
-            .collect()
-    };
+    ;
 
     let mut metadata_vec = Vec::with_capacity(tasks.len());
     for task in tasks {
