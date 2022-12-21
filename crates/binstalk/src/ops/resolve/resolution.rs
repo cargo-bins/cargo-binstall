@@ -28,7 +28,7 @@ pub struct ResolutionSource {
 }
 
 pub enum Resolution {
-    Fetch(ResolutionFetch),
+    Fetch(Box<ResolutionFetch>),
     InstallFromSource(ResolutionSource),
     AlreadyUpToDate,
 }
