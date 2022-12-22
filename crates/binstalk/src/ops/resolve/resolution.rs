@@ -1,7 +1,9 @@
-use std::{borrow::Cow, env, ffi::OsStr, path::Path, sync::Arc};
+use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, path::Path, sync::Arc};
 
 use command_group::AsyncCommandGroup;
 use compact_str::{CompactString, ToCompactString};
+use either::Either;
+use itertools::Itertools;
 use semver::Version;
 use tokio::process::Command;
 use tracing::{debug, error, info, warn};
@@ -165,12 +167,12 @@ impl ResolutionSource {
             } else {
                 error!("Cargo errored! {status:?}");
                 Err(BinstallError::SubProcess {
-                    command: format!("{cmd:?}").into_boxed_str(),
+                    command: format_cmd(&cmd).to_string().into_boxed_str(),
                     status,
                 })
             }
         } else {
-            info!("Dry-run: running `{cmd:?}`");
+            info!("Dry-run: running `{}`", format_cmd(&cmd));
             Ok(())
         }
     }
@@ -181,4 +183,17 @@ impl ResolutionSource {
             self.name, self.version
         )
     }
+}
+
+fn format_cmd(cmd: &Command) -> impl fmt::Display + '_ {
+    let cmd = cmd.as_std();
+
+    let program = Either::Left(Path::new(cmd.get_program()).display());
+
+    let program_args = cmd
+        .get_args()
+        .map(OsStr::to_string_lossy)
+        .map(Either::Right);
+
+    iter::once(program).chain(program_args).format(" ")
 }
