@@ -83,10 +83,10 @@ impl ResolutionFetch {
         let name = &self.name;
         let new_version = &self.new_version;
 
-        let fetcher_target = fetcher.target();
         debug!(
-            "Found a binary install source: {} ({fetcher_target})",
-            fetcher.source_name()
+            "Found a binary install source: {} ({})",
+            fetcher.source_name(),
+            fetcher.target()
         );
 
         warn!(
