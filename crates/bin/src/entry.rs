@@ -129,13 +129,13 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     for task in tasks {
         match task.await?? {
             Resolution::AlreadyUpToDate => {}
-            resolution => {
-                resolution.print(&binstall_opts);
-                match resolution {
-                    Resolution::Fetch(fetch) => resolution_fetchs.push(fetch),
-                    Resolution::InstallFromSource(source) => resolution_sources.push(source),
-                    Resolution::AlreadyUpToDate => unreachable!(),
-                }
+            Resolution::Fetch(fetch) => {
+                fetch.print(&binstall_opts);
+                resolution_fetchs.push(fetch)
+            }
+            Resolution::InstallFromSource(source) => {
+                source.print();
+                resolution_sources.push(source)
             }
         }
     }
