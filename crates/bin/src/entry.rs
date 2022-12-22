@@ -150,40 +150,47 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         confirm().await?;
     }
 
-    if dry_run {
-        info!("Dry run, not proceeding");
-    } else if !resolution_fetchs.is_empty() {
-        block_in_place(|| -> Result<()> {
-            let metadata_vec = resolution_fetchs
-                .into_iter()
-                .map(|fetch| fetch.install(&binstall_opts))
-                .collect::<Result<Vec<_>, BinstallError>>()?;
+    if !resolution_fetchs.is_empty() {
+        if dry_run {
+            info!("Dry-run: Not proceeding to install fetched binaries");
+        } else {
+            let f = || -> Result<()> {
+                let metadata_vec = resolution_fetchs
+                    .into_iter()
+                    .map(|fetch| fetch.install(&binstall_opts))
+                    .collect::<Result<Vec<_>, BinstallError>>()?;
 
-            if let Some((mut cargo_binstall_metadata, _)) = metadata {
-                // The cargo manifest path is already created when loading
-                // metadata.
+                if let Some((mut cargo_binstall_metadata, _)) = metadata {
+                    // The cargo manifest path is already created when loading
+                    // metadata.
 
-                debug!("Writing .crates.toml");
-                CratesToml::append_to_path(cargo_roots.join(".crates.toml"), metadata_vec.iter())?;
+                    debug!("Writing .crates.toml");
+                    CratesToml::append_to_path(
+                        cargo_roots.join(".crates.toml"),
+                        metadata_vec.iter(),
+                    )?;
 
-                debug!("Writing binstall/crates-v1.json");
-                for metadata in metadata_vec {
-                    cargo_binstall_metadata.replace(metadata);
+                    debug!("Writing binstall/crates-v1.json");
+                    for metadata in metadata_vec {
+                        cargo_binstall_metadata.replace(metadata);
+                    }
+                    cargo_binstall_metadata.overwrite()?;
                 }
-                cargo_binstall_metadata.overwrite()?;
-            }
 
-            if no_cleanup {
-                // Consume temp_dir without removing it from fs.
-                temp_dir.into_path();
-            } else {
-                temp_dir.close().unwrap_or_else(|err| {
-                    warn!("Failed to clean up some resources: {err}");
-                });
-            }
+                if no_cleanup {
+                    // Consume temp_dir without removing it from fs.
+                    temp_dir.into_path();
+                } else {
+                    temp_dir.close().unwrap_or_else(|err| {
+                        warn!("Failed to clean up some resources: {err}");
+                    });
+                }
 
-            Ok(())
-        })?;
+                Ok(())
+            };
+
+            block_in_place(f)?;
+        }
     }
 
     let tasks: Vec<_> = resolution_sources
