@@ -287,18 +287,11 @@ fn filter_out_installed_crates(
         let name = &crate_name.name;
 
         let curr_version = metadata
-            .and_then(|metadata| {
-                metadata
-                    .0
-                    .get(name)
-                    .map(|crate_info| &crate_info.current_version)
-                    .into_iter()
-                    .chain(metadata.1.get(name))
-                    // Since the cargo_install_v1_metadata could be out of sync
-                    // from cargo_binstall_metadata, it is better to obtain
-                    // the version from both of them and takes the larger one.
-                    .max()
-            });
+            // `cargo-uninstall` can be called to uninstall crates,
+            // but it only updates .crates.toml.
+            //
+            // So here we will honour .crates.toml only.
+            .and_then(|metadata| metadata.1.get(name));
 
         match (
             force,
