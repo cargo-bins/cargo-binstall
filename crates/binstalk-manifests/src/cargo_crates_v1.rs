@@ -99,19 +99,11 @@ impl CratesToml<'_> {
         self.write_to_file(&mut file)
     }
 
-    pub fn append_to_path<'a, Iter>(
-        path: impl AsRef<Path>,
-        iter: Iter,
-    ) -> Result<(), CratesTomlParseError>
+    pub fn append_to_file<'a, Iter>(file: &mut File, iter: Iter) -> Result<(), CratesTomlParseError>
     where
         Iter: IntoIterator<Item = &'a CrateInfo>,
     {
-        let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
-        let mut c1 = if file.metadata()?.len() != 0 {
-            Self::load_from_reader(&mut *file)?
-        } else {
-            Self::default()
-        };
+        let mut c1 = Self::load_from_reader(&mut *file)?;
 
         for metadata in iter {
             let name = &metadata.name;
@@ -126,9 +118,20 @@ impl CratesToml<'_> {
         }
 
         file.rewind()?;
-        c1.write_to_file(&mut file)?;
+        c1.write_to_file(file)?;
 
         Ok(())
+    }
+
+    pub fn append_to_path<'a, Iter>(
+        path: impl AsRef<Path>,
+        iter: Iter,
+    ) -> Result<(), CratesTomlParseError>
+    where
+        Iter: IntoIterator<Item = &'a CrateInfo>,
+    {
+        let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+        Self::append_to_file(&mut file, iter)
     }
 
     pub fn append<'a, Iter>(iter: Iter) -> Result<(), CratesTomlParseError>
