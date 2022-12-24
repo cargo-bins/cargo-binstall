@@ -103,24 +103,31 @@ impl CratesToml<'_> {
     where
         Iter: IntoIterator<Item = &'a CrateInfo>,
     {
-        let mut c1 = Self::load_from_reader(&mut *file)?;
+        fn inner(
+            file: &mut File,
+            iter: &mut dyn Iterator<Item = &CrateInfo>,
+        ) -> Result<(), CratesTomlParseError> {
+            let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
-        for metadata in iter {
-            let name = &metadata.name;
-            let version = &metadata.current_version;
-            let source = Source::from(&metadata.source);
+            for metadata in iter {
+                let name = &metadata.name;
+                let version = &metadata.current_version;
+                let source = Source::from(&metadata.source);
 
-            c1.remove(name);
-            c1.v1.push((
-                format!("{name} {version} ({source})"),
-                Cow::borrowed(&metadata.bins),
-            ));
+                c1.remove(name);
+                c1.v1.push((
+                    format!("{name} {version} ({source})"),
+                    Cow::borrowed(&metadata.bins),
+                ));
+            }
+
+            file.rewind()?;
+            c1.write_to_file(file)?;
+
+            Ok(())
         }
 
-        file.rewind()?;
-        c1.write_to_file(file)?;
-
-        Ok(())
+        inner(file, &mut iter.into_iter())
     }
 
     pub fn append_to_path<'a, Iter>(
