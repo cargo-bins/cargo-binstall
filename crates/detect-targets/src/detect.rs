@@ -52,13 +52,11 @@ pub async fn detect_targets() -> Vec<String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        let target = if let Some(target) = get_target_from_rustc().await {
-            target
-        } else {
+        let target = get_target_from_rustc().await.unwrap_or_else(|| {
             guess_host_triple::guess_host_triple()
                 .unwrap_or(TARGET)
                 .to_string()
-        };
+        });
 
         let mut targets = vec![target];
 
