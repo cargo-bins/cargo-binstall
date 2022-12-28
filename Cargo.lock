@@ -477,9 +477,9 @@ dependencies = [
 
 [[package]]
 name = "command-group"
-version = "2.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e98782b6b757b633bd1da9d1a4ee7d323a6bd205a32b1c242d5e56e7092dfd3f"
+checksum = "026c3922235f9f7d78f21251a026f3acdeb7cce3deba107fe09a4bfa63d850a2"
 dependencies = [
  "async-trait",
  "nix",
