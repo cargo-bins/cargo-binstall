@@ -38,13 +38,13 @@ pub async fn detect_targets() -> Vec<String> {
     #[cfg(target_os = "linux")]
     {
         if let Some(target) = get_target_from_rustc().await {
-            let mut v = vec![target];
+            let mut targets = vec![target];
 
-            if v[0].contains("gnu") {
-                v.push(v[0].replace("gnu", "musl"));
+            if targets[0].contains("gnu") {
+                targets.push(targets[0].replace("gnu", "musl"));
             }
 
-            v
+            targets
         } else {
             linux::detect_targets_linux().await
         }
@@ -52,23 +52,25 @@ pub async fn detect_targets() -> Vec<String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        let mut v = if let Some(target) = get_target_from_rustc().await {
-            vec![target]
+        let target = if let Some(target) = get_target_from_rustc().await {
+            target
         } else {
-            vec![guess_host_triple::guess_host_triple()
+            guess_host_triple::guess_host_triple()
                 .unwrap_or(TARGET)
-                .to_string()]
+                .to_string()
         };
+
+        let mut targets = vec![target];
 
         cfg_if! {
             if #[cfg(target_os = "macos")] {
-                v.extend(macos::detect_alternative_targets(&v[0]));
+                targets.extend(macos::detect_alternative_targets(&targets[0]));
             } else if #[cfg(target_os = "windows")] {
-                v.extend(windows::detect_alternative_targets(&v[0]));
+                targets.extend(windows::detect_alternative_targets(&targets[0]));
             }
         }
 
-        v
+        targets
     }
 }
 
