@@ -2,7 +2,9 @@ use crate::TARGET;
 use guess_host_triple::guess_host_triple;
 
 pub(super) fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
-    let (prefix, abi) = target.rsplit_once('-')?;
+    // This rsplit will succeed on valid target triple, which we assume
+    // is valid.
+    let (prefix, abi) = target.rsplit_once('-').unwrap();
 
     // AFAIK only windows 10/11 supports arm and it requires > 4G of ram,
     // which makes running it on armv7 moot.
