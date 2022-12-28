@@ -9,6 +9,8 @@ use std::{
 use cfg_if::cfg_if;
 use tokio::process::Command;
 
+use crate::TARGET;
+
 cfg_if! {
     if #[cfg(target_os = "linux")] {
         mod linux;
@@ -50,15 +52,26 @@ pub async fn detect_targets() -> Vec<String> {
 
         v
     } else {
+        #[cfg(not(target_os = "linux"))]
+        fn guess_host_target() -> Vec<String> {
+            vec![guess_host_triple::guess_host_triple()
+                .unwrap_or(TARGET)
+                .to_string()]
+        }
+
         cfg_if! {
             if #[cfg(target_os = "linux")] {
                 linux::detect_targets_linux().await
             } else if #[cfg(target_os = "macos")] {
-                macos::detect_targets_macos()
+                let mut v = guess_host_target();
+                v.extend(macos::detect_alternative_targets(&v[0]));
+                v
             } else if #[cfg(target_os = "windows")] {
-                windows::detect_targets_windows()
+                let mut v = guess_host_target();
+                v.extend(windows::detect_alternative_targets(&v[0]));
+                v
             } else {
-                vec![TARGET.into()]
+                guess_host_target()
             }
         }
     }
