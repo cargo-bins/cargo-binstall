@@ -16,7 +16,7 @@ use crate::{
 
 use super::{Data, TargetData};
 
-const BASE_URL: &str = "https://github.com/alsuren/cargo-quickinstall/releases/download";
+const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 
 pub struct QuickInstall {
