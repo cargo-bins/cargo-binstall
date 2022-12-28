@@ -95,5 +95,6 @@ async fn get_target_from_rustc() -> Option<String> {
         .lines()
         .filter_map(|line| line.ok())
         .find_map(|line| line.strip_prefix("host: ").map(|host| host.to_owned()))
+        // All valid target triple must be in the form of $arch-$os-$abi.
         .filter(|target| target.split('-').count() >= 3)
 }
