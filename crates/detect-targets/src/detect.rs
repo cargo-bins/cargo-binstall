@@ -35,15 +35,33 @@ cfg_if! {
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
 pub async fn detect_targets() -> Vec<String> {
-    if let Some(target) = get_target_from_rustc().await {
-        let mut v = vec![target];
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(target) = get_target_from_rustc().await {
+            let mut v = vec![target];
+
+            if v[0].contains("gnu") {
+                v.push(v[0].replace("gnu", "musl"));
+            }
+
+            v
+        } else {
+            linux::detect_targets_linux().await
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let mut v = if let Some(target) = get_target_from_rustc().await {
+            vec![target]
+        } else {
+            vec![guess_host_triple::guess_host_triple()
+                .unwrap_or(TARGET)
+                .to_string()]
+        };
 
         cfg_if! {
-            if #[cfg(target_os = "linux")] {
-                if v[0].contains("gnu") {
-                    v.push(v[0].replace("gnu", "musl"));
-                }
-            } else if #[cfg(target_os = "macos")] {
+            if #[cfg(target_os = "macos")] {
                 v.extend(macos::detect_alternative_targets(&v[0]));
             } else if #[cfg(target_os = "windows")] {
                 v.extend(windows::detect_alternative_targets(&v[0]));
@@ -51,29 +69,6 @@ pub async fn detect_targets() -> Vec<String> {
         }
 
         v
-    } else {
-        #[cfg(not(target_os = "linux"))]
-        fn guess_host_target() -> Vec<String> {
-            vec![guess_host_triple::guess_host_triple()
-                .unwrap_or(TARGET)
-                .to_string()]
-        }
-
-        cfg_if! {
-            if #[cfg(target_os = "linux")] {
-                linux::detect_targets_linux().await
-            } else if #[cfg(target_os = "macos")] {
-                let mut v = guess_host_target();
-                v.extend(macos::detect_alternative_targets(&v[0]));
-                v
-            } else if #[cfg(target_os = "windows")] {
-                let mut v = guess_host_target();
-                v.extend(windows::detect_alternative_targets(&v[0]));
-                v
-            } else {
-                guess_host_target()
-            }
-        }
     }
 }
 
