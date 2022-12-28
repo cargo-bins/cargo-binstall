@@ -111,90 +111,98 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     let no_confirm = args.no_confirm;
     let no_cleanup = args.no_cleanup;
 
-    let tasks: Vec<_> = if !dry_run && !no_confirm {
-        // Resolve crates
-        let tasks: Vec<_> = crate_names
-            .map(|(crate_name, current_version)| {
-                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
-                    binstall_opts.clone(),
-                    crate_name,
-                    current_version,
-                ))
-            })
-            .collect();
+    // Resolve crates
+    let tasks: Vec<_> = crate_names
+        .map(|(crate_name, current_version)| {
+            AutoAbortJoinHandle::spawn(ops::resolve::resolve(
+                binstall_opts.clone(),
+                crate_name,
+                current_version,
+            ))
+        })
+        .collect();
 
-        // Confirm
-        let mut resolutions = Vec::with_capacity(tasks.len());
-        for task in tasks {
-            match task.await?? {
-                Resolution::AlreadyUpToDate => {}
-                res => resolutions.push(res),
-            }
-        }
+    // Collect results
+    let mut resolution_fetchs = Vec::new();
+    let mut resolution_sources = Vec::new();
 
-        if resolutions.is_empty() {
-            debug!("Nothing to do");
-            return Ok(());
-        }
-
-        confirm().await?;
-
-        // Install
-        resolutions
-            .into_iter()
-            .map(|resolution| {
-                AutoAbortJoinHandle::spawn(ops::install::install(resolution, binstall_opts.clone()))
-            })
-            .collect()
-    } else {
-        // Resolve crates and install without confirmation
-        crate_names
-            .map(|(crate_name, current_version)| {
-                let opts = binstall_opts.clone();
-
-                AutoAbortJoinHandle::spawn(async move {
-                    let resolution =
-                        ops::resolve::resolve(opts.clone(), crate_name, current_version).await?;
-
-                    ops::install::install(resolution, opts).await
-                })
-            })
-            .collect()
-    };
-
-    let mut metadata_vec = Vec::with_capacity(tasks.len());
     for task in tasks {
-        if let Some(metadata) = task.await?? {
-            metadata_vec.push(metadata);
+        match task.await?? {
+            Resolution::AlreadyUpToDate => {}
+            Resolution::Fetch(fetch) => {
+                fetch.print(&binstall_opts);
+                resolution_fetchs.push(fetch)
+            }
+            Resolution::InstallFromSource(source) => {
+                source.print();
+                resolution_sources.push(source)
+            }
         }
     }
 
-    block_in_place(|| {
-        if let Some((mut cargo_binstall_metadata, _)) = metadata {
-            // The cargo manifest path is already created when loading
-            // metadata.
+    if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
+        debug!("Nothing to do");
+        return Ok(());
+    }
 
-            debug!("Writing .crates.toml");
-            CratesToml::append_to_path(cargo_roots.join(".crates.toml"), metadata_vec.iter())?;
+    // Confirm
+    if !dry_run && !no_confirm {
+        confirm().await?;
+    }
 
-            debug!("Writing binstall/crates-v1.json");
-            for metadata in metadata_vec {
-                cargo_binstall_metadata.replace(metadata);
-            }
-            cargo_binstall_metadata.overwrite()?;
-        }
-
-        if no_cleanup {
-            // Consume temp_dir without removing it from fs.
-            temp_dir.into_path();
+    if !resolution_fetchs.is_empty() {
+        if dry_run {
+            info!("Dry-run: Not proceeding to install fetched binaries");
         } else {
-            temp_dir.close().unwrap_or_else(|err| {
-                warn!("Failed to clean up some resources: {err}");
-            });
-        }
+            let f = || -> Result<()> {
+                let metadata_vec = resolution_fetchs
+                    .into_iter()
+                    .map(|fetch| fetch.install(&binstall_opts))
+                    .collect::<Result<Vec<_>, BinstallError>>()?;
 
-        Ok(())
-    })
+                if let Some((mut cargo_binstall_metadata, _)) = metadata {
+                    // The cargo manifest path is already created when loading
+                    // metadata.
+
+                    debug!("Writing .crates.toml");
+                    CratesToml::append_to_path(
+                        cargo_roots.join(".crates.toml"),
+                        metadata_vec.iter(),
+                    )?;
+
+                    debug!("Writing binstall/crates-v1.json");
+                    for metadata in metadata_vec {
+                        cargo_binstall_metadata.replace(metadata);
+                    }
+                    cargo_binstall_metadata.overwrite()?;
+                }
+
+                if no_cleanup {
+                    // Consume temp_dir without removing it from fs.
+                    temp_dir.into_path();
+                } else {
+                    temp_dir.close().unwrap_or_else(|err| {
+                        warn!("Failed to clean up some resources: {err}");
+                    });
+                }
+
+                Ok(())
+            };
+
+            block_in_place(f)?;
+        }
+    }
+
+    let tasks: Vec<_> = resolution_sources
+        .into_iter()
+        .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
+        .collect();
+
+    for task in tasks {
+        task.await??;
+    }
+
+    Ok(())
 }
 
 type Metadata = (BinstallCratesV1Records, BTreeMap<CompactString, Version>);

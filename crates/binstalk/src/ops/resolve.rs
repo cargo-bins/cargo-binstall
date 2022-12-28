@@ -27,66 +27,14 @@ use crate::{
 mod crate_name;
 #[doc(inline)]
 pub use crate_name::CrateName;
+
 mod version_ext;
 #[doc(inline)]
 pub use version_ext::VersionReqExt;
 
-pub enum Resolution {
-    Fetch {
-        fetcher: Arc<dyn Fetcher>,
-        new_version: Version,
-        name: CompactString,
-        version_req: CompactString,
-        bin_files: Vec<bins::BinFile>,
-    },
-    InstallFromSource {
-        name: CompactString,
-        version: CompactString,
-    },
-    AlreadyUpToDate,
-}
-impl Resolution {
-    fn print(&self, opts: &Options) {
-        match self {
-            Resolution::Fetch {
-                fetcher, bin_files, ..
-            } => {
-                let fetcher_target = fetcher.target();
-                // Prompt user for confirmation
-                debug!(
-                    "Found a binary install source: {} ({fetcher_target})",
-                    fetcher.source_name()
-                );
-
-                warn!(
-                    "The package will be downloaded from {}{}",
-                    if fetcher.is_third_party() {
-                        "third-party source "
-                    } else {
-                        ""
-                    },
-                    fetcher.source_name()
-                );
-
-                info!("This will install the following binaries:");
-                for file in bin_files {
-                    info!("  - {}", file.preview_bin());
-                }
-
-                if !opts.no_symlinks {
-                    info!("And create (or update) the following symlinks:");
-                    for file in bin_files {
-                        info!("  - {}", file.preview_link());
-                    }
-                }
-            }
-            Resolution::InstallFromSource { .. } => {
-                warn!("The package will be installed from source (with cargo)",)
-            }
-            Resolution::AlreadyUpToDate => (),
-        }
-    }
-}
+mod resolution;
+#[doc(inline)]
+pub use resolution::{Resolution, ResolutionFetch, ResolutionSource};
 
 #[instrument(skip_all)]
 pub async fn resolve(
@@ -95,17 +43,15 @@ pub async fn resolve(
     curr_version: Option<Version>,
 ) -> Result<Resolution, BinstallError> {
     let crate_name_name = crate_name.name.clone();
-    let resolution = resolve_inner(&opts, crate_name, curr_version)
+    let resolution = resolve_inner(opts, crate_name, curr_version)
         .await
         .map_err(|err| err.crate_context(crate_name_name))?;
-
-    resolution.print(&opts);
 
     Ok(resolution)
 }
 
 async fn resolve_inner(
-    opts: &Options,
+    opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
 ) -> Result<Resolution, BinstallError> {
@@ -120,7 +66,7 @@ async fn resolve_inner(
 
     let version_req_str = version_req.to_compact_string();
 
-    let Some(package_info) = PackageInfo::resolve(opts,
+    let Some(package_info) = PackageInfo::resolve(&opts,
         crate_name.name,
         curr_version,
         version_req,
@@ -188,13 +134,13 @@ async fn resolve_inner(
                 {
                     Ok(bin_files) => {
                         if !bin_files.is_empty() {
-                            return Ok(Resolution::Fetch {
+                            return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                                 fetcher,
                                 new_version: package_info.version,
                                 name: package_info.name,
                                 version_req: version_req_str,
                                 bin_files,
-                            });
+                            })));
                         } else {
                             warn!(
                                 "Error when checking binaries provided by fetcher {}: \
@@ -227,10 +173,10 @@ async fn resolve_inner(
     }
 
     if opts.cargo_install_fallback {
-        Ok(Resolution::InstallFromSource {
+        Ok(Resolution::InstallFromSource(ResolutionSource {
             name: package_info.name,
             version: package_info.version_str,
-        })
+        }))
     } else {
         Err(BinstallError::NoFallbackToCargoInstall)
     }
