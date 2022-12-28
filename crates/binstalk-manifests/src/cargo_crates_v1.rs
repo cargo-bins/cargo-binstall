@@ -49,7 +49,12 @@ impl CratesToml<'_> {
     pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
         let mut vec = Vec::new();
         reader.read_to_end(&mut vec)?;
-        Ok(toml::from_slice(&vec)?)
+
+        if vec.is_empty() {
+            Ok(Self::default())
+        } else {
+            toml::from_slice(&vec).map_err(CratesTomlParseError::from)
+        }
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
@@ -244,6 +249,16 @@ mod tests {
             crates.get("cargo-binstall").unwrap(),
             &Version::new(0, 12, 0)
         );
+    }
+
+    #[test]
+    fn test_empty_file() {
+        let tempdir = TempDir::new().unwrap();
+        let path = tempdir.path().join("crates-v1.toml");
+
+        File::create(&path).unwrap();
+
+        assert!(CratesToml::load_from_path(&path).unwrap().v1.is_empty());
     }
 
     #[test]
