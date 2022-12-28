@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use cargo_toml::Manifest;
+use cargo_toml::{Manifest, Value};
 use normalize_path::NormalizePath;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
@@ -84,7 +84,7 @@ fn load_manifest(slice: &[u8], vfs: &Vfs) -> Result<Manifest<Meta>, BinstallErro
     let mut manifest = Manifest::from_slice_with_metadata(slice)?;
 
     // Checks vfs for binary output names
-    manifest.complete_from_abstract_filesystem(vfs)?;
+    manifest.complete_from_abstract_filesystem::<Value, _>(vfs, None)?;
 
     // Return metadata
     Ok(manifest)
