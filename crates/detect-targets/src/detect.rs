@@ -9,7 +9,7 @@ use std::{
 use cfg_if::cfg_if;
 use tokio::process::Command;
 
-use crate::TARGET;
+use crate::CowStr;
 
 cfg_if! {
     if #[cfg(target_os = "linux")] {
@@ -34,14 +34,14 @@ cfg_if! {
 ///
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
-pub async fn detect_targets() -> Vec<String> {
+pub async fn detect_targets() -> Vec<CowStr> {
     #[cfg(target_os = "linux")]
     {
         if let Some(target) = get_target_from_rustc().await {
-            let mut targets = vec![target];
+            let mut targets = vec![CowStr::owned(target)];
 
             if targets[0].contains("gnu") {
-                targets.push(targets[0].replace("gnu", "musl"));
+                targets.push(CowStr::owned(targets[0].replace("gnu", "musl")));
             }
 
             targets
@@ -52,11 +52,12 @@ pub async fn detect_targets() -> Vec<String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        let target = get_target_from_rustc().await.unwrap_or_else(|| {
-            guess_host_triple::guess_host_triple()
-                .unwrap_or(TARGET)
-                .to_string()
-        });
+        let target = get_target_from_rustc()
+            .await
+            .map(CowStr::owned)
+            .unwrap_or_else(|| {
+                CowStr::borrowed(guess_host_triple::guess_host_triple().unwrap_or(crate::TARGET))
+            });
 
         let mut targets = vec![target];
 

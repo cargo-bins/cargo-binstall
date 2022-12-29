@@ -95,7 +95,8 @@ async fn resolve_inner(
                 debug!("Building metadata for target: {target}");
 
                 let target_meta = package_info.meta.merge_overrides(
-                    iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
+                    iter::once(&opts.cli_overrides)
+                        .chain(package_info.overrides.get(target.as_ref())),
                 );
 
                 debug!("Found metadata: {target_meta:?}");

@@ -139,7 +139,7 @@ impl ResolutionSource {
             .arg("--version")
             .arg(version)
             .arg("--target")
-            .arg(target)
+            .arg(target.as_ref())
             .kill_on_drop(true);
 
         if opts.quiet {

@@ -1,6 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use compact_str::CompactString;
+pub use detect_targets::CowStr as Target;
 pub use gh_crate_meta::*;
 pub use quickinstall::*;
 
@@ -68,6 +69,6 @@ pub struct Data {
 /// Target specific data required to fetch a package
 #[derive(Clone, Debug)]
 pub struct TargetData {
-    pub target: String,
+    pub target: Target,
     pub meta: PkgMeta,
 }

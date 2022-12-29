@@ -1,4 +1,4 @@
-use crate::detect_targets;
+use crate::{detect_targets, CowStr};
 
 use std::sync::Arc;
 
@@ -6,15 +6,15 @@ use tokio::sync::OnceCell;
 
 #[derive(Debug)]
 enum DesiredTargetsInner {
-    AutoDetect(Arc<OnceCell<Vec<String>>>),
-    Initialized(Vec<String>),
+    AutoDetect(Arc<OnceCell<Vec<CowStr>>>),
+    Initialized(Vec<CowStr>),
 }
 
 #[derive(Debug)]
 pub struct DesiredTargets(DesiredTargetsInner);
 
 impl DesiredTargets {
-    fn initialized(targets: Vec<String>) -> Self {
+    fn initialized(targets: Vec<CowStr>) -> Self {
         Self(DesiredTargetsInner::Initialized(targets))
     }
 
@@ -29,7 +29,7 @@ impl DesiredTargets {
         Self(DesiredTargetsInner::AutoDetect(arc))
     }
 
-    pub async fn get(&self) -> &[String] {
+    pub async fn get(&self) -> &[CowStr] {
         use DesiredTargetsInner::*;
 
         match &self.0 {
@@ -49,7 +49,7 @@ impl DesiredTargets {
 /// Since `detect_targets` internally spawns a process and wait for it,
 /// it's pretty costy, it is recommended to run this fn ASAP and
 /// reuse the result.
-pub fn get_desired_targets(opts_targets: Option<Vec<String>>) -> DesiredTargets {
+pub fn get_desired_targets(opts_targets: Option<Vec<CowStr>>) -> DesiredTargets {
     if let Some(targets) = opts_targets {
         DesiredTargets::initialized(targets)
     } else {

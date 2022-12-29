@@ -60,7 +60,10 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     }
 
     // Launch target detection
-    let desired_targets = get_desired_targets(args.targets);
+    let desired_targets = get_desired_targets(
+        args.targets
+            .map(|targets| targets.into_iter().map(Into::into).collect()),
+    );
 
     // Computer cli_overrides
     let cli_overrides = PkgOverride {

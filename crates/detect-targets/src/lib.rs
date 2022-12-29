@@ -42,8 +42,8 @@
 //!
 //! assert_eq!(
 //!     get_desired_targets(Some(vec![
-//!         "x86_64-apple-darwin".to_string(),
-//!         "aarch64-apple-darwin".to_string(),
+//!         "x86_64-apple-darwin".to_string().into(),
+//!         "aarch64-apple-darwin".to_string().into(),
 //!     ])).get().await,
 //!     &["x86_64-apple-darwin", "aarch64-apple-darwin"],
 //! );
@@ -72,3 +72,5 @@ pub use desired_targets::{get_desired_targets, DesiredTargets};
 
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");
+
+pub type CowStr = beef::Cow<'static, str>;

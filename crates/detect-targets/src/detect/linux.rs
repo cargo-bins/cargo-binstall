@@ -1,10 +1,10 @@
-use crate::TARGET;
+use crate::{CowStr, TARGET};
 
 use std::process::{Output, Stdio};
 
 use tokio::process::Command;
 
-pub(super) async fn detect_targets_linux() -> Vec<String> {
+pub(super) async fn detect_targets_linux() -> Vec<CowStr> {
     let (abi, libc) = parse_abi_and_libc();
 
     if let Libc::Glibc = libc {
@@ -69,16 +69,16 @@ fn parse_abi_and_libc() -> (&'static str, Libc) {
     }
 }
 
-fn create_target_str(libc_version: &str, abi: &str) -> String {
+fn create_target_str(libc_version: &str, abi: &str) -> CowStr {
     let prefix = TARGET
         .rsplit_once('-')
         .expect("unwrap: TARGET always has a -")
         .0;
 
-    format!("{prefix}-{libc_version}{abi}")
+    CowStr::owned(format!("{prefix}-{libc_version}{abi}"))
 }
 
-fn create_targets_str(libc_versions: &[&str], abi: &str) -> Vec<String> {
+fn create_targets_str(libc_versions: &[&str], abi: &str) -> Vec<CowStr> {
     libc_versions
         .iter()
         .map(|libc_version| create_target_str(libc_version, abi))
