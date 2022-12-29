@@ -9,6 +9,8 @@ use std::{
 use cfg_if::cfg_if;
 use tokio::process::Command;
 
+use crate::TARGET;
+
 cfg_if! {
     if #[cfg(target_os = "linux")] {
         mod linux;
@@ -33,34 +35,40 @@ cfg_if! {
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
 pub async fn detect_targets() -> Vec<String> {
-    if let Some(target) = get_target_from_rustc().await {
-        let mut v = vec![target];
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(target) = get_target_from_rustc().await {
+            let mut targets = vec![target];
+
+            if targets[0].contains("gnu") {
+                targets.push(targets[0].replace("gnu", "musl"));
+            }
+
+            targets
+        } else {
+            linux::detect_targets_linux().await
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let target = get_target_from_rustc().await.unwrap_or_else(|| {
+            guess_host_triple::guess_host_triple()
+                .unwrap_or(TARGET)
+                .to_string()
+        });
+
+        let mut targets = vec![target];
 
         cfg_if! {
-            if #[cfg(target_os = "linux")] {
-                if v[0].contains("gnu") {
-                    v.push(v[0].replace("gnu", "musl"));
-                }
-            } else if #[cfg(target_os = "macos")] {
-                v.extend(macos::detect_alternative_targets(&v[0]));
+            if #[cfg(target_os = "macos")] {
+                targets.extend(macos::detect_alternative_targets(&targets[0]));
             } else if #[cfg(target_os = "windows")] {
-                v.extend(windows::detect_alternative_targets(&v[0]));
+                targets.extend(windows::detect_alternative_targets(&targets[0]));
             }
         }
 
-        v
-    } else {
-        cfg_if! {
-            if #[cfg(target_os = "linux")] {
-                linux::detect_targets_linux().await
-            } else if #[cfg(target_os = "macos")] {
-                macos::detect_targets_macos()
-            } else if #[cfg(target_os = "windows")] {
-                windows::detect_targets_windows()
-            } else {
-                vec![TARGET.into()]
-            }
-        }
+        targets
     }
 }
 
