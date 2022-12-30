@@ -106,7 +106,7 @@ impl CratesToml<'_> {
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
-        let mut file = File::create(path)?;
+        let mut file = FileLock::new_exclusive(File::create(path)?)?;
         self.write_to_file(&mut file)
     }
 
