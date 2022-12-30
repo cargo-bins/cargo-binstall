@@ -85,9 +85,16 @@ impl CratesToml<'_> {
     }
 
     pub fn write_to_writer<W: io::Write>(&self, mut writer: W) -> Result<(), CratesTomlParseError> {
-        let data = toml::to_vec(&self)?;
-        writer.write_all(&data)?;
-        Ok(())
+        fn inner(
+            this: &CratesToml<'_>,
+            writer: &mut dyn io::Write,
+        ) -> Result<(), CratesTomlParseError> {
+            let data = toml::to_vec(&this)?;
+            writer.write_all(&data)?;
+            Ok(())
+        }
+
+        inner(self, &mut writer)
     }
 
     pub fn write_to_file(&self, file: &mut File) -> Result<(), CratesTomlParseError> {
