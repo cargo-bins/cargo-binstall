@@ -1,4 +1,4 @@
-use std::{future::Future, iter, ops::Deref, path::Path, sync::Arc};
+use std::{borrow::Cow, future::Future, iter, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -38,13 +38,13 @@ impl GhCrateMeta {
     fn launch_baseline_find_tasks<'a>(
         &'a self,
         pkg_fmt: PkgFmt,
-        pkg_url: &'a str,
+        pkg_url: Cow<'a, str>,
         repo: Option<&'a str>,
     ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(move |ext| {
             let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
-            match ctx.render_url(pkg_url) {
+            match ctx.render_url(&pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
                     warn!("Failed to render url for {ctx:#?}: {err:#?}");
@@ -131,8 +131,8 @@ impl super::Fetcher for GhCrateMeta {
 
             let launch_baseline_find_tasks = |pkg_fmt| {
                 match &pkg_urls {
-                    Either::Left(pkg_url) => Either::Left(iter::once(*pkg_url)),
-                    Either::Right(pkg_urls) => Either::Right(pkg_urls.iter().map(Deref::deref)),
+                    Either::Left(pkg_url) => Either::Left(iter::once(Cow::Borrowed(*pkg_url))),
+                    Either::Right(pkg_urls) => Either::Right(pkg_urls.clone().map(Cow::Owned)),
                 }
                 .flat_map(move |pkg_url| this.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
             };
