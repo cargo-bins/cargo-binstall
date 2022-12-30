@@ -42,6 +42,8 @@ pub async fn detect_targets() -> Vec<CowStr> {
 
             if targets[0].contains("gnu") {
                 targets.push(CowStr::owned(targets[0].replace("gnu", "musl")));
+            } else if targets[0].contains("android") {
+                targets.push(CowStr::owned(targets[0].replace("android", "musl")));
             }
 
             targets
