@@ -353,6 +353,7 @@ dependencies = [
  "crates_io_api",
  "dirs",
  "embed-resource",
+ "fs-lock",
  "log",
  "miette",
  "mimalloc",
