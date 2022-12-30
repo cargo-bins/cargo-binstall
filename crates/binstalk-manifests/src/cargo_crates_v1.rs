@@ -47,14 +47,18 @@ impl CratesToml<'_> {
     }
 
     pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
-        let mut vec = Vec::new();
-        reader.read_to_end(&mut vec)?;
+        fn inner(reader: &mut dyn io::Read) -> Result<CratesToml<'static>, CratesTomlParseError> {
+            let mut vec = Vec::new();
+            reader.read_to_end(&mut vec)?;
 
-        if vec.is_empty() {
-            Ok(Self::default())
-        } else {
-            toml::from_slice(&vec).map_err(CratesTomlParseError::from)
+            if vec.is_empty() {
+                Ok(CratesToml::default())
+            } else {
+                toml::from_slice(&vec).map_err(CratesTomlParseError::from)
+            }
         }
+
+        inner(&mut reader)
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
