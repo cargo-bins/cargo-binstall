@@ -38,13 +38,13 @@ impl GhCrateMeta {
     fn launch_baseline_find_tasks<'a>(
         &'a self,
         pkg_fmt: PkgFmt,
-        pkg_url: Cow<'a, str>,
+        pkg_url: &'a str,
         repo: Option<&'a str>,
     ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(move |ext| {
             let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
-            match ctx.render_url(&pkg_url) {
+            match ctx.render_url(pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
                     warn!("Failed to render url for {ctx:#?}: {err:#?}");
@@ -135,13 +135,18 @@ impl super::Fetcher for GhCrateMeta {
                 Either::Right(PkgFmt::iter())
             };
 
-            let mut handles: FuturesUnordered<_> = pkg_urls
-                .flat_map(move |pkg_url| {
-                    pkg_fmts.clone().flat_map(move |pkg_fmt| {
-                        this.launch_baseline_find_tasks(pkg_fmt, pkg_url.clone(), repo)
-                    })
-                })
-                .collect();
+            let mut handles = FuturesUnordered::new();
+
+            // Iterate over pkg_urls to avoid String::clone.
+            for pkg_url in pkg_urls {
+                //             Clone iter pkg_fmts to ensure all pkg_fmts is
+                //             iterated over for each pkg_url, which is
+                //             basically cartesian product.
+                //             |
+                for pkg_fmt in pkg_fmts.clone() {
+                    handles.extend(this.launch_baseline_find_tasks(pkg_fmt, &pkg_url, repo));
+                }
+            }
 
             while let Some(res) = handles.next().await {
                 if let Some((url, pkg_fmt)) = res? {
