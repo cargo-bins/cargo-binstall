@@ -21,8 +21,7 @@ impl Manifests {
         fs::create_dir_all(metadata_path.parent().unwrap()).map_err(BinstallError::Io)?;
 
         debug!(
-            "Reading {} from {} and obtaining exclusive lock",
-            "binstall metadata",
+            "Reading binstall metadata from {} and obtaining exclusive lock",
             metadata_path.display()
         );
 
@@ -32,8 +31,7 @@ impl Manifests {
         let manifest_path = cargo_roots.join(".crates.toml");
 
         debug!(
-            "Obtaining exclusive lock of {} in path {}",
-            "cargo install v1 metadata",
+            "Obtaining exclusive lock of cargo install v1 metadata in path {}",
             manifest_path.display()
         );
 
