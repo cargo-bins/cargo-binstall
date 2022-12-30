@@ -84,21 +84,17 @@ pub enum TarEntryType {
 /// Entires can be in arbitary order.
 #[async_trait::async_trait]
 pub trait TarEntriesVisitor: Send + Sync {
-    type Target;
-
     /// Will be called once per entry
     async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError>;
-    fn finish(self) -> Result<Self::Target, DownloadError>;
 }
 
-pub(crate) async fn extract_tar_based_stream_and_visit<S, V>(
+pub(crate) async fn extract_tar_based_stream_and_visit<S>(
     stream: S,
     fmt: TarBasedFmt,
-    mut visitor: V,
-) -> Result<V::Target, DownloadError>
+    visitor: &mut dyn TarEntriesVisitor,
+) -> Result<(), DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync,
-    V: TarEntriesVisitor,
 {
     debug!("Extracting from {fmt} archive to process it in memory");
 
@@ -125,5 +121,5 @@ where
         copy(&mut entry, &mut sink).await?;
     }
 
-    visitor.finish()
+    Ok(())
 }
