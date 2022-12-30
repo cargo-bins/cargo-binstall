@@ -58,6 +58,10 @@ impl Manifests {
             .map_err(Error::from)
     }
 
+    /// `cargo-uninstall` can be called to uninstall crates,
+    /// but it only updates .crates.toml.
+    ///
+    /// So here we will honour .crates.toml only.
     pub fn load_installed_crates(&mut self) -> Result<BTreeMap<CompactString, Version>> {
         self.rewind_cargo_crates_v1()?;
 
