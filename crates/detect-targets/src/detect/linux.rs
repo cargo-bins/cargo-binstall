@@ -2,43 +2,58 @@ use crate::{CowStr, TARGET};
 
 use std::process::{Output, Stdio};
 
+use guess_host_triple::guess_host_triple;
 use tokio::process::Command;
 
 pub(super) async fn detect_targets_linux() -> Vec<CowStr> {
-    let (abi, libc) = parse_abi_and_libc();
+    let target = guess_host_triple().unwrap_or(TARGET);
 
-    if let Libc::Glibc = libc {
-        // Glibc can only be dynamically linked.
-        // If we can run this binary, then it means that the target
-        // supports both glibc and musl.
-        return create_targets_str(&["gnu", "musl"], abi);
+    let (prefix, postfix) = target
+        .rsplit_once('-')
+        .expect("unwrap: target always has a -");
+
+    let (abi, libc) = if let Some(abi) = postfix.strip_prefix("musl") {
+        (abi, Libc::Musl)
+    } else if let Some(abi) = postfix.strip_prefix("gnu") {
+        (abi, Libc::Gnu)
+    } else if let Some(abi) = postfix.strip_prefix("android") {
+        (abi, Libc::Android)
+    } else {
+        (postfix, Libc::Unknown)
+    };
+
+    let musl_fallback_target = || CowStr::owned(format!("{prefix}-{}{abi}", "musl"));
+
+    match libc {
+        Libc::Gnu => {
+            // guess_host_triple cannot detect whether the system is using glibc,
+            // musl libc or other libc.
+            //
+            // As such, we need to launch the test ourselves.
+            if supports_gnu().await {
+                vec![CowStr::borrowed(target), musl_fallback_target()]
+            } else {
+                vec![musl_fallback_target()]
+            }
+        }
+        Libc::Android => vec![CowStr::borrowed(target), musl_fallback_target()],
+
+        _ => vec![CowStr::borrowed(target)],
     }
+}
 
-    if let Ok(Output {
-        status: _,
-        stdout,
-        stderr,
-    }) = Command::new("ldd")
+async fn supports_gnu() -> bool {
+    Command::new("ldd")
         .arg("--version")
         .stdin(Stdio::null())
         .output()
         .await
-    {
-        let libc_version = if let Some(libc_version) = parse_libc_version_from_ldd_output(&stdout) {
-            libc_version
-        } else if let Some(libc_version) = parse_libc_version_from_ldd_output(&stderr) {
-            libc_version
-        } else {
-            return vec![create_target_str("musl", abi)];
-        };
-
-        if libc_version == "gnu" {
-            return create_targets_str(&["gnu", "musl"], abi);
-        }
-    }
-
-    // Fallback to using musl
-    vec![create_target_str("musl", abi)]
+        .ok()
+        .and_then(|Output { stdout, stderr, .. }| {
+            parse_libc_version_from_ldd_output(&stdout)
+                .or_else(|| parse_libc_version_from_ldd_output(&stderr))
+        })
+        == Some("gnu")
 }
 
 fn parse_libc_version_from_ldd_output(output: &[u8]) -> Option<&'static str> {
@@ -53,34 +68,8 @@ fn parse_libc_version_from_ldd_output(output: &[u8]) -> Option<&'static str> {
 }
 
 enum Libc {
-    Glibc,
+    Gnu,
     Musl,
-}
-
-fn parse_abi_and_libc() -> (&'static str, Libc) {
-    let last = TARGET.rsplit_once('-').unwrap().1;
-
-    if let Some(libc_version) = last.strip_prefix("musl") {
-        (libc_version, Libc::Musl)
-    } else if let Some(libc_version) = last.strip_prefix("gnu") {
-        (libc_version, Libc::Glibc)
-    } else {
-        panic!("Unrecognized libc")
-    }
-}
-
-fn create_target_str(libc_version: &str, abi: &str) -> CowStr {
-    let prefix = TARGET
-        .rsplit_once('-')
-        .expect("unwrap: TARGET always has a -")
-        .0;
-
-    CowStr::owned(format!("{prefix}-{libc_version}{abi}"))
-}
-
-fn create_targets_str(libc_versions: &[&str], abi: &str) -> Vec<CowStr> {
-    libc_versions
-        .iter()
-        .map(|libc_version| create_target_str(libc_version, abi))
-        .collect()
+    Android,
+    Unknown,
 }
