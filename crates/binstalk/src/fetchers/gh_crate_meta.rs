@@ -3,6 +3,7 @@ use std::{borrow::Cow, future::Future, iter, path::Path, sync::Arc};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use futures_util::stream::{FuturesUnordered, StreamExt};
+use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use strum::IntoEnumIterator;
@@ -44,16 +45,21 @@ impl GhCrateMeta {
         repo: Option<&'a str>,
     ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
         // build up list of potential URLs
-        let urls = pkg_fmt.extensions().iter().filter_map(move |ext| {
-            let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
-            match ctx.render_url_with_compiled_tt(tt, pkg_url) {
-                Ok(url) => Some(url),
-                Err(err) => {
-                    warn!("Failed to render url for {ctx:#?}: {err:#?}");
-                    None
+        let urls = pkg_fmt
+            .extensions()
+            .iter()
+            .filter_map(move |ext| {
+                let ctx =
+                    Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
+                match ctx.render_url_with_compiled_tt(tt, pkg_url) {
+                    Ok(url) => Some(url),
+                    Err(err) => {
+                        warn!("Failed to render url for {ctx:#?}: {err:#?}");
+                        None
+                    }
                 }
-            }
-        });
+            })
+            .dedup();
 
         // go check all potential URLs at once
         urls.map(move |url| {
