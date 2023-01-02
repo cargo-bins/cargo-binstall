@@ -35,16 +35,18 @@ pub struct GhCrateMeta {
 type FindTaskRes = Result<Option<(Url, PkgFmt)>, BinstallError>;
 
 impl GhCrateMeta {
+    /// * `tt` - must have added a template named "path".
     fn launch_baseline_find_tasks<'a>(
         &'a self,
         pkg_fmt: PkgFmt,
+        tt: &'a TinyTemplate,
         pkg_url: &'a str,
         repo: Option<&'a str>,
     ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
         // build up list of potential URLs
         let urls = pkg_fmt.extensions().iter().filter_map(move |ext| {
             let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
-            match ctx.render_url(pkg_url) {
+            match ctx.render_url_with_compiled_tt(tt, pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
                     warn!("Failed to render url for {ctx:#?}: {err:#?}");
@@ -139,12 +141,16 @@ impl super::Fetcher for GhCrateMeta {
 
             // Iterate over pkg_urls first to avoid String::clone.
             for pkg_url in pkg_urls {
+                let mut tt = TinyTemplate::new();
+
+                tt.add_template("path", &pkg_url)?;
+
                 //             Clone iter pkg_fmts to ensure all pkg_fmts is
                 //             iterated over for each pkg_url, which is
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    handles.extend(this.launch_baseline_find_tasks(pkg_fmt, &pkg_url, repo));
+                    handles.extend(this.launch_baseline_find_tasks(pkg_fmt, &tt, &pkg_url, repo));
                 }
             }
 
@@ -266,12 +272,21 @@ impl<'c> Context<'c> {
         Self::from_data_with_repo(data, target, archive_format, data.repo.as_deref())
     }
 
-    pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
+    pub(self) fn render_url_with_compiled_tt(
+        &self,
+        tt: &TinyTemplate,
+        template: &str,
+    ) -> Result<Url, BinstallError> {
         debug!("Render {template:?} using context: {:?}", self);
 
+        Ok(Url::parse(&tt.render("path", self)?)?)
+    }
+
+    #[cfg(test)]
+    pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
         let mut tt = TinyTemplate::new();
         tt.add_template("path", template)?;
-        Ok(Url::parse(&tt.render("path", self)?)?)
+        self.render_url_with_compiled_tt(&tt, template)
     }
 }
 
