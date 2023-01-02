@@ -35,7 +35,7 @@ pub struct GhCrateMeta {
 type FindTaskRes = Result<Option<(Url, PkgFmt)>, BinstallError>;
 
 impl GhCrateMeta {
-    /// * `tt` - must have added a template named "path".
+    /// * `tt` - must have added a template named "pkg_url".
     fn launch_baseline_find_tasks<'a>(
         &'a self,
         pkg_fmt: PkgFmt,
@@ -143,7 +143,7 @@ impl super::Fetcher for GhCrateMeta {
             for pkg_url in pkg_urls {
                 let mut tt = TinyTemplate::new();
 
-                tt.add_template("path", &pkg_url)?;
+                tt.add_template("pkg_url", &pkg_url)?;
 
                 //             Clone iter pkg_fmts to ensure all pkg_fmts is
                 //             iterated over for each pkg_url, which is
@@ -272,20 +272,21 @@ impl<'c> Context<'c> {
         Self::from_data_with_repo(data, target, archive_format, data.repo.as_deref())
     }
 
+    /// * `tt` - must have added a template named "pkg_url".
     pub(self) fn render_url_with_compiled_tt(
         &self,
         tt: &TinyTemplate,
         template: &str,
     ) -> Result<Url, BinstallError> {
-        debug!("Render {template:?} using context: {:?}", self);
+        debug!("Render {template} using context: {self:?}");
 
-        Ok(Url::parse(&tt.render("path", self)?)?)
+        Ok(Url::parse(&tt.render("pkg_url", self)?)?)
     }
 
     #[cfg(test)]
     pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
         let mut tt = TinyTemplate::new();
-        tt.add_template("path", template)?;
+        tt.add_template("pkg_url", template)?;
         self.render_url_with_compiled_tt(&tt, template)
     }
 }
