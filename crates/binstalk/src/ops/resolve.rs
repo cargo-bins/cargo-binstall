@@ -11,6 +11,7 @@ use compact_str::{CompactString, ToCompactString};
 use crates_io_api::AsyncClient as CratesIoApiClient;
 use itertools::Itertools;
 use semver::{Version, VersionReq};
+use tinytemplate::TinyTemplate;
 use tokio::task::block_in_place;
 use tracing::{debug, info, instrument, warn};
 
@@ -296,11 +297,15 @@ fn collect_bin_files(
         .map(Cow::Borrowed)
         .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data));
 
+    let mut tt = TinyTemplate::new();
+
+    tt.add_template("bin_dir", &bin_dir)?;
+
     // Create bin_files
     let bin_files = package_info
         .binaries
         .iter()
-        .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &bin_dir, no_symlinks))
+        .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &tt, no_symlinks))
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let mut source_set = BTreeSet::new();
