@@ -137,7 +137,7 @@ impl super::Fetcher for GhCrateMeta {
 
             let mut handles = FuturesUnordered::new();
 
-            // Iterate over pkg_urls to avoid String::clone.
+            // Iterate over pkg_urls first to avoid String::clone.
             for pkg_url in pkg_urls {
                 //             Clone iter pkg_fmts to ensure all pkg_fmts is
                 //             iterated over for each pkg_url, which is
