@@ -120,13 +120,15 @@ impl BinFile {
         };
 
         // Destination at install dir + base-name{.extension}
-        let basename = if binary_ext.is_empty() {
-            Cow::Borrowed(ctx.bin)
-        } else {
-            Cow::Owned(format!("{}{}", ctx.bin, ctx.binary_ext))
-        };
-
-        let dest = data.install_path.join(&*basename);
+        let mut dest = data.install_path.join(ctx.bin);
+        if !binary_ext.is_empty() {
+            // Trim the starting "."
+            //
+            // PathBuf::set_extension returns false if Path::file_name
+            // is None, but we know that the file name must be Some,
+            // thus we assert! the return value here.
+            assert!(dest.set_extension(&binary_ext[1..]));
+        }
 
         let (dest, link) = if no_symlinks {
             (dest, None)
