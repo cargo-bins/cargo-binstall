@@ -15,7 +15,7 @@ pub struct Manifests {
 }
 
 impl Manifests {
-    pub fn open_exlusive(cargo_roots: &Path) -> Result<Self> {
+    pub fn open_exclusive(cargo_roots: &Path) -> Result<Self> {
         // Read cargo_binstall_metadata
         let metadata_path = cargo_roots.join("binstall/crates-v1.json");
         fs::create_dir_all(metadata_path.parent().unwrap()).map_err(BinstallError::Io)?;

@@ -212,7 +212,7 @@ fn compute_paths_and_load_manifests(
 
         // Load manifests
         let manifests = if !custom_install_path {
-            Some(Manifests::open_exlusive(&cargo_roots)?)
+            Some(Manifests::open_exclusive(&cargo_roots)?)
         } else {
             None
         };
