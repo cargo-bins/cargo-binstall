@@ -47,14 +47,18 @@ impl CratesToml<'_> {
     }
 
     pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
-        let mut vec = Vec::new();
-        reader.read_to_end(&mut vec)?;
+        fn inner(reader: &mut dyn io::Read) -> Result<CratesToml<'static>, CratesTomlParseError> {
+            let mut vec = Vec::new();
+            reader.read_to_end(&mut vec)?;
 
-        if vec.is_empty() {
-            Ok(Self::default())
-        } else {
-            toml::from_slice(&vec).map_err(CratesTomlParseError::from)
+            if vec.is_empty() {
+                Ok(CratesToml::default())
+            } else {
+                toml::from_slice(&vec).map_err(CratesTomlParseError::from)
+            }
         }
+
+        inner(&mut reader)
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
@@ -81,9 +85,16 @@ impl CratesToml<'_> {
     }
 
     pub fn write_to_writer<W: io::Write>(&self, mut writer: W) -> Result<(), CratesTomlParseError> {
-        let data = toml::to_vec(&self)?;
-        writer.write_all(&data)?;
-        Ok(())
+        fn inner(
+            this: &CratesToml<'_>,
+            writer: &mut dyn io::Write,
+        ) -> Result<(), CratesTomlParseError> {
+            let data = toml::to_vec(&this)?;
+            writer.write_all(&data)?;
+            Ok(())
+        }
+
+        inner(self, &mut writer)
     }
 
     pub fn write_to_file(&self, file: &mut File) -> Result<(), CratesTomlParseError> {
@@ -95,7 +106,7 @@ impl CratesToml<'_> {
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
-        let mut file = File::create(path)?;
+        let mut file = FileLock::new_exclusive(File::create(path)?)?;
         self.write_to_file(&mut file)
     }
 
