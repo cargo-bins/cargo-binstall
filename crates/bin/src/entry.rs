@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs, io, path::PathBuf, sync::Arc, time::Duration};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use binstalk::{
     errors::BinstallError,
@@ -11,12 +11,7 @@ use binstalk::{
         Resolver,
     },
 };
-use binstalk_manifests::{
-    binstall_crates_v1::Records as BinstallCratesV1Records,
-    cargo_crates_v1::{CratesToml, CratesTomlParseError},
-    cargo_toml_binstall::PkgOverride,
-    CompactString, Version,
-};
+use binstalk_manifests::cargo_toml_binstall::PkgOverride;
 use crates_io_api::AsyncClient as CratesIoApiClient;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
@@ -26,6 +21,7 @@ use tracing::{debug, error, info, warn};
 use crate::{
     args::{Args, Strategy},
     install_path,
+    manifests::Manifests,
     ui::confirm,
 };
 
@@ -47,12 +43,12 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         .collect();
 
     // Compute paths
-    let (install_path, cargo_roots, metadata, temp_dir) =
+    let (install_path, mut manifests, temp_dir) =
         compute_paths_and_load_manifests(args.roots, args.install_path)?;
 
     // Remove installed crates
     let mut crate_names =
-        filter_out_installed_crates(args.crate_names, args.force, metadata.as_ref()).peekable();
+        filter_out_installed_crates(args.crate_names, args.force, manifests.as_mut())?.peekable();
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
@@ -160,21 +156,8 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
                     .map(|fetch| fetch.install(&binstall_opts))
                     .collect::<Result<Vec<_>, BinstallError>>()?;
 
-                if let Some((mut cargo_binstall_metadata, _)) = metadata {
-                    // The cargo manifest path is already created when loading
-                    // metadata.
-
-                    debug!("Writing .crates.toml");
-                    CratesToml::append_to_path(
-                        cargo_roots.join(".crates.toml"),
-                        metadata_vec.iter(),
-                    )?;
-
-                    debug!("Writing binstall/crates-v1.json");
-                    for metadata in metadata_vec {
-                        cargo_binstall_metadata.replace(metadata);
-                    }
-                    cargo_binstall_metadata.overwrite()?;
+                if let Some(manifests) = manifests {
+                    manifests.update(metadata_vec)?;
                 }
 
                 if no_cleanup {
@@ -205,13 +188,11 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     Ok(())
 }
 
-type Metadata = (BinstallCratesV1Records, BTreeMap<CompactString, Version>);
-
-/// Return (install_path, cargo_roots, metadata, temp_dir)
+/// Return (install_path, manifests, temp_dir)
 fn compute_paths_and_load_manifests(
     roots: Option<PathBuf>,
     install_path: Option<PathBuf>,
-) -> Result<(PathBuf, PathBuf, Option<Metadata>, tempfile::TempDir)> {
+) -> Result<(PathBuf, Option<Manifests>, tempfile::TempDir)> {
     block_in_place(|| {
         // Compute cargo_roots
         let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
@@ -229,42 +210,9 @@ fn compute_paths_and_load_manifests(
         fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
         debug!("Using install path: {}", install_path.display());
 
-        // Load metadata
-        let metadata = if !custom_install_path {
-            // Read cargo_binstall_metadata
-            let metadata_dir = cargo_roots.join("binstall");
-            fs::create_dir_all(&metadata_dir).map_err(BinstallError::Io)?;
-            let manifest_path = metadata_dir.join("crates-v1.json");
-
-            debug!(
-                "Reading {} from {}",
-                "cargo_binstall_metadata",
-                manifest_path.display()
-            );
-
-            let cargo_binstall_metadata = BinstallCratesV1Records::load_from_path(&manifest_path)?;
-
-            // Read cargo_install_v1_metadata
-            let manifest_path = cargo_roots.join(".crates.toml");
-
-            debug!(
-                "Reading {} from {}",
-                "cargo_install_v1_metadata",
-                manifest_path.display()
-            );
-
-            let cargo_install_v1_metadata = match CratesToml::load_from_path(&manifest_path) {
-                Ok(metadata) => metadata.collect_into_crates_versions()?,
-                Err(CratesTomlParseError::Io(io_err))
-                    if io_err.kind() == io::ErrorKind::NotFound =>
-                {
-                    // .crates.toml does not exist, create an empty BTreeMap
-                    Default::default()
-                }
-                Err(err) => Err(err)?,
-            };
-
-            Some((cargo_binstall_metadata, cargo_install_v1_metadata))
+        // Load manifests
+        let manifests = if !custom_install_path {
+            Some(Manifests::open_exclusive(&cargo_roots)?)
         } else {
             None
         };
@@ -280,7 +228,7 @@ fn compute_paths_and_load_manifests(
             .map_err(BinstallError::from)
             .wrap_err("Creating a temporary directory failed.")?;
 
-        Ok((install_path, cargo_roots, metadata, temp_dir))
+        Ok((install_path, manifests, temp_dir))
     })
 }
 
@@ -288,18 +236,23 @@ fn compute_paths_and_load_manifests(
 fn filter_out_installed_crates(
     crate_names: Vec<CrateName>,
     force: bool,
-    metadata: Option<&Metadata>,
-) -> impl Iterator<Item = (CrateName, Option<semver::Version>)> + '_ {
-    CrateName::dedup(crate_names)
+    manifests: Option<&mut Manifests>,
+) -> Result<impl Iterator<Item = (CrateName, Option<semver::Version>)> + '_> {
+    let mut installed_crates = manifests
+        .map(Manifests::load_installed_crates)
+        .transpose()?;
+
+    Ok(CrateName::dedup(crate_names)
     .filter_map(move |crate_name| {
         let name = &crate_name.name;
 
-        let curr_version = metadata
-            // `cargo-uninstall` can be called to uninstall crates,
-            // but it only updates .crates.toml.
+        let curr_version = installed_crates
+            .as_mut()
+            // Since crate_name is deduped, every entry of installed_crates
+            // can be visited at most once.
             //
-            // So here we will honour .crates.toml only.
-            .and_then(|metadata| metadata.1.get(name));
+            // So here we take ownership of the version stored to avoid cloning.
+            .and_then(|crates| crates.remove(name));
 
         match (
             force,
@@ -307,7 +260,7 @@ fn filter_out_installed_crates(
             &crate_name.version_req,
         ) {
             (false, Some(curr_version), Some(version_req))
-                if version_req.is_latest_compatible(curr_version) =>
+                if version_req.is_latest_compatible(&curr_version) =>
             {
                 debug!("Bailing out early because we can assume wanted is already installed from metafile");
                 info!("{name} v{curr_version} is already installed, use --force to override");
@@ -316,10 +269,10 @@ fn filter_out_installed_crates(
 
             // The version req is "*" thus a remote upgraded version could exist
             (false, Some(curr_version), None) => {
-                Some((crate_name, Some(curr_version.clone())))
+                Some((crate_name, Some(curr_version)))
             }
 
             _ => Some((crate_name, None)),
         }
-    })
+    }))
 }
