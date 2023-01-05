@@ -413,7 +413,6 @@ impl From<DownloadError> for BinstallError {
             Unzip(zip_error) => zip_error.into(),
             Remote(remote_error) => remote_error.into(),
             Io(io_error) => io_error.into(),
-            UserAbort => BinstallError::UserAbort,
         }
     }
 }
