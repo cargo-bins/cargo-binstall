@@ -39,9 +39,6 @@ pub enum DownloadError {
     /// - Exit: 74
     #[error(transparent)]
     Io(io::Error),
-
-    #[error("installation cancelled by user")]
-    UserAbort,
 }
 
 impl From<io::Error> for DownloadError {
