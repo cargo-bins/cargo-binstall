@@ -21,6 +21,7 @@ pub use url::Url;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
+const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
@@ -50,6 +51,8 @@ impl Client {
     /// * `per` - must not be 0.
     /// * `num_request` - maximum number of requests to be processed for
     ///   each `per` duration.
+    ///
+    /// The Client created would use at least tls 1.2
     pub fn new(
         user_agent: impl AsRef<str>,
         min_tls: Option<tls::Version>,
@@ -62,17 +65,16 @@ impl Client {
             per: Duration,
             num_request: NonZeroU64,
         ) -> Result<Client, Error> {
-            let mut builder = reqwest::ClientBuilder::new()
+            let tls_ver = min_tls
+                .map(|tls| tls.max(DEFAULT_MIN_TLS))
+                .unwrap_or(DEFAULT_MIN_TLS);
+
+            let client = reqwest::ClientBuilder::new()
                 .user_agent(user_agent)
                 .https_only(true)
-                .min_tls_version(tls::Version::TLS_1_2)
-                .tcp_nodelay(false);
-
-            if let Some(ver) = min_tls {
-                builder = builder.min_tls_version(ver);
-            }
-
-            let client = builder.build()?;
+                .min_tls_version(tls_ver)
+                .tcp_nodelay(false)
+                .build()?;
 
             Ok(Client {
                 client: client.clone(),
