@@ -23,6 +23,7 @@ futures-util = { version = "0.3.25", default-features = false, features = ["std"
 home = "0.5.4"
 itertools = "0.10.5"
 jobslot = { version = "0.2.8", features = ["tokio"] }
+maybe-owned = "0.3.4"
 miette = "5.5.0"
 normalize-path = { version = "0.2.0", path = "../normalize-path" }
 once_cell = "1.17.0"
