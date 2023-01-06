@@ -177,6 +177,7 @@ dependencies = [
  "home",
  "itertools",
  "jobslot",
+ "maybe-owned",
  "miette",
  "normalize-path",
  "once_cell",
