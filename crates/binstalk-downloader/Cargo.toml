@@ -29,7 +29,7 @@ reqwest = { version = "0.11.13", features = ["stream", "gzip", "brotli", "deflat
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.3.0"
 thiserror = "1.0.38"
-tokio = { version = "1.23.0", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
+tokio = { version = "1.24.0", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
 tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.4", features = ["io"] }
 tower = { version = "0.4.13", features = ["limit", "util"] }
