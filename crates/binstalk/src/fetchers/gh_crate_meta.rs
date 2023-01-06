@@ -54,7 +54,7 @@ impl GhCrateMeta {
                 match ctx.render_url_with_compiled_tt(tt, pkg_url) {
                     Ok(url) => Some(url),
                     Err(err) => {
-                        warn!("Failed to render url for {ctx:#?}: {err:#?}");
+                        warn!("Failed to render url for {ctx:#?}: {err}");
                         None
                     }
                 }
