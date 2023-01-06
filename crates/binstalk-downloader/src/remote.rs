@@ -41,11 +41,14 @@ pub struct HttpError {
     err: reqwest::Error,
 }
 
-#[derive(Clone, Debug)]
-pub struct Client {
+#[derive(Debug)]
+struct Inner {
     client: reqwest::Client,
-    rate_limit: Arc<Mutex<RateLimit<reqwest::Client>>>,
+    rate_limit: Mutex<RateLimit<reqwest::Client>>,
 }
+
+#[derive(Clone, Debug)]
+pub struct Client(Arc<Inner>);
 
 impl Client {
     /// * `per` - must not be 0.
@@ -76,14 +79,14 @@ impl Client {
                 .tcp_nodelay(false)
                 .build()?;
 
-            Ok(Client {
+            Ok(Client(Arc::new(Inner {
                 client: client.clone(),
-                rate_limit: Arc::new(Mutex::new(
+                rate_limit: Mutex::new(
                     ServiceBuilder::new()
                         .rate_limit(num_request.get(), per)
                         .service(client),
-                )),
-            })
+                ),
+            })))
         }
 
         inner(user_agent.as_ref(), min_tls, per, num_request)
@@ -91,7 +94,7 @@ impl Client {
 
     /// Return inner reqwest client.
     pub fn get_inner(&self) -> &reqwest::Client {
-        &self.client
+        &self.0.client
     }
 
     async fn send_request_inner(
@@ -110,7 +113,7 @@ impl Client {
             //    the future, then release the lock before
             //    polling the future, which performs network I/O that could
             //    take really long.
-            let future = self.rate_limit.lock().await.ready().await?.call(request);
+            let future = self.0.rate_limit.lock().await.ready().await?.call(request);
 
             let response = future.await?;
 
