@@ -157,6 +157,8 @@ package-dir:
     cp crates/bin/LICENSE packages/prep
     cp README.md packages/prep
 
+# debuginfo won't be there on Linux until https://github.com/rust-lang/cargo/pull/11384
+# lands in Cargo, but we just don't block on it.
 package-prepare: build package-dir
     just get-binary packages/prep
     -just get-debuginfo {{output-filename}} packages/prep
