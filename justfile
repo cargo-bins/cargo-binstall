@@ -70,12 +70,14 @@ cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci
 export RUSTFLAGS := (cargo-gcclibs)
 
 
+ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev"
+    } else if target == "x86_64-unknown-linux-musl" { "musl-tools"
+    } else { "" }
+
 [linux]
 ci-install-deps:
-    {{ if for-release != "" { "exit" } else { "" } }}
-    aptc="apt update && apt install -y --no-install-recommends"
-    {{ if target == "x86_64-unknown-linux-gnu" { "$aptc liblzma-dev libzip-dev libzstd-dev" } else { "" } }}
-    {{ if target == "x86_64-unknown-linux-musl" { "$aptc musl-tools" } else { "" } }}
+    {{ if ci-apt-deps == "" { "exit" } else { "" } }}
+    apt update && apt install -y --no-install-recommends {{ci-apt-deps}}
 
 [macos]
 [windows]
