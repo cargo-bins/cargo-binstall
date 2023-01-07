@@ -226,11 +226,7 @@ pub struct Args {
     ///
     /// Set to `off` to disable logging completely, this will also
     /// disable output from `cargo-install`.
-    #[clap(
-        help_heading = "Meta",
-        long,
-        value_name = "LEVEL"
-    )]
+    #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
     pub log_level: Option<LevelFilter>,
 
     /// Equivalent to setting `log_level` to `off`.
@@ -332,7 +328,12 @@ pub fn parse() -> Args {
     // Load options
     let mut opts = Args::parse_from(args);
 
-    if let (true, Some(log)) = (opts.log_level.is_none(), env::var("BINSTALL_LOG_LEVEL").ok().and_then(|s| s.parse().ok())) {
+    if let (true, Some(log)) = (
+        opts.log_level.is_none(),
+        env::var("BINSTALL_LOG_LEVEL")
+            .ok()
+            .and_then(|s| s.parse().ok()),
+    ) {
         opts.log_level = Some(log);
     } else if opts.quiet {
         opts.log_level = Some(LevelFilter::Off);
