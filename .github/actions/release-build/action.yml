@@ -8,10 +8,13 @@ runs:
       cache-suffix: release
 
   - run: just toolchain rust-src
+    shell: bash
   - run: just ci-install-deps
+    shell: bash
 
   - name: Builds (mac)
     if: runner.os == 'macOS'
+    shell: bash
     run: |
       set -ex
       just target=x86_64-apple-darwin package
@@ -20,6 +23,7 @@ runs:
 
   - name: Builds (linux)
     if: runner.os == 'Linux'
+    shell: bash
     run: |
       set -ex
       just target=x86_64-unknown-linux-gnu package
@@ -31,6 +35,7 @@ runs:
 
   - name: Builds (windows)
     if: runner.os == 'Windows'
+    shell: bash
     run: |
       set -ex
       just target=x86_64-pc-windows-msvc package
