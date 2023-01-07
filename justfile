@@ -78,8 +78,6 @@ ci-install-deps:
     {{ if target == "x86_64-unknown-linux-musl" { "$aptc musl-tools" } else { "" } }}
 
 [macos]
-ci-install-deps:
-
 [windows]
 ci-install-deps:
 
@@ -92,10 +90,14 @@ ci-toolchain version="nightly" components="":
 build:
     {{cargo-bin}} build {{cargo-build-args}}
 
-get-binary:
-    cp {{output-path}} {{output-filename}}
-    -chmod +x {{output-filename}}
-    ls -l {{output-filename}}
+check:
+    {{cargo-bin}} check {{cargo-build-args}}
+
+get-binary output=output-filename:
+    {{ if output =~ "/" { "mkdir -p " + parent_directory(output) } else { "" } }}
+    cp {{output-path}} {{output}}
+    -chmod +x {{output}}
+    ls -l {{output}}
 
 e2e-test-live:
     bash e2e-tests/live.sh {{output-filename}}
@@ -131,3 +133,25 @@ fmt-check:
     cargo fmt --all -- --check
 
 lint: clippy fmt-check
+
+package-dir:
+    mkdir -p packages
+
+[linux]
+package: build get-binary package-dir
+    tar cv {{output-filename}} | gzip -9 > "packages/cargo-binstall-{{target}}.tgz"
+
+[macos]
+[windows]
+package: build get-binary package-dir
+    zip -9 "packages/cargo-binstall-{{target}}.zip" {{output-filename}}
+
+[macos]
+package-lipo: lipo package-dir
+    zip -9 "packages/cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
+
+[macos]
+lipo:
+    just target=aarch64-apple-darwin build get-binary=arm64/{{output-filename}}
+    just target=x86_64-apple-darwin build get-binary=x64/{{output-filename}}
+    lipo -create -output {{output-filename}} arm64/{{output-filename}} x64/{{output-filename}}

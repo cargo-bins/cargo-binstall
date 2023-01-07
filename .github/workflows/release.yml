@@ -49,30 +49,67 @@ jobs:
         custom_tag: ${{ needs.info.outputs.version }}
         tag_prefix: ''
 
-  build:
-    if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
-    needs: info # not really, but just so it fails fast
-    uses: ./.github/workflows/build.yml
-    with:
-      for_release: true
-
-  release:
+  package:
     if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
     needs:
-      - info
-      - tag
-      - build
-    name: Package and release
-    runs-on: ubuntu-latest
+    - info
+    - tag
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_UNSTABLE_SPARSE_REGISTRY: "true"
+      JUST_FOR_RELEASE: true
+
     steps:
     - uses: actions/checkout@v3
-    - name: Get outputs
-      uses: actions/download-artifact@v3
+    - name: Install just
+      uses: taiki-e/install-action@v2
       with:
-        path: outputs/
+        tool: just
 
-    - name: Pack archives
-      run: .github/scripts/pack-release-archives.sh
+    - name: Configure caching
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+    - run: just ci-toolchain
+    - run: just ci-install-deps
+
+    - name: Builds (mac)
+      if: runner.os == 'macOS'
+      run: |
+        set -ex
+        just target=x86_64-apple-darwin package
+        just target=aarch64-apple-darwin package
+        just package-lipo
+
+    - name: Builds (linux)
+      if: runner.os == 'Linux'
+      run: |
+        set -ex
+        just target=x86_64-unknown-linux-gnu package
+        just target=x86_64-unknown-linux-musl package
+        just use-cross=true target=armv7-unknown-linux-musleabihf package
+        just use-cross=true target=armv7-unknown-linux-gnueabihf package
+        just use-cross=true target=aarch64-unknown-linux-musl package
+        just use-cross=true target=aarch64-unknown-linux-gnu package
+
+    - name: Builds (windows)
+      if: runner.os == 'Windows'
+      run: |
+        set -ex
+        just target=x86_64-pc-windows-msvc package
+        just target=aarch64-pc-windows-msvc package
 
     - name: Publish release
       uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
@@ -80,9 +117,8 @@ jobs:
         tag_name: ${{ needs.info.outputs.version }}
         name: ${{ needs.info.outputs.version }}
         body: ${{ needs.info.outputs.notes }}
-        append_body: true
+        append_body: false
         files: |
-          outputs/cargo-binstall-*.zip
-          outputs/cargo-binstall-*.tgz
+          packages/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

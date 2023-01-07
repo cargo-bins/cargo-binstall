@@ -41,6 +41,46 @@ jobs:
     - run: just ci-install-deps
     - run: just test
 
+  linux-cross-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+        - armv7-unknown-linux-musleabihf
+        - armv7-unknown-linux-gnueabihf
+        - aarch64-unknown-linux-musl
+        - aarch64-unknown-linux-gnu
+
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
+    - run: just ci-toolchain
+    - run: just ci-install-deps
+    - run: just check
+
+  apple-m1:
+    runs-on: macos-latest
+    env:
+      CARGO_BUILD_TARGET: aarch64-apple-darwin
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just
+
+    - run: just ci-toolchain
+    - run: just check
+
   lint:
     strategy:
       fail-fast: false
