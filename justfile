@@ -110,10 +110,11 @@ check:
 get-output file outdir=".":
     [[ -d "{{outdir}}" ]] || mkdir -p {{outdir}}
     cp -r {{ output-folder / file }} {{outdir}}/{{file}}
-    -chmod +x {{outdir}}/{{file}}
     -ls -l {{outdir}}/{{file}}
 
 get-binary outdir=".": (get-output output-filename outdir)
+    -chmod +x {{ outdir / output-filename }}
+
 get-debuginfo file outdir=".": (get-output (file_stem(file) + debuginfo-ext) outdir)
 
 e2e-test file *arguments: (get-binary "e2e-tests")
@@ -157,14 +158,23 @@ package-dir:
     cp crates/bin/LICENSE packages/prep
     cp README.md packages/prep
 
-# debuginfo won't be there on Linux until https://github.com/rust-lang/cargo/pull/11384
-# lands in Cargo, but we just don't block on it.
+[windows]
+[macos]
 package-prepare: build package-dir
     just get-binary packages/prep
     -just get-debuginfo {{output-filename}} packages/prep
 
     just get-output detect-wasi{{output-ext}} packages/prep
     -just get-debuginfo detect-wasi{{output-ext}} packages/prep
+
+# this split is needed until https://github.com/rust-lang/cargo/pull/11384 lands
+[linux]
+package-prepare: build package-dir
+    just get-binary packages/prep
+    -cp {{output-folder}}/deps/cargo_binstall-*.dwp packages/prep/cargo-binstall.dwp
+
+    just get-output detect-wasi{{output-ext}} packages/prep
+    -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect-wasi.dwp
 
 [macos]
 lipo-prepare: package-dir
