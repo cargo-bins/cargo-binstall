@@ -85,6 +85,7 @@ ci-install-deps:
 
 ci-toolchain components="":
     rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
+    {{ if ci != "" { "rustup default nightly" } else { "" } }}
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
 
