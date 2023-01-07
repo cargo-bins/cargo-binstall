@@ -99,6 +99,17 @@ jobs:
     - run: just ci-install-deps
     - run: just lint
 
+  # Dummy job to have a stable name for the "all tests pass" requirement
+  tests-pass: Tests pass
+    needs:
+    - test
+    - linux-cross-check
+    - apple-m1-check
+    - lint
+    runs-on: ubuntu-latest
+    steps:
+    - run: echo "Tests pass"
+
   # if everything succeeds, test the release/package process
   release-builds:
     needs:
