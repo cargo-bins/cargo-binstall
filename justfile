@@ -83,9 +83,9 @@ ci-install-deps:
 [windows]
 ci-install-deps:
 
-ci-toolchain components="":
+toolchain components="":
     rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
-    {{ if ci != "" { "rustup default nightly" } else { "" } }}
+    {{ if ci != "" { "rustup default nightly" } else { "rustup override set nightly" } }}
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
 
