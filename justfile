@@ -7,6 +7,8 @@ extra-features := env_var_or_default("JUST_EXTRA_FEATURES", "")
 default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
 override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
 
+export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
+
 # target information
 target-host := `rustc -vV | grep host: | cut -d ' ' -f 2`
 target := env_var_or_default("CARGO_BUILD_TARGET", target-host)
