@@ -30,6 +30,7 @@ runs:
     run: |
       set -ex
       just target=x86_64-unknown-linux-gnu package
+      just target=x86_64-unknown-linux-musl ci-install-deps
       just target=x86_64-unknown-linux-musl package
       just use-cross=true target=armv7-unknown-linux-musleabihf package
       just use-cross=true target=armv7-unknown-linux-gnueabihf package
