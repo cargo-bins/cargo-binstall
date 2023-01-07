@@ -7,10 +7,16 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install just
+    - if: inputs.tools == ''
+      name: Install just
       uses: taiki-e/install-action@v2
       with:
-        tool: "${{ join(['just', inputs.tools], ',') }}"
+        tool: just
+    - if: inputs.tools != ''
+      name: Install just and tools
+      uses: taiki-e/install-action@v2
+      with:
+        tool: just,${{ inputs.tools }}
 
     - name: Configure index cache
       uses: actions/cache@v3
