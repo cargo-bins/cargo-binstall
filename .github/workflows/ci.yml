@@ -100,7 +100,8 @@ jobs:
     - run: just lint
 
   # Dummy job to have a stable name for the "all tests pass" requirement
-  tests-pass: Tests pass
+  tests-pass:
+    name: Tests pass
     needs:
     - test
     - linux-cross-check
