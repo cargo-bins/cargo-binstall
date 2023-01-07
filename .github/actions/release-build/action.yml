@@ -1,0 +1,37 @@
+name: Build for release
+runs:
+  using: composite
+  steps:
+  - uses: ./.github/actions/just-setup
+    with:
+      tools: cross
+      cache-suffix: release
+
+  - run: just toolchain rust-src
+  - run: just ci-install-deps
+
+  - name: Builds (mac)
+    if: runner.os == 'macOS'
+    run: |
+      set -ex
+      just target=x86_64-apple-darwin package
+      just target=aarch64-apple-darwin package
+      just package-lipo
+
+  - name: Builds (linux)
+    if: runner.os == 'Linux'
+    run: |
+      set -ex
+      just target=x86_64-unknown-linux-gnu package
+      just target=x86_64-unknown-linux-musl package
+      just use-cross=true target=armv7-unknown-linux-musleabihf package
+      just use-cross=true target=armv7-unknown-linux-gnueabihf package
+      just use-cross=true target=aarch64-unknown-linux-musl package
+      just use-cross=true target=aarch64-unknown-linux-gnu package
+
+  - name: Builds (windows)
+    if: runner.os == 'Windows'
+    run: |
+      set -ex
+      just target=x86_64-pc-windows-msvc package
+      just target=aarch64-pc-windows-msvc package
