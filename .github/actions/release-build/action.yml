@@ -20,8 +20,8 @@ runs:
     shell: bash
     run: |
       set -ex
-      just target=x86_64-apple-darwin package
-      just target=aarch64-apple-darwin package
+      CARGO_BUILD_TARGET=x86_64-apple-darwin just package
+      CARGO_BUILD_TARGET=aarch64-apple-darwin just package
       just package-lipo
 
   - name: Builds (linux)
@@ -29,18 +29,19 @@ runs:
     shell: bash
     run: |
       set -ex
-      just target=x86_64-unknown-linux-gnu package
-      just target=x86_64-unknown-linux-musl ci-install-deps
-      just target=x86_64-unknown-linux-musl package
-      just use-cross=true target=armv7-unknown-linux-musleabihf package
-      just use-cross=true target=armv7-unknown-linux-gnueabihf package
-      just use-cross=true target=aarch64-unknown-linux-musl package
-      just use-cross=true target=aarch64-unknown-linux-gnu package
+      CARGO_BUILD_TARGET=x86_64-unknown-linux-musl just ci-install-deps
+
+      CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu just package
+      CARGO_BUILD_TARGET=x86_64-unknown-linux-musl just package
+      JUST_USE_CROSS=true CARGO_BUILD_TARGET=armv7-unknown-linux-musleabihf just package
+      JUST_USE_CROSS=true CARGO_BUILD_TARGET=armv7-unknown-linux-gnueabihf just package
+      JUST_USE_CROSS=true CARGO_BUILD_TARGET=aarch64-unknown-linux-musl just package
+      JUST_USE_CROSS=true CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu just package
 
   - name: Builds (windows)
     if: runner.os == 'Windows'
     shell: bash
     run: |
       set -ex
-      just target=x86_64-pc-windows-msvc package
-      just target=aarch64-pc-windows-msvc package
+      CARGO_BUILD_TARGET=x86_64-pc-windows-msvc just package
+      CARGO_BUILD_TARGET=aarch64-pc-windows-msvc just package
