@@ -2,6 +2,9 @@ name: Build for release
 runs:
   using: composite
   steps:
+  - run: echo "JUST_FOR_RELEASE=true" >> $GITHUB_ENV
+    shell: bash
+
   - uses: ./.github/actions/just-setup
     with:
       tools: cross
