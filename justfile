@@ -148,9 +148,12 @@ package: build get-binary package-dir
     tar cv {{output-filename}} | gzip -9 > "packages/cargo-binstall-{{target}}.tgz"
 
 [macos]
-[windows]
 package: build get-binary package-dir
     zip -9 "packages/cargo-binstall-{{target}}.zip" {{output-filename}}
+
+[windows]
+package: build get-binary package-dir
+    7z a -mx9 "packages/cargo-binstall-{{target}}.zip" {{output-filename}}
 
 [macos]
 package-lipo: lipo package-dir
@@ -158,6 +161,6 @@ package-lipo: lipo package-dir
 
 [macos]
 lipo:
-    just target=aarch64-apple-darwin build get-binary=arm64/{{output-filename}}
-    just target=x86_64-apple-darwin build get-binary=x64/{{output-filename}}
+    just target=aarch64-apple-darwin build get-binary arm64/{{output-filename}}
+    just target=x86_64-apple-darwin build get-binary x64/{{output-filename}}
     lipo -create -output {{output-filename}} arm64/{{output-filename}} x64/{{output-filename}}
