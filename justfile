@@ -107,7 +107,7 @@ check:
     {{cargo-bin}} check {{cargo-build-args}}
 
 get-output file outdir=".":
-    [[ -d "{{outdir}}" ]] || mkdir -p {{outdir}}
+    test -d "{{outdir}}" || mkdir -p {{outdir}}
     cp -r {{ output-folder / file }} {{outdir}}/{{file}}
     -ls -l {{outdir}}/{{file}}
 
