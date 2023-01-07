@@ -16,7 +16,7 @@ cp "./$1" "$othertmpdir/bin/"
 
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
-cargo binstall --log-level debug --no-confirm $crates
+cargo binstall --no-confirm $crates
 
 rm -r "$othertmpdir"
 

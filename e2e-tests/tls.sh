@@ -9,7 +9,6 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 "./$1" binstall \
     --force \
-    --log-level debug \
     --min-tls-version "${2:-1.3}" \
     --no-confirm \
     cargo-binstall

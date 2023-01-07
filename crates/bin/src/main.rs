@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use binstalk::helpers::jobserver_client::LazyJobserverClient;
+use log::LevelFilter;
 use tracing::debug;
 
 use cargo_binstall::{
@@ -24,7 +25,7 @@ fn main() -> MainExit {
         println!("{}", env!("CARGO_PKG_VERSION"));
         MainExit::Success(None)
     } else {
-        logging(args.log_level, args.json_output);
+        logging(args.log_level.unwrap_or(LevelFilter::Info), args.json_output);
 
         let start = Instant::now();
 

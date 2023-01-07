@@ -11,7 +11,6 @@ export PATH="$CARGO_HOME/bin:$PATH"
 "./$1" binstall \
     --force \
     --manifest-path "manifests/gitlab-test-Cargo.toml" \
-    --log-level debug \
     --no-confirm \
     --disable-strategies compile \
     cargo-binstall
@@ -20,7 +19,6 @@ export PATH="$CARGO_HOME/bin:$PATH"
 "./$1" binstall \
     --force \
     --manifest-path "manifests/bitbucket-test-Cargo.toml" \
-    --log-level debug \
     --no-confirm \
     --disable-strategies compile \
     cargo-binstall
@@ -30,7 +28,6 @@ export PATH="$CARGO_HOME/bin:$PATH"
 "./$1" binstall \
     --force \
     --manifest-path "manifests/github-test-Cargo2.toml" \
-    --log-level debug \
     --no-confirm \
     --disable-strategies compile \
     cargo-binstall
