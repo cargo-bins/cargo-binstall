@@ -1,4 +1,5 @@
 use std::{
+    env,
     ffi::OsString,
     fmt,
     num::{NonZeroU64, ParseIntError},
@@ -331,7 +332,12 @@ pub fn parse() -> Args {
 
     // Load options
     let mut opts = Args::parse_from(args);
-    if opts.quiet {
+
+    if let Some(log) = env::var("BINSTALL_LOG").ok().and_then(|s| s.parse().ok()) {
+        opts.log_level = log;
+    } else if let Some(log) = env::var("CARGO_LOG").ok().and_then(|s| s.parse().ok()) {
+        opts.log_level = log;
+    } else if opts.quiet {
         opts.log_level = LevelFilter::Off;
     }
 
