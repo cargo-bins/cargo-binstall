@@ -101,8 +101,7 @@ get-binary output=output-filename:
     -chmod +x {{output}}
     ls -l {{output}}
 
-e2e-test file *arguments:
-    cp {{output-path}} e2e-tests/{{output-filename}}
+e2e-test file *arguments: (get-binary ("e2e-tests" / output-filename))
     cd e2e-tests && bash {{file}}.sh {{output-filename}} {{arguments}}
 
 e2e-test-live: (e2e-test "live")
