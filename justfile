@@ -154,6 +154,8 @@ lint: clippy fmt-check
 package-dir:
     mkdir -p packages
     rm -rf packages/prep
+    cp crates/bin/LICENSE packages/prep
+    cp README.md packages/prep
 
 package-prepare: build package-dir
     just get-binary packages/prep
@@ -161,9 +163,6 @@ package-prepare: build package-dir
 
     just get-output detect-wasi{{output-ext}} packages/prep
     -just get-debuginfo detect-wasi{{output-ext}} packages/prep
-
-    cp crates/bin/LICENSE packages/prep
-    cp README.md packages/prep
 
 [macos]
 lipo-prepare: package-dir
@@ -176,9 +175,6 @@ lipo-prepare: package-dir
     just target=x86_64-apple-darwin build get-output detect-wasi{{output-ext}} packages/prep/x64
     lipo -create -output packages/prep/detect-wasi{{output-ext}} packages/prep/{arm64,x64}/detect-wasi{{output-ext}}
     -just get-debuginfo detect-wasi{{output-ext}} packages/prep
-
-    cp crates/bin/LICENSE packages/prep
-    cp README.md packages/prep
 
 
 [linux]
