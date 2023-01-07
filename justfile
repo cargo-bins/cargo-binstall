@@ -8,7 +8,7 @@ default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
 override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
 
 # target information
-target-host := `rustc -vV | grep -oP "(?<=host: ).+"`
+target-host := `rustc -vV | grep host: | cut -d ' ' -f 2`
 target := env_var_or_default("CARGO_BUILD_TARGET", target-host)
 target-os := if target =~ "-windows-" { "windows"
     } else if target =~ "darwin" { "macos"
