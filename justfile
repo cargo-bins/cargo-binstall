@@ -74,7 +74,11 @@ cargo-features := trim_end_match(if override-features != "" { override-features
 cargo-split-debuginfo := if for-release != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
 debuginfo-ext := if target-os == "macos" { ".dSYM" } else if target-os == "windows" { ".pdb" } else { ".dwp" }
 
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci != "" { " --locked" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" })
+# for ARM64 Windows, use a patched version of ring
+# this should be unnecessary once ring 0.17 is released
+win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring = { git = "https://github.com/awakecoding/ring", branch = "0.16.20_alpha" }'" } else { "" }
+
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci != "" { " --locked" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
 export RUSTFLAGS := (cargo-gcclibs)
 
 
