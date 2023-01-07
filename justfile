@@ -108,7 +108,7 @@ check:
     {{cargo-bin}} check {{cargo-build-args}}
 
 get-output file outdir=".":
-    mkdir -p {{outdir}}
+    [[ -d "{{outdir}}" ]] || mkdir -p {{outdir}}
     cp -r {{ output-folder / file }} {{outdir}}/{{file}}
     -chmod +x {{outdir}}/{{file}}
     -ls -l {{outdir}}/{{file}}
@@ -152,8 +152,8 @@ fmt-check:
 lint: clippy fmt-check
 
 package-dir:
-    mkdir -p packages
     rm -rf packages/prep
+    mkdir -p packages/prep
     cp crates/bin/LICENSE packages/prep
     cp README.md packages/prep
 
