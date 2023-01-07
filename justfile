@@ -27,6 +27,7 @@ target-libc := if target =~ "gnu" { "gnu"
 output-filename := if target-os == "windows" { "cargo-binstall.exe" } else { "cargo-binstall" }
 output-profile-folder := if for-release != "" { "release" } else { "debug" }
 output-folder := if target != target-host { "target" / target / output-profile-folder
+    } else if $CARGO_BUILD_TARGET != "" { "target" / target / output-profile-folder
     } else { "target" / output-profile-folder }
 output-path := output-folder / output-filename
 
@@ -99,7 +100,7 @@ get-binary output=output-filename:
     {{ if output =~ "/" { "mkdir -p " + parent_directory(output) } else { "" } }}
     cp {{output-path}} {{output}}
     -chmod +x {{output}}
-    ls -l {{output}}
+    -ls -l {{output}}
 
 e2e-test file *arguments: (get-binary ("e2e-tests" / output-filename))
     cd e2e-tests && bash {{file}}.sh {{output-filename}} {{arguments}}
