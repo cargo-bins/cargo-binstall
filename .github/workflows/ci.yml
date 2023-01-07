@@ -37,6 +37,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
     - run: just toolchain
     - run: just ci-install-deps
@@ -62,6 +64,7 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         tools: cross
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
     - run: just toolchain
     - run: just ci-install-deps
@@ -75,6 +78,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
     - run: just toolchain
     - run: just check

@@ -70,6 +70,7 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         tools: cross
+        cache-suffix: release
 
     - run: just toolchain rust-src
     - run: just ci-install-deps

@@ -4,6 +4,10 @@ inputs:
     description: Extra tools
     required: false
     default: ""
+  cache-suffix:
+    description: Suffix for cache key
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -26,8 +30,9 @@ runs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
         restore-keys: |
+          ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}-
           ${{ runner.os }}-cargo-index-
 
     - name: Configure build cache
@@ -35,4 +40,6 @@ runs:
       with:
         path: |
           target/
-        key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
