@@ -70,7 +70,7 @@ jobs:
     - run: just ci-install-deps
     - run: just check
 
-  apple-m1:
+  apple-m1-check:
     runs-on: macos-latest
     env:
       CARGO_BUILD_TARGET: aarch64-apple-darwin
@@ -99,7 +99,7 @@ jobs:
       with:
         tool: just
 
-    - run: just ci-toolchain components=rustfmt,clippy
+    - run: just ci-toolchain rustfmt,clippy
     - run: just ci-install-deps
     - run: just lint
 

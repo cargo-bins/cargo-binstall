@@ -77,16 +77,16 @@ ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev
 [linux]
 ci-install-deps:
     {{ if ci-apt-deps == "" { "exit" } else { "" } }}
-    apt update && apt install -y --no-install-recommends {{ci-apt-deps}}
+    sudo apt update && sudo apt install -y --no-install-recommends {{ci-apt-deps}}
 
 [macos]
 [windows]
 ci-install-deps:
 
-
 ci-toolchain components="":
     rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
     {{ if target != "" { "rustup target add " + target } else { "" } }}
+
 
 build:
     {{cargo-bin}} build {{cargo-build-args}}

@@ -82,7 +82,7 @@ jobs:
           target/
         key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
-    - run: just ci-toolchain
+    - run: just ci-toolchain rust-src
     - run: just ci-install-deps
 
     - name: Builds (mac)
