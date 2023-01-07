@@ -9,8 +9,6 @@ use std::{
 use cfg_if::cfg_if;
 use tokio::process::Command;
 
-use crate::TARGET;
-
 cfg_if! {
     if #[cfg(target_os = "linux")] {
         mod linux;
@@ -56,7 +54,7 @@ pub async fn detect_targets() -> Vec<String> {
     {
         let target = get_target_from_rustc().await.unwrap_or_else(|| {
             guess_host_triple::guess_host_triple()
-                .unwrap_or(TARGET)
+                .unwrap_or(crate::TARGET)
                 .to_string()
         });
 
