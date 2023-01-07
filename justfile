@@ -72,7 +72,6 @@ cargo-features := trim_end_match(if override-features != "" { override-features
 }, ",")
 
 cargo-split-debuginfo := if for-release != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
-debuginfo-ext := if target-os == "macos" { ".dSYM" } else if target-os == "windows" { ".pdb" } else { ".dwp" }
 
 # for ARM64 Windows, use a patched version of ring
 # this should be unnecessary once ring 0.17 is released
@@ -115,8 +114,6 @@ get-output file outdir=".":
 get-binary outdir=".": (get-output output-filename outdir)
     -chmod +x {{ outdir / output-filename }}
 
-get-debuginfo file outdir=".": (get-output (file_stem(file) + debuginfo-ext) outdir)
-
 e2e-test file *arguments: (get-binary "e2e-tests")
     cd e2e-tests && bash {{file}}.sh {{output-filename}} {{arguments}}
 
@@ -158,23 +155,33 @@ package-dir:
     cp crates/bin/LICENSE packages/prep
     cp README.md packages/prep
 
-[windows]
 [macos]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -just get-debuginfo {{output-filename}} packages/prep
+    -just get-output cargo-binstall.dSYM packages/prep
 
     just get-output detect-wasi{{output-ext}} packages/prep
-    -just get-debuginfo detect-wasi{{output-ext}} packages/prep
+    -just get-output detect-wasi.dSYM packages/prep
 
-# this split is needed until https://github.com/rust-lang/cargo/pull/11384 lands
+# when https://github.com/rust-lang/cargo/pull/11384 lands, we can use
+# -just get-output cargo_binstall.dwp packages/prep
+# underscored dwp name needs to remain for debuggers to find the file properly
 [linux]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -cp {{output-folder}}/deps/cargo_binstall-*.dwp packages/prep/cargo-binstall.dwp
+    -cp {{output-folder}}/deps/cargo_binstall-*.dwp packages/prep/cargo_binstall.dwp
 
-    just get-output detect-wasi{{output-ext}} packages/prep
-    -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect-wasi.dwp
+    just get-output detect-wasi packages/prep
+    -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect_wasi.dwp
+
+# underscored pdb name needs to remain for debuggers to find the file properly
+[windows]
+package-prepare: build package-dir
+    just get-binary packages/prep
+    -just get-output cargo_binstall.pdb packages/prep
+
+    just get-output detect-wasi.exe packages/prep
+    -just get-output detect_wasi.pdb packages/prep
 
 # we don't get dSYM bundles for universal binaries; unsure if it's even a thing
 [macos]
