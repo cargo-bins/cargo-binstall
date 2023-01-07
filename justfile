@@ -31,7 +31,7 @@ output-folder := if target != target-host { "target" / target / output-profile-f
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cross != "" { "cross" } else { "cargo" }
+cargo-bin := if use-cross != "" { "cross" } else { "cargo +nightly" }
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
@@ -82,9 +82,8 @@ ci-install-deps:
 ci-install-deps:
 
 
-ci-toolchain version="nightly" components="":
-    rustup toolchain install {{version}} {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
-    rustup default {{version}}
+ci-toolchain components="":
+    rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
 build:
