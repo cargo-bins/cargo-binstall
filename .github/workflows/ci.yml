@@ -114,10 +114,7 @@ jobs:
   # if everything succeeds, test the release/package process
   release-builds:
     needs:
-    - test
-    - linux-cross-check
-    - apple-m1-check
-    - lint
+    - tests-pass
 
     strategy:
       fail-fast: false
