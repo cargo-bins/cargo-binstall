@@ -169,12 +169,12 @@ package-prepare: build package-dir
 lipo-prepare: package-dir
     just target=aarch64-apple-darwin build get-binary packages/prep/arm64
     just target=x86_64-apple-darwin build get-binary packages/prep/x64
-    lipo -create -output packages/prep/{{output-filename}} arm64/{{output-filename}} x64/{{output-filename}}
+    lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64}/{{output-filename}}
     -just get-debuginfo {{output-filename}} packages/prep
 
     just target=aarch64-apple-darwin build get-output detect-wasi{{output-ext}} packages/prep/arm64
     just target=x86_64-apple-darwin build get-output detect-wasi{{output-ext}} packages/prep/x64
-    lipo -create -output packages/prep/{{output-filename}} arm64/{{output-filename}} x64/{{output-filename}}
+    lipo -create -output packages/prep/detect-wasi{{output-ext}} packages/prep/{arm64,x64}/detect-wasi{{output-ext}}
     -just get-debuginfo detect-wasi{{output-ext}} packages/prep
 
     cp crates/bin/LICENSE packages/prep
