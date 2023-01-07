@@ -69,7 +69,7 @@ cargo-features := trim_end_match(if override-features != "" { override-features
     } else { extra-features
 }, ",")
 
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci != "" { " --locked" } else { "" }) + (if target != target-host { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" })
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci != "" { " --locked" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" })
 export RUSTFLAGS := (cargo-gcclibs)
 
 
