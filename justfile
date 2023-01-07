@@ -27,7 +27,7 @@ target-libc := if target =~ "gnu" { "gnu"
 output-filename := if target-os == "windows" { "cargo-binstall.exe" } else { "cargo-binstall" }
 output-profile-folder := if for-release != "" { "release" } else { "debug" }
 output-folder := if target != target-host { "target" / target / output-profile-folder
-    } else if $CARGO_BUILD_TARGET != "" { "target" / target / output-profile-folder
+    } else if (env_var_or_default($CARGO_BUILD_TARGET, "") != "") { "target" / target / output-profile-folder
     } else { "target" / output-profile-folder }
 output-path := output-folder / output-filename
 
