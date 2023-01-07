@@ -67,20 +67,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install just
-      uses: taiki-e/install-action@v2
+    - uses: ./.github/actions/just-setup
       with:
-        tool: just
-
-    - name: Configure caching
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        tools: cross
 
     - run: just toolchain rust-src
     - run: just ci-install-deps

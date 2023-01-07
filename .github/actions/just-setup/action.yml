@@ -1,0 +1,32 @@
+name: Setup tools and cache
+inputs:
+  tools:
+    description: Extra tools
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install just
+      uses: taiki-e/install-action@v2
+      with:
+        tool: "${{ join(['just', inputs.tools], ',') }}"
+
+    - name: Configure index cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-index-
+
+    - name: Configure build cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          target/
+        key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}

@@ -36,10 +36,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install just
-      uses: taiki-e/install-action@v2
-      with:
-        tool: just
+    - uses: ./.github/actions/just-setup
 
     - run: just toolchain
     - run: just ci-install-deps
@@ -62,10 +59,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install just
-      uses: taiki-e/install-action@v2
+    - uses: ./.github/actions/just-setup
       with:
-        tool: just,cross
+        tools: cross
 
     - run: just toolchain
     - run: just ci-install-deps
@@ -78,10 +74,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install just
-      uses: taiki-e/install-action@v2
-      with:
-        tool: just
+    - uses: ./.github/actions/just-setup
 
     - run: just toolchain
     - run: just check
@@ -95,10 +88,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
-    - name: Install just
-      uses: taiki-e/install-action@v2
-      with:
-        tool: just
+    - uses: ./.github/actions/just-setup
 
     - run: just toolchain rustfmt,clippy
     - run: just ci-install-deps
