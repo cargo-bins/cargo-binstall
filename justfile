@@ -176,6 +176,7 @@ package-prepare: build package-dir
     just get-output detect-wasi{{output-ext}} packages/prep
     -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect-wasi.dwp
 
+# we don't get dSYM bundles for universal binaries; unsure if it's even a thing
 [macos]
 lipo-prepare: package-dir
     just target=aarch64-apple-darwin build get-binary packages/prep/arm64
@@ -184,12 +185,12 @@ lipo-prepare: package-dir
     just target=aarch64-apple-darwin get-binary packages/prep/arm64
     just target=x86_64-apple-darwin get-binary packages/prep/x64
     lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64}/{{output-filename}}
-    -just get-debuginfo {{output-filename}} packages/prep
 
     just target=aarch64-apple-darwin get-output detect-wasi{{output-ext}} packages/prep/arm64
     just target=x86_64-apple-darwin get-output detect-wasi{{output-ext}} packages/prep/x64
     lipo -create -output packages/prep/detect-wasi{{output-ext}} packages/prep/{arm64,x64}/detect-wasi{{output-ext}}
-    -just get-debuginfo detect-wasi{{output-ext}} packages/prep
+
+    rm -rf packages/prep/{arm64,x64}
 
 
 [linux]
