@@ -26,7 +26,8 @@ target-libc := if target =~ "gnu" { "gnu"
     } else { "unknown" }
 
 # build output location
-output-filename := if target-os == "windows" { "cargo-binstall.exe" } else { "cargo-binstall" }
+output-ext := if target-os == "windows" { ".exe" } else { "" }
+output-filename := "cargo-binstall" + output-ext
 output-profile-folder := if for-release != "" { "release" } else { "debug" }
 output-folder := if target != target-host { "target" / target / output-profile-folder
     } else if env_var_or_default("CARGO_BUILD_TARGET", "") != "" { "target" / target / output-profile-folder
@@ -70,7 +71,10 @@ cargo-features := trim_end_match(if override-features != "" { override-features
     } else { extra-features
 }, ",")
 
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci != "" { " --locked" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" })
+cargo-split-debuginfo := if for-release != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
+debuginfo-ext := if target-os == "macos" { ".dSYM" } else if target-os == "windows" { ".pdb" } else { ".dwp" }
+
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci != "" { " --locked" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" })
 export RUSTFLAGS := (cargo-gcclibs)
 
 
@@ -99,13 +103,16 @@ build:
 check:
     {{cargo-bin}} check {{cargo-build-args}}
 
-get-binary output=output-filename:
-    {{ if output =~ "/" { "mkdir -p " + parent_directory(output) } else { "" } }}
-    cp {{output-path}} {{output}}
-    -chmod +x {{output}}
-    -ls -l {{output}}
+get-output file outdir=".":
+    mkdir -p {{outdir}}
+    cp {{ output-folder / file }} {{outdir}}/{{file}}
+    -chmod +x {{outdir}}/{{file}}
+    -ls -l {{outdir}}/{{file}}
 
-e2e-test file *arguments: (get-binary ("e2e-tests" / output-filename))
+get-binary outdir=".": (get-output output-filename outdir)
+get-debuginfo file outdir=".": (get-output (file_stem(file) + debuginfo-ext) outdir)
+
+e2e-test file *arguments: (get-binary "e2e-tests")
     cd e2e-tests && bash {{file}}.sh {{output-filename}} {{arguments}}
 
 e2e-test-live: (e2e-test "live")
@@ -142,25 +149,50 @@ lint: clippy fmt-check
 
 package-dir:
     mkdir -p packages
+    rm -rf packages/prep
+
+package-prepare: build package-dir
+    just get-binary packages/prep
+    -just get-debuginfo {{output-filename}} packages/prep
+
+    just get-output detect-wasi{{output-ext}} packages/prep
+    -just get-debuginfo detect-wasi{{output-ext}} packages/prep
+
+    cp crates/bin/LICENSE packages/prep
+    cp README.md packages/prep
+
+[macos]
+lipo-prepare: package-dir
+    just target=aarch64-apple-darwin build get-binary packages/prep/arm64
+    just target=x86_64-apple-darwin build get-binary packages/prep/x64
+    lipo -create -output packages/prep/{{output-filename}} arm64/{{output-filename}} x64/{{output-filename}}
+    -just get-debuginfo {{output-filename}} packages/prep
+
+    just target=aarch64-apple-darwin build get-output detect-wasi{{output-ext}} packages/prep/arm64
+    just target=x86_64-apple-darwin build get-output detect-wasi{{output-ext}} packages/prep/x64
+    lipo -create -output packages/prep/{{output-filename}} arm64/{{output-filename}} x64/{{output-filename}}
+    -just get-debuginfo detect-wasi{{output-ext}} packages/prep
+
+    cp crates/bin/LICENSE packages/prep
+    cp README.md packages/prep
+
 
 [linux]
-package: build get-binary package-dir
-    tar cv {{output-filename}} | gzip -9 > "packages/cargo-binstall-{{target}}.tgz"
+package: package-prepare
+    cd packages/prep && tar cv {{output-filename}} | gzip -9 > "../cargo-binstall-{{target}}.tgz"
+    cd packages/prep && tar cv * | gzip -9 > "../cargo-binstall-{{target}}.full.tgz"
 
 [macos]
-package: build get-binary package-dir
-    zip -9 "packages/cargo-binstall-{{target}}.zip" {{output-filename}}
+package: package-prepare
+    cd packages/prep && zip -9 "../cargo-binstall-{{target}}.zip" {{output-filename}}
+    cd packages/prep && zip -9 "../cargo-binstall-{{target}}.full.zip" *
 
 [windows]
-package: build get-binary package-dir
-    7z a -mx9 "packages/cargo-binstall-{{target}}.zip" {{output-filename}}
+package: package-prepare
+    cd packages/prep && 7z a -mx9 "../cargo-binstall-{{target}}.zip" {{output-filename}}
+    cd packages/prep && 7z a -mx9 "../cargo-binstall-{{target}}.full.zip" *
 
 [macos]
-package-lipo: lipo package-dir
-    zip -9 "packages/cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
-
-[macos]
-lipo:
-    just target=aarch64-apple-darwin build get-binary arm64/{{output-filename}}
-    just target=x86_64-apple-darwin build get-binary x64/{{output-filename}}
-    lipo -create -output {{output-filename}} arm64/{{output-filename}} x64/{{output-filename}}
+package-lipo: lipo-prepare
+    cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
+    cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
