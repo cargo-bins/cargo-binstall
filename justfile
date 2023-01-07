@@ -109,7 +109,7 @@ check:
 
 get-output file outdir=".":
     mkdir -p {{outdir}}
-    cp {{ output-folder / file }} {{outdir}}/{{file}}
+    cp -r {{ output-folder / file }} {{outdir}}/{{file}}
     -chmod +x {{outdir}}/{{file}}
     -ls -l {{outdir}}/{{file}}
 
