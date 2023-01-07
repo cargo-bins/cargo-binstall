@@ -1,0 +1,133 @@
+# input variables
+ci := env_var_or_default("CI", "")
+for-release := env_var_or_default("JUST_FOR_RELEASE", "")
+use-cross := env_var_or_default("JUST_USE_CROSS", "")
+extra-build-args := env_var_or_default("JUST_EXTRA_BUILD_ARGS", "")
+extra-features := env_var_or_default("JUST_EXTRA_FEATURES", "")
+default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
+override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
+
+# target information
+target-host := `rustc -vV | grep -oP "(?<=host: ).+"`
+target := env_var_or_default("CARGO_BUILD_TARGET", target-host)
+target-os := if target =~ "-windows-" { "windows"
+    } else if target =~ "darwin" { "macos"
+    } else if target =~ "linux" { "linux"
+    } else { "unknown" }
+target-arch := if target =~ "x86_64" { "x64"
+    } else if target =~ "i[56]86" { "x86"
+    } else if target =~ "aarch64" { "arm64"
+    } else if target =~ "armv7" { "arm32"
+    } else { "unknown" }
+target-libc := if target =~ "gnu" { "gnu"
+    } else if target =~ "musl" { "musl"
+    } else { "unknown" }
+
+# build output location
+output-filename := if target-os == "windows" { "cargo-binstall.exe" } else { "cargo-binstall" }
+output-profile-folder := if for-release != "" { "release" } else { "debug" }
+output-folder := if target != target-host { "target" / target / output-profile-folder
+    } else { "target" / output-profile-folder }
+output-path := output-folder / output-filename
+
+# which tool to use for compiling
+cargo-bin := if use-cross != "" { "cross" } else { "cargo" }
+
+# cargo compile options
+cargo-profile := if for-release != "" { "release" } else { "dev" }
+
+
+ci-or-no := if ci != "" { "ci" } else { "noci" }
+
+# In release builds in CI, build the std library ourselves so it uses our
+# compile profile, and optimise panic messages out with immediate abort.
+#
+# explicitly disabled on aarch64-unknown-linux-gnu due to a failing build
+cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
+    if target == "aarch64-unknown-linux-gnu" { ""
+    } else { " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort" }
+} else { "" }
+
+# In musl release builds in CI, statically link gcclibs.
+cargo-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
+    " -C link-arg=-lgcc -C link-arg=-static-libgcc"
+} else { "" }
+
+# disable default features in CI for debug builds, for speed
+cargo-no-default-features := if default-features == "false" { " --no-default-features"
+    } else if default-features == "true" { ""
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { " --no-default-features"
+    } else { "" }
+
+cargo-features := trim_end_match(if override-features != "" { override-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace," + extra-features
+    } else if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" { "rustls,fancy-with-backtrace,zstd-thin," + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "rustls,fancy-with-backtrace," + extra-features
+    } else { extra-features
+}, ",")
+
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if ci != "" { " --locked" } else { "" }) + (if target != target-host { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" })
+export RUSTFLAGS := (cargo-gcclibs)
+
+
+[linux]
+ci-install-deps:
+    {{ if for-release != "" { "exit" } else { "" } }}
+    aptc="apt update && apt install -y --no-install-recommends"
+    {{ if target == "x86_64-unknown-linux-gnu" { "$aptc liblzma-dev libzip-dev libzstd-dev" } else { "" } }}
+    {{ if target == "x86_64-unknown-linux-musl" { "$aptc musl-tools" } else { "" } }}
+
+[macos]
+ci-install-deps:
+
+[windows]
+ci-install-deps:
+
+
+ci-toolchain version="nightly" components="":
+    rustup toolchain install {{version}} {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
+    rustup default {{version}}
+    {{ if target != "" { "rustup target add " + target } else { "" } }}
+
+build:
+    {{cargo-bin}} build {{cargo-build-args}}
+
+get-binary:
+    cp {{output-path}} {{output-filename}}
+    -chmod +x {{output-filename}}
+    ls -l {{output-filename}}
+
+e2e-test-live:
+    bash e2e-tests/live.sh {{output-filename}}
+e2e-test-manifest-path:
+    bash e2e-tests/manifest-path.sh {{output-filename}}
+e2e-test-other-repos:
+    bash e2e-tests/other-repos.sh {{output-filename}}
+e2e-test-strategies:
+    bash e2e-tests/strategies.sh {{output-filename}}
+e2e-test-version-syntax:
+    bash e2e-tests/version-syntax.sh {{output-filename}}
+e2e-test-upgrade:
+    bash e2e-tests/upgrade.sh {{output-filename}}
+e2e-test-tls:
+    # WinTLS (Windows in CI) does not have TLS 1.3 support
+    bash e2e-tests/tls.sh {{output-filename}} 1.2
+    {{ if (ci-or-no / target-os) == "ci/windows" { "" } else { "bash e2e-tests/tls.sh " + output-filename + " 1.3" } }}
+
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls
+
+unit-tests:
+    {{cargo-bin}} test {{cargo-build-args}}
+
+test: unit-tests build get-binary e2e-tests
+
+clippy:
+    {{cargo-bin}} clippy --no-deps -- -D clippy::all
+
+fmt:
+    cargo fmt --all -- --check
+
+fmt-check:
+    cargo fmt --all -- --check
+
+lint: clippy fmt-check
