@@ -46,12 +46,9 @@ ci-or-no := if ci != "" { "ci" } else { "noci" }
 
 # In release builds in CI, build the std library ourselves so it uses our
 # compile profile, and optimise panic messages out with immediate abort.
-#
-# explicitly disabled on aarch64-unknown-linux-gnu due to a failing build
 cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
-    if target == "aarch64-unknown-linux-gnu" { ""
-    } else { " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort" }
-} else { "" }
+    " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
+    } else { "" }
 
 # In musl release builds in CI, statically link gcclibs.
 rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
