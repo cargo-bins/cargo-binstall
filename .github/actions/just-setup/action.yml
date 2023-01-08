@@ -4,6 +4,11 @@ inputs:
     description: Extra tools
     required: false
     default: ""
+  cache:
+    description: Enable caches
+    required: true
+    default: true
+    type: boolean
   cache-suffix:
     description: Suffix for cache key
     required: false
@@ -22,7 +27,8 @@ runs:
     with:
       tool: just,${{ inputs.tools }}
 
-  - name: Configure index cache
+  - if: inputs.cache
+    name: Configure index cache
     uses: actions/cache@v3
     with:
       path: |
@@ -35,7 +41,8 @@ runs:
         ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}-
         ${{ runner.os }}-cargo-index-
 
-  - name: Configure build cache
+  - if: inputs.cache
+    name: Configure build cache
     uses: actions/cache@v3
     with:
       path: |
