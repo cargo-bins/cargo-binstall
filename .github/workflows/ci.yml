@@ -111,8 +111,9 @@ jobs:
     steps:
     - run: echo "Tests pass"
 
-  # if everything succeeds, test the release/package process
+  # if everything succeeds and PR is ready for review, test the release/package process
   release-builds:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'workflow_dispatch'
     needs:
     - tests-pass
     uses: ./.github/workflows/release-build.yml
