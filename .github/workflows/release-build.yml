@@ -47,7 +47,10 @@ jobs:
     - run: just toolchain rust-src
     - run: just ci-install-deps
     - run: just package
-    - run: ls -shall packages/
+    - if: runner.os == 'Windows'
+      run: Get-ChildItem packages/
+    - if: runner.os != 'Windows'
+      run: ls -shal packages/
 
     - if: ${{ inputs.publish }}
       name: Publish release
@@ -84,8 +87,7 @@ jobs:
     - run: just toolchain rust-src
     - run: just ci-install-deps
     - run: just package-lipo
-    - run: ls -shall packages/
-      shell: bash
+    - run: ls -shal packages/
 
     - if: ${{ inputs.publish }}
       name: Publish release
