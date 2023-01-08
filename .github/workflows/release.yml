@@ -54,28 +54,8 @@ jobs:
     needs:
     - info
     - tag
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-20.04, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    env:
-      CARGO_TERM_COLOR: always
-      CARGO_UNSTABLE_SPARSE_REGISTRY: "true"
-
-    steps:
-    - uses: actions/checkout@v3
-    - uses: ./.github/actions/release-build
-
-    - name: Publish release
-      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
-      with:
-        tag_name: ${{ needs.info.outputs.version }}
-        name: ${{ needs.info.outputs.version }}
-        body: ${{ needs.info.outputs.notes }}
-        append_body: false
-        files: |
-          packages/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: ./.github/workflows/release-build.yml
+    with:
+      publish: ${{ toJSON(needs.info.outputs) }}
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
