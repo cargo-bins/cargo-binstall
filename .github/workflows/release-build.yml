@@ -85,9 +85,6 @@ jobs:
       with:
         cache: false
 
-    - run: just toolchain rust-src
-    - run: just ci-install-deps
-
     - uses: actions/download-artifact@v3
       with:
         name: x86_64-apple-darwin
