@@ -48,13 +48,13 @@ jobs:
     - run: just ci-install-deps
     - run: just package
 
-    - if: ${{ fromJSON(inputs.for_release).version }}
+    - if: ${{ inputs.publish && fromJSON(inputs.publish).version }}
       name: Publish release
       uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
       with:
-        tag_name: ${{ fromJSON(inputs.for_release).version }}
-        name: ${{ fromJSON(inputs.for_release).version }}
-        body: ${{ fromJSON(inputs.for_release).notes }}
+        tag_name: ${{ fromJSON(inputs.publish).version }}
+        name: ${{ fromJSON(inputs.publish).version }}
+        body: ${{ fromJSON(inputs.publish).notes }}
         append_body: false
         files: |
           packages/cargo-binstall-*
