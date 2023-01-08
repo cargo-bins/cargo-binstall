@@ -71,7 +71,9 @@ cargo-features := trim_end_match(if override-features != "" { override-features
     } else { extra-features
 }, ",")
 
-cargo-split-debuginfo := if for-release != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
+# it seems we can't split debuginfo for non-buildstd builds
+# errors with: "Found a record with an unknown abbreviation code"
+cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
 
 # for ARM64 Windows, use a patched version of ring
 # this should be unnecessary once ring 0.17 is released
