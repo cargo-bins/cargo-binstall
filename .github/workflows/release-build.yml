@@ -23,7 +23,7 @@ jobs:
           # - { o: macos-latest,    t: aarch64-apple-darwin                     }
           # - { o: ubuntu-20.04,    t: x86_64-unknown-linux-gnu                 }
           # - { o: ubuntu-20.04,    t: armv7-unknown-linux-gnueabihf,   c: true }
-          - { o: ubuntu-20.04,    t: aarch64-unknown-linux-gnu,       c: true }
+          - { o: ubuntu-20.04,    t: aarch64-unknown-linux-gnu                }
           # - { o: ubuntu-latest,   t: x86_64-unknown-linux-musl                }
           # - { o: ubuntu-latest,   t: armv7-unknown-linux-musleabihf,  c: true }
           # - { o: ubuntu-latest,   t: aarch64-unknown-linux-musl,      c: true }

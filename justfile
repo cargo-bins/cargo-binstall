@@ -92,7 +92,7 @@ export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
 # libblocksruntime-dev provides compiler-rt
 ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev"
     } else if target == "x86_64-unknown-linux-musl" { "musl-tools"
-    } else if target == "aarch64-unknown-linux-gnu" { "libblocksruntime-dev llvm-runtime"
+    } else if target == "aarch64-unknown-linux-gnu" { "gcc-aarch64-linux-gnu libblocksruntime-dev"
     } else { "" }
 
 [linux]
