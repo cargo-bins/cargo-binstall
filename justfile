@@ -222,3 +222,17 @@ package: package-prepare
 package-lipo: lipo-prepare
     cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
     cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
+
+# assuming x64 and arm64 packages are already built, extract and lipo them
+[macos]
+repackage-lipo: package-dir
+    mkdir -p packages/prep/{arm64,x64}
+    cd packages/prep/x64 && unzip -o "../cargo-binstall-x86_64-apple-darwin.full.zip"
+    cd packages/prep/arm64 && unzip -o "../cargo-binstall-aarch64-apple-darwin.full.zip"
+
+    lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64}/{{output-filename}}
+    lipo -create -output packages/prep/detect-wasi packages/prep/{arm64,x64}/detect-wasi
+
+    rm -rf packages/prep/{arm64,x64}
+    cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
+    cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.full.zip" *

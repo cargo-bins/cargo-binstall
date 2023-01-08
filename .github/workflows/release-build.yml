@@ -64,7 +64,7 @@ jobs:
           packages/cargo-binstall-*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - if: ${{ !inputs.publish }}
+    - if: ${{ !inputs.publish || runner.os == 'macOS' }}
       name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
@@ -73,6 +73,7 @@ jobs:
         retention-days: 1
 
   lipo:
+    needs: build
     name: universal-apple-darwin
     runs-on: macos-latest
     env:
@@ -86,7 +87,17 @@ jobs:
 
     - run: just toolchain rust-src
     - run: just ci-install-deps
-    - run: just package-lipo
+
+    - uses: actions/download-artifact@v3
+      with:
+        name: x86_64-apple-darwin
+        path: packages/
+    - uses: actions/download-artifact@v3
+      with:
+        name: aarch64-apple-darwin
+        path: packages/
+
+    - run: just repackage-lipo
     - run: ls -shal packages/
 
     - if: ${{ inputs.publish }}
