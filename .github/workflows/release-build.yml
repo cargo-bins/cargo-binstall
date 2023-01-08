@@ -38,6 +38,7 @@ jobs:
       JUST_FOR_RELEASE: true
 
     steps:
+    - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
         tools: cross
