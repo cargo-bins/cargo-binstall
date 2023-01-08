@@ -107,7 +107,7 @@ jobs:
         body: ${{ fromJSON(inputs.publish).notes }}
         append_body: false
         files: |
-          packages/cargo-binstall-*
+          packages/cargo-binstall-universal-*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - if: ${{ !inputs.publish }}
@@ -115,5 +115,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: universal-apple-darwin
-        path: packages/cargo-binstall-*
+        path: packages/cargo-binstall-universal-*
         retention-days: 1
