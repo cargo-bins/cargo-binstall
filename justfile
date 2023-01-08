@@ -54,7 +54,7 @@ cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
 } else { "" }
 
 # In musl release builds in CI, statically link gcclibs.
-cargo-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
+rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
     " -C link-arg=-lgcc -C link-arg=-static-libgcc"
 } else { "" }
 
@@ -79,8 +79,17 @@ cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.s
 # this should be unnecessary once ring 0.17 is released
 win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring.git=\"https://github.com/awakecoding/ring\"' --config='patch.crates-io.ring.branch=\"0.16.20_alpha\"'" } else { "" }
 
+# MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
+# disabled for now, as it ICEs
+# https://github.com/rust-lang/rust/issues/106141
+rustc-miropt := "" #if for-release != "" { " -Z mir-opt-level=4" } else { "" }
+
+# ICF: link-time identical code folding
+# disabled for now, as it requires the gold linker
+rustc-icf := "" #if for-release != "" { " -C link-arg=-Wl,--icf=all" } else { "" }
+
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
-export RUSTFLAGS := (cargo-gcclibs)
+export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
 
 
 ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev"
