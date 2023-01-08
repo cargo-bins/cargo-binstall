@@ -57,5 +57,3 @@ jobs:
     uses: ./.github/workflows/release-build.yml
     with:
       publish: ${{ toJSON(needs.info.outputs) }}
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

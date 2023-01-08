@@ -8,10 +8,6 @@ on:
         description: "Set to the release metadata JSON to publish the release"
         required: false
         type: string
-    secrets:
-      GITHUB_TOKEN:
-        description: "GitHub token"
-        required: false
 
 env:
   CARGO_TERM_COLOR: always
