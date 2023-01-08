@@ -16,97 +16,97 @@ env:
   CARGO_UNSTABLE_SPARSE_REGISTRY: "true"
 
 jobs:
-  # test:
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       include:
-  #         - target: x86_64-apple-darwin
-  #           os: macos-latest
-  #         - target: x86_64-unknown-linux-gnu
-  #           os: ubuntu-latest
-  #         - target: x86_64-unknown-linux-musl
-  #           os: ubuntu-latest
-  #         - target: x86_64-pc-windows-msvc
-  #           os: windows-latest
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
 
-  #   runs-on: ${{ matrix.os }}
-  #   env:
-  #     CARGO_BUILD_TARGET: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
 
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - uses: ./.github/actions/just-setup
-  #     with:
-  #       cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
-  #   - run: just toolchain
-  #   - run: just ci-install-deps
-  #   - run: just test
+    - run: just toolchain
+    - run: just ci-install-deps
+    - run: just test
 
-  # linux-cross-check:
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       target:
-  #       - armv7-unknown-linux-musleabihf
-  #       - armv7-unknown-linux-gnueabihf
-  #       - aarch64-unknown-linux-musl
-  #       - aarch64-unknown-linux-gnu
+  linux-cross-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+        - armv7-unknown-linux-musleabihf
+        - armv7-unknown-linux-gnueabihf
+        - aarch64-unknown-linux-musl
+        - aarch64-unknown-linux-gnu
 
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     CARGO_BUILD_TARGET: ${{ matrix.target }}
-  #     JUST_USE_CROSS: true
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      JUST_USE_CROSS: true
 
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - uses: ./.github/actions/just-setup
-  #     with:
-  #       tools: cross
-  #       cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        tools: cross
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
-  #   - run: just toolchain
-  #   - run: just ci-install-deps
-  #   - run: just check
+    - run: just toolchain
+    - run: just ci-install-deps
+    - run: just check
 
-  # apple-m1-check:
-  #   runs-on: macos-latest
-  #   env:
-  #     CARGO_BUILD_TARGET: aarch64-apple-darwin
+  apple-m1-check:
+    runs-on: macos-latest
+    env:
+      CARGO_BUILD_TARGET: aarch64-apple-darwin
 
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - uses: ./.github/actions/just-setup
-  #     with:
-  #       cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
-  #   - run: just toolchain
-  #   - run: just check
+    - run: just toolchain
+    - run: just check
 
-  # lint:
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       os: [ubuntu-latest, macos-latest, windows-latest]
+  lint:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
-  #   runs-on: ${{ matrix.os }}
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - uses: ./.github/actions/just-setup
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
 
-  #   - run: just toolchain rustfmt,clippy
-  #   - run: just ci-install-deps
-  #   - run: just lint
+    - run: just toolchain rustfmt,clippy
+    - run: just ci-install-deps
+    - run: just lint
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Tests pass
-    # needs:
-    # - test
-    # - linux-cross-check
-    # - apple-m1-check
-    # - lint
+    needs:
+    - test
+    - linux-cross-check
+    - apple-m1-check
+    - lint
     runs-on: ubuntu-latest
     steps:
     - run: echo "Tests pass"
