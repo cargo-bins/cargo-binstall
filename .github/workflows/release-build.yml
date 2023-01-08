@@ -21,14 +21,14 @@ jobs:
         include:
           - { o: macos-latest,    t: x86_64-apple-darwin                      }
           - { o: macos-latest,    t: aarch64-apple-darwin                     }
-          - { o: ubuntu-20.04,    t: x86_64-unknown-linux-gnu                 }
-          - { o: ubuntu-20.04,    t: armv7-unknown-linux-gnueabihf,   c: true }
-          - { o: ubuntu-20.04,    t: aarch64-unknown-linux-gnu,       c: true }
-          - { o: ubuntu-latest,   t: x86_64-unknown-linux-musl                }
-          - { o: ubuntu-latest,   t: armv7-unknown-linux-musleabihf,  c: true }
-          - { o: ubuntu-latest,   t: aarch64-unknown-linux-musl,      c: true }
-          - { o: windows-latest,  t: x86_64-pc-windows-msvc                   }
-          - { o: windows-latest,  t: aarch64-pc-windows-msvc                  }
+          # - { o: ubuntu-20.04,    t: x86_64-unknown-linux-gnu                 }
+          # - { o: ubuntu-20.04,    t: armv7-unknown-linux-gnueabihf,   c: true }
+          # - { o: ubuntu-20.04,    t: aarch64-unknown-linux-gnu,       c: true }
+          # - { o: ubuntu-latest,   t: x86_64-unknown-linux-musl                }
+          # - { o: ubuntu-latest,   t: armv7-unknown-linux-musleabihf,  c: true }
+          # - { o: ubuntu-latest,   t: aarch64-unknown-linux-musl,      c: true }
+          # - { o: windows-latest,  t: x86_64-pc-windows-msvc                   }
+          # - { o: windows-latest,  t: aarch64-pc-windows-msvc                  }
 
     name: ${{ matrix.t }}
     runs-on: ${{ matrix.o }}
@@ -97,6 +97,7 @@ jobs:
         name: aarch64-apple-darwin
         path: packages/
 
+    - run: ls -shalr packages/
     - run: just repackage-lipo
     - run: ls -shal packages/
 
