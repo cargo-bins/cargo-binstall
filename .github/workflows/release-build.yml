@@ -85,6 +85,7 @@ jobs:
     - run: just ci-install-deps
     - run: just package-lipo
     - run: ls -shall packages/
+      shell: bash
 
     - if: ${{ inputs.publish }}
       name: Publish release
