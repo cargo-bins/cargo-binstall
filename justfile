@@ -110,8 +110,8 @@ check:
 
 get-output file outdir=".":
     test -d "{{outdir}}" || mkdir -p {{outdir}}
-    cp -r {{ output-folder / file }} {{outdir}}/{{file}}
-    -ls -l {{outdir}}/{{file}}
+    cp -r {{ output-folder / file }} {{outdir}}/{{ file_name(file) }}
+    -ls -l {{outdir}}/{{ file_name(file) }}
 
 get-binary outdir=".": (get-output output-filename outdir)
     -chmod +x {{ outdir / output-filename }}
@@ -177,13 +177,14 @@ package-prepare: build package-dir
     -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect_wasi.dwp
 
 # underscored pdb name needs to remain for debuggers to find the file properly
+# read from deps because sometimes cargo doesn't copy the pdb to the output folder
 [windows]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -just get-output cargo_binstall.pdb packages/prep
+    -just get-output deps/cargo_binstall.pdb packages/prep
 
     just get-output detect-wasi.exe packages/prep
-    -just get-output detect_wasi.pdb packages/prep
+    -just get-output deps/detect_wasi.pdb packages/prep
 
 # we don't get dSYM bundles for universal binaries; unsure if it's even a thing
 [macos]
