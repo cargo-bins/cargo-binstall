@@ -61,4 +61,31 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-# todo: lipo
+  lipo:
+    name: universal-apple-darwin
+    runs-on: macos-latest
+    env:
+      JUST_FOR_RELEASE: true
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: release-universal-apple-darwin
+
+    - run: just toolchain rust-src
+    - run: just ci-install-deps
+    - run: just package-lipo
+
+    - if: ${{ inputs.publish && fromJSON(inputs.publish).version }}
+      name: Publish release
+      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+      with:
+        tag_name: ${{ fromJSON(inputs.publish).version }}
+        name: ${{ fromJSON(inputs.publish).version }}
+        body: ${{ fromJSON(inputs.publish).notes }}
+        append_body: false
+        files: |
+          packages/cargo-binstall-*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
