@@ -1,0 +1,119 @@
+name: Build for release
+
+on:
+  workflow_dispatch: # can't publish from dispatch
+  workflow_call:
+    inputs:
+      publish:
+        description: "Set to the release metadata JSON to publish the release"
+        required: false
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_UNSTABLE_SPARSE_REGISTRY: "true"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { o: macos-latest,    t: x86_64-apple-darwin                      }
+          - { o: macos-latest,    t: aarch64-apple-darwin                     }
+          - { o: ubuntu-20.04,    t: x86_64-unknown-linux-gnu                 }
+          - { o: ubuntu-20.04,    t: armv7-unknown-linux-gnueabihf,   c: true }
+          - { o: ubuntu-20.04,    t: aarch64-unknown-linux-gnu,       c: true }
+          - { o: ubuntu-latest,   t: x86_64-unknown-linux-musl                }
+          - { o: ubuntu-latest,   t: armv7-unknown-linux-musleabihf,  c: true }
+          - { o: ubuntu-latest,   t: aarch64-unknown-linux-musl,      c: true }
+          - { o: windows-latest,  t: x86_64-pc-windows-msvc                   }
+          - { o: windows-latest,  t: aarch64-pc-windows-msvc                  }
+
+    name: ${{ matrix.t }}
+    runs-on: ${{ matrix.o }}
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.t }}
+      JUST_USE_CROSS: ${{ matrix.c }}
+      JUST_FOR_RELEASE: true
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        tools: cross
+        cache-suffix: release-${{ matrix.t }}
+
+    - run: just toolchain rust-src
+    - run: just ci-install-deps
+    - run: just package
+    - if: runner.os == 'Windows'
+      run: Get-ChildItem packages/
+    - if: runner.os != 'Windows'
+      run: ls -shal packages/
+
+    - if: ${{ inputs.publish }}
+      name: Publish release
+      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+      with:
+        tag_name: ${{ fromJSON(inputs.publish).version }}
+        name: ${{ fromJSON(inputs.publish).version }}
+        body: ${{ fromJSON(inputs.publish).notes }}
+        append_body: false
+        files: |
+          packages/cargo-binstall-*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - if: ${{ !inputs.publish || runner.os == 'macOS' }}
+      name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.t }}
+        path: packages/cargo-binstall-*
+        retention-days: 1
+
+  lipo:
+    needs: build
+    name: universal-apple-darwin
+    runs-on: macos-latest
+    env:
+      JUST_FOR_RELEASE: true
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        cache: false
+
+    - uses: actions/download-artifact@v3
+      with:
+        name: x86_64-apple-darwin
+        path: packages/
+    - uses: actions/download-artifact@v3
+      with:
+        name: aarch64-apple-darwin
+        path: packages/
+
+    - run: ls -shalr packages/
+    - run: just repackage-lipo
+    - run: ls -shal packages/
+
+    - if: ${{ inputs.publish }}
+      name: Publish release
+      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+      with:
+        tag_name: ${{ fromJSON(inputs.publish).version }}
+        name: ${{ fromJSON(inputs.publish).version }}
+        body: ${{ fromJSON(inputs.publish).notes }}
+        append_body: false
+        files: |
+          packages/cargo-binstall-universal-*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - if: ${{ !inputs.publish }}
+      name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: universal-apple-darwin
+        path: packages/cargo-binstall-universal-*
+        retention-days: 1
