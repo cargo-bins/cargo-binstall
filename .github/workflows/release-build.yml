@@ -48,7 +48,7 @@ jobs:
     - run: just ci-install-deps
     - run: just package
 
-    - if: ${{ inputs.publish && fromJSON(inputs.publish).version }}
+    - if: ${{ inputs.publish }}
       name: Publish release
       uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
       with:
@@ -60,6 +60,13 @@ jobs:
           packages/cargo-binstall-*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - if: ${{ !inputs.publish }}
+      name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.t }}
+        path: packages/cargo-binstall-*
+        retention-days: 1
 
   lipo:
     name: universal-apple-darwin
@@ -77,7 +84,7 @@ jobs:
     - run: just ci-install-deps
     - run: just package-lipo
 
-    - if: ${{ inputs.publish && fromJSON(inputs.publish).version }}
+    - if: ${{ inputs.publish }}
       name: Publish release
       uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
       with:
@@ -89,3 +96,10 @@ jobs:
           packages/cargo-binstall-*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - if: ${{ !inputs.publish }}
+      name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: universal-apple-darwin
+        path: packages/cargo-binstall-*
+        retention-days: 1
