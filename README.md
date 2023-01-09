@@ -91,7 +91,7 @@ Supported crates such as `cargo-binstall` itself can also be updated with `cargo
 - Can I use it in CI?
   - Yes! For GitHub Actions, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has explicit support for selected tools and uses `cargo-binstall` for everything else.
 - Are debug symbols available?
-  - Yes! Extra pre-built packages with a `.full` suffix are available and contain split debuginfo (for Windows and macOS, Linux coming soon), documentation files, and extra binaries like the `detect-wasi` utility.
+  - Yes! Extra pre-built packages with a `.full` suffix are available and contain split debuginfo, documentation files, and extra binaries like the `detect-wasi` utility.
 
 ---
 
