@@ -28,7 +28,7 @@ We recommend using the pre-compiled ones because we optimize those more than a s
 | macos   | universal | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-universal-apple-darwin.zip |
 | windows | x86\_64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip |
 
-To upgrade, use `cargo binstall cargo-binstall`!
+To upgrade cargo-binstall, use `cargo binstall cargo-binstall`!
 
 ## Usage
 
@@ -90,6 +90,8 @@ Supported crates such as `cargo-binstall` itself can also be updated with `cargo
   - You can find a full description of errors including exit codes here: <https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
 - Can I use it in CI?
   - Yes! For GitHub Actions, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has explicit support for selected tools and uses `cargo-binstall` for everything else.
+- Are debug symbols available?
+  - Yes! Extra pre-built packages with a `.full` suffix are available and contain split debuginfo (for Windows and macOS, Linux coming soon), documentation files, and extra binaries like the `detect-wasi` utility.
 
 ---
 

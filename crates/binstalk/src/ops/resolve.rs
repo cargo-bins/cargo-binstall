@@ -10,6 +10,7 @@ use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use crates_io_api::AsyncClient as CratesIoApiClient;
 use itertools::Itertools;
+use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
 use tinytemplate::TinyTemplate;
 use tokio::task::block_in_place;
@@ -58,11 +59,11 @@ async fn resolve_inner(
 ) -> Result<Resolution, BinstallError> {
     info!("Resolving package: '{}'", crate_name);
 
-    let version_req: VersionReq = match (crate_name.version_req, &opts.version_req) {
-        (Some(version), None) => version,
-        (None, Some(version)) => version.clone(),
+    let version_req = match (&crate_name.version_req, &opts.version_req) {
+        (Some(version), None) => MaybeOwned::Borrowed(version),
+        (None, Some(version)) => MaybeOwned::Borrowed(version),
         (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
-        (None, None) => VersionReq::STAR,
+        (None, None) => MaybeOwned::Owned(VersionReq::STAR),
     };
 
     let version_req_str = version_req.to_compact_string();
@@ -70,7 +71,7 @@ async fn resolve_inner(
     let Some(package_info) = PackageInfo::resolve(&opts,
         crate_name.name,
         curr_version,
-        version_req,
+        &version_req,
         opts.client.clone(),
         &opts.crates_io_api_client).await?
     else {
@@ -342,7 +343,7 @@ impl PackageInfo {
         opts: &Options,
         name: CompactString,
         curr_version: Option<Version>,
-        version_req: VersionReq,
+        version_req: &VersionReq,
         client: Client,
         crates_io_api_client: &CratesIoApiClient,
     ) -> Result<Option<Self>, BinstallError> {
@@ -354,7 +355,7 @@ impl PackageInfo {
                     client,
                     crates_io_api_client,
                     &name,
-                    &version_req,
+                    version_req,
                 ))
                 .await?
             }

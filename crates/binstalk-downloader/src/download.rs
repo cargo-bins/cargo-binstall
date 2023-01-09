@@ -39,9 +39,6 @@ pub enum DownloadError {
     /// - Exit: 74
     #[error(transparent)]
     Io(io::Error),
-
-    #[error("installation cancelled by user")]
-    UserAbort,
 }
 
 impl From<io::Error> for DownloadError {
@@ -101,11 +98,11 @@ impl Download {
     /// NOTE that this API does not support gnu extension sparse file unlike
     /// [`Download::and_extract`].
     #[instrument(skip(visitor))]
-    pub async fn and_visit_tar<V: TarEntriesVisitor + Debug + Send + 'static>(
+    pub async fn and_visit_tar(
         self,
         fmt: TarBasedFmt,
-        visitor: V,
-    ) -> Result<V::Target, DownloadError> {
+        visitor: &mut dyn TarEntriesVisitor,
+    ) -> Result<(), DownloadError> {
         let stream = self
             .client
             .get_stream(self.url)
@@ -114,11 +111,11 @@ impl Download {
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let ret = extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
+        extract_tar_based_stream_and_visit(stream, fmt, visitor).await?;
 
         debug!("Download, extraction and in-memory procession OK");
 
-        Ok(ret)
+        Ok(())
     }
 
     /// Download a file from the provided URL and extract it to the provided path.

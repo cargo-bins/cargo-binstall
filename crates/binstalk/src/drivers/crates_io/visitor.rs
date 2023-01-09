@@ -1,7 +1,4 @@
-use std::{
-    io,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use cargo_toml::{Manifest, Value};
 use normalize_path::NormalizePath;
@@ -37,8 +34,6 @@ impl ManifestVisitor {
 
 #[async_trait::async_trait]
 impl TarEntriesVisitor for ManifestVisitor {
-    type Target = Manifest<Meta>;
-
     async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError> {
         let path = entry.path()?;
         let path = path.normalize();
@@ -70,22 +65,20 @@ impl TarEntriesVisitor for ManifestVisitor {
 
         Ok(())
     }
-
-    /// Load binstall metadata using the extracted information stored in memory.
-    fn finish(self) -> Result<Self::Target, DownloadError> {
-        Ok(load_manifest(&self.cargo_toml_content, &self.vfs).map_err(io::Error::from)?)
-    }
 }
 
-fn load_manifest(slice: &[u8], vfs: &Vfs) -> Result<Manifest<Meta>, BinstallError> {
-    debug!("Loading manifest directly from extracted file");
+impl ManifestVisitor {
+    /// Load binstall metadata using the extracted information stored in memory.
+    pub(super) fn load_manifest(self) -> Result<Manifest<Meta>, BinstallError> {
+        debug!("Loading manifest directly from extracted file");
 
-    // Load and parse manifest
-    let mut manifest = Manifest::from_slice_with_metadata(slice)?;
+        // Load and parse manifest
+        let mut manifest = Manifest::from_slice_with_metadata(&self.cargo_toml_content)?;
 
-    // Checks vfs for binary output names
-    manifest.complete_from_abstract_filesystem::<Value, _>(vfs, None)?;
+        // Checks vfs for binary output names
+        manifest.complete_from_abstract_filesystem::<Value, _>(&self.vfs, None)?;
 
-    // Return metadata
-    Ok(manifest)
+        // Return metadata
+        Ok(manifest)
+    }
 }

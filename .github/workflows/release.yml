@@ -49,40 +49,11 @@ jobs:
         custom_tag: ${{ needs.info.outputs.version }}
         tag_prefix: ''
 
-  build:
-    if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
-    needs: info # not really, but just so it fails fast
-    uses: ./.github/workflows/build.yml
-    with:
-      for_release: true
-
-  release:
+  package:
     if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
     needs:
-      - info
-      - tag
-      - build
-    name: Package and release
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Get outputs
-      uses: actions/download-artifact@v3
-      with:
-        path: outputs/
-
-    - name: Pack archives
-      run: .github/scripts/pack-release-archives.sh
-
-    - name: Publish release
-      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
-      with:
-        tag_name: ${{ needs.info.outputs.version }}
-        name: ${{ needs.info.outputs.version }}
-        body: ${{ needs.info.outputs.notes }}
-        append_body: true
-        files: |
-          outputs/cargo-binstall-*.zip
-          outputs/cargo-binstall-*.tgz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - info
+    - tag
+    uses: ./.github/workflows/release-build.yml
+    with:
+      publish: ${{ toJSON(needs.info.outputs) }}

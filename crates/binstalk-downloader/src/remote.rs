@@ -21,6 +21,7 @@ pub use url::Url;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
+const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
@@ -40,16 +41,21 @@ pub struct HttpError {
     err: reqwest::Error,
 }
 
-#[derive(Clone, Debug)]
-pub struct Client {
+#[derive(Debug)]
+struct Inner {
     client: reqwest::Client,
-    rate_limit: Arc<Mutex<RateLimit<reqwest::Client>>>,
+    rate_limit: Mutex<RateLimit<reqwest::Client>>,
 }
+
+#[derive(Clone, Debug)]
+pub struct Client(Arc<Inner>);
 
 impl Client {
     /// * `per` - must not be 0.
     /// * `num_request` - maximum number of requests to be processed for
     ///   each `per` duration.
+    ///
+    /// The Client created would use at least tls 1.2
     pub fn new(
         user_agent: impl AsRef<str>,
         min_tls: Option<tls::Version>,
@@ -62,26 +68,25 @@ impl Client {
             per: Duration,
             num_request: NonZeroU64,
         ) -> Result<Client, Error> {
-            let mut builder = reqwest::ClientBuilder::new()
+            let tls_ver = min_tls
+                .map(|tls| tls.max(DEFAULT_MIN_TLS))
+                .unwrap_or(DEFAULT_MIN_TLS);
+
+            let client = reqwest::ClientBuilder::new()
                 .user_agent(user_agent)
                 .https_only(true)
-                .min_tls_version(tls::Version::TLS_1_2)
-                .tcp_nodelay(false);
+                .min_tls_version(tls_ver)
+                .tcp_nodelay(false)
+                .build()?;
 
-            if let Some(ver) = min_tls {
-                builder = builder.min_tls_version(ver);
-            }
-
-            let client = builder.build()?;
-
-            Ok(Client {
+            Ok(Client(Arc::new(Inner {
                 client: client.clone(),
-                rate_limit: Arc::new(Mutex::new(
+                rate_limit: Mutex::new(
                     ServiceBuilder::new()
                         .rate_limit(num_request.get(), per)
                         .service(client),
-                )),
-            })
+                ),
+            })))
         }
 
         inner(user_agent.as_ref(), min_tls, per, num_request)
@@ -89,7 +94,7 @@ impl Client {
 
     /// Return inner reqwest client.
     pub fn get_inner(&self) -> &reqwest::Client {
-        &self.client
+        &self.0.client
     }
 
     async fn send_request_inner(
@@ -108,7 +113,7 @@ impl Client {
             //    the future, then release the lock before
             //    polling the future, which performs network I/O that could
             //    take really long.
-            let future = self.rate_limit.lock().await.ready().await?.call(request);
+            let future = self.0.rate_limit.lock().await.ready().await?.call(request);
 
             let response = future.await?;
 
