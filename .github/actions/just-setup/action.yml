@@ -48,5 +48,3 @@ runs:
       path: |
         target/
       key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
-      restore-keys: |
-        ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
