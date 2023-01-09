@@ -122,12 +122,12 @@ impl BinFile {
         // Destination at install dir + base-name{.extension}
         let mut dest = data.install_path.join(ctx.bin);
         if !binary_ext.is_empty() {
-            // Trim the starting "."
-            //
+            let binary_ext = binary_ext.strip_prefix('.').unwrap();
+
             // PathBuf::set_extension returns false if Path::file_name
             // is None, but we know that the file name must be Some,
             // thus we assert! the return value here.
-            assert!(dest.set_extension(&binary_ext[1..]));
+            assert!(dest.set_extension(binary_ext));
         }
 
         let (dest, link) = if no_symlinks {
