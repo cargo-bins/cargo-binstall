@@ -140,7 +140,7 @@ impl Log for Logger {
 struct ErrorFreeWriter;
 
 fn report_err(err: io::Error) {
-    write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+    writeln!(io::stderr(), "Failed to write to stdout: {err}").ok();
 }
 
 impl io::Write for &ErrorFreeWriter {
