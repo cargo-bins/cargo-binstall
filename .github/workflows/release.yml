@@ -1,56 +1,50 @@
-name: Release
+name: On release
 on:
-  push:
-    branches:
-      - main
-    tags-ignore:
-      - "*"
+  pull_request:
+    types: closed
+    branches: [main] # target branch of release PRs
 
 jobs:
   info:
+    if: ${{ github.event.pull_request.merged }}
+
+    outputs: # specific fields extracted from the action's outputs
+      is-release: ${{ steps.meta.outputs.is-release }}
+      crate: ${{ steps.meta.outputs.crate-names }}
+      version: ${{ steps.meta.outputs.version-actual }}
+      notes: ${{ steps.meta.outputs.notes }}
+
     runs-on: ubuntu-latest
-    # the commit message will look like: `release: {crate-name} v{version} (#{pr-number})`
-    if: "startsWith(github.event.head_commit.message, 'release: ')"
-    outputs:
-      crate: ${{ steps.version.outputs.crate }}
-      version: ${{ steps.version.outputs.version }}
-      notes: ${{ fromJSON(steps.notes.outputs.notes_json) }}
-    env:
-      COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
     steps:
-    - uses: actions/checkout@v3
-    - name: Extract tag from commit message
-      id: version
-      run: .github/scripts/extract-tag-from-release-commit.sh
-    - name: Extract release notes
-      id: notes
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GITHUB_REPO: ${{ github.repository }}
-      run: .github/scripts/extract-release-notes.sh
+    - id: meta
+      uses: cargo-bins/release-meta@v1
+      with:
+        event-data: ${{ toJSON(github.event) }}
+        extract-notes-under: '### Release notes'
 
   tag:
+    if: needs.info.outputs.is-release == 'true'
     needs: info
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
     - name: Push lib release tag
-      if: "! startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
+      if: needs.info.outputs.crate != 'cargo-binstall'
       uses: mathieudutour/github-tag-action@v6.1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ needs.info.outputs.version }}
-        tag_prefix: ${{ needs.info.outputs.crate }}-
+        tag_prefix: ${{ needs.info.outputs.crate }}-v
     - name: Push cli release tag
-      if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
+      if: needs.info.outputs.crate == 'cargo-binstall'
       uses: mathieudutour/github-tag-action@v6.1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ needs.info.outputs.version }}
-        tag_prefix: ''
+        tag_prefix: v
 
   package:
-    if: "startsWith(github.event.head_commit.message, 'release: cargo-binstall v')"
+    if: needs.info.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
     needs:
     - info
     - tag
