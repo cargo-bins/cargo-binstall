@@ -8,7 +8,7 @@ jobs:
   info:
     if: github.event.pull_request.merged
 
-    outputs: # specific fields extracted from the action's outputs
+    outputs:
       is-release: ${{ steps.meta.outputs.is-release }}
       crate: ${{ steps.meta.outputs.crate-names }}
       version: ${{ steps.meta.outputs.version-actual }}
