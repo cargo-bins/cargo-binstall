@@ -6,7 +6,7 @@ on:
 
 jobs:
   info:
-    if: ${{ github.event.pull_request.merged }}
+    if: github.event.pull_request.merged
 
     outputs: # specific fields extracted from the action's outputs
       is-release: ${{ steps.meta.outputs.is-release }}
@@ -44,7 +44,7 @@ jobs:
         tag_prefix: v
 
   package:
-    if: needs.info.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
+    if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
     needs:
     - info
     - tag
