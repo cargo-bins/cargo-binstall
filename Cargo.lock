@@ -606,7 +606,7 @@ checksum = "23d8666cb01533c39dde32bcbab8e227b4ed6679b2c925eba05feabea39508fb"
 
 [[package]]
 name = "detect-targets"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
