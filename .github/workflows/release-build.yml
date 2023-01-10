@@ -102,8 +102,8 @@ jobs:
       name: Publish release
       uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
       with:
-        tag_name: ${{ fromJSON(inputs.publish).version }}
-        name: ${{ fromJSON(inputs.publish).version }}
+        tag_name: v${{ fromJSON(inputs.publish).version }}
+        name: v${{ fromJSON(inputs.publish).version }}
         body: ${{ fromJSON(inputs.publish).notes }}
         append_body: false
         files: |
