@@ -10,7 +10,7 @@ jobs:
 
     outputs:
       is-release: ${{ steps.meta.outputs.is-release }}
-      crate: ${{ steps.meta.outputs.crate-names }}
+      crate: ${{ steps.meta.outputs.crates-names }}
       version: ${{ steps.meta.outputs.version-actual }}
       notes: ${{ steps.meta.outputs.notes }}
 
