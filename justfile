@@ -218,8 +218,8 @@ package: package-prepare
 
 [macos]
 package: package-prepare
-    cd packages/prep && zip -9 "../cargo-binstall-{{target}}.zip" {{output-filename}}
-    cd packages/prep && zip -9 "../cargo-binstall-{{target}}.full.zip" *
+    cd packages/prep && zip -r -9 "../cargo-binstall-{{target}}.zip" {{output-filename}}
+    cd packages/prep && zip -r -9 "../cargo-binstall-{{target}}.full.zip" *
 
 [windows]
 package: package-prepare
@@ -228,8 +228,8 @@ package: package-prepare
 
 [macos]
 package-lipo: lipo-prepare
-    cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
-    cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
+    cd packages/prep && zip -r -9 "../cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
+    cd packages/prep && zip -r -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
 
 # assuming x64 and arm64 packages are already built, extract and lipo them
 [macos]

@@ -52,19 +52,16 @@ jobs:
     - if: runner.os != 'Windows'
       run: ls -shal packages/
 
-    - if: ${{ inputs.publish }}
-      name: Publish release
-      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+    - if: inputs.publish
+      name: Upload to release
+      uses: svenstaro/upload-release-action@v2
       with:
-        tag_name: ${{ fromJSON(inputs.publish).version }}
-        name: ${{ fromJSON(inputs.publish).version }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        tag: v${{ fromJSON(inputs.publish).version }}
         body: ${{ fromJSON(inputs.publish).notes }}
-        append_body: false
-        files: |
-          packages/cargo-binstall-*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - if: ${{ !inputs.publish || runner.os == 'macOS' }}
+        file: packages/cargo-binstall-*
+        file_glob: true
+    - if: "! inputs.publish || runner.os == 'macOS'"
       name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
@@ -98,19 +95,17 @@ jobs:
     - run: just repackage-lipo
     - run: ls -shal packages/
 
-    - if: ${{ inputs.publish }}
-      name: Publish release
-      uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+    - if: inputs.publish
+      name: Upload to release
+      uses: svenstaro/upload-release-action@v2
       with:
-        tag_name: ${{ fromJSON(inputs.publish).version }}
-        name: ${{ fromJSON(inputs.publish).version }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        tag: v${{ fromJSON(inputs.publish).version }}
         body: ${{ fromJSON(inputs.publish).notes }}
-        append_body: false
-        files: |
-          packages/cargo-binstall-universal-*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - if: ${{ !inputs.publish }}
+        file: packages/cargo-binstall-universal-*
+        file_glob: true
+        overwrite: true
+    - if: "! inputs.publish"
       name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
