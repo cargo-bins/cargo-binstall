@@ -275,7 +275,7 @@ fn do_install_fetches(
         return Ok(());
     }
 
-    block_in_place(|| -> Result<()> {
+    block_in_place(|| {
         let metadata_vec = resolution_fetchs
             .into_iter()
             .map(|fetch| fetch.install(binstall_opts))
