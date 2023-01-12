@@ -7,7 +7,7 @@ use binstalk::{
     helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
     ops::{
         self,
-        resolve::{CrateName, Resolution, VersionReqExt},
+        resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
         Resolver,
     },
 };
@@ -146,35 +146,14 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         confirm().await?;
     }
 
-    if !resolution_fetchs.is_empty() {
-        if dry_run {
-            info!("Dry-run: Not proceeding to install fetched binaries");
-        } else {
-            let f = || -> Result<()> {
-                let metadata_vec = resolution_fetchs
-                    .into_iter()
-                    .map(|fetch| fetch.install(&binstall_opts))
-                    .collect::<Result<Vec<_>, BinstallError>>()?;
-
-                if let Some(manifests) = manifests {
-                    manifests.update(metadata_vec)?;
-                }
-
-                if no_cleanup {
-                    // Consume temp_dir without removing it from fs.
-                    temp_dir.into_path();
-                } else {
-                    temp_dir.close().unwrap_or_else(|err| {
-                        warn!("Failed to clean up some resources: {err}");
-                    });
-                }
-
-                Ok(())
-            };
-
-            block_in_place(f)?;
-        }
-    }
+    do_install_fetches(
+        resolution_fetchs,
+        manifests,
+        &binstall_opts,
+        dry_run,
+        temp_dir,
+        no_cleanup,
+    )?;
 
     let tasks: Vec<_> = resolution_sources
         .into_iter()
@@ -275,4 +254,46 @@ fn filter_out_installed_crates(
             _ => Some((crate_name, None)),
         }
     }))
+}
+
+#[allow(clippy::vec_box)]
+fn do_install_fetches(
+    resolution_fetchs: Vec<Box<ResolutionFetch>>,
+    // Take manifests by value to drop the `FileLock`.
+    manifests: Option<Manifests>,
+    binstall_opts: &ops::Options,
+    dry_run: bool,
+    temp_dir: tempfile::TempDir,
+    no_cleanup: bool,
+) -> Result<()> {
+    if resolution_fetchs.is_empty() {
+        return Ok(());
+    }
+
+    if dry_run {
+        info!("Dry-run: Not proceeding to install fetched binaries");
+        return Ok(());
+    }
+
+    block_in_place(|| -> Result<()> {
+        let metadata_vec = resolution_fetchs
+            .into_iter()
+            .map(|fetch| fetch.install(binstall_opts))
+            .collect::<Result<Vec<_>, BinstallError>>()?;
+
+        if let Some(manifests) = manifests {
+            manifests.update(metadata_vec)?;
+        }
+
+        if no_cleanup {
+            // Consume temp_dir without removing it from fs.
+            temp_dir.into_path();
+        } else {
+            temp_dir.close().unwrap_or_else(|err| {
+                warn!("Failed to clean up some resources: {err}");
+            });
+        }
+
+        Ok(())
+    })
 }
