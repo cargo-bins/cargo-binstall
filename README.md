@@ -27,6 +27,10 @@ We recommend using the pre-compiled ones because we optimize those more than a s
 | macos   | m1      | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip |
 | macos   | universal | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-universal-apple-darwin.zip |
 | windows | x86\_64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip |
+| windows | arm64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-pc-windows-msvc.zip |
+
+We also provide pre-built artifacts with debuginfo for Linux and Mac.
+These artifacts are suffixed with `.full.tgz` on Linux and `.full.zip` on Mac and Windows.
 
 To upgrade cargo-binstall, use `cargo binstall cargo-binstall`!
 
