@@ -17,7 +17,7 @@ cargo_toml = "0.14.0"
 command-group = { version = "2.0.1", features = ["with-tokio"] }
 compact_str = { version = "0.6.1", features = ["serde"] }
 crates_io_api = { version = "0.8.1", default-features = false }
-detect-targets = { version = "0.1.4", path = "../detect-targets" }
+detect-targets = { version = "0.1.5", path = "../detect-targets" }
 either = "1.8.0"
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 home = "0.5.4"
