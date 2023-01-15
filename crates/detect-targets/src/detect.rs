@@ -2,7 +2,6 @@ use std::{
     borrow::Cow,
     env,
     ffi::OsStr,
-    io::{BufRead, Cursor},
     process::{Output, Stdio},
 };
 
@@ -99,36 +98,26 @@ async fn get_target_from_rustc() -> Option<String> {
         return None;
     }
 
-    let it = Cursor::new(stdout).lines().filter_map(Result::ok);
+    let stdout = String::from_utf8_lossy(&stdout);
+    let target = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))?;
 
-    for line in it {
-        let rest = line.strip_prefix("host: ");
-
-        // If the line starts with "host: ", then we will process it and
-        // either return Some or None.
-        //
-        // We will not keep iterating over the lines anymore.
-        if let Some(target) = rest {
-            // The target triplets have the form of 'arch-vendor-system'.
-            //
-            // When building for Linux (e.g. the 'system' part is
-            // 'linux-something'), replace the vendor with 'unknown'
-            // so that mapping to rust standard targets happens correctly.
-            //
-            // For example, alpine set `rustc` host triple to
-            // `x86_64-alpine-linux-musl`.
-            //
-            // Here we use splitn with n=4 since we just need to check
-            // the third part to see if it equals to "linux" and verify
-            // that we have at least three parts.
-            let mut parts: Vec<&str> = target.splitn(4, '-').collect();
-            if *parts.get(2)? == "linux" {
-                parts[1] = "unknown";
-            }
-            return Some(parts.join("-"));
-        }
+    // The target triplets have the form of 'arch-vendor-system'.
+    //
+    // When building for Linux (e.g. the 'system' part is
+    // 'linux-something'), replace the vendor with 'unknown'
+    // so that mapping to rust standard targets happens correctly.
+    //
+    // For example, alpine set `rustc` host triple to
+    // `x86_64-alpine-linux-musl`.
+    //
+    // Here we use splitn with n=4 since we just need to check
+    // the third part to see if it equals to "linux" and verify
+    // that we have at least three parts.
+    let mut parts: Vec<&str> = target.splitn(4, '-').collect();
+    if *parts.get(2)? == "linux" {
+        parts[1] = "unknown";
     }
-
-    // Return None if no line starts with "host: " is found
-    None
+    Some(parts.join("-"))
 }
