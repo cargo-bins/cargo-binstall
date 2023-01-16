@@ -7,6 +7,16 @@ unset CARGO_INSTALL_ROOT
 export CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
 export PATH="$CARGO_HOME/bin:$PATH"
 
-"./$1" binstall --no-confirm --no-symlinks --force cargo-binstall@0.11.1
+# first boostrap-install into the CARGO_HOME
+"./$1" binstall --no-confirm --no-symlinks --force cargo-binstall
 
-"./$1" binstall --no-confirm --force cargo-binstall@0.12.0
+# now we're running the CARGO_HOME/bin/cargo-binstall (via cargo):
+
+# self update
+cargo binstall --no-confirm --no-symlinks --force cargo-binstall
+
+# self update replacing no-symlinks with symlinks
+cargo binstall --no-confirm --force cargo-binstall
+
+# self update with symlinks
+cargo binstall --no-confirm --force cargo-binstall
