@@ -14,6 +14,9 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     );
 
     if let Err(err) = fs::rename(src, dst) {
+        #[cfg(target_os = "windows")]
+        {}
+
         debug!("Attempting at atomic rename failed: {err:#?}, fallback to creating tempfile.");
         // src and dst is not on the same filesystem/mountpoint.
         // Fallback to creating NamedTempFile on the parent dir of
@@ -86,4 +89,40 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
         link.display()
     );
     temp_path.persist(link).map_err(io::Error::from)
+}
+
+#[cfg(target_os = "windows")]
+mod win {
+    use std::{os::windows::ffi::OsStrExt, path::Path};
+
+    use windows::{
+        core::{Error, PCWSTR},
+        Win32::Storage::FileSystem::{ReplaceFileW, REPLACE_FILE_FLAGS},
+    };
+
+    pub(super) fn replace_file(src: &Path, dst: &Path) -> Result<(), Error> {
+        let mut src: Vec<_> = src.as_os_str().encode_wide().collect();
+        let mut dst: Vec<_> = dst.as_os_str().encode_wide().collect();
+
+        // Ensure it is terminated with 0
+        src.push(0);
+        dst.push(0);
+
+        // SAFETY: We use it according its doc
+        // https://learn.microsoft.com/en-nz/windows/win32/api/winbase/nf-winbase-replacefilew
+        //
+        // NOTE that this function is available since windows XP, so we don't need to
+        // lazily load this function.
+        unsafe {
+            ReplaceFileW(
+                PCWSTR::from_raw(dst.as_ptr()), // lpreplacedfilename
+                PCWSTR::from_raw(src.as_ptr()), // lpreplacementfilename
+                PCWSTR::null(),                 // lpbackupfilename, null for no backup file
+                REPLACE_FILE_FLAGS(0),          // dwreplaceflags
+                None,                           // lpexclude, unused
+                None,                           // lpreserved, unused
+            )
+        }
+        .ok()
+    }
 }
