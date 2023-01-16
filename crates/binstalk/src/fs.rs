@@ -15,7 +15,25 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
 
     if let Err(err) = fs::rename(src, dst) {
         #[cfg(target_os = "windows")]
-        {}
+        {
+            match win::replace_file(src, dst) {
+                Ok(()) => {
+                    debug!(
+                        "ReplaceFileW succeeded rename {} => {}.",
+                        src.display(),
+                        dst.display()
+                    );
+                    return Ok(());
+                }
+                Err(err) => {
+                    warn!(
+                        "ReplaceFileW failed to rename {} => {}: {err}",
+                        src.display(),
+                        dst.display()
+                    );
+                }
+            }
+        }
 
         debug!("Attempting at atomic rename failed: {err:#?}, fallback to creating tempfile.");
         // src and dst is not on the same filesystem/mountpoint.
