@@ -11,7 +11,7 @@ license = "GPL-3.0"
 
 [dependencies]
 async-trait = "0.1.61"
-binstalk-downloader = { version = "0.3.0", path = "../binstalk-downloader" }
+binstalk-downloader = { version = "0.3.1", path = "../binstalk-downloader" }
 binstalk-types = { version = "0.2.0", path = "../binstalk-types" }
 cargo_toml = "0.14.0"
 command-group = { version = "2.0.1", features = ["with-tokio"] }

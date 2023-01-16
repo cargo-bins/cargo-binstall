@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-downloader"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-compression",
  "async-trait",
