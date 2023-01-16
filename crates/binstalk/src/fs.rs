@@ -24,11 +24,7 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
                     return Ok(());
                 }
                 Err(err) => {
-                    warn!(
-                        "ReplaceFileW failed: {err}, fallback to using tempfile plus rename",
-                        src.display(),
-                        dst.display()
-                    );
+                    warn!("ReplaceFileW failed: {err}, fallback to using tempfile plus rename",);
                 }
             }
         }
