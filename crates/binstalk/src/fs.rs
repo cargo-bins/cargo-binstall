@@ -1,7 +1,7 @@
 use std::{fs, io, path::Path};
 
 use tempfile::NamedTempFile;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Atomically install a file.
 ///
@@ -14,20 +14,18 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     );
 
     if let Err(err) = fs::rename(src, dst) {
+        warn!("Attempting at atomic rename failed: {err:#?}, fallback to other methods.");
+
         #[cfg(target_os = "windows")]
         {
             match win::replace_file(src, dst) {
                 Ok(()) => {
-                    debug!(
-                        "ReplaceFileW succeeded rename {} => {}.",
-                        src.display(),
-                        dst.display()
-                    );
+                    debug!("ReplaceFileW succeeded.",);
                     return Ok(());
                 }
                 Err(err) => {
                     warn!(
-                        "ReplaceFileW failed to rename {} => {}: {err}",
+                        "ReplaceFileW failed: {err}, fallback to using tempfile plus rename",
                         src.display(),
                         dst.display()
                     );
@@ -35,7 +33,6 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
             }
         }
 
-        debug!("Attempting at atomic rename failed: {err:#?}, fallback to creating tempfile.");
         // src and dst is not on the same filesystem/mountpoint.
         // Fallback to creating NamedTempFile on the parent dir of
         // dst.
