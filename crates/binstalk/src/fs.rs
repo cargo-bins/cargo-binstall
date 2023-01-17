@@ -55,12 +55,7 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
         );
         tempfile.as_file().set_permissions(permissions)?;
 
-        debug!(
-            "Persisting '{}' to '{}'",
-            tempfile.path().display(),
-            dst.display()
-        );
-        tempfile.persist(dst).map_err(io::Error::from)?;
+        persist(tempfile.into_temp_path(), dst)?;
     } else {
         debug!("Attempting at atomically succeeded.");
     }
