@@ -97,7 +97,7 @@ fn persist(temp_path: TempPath, to: &Path) -> io::Result<()> {
     match temp_path.persist(to) {
         Ok(()) => Ok(()),
         #[cfg(target_os = "windows")]
-        Err(temp_path::PathPersistError {
+        Err(tempfile::PathPersistError {
             error,
             path: temp_path,
         }) => {
