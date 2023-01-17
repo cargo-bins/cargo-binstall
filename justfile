@@ -84,6 +84,12 @@ rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 # it requires the gold linker
 rustc-icf := if for-release != "" { if target-os == "windows" { " -C link-arg=-Wl,--icf=safe" } else { "" } } else { "" }
 
+# lld is the faster linker for lto builds and only slower than mold for non-lto
+# builds.
+#
+# It also supports --icf=safe.
+linker := " -C link-arg=-fuse-ld=lld"
+
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
 export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
 
