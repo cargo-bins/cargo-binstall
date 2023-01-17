@@ -82,7 +82,7 @@ rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 # ICF: link-time identical code folding
 # Only enable it on windows where build succeeds, as on other targets
 # it requires the gold linker
-rustc-icf := if for-release != "" { if target-os == "windows" { " -C link-arg=-Wl,--icf=safe" } else { "" } } else { "" }
+rustc-icf := if for-release != "" { if use-cross == "" { " -C link-arg=-Wl,--icf=safe" } else { "" } } else { "" }
 
 # lld is the faster linker for lto builds and only slower than mold for non-lto
 # builds.
