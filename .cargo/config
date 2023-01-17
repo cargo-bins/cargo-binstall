@@ -1,11 +1,15 @@
 [target.armv7-unknown-linux-gnueabihf]
 linker = "arm-linux-gnueabihf-gcc"
+pre-build = ["apt-get update && apt-get install -y lld"]
 
 [target.armv7-unknown-linux-musleabihf]
 linker = "arm-linux-musleabihf-gcc"
+pre-build = ["apt-get update && apt-get install -y lld"]
 
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
+pre-build = ["apt-get update && apt-get install -y lld"]
 
 [target.aarch64-unknown-linux-musl]
 linker = "aarch64-linux-musl-gcc"
+pre-build = ["apt-get update && apt-get install -y lld"]
