@@ -89,19 +89,22 @@ export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt
-ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev"
-    } else if target == "x86_64-unknown-linux-musl" { "musl-tools"
-    } else if target == "aarch64-unknown-linux-gnu" { "g++-aarch64-linux-gnu libc6-dev-arm64-cross binutils binutils-aarch64-linux-gnu libblocksruntime-dev"
-    } else { "" }
+ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev lld"
+    } else if target == "x86_64-unknown-linux-musl" { "musl-tools lld"
+    } else if target == "aarch64-unknown-linux-gnu" { "g++-aarch64-linux-gnu libc6-dev-arm64-cross binutils binutils-aarch64-linux-gnu libblocksruntime-dev lld"
+    } else { "lld" }
 
 [linux]
 ci-install-deps:
-    {{ if ci-apt-deps == "" { "exit" } else { "" } }}
     sudo apt update && sudo apt install -y --no-install-recommends {{ci-apt-deps}}
 
 [macos]
+ci-install-deps:
+    brew update && brew install llvm
+
 [windows]
 ci-install-deps:
+    choco install llvm
 
 toolchain components="":
     rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
