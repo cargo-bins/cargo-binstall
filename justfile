@@ -77,9 +77,7 @@ cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.s
 win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring.git=\"https://github.com/awakecoding/ring\"' --config='patch.crates-io.ring.branch=\"0.16.20_alpha\"'" } else { "" }
 
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
-# disabled for now, as it ICEs
-# https://github.com/rust-lang/rust/issues/106141
-rustc-miropt := "" #if for-release != "" { " -Z mir-opt-level=4" } else { "" }
+rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 
 # ICF: link-time identical code folding
 # disabled for now, as it requires the gold linker
