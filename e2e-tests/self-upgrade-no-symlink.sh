@@ -22,11 +22,11 @@ cp "./$1" "$CARGO_HOME/bin"
 cargo binstall --no-confirm --force cargo-binstall
 
 # self update replacing symlinks with symlinks
-ln -sf "./$1" "$CARGO_HOME/bin"
+ln -sf "./$1" "$CARGO_HOME/bin/cargo-binstall"
 
 cargo binstall --no-confirm --force cargo-binstall
 
 # self update replacing symlinks with no-symlinks
-ln -sf "./$1" "$CARGO_HOME/bin"
+ln -sf "./$1" "$CARGO_HOME/bin/cargo-binstall"
 
 cargo binstall --no-confirm --force --no-symlinks cargo-binstall
