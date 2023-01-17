@@ -101,6 +101,7 @@ jobs:
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         tag: v${{ fromJSON(inputs.publish).version }}
+        release_name: v${{ fromJSON(inputs.publish).version }}
         body: ${{ fromJSON(inputs.publish).notes }}
         file: packages/cargo-binstall-universal-*
         file_glob: true
