@@ -1,6 +1,6 @@
 use std::{fs, io, path::Path};
 
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, TempPath};
 use tracing::{debug, warn};
 
 /// Atomically install a file.
@@ -94,12 +94,12 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
     );
     symlink_file(dest, &temp_path)?;
 
-    debug!(
-        "Persisting '{}' to '{}'",
-        temp_path.display(),
-        link.display()
-    );
-    match temp_path.persist(link) {
+    persist(temp_path, link)
+}
+
+fn persist(temp_path: TempPath, to: &Path) -> io::Result<()> {
+    debug!("Persisting '{}' to '{}'", temp_path.display(), to.display());
+    match temp_path.persist(to) {
         Ok(()) => Ok(()),
         #[cfg(target_os = "windows")]
         Err(temp_path::PathPersistError {
@@ -109,9 +109,9 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
             warn!(
                 "Failed to persist symlink '{}' to '{}': {error}, fallback to ReplaceFileW",
                 temp_path.display(),
-                link.display(),
+                to.display(),
             );
-            win::replace_file(&temp_path, link).map_err(io::Error::from)
+            win::replace_file(&temp_path, to).map_err(io::Error::from)
         }
         #[cfg(not(target_os = "windows"))]
         Err(err) => Err(err.into()),
