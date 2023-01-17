@@ -88,10 +88,12 @@ rustc-icf := if for-release != "" { if target-os == "windows" { " -C link-arg=-W
 # builds.
 #
 # It also supports --icf=safe.
-linker := " -C link-arg=-fuse-ld=lld"
+#
+# If use-cross is true, then we have to use linker provided by cross.
+linker := if use-cross != "" { "" } else { " -C link-arg=-fuse-ld=lld" }
 
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
-export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
+export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (linker) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt
