@@ -186,13 +186,6 @@ impl BinFile {
 
     pub fn install_link(&self) -> Result<(), BinstallError> {
         if let Some(link) = &self.link {
-            // Remove existing symlink
-            // TODO: check if existing symlink is correct
-            if link.exists() {
-                debug!("Remove link '{}'", link.display());
-                std::fs::remove_file(link)?;
-            }
-
             let dest = self.link_dest();
             debug!(
                 "Create link '{}' pointing to '{}'",
