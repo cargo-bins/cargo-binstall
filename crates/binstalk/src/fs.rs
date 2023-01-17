@@ -107,7 +107,7 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
             path: temp_path,
         }) => {
             warn!(
-                "Failed to persist symlink '{}' to '{}': {err}, fallback to ReplaceFileW",
+                "Failed to persist symlink '{}' to '{}': {error}, fallback to ReplaceFileW",
                 temp_path.display(),
                 link.display(),
             );
