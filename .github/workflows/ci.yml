@@ -90,6 +90,7 @@ jobs:
     - run: just check
 
   lint:
+    if: false # skip it for a test
     strategy:
       fail-fast: false
       matrix:
@@ -112,9 +113,12 @@ jobs:
     - linux-cross-check
     - apple-m1-check
     - lint
+    if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
-    - run: echo "Tests pass"
+    # fail if ANY dependency has failed or been skipped or cancelled
+    - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') || contains(needs.*.result, 'cancelled')"
+      run: exit 1
 
   # if everything succeeds and PR is ready for review, test the release/package process
   release-builds:
