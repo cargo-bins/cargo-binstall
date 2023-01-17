@@ -13,11 +13,20 @@ cp "./$1" "$CARGO_HOME/bin"
 
 # now we're running the CARGO_HOME/bin/cargo-binstall (via cargo):
 
-# self update
+# self update replacing no-symlinks with no-symlinks
 cargo binstall --no-confirm --no-symlinks --force cargo-binstall
 
-## self update replacing no-symlinks with symlinks
-#cargo binstall --no-confirm --force cargo-binstall
-#
-## self update with symlinks
-#cargo binstall --no-confirm --force cargo-binstall
+# self update replacing no-symlinks with symlinks
+cp "./$1" "$CARGO_HOME/bin"
+
+cargo binstall --no-confirm --force cargo-binstall
+
+# self update replacing symlinks with symlinks
+ln -sf "./$1" "$CARGO_HOME/bin"
+
+cargo binstall --no-confirm --force cargo-binstall
+
+# self update replacing symlinks with no-symlinks
+ln -sf "./$1" "$CARGO_HOME/bin"
+
+cargo binstall --no-confirm --force --no-symlinks cargo-binstall
