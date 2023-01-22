@@ -24,3 +24,6 @@ if [ "$exit_code" != 94 ]; then
     echo "Expected exit code 94, but actual exit code $exit_code"
     exit 1
 fi
+
+## Test compile-only strategy
+"./$1" binstall --no-confirm --strategies compile cargo-quickinstall

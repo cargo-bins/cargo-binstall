@@ -3,7 +3,7 @@ name = "binstalk-downloader"
 description = "The binstall toolkit for downloading and extracting file"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-downloader"
-version = "0.3.0"
+version = "0.3.2"
 rust-version = "1.65.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -21,7 +21,7 @@ flate2 = { version = "1.0.25", default-features = false }
 futures-util = { version = "0.3.25", default-features = false, features = ["std"] }
 generic-array = "0.14.6"
 httpdate = "1.0.2"
-reqwest = { version = "0.11.13", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
+reqwest = { version = "0.11.14", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
 #
@@ -29,7 +29,7 @@ reqwest = { version = "0.11.13", features = ["stream", "gzip", "brotli", "deflat
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.3.0"
 thiserror = "1.0.38"
-tokio = { version = "1.24.1", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
+tokio = { version = "1.24.2", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
 tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.4", features = ["io"] }
 tower = { version = "0.4.13", features = ["limit", "util"] }
@@ -43,7 +43,7 @@ xz2 = "0.1.7"
 # Since zip 0.6.3 depends on zstd 0.11, we can use 0.12.0 here
 # because it uses the same zstd-sys version.
 # Otherwise there will be a link conflict.
-zstd = { version = "0.12.1", default-features = false }
+zstd = { version = "0.12.2", default-features = false }
 
 [features]
 default = ["static", "rustls"]

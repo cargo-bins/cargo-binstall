@@ -2,7 +2,6 @@ use std::{
     borrow::Cow,
     env,
     ffi::OsStr,
-    io::{BufRead, Cursor},
     process::{Output, Stdio},
 };
 
@@ -99,10 +98,26 @@ async fn get_target_from_rustc() -> Option<String> {
         return None;
     }
 
-    Cursor::new(stdout)
+    let stdout = String::from_utf8_lossy(&stdout);
+    let target = stdout
         .lines()
-        .filter_map(|line| line.ok())
-        .find_map(|line| line.strip_prefix("host: ").map(|host| host.to_owned()))
-        // All valid target triple must be in the form of $arch-$os-$abi.
-        .filter(|target| target.split('-').count() >= 3)
+        .find_map(|line| line.strip_prefix("host: "))?;
+
+    // The target triplets have the form of 'arch-vendor-system'.
+    //
+    // When building for Linux (e.g. the 'system' part is
+    // 'linux-something'), replace the vendor with 'unknown'
+    // so that mapping to rust standard targets happens correctly.
+    //
+    // For example, alpine set `rustc` host triple to
+    // `x86_64-alpine-linux-musl`.
+    //
+    // Here we use splitn with n=4 since we just need to check
+    // the third part to see if it equals to "linux" and verify
+    // that we have at least three parts.
+    let mut parts: Vec<&str> = target.splitn(4, '-').collect();
+    if *parts.get(2)? == "linux" {
+        parts[1] = "unknown";
+    }
+    Some(parts.join("-"))
 }

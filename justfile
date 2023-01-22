@@ -77,9 +77,7 @@ cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.s
 win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring.git=\"https://github.com/awakecoding/ring\"' --config='patch.crates-io.ring.branch=\"0.16.20_alpha\"'" } else { "" }
 
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
-# disabled for now, as it ICEs
-# https://github.com/rust-lang/rust/issues/106141
-rustc-miropt := "" #if for-release != "" { " -Z mir-opt-level=4" } else { "" }
+rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 
 # ICF: link-time identical code folding
 # disabled for now, as it requires the gold linker
@@ -133,6 +131,7 @@ e2e-test-other-repos: (e2e-test "other-repos")
 e2e-test-strategies: (e2e-test "strategies")
 e2e-test-version-syntax: (e2e-test "version-syntax")
 e2e-test-upgrade: (e2e-test "upgrade")
+e2e-test-self-upgrade-no-symlink: (e2e-test "self-upgrade-no-symlink")
 
 # WinTLS (Windows in CI) does not have TLS 1.3 support
 [windows]
@@ -141,7 +140,7 @@ e2e-test-tls: (e2e-test "tls" "1.2")
 [macos]
 e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink
 
 unit-tests:
     {{cargo-bin}} test {{cargo-build-args}}
