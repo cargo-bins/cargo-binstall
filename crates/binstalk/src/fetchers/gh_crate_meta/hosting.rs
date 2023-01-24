@@ -44,7 +44,9 @@ impl RepositoryHost {
         }
     }
 
-    pub fn get_default_pkg_url_template(self) -> Option<Vec<String>> {
+    pub fn get_default_pkg_url_template(
+        self,
+    ) -> Option<impl Iterator<Item = String> + Clone + 'static> {
         use RepositoryHost::*;
 
         match self {
@@ -82,11 +84,14 @@ impl RepositoryHost {
     }
 }
 
-fn apply_filenames_to_paths(paths: &[&str], filenames: &[&[&str]], suffix: &str) -> Vec<String> {
+fn apply_filenames_to_paths(
+    paths: &'static [&'static str],
+    filenames: &'static [&'static [&'static str]],
+    suffix: &'static str,
+) -> impl Iterator<Item = String> + Clone + 'static {
     filenames
         .iter()
         .flat_map(|fs| fs.iter())
         .cartesian_product(paths.iter())
-        .map(|(filename, path)| format!("{path}/{filename}{suffix}"))
-        .collect()
+        .map(move |(filename, path)| format!("{path}/{filename}{suffix}"))
 }

@@ -1,4 +1,8 @@
-use std::{cmp::min, io, iter::repeat};
+use std::{
+    cmp::min,
+    io::{self, Write},
+    iter::repeat,
+};
 
 use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
 use once_cell::sync::Lazy;
@@ -135,10 +139,14 @@ impl Log for Logger {
 
 struct ErrorFreeWriter;
 
+fn report_err(err: io::Error) {
+    writeln!(io::stderr(), "Failed to write to stdout: {err}").ok();
+}
+
 impl io::Write for &ErrorFreeWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         io::stdout().write(buf).or_else(|err| {
-            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            report_err(err);
             // Behave as if writing to /dev/null so that logging system
             // would keep working.
             Ok(buf.len())
@@ -147,7 +155,7 @@ impl io::Write for &ErrorFreeWriter {
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         io::stdout().write_all(buf).or_else(|err| {
-            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            report_err(err);
             // Behave as if writing to /dev/null so that logging system
             // would keep working.
             Ok(())
@@ -156,7 +164,7 @@ impl io::Write for &ErrorFreeWriter {
 
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
         io::stdout().write_vectored(bufs).or_else(|err| {
-            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            report_err(err);
             // Behave as if writing to /dev/null so that logging system
             // would keep working.
             Ok(bufs.iter().map(|io_slice| io_slice.len()).sum())
@@ -165,7 +173,7 @@ impl io::Write for &ErrorFreeWriter {
 
     fn flush(&mut self) -> io::Result<()> {
         io::stdout().flush().or_else(|err| {
-            write!(io::stderr(), "Failed to write to stdout: {err}").ok();
+            report_err(err);
             // Behave as if writing to /dev/null so that logging system
             // would keep working.
             Ok(())

@@ -1,4 +1,4 @@
-use std::{future::Future, iter, ops::Deref, path::Path, sync::Arc};
+use std::{borrow::Cow, future::Future, iter, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -92,12 +92,12 @@ impl super::Fetcher for GhCrateMeta {
             };
 
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-                Either::Left(pkg_url)
+                Either::Left(iter::once(Cow::Borrowed(pkg_url)))
             } else if let Some(repo) = repo.as_ref() {
                 if let Some(pkg_urls) =
                     RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
                 {
-                    Either::Right(pkg_urls)
+                    Either::Right(pkg_urls.map(Cow::Owned))
                 } else {
                     warn!(
                     concat!(
@@ -129,22 +129,24 @@ impl super::Fetcher for GhCrateMeta {
             // launch_baseline_find_tasks which moves `this`
             let this = &self;
 
-            let launch_baseline_find_tasks = |pkg_fmt| {
-                match &pkg_urls {
-                    Either::Left(pkg_url) => Either::Left(iter::once(*pkg_url)),
-                    Either::Right(pkg_urls) => Either::Right(pkg_urls.iter().map(Deref::deref)),
-                }
-                .flat_map(move |pkg_url| this.launch_baseline_find_tasks(pkg_fmt, pkg_url, repo))
+            let pkg_fmts = if let Some(pkg_fmt) = self.target_data.meta.pkg_fmt {
+                Either::Left(iter::once(pkg_fmt))
+            } else {
+                Either::Right(PkgFmt::iter())
             };
 
-            let mut handles: FuturesUnordered<_> =
-                if let Some(pkg_fmt) = self.target_data.meta.pkg_fmt {
-                    launch_baseline_find_tasks(pkg_fmt).collect()
-                } else {
-                    PkgFmt::iter()
-                        .flat_map(launch_baseline_find_tasks)
-                        .collect()
-                };
+            let mut handles = FuturesUnordered::new();
+
+            // Iterate over pkg_urls first to avoid String::clone.
+            for pkg_url in pkg_urls {
+                //             Clone iter pkg_fmts to ensure all pkg_fmts is
+                //             iterated over for each pkg_url, which is
+                //             basically cartesian product.
+                //             |
+                for pkg_fmt in pkg_fmts.clone() {
+                    handles.extend(this.launch_baseline_find_tasks(pkg_fmt, &pkg_url, repo));
+                }
+            }
 
             while let Some(res) = handles.next().await {
                 if let Some((url, pkg_fmt)) = res? {
