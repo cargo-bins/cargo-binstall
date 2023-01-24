@@ -13,6 +13,7 @@ use std::{
     io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
+    str::{self, Utf8Error},
 };
 
 use beef::Cow;
@@ -54,7 +55,7 @@ impl CratesToml<'_> {
             if vec.is_empty() {
                 Ok(CratesToml::default())
             } else {
-                toml::from_slice(&vec).map_err(CratesTomlParseError::from)
+                toml::from_str(str::from_utf8(&vec)?).map_err(CratesTomlParseError::from)
             }
         }
 
@@ -89,7 +90,7 @@ impl CratesToml<'_> {
             this: &CratesToml<'_>,
             writer: &mut dyn io::Write,
         ) -> Result<(), CratesTomlParseError> {
-            let data = toml::to_vec(&this)?;
+            let data = toml::to_string(&this)?.into_bytes();
             writer.write_all(&data)?;
             Ok(())
         }
@@ -184,8 +185,11 @@ pub enum CratesTomlParseError {
     #[error(transparent)]
     Io(#[from] io::Error),
 
+    #[error("Failed to parse toml: File is not in valid utf-8 encodings: {0}")]
+    TomlParseNonUtf8(#[from] Utf8Error),
+
     #[error(transparent)]
-    TomlParse(#[from] toml::de::Error),
+    TomlParse(Box<toml::de::Error>),
 
     #[error(transparent)]
     TomlWrite(Box<toml::ser::Error>),
@@ -203,6 +207,12 @@ impl From<CvsParseError> for CratesTomlParseError {
 impl From<toml::ser::Error> for CratesTomlParseError {
     fn from(e: toml::ser::Error) -> Self {
         CratesTomlParseError::TomlWrite(Box::new(e))
+    }
+}
+
+impl From<toml::de::Error> for CratesTomlParseError {
+    fn from(e: toml::de::Error) -> Self {
+        CratesTomlParseError::TomlParse(Box::new(e))
     }
 }
 
