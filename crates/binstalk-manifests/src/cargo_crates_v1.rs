@@ -13,7 +13,6 @@ use std::{
     io::{self, Seek},
     iter::IntoIterator,
     path::{Path, PathBuf},
-    str::{self, Utf8Error},
 };
 
 use beef::Cow;
