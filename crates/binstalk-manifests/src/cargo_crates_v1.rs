@@ -189,7 +189,7 @@ pub enum CratesTomlParseError {
     TomlParseNonUtf8(#[from] Utf8Error),
 
     #[error(transparent)]
-    TomlParse(#[from] toml::de::Error),
+    TomlParse(Box<toml::de::Error>),
 
     #[error(transparent)]
     TomlWrite(Box<toml::ser::Error>),
@@ -207,6 +207,12 @@ impl From<CvsParseError> for CratesTomlParseError {
 impl From<toml::ser::Error> for CratesTomlParseError {
     fn from(e: toml::ser::Error) -> Self {
         CratesTomlParseError::TomlWrite(Box::new(e))
+    }
+}
+
+impl From<toml::de::Error> for CratesTomlParseError {
+    fn from(e: toml::de::Error) -> Self {
+        CratesTomlParseError::TomlParse(Box::new(e))
     }
 }
 
