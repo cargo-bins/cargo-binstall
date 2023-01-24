@@ -55,7 +55,7 @@ impl CratesToml<'_> {
             if vec.is_empty() {
                 Ok(CratesToml::default())
             } else {
-                toml::from_str(str::from_utf8(&vec)?).map_err(CratesTomlParseError::from)
+                toml_edit::de::from_slice(&vec).map_err(CratesTomlParseError::from)
             }
         }
 
@@ -90,7 +90,7 @@ impl CratesToml<'_> {
             this: &CratesToml<'_>,
             writer: &mut dyn io::Write,
         ) -> Result<(), CratesTomlParseError> {
-            let data = toml::to_string(&this)?.into_bytes();
+            let data = toml_edit::ser::to_vec(&this)?;
             writer.write_all(&data)?;
             Ok(())
         }
@@ -185,14 +185,11 @@ pub enum CratesTomlParseError {
     #[error(transparent)]
     Io(#[from] io::Error),
 
-    #[error("Failed to parse toml: File is not in valid utf-8 encodings: {0}")]
-    TomlParseNonUtf8(#[from] Utf8Error),
+    #[error(transparent)]
+    TomlParse(Box<toml_edit::de::Error>),
 
     #[error(transparent)]
-    TomlParse(Box<toml::de::Error>),
-
-    #[error(transparent)]
-    TomlWrite(Box<toml::ser::Error>),
+    TomlWrite(Box<toml_edit::ser::Error>),
 
     #[error(transparent)]
     CvsParse(Box<CvsParseError>),
@@ -204,14 +201,14 @@ impl From<CvsParseError> for CratesTomlParseError {
     }
 }
 
-impl From<toml::ser::Error> for CratesTomlParseError {
-    fn from(e: toml::ser::Error) -> Self {
+impl From<toml_edit::ser::Error> for CratesTomlParseError {
+    fn from(e: toml_edit::ser::Error) -> Self {
         CratesTomlParseError::TomlWrite(Box::new(e))
     }
 }
 
-impl From<toml::de::Error> for CratesTomlParseError {
-    fn from(e: toml::de::Error) -> Self {
+impl From<toml_edit::de::Error> for CratesTomlParseError {
+    fn from(e: toml_edit::de::Error) -> Self {
         CratesTomlParseError::TomlParse(Box::new(e))
     }
 }
