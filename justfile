@@ -62,9 +62,8 @@ cargo-no-default-features := if default-features == "false" { " --no-default-fea
     } else { "" }
 
 cargo-features := trim_end_match(if override-features != "" { override-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace," + extra-features
-    } else if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" { "rustls,fancy-with-backtrace,zstd-thin," + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "rustls,fancy-with-backtrace," + extra-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin" + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "rustls,fancy-with-backtrace,zstd-thin" + extra-features
     } else { extra-features
 }, ",")
 
