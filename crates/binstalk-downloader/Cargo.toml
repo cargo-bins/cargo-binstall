@@ -10,7 +10,7 @@ edition = "2021"
 license = "GPL-3.0"
 
 [dependencies]
-async-trait = "0.1.63"
+async-trait = "0.1.64"
 async-compression = { version = "0.3.15", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
 async_zip = { version = "0.0.9", features = ["deflate", "bzip2", "lzma", "zstd", "xz"] }
 binstalk-types = { version = "0.2.0", path = "../binstalk-types" }
