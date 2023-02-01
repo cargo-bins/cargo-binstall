@@ -108,23 +108,23 @@ impl super::Fetcher for GhCrateMeta {
                     Either::Right(pkg_urls.map(Cow::Owned))
                 } else {
                     warn!(
-                    concat!(
-                        "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
-                        "Please ask the upstream to provide it for target {}."
-                    ),
-                    repo, self.target_data.target
-                );
+                        concat!(
+                            "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
+                            "Please ask the upstream to provide it for target {}."
+                        ),
+                        repo, self.target_data.target
+                    );
 
                     return Ok(false);
                 }
             } else {
                 warn!(
-                concat!(
-                    "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
-                    "Please ask the upstream to provide it for target {}."
-                ),
-                self.target_data.target
-            );
+                    concat!(
+                        "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
+                        "Please ask the upstream to provide it for target {}."
+                    ),
+                    self.target_data.target
+                );
 
                 return Ok(false);
             };
