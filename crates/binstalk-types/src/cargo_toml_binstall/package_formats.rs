@@ -58,7 +58,7 @@ impl PkgFmt {
         }
     }
 
-    /// The pkg-url template
+    /// Given the pkg-url template, guess the possible pkg-fmt.
     pub fn guess_pkg_format(pkg_url: &str) -> Option<Self> {
         let mut it = pkg_url.rsplitn(3, '.');
 
