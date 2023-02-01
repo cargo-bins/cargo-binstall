@@ -12,7 +12,7 @@ use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
-    errors::BinstallError,
+    errors::{BinstallError, InvalidPkgFmtError},
     helpers::{
         download::Download,
         remote::{Client, Method},
@@ -99,7 +99,34 @@ impl super::Fetcher for GhCrateMeta {
                 None
             };
 
+            let mut pkg_fmt = self.target_data.meta.pkg_fmt;
+
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+                if pkg_fmt.is_none()
+                    && !(pkg_url.contains("format")
+                        || pkg_url.contains("archive-format")
+                        || pkg_url.contains("archive-suffix"))
+                {
+                    // The crate does not specify the pkg-fmt, yet its pkg-url
+                    // template doesn't contains format, archive-format or
+                    // archive-suffix which is required for automatically
+                    // deducing the pkg-fmt.
+                    //
+                    // We will attempt to guess the pkg-fmt there, but this is
+                    // just a best-effort
+                    pkg_fmt = PkgFmt::guess_pkg_format(pkg_url);
+
+                    if pkg_fmt.is_none() {
+                        return Err(InvalidPkgFmtError {
+                            crate_name: self.data.name.clone(),
+                            version: self.data.version.clone(),
+                            target: self.target_data.target.clone(),
+                            pkg_url: pkg_url.to_string(),
+                            reason: "pkg-fmt is not specified, yet pkg-url does not contain format, archive-format or archive-suffix which is required for automatically deducing pkg-fmt",
+                        }
+                        .into());
+                    }
+                }
                 Either::Left(iter::once(Cow::Borrowed(pkg_url)))
             } else if let Some(repo) = repo.as_ref() {
                 if let Some(pkg_urls) =
@@ -137,7 +164,7 @@ impl super::Fetcher for GhCrateMeta {
             // launch_baseline_find_tasks which moves `this`
             let this = &self;
 
-            let pkg_fmts = if let Some(pkg_fmt) = self.target_data.meta.pkg_fmt {
+            let pkg_fmts = if let Some(pkg_fmt) = pkg_fmt {
                 Either::Left(iter::once(pkg_fmt))
             } else {
                 Either::Right(PkgFmt::iter())
