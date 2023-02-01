@@ -44,11 +44,11 @@ pub struct CrateContextError {
 #[derive(Debug, Error)]
 #[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
 pub struct InvalidPkgFmtError {
-    crate_name: CompactString,
-    version: CompactString,
-    target: String,
-    pkg_url: String,
-    reason: &'static str,
+    pub crate_name: CompactString,
+    pub version: CompactString,
+    pub target: String,
+    pub pkg_url: String,
+    pub reason: &'static str,
 }
 
 /// Error kinds emitted by cargo-binstall.
