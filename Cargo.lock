@@ -789,9 +789,9 @@ dependencies = [
 
 [[package]]
 name = "fs4"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9813c3dc174931eff4bd78609debba56465b7c1da888576d21636b601a46790"
+checksum = "8ea55201cc351fdb478217c0fb641b59813da9b4efe4c414a9d8f989a657d149"
 dependencies = [
  "libc",
  "rustix 0.35.13",
