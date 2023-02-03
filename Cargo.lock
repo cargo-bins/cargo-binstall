@@ -216,6 +216,7 @@ dependencies = [
  "futures-util",
  "generic-array",
  "httpdate",
+ "pin-project",
  "reqwest",
  "tempfile",
  "thiserror",
