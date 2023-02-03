@@ -127,9 +127,9 @@ impl Client {
                 (
                     // 503                            429
                     StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS,
-                    Some(mut duration),
+                    Some(duration),
                 ) => {
-                    duration = duration.min(MAX_RETRY_DURATION);
+                    let duration = duration.min(MAX_RETRY_DURATION);
 
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
 
