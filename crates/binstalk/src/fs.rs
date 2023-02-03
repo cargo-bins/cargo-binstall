@@ -70,7 +70,7 @@ fn symlink_file<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> io::Res
     // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
     #[cfg(target_family = "windows")]
     std::os::windows::fs::symlink_file(original, link)
-        .or_else(|_| std::fs::copy(original, link))?;
+        .or_else(|_| std::fs::copy(original, link).map(drop))?;
     Ok(())
 }
 
