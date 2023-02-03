@@ -57,6 +57,38 @@ impl PkgFmt {
             PkgFmt::Zip => &[".zip"],
         }
     }
+
+    /// Given the pkg-url template, guess the possible pkg-fmt.
+    pub fn guess_pkg_format(pkg_url: &str) -> Option<Self> {
+        let mut it = pkg_url.rsplitn(3, '.');
+
+        let guess = match it.next()? {
+            "tar" => Some(PkgFmt::Tar),
+
+            "tbz2" => Some(PkgFmt::Tbz2),
+            "bz2" if it.next() == Some("tar") => Some(PkgFmt::Tbz2),
+
+            "tgz" => Some(PkgFmt::Tgz),
+            "gz" if it.next() == Some("tar") => Some(PkgFmt::Tgz),
+
+            "txz" => Some(PkgFmt::Txz),
+            "xz" if it.next() == Some("tar") => Some(PkgFmt::Txz),
+
+            "tzstd" | "tzst" => Some(PkgFmt::Tzstd),
+            "zst" if it.next() == Some("tar") => Some(PkgFmt::Tzstd),
+
+            "exe" | "bin" => Some(PkgFmt::Bin),
+            "zip" => Some(PkgFmt::Zip),
+
+            _ => None,
+        };
+
+        if it.next().is_some() {
+            guess
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

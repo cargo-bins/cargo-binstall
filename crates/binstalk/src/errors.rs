@@ -41,6 +41,16 @@ pub struct CrateContextError {
     err: BinstallError,
 }
 
+#[derive(Debug, Error)]
+#[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
+pub struct InvalidPkgFmtError {
+    pub crate_name: CompactString,
+    pub version: CompactString,
+    pub target: String,
+    pub pkg_url: String,
+    pub reason: &'static str,
+}
+
 /// Error kinds emitted by cargo-binstall.
 #[derive(Error, Diagnostic, Debug)]
 #[non_exhaustive]
@@ -291,6 +301,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::no_fallback_to_cargo_install))]
     NoFallbackToCargoInstall,
 
+    /// Fallback to `cargo-install` is disabled.
+    ///
+    /// - Code: `binstall::invalid_pkg_fmt`
+    /// - Exit: 95
+    #[error(transparent)]
+    #[diagnostic(severity(error), code(binstall::invalid_pkg_fmt))]
+    InvalidPkgFmt(Box<InvalidPkgFmtError>),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -324,6 +342,7 @@ impl BinstallError {
             InvalidSourceFilePath { .. } => 91,
             EmptySourceFilePath => 92,
             NoFallbackToCargoInstall => 94,
+            InvalidPkgFmt(..) => 95,
             CrateContext(context) => context.err.exit_number(),
         };
 
@@ -426,5 +445,11 @@ impl From<TinyTemplateError> for BinstallError {
 impl From<CargoTomlError> for BinstallError {
     fn from(e: CargoTomlError) -> Self {
         BinstallError::CargoManifest(Box::new(e))
+    }
+}
+
+impl From<InvalidPkgFmtError> for BinstallError {
+    fn from(e: InvalidPkgFmtError) -> Self {
+        BinstallError::InvalidPkgFmt(Box::new(e))
     }
 }
