@@ -19,6 +19,8 @@ use tracing::{debug, info};
 pub use reqwest::{tls, Error as ReqwestError, Method};
 pub use url::Url;
 
+mod delay_request;
+
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
 const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
