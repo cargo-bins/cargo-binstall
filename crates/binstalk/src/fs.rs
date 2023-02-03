@@ -63,7 +63,7 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn symlink_file<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> io::Result<()> {
+fn symlink_file(original: &Path, link: &Path) -> io::Result<()> {
     #[cfg(target_family = "unix")]
     std::os::unix::fs::symlink(original, link)?;
 
