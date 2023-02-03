@@ -211,6 +211,7 @@ dependencies = [
  "binstall-tar",
  "bytes",
  "bzip2",
+ "compact_str",
  "digest",
  "flate2",
  "futures-util",
