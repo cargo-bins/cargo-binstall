@@ -7,12 +7,13 @@ use std::{
 use bytes::Bytes;
 use futures_util::stream::{Stream, StreamExt};
 use httpdate::parse_http_date;
+use itertools::Itertools;
 use reqwest::{
     header::{HeaderMap, RETRY_AFTER},
     Request, Response, StatusCode,
 };
 use thiserror::Error as ThisError;
-use tokio::{sync::Mutex, time::sleep};
+use tokio::{sync::Mutex, time::Instant};
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
@@ -20,6 +21,7 @@ pub use reqwest::{tls, Error as ReqwestError, Method};
 pub use url::Url;
 
 mod delay_request;
+use delay_request::DelayRequest;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
@@ -46,7 +48,7 @@ pub struct HttpError {
 #[derive(Debug)]
 struct Inner {
     client: reqwest::Client,
-    rate_limit: Mutex<RateLimit<reqwest::Client>>,
+    service: Mutex<DelayRequest<RateLimit<reqwest::Client>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -83,11 +85,11 @@ impl Client {
 
             Ok(Client(Arc::new(Inner {
                 client: client.clone(),
-                rate_limit: Mutex::new(
+                service: Mutex::new(DelayRequest::new(
                     ServiceBuilder::new()
                         .rate_limit(num_request.get(), per)
                         .service(client),
-                ),
+                )),
             })))
         }
 
@@ -115,7 +117,7 @@ impl Client {
             //    the future, then release the lock before
             //    polling the future, which performs network I/O that could
             //    take really long.
-            let future = self.0.rate_limit.lock().await.ready().await?.call(request);
+            let future = self.0.service.lock().await.ready().await?.call(request);
 
             let response = future.await?;
 
@@ -128,7 +130,14 @@ impl Client {
                     Some(duration),
                 ) if duration <= MAX_RETRY_DURATION && count < MAX_RETRY_COUNT => {
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
-                    sleep(duration).await
+
+                    let deadline = Instant::now() + duration;
+
+                    self.0
+                        .service
+                        .lock()
+                        .await
+                        .add_urls_to_delay([url, response.url()].into_iter().dedup(), deadline);
                 }
                 _ => break Ok(response),
             }

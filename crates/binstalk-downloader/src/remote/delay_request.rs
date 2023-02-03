@@ -7,10 +7,11 @@ use std::{
 
 use compact_str::{CompactString, ToCompactString};
 use pin_project::pin_project;
-use reqwest::Request;
+use reqwest::{Request, Url};
 use tokio::time::{sleep_until, Instant, Sleep};
 use tower::Service;
 
+#[derive(Debug)]
 pub(super) struct DelayRequest<S> {
     inner: S,
     hosts_to_delay: HashMap<CompactString, Instant>,
@@ -31,6 +32,15 @@ impl<S> DelayRequest<S> {
                 *old_dl = deadline.max(*old_dl);
             })
             .or_insert(deadline);
+    }
+
+    pub(super) fn add_urls_to_delay<'a, Urls>(&mut self, urls: Urls, deadline: Instant)
+    where
+        Urls: IntoIterator<Item = &'a Url>,
+    {
+        urls.into_iter()
+            .filter_map(Url::host_str)
+            .for_each(|host| self.add_host_to_delay(host, deadline));
     }
 }
 
