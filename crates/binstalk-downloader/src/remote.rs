@@ -7,7 +7,6 @@ use std::{
 use bytes::Bytes;
 use futures_util::stream::{Stream, StreamExt};
 use httpdate::parse_http_date;
-use itertools::Itertools;
 use reqwest::{
     header::{HeaderMap, RETRY_AFTER},
     Request, Response, StatusCode,
@@ -131,7 +130,7 @@ impl Client {
 
                     self.0
                         .service
-                        .add_urls_to_delay([url, response.url()].into_iter().dedup(), deadline);
+                        .add_urls_to_delay(dedup([url, response.url()]), deadline);
 
                     if count >= MAX_RETRY_COUNT {
                         break Ok(response);
@@ -218,5 +217,13 @@ fn parse_header_retry_after(headers: &HeaderMap) -> Option<Duration> {
             // If underflows, returns Duration::ZERO.
             Some(retry_after_unix_timestamp.saturating_sub(curr_time_unix_timestamp))
         }
+    }
+}
+
+fn dedup(urls: [&Url; 2]) -> impl Iterator<Item = &Url> {
+    if urls[0] == urls[1] {
+        Some(urls[0]).into_iter().chain(None)
+    } else {
+        Some(urls[0]).into_iter().chain(Some(urls[1]))
     }
 }

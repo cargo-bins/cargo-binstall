@@ -217,7 +217,6 @@ dependencies = [
  "futures-util",
  "generic-array",
  "httpdate",
- "itertools",
  "reqwest",
  "tempfile",
  "thiserror",
