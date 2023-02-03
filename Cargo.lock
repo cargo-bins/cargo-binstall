@@ -218,7 +218,6 @@ dependencies = [
  "generic-array",
  "httpdate",
  "itertools",
- "pin-project",
  "reqwest",
  "tempfile",
  "thiserror",
