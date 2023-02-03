@@ -2,31 +2,36 @@ use std::{
     collections::HashMap,
     future::Future,
     pin::Pin,
-    task::{ready, Context, Poll},
+    sync::Mutex,
+    task::{Context, Poll},
 };
 
 use compact_str::{CompactString, ToCompactString};
-use pin_project::pin_project;
 use reqwest::{Request, Url};
-use tokio::time::{sleep_until, Instant, Sleep};
-use tower::Service;
+use tokio::{
+    sync::Mutex as AsyncMutex,
+    time::{sleep_until, Instant},
+};
+use tower::{Service, ServiceExt};
 
 #[derive(Debug)]
 pub(super) struct DelayRequest<S> {
-    inner: S,
-    hosts_to_delay: HashMap<CompactString, Instant>,
+    inner: AsyncMutex<S>,
+    hosts_to_delay: Mutex<HashMap<CompactString, Instant>>,
 }
 
 impl<S> DelayRequest<S> {
     pub(super) fn new(inner: S) -> Self {
         Self {
-            inner,
+            inner: AsyncMutex::new(inner),
             hosts_to_delay: Default::default(),
         }
     }
 
-    pub(super) fn add_host_to_delay(&mut self, host: &str, deadline: Instant) {
+    pub(super) fn add_host_to_delay(&self, host: &str, deadline: Instant) {
         self.hosts_to_delay
+            .lock()
+            .unwrap()
             .entry(host.to_compact_string())
             .and_modify(|old_dl| {
                 *old_dl = deadline.max(*old_dl);
@@ -34,7 +39,7 @@ impl<S> DelayRequest<S> {
             .or_insert(deadline);
     }
 
-    pub(super) fn add_urls_to_delay<'a, Urls>(&mut self, urls: Urls, deadline: Instant)
+    pub(super) fn add_urls_to_delay<'a, Urls>(&self, urls: Urls, deadline: Instant)
     where
         Urls: IntoIterator<Item = &'a Url>,
     {
@@ -42,69 +47,60 @@ impl<S> DelayRequest<S> {
             .filter_map(Url::host_str)
             .for_each(|host| self.add_host_to_delay(host, deadline));
     }
-}
 
-impl<S> Service<Request> for DelayRequest<S>
-where
-    S: Service<Request>,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = DelayRequestFuture<S::Future>;
+    fn wait_until_available(&self, url: &Url) -> impl Future<Output = ()> + Send + 'static {
+        let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: Request) -> Self::Future {
-        let sleep = req
-            .url()
+        let sleep = url
             .host_str()
-            .and_then(|host| {
-                self.hosts_to_delay
-                    .get(host)
-                    .map(|deadline| (*deadline, host))
-            })
+            .and_then(|host| hosts_to_delay.get(host).map(|deadline| (*deadline, host)))
             .and_then(|(deadline, host)| {
                 if deadline.elapsed().is_zero() {
-                    Some(Box::pin(sleep_until(deadline)))
+                    Some(sleep_until(deadline))
                 } else {
                     // We have already gone past the deadline,
                     // so we should remove it instead.
-                    self.hosts_to_delay.remove(host);
+                    hosts_to_delay.remove(host);
                     None
                 }
             });
 
-        DelayRequestFuture {
-            sleep,
-            inner: self.inner.call(req),
+        async move {
+            if let Some(sleep) = sleep {
+                sleep.await;
+            }
         }
     }
 }
 
-#[pin_project]
-pub(super) struct DelayRequestFuture<F> {
-    sleep: Option<Pin<Box<Sleep>>>,
-
-    #[pin]
-    inner: F,
-}
-
-impl<F> Future for DelayRequestFuture<F>
+impl<'this, S> Service<Request> for &'this DelayRequest<S>
 where
-    F: Future,
+    S: Service<Request> + Send,
+    S::Future: Send,
 {
-    type Output = F::Output;
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'this>>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
 
-        if let Some(sleep) = this.sleep.as_mut() {
-            ready!(sleep.as_mut().poll(cx));
-            *this.sleep = None;
-        }
+    fn call(&mut self, req: Request) -> Self::Future {
+        let this = *self;
 
-        this.inner.poll(cx)
+        Box::pin(async move {
+            this.wait_until_available(req.url()).await;
+
+            // Reduce critical section:
+            //  - Construct the request before locking
+            //  - Once it is ready, call it and obtain
+            //    the future, then release the lock before
+            //    polling the future, which performs network I/O that could
+            //    take really long.
+            let future = this.inner.lock().await.ready().await?.call(req);
+
+            future.await
+        })
     }
 }

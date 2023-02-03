@@ -13,7 +13,7 @@ use reqwest::{
     Request, Response, StatusCode,
 };
 use thiserror::Error as ThisError;
-use tokio::{sync::Mutex, time::Instant};
+use tokio::time::Instant;
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
@@ -48,7 +48,7 @@ pub struct HttpError {
 #[derive(Debug)]
 struct Inner {
     client: reqwest::Client,
-    service: Mutex<DelayRequest<RateLimit<reqwest::Client>>>,
+    service: DelayRequest<RateLimit<reqwest::Client>>,
 }
 
 #[derive(Clone, Debug)]
@@ -85,11 +85,11 @@ impl Client {
 
             Ok(Client(Arc::new(Inner {
                 client: client.clone(),
-                service: Mutex::new(DelayRequest::new(
+                service: DelayRequest::new(
                     ServiceBuilder::new()
                         .rate_limit(num_request.get(), per)
                         .service(client),
-                )),
+                ),
             })))
         }
 
@@ -111,13 +111,7 @@ impl Client {
         loop {
             let request = Request::new(method.clone(), url.clone());
 
-            // Reduce critical section:
-            //  - Construct the request before locking
-            //  - Once the rate_limit is ready, call it and obtain
-            //    the future, then release the lock before
-            //    polling the future, which performs network I/O that could
-            //    take really long.
-            let future = self.0.service.lock().await.ready().await?.call(request);
+            let future = (&self.0.service).ready().await?.call(request);
 
             let response = future.await?;
 
@@ -137,8 +131,6 @@ impl Client {
 
                     self.0
                         .service
-                        .lock()
-                        .await
                         .add_urls_to_delay([url, response.url()].into_iter().dedup(), deadline);
 
                     if count >= MAX_RETRY_COUNT {
