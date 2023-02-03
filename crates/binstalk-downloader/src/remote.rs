@@ -127,8 +127,10 @@ impl Client {
                 (
                     // 503                            429
                     StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS,
-                    Some(duration),
-                ) if duration <= MAX_RETRY_DURATION && count < MAX_RETRY_COUNT => {
+                    Some(mut duration),
+                ) if count < MAX_RETRY_COUNT => {
+                    duration = duration.min(MAX_RETRY_DURATION);
+
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
 
                     let deadline = Instant::now() + duration;
