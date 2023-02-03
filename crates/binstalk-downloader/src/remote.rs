@@ -128,7 +128,7 @@ impl Client {
                     // 503                            429
                     StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS,
                     Some(mut duration),
-                ) if count < MAX_RETRY_COUNT => {
+                ) => {
                     duration = duration.min(MAX_RETRY_DURATION);
 
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
@@ -140,6 +140,10 @@ impl Client {
                         .lock()
                         .await
                         .add_urls_to_delay([url, response.url()].into_iter().dedup(), deadline);
+
+                    if count >= MAX_RETRY_COUNT {
+                        break Ok(response);
+                    }
                 }
                 _ => break Ok(response),
             }
