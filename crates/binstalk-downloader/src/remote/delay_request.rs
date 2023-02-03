@@ -28,24 +28,20 @@ impl<S> DelayRequest<S> {
         }
     }
 
-    pub(super) fn add_host_to_delay(&self, host: &str, deadline: Instant) {
-        self.hosts_to_delay
-            .lock()
-            .unwrap()
-            .entry(host.to_compact_string())
-            .and_modify(|old_dl| {
-                *old_dl = deadline.max(*old_dl);
-            })
-            .or_insert(deadline);
-    }
-
     pub(super) fn add_urls_to_delay<'a, Urls>(&self, urls: Urls, deadline: Instant)
     where
         Urls: IntoIterator<Item = &'a Url>,
     {
-        urls.into_iter()
-            .filter_map(Url::host_str)
-            .for_each(|host| self.add_host_to_delay(host, deadline));
+        let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
+
+        urls.into_iter().filter_map(Url::host_str).for_each(|host| {
+            hosts_to_delay
+                .entry(host.to_compact_string())
+                .and_modify(|old_dl| {
+                    *old_dl = deadline.max(*old_dl);
+                })
+                .or_insert(deadline);
+        });
     }
 
     fn wait_until_available(&self, url: &Url) -> impl Future<Output = ()> + Send + 'static {
@@ -80,6 +76,8 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
+    // TODO: Replace this with `type_alias_impl_trait` once it stablises
+    // https://github.com/rust-lang/rust/issues/63063
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'this>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
