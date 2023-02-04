@@ -12,12 +12,15 @@ use reqwest::{
     Request, Response, StatusCode,
 };
 use thiserror::Error as ThisError;
-use tokio::{sync::Mutex, time::sleep};
+use tokio::time::Instant;
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
 pub use reqwest::{tls, Error as ReqwestError, Method};
 pub use url::Url;
+
+mod delay_request;
+use delay_request::DelayRequest;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
@@ -44,7 +47,7 @@ pub struct HttpError {
 #[derive(Debug)]
 struct Inner {
     client: reqwest::Client,
-    rate_limit: Mutex<RateLimit<reqwest::Client>>,
+    service: DelayRequest<RateLimit<reqwest::Client>>,
 }
 
 #[derive(Clone, Debug)]
@@ -81,7 +84,7 @@ impl Client {
 
             Ok(Client(Arc::new(Inner {
                 client: client.clone(),
-                rate_limit: Mutex::new(
+                service: DelayRequest::new(
                     ServiceBuilder::new()
                         .rate_limit(num_request.get(), per)
                         .service(client),
@@ -107,13 +110,7 @@ impl Client {
         loop {
             let request = Request::new(method.clone(), url.clone());
 
-            // Reduce critical section:
-            //  - Construct the request before locking
-            //  - Once the rate_limit is ready, call it and obtain
-            //    the future, then release the lock before
-            //    polling the future, which performs network I/O that could
-            //    take really long.
-            let future = self.0.rate_limit.lock().await.ready().await?.call(request);
+            let future = (&self.0.service).ready().await?.call(request);
 
             let response = future.await?;
 
@@ -124,9 +121,20 @@ impl Client {
                     // 503                            429
                     StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS,
                     Some(duration),
-                ) if duration <= MAX_RETRY_DURATION && count < MAX_RETRY_COUNT => {
+                ) => {
+                    let duration = duration.min(MAX_RETRY_DURATION);
+
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
-                    sleep(duration).await
+
+                    let deadline = Instant::now() + duration;
+
+                    self.0
+                        .service
+                        .add_urls_to_delay(dedup([url, response.url()]), deadline);
+
+                    if count >= MAX_RETRY_COUNT {
+                        break Ok(response);
+                    }
                 }
                 _ => break Ok(response),
             }
@@ -209,5 +217,13 @@ fn parse_header_retry_after(headers: &HeaderMap) -> Option<Duration> {
             // If underflows, returns Duration::ZERO.
             Some(retry_after_unix_timestamp.saturating_sub(curr_time_unix_timestamp))
         }
+    }
+}
+
+fn dedup(urls: [&Url; 2]) -> impl Iterator<Item = &Url> {
+    if urls[0] == urls[1] {
+        Some(urls[0]).into_iter().chain(None)
+    } else {
+        Some(urls[0]).into_iter().chain(Some(urls[1]))
     }
 }
