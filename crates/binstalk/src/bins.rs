@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    fmt, fs,
+    fmt,
     path::{self, Component, Path, PathBuf},
 };
 
@@ -183,7 +183,7 @@ impl BinFile {
         );
 
         #[cfg(unix)]
-        fs::set_permissions(
+        std::fs::set_permissions(
             &self.source,
             std::os::unix::fs::PermissionsExt::from_mode(0o755),
         )?;

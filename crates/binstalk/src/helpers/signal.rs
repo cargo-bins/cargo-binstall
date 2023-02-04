@@ -1,4 +1,4 @@
-use std::{future::pending, io};
+use std::io;
 
 use super::tasks::AutoAbortJoinHandle;
 use crate::errors::BinstallError;
@@ -73,7 +73,7 @@ mod unix {
             Ok(())
         } else {
             // Use pending() here for the same reason as above.
-            pending().await
+            std::future::pending().await
         }
     }
 

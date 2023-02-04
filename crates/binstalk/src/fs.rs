@@ -63,13 +63,15 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn symlink_file<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> io::Result<()> {
+fn symlink_file(original: &Path, link: &Path) -> io::Result<()> {
     #[cfg(target_family = "unix")]
-    let f = std::os::unix::fs::symlink;
-    #[cfg(target_family = "windows")]
-    let f = std::os::windows::fs::symlink_file;
+    std::os::unix::fs::symlink(original, link)?;
 
-    f(original, link)
+    // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
+    #[cfg(target_family = "windows")]
+    std::os::windows::fs::symlink_file(original, link)
+        .or_else(|_| std::fs::copy(original, link).map(drop))?;
+    Ok(())
 }
 
 /// Atomically install symlink "link" to a file "dst".
