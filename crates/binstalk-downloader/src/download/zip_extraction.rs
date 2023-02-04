@@ -5,7 +5,7 @@ use std::{
 
 use async_zip::{read::ZipEntryReader, ZipEntryExt};
 use bytes::{Bytes, BytesMut};
-use futures_util::future::{try_join, TryFutureExt};
+use futures_lite::future::try_zip as try_join;
 use thiserror::Error as ThisError;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -78,29 +78,36 @@ where
         let (tx, mut rx) = mpsc::channel::<Bytes>(5);
 
         // This entry is a file.
+
+        let write_task = asyncify(move || {
+            if let Some(p) = outpath.parent() {
+                std::fs::create_dir_all(p)?;
+            }
+            let mut outfile = std::fs::File::create(&outpath)?;
+
+            while let Some(bytes) = rx.blocking_recv() {
+                outfile.write_all(&bytes)?;
+            }
+
+            outfile.flush()?;
+
+            if let Some(perms) = perms {
+                outfile.set_permissions(perms)?;
+            }
+
+            Ok(())
+        });
+
+        let read_task = copy_file_to_mpsc(entry, tx, buf);
+
         try_join(
-            asyncify(move || {
-                if let Some(p) = outpath.parent() {
-                    std::fs::create_dir_all(p)?;
-                }
-                let mut outfile = std::fs::File::create(&outpath)?;
-
-                while let Some(bytes) = rx.blocking_recv() {
-                    outfile.write_all(&bytes)?;
-                }
-
-                outfile.flush()?;
-
-                if let Some(perms) = perms {
-                    outfile.set_permissions(perms)?;
-                }
-
-                Ok(())
-            })
-            .err_into(),
-            copy_file_to_mpsc(entry, tx, buf)
-                .map_err(ZipError::from_inner)
-                .map_err(DownloadError::from),
+            async move { write_task.await.map_err(From::from) },
+            async move {
+                read_task
+                    .await
+                    .map_err(ZipError::from_inner)
+                    .map_err(DownloadError::from)
+            },
         )
         .await?;
     }

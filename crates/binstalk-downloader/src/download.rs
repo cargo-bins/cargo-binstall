@@ -2,7 +2,7 @@ use std::{fmt::Debug, io, marker::PhantomData, path::Path};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
-use futures_util::stream::StreamExt;
+use futures_lite::stream::StreamExt;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
