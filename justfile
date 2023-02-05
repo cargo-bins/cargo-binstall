@@ -37,7 +37,7 @@ output-folder := if target != target-host { "target" / target / output-profile-f
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cargo-zigbuild != "" { "cargo zigbuild" } else if use-cross != "" { "cross" } else { "cargo +nightly" }
+cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo +nightly" }
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
