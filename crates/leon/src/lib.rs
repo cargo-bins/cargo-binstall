@@ -1,0 +1,137 @@
+//! Dead-simple string templating.
+//!
+//! Leon parses a template string into a list of tokens, and then substitutes
+//! provided values in. Unlike other templating engines, it is extremely simple:
+//! it supports no logic, only replaces. It is even simpler than `format!()`,
+//! though has a similar syntax.
+//!
+//! # Syntax
+//!
+//! ```plain
+//! it is better to rule { group }
+//! one can live {adverb} without power
+//! ```
+//!
+//! A replacement is denoted by `{` and `}`. The contents of the braces, trimmed
+//! of any whitespace, are the key. Any text outside of braces is left as-is.
+//!
+//! To escape a brace, use `{{` or `}}`:
+//!
+//! ```plain
+//! {{ leon }}
+//! ```
+//!
+//! The above examples, given the values `group = "no one"` and
+//! `adverb = "honourably"`, would render to:
+//!
+//! ```plain
+//! it is better to rule no one
+//! one can live honourably without power
+//! { leon }
+//! ```
+//!
+//! # Usage
+//!
+//! A template is first parsed to a token list:
+//!
+//! ```
+//! use std::str::FromStr;
+//! use leon::Template;
+//!
+//! let template = Template::from_str("hello {name}").unwrap();
+//! ```
+//!
+//! The template can be inspected, for example to check if a key is present:
+//!
+//! ```
+//! # use std::str::FromStr;
+//! # use leon::Template;
+//! #
+//! # let template = Template::from_str("hello {name}").unwrap();
+//! assert!(template.has_key("name"));
+//! ```
+//!
+//! The template can be rendered to a string:
+//!
+//! ```
+//! # use std::str::FromStr;
+//! # use leon::Template;
+//! #
+//! # let template = Template::from_str("hello {name}").unwrap();
+//! assert_eq!(template.render(|_key| Some("marcus")).unwrap().as_str(), "hello marcus");
+//! ```
+//!
+//! …or to a writer:
+//!
+//! ```
+//! use std::io::Write;
+//! # use std::str::FromStr;
+//! # use leon::Template;
+//! #
+//! # let template = Template::from_str("hello {name}").unwrap();
+//! let mut buf: Vec<u8> = Vec::new();
+//! template.render_into(&mut buf, |key| if key == "name" { Some("julius") } else { None }).unwrap();
+//! assert_eq!(buf.as_slice(), b"hello julius");
+//! ```
+//!
+//! …with a map:
+//!
+//! ```
+//! use std::collections::HashMap;
+//! # use std::str::FromStr;
+//! # use leon::Template;
+//! # let template = Template::from_str("hello {name}").unwrap();
+//! let mut values = HashMap::new();
+//! values.insert("name", "brutus");
+//! assert_eq!(template.render(&values).unwrap().as_str(), "hello brutus");
+//! ```
+//!
+//! …or with your own type, if you implement the [`ValueProvider`] trait:
+//!
+//! ```
+//! # use std::str::FromStr;
+//! # use leon::Template;
+//! use leon::Values;
+//!
+//! struct MyMap {
+//!   name: &'static str,
+//! }
+//! impl<'a> Values<&'a str, &'a str> for &MyMap {
+//!    fn get_value(&mut self, key: &str) -> Option<&'a str> {
+//!       if key == "name" {
+//!         Some(self.name)
+//!      } else {
+//!        None
+//!     }
+//!    }
+//! }
+//! #
+//! # let template = Template::from_str("hello {name}").unwrap();
+//! let values = MyMap { name: "pontifex" };
+//! assert_eq!(template.render(&values).unwrap().as_str(), "hello pontifex");
+//! ```
+//!
+//! # Errors
+//!
+//! Leon will return a [`LeonError::InvalidTemplate`] if the template fails to
+//! parse. This can happen if there are unbalanced braces, or if a key is empty.
+//!
+//! Leon will return a [`LeonError::MissingKey`] if a key is missing from keyed
+//! values passed to [`Template::render`], unless a default value is provided
+//! with [`Template.default`].
+//!
+//! It will also pass through I/O errors when using [`Template::render_into()`].
+
+#[doc(inline)]
+pub use error::*;
+
+#[doc(inline)]
+pub use template::*;
+
+#[doc(inline)]
+pub use values::*;
+
+mod error;
+mod parser;
+mod template;
+mod values;

@@ -1,0 +1,14 @@
+[package]
+name = "leon"
+description = "Dead-simple string templating"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/leon"
+version = "0.0.0"
+rust-version = "1.61.0"
+authors = ["Félix Saparelli <felix@passcod.name>"]
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+miette = "5.5.0"
+thiserror = "1.0.38"
