@@ -19,7 +19,6 @@ compact_str = { version = "0.6.1", features = ["serde"] }
 crates_io_api = { version = "0.8.1", default-features = false }
 detect-targets = { version = "0.1.5", path = "../detect-targets" }
 either = "1.8.1"
-futures-util = { version = "0.3.26", default-features = false, features = ["std"] }
 home = "0.5.4"
 itertools = "0.10.5"
 jobslot = { version = "0.2.8", features = ["tokio"] }

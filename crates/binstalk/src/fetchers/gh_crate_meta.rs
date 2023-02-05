@@ -2,7 +2,6 @@ use std::{borrow::Cow, future::Future, iter, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
-use futures_util::stream::{FuturesUnordered, StreamExt};
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use serde::Serialize;
@@ -15,6 +14,7 @@ use crate::{
     errors::{BinstallError, InvalidPkgFmtError},
     helpers::{
         download::Download,
+        futures_resolver::FuturesResolver,
         remote::{Client, Method},
         tasks::AutoAbortJoinHandle,
     },
@@ -170,7 +170,7 @@ impl super::Fetcher for GhCrateMeta {
                 Either::Right(PkgFmt::iter())
             };
 
-            let mut handles = FuturesUnordered::new();
+            let resolver = FuturesResolver::default();
 
             // Iterate over pkg_urls first to avoid String::clone.
             for pkg_url in pkg_urls {
@@ -183,19 +183,17 @@ impl super::Fetcher for GhCrateMeta {
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    handles.extend(this.launch_baseline_find_tasks(pkg_fmt, &tt, &pkg_url, repo));
+                    resolver.extend(this.launch_baseline_find_tasks(pkg_fmt, &tt, &pkg_url, repo));
                 }
             }
 
-            while let Some(res) = handles.next().await {
-                if let Some((url, pkg_fmt)) = res? {
-                    debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
-                    self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
-                    return Ok(true);
-                }
+            if let Some((url, pkg_fmt)) = resolver.resolve().await? {
+                debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
+                self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
+                Ok(true)
+            } else {
+                Ok(false)
             }
-
-            Ok(false)
         })
     }
 
