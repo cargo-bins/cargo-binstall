@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
-      JUST_USE_CROSS: true
+      JUST_USE_CARGO_ZIGBUILD: true
 
     steps:
     - uses: actions/checkout@v3
