@@ -4,7 +4,7 @@ use std::{
 };
 
 pub trait Values<K, V> {
-    fn get_value(&mut self, _key: K) -> Option<V>;
+    fn get_value(&mut self, key: K) -> Option<V>;
 }
 
 impl<K, V, F> Values<K, V> for F
