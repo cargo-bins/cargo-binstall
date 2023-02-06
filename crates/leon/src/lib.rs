@@ -35,7 +35,6 @@
 //! A template is first parsed to a token list:
 //!
 //! ```
-//! use std::str::FromStr;
 //! use leon::Template;
 //!
 //! let template = Template::from_str("hello {name}").unwrap();
@@ -44,7 +43,6 @@
 //! The template can be inspected, for example to check if a key is present:
 //!
 //! ```
-//! # use std::str::FromStr;
 //! # use leon::Template;
 //! #
 //! # let template = Template::from_str("hello {name}").unwrap();
@@ -54,7 +52,6 @@
 //! The template can be rendered to a string:
 //!
 //! ```
-//! # use std::str::FromStr;
 //! # use leon::Template;
 //! use leon::vals;
 //! #
@@ -66,7 +63,6 @@
 //!
 //! ```
 //! use std::io::Write;
-//! # use std::str::FromStr;
 //! # use leon::Template;
 //! use leon::vals;
 //! #
@@ -80,7 +76,6 @@
 //!
 //! ```
 //! use std::collections::HashMap;
-//! # use std::str::FromStr;
 //! # use leon::Template;
 //! # let template = Template::from_str("hello {name}").unwrap();
 //! let mut values = HashMap::new();
@@ -91,7 +86,6 @@
 //! …or with your own type, if you implement the [`ValueProvider`] trait:
 //!
 //! ```
-//! # use std::str::FromStr;
 //! # use leon::Template;
 //! use leon::Values;
 //!

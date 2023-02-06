@@ -1,20 +1,22 @@
-use std::{io::Write, ops::Add};
+use std::{borrow::Cow, io::Write, ops::Add};
 
 use crate::{LeonError, Values};
 
+pub type Literal<'s> = Cow<'s, str>;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Template {
-    pub items: Vec<Item>,
-    pub default: Option<String>,
+pub struct Template<'s> {
+    pub items: Vec<Item<'s>>,
+    pub default: Option<Literal<'s>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Item {
-    Text(String),
-    Key(String),
+pub enum Item<'s> {
+    Text(Literal<'s>),
+    Key(Literal<'s>),
 }
 
-impl Template {
+impl<'s> Template<'s> {
     pub fn render_into<'a>(
         &'a self,
         writer: &mut dyn Write,
@@ -63,15 +65,15 @@ impl Template {
         })
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &str> {
+    pub fn keys(&self) -> impl Iterator<Item = &Literal> {
         self.items.iter().filter_map(|token| match token {
-            Item::Key(k) => Some(k.as_str()),
+            Item::Key(k) => Some(k),
             _ => None,
         })
     }
 }
 
-impl Add for Template {
+impl<'s> Add for Template<'s> {
     type Output = Self;
 
     fn add(mut self, rhs: Self) -> Self::Output {
@@ -90,17 +92,14 @@ mod test {
     #[test]
     fn concat_templates() {
         let t1 = Template {
-            items: vec![
-                Item::Text("Hello".to_string()),
-                Item::Key("name".to_string()),
-            ],
+            items: vec![Item::Text("Hello".into()), Item::Key("name".into())],
             default: None,
         };
         let t2 = Template {
             items: vec![
-                Item::Text("have a".to_string()),
-                Item::Key("adjective".to_string()),
-                Item::Text("day!".to_string()),
+                Item::Text("have a".into()),
+                Item::Key("adjective".into()),
+                Item::Text("day!".into()),
             ],
             default: None,
         };
@@ -108,11 +107,11 @@ mod test {
             t1 + t2,
             Template {
                 items: vec![
-                    Item::Text("Hello".to_string()),
-                    Item::Key("name".to_string()),
-                    Item::Text("have a".to_string()),
-                    Item::Key("adjective".to_string()),
-                    Item::Text("day!".to_string()),
+                    Item::Text("Hello".into()),
+                    Item::Key("name".into()),
+                    Item::Text("have a".into()),
+                    Item::Key("adjective".into()),
+                    Item::Text("day!".into()),
                 ],
                 default: None,
             }

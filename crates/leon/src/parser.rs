@@ -1,54 +1,49 @@
-use std::str::FromStr;
+use crate::{Item, Literal, ParseError};
 
-use crate::{Item, ParseError};
+use super::Template;
 
-enum Current {
-    Text(String),
-    Key(String),
-}
-
-impl FromStr for super::Template {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl<'s> Template<'s> {
+    #[allow(clippy::should_implement_trait)] // TODO: implement FromStr
+    pub fn from_str(s: &'s str) -> Result<Self, ParseError<'s>> {
         let mut tokens = Vec::new();
-        let mut current = Current::Text(String::new());
+        let mut current = Item::Text(Literal::default());
 
         for (i, c) in s.chars().enumerate() {
-            match (c, &current) {
-                ('{', Current::Text(t)) => {
+            let check = current.clone();
+            match (c, &check) {
+                ('{', Item::Text(t)) => {
                     tokens.push(Item::Text(t.clone()));
-                    current = Current::Key(String::new());
+                    current = Item::Key(Literal::default());
                 }
-                ('{', Current::Key(k)) if k.is_empty() => {
+                ('{', Item::Key(k)) if k.is_empty() => {
                     if let Some(Item::Text(mut t)) = tokens.pop() {
-                        t.push('{');
-                        current = Current::Text(t);
+                        t.to_mut().push('{');
+                        current = Item::Text(t);
                     } else {
                         return Err(ParseError {
-                            src: s.to_string(),
+                            src: s.into(),
                             unbalanced: Some((i, i + 1).into()),
                             empty_key: None,
                         });
                     }
                 }
-                ('}', Current::Key(k)) => {
+                ('}', Item::Key(k)) => {
                     tokens.push(Item::Key(k.clone()));
-                    current = Current::Text(String::new());
+                    current = Item::Text(Literal::default());
                 }
-                ('}', Current::Text(k)) if k.ends_with('}') => {
+                ('}', Item::Text(k)) if k.ends_with('}') => {
                     // skip, that's the escape
                 }
-                (c, Current::Text(t)) => current = Current::Text(format!("{t}{c}")),
-                (c, Current::Key(k)) => current = Current::Key(format!("{k}{c}")),
+                (c, Item::Text(t)) => current = Item::Text(format!("{t}{c}").into()),
+                (c, Item::Key(k)) => current = Item::Key(format!("{k}{c}").into()),
             }
         }
 
         match current {
-            Current::Text(t) => tokens.push(Item::Text(t)),
-            Current::Key(_) => {
+            Item::Text(t) => tokens.push(Item::Text(t)),
+            Item::Key(_) => {
                 return Err(ParseError {
-                    src: s.to_string(),
+                    src: s.into(),
                     unbalanced: Some((s.len() - 1, s.len()).into()),
                     empty_key: None,
                 })
@@ -61,11 +56,11 @@ impl FromStr for super::Template {
                 .filter_map(|tok| match tok {
                     Item::Text(t) if t.is_empty() => None,
                     Item::Key(k) if k.is_empty() => Some(Err(ParseError {
-                        src: s.to_string(),
+                        src: s.into(),
                         unbalanced: None,
                         empty_key: Some((s.len() - 1, s.len()).into()),
                     })),
-                    Item::Key(k) => Some(Ok(Item::Key(k.trim().to_string()))),
+                    Item::Key(k) => Some(Ok(Item::Key(k.trim().to_string().into()))),
                     _ => Some(Ok(tok)),
                 })
                 .collect::<Result<Vec<_>, _>>()?,
@@ -76,8 +71,6 @@ impl FromStr for super::Template {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
     use crate::{Item, Template};
 
     #[test]
@@ -92,7 +85,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("hello world".to_string())],
+                items: vec![Item::Text("hello world".into())],
                 default: None,
             }
         );
@@ -104,10 +97,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Key("salutation".to_string()),
-                    Item::Text(" world".to_string())
-                ],
+                items: vec![Item::Key("salutation".into()), Item::Text(" world".into())],
                 default: None,
             }
         );
@@ -119,10 +109,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Text("hello ".to_string()),
-                    Item::Key("name".to_string())
-                ],
+                items: vec![Item::Text("hello ".into()), Item::Key("name".into())],
                 default: None,
             }
         );
@@ -135,9 +122,9 @@ mod test {
             template,
             Template {
                 items: vec![
-                    Item::Text("hello ".to_string()),
-                    Item::Key("name".to_string()),
-                    Item::Text("!".to_string())
+                    Item::Text("hello ".into()),
+                    Item::Key("name".into()),
+                    Item::Text("!".into())
                 ],
                 default: None,
             }
@@ -151,9 +138,9 @@ mod test {
             template,
             Template {
                 items: vec![
-                    Item::Key("salutation".to_string()),
-                    Item::Text(" good ".to_string()),
-                    Item::Key("title".to_string()),
+                    Item::Key("salutation".into()),
+                    Item::Text(" good ".into()),
+                    Item::Key("title".into()),
                 ],
                 default: None,
             }
@@ -174,13 +161,13 @@ mod test {
             template,
             Template {
                 items: vec![
-                    Item::Text("\n            And if thy native country was ".to_string()),
-                    Item::Key("ancient civilisation".to_string()),
-                    Item::Text(",\n            What need to slight thee? Came not ".to_string()),
-                    Item::Key("hero".to_string()),
-                    Item::Text(" thence,\n            Who gave to ".to_string()),
-                    Item::Key("country".to_string()),
-                    Item::Text(" her books and art of writing?\n        ".to_string()),
+                    Item::Text("\n            And if thy native country was ".into()),
+                    Item::Key("ancient civilisation".into()),
+                    Item::Text(",\n            What need to slight thee? Came not ".into()),
+                    Item::Key("hero".into()),
+                    Item::Text(" thence,\n            Who gave to ".into()),
+                    Item::Key("country".into()),
+                    Item::Text(" her books and art of writing?\n        ".into()),
                 ],
                 default: None,
             }
@@ -193,7 +180,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".to_string()),],
+                items: vec![Item::Key("word".into()),],
                 default: None,
             }
         );
@@ -205,7 +192,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".to_string()),],
+                items: vec![Item::Key("word".into()),],
                 default: None,
             }
         );
@@ -217,7 +204,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".to_string()),],
+                items: vec![Item::Key("word".into()),],
                 default: None,
             }
         );
@@ -234,7 +221,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".to_string()),],
+                items: vec![Item::Key("word".into()),],
                 default: None,
             }
         );
@@ -246,7 +233,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("a word".to_string()),],
+                items: vec![Item::Key("a word".into()),],
                 default: None,
             }
         );
@@ -258,7 +245,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("this { single left brace".to_string()),],
+                items: vec![Item::Text("this { single left brace".into()),],
                 default: None,
             }
         );
@@ -270,7 +257,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("this } single right brace".to_string()),],
+                items: vec![Item::Text("this } single right brace".into()),],
                 default: None,
             }
         );
@@ -282,7 +269,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("these { two } braces".to_string()),],
+                items: vec![Item::Text("these { two } braces".into()),],
                 default: None,
             }
         );
@@ -295,7 +282,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("these {{ four }} braces".to_string()),],
+                items: vec![Item::Text("these {{ four }} braces".into()),],
                 default: None,
             }
         );

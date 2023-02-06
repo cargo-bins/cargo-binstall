@@ -17,6 +17,28 @@ where
     }
 }
 
+impl<K, V> Values<K, V> for [(K, V)]
+where
+    K: Eq + Hash,
+    V: Clone,
+{
+    fn get_value(&self, key: K) -> Option<V> {
+        self.iter()
+            .find_map(|(k, v)| if k == &key { Some(v.clone()) } else { None })
+    }
+}
+
+impl<K, V, const N: usize> Values<K, V> for [(K, V); N]
+where
+    K: Eq + Hash,
+    V: Clone,
+{
+    fn get_value(&self, key: K) -> Option<V> {
+        self.iter()
+            .find_map(|(k, v)| if k == &key { Some(v.clone()) } else { None })
+    }
+}
+
 impl<K, V> Values<K, V> for HashMap<K, V>
 where
     K: Eq + Hash,
