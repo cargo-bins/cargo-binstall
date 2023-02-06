@@ -16,11 +16,11 @@ impl FromStr for super::Template {
 
         for (i, c) in s.chars().enumerate() {
             match (c, &current) {
-                ('{', &Current::Text(ref t)) => {
+                ('{', Current::Text(t)) => {
                     tokens.push(Item::Text(t.clone()));
                     current = Current::Key(String::new());
                 }
-                ('{', &Current::Key(ref k)) if k.is_empty() => {
+                ('{', Current::Key(k)) if k.is_empty() => {
                     if let Some(Item::Text(mut t)) = tokens.pop() {
                         t.push('{');
                         current = Current::Text(t);
@@ -32,15 +32,15 @@ impl FromStr for super::Template {
                         });
                     }
                 }
-                ('}', &Current::Key(ref k)) => {
+                ('}', Current::Key(k)) => {
                     tokens.push(Item::Key(k.clone()));
                     current = Current::Text(String::new());
                 }
-                ('}', &Current::Text(ref k)) if k.chars().last() == Some('}') => {
+                ('}', Current::Text(k)) if k.ends_with('}') => {
                     // skip, that's the escape
                 }
-                (c, &Current::Text(ref t)) => current = Current::Text(format!("{t}{c}")),
-                (c, &Current::Key(ref k)) => current = Current::Key(format!("{k}{c}")),
+                (c, Current::Text(t)) => current = Current::Text(format!("{t}{c}")),
+                (c, Current::Key(k)) => current = Current::Key(format!("{k}{c}")),
             }
         }
 
