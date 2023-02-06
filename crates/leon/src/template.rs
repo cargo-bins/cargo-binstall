@@ -37,7 +37,10 @@ impl Template {
         Ok(())
     }
 
-    pub fn render<'a>(&'a self, values: impl Values<&'a str, &'a str>) -> Result<String, LeonError> {
+    pub fn render<'a>(
+        &'a self,
+        values: impl Values<&'a str, &'a str>,
+    ) -> Result<String, LeonError> {
         let mut buf = Vec::with_capacity(
             self.items
                 .iter()
@@ -82,27 +85,37 @@ impl Add for Template {
 
 #[cfg(test)]
 mod test {
-    use crate::{Template, Item};
+    use crate::{Item, Template};
 
     #[test]
     fn concat_templates() {
         let t1 = Template {
-            items: vec![Item::Text("Hello".to_string()), Item::Key("name".to_string())],
-            default: None,
-        };
-        let t2 = Template {
-            items: vec![Item::Text("have a".to_string()), Item::Key("adjective".to_string()), Item::Text("day!".to_string())],
-            default: None,
-        };
-        assert_eq!(t1 + t2, Template {
             items: vec![
                 Item::Text("Hello".to_string()),
                 Item::Key("name".to_string()),
+            ],
+            default: None,
+        };
+        let t2 = Template {
+            items: vec![
                 Item::Text("have a".to_string()),
                 Item::Key("adjective".to_string()),
                 Item::Text("day!".to_string()),
             ],
             default: None,
-        });
+        };
+        assert_eq!(
+            t1 + t2,
+            Template {
+                items: vec![
+                    Item::Text("Hello".to_string()),
+                    Item::Key("name".to_string()),
+                    Item::Text("have a".to_string()),
+                    Item::Key("adjective".to_string()),
+                    Item::Text("day!".to_string()),
+                ],
+                default: None,
+            }
+        );
     }
 }

@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    hash::Hash, marker::PhantomData,
+    hash::Hash,
+    marker::PhantomData,
 };
 
 pub trait Values<K, V> {
@@ -41,11 +42,11 @@ where
 /// As this isn't constructible you'll want to use [`vals()`] instead.
 pub struct ValuesFn<K, V, F>
 where
-	F: Fn(K) -> Option<V> + Send + 'static,
+    F: Fn(K) -> Option<V> + Send + 'static,
 {
-	inner: F,
-	_k: PhantomData<K>,
-	_v: PhantomData<V>,
+    inner: F,
+    _k: PhantomData<K>,
+    _v: PhantomData<V>,
 }
 
 impl<K, V, F> Values<K, V> for ValuesFn<K, V, F>
@@ -59,15 +60,15 @@ where
 
 impl<K, V, F> From<F> for ValuesFn<K, V, F>
 where
-	F: Fn(K) -> Option<V> + Send + 'static,
+    F: Fn(K) -> Option<V> + Send + 'static,
 {
-	fn from(inner: F) -> Self {
-		Self {
-			inner,
-			_k: PhantomData,
-			_v: PhantomData,
-		}
-	}
+    fn from(inner: F) -> Self {
+        Self {
+            inner,
+            _k: PhantomData,
+            _v: PhantomData,
+        }
+    }
 }
 
 /// Workaround to allow using functions as [`Values`].

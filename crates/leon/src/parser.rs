@@ -162,11 +162,14 @@ mod test {
 
     #[test]
     fn multiline() {
-        let template = Template::from_str("
+        let template = Template::from_str(
+            "
             And if thy native country was { ancient civilisation },
             What need to slight thee? Came not {hero} thence,
             Who gave to { country } her books and art of writing?
-        ").unwrap();
+        ",
+        )
+        .unwrap();
         assert_eq!(
             template,
             Template {
@@ -190,9 +193,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Key("word".to_string()),
-                ],
+                items: vec![Item::Key("word".to_string()),],
                 default: None,
             }
         );
@@ -204,9 +205,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Key("word".to_string()),
-                ],
+                items: vec![Item::Key("word".to_string()),],
                 default: None,
             }
         );
@@ -218,9 +217,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Key("word".to_string()),
-                ],
+                items: vec![Item::Key("word".to_string()),],
                 default: None,
             }
         );
@@ -228,15 +225,16 @@ mod test {
 
     #[test]
     fn key_both_whitespace() {
-        let template = Template::from_str("{
+        let template = Template::from_str(
+            "{
             \tword
-        }").unwrap();
+        }",
+        )
+        .unwrap();
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Key("word".to_string()),
-                ],
+                items: vec![Item::Key("word".to_string()),],
                 default: None,
             }
         );
@@ -248,9 +246,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Key("a word".to_string()),
-                ],
+                items: vec![Item::Key("a word".to_string()),],
                 default: None,
             }
         );
@@ -262,9 +258,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Text("this { single left brace".to_string()),
-                ],
+                items: vec![Item::Text("this { single left brace".to_string()),],
                 default: None,
             }
         );
@@ -276,9 +270,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Text("this } single right brace".to_string()),
-                ],
+                items: vec![Item::Text("this } single right brace".to_string()),],
                 default: None,
             }
         );
@@ -290,23 +282,20 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Text("these { two } braces".to_string()),
-                ],
+                items: vec![Item::Text("these { two } braces".to_string()),],
                 default: None,
             }
         );
     }
 
-    #[test] #[cfg(fails)] // FIXME
+    #[test]
+    #[cfg(fails)] // FIXME
     fn escape_doubled() {
         let template = Template::from_str("these {{{{ four }}}} braces").unwrap();
         assert_eq!(
             template,
             Template {
-                items: vec![
-                    Item::Text("these {{ four }} braces".to_string()),
-                ],
+                items: vec![Item::Text("these {{ four }} braces".to_string()),],
                 default: None,
             }
         );
