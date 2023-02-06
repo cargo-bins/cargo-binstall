@@ -121,4 +121,17 @@ mod test {
             }
         );
     }
+
+    #[test]
+    fn const_template() {
+        const ITEMS: &'static [Item<'static>] = &[
+            Item::Text(Literal::Borrowed("Hello")),
+            Item::Key(Literal::Borrowed("name")),
+        ];
+        const TEMPLATE: Template = Template {
+            items: Cow::Borrowed(ITEMS),
+            default: None,
+        };
+        assert_eq!(TEMPLATE.render(&[("name", "world")]).unwrap(), "Helloworld");
+    }
 }
