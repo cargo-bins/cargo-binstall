@@ -56,9 +56,10 @@
 //! ```
 //! # use std::str::FromStr;
 //! # use leon::Template;
+//! use leon::vals;
 //! #
 //! # let template = Template::from_str("hello {name}").unwrap();
-//! assert_eq!(template.render(|_key| Some("marcus")).unwrap().as_str(), "hello marcus");
+//! assert_eq!(template.render(vals(|_key| Some("marcus"))).unwrap().as_str(), "hello marcus");
 //! ```
 //!
 //! …or to a writer:
@@ -67,10 +68,11 @@
 //! use std::io::Write;
 //! # use std::str::FromStr;
 //! # use leon::Template;
+//! use leon::vals;
 //! #
 //! # let template = Template::from_str("hello {name}").unwrap();
 //! let mut buf: Vec<u8> = Vec::new();
-//! template.render_into(&mut buf, |key| if key == "name" { Some("julius") } else { None }).unwrap();
+//! template.render_into(&mut buf, vals(|key| if key == "name" { Some("julius") } else { None })).unwrap();
 //! assert_eq!(buf.as_slice(), b"hello julius");
 //! ```
 //!
@@ -96,8 +98,8 @@
 //! struct MyMap {
 //!   name: &'static str,
 //! }
-//! impl<'a> Values<&'a str, &'a str> for &MyMap {
-//!    fn get_value(&mut self, key: &str) -> Option<&'a str> {
+//! impl<'a> Values<&'a str, &'a str> for MyMap {
+//!    fn get_value(&self, key: &str) -> Option<&'a str> {
 //!       if key == "name" {
 //!         Some(self.name)
 //!      } else {

@@ -1,8 +1,6 @@
 use std::{io::Write, ops::Add};
 
-use crate::Values;
-
-use super::LeonError;
+use crate::{LeonError, Values};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Template {
@@ -20,7 +18,7 @@ impl Template {
     pub fn render_into<'a>(
         &'a self,
         writer: &mut dyn Write,
-        mut values: impl Values<&'a str, &'a str>,
+        values: impl Values<&'a str, &'a str>,
     ) -> Result<(), LeonError> {
         for token in &self.items {
             match token {
