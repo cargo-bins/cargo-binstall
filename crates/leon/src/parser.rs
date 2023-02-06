@@ -1,6 +1,6 @@
-use crate::{Item, Literal, ParseError};
+use std::borrow::Cow;
 
-use super::Template;
+use crate::{Item, Literal, ParseError, Template};
 
 impl<'s> Template<'s> {
     #[allow(clippy::should_implement_trait)] // TODO: implement FromStr
@@ -63,7 +63,7 @@ impl<'s> Template<'s> {
                     Item::Key(k) => Some(Ok(Item::Key(k.trim().to_string().into()))),
                     _ => Some(Ok(tok)),
                 })
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<Cow<_>, _>>()?,
             default: None,
         })
     }
@@ -71,6 +71,8 @@ impl<'s> Template<'s> {
 
 #[cfg(test)]
 mod test {
+    use std::borrow::Cow;
+
     use crate::{Item, Template};
 
     #[test]
@@ -85,7 +87,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("hello world".into())],
+                items: Cow::Borrowed(&[Item::Text("hello world".into())]),
                 default: None,
             }
         );
@@ -97,7 +99,10 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("salutation".into()), Item::Text(" world".into())],
+                items: Cow::Borrowed(&[
+                    Item::Key("salutation".into()),
+                    Item::Text(" world".into())
+                ]),
                 default: None,
             }
         );
@@ -109,7 +114,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("hello ".into()), Item::Key("name".into())],
+                items: Cow::Borrowed(&[Item::Text("hello ".into()), Item::Key("name".into())]),
                 default: None,
             }
         );
@@ -121,11 +126,11 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
+                items: Cow::Borrowed(&[
                     Item::Text("hello ".into()),
                     Item::Key("name".into()),
                     Item::Text("!".into())
-                ],
+                ]),
                 default: None,
             }
         );
@@ -137,11 +142,11 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
+                items: Cow::Borrowed(&[
                     Item::Key("salutation".into()),
                     Item::Text(" good ".into()),
                     Item::Key("title".into()),
-                ],
+                ]),
                 default: None,
             }
         );
@@ -160,7 +165,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![
+                items: Cow::Borrowed(&[
                     Item::Text("\n            And if thy native country was ".into()),
                     Item::Key("ancient civilisation".into()),
                     Item::Text(",\n            What need to slight thee? Came not ".into()),
@@ -168,7 +173,7 @@ mod test {
                     Item::Text(" thence,\n            Who gave to ".into()),
                     Item::Key("country".into()),
                     Item::Text(" her books and art of writing?\n        ".into()),
-                ],
+                ]),
                 default: None,
             }
         );
@@ -180,7 +185,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".into()),],
+                items: Cow::Borrowed(&[Item::Key("word".into()),]),
                 default: None,
             }
         );
@@ -192,7 +197,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".into()),],
+                items: Cow::Borrowed(&[Item::Key("word".into()),]),
                 default: None,
             }
         );
@@ -204,7 +209,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".into()),],
+                items: Cow::Borrowed(&[Item::Key("word".into()),]),
                 default: None,
             }
         );
@@ -221,7 +226,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("word".into()),],
+                items: Cow::Borrowed(&[Item::Key("word".into()),]),
                 default: None,
             }
         );
@@ -233,7 +238,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Key("a word".into()),],
+                items: Cow::Borrowed(&[Item::Key("a word".into()),]),
                 default: None,
             }
         );
@@ -245,7 +250,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("this { single left brace".into()),],
+                items: Cow::Borrowed(&[Item::Text("this { single left brace".into()),]),
                 default: None,
             }
         );
@@ -257,7 +262,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("this } single right brace".into()),],
+                items: Cow::Borrowed(&[Item::Text("this } single right brace".into()),]),
                 default: None,
             }
         );
@@ -269,7 +274,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("these { two } braces".into()),],
+                items: Cow::Borrowed(&[Item::Text("these { two } braces".into()),]),
                 default: None,
             }
         );
@@ -282,7 +287,7 @@ mod test {
         assert_eq!(
             template,
             Template {
-                items: vec![Item::Text("these {{ four }} braces".into()),],
+                items: Cow::Borrowed(&[Item::Text("these {{ four }} braces".into()),]),
                 default: None,
             }
         );

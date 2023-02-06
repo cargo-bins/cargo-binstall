@@ -6,7 +6,7 @@ pub type Literal<'s> = Cow<'s, str>;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Template<'s> {
-    pub items: Vec<Item<'s>>,
+    pub items: Cow<'s, [Item<'s>]>,
     pub default: Option<Literal<'s>>,
 }
 
@@ -22,7 +22,7 @@ impl<'s> Template<'s> {
         writer: &mut dyn Write,
         values: impl Values<&'a str, &'a str>,
     ) -> Result<(), LeonError> {
-        for token in &self.items {
+        for token in self.items.as_ref() {
             match token {
                 Item::Text(text) => writer.write_all(text.as_bytes())?,
                 Item::Key(key) => {
@@ -77,7 +77,9 @@ impl<'s> Add for Template<'s> {
     type Output = Self;
 
     fn add(mut self, rhs: Self) -> Self::Output {
-        self.items.extend(rhs.items);
+        self.items
+            .to_mut()
+            .extend(rhs.items.as_ref().iter().cloned());
         if let Some(default) = rhs.default {
             self.default = Some(default);
         }
@@ -87,32 +89,34 @@ impl<'s> Add for Template<'s> {
 
 #[cfg(test)]
 mod test {
-    use crate::{Item, Template};
+    use std::borrow::Cow;
+
+    use crate::{Item, Literal, Template};
 
     #[test]
     fn concat_templates() {
         let t1 = Template {
-            items: vec![Item::Text("Hello".into()), Item::Key("name".into())],
+            items: Cow::Owned(vec![Item::Text("Hello".into()), Item::Key("name".into())]),
             default: None,
         };
         let t2 = Template {
-            items: vec![
+            items: Cow::Owned(vec![
                 Item::Text("have a".into()),
                 Item::Key("adjective".into()),
                 Item::Text("day!".into()),
-            ],
+            ]),
             default: None,
         };
         assert_eq!(
             t1 + t2,
             Template {
-                items: vec![
+                items: Cow::Owned(vec![
                     Item::Text("Hello".into()),
                     Item::Key("name".into()),
                     Item::Text("have a".into()),
                     Item::Key("adjective".into()),
                     Item::Text("day!".into()),
-                ],
+                ]),
                 default: None,
             }
         );
