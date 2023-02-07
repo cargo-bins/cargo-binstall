@@ -614,3 +614,57 @@ mod test_valid {
         assert_eq!(template, template!(Text("محمد "), Key("ريشة")));
     }
 }
+
+#[cfg(test)]
+mod test_error {
+    use crate::{ParseError, Template};
+
+    #[test]
+    fn key_left_half() {
+        let template = Template::from_str("{ open").unwrap_err();
+        assert_eq!(template, ParseError::unbalanced("{ open", 0, 6));
+    }
+
+    #[test]
+    fn key_right_half() {
+        let template = Template::from_str("open }").unwrap_err();
+        assert_eq!(template, ParseError::unbalanced("open }", 5, 5));
+    }
+
+    #[test]
+    fn key_with_half_escape() {
+        let template = Template::from_str(r"this is { not \ allowed }").unwrap_err();
+        assert_eq!(
+            template,
+            ParseError::key_escape(r"this is { not \ allowed }", 8, 14)
+        );
+    }
+
+    #[test]
+    fn key_with_full_escape() {
+        let template = Template::from_str(r"{ not \} allowed }").unwrap_err();
+        assert_eq!(
+            template,
+            ParseError::key_escape(r"{ not \} allowed }", 0, 6)
+        );
+    }
+
+    #[test]
+    fn key_empty() {
+        let template = Template::from_str(r"void: {}").unwrap_err();
+        assert_eq!(template, ParseError::key_empty(r"void: {}", 6, 7));
+    }
+
+    #[test]
+    fn key_only_whitespace() {
+        let template = Template::from_str(r"nothing: { }").unwrap_err();
+        assert_eq!(template, ParseError::key_empty(r"nothing: { }", 9, 11));
+    }
+
+    #[test]
+    fn bad_escape() {
+        let template = Template::from_str(r"not \a thing").unwrap_err();
+        assert_eq!(template, ParseError::escape(r"not \a thing", 4, 5));
+    }
+
+}
