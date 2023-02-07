@@ -30,13 +30,6 @@ impl Token {
         }
     }
 
-    fn start_text_empty(pos: usize) -> Self {
-        Self::Text {
-            start: pos,
-            end: pos,
-        }
-    }
-
     fn start_brace_pair(pos: usize) -> Self {
         Self::BracePair {
             start: pos,
@@ -127,7 +120,7 @@ impl<'s> Template<'s> {
                     }
                 }
                 (txt @ Token::Text { .. }, '\\') => {
-                    if txt.is_empty(source_len) {
+                    if txt.is_empty(source_len) || txt.start() == pos {
                         *txt = Token::start_escape(pos);
                     } else {
                         tokens.push(replace(txt, Token::start_escape(pos)));
@@ -332,7 +325,7 @@ impl<'s> ParseError<'s> {
 }
 
 #[cfg(test)]
-mod test {
+mod test_valid {
     use crate::{helpers::*, template, Template};
 
     #[test]
@@ -498,5 +491,22 @@ mod test {
         );
     }
 
-    // TODO: multibyte
+    #[test]
+    fn escape_before_key() {
+        let template = Template::from_str(r"\\{ a } \{{ b } \}{ c }").unwrap();
+        assert_eq!(
+            template,
+            template!(
+                text(r"\"),
+                key("a"),
+                text(" "),
+                text(r"{"),
+                key("b"),
+                text(" "),
+                text(r"}"),
+                key("c"),
+            )
+        );
+    }
+
 }
