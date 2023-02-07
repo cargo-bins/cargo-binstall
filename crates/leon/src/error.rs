@@ -16,7 +16,7 @@ pub enum LeonError<'s> {
 
     /// A key was missing from the provided values.
     #[error("missing key `{0}`")]
-    MissingKey(Literal<'s>),
+    MissingKey(&'s str),
 
     /// An I/O error passed through from [`Template::render_into`].
     #[error(transparent)]

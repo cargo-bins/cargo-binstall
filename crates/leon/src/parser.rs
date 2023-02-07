@@ -110,7 +110,6 @@ impl<'s> Template<'s> {
         })
     }
 
-    // TODO: figure out if it's parseable without cow (escapes can just point to the source)
     fn parse_items(s: &'s str) -> Result<Vec<Item<'s>>, ParseError<'s>> {
         let source_len = s.len();
         let mut tokens = Vec::new();
@@ -262,7 +261,7 @@ impl<'s> Template<'s> {
         for token in tokens {
             match token {
                 Token::Text { start, end } => {
-                    items.push(Item::Text(Literal::Borrowed(&s[start..=end])));
+                    items.push(Item::Text(&s[start..=end]));
                 }
                 Token::BracePair {
                     start,
@@ -281,11 +280,13 @@ impl<'s> Template<'s> {
                     if key.is_empty() {
                         return Err(ParseError::key_empty(s, start, end));
                     } else {
-                        items.push(Item::Key(Literal::Borrowed(key)));
+                        items.push(Item::Key(key));
                     }
                 }
-                Token::Escape { ch: Some(ch), .. } => {
-                    items.push(Item::Text(Literal::Owned(ch.to_string())));
+                Token::Escape {
+                    ch: Some(_), end, ..
+                } => {
+                    items.push(Item::Text(&s[end..=end]));
                 }
                 Token::Escape {
                     ch: None,

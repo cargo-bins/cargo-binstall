@@ -12,8 +12,8 @@ pub struct Template<'s> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Item<'s> {
-    Text(Literal<'s>),
-    Key(Literal<'s>),
+    Text(&'s str),
+    Key(&'s str),
 }
 
 impl<'s> Template<'s> {
@@ -60,12 +60,12 @@ impl<'s> Template<'s> {
 
     pub fn has_key(&self, key: &str) -> bool {
         self.items.iter().any(|token| match token {
-            Item::Key(k) => k == key,
+            Item::Key(k) => k == &key,
             _ => false,
         })
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &Literal> {
+    pub fn keys(&self) -> impl Iterator<Item = &&str> {
         self.items.iter().filter_map(|token| match token {
             Item::Key(k) => Some(k),
             _ => None,

@@ -8,8 +8,8 @@
 //! const TEMPLATE: Template = Template {
 //!     items: Cow::Borrowed({
 //!         const ITEMS: &'static [Item<'static>] = &[
-//!             Item::Text(Literal::Borrowed("Hello")),
-//!             Item::Key(Literal::Borrowed("name")),
+//!             Item::Text("Hello"),
+//!             Item::Key("name"),
 //!         ];
 //!         ITEMS
 //!     }),
@@ -18,7 +18,7 @@
 //! assert_eq!(TEMPLATE.render(&[("name", "world")]).unwrap(), "Helloworld");
 //! ```
 //!
-//! But that's quite verbose. You can replace the long literals with const functions:
+//! That's a bit verbose. You can replace the long literals with const functions:
 //!
 //! ```
 //! use std::borrow::Cow;
@@ -56,10 +56,7 @@ use std::borrow::Cow;
 use crate::{Item, Literal, Template};
 
 /// Construct a template with the given items and default.
-pub const fn template<'s>(
-    items: &'s [Item<'s>],
-    default: Option<Literal<'s>>,
-) -> Template<'s> {
+pub const fn template<'s>(items: &'s [Item<'s>], default: Option<Literal<'s>>) -> Template<'s> {
     Template {
         items: Cow::Borrowed(items),
         default,
@@ -73,12 +70,12 @@ pub const fn default<'s>(value: &'s str) -> Option<Literal<'s>> {
 
 /// Construct a template text literal.
 pub const fn text<'s>(text: &'s str) -> Item<'s> {
-    Item::Text(Literal::Borrowed(text))
+    Item::Text(text)
 }
 
 /// Construct a template key literal.
 pub const fn key<'s>(key: &'s str) -> Item<'s> {
-    Item::Key(Literal::Borrowed(key))
+    Item::Key(key)
 }
 
 /// Construct a template constant without needing to make an items constant.
