@@ -69,7 +69,7 @@ impl<'s> Template<'s> {
                     } else if let Some(default) = &self.default {
                         writer.write_all(default.as_bytes())?;
                     } else {
-                        return Err(LeonError::MissingKey(key.clone()));
+                        return Err(LeonError::MissingKey(key));
                     }
                 }
             }

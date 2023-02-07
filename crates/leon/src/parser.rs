@@ -152,14 +152,7 @@ impl<'s> Template<'s> {
                 (Token::BracePair { start, .. }, '\\') => {
                     return Err(ParseError::key_escape(s, *start, pos));
                 }
-                (
-                    Token::BracePair {
-                        key_seen,
-                        end,
-                        ..
-                    },
-                    ws,
-                ) if ws.is_whitespace() => {
+                (Token::BracePair { key_seen, end, .. }, ws) if ws.is_whitespace() => {
                     // eprintln!("bracepair ws  > pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                     if *key_seen {
                         *end = pos;
@@ -168,14 +161,7 @@ impl<'s> Template<'s> {
                     }
                     // eprintln!("bracepair ws  < pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                 }
-                (
-                    Token::BracePair {
-                        key_seen,
-                        end,
-                        ..
-                    },
-                    _,
-                ) => {
+                (Token::BracePair { key_seen, end, .. }, _) => {
                     // eprintln!("bracepair any > pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                     *key_seen = true;
                     *end = pos + 1;
@@ -223,9 +209,7 @@ impl<'s> Template<'s> {
                 }
                 (
                     Token::Escape {
-                        start,
-                        ch: None,
-                        ..
+                        start, ch: None, ..
                     },
                     _,
                 ) => {
@@ -234,13 +218,7 @@ impl<'s> Template<'s> {
                     // );
                     return Err(ParseError::escape(s, *start, pos));
                 }
-                (
-                    Token::Escape {
-                        ch: Some(_),
-                        ..
-                    },
-                    _,
-                ) => {
+                (Token::Escape { ch: Some(_), .. }, _) => {
                     // eprintln!(
                     //     "escape after  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
                     // );
