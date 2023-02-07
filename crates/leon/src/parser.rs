@@ -30,6 +30,13 @@ impl Token {
         }
     }
 
+    fn start_text_single(pos: usize) -> Self {
+        Self::Text {
+            start: pos,
+            end: pos,
+        }
+    }
+
     fn start_brace_pair(pos: usize) -> Self {
         Self::BracePair {
             start: pos,
@@ -114,8 +121,10 @@ impl<'s> Template<'s> {
             match (&mut current, chara) {
                 (tok @ (Token::Text { .. } | Token::Escape { ch: Some(_), .. }), '{') => {
                     if matches!(tok, Token::Text { .. }) && tok.start() == pos {
+                        eprintln!("bracepair new | pos={pos:2}  replace tok={tok:?}");
                         *tok = Token::start_brace_pair(pos);
                     } else {
+                        eprintln!("bracepair new | pos={pos:2}     push tok={tok:?}");
                         tokens.push(replace(tok, Token::start_brace_pair(pos)));
                     }
                 }
@@ -229,7 +238,7 @@ impl<'s> Template<'s> {
                     eprintln!(
                         "escape after  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
                     );
-                    tokens.push(replace(&mut current, Token::start_text(pos)));
+                    tokens.push(replace(&mut current, Token::start_text_single(pos)));
                 }
             }
         }
