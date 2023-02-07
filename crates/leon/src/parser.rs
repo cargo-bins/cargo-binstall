@@ -509,4 +509,39 @@ mod test_valid {
         );
     }
 
+    #[test]
+    fn multibyte_texts() {
+        let template = Template::from_str("幸徳 {particle} 秋水").unwrap();
+        assert_eq!(template, template!(text("幸徳 "), key("particle"), text(" 秋水")));
+    }
+
+    #[test]
+    fn multibyte_key() {
+        let template = Template::from_str("The { 連盟 }").unwrap();
+        assert_eq!(template, template!(text("The "), key("連盟")));
+    }
+
+    #[test]
+    fn multibyte_both() {
+        let template = Template::from_str("大杉 {栄}").unwrap();
+        assert_eq!(template, template!(text("大杉"), key("栄")));
+    }
+
+    #[test]
+    fn multibyte_whitespace() {
+        let template = Template::from_str("岩佐　作{　太　}郎").unwrap();
+        assert_eq!(template, template!(text("岩佐　作"), key("太"), text("郎")));
+    }
+
+    #[test]
+    fn multibyte_rtl_text() {
+        let template = Template::from_str("محمد صايل").unwrap();
+        assert_eq!(template, template!(text("محمد صايل")));
+    }
+
+    #[test]
+    fn multibyte_rtl_key() {
+        let template = Template::from_str("محمد {ريشة}").unwrap();
+        assert_eq!(template, template!(text("محمد "), key("ريشة")));
+    }
 }
