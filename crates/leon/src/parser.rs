@@ -10,6 +10,7 @@ enum Token {
     },
     BracePair {
         start: usize,
+        key_seen: bool,
         key_start: usize,
         key_end: usize,
         end: usize,
@@ -28,6 +29,7 @@ impl Token {
     fn start_brace_pair(pos: usize) -> Self {
         Self::BracePair {
             start: pos,
+            key_seen: false,
             key_start: pos + 1,
             key_end: pos + 1,
             end: pos + 1,
@@ -41,11 +43,13 @@ impl Token {
             }
             Self::BracePair {
                 start,
+                key_seen,
                 key_start,
                 key_end,
                 end,
             } => {
-                *start >= source_len
+                !key_seen
+                    || *start >= source_len
                     || *end >= source_len
                     || *key_start >= source_len
                     || *key_end >= source_len
@@ -74,7 +78,7 @@ impl Token {
             if self.is_empty(source.len()) {
                 ""
             } else {
-                &source[(self.start())..(self.end() + 1)]
+                &source[(self.start())..=(self.end())]
             },
             self,
         )
@@ -97,12 +101,12 @@ impl<'s> Template<'s> {
                         tokens.push(replace(txt, Token::start_brace_pair(pos)));
                     }
                 }
-
                 (bp @ Token::BracePair { .. }, '}') => {
                     tokens.push(replace(bp, Token::start_text(pos + 1)));
                 }
                 (
                     Token::BracePair {
+                        key_seen,
                         key_start,
                         key_end,
                         end,
@@ -110,23 +114,35 @@ impl<'s> Template<'s> {
                     },
                     ws,
                 ) if ws.is_whitespace() => {
-                    if *key_start == *key_end {
-                        // We're in a brace pair, but we're not in the key yet.
-                        *key_start = pos + 1;
-                    } else {
+                    eprintln!("bracepair ws  > pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
+                    if *key_seen {
                         *key_end = pos - 1;
                         *end = pos;
+                    } else {
+                        // We're in a brace pair, but we're not in the key yet.
+                        *key_start = pos + 1;
                     }
+                    eprintln!("bracepair ws  < pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
                 }
-                (Token::BracePair { key_end, end, .. }, any) => {
+                (
+                    Token::BracePair {
+                        key_seen,
+                        key_start,
+                        key_end,
+                        end,
+                        ..
+                    },
+                    _,
+                ) => {
+                    eprintln!("bracepair any > pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
+                    *key_seen = true;
                     *key_end = pos;
                     *end = pos + 1;
+                    eprintln!("bracepair any < pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
                 }
-
-                (Token::Text { start, end }, any) => {
+                (Token::Text { end, .. }, _) => {
                     *end = pos;
                 }
-                _ => {}
             }
         }
 
@@ -148,7 +164,7 @@ impl<'s> Template<'s> {
                 Token::BracePair {
                     key_start, key_end, ..
                 } => {
-                    items.push(Item::Key(Literal::Borrowed(&s[key_start..=key_end])));
+                    items.push(Item::Key(Literal::Borrowed(s[key_start..=key_end].trim())));
                 }
             }
         }
@@ -382,4 +398,6 @@ mod test {
             }
         );
     }
+
+    // TODO: multibyte
 }
