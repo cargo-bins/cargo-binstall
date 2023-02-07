@@ -565,7 +565,7 @@ mod test_valid {
     #[test]
     fn multibyte_both() {
         let template = Template::from_str("大杉 {栄}").unwrap();
-        assert_eq!(template, template!(Text("大杉"), Key("栄")));
+        assert_eq!(template, template!(Text("大杉 "), Key("栄")));
     }
 
     #[test]
