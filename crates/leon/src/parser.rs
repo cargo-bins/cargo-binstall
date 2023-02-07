@@ -102,9 +102,16 @@ impl Token {
 }
 
 impl<'s> Template<'s> {
-    // TODO: figure out if it's parseable without cow (escapes can just point to the source)
     #[allow(clippy::should_implement_trait)] // TODO: implement FromStr
     pub fn from_str(s: &'s str) -> Result<Self, ParseError<'s>> {
+        Self::parse_items(s).map(|items| Template {
+            items: Cow::Owned(items),
+            default: None,
+        })
+    }
+
+    // TODO: figure out if it's parseable without cow (escapes can just point to the source)
+    fn parse_items(s: &'s str) -> Result<Vec<Item<'s>>, ParseError<'s>> {
         let source_len = s.len();
         let mut tokens = Vec::new();
 
@@ -251,7 +258,7 @@ impl<'s> Template<'s> {
             current.debug(s)
         );
 
-        let mut items = Vec::new();
+        let mut items = Vec::with_capacity(tokens.len());
         for token in tokens {
             match token {
                 Token::Text { start, end } => {
@@ -290,10 +297,7 @@ impl<'s> Template<'s> {
             }
         }
 
-        Ok(Template {
-            items: Cow::Owned(items),
-            default: None,
-        })
+        Ok(items)
     }
 }
 
