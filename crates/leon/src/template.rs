@@ -2,12 +2,10 @@ use std::{borrow::Cow, io::Write, ops::Add};
 
 use crate::{LeonError, Values};
 
-pub type Literal<'s> = Cow<'s, str>;
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Template<'s> {
     pub items: Cow<'s, [Item<'s>]>,
-    pub default: Option<Literal<'s>>,
+    pub default: Option<&'s str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,6 +15,46 @@ pub enum Item<'s> {
 }
 
 impl<'s> Template<'s> {
+    /// Construct a template with the given items and default.
+    ///
+    /// You can write a template literal without any help by constructing it directly:
+    ///
+    /// ```
+    /// use std::borrow::Cow;
+    /// use leon::{Item, Template};
+    /// const TEMPLATE: Template = Template {
+    ///     items: Cow::Borrowed({
+    ///         const ITEMS: &'static [Item<'static>] = &[
+    ///             Item::Text("Hello"),
+    ///             Item::Key("name"),
+    ///         ];
+    ///         ITEMS
+    ///     }),
+    ///     default: None,
+    /// };
+    /// assert_eq!(TEMPLATE.render(&[("name", "world")]).unwrap(), "Helloworld");
+    /// ```
+    ///
+    /// As that's a bit verbose, using this function and the enum shorthands can be helpful:
+    ///
+    /// ```
+    /// use leon::{Item, Item::*, Template};
+    /// const TEMPLATE: Template = Template::new({
+    ///     const ITEMS: &'static [Item<'static>] = &[Text("Hello "), Key("name")];
+    ///     ITEMS
+    /// }, Some("world"));
+    ///
+    /// assert_eq!(TEMPLATE.render(&[]).unwrap(), "Hello world");
+    /// ```
+    ///
+    /// For an even more ergonomic syntax, see the [`leon::template!`] macro.
+    pub const fn new(items: &'s [Item<'s>], default: Option<&'s str>) -> Template<'s> {
+        Template {
+            items: Cow::Borrowed(items),
+            default,
+        }
+    }
+
     pub fn render_into<'a>(
         &'a self,
         writer: &mut dyn Write,
@@ -89,20 +127,20 @@ impl<'s> Add for Template<'s> {
 
 #[cfg(test)]
 mod test {
-    use crate::helpers::{key, text};
+    use crate::Item::{Key, Text};
 
     #[test]
     fn concat_templates() {
-        let t1 = crate::template!(text("Hello"), key("name"));
-        let t2 = crate::template!(text("have a"), key("adjective"), text("day"));
+        let t1 = crate::template!(Text("Hello"), Key("name"));
+        let t2 = crate::template!(Text("have a"), Key("adjective"), Text("day"));
         assert_eq!(
             t1 + t2,
             crate::template!(
-                text("Hello"),
-                key("name"),
-                text("have a"),
-                key("adjective"),
-                text("day")
+                Text("Hello"),
+                Key("name"),
+                Text("have a"),
+                Key("adjective"),
+                Text("day")
             ),
         );
     }

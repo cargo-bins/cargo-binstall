@@ -1,6 +1,6 @@
 use std::{borrow::Cow, mem::replace};
 
-use crate::{Item, Literal, ParseError, Template};
+use crate::{Item, ParseError, Template};
 
 #[derive(Debug, Clone, Copy)]
 enum Token {
@@ -303,9 +303,9 @@ impl<'s> Template<'s> {
 }
 
 impl<'s> ParseError<'s> {
-    fn unbalanced(source: &'s str, start: usize, end: usize) -> Self {
+    fn unbalanced(src: &'s str, start: usize, end: usize) -> Self {
         Self {
-            src: Literal::Borrowed(source),
+            src,
             unbalanced: Some((start, end).into()),
             escape: None,
             key_empty: None,
@@ -313,9 +313,9 @@ impl<'s> ParseError<'s> {
         }
     }
 
-    fn escape(source: &'s str, start: usize, end: usize) -> Self {
+    fn escape(src: &'s str, start: usize, end: usize) -> Self {
         Self {
-            src: Literal::Borrowed(source),
+            src,
             unbalanced: None,
             escape: Some((start, end).into()),
             key_empty: None,
@@ -323,9 +323,9 @@ impl<'s> ParseError<'s> {
         }
     }
 
-    fn key_empty(source: &'s str, start: usize, end: usize) -> Self {
+    fn key_empty(src: &'s str, start: usize, end: usize) -> Self {
         Self {
-            src: Literal::Borrowed(source),
+            src,
             unbalanced: None,
             escape: None,
             key_empty: Some((start, end).into()),
@@ -333,9 +333,9 @@ impl<'s> ParseError<'s> {
         }
     }
 
-    fn key_escape(source: &'s str, start: usize, end: usize) -> Self {
+    fn key_escape(src: &'s str, start: usize, end: usize) -> Self {
         Self {
-            src: Literal::Borrowed(source),
+            src,
             unbalanced: None,
             escape: None,
             key_empty: None,
@@ -346,7 +346,7 @@ impl<'s> ParseError<'s> {
 
 #[cfg(test)]
 mod test_valid {
-    use crate::{helpers::*, template, Template};
+    use crate::{template, Item::*, Template};
 
     #[test]
     fn empty() {
@@ -357,25 +357,25 @@ mod test_valid {
     #[test]
     fn no_keys() {
         let template = Template::from_str("hello world").unwrap();
-        assert_eq!(template, template!(text("hello world")));
+        assert_eq!(template, template!(Text("hello world")));
     }
 
     #[test]
     fn leading_key() {
         let template = Template::from_str("{salutation} world").unwrap();
-        assert_eq!(template, template!(key("salutation"), text(" world")));
+        assert_eq!(template, template!(Key("salutation"), Text(" world")));
     }
 
     #[test]
     fn trailing_key() {
         let template = Template::from_str("hello {name}").unwrap();
-        assert_eq!(template, template!(text("hello "), key("name")));
+        assert_eq!(template, template!(Text("hello "), Key("name")));
     }
 
     #[test]
     fn middle_key() {
         let template = Template::from_str("hello {name}!").unwrap();
-        assert_eq!(template, template!(text("hello "), key("name"), text("!")));
+        assert_eq!(template, template!(Text("hello "), Key("name"), Text("!")));
     }
 
     #[test]
@@ -383,7 +383,7 @@ mod test_valid {
         let template = Template::from_str("{salutation} good {title}").unwrap();
         assert_eq!(
             template,
-            template!(key("salutation"), text(" good "), key("title"))
+            template!(Key("salutation"), Text(" good "), Key("title"))
         );
     }
 
@@ -400,13 +400,13 @@ mod test_valid {
         assert_eq!(
             template,
             template!(
-                text("\n            And if thy native country was "),
-                key("ancient civilisation"),
-                text(",\n            What need to slight thee? Came not "),
-                key("hero"),
-                text(" thence,\n            Who gave to "),
-                key("country"),
-                text(" her books and art of writing?\n        "),
+                Text("\n            And if thy native country was "),
+                Key("ancient civilisation"),
+                Text(",\n            What need to slight thee? Came not "),
+                Key("hero"),
+                Text(" thence,\n            Who gave to "),
+                Key("country"),
+                Text(" her books and art of writing?\n        "),
             )
         );
     }
@@ -414,19 +414,19 @@ mod test_valid {
     #[test]
     fn key_no_whitespace() {
         let template = Template::from_str("{word}").unwrap();
-        assert_eq!(template, template!(key("word")));
+        assert_eq!(template, template!(Key("word")));
     }
 
     #[test]
     fn key_leading_whitespace() {
         let template = Template::from_str("{ word}").unwrap();
-        assert_eq!(template, template!(key("word")));
+        assert_eq!(template, template!(Key("word")));
     }
 
     #[test]
     fn key_trailing_whitespace() {
         let template = Template::from_str("{word\n}").unwrap();
-        assert_eq!(template, template!(key("word")));
+        assert_eq!(template, template!(Key("word")));
     }
 
     #[test]
@@ -437,13 +437,13 @@ mod test_valid {
         }",
         )
         .unwrap();
-        assert_eq!(template, template!(key("word")));
+        assert_eq!(template, template!(Key("word")));
     }
 
     #[test]
     fn key_inner_whitespace() {
         let template = Template::from_str("{ a word }").unwrap();
-        assert_eq!(template, template!(key("a word")));
+        assert_eq!(template, template!(Key("a word")));
     }
 
     #[test]
@@ -451,7 +451,7 @@ mod test_valid {
         let template = Template::from_str(r"this \{ single left brace").unwrap();
         assert_eq!(
             template,
-            template!(text("this "), text("{"), text(" single left brace"))
+            template!(Text("this "), Text("{"), Text(" single left brace"))
         );
     }
 
@@ -460,7 +460,7 @@ mod test_valid {
         let template = Template::from_str(r"this \} single right brace").unwrap();
         assert_eq!(
             template,
-            template!(text("this "), text("}"), text(" single right brace"))
+            template!(Text("this "), Text("}"), Text(" single right brace"))
         );
     }
 
@@ -470,11 +470,11 @@ mod test_valid {
         assert_eq!(
             template,
             template!(
-                text("these "),
-                text("{"),
-                text(" two "),
-                text("}"),
-                text(" braces")
+                Text("these "),
+                Text("{"),
+                Text(" two "),
+                Text("}"),
+                Text(" braces")
             )
         );
     }
@@ -485,13 +485,13 @@ mod test_valid {
         assert_eq!(
             template,
             template!(
-                text("these "),
-                text("{"),
-                text("{"),
-                text(" four "),
-                text("}"),
-                text("}"),
-                text(" braces")
+                Text("these "),
+                Text("{"),
+                Text("{"),
+                Text(" four "),
+                Text("}"),
+                Text("}"),
+                Text(" braces")
             )
         );
     }
@@ -502,11 +502,11 @@ mod test_valid {
         assert_eq!(
             template,
             template!(
-                text("these "),
-                text(r"\"),
-                text(" backslashes "),
-                text(r"\"),
-                text(r"\"),
+                Text("these "),
+                Text(r"\"),
+                Text(" backslashes "),
+                Text(r"\"),
+                Text(r"\"),
             )
         );
     }
@@ -517,14 +517,14 @@ mod test_valid {
         assert_eq!(
             template,
             template!(
-                text(r"\"),
-                key("a"),
-                text(" "),
-                text(r"{"),
-                key("b"),
-                text(" "),
-                text(r"}"),
-                key("c"),
+                Text(r"\"),
+                Key("a"),
+                Text(" "),
+                Text(r"{"),
+                Key("b"),
+                Text(" "),
+                Text(r"}"),
+                Key("c"),
             )
         );
     }
@@ -535,14 +535,14 @@ mod test_valid {
         assert_eq!(
             template,
             template!(
-                key("a"),
-                text(r"\"),
-                text(" "),
-                key("b"),
-                text(r"{"),
-                text(" "),
-                key("c"),
-                text(r"}"),
+                Key("a"),
+                Text(r"\"),
+                Text(" "),
+                Key("b"),
+                Text(r"{"),
+                Text(" "),
+                Key("c"),
+                Text(r"}"),
             )
         );
     }
@@ -552,37 +552,37 @@ mod test_valid {
         let template = Template::from_str("幸徳 {particle} 秋水").unwrap();
         assert_eq!(
             template,
-            template!(text("幸徳 "), key("particle"), text(" 秋水"))
+            template!(Text("幸徳 "), Key("particle"), Text(" 秋水"))
         );
     }
 
     #[test]
     fn multibyte_key() {
         let template = Template::from_str("The { 連盟 }").unwrap();
-        assert_eq!(template, template!(text("The "), key("連盟")));
+        assert_eq!(template, template!(Text("The "), Key("連盟")));
     }
 
     #[test]
     fn multibyte_both() {
         let template = Template::from_str("大杉 {栄}").unwrap();
-        assert_eq!(template, template!(text("大杉"), key("栄")));
+        assert_eq!(template, template!(Text("大杉"), Key("栄")));
     }
 
-    // #[test]
-    // fn multibyte_whitespace() {
-    //     let template = Template::from_str("岩佐　作{　太　}郎").unwrap();
-    //     assert_eq!(template, template!(text("岩佐　作"), key("太"), text("郎")));
-    // }
+    #[test]
+    fn multibyte_whitespace() {
+        let template = Template::from_str("岩佐　作{　太　}郎").unwrap();
+        assert_eq!(template, template!(Text("岩佐　作"), Key("太"), Text("郎")));
+    }
 
     #[test]
     fn multibyte_rtl_text() {
         let template = Template::from_str("محمد صايل").unwrap();
-        assert_eq!(template, template!(text("محمد صايل")));
+        assert_eq!(template, template!(Text("محمد صايل")));
     }
 
-    // #[test]
-    // fn multibyte_rtl_key() {
-    //     let template = Template::from_str("محمد {ريشة}").unwrap();
-    //     assert_eq!(template, template!(text("محمد "), key("ريشة")));
-    // }
+    #[test]
+    fn multibyte_rtl_key() {
+        let template = Template::from_str("محمد {ريشة}").unwrap();
+        assert_eq!(template, template!(Text("محمد "), Key("ريشة")));
+    }
 }

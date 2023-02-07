@@ -128,9 +128,8 @@ pub use template::*;
 #[doc(inline)]
 pub use values::*;
 
-pub mod helpers;
-
 mod error;
+mod macros;
 mod parser;
 mod template;
 mod values;

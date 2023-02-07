@@ -1,8 +1,6 @@
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-use crate::Literal;
-
 #[derive(Debug, Diagnostic, Error)]
 pub enum LeonError<'s> {
     /// The template failed to parse.
@@ -27,7 +25,7 @@ pub enum LeonError<'s> {
 #[error("invalid template")]
 pub struct ParseError<'s> {
     #[source_code]
-    pub(crate) src: Literal<'s>,
+    pub(crate) src: &'s str,
 
     #[label = "these braces are unbalanced"]
     pub(crate) unbalanced: Option<SourceSpan>,
