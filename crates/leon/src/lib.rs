@@ -3,7 +3,7 @@
 //! Leon parses a template string into a list of tokens, and then substitutes
 //! provided values in. Unlike other templating engines, it is extremely simple:
 //! it supports no logic, only replaces. It is even simpler than `format!()`,
-//! though has a similar syntax.
+//! albeit with a similar syntax.
 //!
 //! # Syntax
 //!
@@ -83,7 +83,7 @@
 //! assert_eq!(template.render(&values).unwrap().as_str(), "hello brutus");
 //! ```
 //!
-//! …or with your own type, if you implement the [`ValueProvider`] trait:
+//! …or with your own type, if you implement the [`Values`] trait:
 //!
 //! ```
 //! # use leon::Template;
@@ -113,7 +113,7 @@
 //! parse. This can happen if there are unbalanced braces, or if a key is empty.
 //!
 //! Leon will return a [`LeonError::MissingKey`] if a key is missing from keyed
-//! values passed to [`Template::render`], unless a default value is provided
+//! values passed to [`Template::render()`], unless a default value is provided
 //! with [`Template.default`].
 //!
 //! It will also pass through I/O errors when using [`Template::render_into()`].
