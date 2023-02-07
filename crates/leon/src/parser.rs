@@ -180,7 +180,7 @@ impl<'s> Template<'s> {
 mod test {
     use std::borrow::Cow;
 
-    use crate::{Item, Template};
+    use crate::{helpers::*, template, Template};
 
     #[test]
     fn empty() {
@@ -191,56 +191,25 @@ mod test {
     #[test]
     fn no_keys() {
         let template = Template::from_str("hello world").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Text("hello world".into())]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(text("hello world")));
     }
 
     #[test]
     fn leading_key() {
         let template = Template::from_str("{salutation} world").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[
-                    Item::Key("salutation".into()),
-                    Item::Text(" world".into())
-                ]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(key("salutation"), text(" world")));
     }
 
     #[test]
     fn trailing_key() {
         let template = Template::from_str("hello {name}").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Text("hello ".into()), Item::Key("name".into())]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(text("hello "), key("name")));
     }
 
     #[test]
     fn middle_key() {
         let template = Template::from_str("hello {name}!").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[
-                    Item::Text("hello ".into()),
-                    Item::Key("name".into()),
-                    Item::Text("!".into())
-                ]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(text("hello "), key("name"), text("!")));
     }
 
     #[test]
@@ -248,14 +217,7 @@ mod test {
         let template = Template::from_str("{salutation} good {title}").unwrap();
         assert_eq!(
             template,
-            Template {
-                items: Cow::Borrowed(&[
-                    Item::Key("salutation".into()),
-                    Item::Text(" good ".into()),
-                    Item::Key("title".into()),
-                ]),
-                default: None,
-            }
+            template!(key("salutation"), text(" good "), key("title"))
         );
     }
 
@@ -271,55 +233,34 @@ mod test {
         .unwrap();
         assert_eq!(
             template,
-            Template {
-                items: Cow::Borrowed(&[
-                    Item::Text("\n            And if thy native country was ".into()),
-                    Item::Key("ancient civilisation".into()),
-                    Item::Text(",\n            What need to slight thee? Came not ".into()),
-                    Item::Key("hero".into()),
-                    Item::Text(" thence,\n            Who gave to ".into()),
-                    Item::Key("country".into()),
-                    Item::Text(" her books and art of writing?\n        ".into()),
-                ]),
-                default: None,
-            }
+            template!(
+                text("\n            And if thy native country was "),
+                key("ancient civilisation"),
+                text(",\n            What need to slight thee? Came not "),
+                key("hero"),
+                text(" thence,\n            Who gave to "),
+                key("country"),
+                text(" her books and art of writing?\n        "),
+            )
         );
     }
 
     #[test]
     fn key_no_whitespace() {
         let template = Template::from_str("{word}").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Key("word".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(key("word")));
     }
 
     #[test]
     fn key_leading_whitespace() {
         let template = Template::from_str("{ word}").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Key("word".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(key("word")));
     }
 
     #[test]
     fn key_trailing_whitespace() {
         let template = Template::from_str("{word\n}").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Key("word".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(key("word")));
     }
 
     #[test]
@@ -330,73 +271,37 @@ mod test {
         }",
         )
         .unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Key("word".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(key("word")));
     }
 
     #[test]
     fn key_inner_whitespace() {
         let template = Template::from_str("{ a word }").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Key("a word".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(key("a word")));
     }
 
     #[test]
     fn escape_left() {
         let template = Template::from_str("this {{ single left brace").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Text("this { single left brace".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(text("this { single left brace")));
     }
 
     #[test]
     fn escape_right() {
         let template = Template::from_str("this }} single right brace").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Text("this } single right brace".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(text("this } single right brace")));
     }
 
     #[test]
     fn escape_both() {
         let template = Template::from_str("these {{ two }} braces").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Text("these { two } braces".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(text("these { two } braces")));
     }
 
     #[test]
     fn escape_doubled() {
         let template = Template::from_str("these {{{{ four }}}} braces").unwrap();
-        assert_eq!(
-            template,
-            Template {
-                items: Cow::Borrowed(&[Item::Text("these {{ four }} braces".into()),]),
-                default: None,
-            }
-        );
+        assert_eq!(template, template!(text("these {{ four }} braces")));
     }
 
     // TODO: multibyte
