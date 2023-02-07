@@ -89,16 +89,16 @@ impl Token {
         }
     }
 
-    fn debug<'a>(&'a self, source: &'a str) -> (&str, &Self) {
-        (
-            if self.is_empty(source.len()) {
-                ""
-            } else {
-                &source[(self.start())..=(self.end())]
-            },
-            self,
-        )
-    }
+    // fn debug<'a>(&'a self, source: &'a str) -> (&str, &Self) {
+    //     (
+    //         if self.is_empty(source.len()) {
+    //             ""
+    //         } else {
+    //             &source[(self.start())..=(self.end())]
+    //         },
+    //         self,
+    //     )
+    // }
 }
 
 impl<'s> Template<'s> {
@@ -120,13 +120,13 @@ impl<'s> Template<'s> {
             match (&mut current, chara) {
                 (tok @ (Token::Text { .. } | Token::Escape { ch: Some(_), .. }), ch @ '{') => {
                     if matches!(tok, Token::Text { .. }) && tok.start() == pos {
-                        eprintln!("bracepair new | pos={pos:2}  replace tok={tok:?}");
+                        // eprintln!("bracepair new | pos={pos:2}  replace tok={tok:?}");
                         *tok = Token::start_brace_pair(pos, ch);
                     } else {
                         if let Token::Text { end, .. } = tok {
                             *end = pos - 1;
                         }
-                        eprintln!("bracepair new | pos={pos:2}     push tok={tok:?}");
+                        // eprintln!("bracepair new | pos={pos:2}     push tok={tok:?}");
                         tokens.push(replace(tok, Token::start_brace_pair(pos, ch)));
                     }
                 }
@@ -155,60 +155,60 @@ impl<'s> Template<'s> {
                 (
                     Token::BracePair {
                         key_seen,
-                        start,
                         end,
+                        ..
                     },
                     ws,
                 ) if ws.is_whitespace() => {
-                    eprintln!("bracepair ws  > pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
+                    // eprintln!("bracepair ws  > pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                     if *key_seen {
                         *end = pos;
                     } else {
                         // We're in a brace pair, but we're not in the key yet.
                     }
-                    eprintln!("bracepair ws  < pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
+                    // eprintln!("bracepair ws  < pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                 }
                 (
                     Token::BracePair {
                         key_seen,
-                        start,
                         end,
+                        ..
                     },
                     _,
                 ) => {
-                    eprintln!("bracepair any > pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
+                    // eprintln!("bracepair any > pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                     *key_seen = true;
                     *end = pos + 1;
-                    eprintln!("bracepair any < pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
+                    // eprintln!("bracepair any < pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                 }
                 (Token::Text { .. }, '}') => {
                     return Err(ParseError::unbalanced(s, pos, pos));
                 }
-                (Token::Text { start, end, .. }, ch) => {
-                    eprintln!(
-                        "text any      > pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
-                    );
+                (Token::Text { end, .. }, _) => {
+                    // eprintln!(
+                    //     "text any      > pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    // );
                     *end = pos;
-                    eprintln!(
-                        "text any      < pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
-                    );
+                    // eprintln!(
+                    //     "text any      < pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    // );
                 }
                 (esc @ Token::Escape { .. }, es @ ('\\' | '{' | '}')) => {
                     if let Token::Escape { start, end, ch, .. } = esc {
                         if ch.is_none() {
-                            eprintln!(
-                                "escape valid  > pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
-                            );
+                            // eprintln!(
+                            //     "escape valid  > pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                            // );
                             *end = pos;
                             *ch = Some(es);
-                            eprintln!(
-                                "escape valid  < pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
-                            );
+                            // eprintln!(
+                            //     "escape valid  < pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                            // );
                         } else if es == '\\' {
                             // A new escape right after a completed escape.
-                            eprintln!(
-                                "escape new    | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
-                            );
+                            // eprintln!(
+                            //     "escape new    | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                            // );
                             tokens.push(replace(esc, Token::start_escape(pos, es)));
                         } else if es == '{' {
                             // A new brace pair right after a completed escape, should be handled prior to this.
@@ -224,47 +224,46 @@ impl<'s> Template<'s> {
                 (
                     Token::Escape {
                         start,
-                        end,
                         ch: None,
+                        ..
                     },
-                    ch,
+                    _,
                 ) => {
-                    eprintln!(
-                        "escape error  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
-                    );
+                    // eprintln!(
+                    //     "escape error  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    // );
                     return Err(ParseError::escape(s, *start, pos));
                 }
                 (
                     Token::Escape {
-                        start,
-                        end,
                         ch: Some(_),
+                        ..
                     },
-                    ch,
+                    _,
                 ) => {
-                    eprintln!(
-                        "escape after  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
-                    );
+                    // eprintln!(
+                    //     "escape after  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    // );
                     tokens.push(replace(&mut current, Token::start_text_single(pos)));
                 }
             }
         }
 
-        dbg!(s, source_len);
-        dbg!(&tokens, &current);
+        // dbg!(s, source_len);
+        // dbg!(&tokens, &current);
 
         if !current.is_empty(source_len) {
             if current.end() < source_len - 1 {
                 current.set_end(source_len - 1);
             }
-            dbg!(current.debug(s));
+            // dbg!(current.debug(s));
 
             tokens.push(current);
         }
-        dbg!(
-            tokens.iter().map(|t| t.debug(s)).collect::<Vec<_>>(),
-            current.debug(s)
-        );
+        // dbg!(
+        //     tokens.iter().map(|t| t.debug(s)).collect::<Vec<_>>(),
+        //     current.debug(s)
+        // );
 
         if let Token::BracePair { start, end, .. } = current {
             return Err(ParseError::unbalanced(s, start, end));
