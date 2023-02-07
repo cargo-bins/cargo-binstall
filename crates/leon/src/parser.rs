@@ -15,7 +15,11 @@ enum Token {
         key_end: usize,
         end: usize,
     },
-    // Escape { start: usize, end: usize },
+    Escape {
+        start: usize,
+        end: usize,
+        ch: Option<char>,
+    },
 }
 
 impl Token {
@@ -26,6 +30,13 @@ impl Token {
         }
     }
 
+    fn start_text_empty(pos: usize) -> Self {
+        Self::Text {
+            start: pos,
+            end: pos,
+        }
+    }
+
     fn start_brace_pair(pos: usize) -> Self {
         Self::BracePair {
             start: pos,
@@ -33,6 +44,14 @@ impl Token {
             key_start: pos + 1,
             key_end: pos + 1,
             end: pos + 1,
+        }
+    }
+
+    fn start_escape(pos: usize) -> Self {
+        Self::Escape {
+            start: pos,
+            end: pos + 1,
+            ch: None,
         }
     }
 
@@ -56,6 +75,9 @@ impl Token {
                     || *start > *end
                     || *key_start > *key_end
             }
+            Self::Escape { start, end, .. } => {
+                *start >= source_len || *end >= source_len || *start > *end
+            }
         }
     }
 
@@ -63,6 +85,7 @@ impl Token {
         match self {
             Self::Text { start, .. } => *start,
             Self::BracePair { start, .. } => *start,
+            Self::Escape { start, .. } => *start,
         }
     }
 
@@ -70,6 +93,7 @@ impl Token {
         match self {
             Self::Text { end, .. } => *end,
             Self::BracePair { end, .. } => *end,
+            Self::Escape { end, .. } => *end,
         }
     }
 
@@ -88,21 +112,32 @@ impl Token {
 impl<'s> Template<'s> {
     #[allow(clippy::should_implement_trait)] // TODO: implement FromStr
     pub fn from_str(s: &'s str) -> Result<Self, ParseError<'s>> {
+        let source_len = s.len();
         let mut tokens = Vec::new();
 
         let mut current = Token::start_text(0);
 
         for (pos, chara) in s.char_indices() {
             match (&mut current, chara) {
-                (txt @ Token::Text { .. }, '{') => {
-                    if txt.start() == pos {
-                        *txt = Token::start_brace_pair(pos);
+                (tok @ (Token::Text { .. } | Token::Escape { ch: Some(_), .. }), '{') => {
+                    if matches!(tok, Token::Text { .. }) && tok.start() == pos {
+                        *tok = Token::start_brace_pair(pos);
                     } else {
-                        tokens.push(replace(txt, Token::start_brace_pair(pos)));
+                        tokens.push(replace(tok, Token::start_brace_pair(pos)));
+                    }
+                }
+                (txt @ Token::Text { .. }, '\\') => {
+                    if txt.is_empty(source_len) {
+                        *txt = Token::start_escape(pos);
+                    } else {
+                        tokens.push(replace(txt, Token::start_escape(pos)));
                     }
                 }
                 (bp @ Token::BracePair { .. }, '}') => {
                     tokens.push(replace(bp, Token::start_text(pos + 1)));
+                }
+                (Token::BracePair { start, .. }, '\\') => {
+                    return Err(ParseError::key_escape(s, *start, pos));
                 }
                 (
                     Token::BracePair {
@@ -114,7 +149,7 @@ impl<'s> Template<'s> {
                     },
                     ws,
                 ) if ws.is_whitespace() => {
-                    eprintln!("bracepair ws  > pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
+                    eprintln!("bracepair ws  > pos={pos:2}   key seen={key_seen} start={key_start:2} end={key_end:2}");
                     if *key_seen {
                         *key_end = pos - 1;
                         *end = pos;
@@ -122,7 +157,7 @@ impl<'s> Template<'s> {
                         // We're in a brace pair, but we're not in the key yet.
                         *key_start = pos + 1;
                     }
-                    eprintln!("bracepair ws  < pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
+                    eprintln!("bracepair ws  < pos={pos:2}   key seen={key_seen} start={key_start:2} end={key_end:2}");
                 }
                 (
                     Token::BracePair {
@@ -134,19 +169,78 @@ impl<'s> Template<'s> {
                     },
                     _,
                 ) => {
-                    eprintln!("bracepair any > pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
+                    eprintln!("bracepair any > pos={pos:2}   key seen={key_seen} start={key_start:2} end={key_end:2}");
                     *key_seen = true;
                     *key_end = pos;
                     *end = pos + 1;
-                    eprintln!("bracepair any < pos={pos}   key seen={key_seen} start={key_start} end={key_end}");
+                    eprintln!("bracepair any < pos={pos:2}   key seen={key_seen} start={key_start:2} end={key_end:2}");
                 }
-                (Token::Text { end, .. }, _) => {
+                (Token::Text { start, end, .. }, ch) => {
+                    eprintln!(
+                        "text any      > pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    );
                     *end = pos;
+                    eprintln!(
+                        "text any      < pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    );
+                }
+                (esc @ Token::Escape { .. }, es @ ('\\' | '{' | '}')) => {
+                    if let Token::Escape { start, end, ch, .. } = esc {
+                        if ch.is_none() {
+                            eprintln!(
+                                "escape valid  > pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                            );
+                            *end = pos;
+                            *ch = Some(es);
+                            eprintln!(
+                                "escape valid  < pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                            );
+                        } else if es == '\\' {
+                            // A new escape right after a completed escape.
+                            eprintln!(
+                                "escape new    | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                            );
+                            tokens.push(replace(esc, Token::start_escape(pos)));
+                        } else if es == '{' {
+                            // A new brace pair right after a completed escape, should be handled prior to this.
+                            unreachable!("escape followed by brace pair, unhandled");
+                        } else {
+                            // } right after a completed escape, probably unreachable but just in case:
+                            return Err(ParseError::key_escape(s, *start, pos));
+                        }
+                    } else {
+                        unreachable!("escape is not an escape");
+                    }
+                }
+                (
+                    Token::Escape {
+                        start,
+                        end,
+                        ch: None,
+                    },
+                    ch,
+                ) => {
+                    eprintln!(
+                        "escape error  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    );
+                    return Err(ParseError::escape(s, *start, pos));
+                }
+                (
+                    Token::Escape {
+                        start,
+                        end,
+                        ch: Some(_),
+                    },
+                    ch,
+                ) => {
+                    eprintln!(
+                        "escape after  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
+                    );
+                    tokens.push(replace(&mut current, Token::start_text(pos)));
                 }
             }
         }
 
-        let source_len = s.len();
         dbg!(s, source_len);
         dbg!(tokens.iter().map(|t| t.debug(s)).collect::<Vec<_>>());
         dbg!(current.debug(s));
@@ -162,9 +256,28 @@ impl<'s> Template<'s> {
                     items.push(Item::Text(Literal::Borrowed(&s[start..=end])));
                 }
                 Token::BracePair {
-                    key_start, key_end, ..
+                    start,
+                    key_start,
+                    key_end,
+                    end,
+                    ..
                 } => {
-                    items.push(Item::Key(Literal::Borrowed(s[key_start..=key_end].trim())));
+                    let key = s[key_start..=key_end].trim();
+                    if key.is_empty() {
+                        return Err(ParseError::key_empty(s, start, end));
+                    } else {
+                        items.push(Item::Key(Literal::Borrowed(key)));
+                    }
+                }
+                Token::Escape { ch: Some(ch), .. } => {
+                    items.push(Item::Text(Literal::Owned(ch.to_string())));
+                }
+                Token::Escape {
+                    ch: None,
+                    start,
+                    end,
+                } => {
+                    return Err(ParseError::escape(s, start, end));
                 }
             }
         }
@@ -176,10 +289,50 @@ impl<'s> Template<'s> {
     }
 }
 
+impl<'s> ParseError<'s> {
+    fn unbalanced(source: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src: Literal::Borrowed(source),
+            unbalanced: Some((start, end).into()),
+            escape: None,
+            key_empty: None,
+            key_escape: None,
+        }
+    }
+
+    fn escape(source: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src: Literal::Borrowed(source),
+            unbalanced: None,
+            escape: Some((start, end).into()),
+            key_empty: None,
+            key_escape: None,
+        }
+    }
+
+    fn key_empty(source: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src: Literal::Borrowed(source),
+            unbalanced: None,
+            escape: None,
+            key_empty: Some((start, end).into()),
+            key_escape: None,
+        }
+    }
+
+    fn key_escape(source: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src: Literal::Borrowed(source),
+            unbalanced: None,
+            escape: None,
+            key_empty: None,
+            key_escape: Some((start, end).into()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
-
     use crate::{helpers::*, template, Template};
 
     #[test]
@@ -282,26 +435,67 @@ mod test {
 
     #[test]
     fn escape_left() {
-        let template = Template::from_str("this {{ single left brace").unwrap();
-        assert_eq!(template, template!(text("this { single left brace")));
+        let template = Template::from_str(r"this \{ single left brace").unwrap();
+        assert_eq!(
+            template,
+            template!(text("this "), text("{"), text(" single left brace"))
+        );
     }
 
     #[test]
     fn escape_right() {
-        let template = Template::from_str("this }} single right brace").unwrap();
-        assert_eq!(template, template!(text("this } single right brace")));
+        let template = Template::from_str(r"this \} single right brace").unwrap();
+        assert_eq!(
+            template,
+            template!(text("this "), text("}"), text(" single right brace"))
+        );
     }
 
     #[test]
     fn escape_both() {
-        let template = Template::from_str("these {{ two }} braces").unwrap();
-        assert_eq!(template, template!(text("these { two } braces")));
+        let template = Template::from_str(r"these \{ two \} braces").unwrap();
+        assert_eq!(
+            template,
+            template!(
+                text("these "),
+                text("{"),
+                text(" two "),
+                text("}"),
+                text(" braces")
+            )
+        );
     }
 
     #[test]
     fn escape_doubled() {
-        let template = Template::from_str("these {{{{ four }}}} braces").unwrap();
-        assert_eq!(template, template!(text("these {{ four }} braces")));
+        let template = Template::from_str(r"these \{\{ four \}\} braces").unwrap();
+        assert_eq!(
+            template,
+            template!(
+                text("these "),
+                text("{"),
+                text("{"),
+                text(" four "),
+                text("}"),
+                text("}"),
+                text(" braces")
+            )
+        );
+    }
+
+    #[test]
+    fn escape_escape() {
+        let template = Template::from_str(r"these \\ backslashes \\\\").unwrap();
+        assert_eq!(
+            template,
+            template!(
+                text("these "),
+                text(r"\"),
+                text(" backslashes "),
+                text(r"\"),
+                text(r"\"),
+            )
+        );
     }
 
     // TODO: multibyte

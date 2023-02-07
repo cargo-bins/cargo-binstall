@@ -29,9 +29,15 @@ pub struct ParseError<'s> {
     #[source_code]
     pub(crate) src: Literal<'s>,
 
-    #[label = "unbalanced braces"]
+    #[label = "these braces are unbalanced"]
     pub(crate) unbalanced: Option<SourceSpan>,
 
-    #[label = "empty key"]
-    pub(crate) empty_key: Option<SourceSpan>,
+    #[label = "this escape is malformed"]
+    pub(crate) escape: Option<SourceSpan>,
+
+    #[label = "a key cannot be empty"]
+    pub(crate) key_empty: Option<SourceSpan>,
+
+    #[label = "escapes are not allowed in keys"]
+    pub(crate) key_escape: Option<SourceSpan>,
 }
