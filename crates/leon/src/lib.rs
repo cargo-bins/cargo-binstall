@@ -57,7 +57,7 @@
 //! use leon::vals;
 //! #
 //! # let template = Template::from_str("hello {name}").unwrap();
-//! assert_eq!(template.render(vals(|_key| Some("marcus"))).unwrap().as_str(), "hello marcus");
+//! assert_eq!(template.render(&vals(|_key| Some("marcus"))).unwrap().as_str(), "hello marcus");
 //! ```
 //!
 //! …or to a writer:
@@ -69,7 +69,7 @@
 //! #
 //! # let template = Template::from_str("hello {name}").unwrap();
 //! let mut buf: Vec<u8> = Vec::new();
-//! template.render_into(&mut buf, vals(|key| if key == "name" { Some("julius") } else { None })).unwrap();
+//! template.render_into(&mut buf, &vals(|key| if key == "name" { Some("julius") } else { None })).unwrap();
 //! assert_eq!(buf.as_slice(), b"hello julius");
 //! ```
 //!

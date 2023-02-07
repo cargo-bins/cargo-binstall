@@ -58,7 +58,7 @@ impl<'s> Template<'s> {
     pub fn render_into<'a>(
         &'a self,
         writer: &mut dyn Write,
-        values: impl Values<&'a str, &'a str>,
+        values: &dyn Values<&'a str, &'a str>,
     ) -> Result<(), LeonError> {
         for token in self.items.as_ref() {
             match token {
@@ -79,7 +79,7 @@ impl<'s> Template<'s> {
 
     pub fn render<'a>(
         &'a self,
-        values: impl Values<&'a str, &'a str>,
+        values: &dyn Values<&'a str, &'a str>,
     ) -> Result<String, LeonError> {
         let mut buf = Vec::with_capacity(
             self.items
