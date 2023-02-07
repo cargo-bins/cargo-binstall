@@ -4,6 +4,6 @@ use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {
-        let _ = leon::Template::from_str(s);
+        let _ = leon::Template::parse(s);
     }
 });

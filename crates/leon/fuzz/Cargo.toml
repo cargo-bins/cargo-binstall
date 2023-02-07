@@ -21,7 +21,7 @@ members = ["."]
 debug = 1
 
 [[bin]]
-name = "fuzz_target"
-path = "fuzz_targets/fuzz_target.rs"
+name = "parser"
+path = "fuzz_targets/parser.rs"
 test = false
 doc = false
