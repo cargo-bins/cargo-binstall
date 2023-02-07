@@ -12,3 +12,10 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 miette = "5.5.0"
 thiserror = "1.0.38"
+
+[dev-dependencies]
+criterion = "0.4.0"
+
+[[bench]]
+name = "values"
+harness = false
