@@ -251,12 +251,17 @@ impl<'s> Template<'s> {
         }
 
         dbg!(s, source_len);
-        dbg!(tokens.iter().map(|t| t.debug(s)).collect::<Vec<_>>());
-        dbg!(current.debug(s));
+        dbg!(&tokens, &current);
 
         if !current.is_empty(source_len) {
+            if current.end() < source_len - 1 {
+                current.set_end(source_len - 1);
+            }
+            dbg!(current.debug(s));
+
             tokens.push(current);
         }
+        dbg!(tokens.iter().map(|t| t.debug(s)).collect::<Vec<_>>(), current.debug(s));
 
         let mut items = Vec::new();
         for token in tokens {
