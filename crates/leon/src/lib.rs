@@ -127,6 +127,8 @@ pub use template::*;
 #[doc(inline)]
 pub use values::*;
 
+pub mod compiletime;
+
 mod error;
 mod parser;
 mod template;

@@ -91,7 +91,7 @@ impl<'s> Add for Template<'s> {
 mod test {
     use std::borrow::Cow;
 
-    use crate::{Item, Literal, Template};
+    use crate::{Item, Template};
 
     #[test]
     fn concat_templates() {
@@ -120,18 +120,5 @@ mod test {
                 default: None,
             }
         );
-    }
-
-    #[test]
-    fn const_template() {
-        const ITEMS: &'static [Item<'static>] = &[
-            Item::Text(Literal::Borrowed("Hello")),
-            Item::Key(Literal::Borrowed("name")),
-        ];
-        const TEMPLATE: Template = Template {
-            items: Cow::Borrowed(ITEMS),
-            default: None,
-        };
-        assert_eq!(TEMPLATE.render(&[("name", "world")]).unwrap(), "Helloworld");
     }
 }
