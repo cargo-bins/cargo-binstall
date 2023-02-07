@@ -15,7 +15,13 @@ thiserror = "1.0.38"
 
 [dev-dependencies]
 criterion = "0.4.0"
+serde = { version = "1.0.152", features = ["derive"] }
+tinytemplate = "1.2.1"
 
 [[bench]]
 name = "values"
+harness = false
+
+[[bench]]
+name = "others"
 harness = false

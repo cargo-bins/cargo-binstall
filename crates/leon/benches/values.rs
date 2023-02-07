@@ -4,6 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use leon::{vals, Template};
 
 fn one_replace(c: &mut Criterion) {
+    const TEMPLATE: &str = "Hello, {name}!";
     let mut hashmap = HashMap::new();
     hashmap.insert("name", "marcus");
 
@@ -11,25 +12,26 @@ fn one_replace(c: &mut Criterion) {
 
     c.bench_function("one replace, fn", |b| {
         b.iter(|| {
-            let template = Template::parse("hello {name}").unwrap();
+            let template = Template::parse(black_box(TEMPLATE)).unwrap();
             black_box(template.render(&vals(|_| Some("marcus"))).unwrap());
         })
     });
     c.bench_function("one replace, hashmap", |b| {
         b.iter(|| {
-            let template = Template::parse("hello {name}").unwrap();
+            let template = Template::parse(black_box(TEMPLATE)).unwrap();
             black_box(template.render(&hashmap).unwrap());
         })
     });
     c.bench_function("one replace, slice", |b| {
         b.iter(|| {
-            let template = Template::parse("hello {name}").unwrap();
+            let template = Template::parse(black_box(TEMPLATE)).unwrap();
             black_box(template.render(&slice).unwrap());
         })
     });
 }
 
 fn some_replaces(c: &mut Criterion) {
+    const TEMPLATE: &str = "hello {name}! i am {age} years old. my goal is to {goal}. i like: {flower}, {music}, {animal}, {color}, {food}. i'm drinking {drink}";
     let mut hashmap = HashMap::new();
     hashmap.insert("name", "marcus");
     hashmap.insert("age", "42");
@@ -55,7 +57,7 @@ fn some_replaces(c: &mut Criterion) {
 
     c.bench_function("some replaces, fn", |b| {
         b.iter(|| {
-            let template = Template::parse("hello {name}").unwrap();
+            let template = Template::parse(black_box(TEMPLATE)).unwrap();
             black_box(
                 template
                     .render(&vals(|key| match key {
@@ -76,13 +78,13 @@ fn some_replaces(c: &mut Criterion) {
     });
     c.bench_function("some replaces, hashmap", |b| {
         b.iter(|| {
-            let template = Template::parse("hello {name}").unwrap();
+            let template = Template::parse(black_box(TEMPLATE)).unwrap();
             black_box(template.render(&hashmap).unwrap());
         })
     });
     c.bench_function("some replaces, slice", |b| {
         b.iter(|| {
-            let template = Template::parse("hello {name}").unwrap();
+            let template = Template::parse(black_box(TEMPLATE)).unwrap();
             black_box(template.render(&slice).unwrap());
         })
     });

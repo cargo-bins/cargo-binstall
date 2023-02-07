@@ -1404,7 +1404,9 @@ version = "0.0.0"
 dependencies = [
  "criterion",
  "miette",
+ "serde",
  "thiserror",
+ "tinytemplate",
 ]
 
 [[package]]
