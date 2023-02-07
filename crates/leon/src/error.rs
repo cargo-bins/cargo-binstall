@@ -8,8 +8,7 @@ pub enum LeonError<'s> {
     InvalidTemplate(
         #[diagnostic_source]
         #[from]
-        ParseError<'static>,
-        // 'static is required due to limitations of the std::Error trait
+        BoxedParseError,
     ),
 
     /// A key was missing from the provided values.
@@ -19,6 +18,16 @@ pub enum LeonError<'s> {
     /// An I/O error passed through from [`Template::render_into`].
     #[error(transparent)]
     Io(#[from] std::io::Error),
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct BoxedParseError(#[from] pub Box<ParseError<'static>>);
+
+impl Diagnostic for BoxedParseError {
+    fn diagnostic_source(&self) -> Option<&dyn Diagnostic> {
+        Some(&*self.0)
+    }
 }
 
 #[derive(Debug, Diagnostic, Error, PartialEq, Eq)]
