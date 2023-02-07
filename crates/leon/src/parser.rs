@@ -181,6 +181,9 @@ impl<'s> Template<'s> {
                     *end = pos + 1;
                     eprintln!("bracepair any < pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                 }
+                (Token::Text { .. }, '}') => {
+                    return Err(ParseError::unbalanced(s, pos, pos));
+                }
                 (Token::Text { start, end, .. }, ch) => {
                     eprintln!(
                         "text any      > pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
@@ -262,6 +265,10 @@ impl<'s> Template<'s> {
             tokens.iter().map(|t| t.debug(s)).collect::<Vec<_>>(),
             current.debug(s)
         );
+
+        if let Token::BracePair { start, end, .. } = current {
+            return Err(ParseError::unbalanced(s, start, end));
+        }
 
         let mut items = Vec::with_capacity(tokens.len());
         for token in tokens {

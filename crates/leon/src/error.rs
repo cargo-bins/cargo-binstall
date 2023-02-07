@@ -21,7 +21,7 @@ pub enum LeonError<'s> {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Debug, Diagnostic, Error)]
+#[derive(Debug, Diagnostic, Error, PartialEq, Eq)]
 #[error("invalid template")]
 pub struct ParseError<'s> {
     #[source_code]
