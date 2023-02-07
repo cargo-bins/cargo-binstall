@@ -1,69 +1,160 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, mem::replace};
 
 use crate::{Item, Literal, ParseError, Template};
+
+#[derive(Debug, Clone, Copy)]
+enum Token {
+    Text {
+        start: usize,
+        end: usize,
+    },
+    BracePair {
+        start: usize,
+        key_start: usize,
+        key_end: usize,
+        end: usize,
+    },
+    // Escape { start: usize, end: usize },
+}
+
+impl Token {
+    fn start_text(pos: usize) -> Self {
+        Self::Text {
+            start: pos,
+            end: pos + 1,
+        }
+    }
+
+    fn start_brace_pair(pos: usize) -> Self {
+        Self::BracePair {
+            start: pos,
+            key_start: pos + 1,
+            key_end: pos + 1,
+            end: pos + 1,
+        }
+    }
+
+    fn is_empty(&self, source_len: usize) -> bool {
+        match self {
+            Self::Text { start, end } => {
+                *start >= source_len || *end >= source_len || *start > *end
+            }
+            Self::BracePair {
+                start,
+                key_start,
+                key_end,
+                end,
+            } => {
+                *start >= source_len
+                    || *end >= source_len
+                    || *key_start >= source_len
+                    || *key_end >= source_len
+                    || *start > *end
+                    || *key_start > *key_end
+            }
+        }
+    }
+
+    fn start(&self) -> usize {
+        match self {
+            Self::Text { start, .. } => *start,
+            Self::BracePair { start, .. } => *start,
+        }
+    }
+
+    fn end(&self) -> usize {
+        match self {
+            Self::Text { end, .. } => *end,
+            Self::BracePair { end, .. } => *end,
+        }
+    }
+
+    fn debug<'a>(&'a self, source: &'a str) -> (&str, &Self) {
+        (
+            if self.is_empty(source.len()) {
+                ""
+            } else {
+                &source[(self.start())..(self.end() + 1)]
+            },
+            self,
+        )
+    }
+}
 
 impl<'s> Template<'s> {
     #[allow(clippy::should_implement_trait)] // TODO: implement FromStr
     pub fn from_str(s: &'s str) -> Result<Self, ParseError<'s>> {
         let mut tokens = Vec::new();
-        let mut current = Item::Text(Literal::default());
 
-        for (i, c) in s.chars().enumerate() {
-            let check = current.clone();
-            match (c, &check) {
-                ('{', Item::Text(t)) => {
-                    tokens.push(Item::Text(t.clone()));
-                    current = Item::Key(Literal::default());
-                }
-                ('{', Item::Key(k)) if k.is_empty() => {
-                    if let Some(Item::Text(mut t)) = tokens.pop() {
-                        t.to_mut().push('{');
-                        current = Item::Text(t);
+        let mut current = Token::start_text(0);
+
+        for (pos, chara) in s.char_indices() {
+            match (&mut current, chara) {
+                (txt @ Token::Text { .. }, '{') => {
+                    if txt.start() == pos {
+                        *txt = Token::start_brace_pair(pos);
                     } else {
-                        return Err(ParseError {
-                            src: s.into(),
-                            unbalanced: Some((i, i + 1).into()),
-                            empty_key: None,
-                        });
+                        tokens.push(replace(txt, Token::start_brace_pair(pos)));
                     }
                 }
-                ('}', Item::Key(k)) => {
-                    tokens.push(Item::Key(k.clone()));
-                    current = Item::Text(Literal::default());
+
+                (bp @ Token::BracePair { .. }, '}') => {
+                    tokens.push(replace(bp, Token::start_text(pos + 1)));
                 }
-                ('}', Item::Text(k)) if k.ends_with('}') => {
-                    // skip, that's the escape
+                (
+                    Token::BracePair {
+                        key_start,
+                        key_end,
+                        end,
+                        ..
+                    },
+                    ws,
+                ) if ws.is_whitespace() => {
+                    if *key_start == *key_end {
+                        // We're in a brace pair, but we're not in the key yet.
+                        *key_start = pos + 1;
+                    } else {
+                        *key_end = pos - 1;
+                        *end = pos;
+                    }
                 }
-                (c, Item::Text(t)) => current = Item::Text(format!("{t}{c}").into()),
-                (c, Item::Key(k)) => current = Item::Key(format!("{k}{c}").into()),
+                (Token::BracePair { key_end, end, .. }, any) => {
+                    *key_end = pos;
+                    *end = pos + 1;
+                }
+
+                (Token::Text { start, end }, any) => {
+                    *end = pos;
+                }
+                _ => {}
             }
         }
 
-        match current {
-            Item::Text(t) => tokens.push(Item::Text(t)),
-            Item::Key(_) => {
-                return Err(ParseError {
-                    src: s.into(),
-                    unbalanced: Some((s.len() - 1, s.len()).into()),
-                    empty_key: None,
-                })
+        let source_len = s.len();
+        dbg!(s, source_len);
+        dbg!(tokens.iter().map(|t| t.debug(s)).collect::<Vec<_>>());
+        dbg!(current.debug(s));
+
+        if !current.is_empty(source_len) {
+            tokens.push(current);
+        }
+
+        let mut items = Vec::new();
+        for token in tokens {
+            match token {
+                Token::Text { start, end } => {
+                    items.push(Item::Text(Literal::Borrowed(&s[start..=end])));
+                }
+                Token::BracePair {
+                    key_start, key_end, ..
+                } => {
+                    items.push(Item::Key(Literal::Borrowed(&s[key_start..=key_end])));
+                }
             }
         }
 
-        Ok(Self {
-            items: tokens
-                .into_iter()
-                .filter_map(|tok| match tok {
-                    Item::Text(t) if t.is_empty() => None,
-                    Item::Key(k) if k.is_empty() => Some(Err(ParseError {
-                        src: s.into(),
-                        unbalanced: None,
-                        empty_key: Some((s.len() - 1, s.len()).into()),
-                    })),
-                    Item::Key(k) => Some(Ok(Item::Key(k.trim().to_string().into()))),
-                    _ => Some(Ok(tok)),
-                })
-                .collect::<Result<Cow<_>, _>>()?,
+        Ok(Template {
+            items: Cow::Owned(items),
             default: None,
         })
     }
@@ -281,7 +372,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(fails)] // FIXME
     fn escape_doubled() {
         let template = Template::from_str("these {{{{ four }}}} braces").unwrap();
         assert_eq!(
