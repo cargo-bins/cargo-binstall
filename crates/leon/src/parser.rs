@@ -123,6 +123,9 @@ impl<'s> Template<'s> {
                         eprintln!("bracepair new | pos={pos:2}  replace tok={tok:?}");
                         *tok = Token::start_brace_pair(pos, ch);
                     } else {
+                        if let Token::Text { end, .. } = tok {
+                            *end = pos - 1;
+                        }
                         eprintln!("bracepair new | pos={pos:2}     push tok={tok:?}");
                         tokens.push(replace(tok, Token::start_brace_pair(pos, ch)));
                     }
@@ -131,6 +134,9 @@ impl<'s> Template<'s> {
                     if txt.is_empty(source_len) || txt.start() == pos {
                         *txt = Token::start_escape(pos, ch);
                     } else {
+                        if let Token::Text { end, .. } = txt {
+                            *end = pos - 1;
+                        }
                         tokens.push(replace(txt, Token::start_escape(pos, ch)));
                     }
                 }
@@ -572,6 +578,21 @@ mod test_valid {
     fn multibyte_whitespace() {
         let template = Template::from_str("岩佐　作{　太　}郎").unwrap();
         assert_eq!(template, template!(Text("岩佐　作"), Key("太"), Text("郎")));
+    }
+
+    #[test]
+    fn multibyte_with_escapes() {
+        let template = Template::from_str(r"日本\{アナキスト\}連盟").unwrap();
+        assert_eq!(
+            template,
+            template!(
+                Text("日本"),
+                Text(r"{"),
+                Text("アナキスト"),
+                Text(r"}"),
+                Text("連盟")
+            )
+        );
     }
 
     #[test]
