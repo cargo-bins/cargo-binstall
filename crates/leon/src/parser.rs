@@ -270,6 +270,15 @@ impl<'s> Template<'s> {
             return Err(ParseError::unbalanced(s, start, end));
         }
 
+        if let Token::Escape {
+            start,
+            end,
+            ch: None,
+        } = current
+        {
+            return Err(ParseError::escape(s, start, end));
+        }
+
         let mut items = Vec::with_capacity(tokens.len());
         for token in tokens {
             match token {
@@ -667,4 +676,9 @@ mod test_error {
         assert_eq!(template, ParseError::escape(r"not \a thing", 4, 5));
     }
 
+    #[test]
+    fn end_escape() {
+        let template = Template::from_str(r"forget me not \").unwrap_err();
+        assert_eq!(template, ParseError::escape(r"forget me not \", 14, 15));
+    }
 }
