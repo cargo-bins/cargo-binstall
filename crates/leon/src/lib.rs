@@ -38,7 +38,7 @@
 //! ```
 //! use leon::Template;
 //!
-//! let template = Template::from_str("hello {name}").unwrap();
+//! let template = Template::parse("hello {name}").unwrap();
 //! ```
 //!
 //! The template can be inspected, for example to check if a key is present:
@@ -46,7 +46,7 @@
 //! ```
 //! # use leon::Template;
 //! #
-//! # let template = Template::from_str("hello {name}").unwrap();
+//! # let template = Template::parse("hello {name}").unwrap();
 //! assert!(template.has_key("name"));
 //! ```
 //!
@@ -56,7 +56,7 @@
 //! # use leon::Template;
 //! use leon::vals;
 //! #
-//! # let template = Template::from_str("hello {name}").unwrap();
+//! # let template = Template::parse("hello {name}").unwrap();
 //! assert_eq!(template.render(&vals(|_key| Some("marcus"))).unwrap().as_str(), "hello marcus");
 //! ```
 //!
@@ -67,7 +67,7 @@
 //! # use leon::Template;
 //! use leon::vals;
 //! #
-//! # let template = Template::from_str("hello {name}").unwrap();
+//! # let template = Template::parse("hello {name}").unwrap();
 //! let mut buf: Vec<u8> = Vec::new();
 //! template.render_into(&mut buf, &vals(|key| if key == "name" { Some("julius") } else { None })).unwrap();
 //! assert_eq!(buf.as_slice(), b"hello julius");
@@ -78,7 +78,7 @@
 //! ```
 //! use std::collections::HashMap;
 //! # use leon::Template;
-//! # let template = Template::from_str("hello {name}").unwrap();
+//! # let template = Template::parse("hello {name}").unwrap();
 //! let mut values = HashMap::new();
 //! values.insert("name", "brutus");
 //! assert_eq!(template.render(&values).unwrap().as_str(), "hello brutus");
@@ -103,7 +103,7 @@
 //!    }
 //! }
 //! #
-//! # let template = Template::from_str("hello {name}").unwrap();
+//! # let template = Template::parse("hello {name}").unwrap();
 //! let values = MyMap { name: "pontifex" };
 //! assert_eq!(template.render(&values).unwrap().as_str(), "hello pontifex");
 //! ```

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, mem::replace};
+use std::mem::replace;
 
 use crate::{Item, ParseError, Template};
 
@@ -102,15 +102,7 @@ impl Token {
 }
 
 impl<'s> Template<'s> {
-    #[allow(clippy::should_implement_trait)] // TODO: implement FromStr
-    pub fn from_str(s: &'s str) -> Result<Self, ParseError<'s>> {
-        Self::parse_items(s).map(|items| Template {
-            items: Cow::Owned(items),
-            default: None,
-        })
-    }
-
-    fn parse_items(s: &'s str) -> Result<Vec<Item<'s>>, ParseError<'s>> {
+    pub(crate) fn parse_items(s: &'s str) -> Result<Vec<Item<'s>>, ParseError<'s>> {
         let source_len = s.len();
         let mut tokens = Vec::new();
 
@@ -349,37 +341,37 @@ mod test_valid {
 
     #[test]
     fn empty() {
-        let template = Template::from_str("").unwrap();
+        let template = Template::parse("").unwrap();
         assert_eq!(template, Template::default());
     }
 
     #[test]
     fn no_keys() {
-        let template = Template::from_str("hello world").unwrap();
+        let template = Template::parse("hello world").unwrap();
         assert_eq!(template, template!(Text("hello world")));
     }
 
     #[test]
     fn leading_key() {
-        let template = Template::from_str("{salutation} world").unwrap();
+        let template = Template::parse("{salutation} world").unwrap();
         assert_eq!(template, template!(Key("salutation"), Text(" world")));
     }
 
     #[test]
     fn trailing_key() {
-        let template = Template::from_str("hello {name}").unwrap();
+        let template = Template::parse("hello {name}").unwrap();
         assert_eq!(template, template!(Text("hello "), Key("name")));
     }
 
     #[test]
     fn middle_key() {
-        let template = Template::from_str("hello {name}!").unwrap();
+        let template = Template::parse("hello {name}!").unwrap();
         assert_eq!(template, template!(Text("hello "), Key("name"), Text("!")));
     }
 
     #[test]
     fn middle_text() {
-        let template = Template::from_str("{salutation} good {title}").unwrap();
+        let template = Template::parse("{salutation} good {title}").unwrap();
         assert_eq!(
             template,
             template!(Key("salutation"), Text(" good "), Key("title"))
@@ -388,7 +380,7 @@ mod test_valid {
 
     #[test]
     fn multiline() {
-        let template = Template::from_str(
+        let template = Template::parse(
             "
             And if thy native country was { ancient civilisation },
             What need to slight thee? Came not {hero} thence,
@@ -412,25 +404,25 @@ mod test_valid {
 
     #[test]
     fn key_no_whitespace() {
-        let template = Template::from_str("{word}").unwrap();
+        let template = Template::parse("{word}").unwrap();
         assert_eq!(template, template!(Key("word")));
     }
 
     #[test]
     fn key_leading_whitespace() {
-        let template = Template::from_str("{ word}").unwrap();
+        let template = Template::parse("{ word}").unwrap();
         assert_eq!(template, template!(Key("word")));
     }
 
     #[test]
     fn key_trailing_whitespace() {
-        let template = Template::from_str("{word\n}").unwrap();
+        let template = Template::parse("{word\n}").unwrap();
         assert_eq!(template, template!(Key("word")));
     }
 
     #[test]
     fn key_both_whitespace() {
-        let template = Template::from_str(
+        let template = Template::parse(
             "{
             \tword
         }",
@@ -441,13 +433,13 @@ mod test_valid {
 
     #[test]
     fn key_inner_whitespace() {
-        let template = Template::from_str("{ a word }").unwrap();
+        let template = Template::parse("{ a word }").unwrap();
         assert_eq!(template, template!(Key("a word")));
     }
 
     #[test]
     fn escape_left() {
-        let template = Template::from_str(r"this \{ single left brace").unwrap();
+        let template = Template::parse(r"this \{ single left brace").unwrap();
         assert_eq!(
             template,
             template!(Text("this "), Text("{"), Text(" single left brace"))
@@ -456,7 +448,7 @@ mod test_valid {
 
     #[test]
     fn escape_right() {
-        let template = Template::from_str(r"this \} single right brace").unwrap();
+        let template = Template::parse(r"this \} single right brace").unwrap();
         assert_eq!(
             template,
             template!(Text("this "), Text("}"), Text(" single right brace"))
@@ -465,7 +457,7 @@ mod test_valid {
 
     #[test]
     fn escape_both() {
-        let template = Template::from_str(r"these \{ two \} braces").unwrap();
+        let template = Template::parse(r"these \{ two \} braces").unwrap();
         assert_eq!(
             template,
             template!(
@@ -480,7 +472,7 @@ mod test_valid {
 
     #[test]
     fn escape_doubled() {
-        let template = Template::from_str(r"these \{\{ four \}\} braces").unwrap();
+        let template = Template::parse(r"these \{\{ four \}\} braces").unwrap();
         assert_eq!(
             template,
             template!(
@@ -497,7 +489,7 @@ mod test_valid {
 
     #[test]
     fn escape_escape() {
-        let template = Template::from_str(r"these \\ backslashes \\\\").unwrap();
+        let template = Template::parse(r"these \\ backslashes \\\\").unwrap();
         assert_eq!(
             template,
             template!(
@@ -512,7 +504,7 @@ mod test_valid {
 
     #[test]
     fn escape_before_key() {
-        let template = Template::from_str(r"\\{ a } \{{ b } \}{ c }").unwrap();
+        let template = Template::parse(r"\\{ a } \{{ b } \}{ c }").unwrap();
         assert_eq!(
             template,
             template!(
@@ -530,7 +522,7 @@ mod test_valid {
 
     #[test]
     fn escape_after_key() {
-        let template = Template::from_str(r"{ a }\\ { b }\{ { c }\}").unwrap();
+        let template = Template::parse(r"{ a }\\ { b }\{ { c }\}").unwrap();
         assert_eq!(
             template,
             template!(
@@ -548,7 +540,7 @@ mod test_valid {
 
     #[test]
     fn multibyte_texts() {
-        let template = Template::from_str("幸徳 {particle} 秋水").unwrap();
+        let template = Template::parse("幸徳 {particle} 秋水").unwrap();
         assert_eq!(
             template,
             template!(Text("幸徳 "), Key("particle"), Text(" 秋水"))
@@ -557,25 +549,25 @@ mod test_valid {
 
     #[test]
     fn multibyte_key() {
-        let template = Template::from_str("The { 連盟 }").unwrap();
+        let template = Template::parse("The { 連盟 }").unwrap();
         assert_eq!(template, template!(Text("The "), Key("連盟")));
     }
 
     #[test]
     fn multibyte_both() {
-        let template = Template::from_str("大杉 {栄}").unwrap();
+        let template = Template::parse("大杉 {栄}").unwrap();
         assert_eq!(template, template!(Text("大杉 "), Key("栄")));
     }
 
     #[test]
     fn multibyte_whitespace() {
-        let template = Template::from_str("岩佐　作{　太　}郎").unwrap();
+        let template = Template::parse("岩佐　作{　太　}郎").unwrap();
         assert_eq!(template, template!(Text("岩佐　作"), Key("太"), Text("郎")));
     }
 
     #[test]
     fn multibyte_with_escapes() {
-        let template = Template::from_str(r"日本\{アナキスト\}連盟").unwrap();
+        let template = Template::parse(r"日本\{アナキスト\}連盟").unwrap();
         assert_eq!(
             template,
             template!(
@@ -590,13 +582,13 @@ mod test_valid {
 
     #[test]
     fn multibyte_rtl_text() {
-        let template = Template::from_str("محمد صايل").unwrap();
+        let template = Template::parse("محمد صايل").unwrap();
         assert_eq!(template, template!(Text("محمد صايل")));
     }
 
     #[test]
     fn multibyte_rtl_key() {
-        let template = Template::from_str("محمد {ريشة}").unwrap();
+        let template = Template::parse("محمد {ريشة}").unwrap();
         assert_eq!(template, template!(Text("محمد "), Key("ريشة")));
     }
 }
@@ -607,19 +599,19 @@ mod test_error {
 
     #[test]
     fn key_left_half() {
-        let template = Template::from_str("{ open").unwrap_err();
+        let template = Template::parse("{ open").unwrap_err();
         assert_eq!(template, ParseError::unbalanced("{ open", 0, 6));
     }
 
     #[test]
     fn key_right_half() {
-        let template = Template::from_str("open }").unwrap_err();
+        let template = Template::parse("open }").unwrap_err();
         assert_eq!(template, ParseError::unbalanced("open }", 5, 5));
     }
 
     #[test]
     fn key_with_half_escape() {
-        let template = Template::from_str(r"this is { not \ allowed }").unwrap_err();
+        let template = Template::parse(r"this is { not \ allowed }").unwrap_err();
         assert_eq!(
             template,
             ParseError::key_escape(r"this is { not \ allowed }", 8, 14)
@@ -628,7 +620,7 @@ mod test_error {
 
     #[test]
     fn key_with_full_escape() {
-        let template = Template::from_str(r"{ not \} allowed }").unwrap_err();
+        let template = Template::parse(r"{ not \} allowed }").unwrap_err();
         assert_eq!(
             template,
             ParseError::key_escape(r"{ not \} allowed }", 0, 6)
@@ -637,25 +629,25 @@ mod test_error {
 
     #[test]
     fn key_empty() {
-        let template = Template::from_str(r"void: {}").unwrap_err();
+        let template = Template::parse(r"void: {}").unwrap_err();
         assert_eq!(template, ParseError::key_empty(r"void: {}", 6, 7));
     }
 
     #[test]
     fn key_only_whitespace() {
-        let template = Template::from_str(r"nothing: { }").unwrap_err();
+        let template = Template::parse(r"nothing: { }").unwrap_err();
         assert_eq!(template, ParseError::key_empty(r"nothing: { }", 9, 11));
     }
 
     #[test]
     fn bad_escape() {
-        let template = Template::from_str(r"not \a thing").unwrap_err();
+        let template = Template::parse(r"not \a thing").unwrap_err();
         assert_eq!(template, ParseError::escape(r"not \a thing", 4, 5));
     }
 
     #[test]
     fn end_escape() {
-        let template = Template::from_str(r"forget me not \").unwrap_err();
+        let template = Template::parse(r"forget me not \").unwrap_err();
         assert_eq!(template, ParseError::escape(r"forget me not \", 14, 15));
     }
 }

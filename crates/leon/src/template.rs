@@ -1,6 +1,6 @@
 use std::{borrow::Cow, io::Write, ops::Add};
 
-use crate::{LeonError, Values};
+use crate::{LeonError, ParseError, Values};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Template<'s> {
@@ -53,6 +53,48 @@ impl<'s> Template<'s> {
             items: Cow::Borrowed(items),
             default,
         }
+    }
+
+    /// Parse a template from a string.
+    ///
+    /// # Syntax
+    ///
+    /// ```plain
+    /// it is better to rule { group }
+    /// one can live {adverb} without power
+    /// ```
+    ///
+    /// A replacement is denoted by `{` and `}`. The contents of the braces, trimmed
+    /// of any whitespace, are the key. Any text outside of braces is left as-is.
+    ///
+    /// To escape a brace, use `\{` or `\}`. To escape a backslash, use `\\`. Keys
+    /// cannot contain escapes.
+    ///
+    /// ```plain
+    /// \{ leon \}
+    /// ```
+    ///
+    /// The above examples, given the values `group = "no one"` and
+    /// `adverb = "honourably"`, would render to:
+    ///
+    /// ```plain
+    /// it is better to rule no one
+    /// one can live honourably without power
+    /// { leon }
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use leon::Template;
+    /// let template = Template::parse("hello {name}").unwrap();
+    /// ```
+    ///
+    pub fn parse(s: &'s str) -> Result<Self, ParseError<'s>> {
+        Self::parse_items(s).map(|items| Template {
+            items: Cow::Owned(items),
+            default: None,
+        })
     }
 
     pub fn render_into<'a>(
