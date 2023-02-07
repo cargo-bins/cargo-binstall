@@ -83,17 +83,23 @@ impl Token {
 
     fn start(&self) -> usize {
         match self {
-            Self::Text { start, .. } => *start,
-            Self::BracePair { start, .. } => *start,
-            Self::Escape { start, .. } => *start,
+            Self::Text { start, .. }
+            | Self::BracePair { start, .. }
+            | Self::Escape { start, .. } => *start,
         }
     }
 
     fn end(&self) -> usize {
         match self {
-            Self::Text { end, .. } => *end,
-            Self::BracePair { end, .. } => *end,
-            Self::Escape { end, .. } => *end,
+            Self::Text { end, .. } | Self::BracePair { end, .. } | Self::Escape { end, .. } => *end,
+        }
+    }
+
+    fn set_end(&mut self, pos: usize) {
+        match self {
+            Self::Text { end, .. } | Self::BracePair { end, .. } | Self::Escape { end, .. } => {
+                *end = pos
+            }
         }
     }
 
@@ -110,6 +116,7 @@ impl Token {
 }
 
 impl<'s> Template<'s> {
+    // TODO: figure out if it's parseable without cow (escapes can just point to the source)
     #[allow(clippy::should_implement_trait)] // TODO: implement FromStr
     pub fn from_str(s: &'s str) -> Result<Self, ParseError<'s>> {
         let source_len = s.len();

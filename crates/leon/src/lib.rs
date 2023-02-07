@@ -15,7 +15,8 @@
 //! A replacement is denoted by `{` and `}`. The contents of the braces, trimmed
 //! of any whitespace, are the key. Any text outside of braces is left as-is.
 //!
-//! To escape a brace, use `\{` or `\}`. To escape a backslash, use `\\`.
+//! To escape a brace, use `\{` or `\}`. To escape a backslash, use `\\`. Keys
+//! cannot contain escapes.
 //!
 //! ```plain
 //! \{ leon \}

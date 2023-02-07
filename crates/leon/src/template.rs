@@ -89,36 +89,21 @@ impl<'s> Add for Template<'s> {
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
-
-    use crate::{Item, Template};
+    use crate::helpers::{key, text};
 
     #[test]
     fn concat_templates() {
-        let t1 = Template {
-            items: Cow::Owned(vec![Item::Text("Hello".into()), Item::Key("name".into())]),
-            default: None,
-        };
-        let t2 = Template {
-            items: Cow::Owned(vec![
-                Item::Text("have a".into()),
-                Item::Key("adjective".into()),
-                Item::Text("day!".into()),
-            ]),
-            default: None,
-        };
+        let t1 = crate::template!(text("Hello"), key("name"));
+        let t2 = crate::template!(text("have a"), key("adjective"), text("day"));
         assert_eq!(
             t1 + t2,
-            Template {
-                items: Cow::Owned(vec![
-                    Item::Text("Hello".into()),
-                    Item::Key("name".into()),
-                    Item::Text("have a".into()),
-                    Item::Key("adjective".into()),
-                    Item::Text("day!".into()),
-                ]),
-                default: None,
-            }
+            crate::template!(
+                text("Hello"),
+                key("name"),
+                text("have a"),
+                key("adjective"),
+                text("day")
+            ),
         );
     }
 }
