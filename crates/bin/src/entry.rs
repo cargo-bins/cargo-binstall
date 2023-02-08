@@ -4,7 +4,11 @@ use binstalk::{
     errors::BinstallError,
     fetchers::{Fetcher, GhCrateMeta, QuickInstall},
     get_desired_targets,
-    helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
+    helpers::{
+        jobserver_client::LazyJobserverClient,
+        remote::{Certificate, Client},
+        tasks::AutoAbortJoinHandle,
+    },
     ops::{
         self,
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
@@ -73,6 +77,15 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         args.min_tls_version.map(|v| v.into()),
         Duration::from_millis(rate_limit.duration.get()),
         rate_limit.request_count,
+        ["CARGO_HTTP_CAINFO", "SSL_CERT_FILE", "SSL_CERT_PATH"]
+            .into_iter()
+            .filter_map(|env_name| match Certificate::from_env(env_name) {
+                Ok(option) => option,
+                Err(err) => {
+                    warn!("Failed to load root certificate specified by env {env_name}: {err}",);
+                    None
+                }
+            }),
     )
     .map_err(BinstallError::from)?;
 
