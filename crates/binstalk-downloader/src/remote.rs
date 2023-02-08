@@ -22,6 +22,9 @@ pub use url::Url;
 mod delay_request;
 use delay_request::DelayRequest;
 
+mod certificate;
+pub use certificate::{Certificate, OpenCertificateError};
+
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
 const DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT: Duration = Duration::from_millis(200);
@@ -66,23 +69,30 @@ impl Client {
         min_tls: Option<tls::Version>,
         per: Duration,
         num_request: NonZeroU64,
+        certificates: impl IntoIterator<Item = Certificate>,
     ) -> Result<Self, Error> {
         fn inner(
             user_agent: &str,
             min_tls: Option<tls::Version>,
             per: Duration,
             num_request: NonZeroU64,
+            certificates: &mut dyn Iterator<Item = Certificate>,
         ) -> Result<Client, Error> {
             let tls_ver = min_tls
                 .map(|tls| tls.max(DEFAULT_MIN_TLS))
                 .unwrap_or(DEFAULT_MIN_TLS);
 
-            let client = reqwest::ClientBuilder::new()
+            let mut builder = reqwest::ClientBuilder::new()
                 .user_agent(user_agent)
                 .https_only(true)
                 .min_tls_version(tls_ver)
-                .tcp_nodelay(false)
-                .build()?;
+                .tcp_nodelay(false);
+
+            for certificate in certificates {
+                builder = builder.add_root_certificate(certificate.0);
+            }
+
+            let client = builder.build()?;
 
             Ok(Client(Arc::new(Inner {
                 client: client.clone(),
@@ -94,7 +104,13 @@ impl Client {
             })))
         }
 
-        inner(user_agent.as_ref(), min_tls, per, num_request)
+        inner(
+            user_agent.as_ref(),
+            min_tls,
+            per,
+            num_request,
+            &mut certificates.into_iter(),
+        )
     }
 
     /// Return inner reqwest client.
