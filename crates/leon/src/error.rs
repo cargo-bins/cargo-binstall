@@ -1,16 +1,10 @@
+#[cfg(feature = "miette")]
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-#[derive(Debug, Diagnostic, Error)]
+#[cfg_attr(feature = "miette", derive(Diagnostic))]
+#[derive(Debug, Error)]
 pub enum RenderError<'s> {
-    /// The template failed to parse.
-    #[error(transparent)]
-    InvalidTemplate(
-        #[diagnostic_source]
-        #[from]
-        BoxedParseError,
-    ),
-
     /// A key was missing from the provided values.
     #[error("missing key `{0}`")]
     MissingKey(&'s str),
@@ -20,31 +14,120 @@ pub enum RenderError<'s> {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Debug, Error)]
-#[error(transparent)]
-pub struct BoxedParseError(#[from] pub Box<ParseError<'static>>);
+#[cfg(feature = "miette")]
+#[derive(Debug, Diagnostic, Error, PartialEq, Eq)]
+#[error("invalid template")]
+#[non_exhaustive]
+pub struct ParseError<'s> {
+    #[source_code]
+    pub src: &'s str,
 
-impl Diagnostic for BoxedParseError {
-    fn diagnostic_source(&self) -> Option<&dyn Diagnostic> {
-        Some(&*self.0)
+    #[label = "these braces are unbalanced"]
+    pub unbalanced: Option<SourceSpan>,
+
+    #[label = "this escape is malformed"]
+    pub escape: Option<SourceSpan>,
+
+    #[label = "a key cannot be empty"]
+    pub key_empty: Option<SourceSpan>,
+
+    #[label = "escapes are not allowed in keys"]
+    pub key_escape: Option<SourceSpan>,
+}
+
+#[cfg(feature = "miette")]
+impl<'s> ParseError<'s> {
+    pub(crate) fn unbalanced(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            unbalanced: Some((start, end).into()),
+            escape: None,
+            key_empty: None,
+            key_escape: None,
+        }
+    }
+
+    pub(crate) fn escape(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            unbalanced: None,
+            escape: Some((start, end).into()),
+            key_empty: None,
+            key_escape: None,
+        }
+    }
+
+    pub(crate) fn key_empty(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            unbalanced: None,
+            escape: None,
+            key_empty: Some((start, end).into()),
+            key_escape: None,
+        }
+    }
+
+    pub(crate) fn key_escape(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            unbalanced: None,
+            escape: None,
+            key_empty: None,
+            key_escape: Some((start, end).into()),
+        }
     }
 }
 
-#[derive(Debug, Diagnostic, Error, PartialEq, Eq)]
-#[error("invalid template")]
+/// An opaque parsing error.
+///
+/// This is the non-miette version of this error, which only implements
+/// [`std::error::Error`] and [`std::fmt::Display`], and does not provide any
+/// programmably-useable detail besides a message.
+#[cfg(not(feature = "miette"))]
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error("invalid template: {problem} at range {start}:{end} in {src:?}")]
 pub struct ParseError<'s> {
-    #[source_code]
-    pub(crate) src: &'s str,
+    src: &'s str,
+    problem: &'static str,
+    start: usize,
+    end: usize,
+}
 
-    #[label = "these braces are unbalanced"]
-    pub(crate) unbalanced: Option<SourceSpan>,
+#[cfg(not(feature = "miette"))]
+impl<'s> ParseError<'s> {
+    pub(crate) fn unbalanced(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            problem: "unbalanced braces",
+            start,
+            end,
+        }
+    }
 
-    #[label = "this escape is malformed"]
-    pub(crate) escape: Option<SourceSpan>,
+    pub(crate) fn escape(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            problem: "malformed escape",
+            start,
+            end,
+        }
+    }
 
-    #[label = "a key cannot be empty"]
-    pub(crate) key_empty: Option<SourceSpan>,
+    pub(crate) fn key_empty(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            problem: "empty key",
+            start,
+            end,
+        }
+    }
 
-    #[label = "escapes are not allowed in keys"]
-    pub(crate) key_escape: Option<SourceSpan>,
+    pub(crate) fn key_escape(src: &'s str, start: usize, end: usize) -> Self {
+        Self {
+            src,
+            problem: "escape in key",
+            start,
+            end,
+        }
+    }
 }

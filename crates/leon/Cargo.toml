@@ -10,8 +10,12 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-miette = "5.5.0"
+miette = { version = "5.5.0", default-features = false, optional = true }
 thiserror = "1.0.38"
+
+[features]
+default = ["miette"]
+miette = ["dep:miette"]
 
 [dev-dependencies]
 criterion = "0.4.0"
