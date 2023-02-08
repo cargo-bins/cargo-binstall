@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    fmt, fs,
+    fmt,
     path::{self, Component, Path, PathBuf},
 };
 
@@ -74,10 +74,11 @@ pub struct BinFile {
 }
 
 impl BinFile {
+    /// * `tt` - must have a template with name "bin_dir"
     pub fn new(
         data: &Data<'_>,
         base_name: &str,
-        bin_dir: &str,
+        tt: &TinyTemplate,
         no_symlinks: bool,
     ) -> Result<Self, BinstallError> {
         let binary_ext = if data.target.contains("windows") {
@@ -101,7 +102,7 @@ impl BinFile {
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
-            let path = ctx.render(bin_dir)?;
+            let path = ctx.render_with_compiled_tt(tt)?;
 
             let path_normalized = Path::new(&path).normalize();
 
@@ -119,13 +120,21 @@ impl BinFile {
         };
 
         // Destination at install dir + base-name{.extension}
-        let dest = data.install_path.join(ctx.render("{ bin }{ binary-ext }")?);
+        let mut dest = data.install_path.join(ctx.bin);
+        if !binary_ext.is_empty() {
+            let binary_ext = binary_ext.strip_prefix('.').unwrap();
+
+            // PathBuf::set_extension returns false if Path::file_name
+            // is None, but we know that the file name must be Some,
+            // thus we assert! the return value here.
+            assert!(dest.set_extension(binary_ext));
+        }
 
         let (dest, link) = if no_symlinks {
             (dest, None)
         } else {
             // Destination path is the install dir + base-name-version{.extension}
-            let dest_file_path_with_ver = ctx.render("{ bin }-v{ version }{ binary-ext }")?;
+            let dest_file_path_with_ver = format!("{}-v{}{}", ctx.bin, ctx.version, ctx.binary_ext);
             let dest_with_ver = data.install_path.join(dest_file_path_with_ver);
 
             (dest_with_ver, Some(dest))
@@ -174,7 +183,7 @@ impl BinFile {
         );
 
         #[cfg(unix)]
-        fs::set_permissions(
+        std::fs::set_permissions(
             &self.source,
             std::os::unix::fs::PermissionsExt::from_mode(0o755),
         )?;
@@ -186,13 +195,6 @@ impl BinFile {
 
     pub fn install_link(&self) -> Result<(), BinstallError> {
         if let Some(link) = &self.link {
-            // Remove existing symlink
-            // TODO: check if existing symlink is correct
-            if link.exists() {
-                debug!("Remove link '{}'", link.display());
-                std::fs::remove_file(link)?;
-            }
-
             let dest = self.link_dest();
             debug!(
                 "Create link '{}' pointing to '{}'",
@@ -242,10 +244,9 @@ struct Context<'c> {
 }
 
 impl<'c> Context<'c> {
-    fn render(&self, template: &str) -> Result<String, BinstallError> {
-        let mut tt = TinyTemplate::new();
-        tt.add_template("path", template)?;
-        Ok(tt.render("path", self)?)
+    /// * `tt` - must have a template with name "bin_dir"
+    fn render_with_compiled_tt(&self, tt: &TinyTemplate) -> Result<String, BinstallError> {
+        Ok(tt.render("bin_dir", self)?)
     }
 }
 

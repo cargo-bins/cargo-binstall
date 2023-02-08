@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt::Debug, io, path::Path, pin::Pin};
 
 use async_compression::tokio::bufread;
 use bytes::Bytes;
-use futures_util::stream::{Stream, StreamExt};
+use futures_lite::stream::{Stream, StreamExt};
 use tokio::io::{copy, sink, AsyncRead};
 use tokio_tar::{Archive, Entry, EntryType};
 use tokio_util::io::StreamReader;

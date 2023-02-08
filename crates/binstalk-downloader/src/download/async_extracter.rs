@@ -7,8 +7,8 @@ use std::{
 
 use async_zip::read::stream::ZipFileReader;
 use bytes::{Bytes, BytesMut};
-use futures_util::{
-    future::try_join,
+use futures_lite::{
+    future::try_zip as try_join,
     stream::{Stream, StreamExt},
 };
 use tokio::sync::mpsc;
