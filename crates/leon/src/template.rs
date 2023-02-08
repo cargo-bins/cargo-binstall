@@ -1,6 +1,6 @@
 use std::{borrow::Cow, io::Write, ops::Add};
 
-use crate::{LeonError, ParseError, Values};
+use crate::{RenderError, ParseError, Values};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Template<'s> {
@@ -90,7 +90,7 @@ impl<'s> Template<'s> {
     /// let template = Template::parse("hello {name}").unwrap();
     /// ```
     ///
-    pub fn parse(s: &'s str) -> Result<Self, ParseError<'s>> {
+    pub fn parse(s: &'s str) -> Result<Self, Box<ParseError<'s>>> {
         Self::parse_items(s).map(|items| Template {
             items: Cow::Owned(items),
             default: None,
@@ -101,7 +101,7 @@ impl<'s> Template<'s> {
         &'a self,
         writer: &mut dyn Write,
         values: &dyn Values<&'a str, &'a str>,
-    ) -> Result<(), LeonError> {
+    ) -> Result<(), RenderError> {
         for token in self.items.as_ref() {
             match token {
                 Item::Text(text) => writer.write_all(text.as_bytes())?,
@@ -111,7 +111,7 @@ impl<'s> Template<'s> {
                     } else if let Some(default) = &self.default {
                         writer.write_all(default.as_bytes())?;
                     } else {
-                        return Err(LeonError::MissingKey(key));
+                        return Err(RenderError::MissingKey(key));
                     }
                 }
             }
@@ -122,7 +122,7 @@ impl<'s> Template<'s> {
     pub fn render<'a>(
         &'a self,
         values: &dyn Values<&'a str, &'a str>,
-    ) -> Result<String, LeonError> {
+    ) -> Result<String, RenderError> {
         let mut buf = Vec::with_capacity(
             self.items
                 .iter()

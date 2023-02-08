@@ -102,7 +102,7 @@ impl Token {
 }
 
 impl<'s> Template<'s> {
-    pub(crate) fn parse_items(s: &'s str) -> Result<Vec<Item<'s>>, ParseError<'s>> {
+    pub(crate) fn parse_items(s: &'s str) -> Result<Vec<Item<'s>>, Box<ParseError<'s>>> {
         let source_len = s.len();
         let mut tokens = Vec::new();
 
@@ -142,7 +142,7 @@ impl<'s> Template<'s> {
                     tokens.push(replace(bp, Token::start_text_single(pos + 1)));
                 }
                 (Token::BracePair { start, .. }, '\\') => {
-                    return Err(ParseError::key_escape(s, *start, pos));
+                    return Err(Box::new(ParseError::key_escape(s, *start, pos)));
                 }
                 (Token::BracePair { key_seen, end, .. }, ws) if ws.is_whitespace() => {
                     // eprintln!("bracepair ws  > pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
@@ -160,7 +160,7 @@ impl<'s> Template<'s> {
                     // eprintln!("bracepair any < pos={pos:2}   key seen={key_seen} start={start:2} end={end:2}");
                 }
                 (Token::Text { .. }, '}') => {
-                    return Err(ParseError::unbalanced(s, pos, pos));
+                    return Err(Box::new(ParseError::unbalanced(s, pos, pos)));
                 }
                 (Token::Text { end, .. }, _) => {
                     // eprintln!(
@@ -193,7 +193,7 @@ impl<'s> Template<'s> {
                             unreachable!("escape followed by brace pair, unhandled");
                         } else {
                             // } right after a completed escape, probably unreachable but just in case:
-                            return Err(ParseError::key_escape(s, *start, pos));
+                            return Err(Box::new(ParseError::key_escape(s, *start, pos)));
                         }
                     } else {
                         unreachable!("escape is not an escape");
@@ -208,7 +208,7 @@ impl<'s> Template<'s> {
                     // eprintln!(
                     //     "escape error  | pos={pos:2}   start={start:2} end={end:2}  ch={ch:?}"
                     // );
-                    return Err(ParseError::escape(s, *start, pos));
+                    return Err(Box::new(ParseError::escape(s, *start, pos)));
                 }
                 (Token::Escape { ch: Some(_), .. }, _) => {
                     // eprintln!(
@@ -236,7 +236,7 @@ impl<'s> Template<'s> {
         // );
 
         if let Token::BracePair { start, end, .. } = current {
-            return Err(ParseError::unbalanced(s, start, end));
+            return Err(Box::new(ParseError::unbalanced(s, start, end)));
         }
 
         if let Token::Escape {
@@ -245,7 +245,7 @@ impl<'s> Template<'s> {
             ch: None,
         } = current
         {
-            return Err(ParseError::escape(s, start, end));
+            return Err(Box::new(ParseError::escape(s, start, end)));
         }
 
         let mut items = Vec::with_capacity(tokens.len());
@@ -259,7 +259,7 @@ impl<'s> Template<'s> {
                     end,
                     key_seen: false,
                 } => {
-                    return Err(ParseError::key_empty(s, start, end));
+                    return Err(Box::new(ParseError::key_empty(s, start, end)));
                 }
                 Token::BracePair {
                     start,
@@ -269,7 +269,7 @@ impl<'s> Template<'s> {
                     let key = s[start..=end]
                         .trim_matches(|c: char| c.is_whitespace() || c == '{' || c == '}');
                     if key.is_empty() {
-                        return Err(ParseError::key_empty(s, start, end));
+                        return Err(Box::new(ParseError::key_empty(s, start, end)));
                     } else {
                         items.push(Item::Key(key));
                     }
@@ -284,54 +284,12 @@ impl<'s> Template<'s> {
                     start,
                     end,
                 } => {
-                    return Err(ParseError::escape(s, start, end));
+                    return Err(Box::new(ParseError::escape(s, start, end)));
                 }
             }
         }
 
         Ok(items)
-    }
-}
-
-impl<'s> ParseError<'s> {
-    fn unbalanced(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            unbalanced: Some((start, end).into()),
-            escape: None,
-            key_empty: None,
-            key_escape: None,
-        }
-    }
-
-    fn escape(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            unbalanced: None,
-            escape: Some((start, end).into()),
-            key_empty: None,
-            key_escape: None,
-        }
-    }
-
-    fn key_empty(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            unbalanced: None,
-            escape: None,
-            key_empty: Some((start, end).into()),
-            key_escape: None,
-        }
-    }
-
-    fn key_escape(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            unbalanced: None,
-            escape: None,
-            key_empty: None,
-            key_escape: Some((start, end).into()),
-        }
     }
 }
 
@@ -600,20 +558,20 @@ mod test_error {
     #[test]
     fn key_left_half() {
         let template = Template::parse("{ open").unwrap_err();
-        assert_eq!(template, ParseError::unbalanced("{ open", 0, 6));
+        assert_eq!(*template, ParseError::unbalanced("{ open", 0, 6));
     }
 
     #[test]
     fn key_right_half() {
         let template = Template::parse("open }").unwrap_err();
-        assert_eq!(template, ParseError::unbalanced("open }", 5, 5));
+        assert_eq!(*template, ParseError::unbalanced("open }", 5, 5));
     }
 
     #[test]
     fn key_with_half_escape() {
         let template = Template::parse(r"this is { not \ allowed }").unwrap_err();
         assert_eq!(
-            template,
+            *template,
             ParseError::key_escape(r"this is { not \ allowed }", 8, 14)
         );
     }
@@ -622,7 +580,7 @@ mod test_error {
     fn key_with_full_escape() {
         let template = Template::parse(r"{ not \} allowed }").unwrap_err();
         assert_eq!(
-            template,
+            *template,
             ParseError::key_escape(r"{ not \} allowed }", 0, 6)
         );
     }
@@ -630,24 +588,24 @@ mod test_error {
     #[test]
     fn key_empty() {
         let template = Template::parse(r"void: {}").unwrap_err();
-        assert_eq!(template, ParseError::key_empty(r"void: {}", 6, 7));
+        assert_eq!(*template, ParseError::key_empty(r"void: {}", 6, 7));
     }
 
     #[test]
     fn key_only_whitespace() {
         let template = Template::parse(r"nothing: { }").unwrap_err();
-        assert_eq!(template, ParseError::key_empty(r"nothing: { }", 9, 11));
+        assert_eq!(*template, ParseError::key_empty(r"nothing: { }", 9, 11));
     }
 
     #[test]
     fn bad_escape() {
         let template = Template::parse(r"not \a thing").unwrap_err();
-        assert_eq!(template, ParseError::escape(r"not \a thing", 4, 5));
+        assert_eq!(*template, ParseError::escape(r"not \a thing", 4, 5));
     }
 
     #[test]
     fn end_escape() {
         let template = Template::parse(r"forget me not \").unwrap_err();
-        assert_eq!(template, ParseError::escape(r"forget me not \", 14, 15));
+        assert_eq!(*template, ParseError::escape(r"forget me not \", 14, 15));
     }
 }

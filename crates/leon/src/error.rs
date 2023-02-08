@@ -2,7 +2,7 @@ use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
 #[derive(Debug, Diagnostic, Error)]
-pub enum LeonError<'s> {
+pub enum RenderError<'s> {
     /// The template failed to parse.
     #[error(transparent)]
     InvalidTemplate(
