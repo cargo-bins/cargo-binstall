@@ -28,7 +28,7 @@ const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
-    #[error(transparent)]
+    #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
 
     #[error(transparent)]

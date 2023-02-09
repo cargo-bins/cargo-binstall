@@ -181,13 +181,13 @@ impl CratesToml<'_> {
 #[derive(Debug, Diagnostic, Error)]
 #[non_exhaustive]
 pub enum CratesTomlParseError {
-    #[error(transparent)]
+    #[error("I/O Error: {0}")]
     Io(#[from] io::Error),
 
-    #[error(transparent)]
+    #[error("Failed to deserialize toml: {0}")]
     TomlParse(Box<toml_edit::de::Error>),
 
-    #[error(transparent)]
+    #[error("Failed to serialie toml: {0}")]
     TomlWrite(Box<toml_edit::ser::Error>),
 
     #[error(transparent)]

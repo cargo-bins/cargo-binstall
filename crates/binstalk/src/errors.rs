@@ -79,7 +79,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::url_parse`
     /// - Exit: 65
-    #[error(transparent)]
+    #[error("Failed to parse url: {0}")]
     #[diagnostic(severity(error), code(binstall::url_parse))]
     UrlParse(#[from] url::ParseError),
 
@@ -87,7 +87,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::unzip`
     /// - Exit: 66
-    #[error(transparent)]
+    #[error("Failed to extract zipfile: {0}")]
     #[diagnostic(severity(error), code(binstall::unzip))]
     Unzip(#[from] ZipError),
 
@@ -95,7 +95,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::template`
     /// - Exit: 67
-    #[error(transparent)]
+    #[error("Failed to render template: {0}")]
     #[diagnostic(severity(error), code(binstall::template))]
     Template(Box<TinyTemplateError>),
 
@@ -105,7 +105,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::reqwest`
     /// - Exit: 68
-    #[error(transparent)]
+    #[error("Reqwest error: {0}")]
     #[diagnostic(severity(error), code(binstall::reqwest))]
     Reqwest(#[from] ReqwestError),
 
@@ -137,7 +137,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::io`
     /// - Exit: 74
-    #[error(transparent)]
+    #[error("I/O Error: {0}")]
     #[diagnostic(severity(error), code(binstall::io))]
     Io(io::Error),
 
@@ -171,7 +171,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 78
-    #[error(transparent)]
+    #[error("Failed to parse cargo manifest: {0}")]
     #[diagnostic(
         severity(error),
         code(binstall::cargo_manifest),
