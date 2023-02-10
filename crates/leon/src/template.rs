@@ -1,11 +1,11 @@
-use std::{borrow::Cow, io::Write, ops::Add};
+use std::{borrow::Cow, fmt::Display, io::Write, ops::Add};
 
 use crate::{ParseError, RenderError, Values};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Template<'s> {
     pub items: Cow<'s, [Item<'s>]>,
-    pub default: Option<&'s str>,
+    pub default: Option<Cow<'s, str>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,7 +51,10 @@ impl<'s> Template<'s> {
     pub const fn new(items: &'s [Item<'s>], default: Option<&'s str>) -> Template<'s> {
         Template {
             items: Cow::Borrowed(items),
-            default,
+            default: match default {
+                Some(default) => Some(Cow::Borrowed(default)),
+                None => None,
+            },
         }
     }
 
@@ -147,6 +150,11 @@ impl<'s> Template<'s> {
             Item::Key(k) => Some(k),
             _ => None,
         })
+    }
+
+    /// Sets the default value for this template.
+    pub fn set_default(&mut self, default: &dyn Display) {
+        self.default = Some(Cow::Owned(default.to_string()));
     }
 }
 
