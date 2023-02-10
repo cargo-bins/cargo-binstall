@@ -16,7 +16,7 @@ thiserror = "1.0.38"
 
 [features]
 default = ["miette"]
-cli = ["dep:clap", "miette/fancy-no-backtrace"]
+cli = ["dep:clap", "miette?/fancy-no-backtrace"]
 miette = ["dep:miette"]
 
 [dev-dependencies]
