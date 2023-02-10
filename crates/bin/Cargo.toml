@@ -23,7 +23,7 @@ pkg-fmt = "zip"
 
 [dependencies]
 binstalk = { path = "../binstalk", version = "0.8.0", default-features = false }
-binstalk-manifests = { path = "../binstalk-manifests", version = "0.2.0" }
+binstalk-manifests = { path = "../binstalk-manifests", version = "0.3.0" }
 clap = { version = "4.1.4", features = ["derive"] }
 crates_io_api = { version = "0.8.1", default-features = false }
 dirs = "4.0.0"
