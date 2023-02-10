@@ -1,6 +1,6 @@
 use std::{borrow::Cow, io::Write, ops::Add};
 
-use crate::{RenderError, ParseError, Values};
+use crate::{ParseError, RenderError, Values};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Template<'s> {
@@ -90,7 +90,7 @@ impl<'s> Template<'s> {
     /// let template = Template::parse("hello {name}").unwrap();
     /// ```
     ///
-    pub fn parse(s: &'s str) -> Result<Self, Box<ParseError<'s>>> {
+    pub fn parse(s: &'s str) -> Result<Self, ParseError> {
         Self::parse_items(s).map(|items| Template {
             items: Cow::Owned(items),
             default: None,

@@ -14,67 +14,90 @@ pub enum RenderError {
     Io(#[from] std::io::Error),
 }
 
+/// An error that can occur when parsing a template.
+///
+/// This is a rich miette-powered error which will highlight the source of the
+/// error in the template when output (with miette's `fancy` feature). If you
+/// don't want or need that, you can disable the `miette` feature and a simpler
+/// opaque error will be substituted.
 #[cfg(feature = "miette")]
-#[derive(Debug, Diagnostic, Error, PartialEq, Eq)]
-#[error("invalid template")]
-#[non_exhaustive]
-pub struct ParseError<'s> {
-    #[source_code]
-    pub src: &'s str,
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[error(transparent)]
+pub struct ParseError(pub Box<InnerParseError>);
 
-    #[label = "these braces are unbalanced"]
+#[cfg(feature = "miette")]
+impl Diagnostic for ParseError {
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        self.0.source_code()
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        self.0.labels()
+    }
+}
+
+/// The inner (unboxed) type of [`ParseError`].
+#[cfg(feature = "miette")]
+#[derive(Clone, Debug, Diagnostic, Error, PartialEq, Eq)]
+#[error("template parse failed")]
+#[non_exhaustive]
+pub struct InnerParseError {
+    #[source_code]
+    pub src: String,
+
+    #[label("This bracket is not opening or closing anything. Try removing it, or escaping it with a backslash.")]
     pub unbalanced: Option<SourceSpan>,
 
-    #[label = "this escape is malformed"]
+    #[label("This escape is malformed.")]
     pub escape: Option<SourceSpan>,
 
-    #[label = "a key cannot be empty"]
+    #[label("A key cannot be empty.")]
     pub key_empty: Option<SourceSpan>,
 
-    #[label = "escapes are not allowed in keys"]
+    #[label("Escapes are not allowed in keys.")]
     pub key_escape: Option<SourceSpan>,
 }
 
 #[cfg(feature = "miette")]
-impl<'s> ParseError<'s> {
-    pub(crate) fn unbalanced(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            unbalanced: Some((start, end).into()),
+impl ParseError {
+    pub(crate) fn unbalanced(src: &str, start: usize, end: usize) -> Self {
+        Self(Box::new(InnerParseError {
+            src: String::from(src),
+            unbalanced: Some((start, end.saturating_sub(start) + 1).into()),
             escape: None,
             key_empty: None,
             key_escape: None,
-        }
+        }))
     }
 
-    pub(crate) fn escape(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
+    pub(crate) fn escape(src: &str, start: usize, end: usize) -> Self {
+        Self(Box::new(InnerParseError {
+            src: String::from(src),
             unbalanced: None,
-            escape: Some((start, end).into()),
+            escape: Some((start, end.saturating_sub(start) + 1).into()),
             key_empty: None,
             key_escape: None,
-        }
+        }))
     }
 
-    pub(crate) fn key_empty(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
+    pub(crate) fn key_empty(src: &str, start: usize, end: usize) -> Self {
+        Self(Box::new(InnerParseError {
+            src: String::from(src),
             unbalanced: None,
             escape: None,
-            key_empty: Some((start, end).into()),
+            key_empty: Some((start, end.saturating_sub(start) + 1).into()),
             key_escape: None,
-        }
+        }))
     }
 
-    pub(crate) fn key_escape(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
+    pub(crate) fn key_escape(src: &str, start: usize, end: usize) -> Self {
+        Self(Box::new(InnerParseError {
+            src: String::from(src),
             unbalanced: None,
             escape: None,
             key_empty: None,
-            key_escape: Some((start, end).into()),
-        }
+            key_escape: Some((start, end.saturating_sub(start) + 1).into()),
+        }))
     }
 }
 
@@ -84,50 +107,25 @@ impl<'s> ParseError<'s> {
 /// [`std::error::Error`] and [`std::fmt::Display`], and does not provide any
 /// programmably-useable detail besides a message.
 #[cfg(not(feature = "miette"))]
-#[derive(Debug, Error, PartialEq, Eq)]
-#[error("invalid template: {problem} at range {start}:{end} in {src:?}")]
-pub struct ParseError<'s> {
-    src: &'s str,
-    problem: &'static str,
-    start: usize,
-    end: usize,
-}
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[error("template parse failed: {0}")]
+pub struct ParseError(String);
 
 #[cfg(not(feature = "miette"))]
-impl<'s> ParseError<'s> {
-    pub(crate) fn unbalanced(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            problem: "unbalanced braces",
-            start,
-            end,
-        }
+impl ParseError {
+    pub(crate) fn unbalanced(src: &str, start: usize, end: usize) -> Self {
+        Self(format!("unbalanced brace at {start}:{end} in {src:?}"))
     }
 
-    pub(crate) fn escape(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            problem: "malformed escape",
-            start,
-            end,
-        }
+    pub(crate) fn escape(src: &str, start: usize, end: usize) -> Self {
+        Self(format!("malformed escape at {start}:{end} in {src:?}"))
     }
 
-    pub(crate) fn key_empty(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            problem: "empty key",
-            start,
-            end,
-        }
+    pub(crate) fn key_empty(src: &str, start: usize, end: usize) -> Self {
+        Self(format!("empty key at {start}:{end} in {src:?}"))
     }
 
-    pub(crate) fn key_escape(src: &'s str, start: usize, end: usize) -> Self {
-        Self {
-            src,
-            problem: "escape in key",
-            start,
-            end,
-        }
+    pub(crate) fn key_escape(src: &str, start: usize, end: usize) -> Self {
+        Self(format!("escape in key at {start}:{end} in {src:?}"))
     }
 }
