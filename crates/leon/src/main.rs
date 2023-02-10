@@ -33,10 +33,10 @@ fn main() -> miette::Result<()> {
         U: std::str::FromStr,
         U::Err: Error + Send + Sync + 'static,
     {
-        let pos = s
-            .find('=')
+        let (k, v) = s
+            .split_once('=')
             .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
-        Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
+        Ok((k.parse()?, v.parse()?))
     }
 
     let args = Args::parse();
