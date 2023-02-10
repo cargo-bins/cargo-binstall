@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use leon::{vals, Template};
 use serde::Serialize;
@@ -5,19 +7,19 @@ use tinytemplate::TinyTemplate;
 
 fn compare_impls(c: &mut Criterion) {
     const TEMPLATE: &str = "hello {name}! i am {age} years old. my goal is to {goal}. i like: {flower}, {music}, {animal}, {color}, {food}. i'm drinking {drink}";
-    fn replace_fn(key: &str) -> Option<&str> {
-        match key {
-            "name" => Some("marcus"),
-            "age" => Some("42"),
-            "goal" => Some("primary"),
-            "flower" => Some("lotus"),
-            "music" => Some("jazz"),
-            "animal" => Some("cat"),
-            "color" => Some("blue"),
-            "food" => Some("pizza"),
-            "drink" => Some("coffee"),
-            _ => None,
-        }
+    fn replace_fn<'s>(key: &'s str) -> Option<Cow<'s, str>> {
+        Some(Cow::Borrowed(match key {
+            "name" => "marcus",
+            "age" => "42",
+            "goal" => "primary",
+            "flower" => "lotus",
+            "music" => "jazz",
+            "animal" => "cat",
+            "color" => "blue",
+            "food" => "pizza",
+            "drink" => "coffee",
+            _ => return None,
+        }))
     }
 
     #[derive(Serialize)]

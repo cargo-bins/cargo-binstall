@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use leon::{vals, Template};
@@ -13,7 +13,11 @@ fn one_replace(c: &mut Criterion) {
     c.bench_function("one replace, fn", |b| {
         b.iter(|| {
             let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(template.render(&vals(|_| Some("marcus"))).unwrap());
+            black_box(
+                template
+                    .render(&vals(|_| Some(Cow::Borrowed("marcus"))))
+                    .unwrap(),
+            );
         })
     });
     c.bench_function("one replace, hashmap", |b| {
@@ -61,15 +65,15 @@ fn some_replaces(c: &mut Criterion) {
             black_box(
                 template
                     .render(&vals(|key| match key {
-                        "name" => Some("marcus"),
-                        "age" => Some("42"),
-                        "goal" => Some("primary"),
-                        "flower" => Some("lotus"),
-                        "music" => Some("jazz"),
-                        "animal" => Some("cat"),
-                        "color" => Some("blue"),
-                        "food" => Some("pizza"),
-                        "drink" => Some("coffee"),
+                        "name" => Some(Cow::Borrowed("marcus")),
+                        "age" => Some(Cow::Borrowed("42")),
+                        "goal" => Some(Cow::Borrowed("primary")),
+                        "flower" => Some(Cow::Borrowed("lotus")),
+                        "music" => Some(Cow::Borrowed("jazz")),
+                        "animal" => Some(Cow::Borrowed("cat")),
+                        "color" => Some(Cow::Borrowed("blue")),
+                        "food" => Some(Cow::Borrowed("pizza")),
+                        "drink" => Some(Cow::Borrowed("coffee")),
                         _ => None,
                     }))
                     .unwrap(),
@@ -306,7 +310,7 @@ fn many_replaces(c: &mut Criterion) {
             black_box(
                 template
                     .render(&vals(|key| {
-                        Some(match key {
+                        Some(Cow::Borrowed(match key {
                             "artichoke" => "Abiu",
                             "aubergine" => "Açaí",
                             "asparagus" => "Acerola",
@@ -408,7 +412,7 @@ fn many_replaces(c: &mut Criterion) {
                             "radish" => "Peach",
                             "wasabi" => "Pear",
                             _ => return None,
-                        })
+                        }))
                     }))
                     .unwrap(),
             );

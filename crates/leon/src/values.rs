@@ -1,106 +1,190 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, HashMap},
-    hash::Hash,
-    marker::PhantomData,
 };
 
-pub trait Values<K, V> {
-    fn get_value(&self, key: K) -> Option<V>;
+pub trait Values {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>>;
 }
 
-impl<K, V, T> Values<K, V> for &T
+impl<T> Values for &T
 where
-    T: Values<K, V>,
+    T: Values,
 {
-    fn get_value(&self, key: K) -> Option<V> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         T::get_value(self, key)
     }
 }
 
-impl<K, V> Values<K, V> for [(K, V)]
-where
-    K: Eq,
-    V: Clone,
-{
-    fn get_value(&self, key: K) -> Option<V> {
-        self.iter()
-            .find_map(|(k, v)| if k == &key { Some(v.clone()) } else { None })
+impl Values for [(&str, &str)] {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == &key {
+                Some(Cow::Borrowed(*v))
+            } else {
+                None
+            }
+        })
     }
 }
 
-impl<K, V, const N: usize> Values<K, V> for [(K, V); N]
-where
-    K: Eq,
-    V: Clone,
-{
-    fn get_value(&self, key: K) -> Option<V> {
-        self.iter()
-            .find_map(|(k, v)| if k == &key { Some(v.clone()) } else { None })
+impl<const N: usize> Values for [(&str, &str); N] {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == &key {
+                Some(Cow::Borrowed(*v))
+            } else {
+                None
+            }
+        })
     }
 }
 
-impl<K, V> Values<K, V> for Vec<(K, V)>
-where
-    K: Eq,
-    V: Clone,
-{
-    fn get_value(&self, key: K) -> Option<V> {
-        self.iter()
-            .find_map(|(k, v)| if k == &key { Some(v.clone()) } else { None })
+impl Values for Vec<(&str, &str)> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == &key {
+                Some(Cow::Borrowed(*v))
+            } else {
+                None
+            }
+        })
     }
 }
 
-impl<K, V> Values<K, V> for HashMap<K, V>
-where
-    K: Eq + Hash,
-    V: Clone,
-{
-    fn get_value(&self, key: K) -> Option<V> {
-        self.get(&key).cloned()
+impl Values for HashMap<&str, &str> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.get(&key).map(|v| Cow::Borrowed(*v))
     }
 }
 
-impl<K, V> Values<K, V> for BTreeMap<K, V>
-where
-    K: Eq + Ord,
-    V: Clone,
-{
-    fn get_value(&self, key: K) -> Option<V> {
-        self.get(&key).cloned()
+impl Values for BTreeMap<&str, &str> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.get(&key).map(|v| Cow::Borrowed(*v))
+    }
+}
+
+impl Values for [(String, &str)] {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == key {
+                Some(Cow::Borrowed(*v))
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl<const N: usize> Values for [(String, &str); N] {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == key {
+                Some(Cow::Borrowed(*v))
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl Values for Vec<(String, &str)> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == key {
+                Some(Cow::Borrowed(*v))
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl Values for HashMap<String, &str> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.get(key).map(|v| Cow::Borrowed(*v))
+    }
+}
+
+impl Values for BTreeMap<String, &str> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.get(key).map(|v| Cow::Borrowed(*v))
+    }
+}
+
+impl Values for [(String, String)] {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == key {
+                Some(Cow::Owned(v.clone()))
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl<const N: usize> Values for [(String, String); N] {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == key {
+                Some(Cow::Owned(v.clone()))
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl Values for Vec<(String, String)> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.iter().find_map(|(k, v)| {
+            if k == key {
+                Some(Cow::Owned(v.clone()))
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl Values for HashMap<String, String> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.get(key).map(|v| Cow::Owned(v.clone()))
+    }
+}
+
+impl Values for BTreeMap<String, String> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.get(key).map(|v| Cow::Owned(v.clone()))
     }
 }
 
 /// Workaround to allow using functions as [`Values`].
 ///
 /// As this isn't constructible you'll want to use [`vals()`] instead.
-pub struct ValuesFn<K, V, F>
+pub struct ValuesFn<F>
 where
-    F: Fn(K) -> Option<V> + Send + 'static,
+    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
 {
     inner: F,
-    _k: PhantomData<K>,
-    _v: PhantomData<V>,
 }
 
-impl<K, V, F> Values<K, V> for ValuesFn<K, V, F>
+impl<F> Values for ValuesFn<F>
 where
-    F: Fn(K) -> Option<V> + Send + 'static,
+    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
 {
-    fn get_value(&self, key: K) -> Option<V> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         (self.inner)(key)
     }
 }
 
-impl<K, V, F> From<F> for ValuesFn<K, V, F>
+impl<F> From<F> for ValuesFn<F>
 where
-    F: Fn(K) -> Option<V> + Send + 'static,
+    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
 {
     fn from(inner: F) -> Self {
-        Self {
-            inner,
-            _k: PhantomData,
-            _v: PhantomData,
-        }
+        Self { inner }
     }
 }
 
@@ -117,13 +201,9 @@ where
 ///
 /// use_values(vals(|_| Some(())));
 /// ```
-pub const fn vals<K, V, F>(func: F) -> ValuesFn<K, V, F>
+pub const fn vals<F>(func: F) -> ValuesFn<F>
 where
-    F: Fn(K) -> Option<V> + Send + 'static,
+    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
 {
-    ValuesFn {
-        inner: func,
-        _k: PhantomData,
-        _v: PhantomData,
-    }
+    ValuesFn { inner: func }
 }
