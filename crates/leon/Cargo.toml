@@ -18,7 +18,7 @@ default = ["miette"]
 miette = ["dep:miette"]
 
 [dev-dependencies]
-criterion = "0.4.0"
+criterion = { version = "0.4.0", default-features = false, features = ["cargo_bench_support", "real_blackbox"] }
 serde = { version = "1.0.152", features = ["derive"] }
 tinytemplate = "1.2.1"
 
