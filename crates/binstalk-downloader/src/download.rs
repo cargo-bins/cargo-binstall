@@ -27,17 +27,17 @@ mod utils;
 
 #[derive(Debug, ThisError)]
 pub enum DownloadError {
-    #[error(transparent)]
+    #[error("Failed to extract zipfile: {0}")]
     Unzip(#[from] ZipError),
 
-    #[error(transparent)]
+    #[error("Failed to download from remote: {0}")]
     Remote(#[from] RemoteError),
 
     /// A generic I/O error.
     ///
     /// - Code: `binstall::io`
     /// - Exit: 74
-    #[error(transparent)]
+    #[error("I/O Error: {0}")]
     Io(io::Error),
 }
 

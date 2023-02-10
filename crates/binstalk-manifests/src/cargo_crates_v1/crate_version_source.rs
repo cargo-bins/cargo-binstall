@@ -98,10 +98,10 @@ impl FromStr for CrateVersionSource {
 #[derive(Debug, Diagnostic, Error)]
 #[non_exhaustive]
 pub enum CvsParseError {
-    #[error(transparent)]
+    #[error("Failed to parse url in cvs: {0}")]
     UrlParse(#[from] url::ParseError),
 
-    #[error(transparent)]
+    #[error("Failed to parse version in cvs: {0}")]
     VersionParse(#[from] semver::Error),
 
     #[error("unknown source type {kind}+{arg}")]
