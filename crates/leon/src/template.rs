@@ -44,7 +44,7 @@ impl<'s> Template<'s> {
     ///     ITEMS
     /// }, Some("world"));
     ///
-    /// assert_eq!(TEMPLATE.render(&[]).unwrap(), "Hello world");
+    /// assert_eq!(TEMPLATE.render(&[("unrelated", "value")]).unwrap(), "Hello world");
     /// ```
     ///
     /// For an even more ergonomic syntax, see the [`leon::template!`] macro.

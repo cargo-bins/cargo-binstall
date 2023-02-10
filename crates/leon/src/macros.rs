@@ -28,7 +28,7 @@
 /// use leon::Item::*;
 /// assert_eq!(
 ///     leon::template!(Text("Hello "), Key("name"); "M. P. T. Acharya")
-///         .render(&[])
+///         .render(&[("city", "Madras")])
 ///         .unwrap(),
 ///     "Hello M. P. T. Acharya",
 /// );

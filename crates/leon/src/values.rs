@@ -197,9 +197,9 @@ where
 /// ```
 /// use leon::{Values, vals};
 ///
-/// fn use_values(_values: impl Values<(), ()>) {}
+/// fn use_values(_values: impl Values) {}
 ///
-/// use_values(vals(|_| Some(())));
+/// use_values(vals(|_| Some("hello".into())));
 /// ```
 pub const fn vals<F>(func: F) -> ValuesFn<F>
 where
