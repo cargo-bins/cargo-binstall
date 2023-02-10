@@ -100,8 +100,8 @@ impl<'s> Template<'s> {
         })
     }
 
-    pub fn render_into<'a>(
-        &'a self,
+    pub fn render_into(
+        &self,
         writer: &mut dyn Write,
         values: &dyn Values,
     ) -> Result<(), RenderError> {
@@ -122,7 +122,7 @@ impl<'s> Template<'s> {
         Ok(())
     }
 
-    pub fn render<'a>(&'a self, values: &dyn Values) -> Result<String, RenderError> {
+    pub fn render(&self, values: &dyn Values) -> Result<String, RenderError> {
         let mut buf = Vec::with_capacity(
             self.items
                 .iter()
