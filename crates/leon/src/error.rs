@@ -4,10 +4,10 @@ use thiserror::Error;
 
 #[cfg_attr(feature = "miette", derive(Diagnostic))]
 #[derive(Debug, Error)]
-pub enum RenderError<'s> {
+pub enum RenderError {
     /// A key was missing from the provided values.
     #[error("missing key `{0}`")]
-    MissingKey(&'s str),
+    MissingKey(String),
 
     /// An I/O error passed through from [`Template::render_into`].
     #[error(transparent)]

@@ -100,7 +100,7 @@ impl<'s> Template<'s> {
     pub fn render_into<'a>(
         &'a self,
         writer: &mut dyn Write,
-        values: &dyn Values<&'a str, &'a str>,
+        values: &dyn Values,
     ) -> Result<(), RenderError> {
         for token in self.items.as_ref() {
             match token {
@@ -111,7 +111,7 @@ impl<'s> Template<'s> {
                     } else if let Some(default) = &self.default {
                         writer.write_all(default.as_bytes())?;
                     } else {
-                        return Err(RenderError::MissingKey(key));
+                        return Err(RenderError::MissingKey(key.to_string()));
                     }
                 }
             }
@@ -119,10 +119,7 @@ impl<'s> Template<'s> {
         Ok(())
     }
 
-    pub fn render<'a>(
-        &'a self,
-        values: &dyn Values<&'a str, &'a str>,
-    ) -> Result<String, RenderError> {
+    pub fn render<'a>(&'a self, values: &dyn Values) -> Result<String, RenderError> {
         let mut buf = Vec::with_capacity(
             self.items
                 .iter()
