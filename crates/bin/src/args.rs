@@ -226,7 +226,12 @@ pub struct Args {
     ///
     /// Set to `off` to disable logging completely, this will also
     /// disable output from `cargo-install`.
-    #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
+    #[clap(
+        help_heading = "Meta",
+        long,
+        value_name = "LEVEL",
+        env = "CARGO_BINSTALL_LOG_LEVEL"
+    )]
     pub log_level: Option<LevelFilter>,
 
     /// Equivalent to setting `log_level` to `off`.
