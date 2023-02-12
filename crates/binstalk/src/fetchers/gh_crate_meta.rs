@@ -13,9 +13,7 @@ use url::Url;
 use crate::{
     errors::{BinstallError, InvalidPkgFmtError},
     helpers::{
-        download::Download,
-        futures_resolver::FuturesResolver,
-        remote::{Client, Method},
+        download::Download, futures_resolver::FuturesResolver, remote::Client,
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -68,8 +66,9 @@ impl GhCrateMeta {
             async move {
                 debug!("Checking for package at: '{url}'");
 
-                Ok((client.remote_exists(url.clone(), Method::HEAD).await?
-                    || client.remote_exists(url.clone(), Method::GET).await?)
+                Ok(client
+                    .remote_gettable(url.clone())
+                    .await?
                     .then_some((url, pkg_fmt)))
             }
         })

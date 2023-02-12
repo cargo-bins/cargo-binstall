@@ -210,32 +210,32 @@ impl Client {
             .map_err(|err| Error::Http(Box::new(HttpError { method, url, err })))
     }
 
-    /// Check if remote exists using `method`.
-    pub async fn remote_exists(&self, url: Url, method: Method) -> Result<bool, Error> {
-        Ok(self
-            .send_request(method, url, false)
-            .await?
-            .status()
-            .is_success())
+    async fn head_or_fallback_to_get(&self, url: Url) -> Result<Response, Error> {
+        let res = self.send_request(Method::HEAD, url.clone(), true).await;
+
+        match res {
+            Err(Error::Http(http_error))
+                if http_error.err.status() == Some(StatusCode::METHOD_NOT_ALLOWED) =>
+            {
+                // Retry using GET
+                self.send_request(Method::GET, url, true).await
+            }
+            res => res,
+        }
+    }
+
+    /// Check if remote exists using `Method::HEAD` or `Method::GET` as fallback.
+    pub async fn remote_gettable(&self, url: Url) -> Result<bool, Error> {
+        self.head_or_fallback_to_get(url)
+            .await
+            .map(|response| response.status().is_success())
     }
 
     /// Attempt to get final redirected url.
     pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        async move {
-            let res = self.send_request(Method::HEAD, url.clone(), true).await;
-
-            match res {
-                Err(Error::Http(http_error))
-                    if http_error.err.status() == Some(StatusCode::METHOD_NOT_ALLOWED) =>
-                {
-                    // Retry using GET
-                    self.send_request(Method::GET, url, true).await
-                }
-                res => res,
-            }
-        }
-        .await
-        .map(|response| response.url().clone())
+        self.head_or_fallback_to_get(url)
+            .await
+            .map(|response| response.url().clone())
     }
 
     /// Create `GET` request to `url` and return a stream of the response data.
