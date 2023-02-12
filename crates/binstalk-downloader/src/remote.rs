@@ -125,7 +125,7 @@ impl Client {
                 // Delay further request on timeout
                 self.0
                     .service
-                    .add_urls_to_delay([url], RETRY_DURATION_FOR_TIMEOUT);
+                    .add_urls_to_delay(&[url], RETRY_DURATION_FOR_TIMEOUT);
 
                 return Ok(ControlFlow::Continue(Err(err)));
             }
@@ -148,7 +148,7 @@ impl Client {
 
                 self.0
                     .service
-                    .add_urls_to_delay([url, response.url()], duration);
+                    .add_urls_to_delay(&[url, response.url()], duration);
 
                 Ok(ControlFlow::Continue(Ok(response)))
             }
@@ -161,7 +161,7 @@ impl Client {
 
                 self.0
                     .service
-                    .add_urls_to_delay([url, response.url()], duration);
+                    .add_urls_to_delay(&[url, response.url()], duration);
 
                 Ok(ControlFlow::Continue(Ok(response)))
             }

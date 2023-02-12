@@ -60,29 +60,22 @@ impl<S> DelayRequest<S> {
         }
     }
 
-    pub(super) fn add_urls_to_delay<'url, Urls>(&self, urls: Urls, delay_duration: Duration)
-    where
-        Urls: IntoIterator<Item = &'url Url>,
-    {
-        self.add_hosts_to_delay(
-            &mut urls.into_iter().filter_map(Url::host_str).dedup(),
-            delay_duration,
-        );
-    }
-
-    fn add_hosts_to_delay(&self, hosts: &mut dyn Iterator<Item = &str>, delay_duration: Duration) {
+    pub(super) fn add_urls_to_delay(&self, urls: &[&Url], delay_duration: Duration) {
         let deadline = Instant::now() + delay_duration;
 
         let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
-        hosts.for_each(|host| {
-            hosts_to_delay
-                .entry(host.to_compact_string())
-                .and_modify(|old_dl| {
-                    *old_dl = deadline.max(*old_dl);
-                })
-                .or_insert(deadline);
-        });
+        urls.iter()
+            .filter_map(|url| url.host_str())
+            .dedup()
+            .for_each(|host| {
+                hosts_to_delay
+                    .entry(host.to_compact_string())
+                    .and_modify(|old_dl| {
+                        *old_dl = deadline.max(*old_dl);
+                    })
+                    .or_insert(deadline);
+            });
     }
 
     fn wait_until_available(&self, url: &Url) -> impl Future<Output = ()> + Send + 'static {
