@@ -205,16 +205,29 @@ impl Client {
             .map_err(|err| Error::Http(Box::new(HttpError { method, url, err })))
     }
 
-    async fn head_or_fallback_to_get(&self, url: Url) -> Result<Response, Error> {
-        let res = self.send_request(Method::HEAD, url.clone(), true).await;
+    async fn head_or_fallback_to_get(
+        &self,
+        url: Url,
+        error_for_status: bool,
+    ) -> Result<Response, Error> {
+        let res = self
+            .send_request(Method::HEAD, url.clone(), error_for_status)
+            .await;
+
+        let retry_with_get = move || async move {
+            // Retry using GET
+            info!("HEAD on {url} is not allowed, fallback to GET");
+            self.send_request(Method::GET, url, error_for_status).await
+        };
 
         match res {
             Err(Error::Http(http_error))
                 if http_error.err.status() == Some(StatusCode::METHOD_NOT_ALLOWED) =>
             {
-                // Retry using GET
-                info!("HEAD on {url} is not allowed, fallback to GET");
-                self.send_request(Method::GET, url, true).await
+                retry_with_get().await
+            }
+            Ok(response) if response.status() == StatusCode::METHOD_NOT_ALLOWED => {
+                retry_with_get().await
             }
             res => res,
         }
@@ -222,7 +235,7 @@ impl Client {
 
     /// Check if remote exists using `Method::HEAD` or `Method::GET` as fallback.
     pub async fn remote_gettable(&self, url: Url) -> Result<bool, Error> {
-        self.head_or_fallback_to_get(url)
+        self.head_or_fallback_to_get(url, false)
             .await
             .map(|response| response.status().is_success())
     }
@@ -230,7 +243,7 @@ impl Client {
     /// Attempt to get final redirected url using `Method::HEAD` or fallback
     /// to `Method::GET`.
     pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        self.head_or_fallback_to_get(url)
+        self.head_or_fallback_to_get(url, true)
             .await
             .map(|response| response.url().clone())
     }
