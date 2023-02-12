@@ -12,7 +12,6 @@ use reqwest::{
     Request, Response, StatusCode,
 };
 use thiserror::Error as ThisError;
-use tokio::time::Instant;
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
@@ -116,9 +115,16 @@ impl Client {
             let response = match future.await {
                 Ok(response) => response,
                 Err(err) if err.is_timeout() => {
+                    // Delay further request on timeout
                     self.0
                         .service
                         .add_urls_to_delay([url], RETRY_DURATION_FOR_TIMEOUT);
+
+                    if count >= MAX_RETRY_COUNT {
+                        break Err(err);
+                    }
+
+                    count += 1;
                     continue;
                 }
                 Err(err) => return Err(err),
@@ -126,12 +132,14 @@ impl Client {
 
             let status = response.status();
 
-            match (status, parse_header_retry_after(response.headers())) {
-                (
-                    // 503                            429
-                    StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS,
-                    Some(duration),
-                ) => {
+            match status {
+                // 503                            429
+                StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
+                    // Delay further request on rate limit
+                    let Some(duration) = parse_header_retry_after(response.headers()) else {
+                        break Ok(response)
+                    };
+
                     let duration = duration.min(MAX_RETRY_DURATION);
 
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
@@ -139,12 +147,24 @@ impl Client {
                     self.0
                         .service
                         .add_urls_to_delay([url, response.url()], duration);
-
-                    if count >= MAX_RETRY_COUNT {
-                        break Ok(response);
-                    }
                 }
+
+                StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => {
+                    // Delay further request on timeout
+                    let duration = RETRY_DURATION_FOR_TIMEOUT;
+
+                    info!("Receiver status code {status}, will wait for {duration:#?} and retry");
+
+                    self.0
+                        .service
+                        .add_urls_to_delay([url, response.url()], duration);
+                }
+
                 _ => break Ok(response),
+            }
+
+            if count >= MAX_RETRY_COUNT {
+                break Ok(response);
             }
 
             count += 1;
