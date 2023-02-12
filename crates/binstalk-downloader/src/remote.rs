@@ -246,9 +246,19 @@ impl Client {
     ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
         debug!("Downloading from: '{url}'");
 
-        self.send_request(Method::GET, url, true)
-            .await
-            .map(|response| response.bytes_stream().map(|res| res.map_err(Error::from)))
+        let response = self.send_request(Method::GET, url.clone(), true).await?;
+
+        let url = Box::new(url);
+
+        Ok(response.bytes_stream().map(move |res| {
+            res.map_err(|err| {
+                Error::Http(Box::new(HttpError {
+                    method: Method::GET,
+                    url: Url::clone(&*url),
+                    err,
+                }))
+            })
+        }))
     }
 }
 
