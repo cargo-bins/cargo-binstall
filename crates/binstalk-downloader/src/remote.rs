@@ -24,6 +24,7 @@ use delay_request::DelayRequest;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
+const RETRY_DURATION_FOR_TIMEOUT: Duration = Duration::from_millis(200);
 const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
 
 #[derive(Debug, ThisError)]
@@ -112,7 +113,16 @@ impl Client {
 
             let future = (&self.0.service).ready().await?.call(request);
 
-            let response = future.await?;
+            let response = match future.await {
+                Ok(response) => response,
+                Err(err) if err.is_timeout() => {
+                    let deadline = Instant::now() + RETRY_DURATION_FOR_TIMEOUT;
+
+                    self.0.service.add_urls_to_delay([url], deadline);
+                    continue;
+                }
+                Err(err) => return Err(err),
+            };
 
             let status = response.status();
 

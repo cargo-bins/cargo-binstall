@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
+    iter::Peekable,
     pin::Pin,
     sync::Mutex,
     task::{Context, Poll},
@@ -13,6 +14,37 @@ use tokio::{
     time::{sleep_until, Instant},
 };
 use tower::{Service, ServiceExt};
+
+trait IterExt: Iterator {
+    fn dedup(self) -> Dedup<Self>
+    where
+        Self: Sized,
+        Self::Item: PartialEq,
+    {
+        Dedup(self.peekable())
+    }
+}
+
+impl<It: Iterator> IterExt for It {}
+
+struct Dedup<It: Iterator>(Peekable<It>);
+
+impl<It> Iterator for Dedup<It>
+where
+    It: Iterator,
+    It::Item: PartialEq,
+{
+    type Item = It::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr = self.0.next()?;
+
+        // Drop all consecutive dup values
+        while self.0.next_if_eq(&curr).is_some() {}
+
+        Some(curr)
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct DelayRequest<S> {
@@ -28,20 +60,20 @@ impl<S> DelayRequest<S> {
         }
     }
 
-    pub(super) fn add_urls_to_delay(&self, urls: [&Url; 2], deadline: Instant) {
-        let mut hosts = [urls[0].host_str(), urls[1].host_str()];
+    pub(super) fn add_urls_to_delay<'url, Urls>(&self, urls: Urls, deadline: Instant)
+    where
+        Urls: IntoIterator<Item = &'url Url>,
+    {
+        self.add_hosts_to_delay(
+            &mut urls.into_iter().filter_map(Url::host_str).dedup(),
+            deadline,
+        );
+    }
 
-        if hosts[0] == hosts[1] {
-            hosts[1] = None;
-        }
-
-        if hosts.iter().all(Option::is_none) {
-            return;
-        }
-
+    fn add_hosts_to_delay(&self, hosts: &mut dyn Iterator<Item = &str>, deadline: Instant) {
         let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
-        hosts.into_iter().flatten().for_each(|host| {
+        hosts.for_each(|host| {
             hosts_to_delay
                 .entry(host.to_compact_string())
                 .and_modify(|old_dl| {
