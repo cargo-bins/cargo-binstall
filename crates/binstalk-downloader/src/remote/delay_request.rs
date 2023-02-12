@@ -28,13 +28,20 @@ impl<S> DelayRequest<S> {
         }
     }
 
-    pub(super) fn add_urls_to_delay<'a, Urls>(&self, urls: Urls, deadline: Instant)
-    where
-        Urls: IntoIterator<Item = &'a Url>,
-    {
+    pub(super) fn add_urls_to_delay(&self, urls: [&Url; 2], deadline: Instant) {
+        let mut hosts = [urls[0].host_str(), urls[1].host_str()];
+
+        if hosts[0] == hosts[1] {
+            hosts[1] = None;
+        }
+
+        if hosts.iter().all(Option::is_none) {
+            return;
+        }
+
         let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
-        urls.into_iter().filter_map(Url::host_str).for_each(|host| {
+        hosts.into_iter().flatten().for_each(|host| {
             hosts_to_delay
                 .entry(host.to_compact_string())
                 .and_modify(|old_dl| {
