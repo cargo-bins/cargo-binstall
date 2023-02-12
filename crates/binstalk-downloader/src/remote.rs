@@ -222,13 +222,15 @@ impl Client {
 
         match res {
             Err(Error::Http(http_error))
-                if http_error.err.status() == Some(StatusCode::METHOD_NOT_ALLOWED) =>
+                if http_error
+                    .err
+                    .status()
+                    .map(|status| status.is_client_error())
+                    .unwrap_or(false) =>
             {
                 retry_with_get().await
             }
-            Ok(response) if response.status() == StatusCode::METHOD_NOT_ALLOWED => {
-                retry_with_get().await
-            }
+            Ok(response) if response.status().is_client_error() => retry_with_get().await,
             res => res,
         }
     }
