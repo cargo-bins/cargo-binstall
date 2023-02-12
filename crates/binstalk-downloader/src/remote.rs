@@ -148,9 +148,8 @@ impl Client {
             // Delay further request on rate limit
             StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
                 let duration = parse_header_retry_after(response.headers())
-                    .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT);
-
-                let duration = duration.min(MAX_RETRY_DURATION);
+                    .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT)
+                    .min(MAX_RETRY_DURATION);
 
                 add_delay_and_continue(response, duration)
             }
