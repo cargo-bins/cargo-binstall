@@ -24,6 +24,7 @@ use delay_request::DelayRequest;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
+const DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT: Duration = Duration::from_millis(200);
 const RETRY_DURATION_FOR_TIMEOUT: Duration = Duration::from_millis(200);
 const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
 
@@ -138,9 +139,8 @@ impl Client {
             // 503                            429
             StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
                 // Delay further request on rate limit
-                let Some(duration) = parse_header_retry_after(response.headers()) else {
-                    return Ok(ControlFlow::Break(response));
-                };
+                let duration = parse_header_retry_after(response.headers())
+                    .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT);
 
                 let duration = duration.min(MAX_RETRY_DURATION);
 
