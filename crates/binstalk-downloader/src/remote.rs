@@ -231,7 +231,8 @@ impl Client {
             .map(|response| response.status().is_success())
     }
 
-    /// Attempt to get final redirected url.
+    /// Attempt to get final redirected url using `Method::HEAD` or fallback
+    /// to `Method::GET`.
     pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
         self.head_or_fallback_to_get(url)
             .await
