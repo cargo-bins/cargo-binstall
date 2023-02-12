@@ -222,11 +222,21 @@ impl Client {
 
     /// Attempt to get final redirected url.
     pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        Ok(self
-            .send_request(Method::HEAD, url, true)
-            .await?
-            .url()
-            .clone())
+        async move {
+            let res = self.send_request(Method::HEAD, url.clone(), true).await;
+
+            match res {
+                Err(Error::Http(http_error))
+                    if http_error.err.status() == Some(StatusCode::METHOD_NOT_ALLOWED) =>
+                {
+                    // Retry using GET
+                    self.send_request(Method::GET, url, true).await
+                }
+                res => res,
+            }
+        }
+        .await
+        .map(|response| response.url().clone())
     }
 
     /// Create `GET` request to `url` and return a stream of the response data.
