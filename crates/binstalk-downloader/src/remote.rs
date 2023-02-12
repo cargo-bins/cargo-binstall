@@ -1,5 +1,6 @@
 use std::{
-    num::NonZeroU64,
+    num::{NonZeroU64, NonZeroU8},
+    ops::ControlFlow,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -100,74 +101,95 @@ impl Client {
         &self.0.client
     }
 
+    /// Return `Err(_)` for fatal error tht cannot be retried.
+    ///
+    /// Return `Ok(ControlFlow::Continue(res))` for retryable error, `res`
+    /// will contain the previous `Result<Response, ReqwestError>`.
+    /// A retryable error could be a `ReqwestError` or `Response` with
+    /// unsuccessful status code.
+    ///
+    /// Return `Ok(ControlFlow::Break(response))` when succeeds and no need
+    /// to retry.
+    async fn do_send_request(
+        &self,
+        method: &Method,
+        url: &Url,
+    ) -> Result<ControlFlow<Response, Result<Response, ReqwestError>>, ReqwestError> {
+        let request = Request::new(method.clone(), url.clone());
+
+        let future = (&self.0.service).ready().await?.call(request);
+
+        let response = match future.await {
+            Ok(response) => response,
+            Err(err) if err.is_timeout() => {
+                // Delay further request on timeout
+                self.0
+                    .service
+                    .add_urls_to_delay([url], RETRY_DURATION_FOR_TIMEOUT);
+
+                return Ok(ControlFlow::Continue(Err(err)));
+            }
+            Err(err) => return Err(err),
+        };
+
+        let status = response.status();
+
+        match status {
+            // 503                            429
+            StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
+                // Delay further request on rate limit
+                let Some(duration) = parse_header_retry_after(response.headers()) else {
+                    return Ok(ControlFlow::Break(response));
+                };
+
+                let duration = duration.min(MAX_RETRY_DURATION);
+
+                info!("Receiver status code {status}, will wait for {duration:#?} and retry");
+
+                self.0
+                    .service
+                    .add_urls_to_delay([url, response.url()], duration);
+
+                Ok(ControlFlow::Continue(Ok(response)))
+            }
+
+            StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => {
+                // Delay further request on timeout
+                let duration = RETRY_DURATION_FOR_TIMEOUT;
+
+                info!("Receiver status code {status}, will wait for {duration:#?} and retry");
+
+                self.0
+                    .service
+                    .add_urls_to_delay([url, response.url()], duration);
+
+                Ok(ControlFlow::Continue(Ok(response)))
+            }
+
+            _ => Ok(ControlFlow::Break(response)),
+        }
+    }
+
     async fn send_request_inner(
         &self,
         method: &Method,
         url: &Url,
     ) -> Result<Response, ReqwestError> {
         let mut count = 0;
+        let max_retry_count = NonZeroU8::new(MAX_RETRY_COUNT).unwrap();
 
+        // Since max_retry_count is non-zero, there is at least one iteration.
         loop {
-            let request = Request::new(method.clone(), url.clone());
-
-            let future = (&self.0.service).ready().await?.call(request);
-
-            let response = match future.await {
-                Ok(response) => response,
-                Err(err) if err.is_timeout() => {
-                    // Delay further request on timeout
-                    self.0
-                        .service
-                        .add_urls_to_delay([url], RETRY_DURATION_FOR_TIMEOUT);
-
-                    if count >= MAX_RETRY_COUNT {
-                        break Err(err);
-                    }
-
-                    count += 1;
-                    continue;
-                }
-                Err(err) => return Err(err),
-            };
-
-            let status = response.status();
-
-            match status {
-                // 503                            429
-                StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
-                    // Delay further request on rate limit
-                    let Some(duration) = parse_header_retry_after(response.headers()) else {
-                        break Ok(response)
-                    };
-
-                    let duration = duration.min(MAX_RETRY_DURATION);
-
-                    info!("Receiver status code {status}, will wait for {duration:#?} and retry");
-
-                    self.0
-                        .service
-                        .add_urls_to_delay([url, response.url()], duration);
-                }
-
-                StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => {
-                    // Delay further request on timeout
-                    let duration = RETRY_DURATION_FOR_TIMEOUT;
-
-                    info!("Receiver status code {status}, will wait for {duration:#?} and retry");
-
-                    self.0
-                        .service
-                        .add_urls_to_delay([url, response.url()], duration);
-                }
-
-                _ => break Ok(response),
-            }
-
-            if count >= MAX_RETRY_COUNT {
-                break Ok(response);
-            }
-
+            // Increment the counter before checking for terminal condition.
             count += 1;
+
+            match self.do_send_request(method, url).await? {
+                ControlFlow::Break(response) => break Ok(response),
+                ControlFlow::Continue(res) if count >= max_retry_count.get() => {
+                    break res;
+                }
+                _ => (),
+            }
         }
     }
 
