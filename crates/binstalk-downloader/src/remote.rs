@@ -124,7 +124,7 @@ impl Client {
             Err(err) if err.is_timeout() => {
                 let duration = RETRY_DURATION_FOR_TIMEOUT;
 
-                info!("Received timeout erro from reqwest. Delay future request by {duration:#?}");
+                info!("Received timeout error from reqwest. Delay future request by {duration:#?}");
 
                 self.0.service.add_urls_to_delay(&[url], duration);
 
