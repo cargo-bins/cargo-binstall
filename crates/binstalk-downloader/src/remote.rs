@@ -134,35 +134,30 @@ impl Client {
 
         let status = response.status();
 
+        let add_delay_and_continue = |response: Response, duration| {
+            info!("Receiver status code {status}, will wait for {duration:#?} and retry");
+
+            self.0
+                .service
+                .add_urls_to_delay(&[url, response.url()], duration);
+
+            Ok(ControlFlow::Continue(Ok(response)))
+        };
+
         match status {
-            // 503                            429
+            // Delay further request on rate limit
             StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
-                // Delay further request on rate limit
                 let duration = parse_header_retry_after(response.headers())
                     .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT);
 
                 let duration = duration.min(MAX_RETRY_DURATION);
 
-                info!("Receiver status code {status}, will wait for {duration:#?} and retry");
-
-                self.0
-                    .service
-                    .add_urls_to_delay(&[url, response.url()], duration);
-
-                Ok(ControlFlow::Continue(Ok(response)))
+                add_delay_and_continue(response, duration)
             }
 
+            // Delay further request on timeout
             StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => {
-                // Delay further request on timeout
-                let duration = RETRY_DURATION_FOR_TIMEOUT;
-
-                info!("Receiver status code {status}, will wait for {duration:#?} and retry");
-
-                self.0
-                    .service
-                    .add_urls_to_delay(&[url, response.url()], duration);
-
-                Ok(ControlFlow::Continue(Ok(response)))
+                add_delay_and_continue(response, RETRY_DURATION_FOR_TIMEOUT)
             }
 
             _ => Ok(ControlFlow::Break(response)),
