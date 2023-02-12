@@ -220,17 +220,25 @@ impl Client {
             self.send_request(Method::GET, url, error_for_status).await
         };
 
+        let is_retryable = |status| {
+            matches!(
+                status,
+                StatusCode::BAD_REQUEST              // 400
+                    | StatusCode::UNAUTHORIZED       // 401
+                    | StatusCode::FORBIDDEN          // 403
+                    | StatusCode::NOT_FOUND          // 404
+                    | StatusCode::METHOD_NOT_ALLOWED // 405
+                    | StatusCode::GONE // 410
+            )
+        };
+
         match res {
             Err(Error::Http(http_error))
-                if http_error
-                    .err
-                    .status()
-                    .map(|status| status.is_client_error())
-                    .unwrap_or(false) =>
+                if http_error.err.status().map(is_retryable).unwrap_or(false) =>
             {
                 retry_with_get().await
             }
-            Ok(response) if response.status().is_client_error() => retry_with_get().await,
+            Ok(response) if is_retryable(response.status()) => retry_with_get().await,
             res => res,
         }
     }
