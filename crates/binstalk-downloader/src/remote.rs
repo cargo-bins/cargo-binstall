@@ -121,7 +121,6 @@ impl Client {
         let future = (&self.0.service).ready().await?.call(request);
 
         let response = match future.await {
-            Ok(response) => response,
             Err(err) if err.is_timeout() => {
                 // Delay further request on timeout
                 self.0
@@ -130,7 +129,7 @@ impl Client {
 
                 return Ok(ControlFlow::Continue(Err(err)));
             }
-            Err(err) => return Err(err),
+            res => res?,
         };
 
         let status = response.status();
