@@ -122,10 +122,11 @@ impl Client {
 
         let response = match future.await {
             Err(err) if err.is_timeout() => {
-                // Delay further request on timeout
-                self.0
-                    .service
-                    .add_urls_to_delay(&[url], RETRY_DURATION_FOR_TIMEOUT);
+                let duration = RETRY_DURATION_FOR_TIMEOUT;
+
+                info!("Received timeout erro from reqwest. Delay future request by {duration:#?}");
+
+                self.0.service.add_urls_to_delay(&[url], duration);
 
                 return Ok(ControlFlow::Continue(Err(err)));
             }
@@ -212,6 +213,7 @@ impl Client {
                 if http_error.err.status() == Some(StatusCode::METHOD_NOT_ALLOWED) =>
             {
                 // Retry using GET
+                info!("HEAD on {url} is not allowed, fallback to GET");
                 self.send_request(Method::GET, url, true).await
             }
             res => res,
