@@ -193,8 +193,11 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
     // Calculate log_level
     let log_level = min(log_level, STATIC_MAX_LEVEL);
 
-    let allowed_targets =
-        (log_level != LevelFilter::Trace).then_some(["binstalk", "cargo_binstall"]);
+    let allowed_targets = (log_level != LevelFilter::Trace).then_some([
+        "binstalk",
+        "binstalk_downloader",
+        "cargo_binstall",
+    ]);
 
     // Forward log to tracing
     Logger::init(log_level);
