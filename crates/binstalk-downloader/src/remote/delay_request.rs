@@ -11,7 +11,7 @@ use compact_str::{CompactString, ToCompactString};
 use reqwest::{Request, Url};
 use tokio::{
     sync::Mutex as AsyncMutex,
-    time::{sleep_until, Instant},
+    time::{sleep_until, Duration, Instant},
 };
 use tower::{Service, ServiceExt};
 
@@ -60,17 +60,19 @@ impl<S> DelayRequest<S> {
         }
     }
 
-    pub(super) fn add_urls_to_delay<'url, Urls>(&self, urls: Urls, deadline: Instant)
+    pub(super) fn add_urls_to_delay<'url, Urls>(&self, urls: Urls, delay_duration: Duration)
     where
         Urls: IntoIterator<Item = &'url Url>,
     {
         self.add_hosts_to_delay(
             &mut urls.into_iter().filter_map(Url::host_str).dedup(),
-            deadline,
+            delay_duration,
         );
     }
 
-    fn add_hosts_to_delay(&self, hosts: &mut dyn Iterator<Item = &str>, deadline: Instant) {
+    fn add_hosts_to_delay(&self, hosts: &mut dyn Iterator<Item = &str>, delay_duration: Duration) {
+        let deadline = Instant::now() + delay_duration;
+
         let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
         hosts.for_each(|host| {

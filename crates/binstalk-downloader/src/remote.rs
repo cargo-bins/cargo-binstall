@@ -116,9 +116,9 @@ impl Client {
             let response = match future.await {
                 Ok(response) => response,
                 Err(err) if err.is_timeout() => {
-                    let deadline = Instant::now() + RETRY_DURATION_FOR_TIMEOUT;
-
-                    self.0.service.add_urls_to_delay([url], deadline);
+                    self.0
+                        .service
+                        .add_urls_to_delay([url], RETRY_DURATION_FOR_TIMEOUT);
                     continue;
                 }
                 Err(err) => return Err(err),
@@ -136,11 +136,9 @@ impl Client {
 
                     info!("Receiver status code {status}, will wait for {duration:#?} and retry");
 
-                    let deadline = Instant::now() + duration;
-
                     self.0
                         .service
-                        .add_urls_to_delay([url, response.url()], deadline);
+                        .add_urls_to_delay([url, response.url()], duration);
 
                     if count >= MAX_RETRY_COUNT {
                         break Ok(response);
