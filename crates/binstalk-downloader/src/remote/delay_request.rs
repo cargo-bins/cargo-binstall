@@ -81,12 +81,12 @@ impl<S> DelayRequest<S> {
     fn wait_until_available(&self, url: &Url) -> impl Future<Output = ()> + Send + 'static {
         let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
-        let sleep = url
+        let deadline = url
             .host_str()
             .and_then(|host| hosts_to_delay.get(host).map(|deadline| (*deadline, host)))
             .and_then(|(deadline, host)| {
                 if deadline.elapsed().is_zero() {
-                    Some(sleep_until(deadline))
+                    Some(deadline)
                 } else {
                     // We have already gone past the deadline,
                     // so we should remove it instead.
@@ -96,8 +96,8 @@ impl<S> DelayRequest<S> {
             });
 
         async move {
-            if let Some(sleep) = sleep {
-                sleep.await;
+            if let Some(deadline) = deadline {
+                sleep_until(deadline).await;
             }
         }
     }
