@@ -101,7 +101,6 @@ ci-install-deps:
 [macos]
 [windows]
 ci-install-deps:
-    pip3 install cargo-zigbuild
 
 toolchain components="":
     rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
