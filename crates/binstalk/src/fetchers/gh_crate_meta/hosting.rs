@@ -27,7 +27,6 @@ pub const FULL_FILENAMES: &[&str] = &[
 
 pub const NOVERSION_FILENAMES: &[&str] = &[
     "{ name }-{ target }{ archive-suffix }",
-    "{ name }{ archive-suffix }",
     "{ name }_{ target }{ archive-suffix }",
 ];
 

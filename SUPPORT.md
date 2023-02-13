@@ -71,7 +71,6 @@ are:
 - `{ name }_{ version }_{ target }{ archive-suffix }`
 - `{ name }_v{ version }_{ target }{ archive-suffix }`
 - `{ name }-{ target }{ archive-suffix }` ("versionless")
-- `{ name }{ archive-suffix }` ("versionless")
 - `{ name }_{ target }{ archive-suffix }` ("versionless")
 
 The paths are:
