@@ -53,7 +53,7 @@ cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
 
 # In musl release builds in CI, statically link gcclibs.
 rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
-    " -C link-arg=-lgcc -C link-arg=-static-libgcc"
+    "-C link-arg=-static-libgcc"
 } else { "" }
 
 # disable default features in CI for debug builds, for speed
