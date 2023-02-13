@@ -226,6 +226,10 @@ pub struct Args {
     ///
     /// Set to `off` to disable logging completely, this will also
     /// disable output from `cargo-install`.
+    ///
+    /// If `--log-level` is not specified on cmdline, then cargo-binstall
+    /// will try to read environment variable `BINSTALL_LOG_LEVEL` and
+    /// interpret it as a log-level.
     #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
     pub log_level: Option<LevelFilter>,
 
