@@ -38,6 +38,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
+      CARGO_BINSTALL_LOG_LEVEL: debug
 
     steps:
     - uses: actions/checkout@v3

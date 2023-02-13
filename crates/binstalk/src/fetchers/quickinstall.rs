@@ -6,11 +6,7 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{
-        download::Download,
-        remote::{Client, Method},
-        tasks::AutoAbortJoinHandle,
-    },
+    helpers::{download::Download, remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -60,10 +56,7 @@ impl super::Fetcher for QuickInstall {
 
             let url = self.package_url();
             debug!("Checking for package at: '{url}'");
-            Ok(self
-                .client
-                .remote_exists(Url::parse(&url)?, Method::HEAD)
-                .await?)
+            Ok(self.client.remote_gettable(Url::parse(&url)?).await?)
         })
     }
 
@@ -124,7 +117,7 @@ impl QuickInstall {
         let url = Url::parse(&self.stats_url())?;
         debug!("Sending installation report to quickinstall ({url})");
 
-        self.client.remote_exists(url, Method::HEAD).await?;
+        self.client.remote_gettable(url).await?;
 
         Ok(())
     }
