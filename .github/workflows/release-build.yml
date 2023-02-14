@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.o }}
     env:
       CARGO_BUILD_TARGET: ${{ matrix.t }}
-      JUST_USE_CROSS: ${{ matrix.c }}
+      JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
       JUST_FOR_RELEASE: true
 
     steps:

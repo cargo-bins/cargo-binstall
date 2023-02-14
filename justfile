@@ -2,6 +2,7 @@
 ci := env_var_or_default("CI", "")
 for-release := env_var_or_default("JUST_FOR_RELEASE", "")
 use-cross := env_var_or_default("JUST_USE_CROSS", "")
+use-cargo-zigbuild  := env_var_or_default("JUST_USE_CARGO_ZIGBUILD", "")
 extra-build-args := env_var_or_default("JUST_EXTRA_BUILD_ARGS", "")
 extra-features := env_var_or_default("JUST_EXTRA_FEATURES", "")
 default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
@@ -36,7 +37,7 @@ output-folder := if target != target-host { "target" / target / output-profile-f
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cross != "" { "cross" } else { "cargo +nightly" }
+cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo +nightly" }
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
@@ -52,7 +53,7 @@ cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
 
 # In musl release builds in CI, statically link gcclibs.
 rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
-    " -C link-arg=-lgcc -C link-arg=-static-libgcc"
+    if use-cargo-zigbuild != "" { "-C link-arg=-static-libgcc" } else { " -C link-arg=-lgcc -C link-arg=-static-libgcc" }
 } else { "" }
 
 # disable default features in CI for debug builds, for speed
@@ -94,8 +95,8 @@ ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev
 
 [linux]
 ci-install-deps:
-    {{ if ci-apt-deps == "" { "exit" } else { "" } }}
-    sudo apt update && sudo apt install -y --no-install-recommends {{ci-apt-deps}}
+    if [ -n "{{ci-apt-deps}}" ]; then sudo apt update && sudo apt install -y --no-install-recommends {{ci-apt-deps}}; fi
+    pip3 install cargo-zigbuild
 
 [macos]
 [windows]
