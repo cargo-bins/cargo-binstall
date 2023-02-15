@@ -118,7 +118,7 @@ pub struct Args {
 
     /// Override the rate limit duration.
     ///
-    /// By default, cargo-binstall allows one request per 5 ms.
+    /// By default, cargo-binstall allows one request per 10 ms.
     ///
     /// Example:
     ///
@@ -290,7 +290,7 @@ impl FromStr for RateLimit {
 impl Default for RateLimit {
     fn default() -> Self {
         Self {
-            duration: NonZeroU64::new(5).unwrap(),
+            duration: NonZeroU64::new(10).unwrap(),
             request_count: NonZeroU64::new(1).unwrap(),
         }
     }
