@@ -96,6 +96,10 @@ where
         try_join(
             async move {
                 while let Some(bytes) = stream.next().await.transpose()? {
+                    if bytes.is_empty() {
+                        continue;
+                    }
+
                     if tx.send(bytes).await.is_err() {
                         // The extract tar returns, which could be that:
                         //  - Extraction fails with an error
