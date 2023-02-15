@@ -132,6 +132,7 @@ e2e-test-strategies: (e2e-test "strategies")
 e2e-test-version-syntax: (e2e-test "version-syntax")
 e2e-test-upgrade: (e2e-test "upgrade")
 e2e-test-self-upgrade-no-symlink: (e2e-test "self-upgrade-no-symlink")
+e2e-test-uninstall: (e2e-test "uninstall")
 
 # WinTLS (Windows in CI) does not have TLS 1.3 support
 [windows]
@@ -140,7 +141,7 @@ e2e-test-tls: (e2e-test "tls" "1.2")
 [macos]
 e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall
 
 unit-tests:
     {{cargo-bin}} test {{cargo-build-args}}
