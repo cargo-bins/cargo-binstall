@@ -3,6 +3,8 @@ use std::{path::Path, sync::Arc};
 use compact_str::CompactString;
 pub use gh_crate_meta::*;
 pub use quickinstall::*;
+use tokio::sync::OnceCell;
+use url::Url;
 
 use crate::{
     errors::BinstallError,
@@ -60,9 +62,37 @@ pub trait Fetcher: Send + Sync {
 /// Data required to fetch a package
 #[derive(Clone, Debug)]
 pub struct Data {
-    pub name: CompactString,
-    pub version: CompactString,
-    pub repo: Option<String>,
+    name: CompactString,
+    version: CompactString,
+    repo: Option<String>,
+    repo_final_url: OnceCell<Option<Url>>,
+}
+
+impl Data {
+    pub fn new(name: CompactString, version: CompactString, repo: Option<String>) -> Self {
+        Self {
+            name,
+            version,
+            repo,
+            repo_final_url: OnceCell::new(),
+        }
+    }
+
+    async fn resolve_final_repo_url(&self, client: &Client) -> Result<&Option<Url>, BinstallError> {
+        self.repo_final_url
+            .get_or_try_init(move || {
+                Box::pin(async move {
+                    if let Some(repo) = self.repo.as_deref() {
+                        Ok(Some(
+                            client.get_redirected_final_url(Url::parse(repo)?).await?,
+                        ))
+                    } else {
+                        Ok(None)
+                    }
+                })
+            })
+            .await
+    }
 }
 
 /// Target specific data required to fetch a package
