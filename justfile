@@ -62,9 +62,13 @@ cargo-no-default-features := if default-features == "false" { " --no-default-fea
     } else if (cargo-profile / ci-or-no) == "dev/ci" { " --no-default-features"
     } else { "" }
 
+support-pkg-config := if target == target-host {
+    if target-os != "windows" { "true" } else { "" }
+} else { "" }
+
 cargo-features := trim_end_match(if override-features != "" { override-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin" + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "rustls,fancy-no-backtrace,zstd-thin" + extra-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin,log_release_max_level_debug" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug" + extra-features
     } else { extra-features
 }, ",")
 
