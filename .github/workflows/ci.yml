@@ -8,9 +8,15 @@ on:
       - reopened
       - synchronize
       - auto_merge_enabled
+    paths-ignore:
+      - README.md
+      - SUPPORT.md
   push:
     branches:
       - main
+    paths-ignore:
+      - README.md
+      - SUPPORT.md
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
