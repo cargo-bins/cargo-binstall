@@ -4,7 +4,7 @@ use std::{
     path::{self, Component, Path, PathBuf},
 };
 
-use compact_str::CompactString;
+use compact_str::{format_compact, CompactString};
 use normalize_path::NormalizePath;
 use serde::Serialize;
 use tinytemplate::TinyTemplate;
@@ -141,7 +141,7 @@ impl BinFile {
         };
 
         Ok(Self {
-            base_name: CompactString::from(base_name),
+            base_name: format_compact!("{base_name}{binary_ext}"),
             source,
             dest,
             link,
