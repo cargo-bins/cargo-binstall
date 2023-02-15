@@ -79,12 +79,24 @@ win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.c
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
 rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 
+# Use rust-lld that is bundled with rustup to speedup linking
+# and support for icf=safe.
+#
+# -Zgcc-ld=lld uses the rust-lld that is bundled with rustup.
+#
+# TODO: There is ongoing effort to stabilise this and we will need to update
+# this once it is merged.
+# https://github.com/rust-lang/compiler-team/issues/510
+rust-lld := if target-os != "windows" { " -Z gcc-ld=lld" } else { "" }
+
 # ICF: link-time identical code folding
-# disabled for now, as it requires the gold linker
-rustc-icf := "" #if for-release != "" { " -C link-arg=-Wl,--icf=all" } else { "" }
+#
+# On windows it works out of the box and on other targets it uses
+# rust-lld.
+rustc-icf := if for-release != "" { " -C link-arg=-Wl,--icf=safe" } else { "" }
 
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
-export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
+export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt
