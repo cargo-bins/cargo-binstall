@@ -84,11 +84,11 @@ async fn resolve_inner(
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
         Vec::with_capacity(desired_targets.len() * resolvers.len());
 
-    let data = Arc::new(Data {
-        name: package_info.name.clone(),
-        version: package_info.version_str.clone(),
-        repo: package_info.repo.clone(),
-    });
+    let data = Arc::new(Data::new(
+        package_info.name.clone(),
+        package_info.version_str.clone(),
+        package_info.repo.clone(),
+    ));
 
     handles.extend(
         desired_targets
