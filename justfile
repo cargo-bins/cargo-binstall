@@ -100,7 +100,7 @@ rust-lld := if target-os != "windows" { " -Z gcc-ld=lld" } else { "" }
 rustc-icf := if for-release != "" { " -C link-arg=-Wl,--icf=safe" } else { "" }
 
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
-export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
+export RUSTFLAGS := "-Z share-generics " + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt
