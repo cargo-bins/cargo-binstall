@@ -105,7 +105,6 @@ export RUSTFLAGS := "-Z share-generics " + (rustc-gcclibs) + (rustc-miropt) + (r
 
 # libblocksruntime-dev provides compiler-rt
 ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev"
-    } else if target == "x86_64-unknown-linux-musl" { "musl-tools"
     } else { "" }
 
 [linux]
