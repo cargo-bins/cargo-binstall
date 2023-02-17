@@ -21,9 +21,9 @@ jobs:
         include:
           - { o: macos-latest,   t: x86_64-apple-darwin,                    r: true          }
           - { o: macos-latest,   t: aarch64-apple-darwin                                     }
-          - { o: ubuntu-20.04,   t: x86_64-unknown-linux-gnu,      g: 2.17, r: true, c: true }
-          - { o: ubuntu-20.04,   t: armv7-unknown-linux-gnueabihf, g: 2.17,          c: true }
-          - { o: ubuntu-20.04,   t: aarch64-unknown-linux-gnu,     g: 2.17,          c: true }
+          - { o: ubuntu-latest,  t: x86_64-unknown-linux-gnu,      g: 2.17, r: true, c: true }
+          - { o: ubuntu-latest,  t: armv7-unknown-linux-gnueabihf, g: 2.17,          c: true }
+          - { o: ubuntu-latest,  t: aarch64-unknown-linux-gnu,     g: 2.17,          c: true }
           - { o: ubuntu-latest,  t: x86_64-unknown-linux-musl,              r: true, c: true }
           - { o: ubuntu-latest,  t: armv7-unknown-linux-musleabihf,                  c: true }
           - { o: ubuntu-latest,  t: aarch64-unknown-linux-musl,                      c: true }
