@@ -100,7 +100,7 @@ rust-lld := if target-os != "windows" { " -Z gcc-ld=lld" } else { "" }
 # rust-lld.
 rustc-icf := if for-release != "" { " -C link-arg=-Wl,--icf=safe" } else { "" }
 
-target-glibc-ver-postfix = if glibc-version != "" {
+target-glibc-ver-postfix := if glibc-version != "" {
     if use-cargo-zigbuild != "" {
         "." + glibc-version
     } else {
@@ -110,7 +110,7 @@ target-glibc-ver-postfix = if glibc-version != "" {
     ""
 }
 
-need-target = if target != target-host {
+need-target := if target != target-host {
     "need"
 } else if cargo-buildstd != "" {
     "need"
