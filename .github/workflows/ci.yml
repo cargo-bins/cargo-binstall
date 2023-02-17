@@ -38,13 +38,14 @@ jobs:
             os: ubuntu-latest
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            c: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
 
     runs-on: ${{ matrix.os }}
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
-      CARGO_BINSTALL_LOG_LEVEL: debug
+      JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
 
     steps:
     - uses: actions/checkout@v3
