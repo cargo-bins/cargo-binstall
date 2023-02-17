@@ -63,7 +63,7 @@ cargo-no-default-features := if default-features == "false" { " --no-default-fea
     } else { "" }
 
 support-pkg-config := if target == target-host {
-    if target-os != "windows" { "true" } else { "" }
+    if target-os == "linux" { "true" } else { "" }
 } else { "" }
 
 cargo-features := trim_end_match(if override-features != "" { override-features
