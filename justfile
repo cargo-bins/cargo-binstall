@@ -69,7 +69,7 @@ support-pkg-config := if target == target-host {
 
 cargo-features := trim_end_match(if override-features != "" { override-features
     } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin,log_release_max_level_debug" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug" + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto" + extra-features
     } else { extra-features
 }, ",")
 
