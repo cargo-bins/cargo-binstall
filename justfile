@@ -121,7 +121,7 @@ need-target := if target != target-host {
 }
 
 target-args := if need-target != "" {
-    "--target " + target + target-glibc-ver-postfix
+    " --target " + target + target-glibc-ver-postfix
 } else {
     ""
 }
