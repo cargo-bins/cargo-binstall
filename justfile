@@ -93,13 +93,15 @@ rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 # this once it is merged.
 # https://github.com/rust-lang/compiler-team/issues/510
 #
-# If cargo-zigbuild is used, then it will provide the lld linker
-# and this option is not supported on windows, so it will be disabled.
+# If cargo-zigbuild is used, then it will provide the lld linker.
+# This option is disabled on windows since it not supported.
 rust-lld := if use-cargo-zigbuild != "" {
     ""
 } else if target-os != "windows" {
     " -Z gcc-ld=lld"
-} else { "" }
+} else {
+    ""
+}
 
 # ICF: link-time identical code folding
 #
@@ -113,7 +115,9 @@ linker-plugin-lto = if for-release == "" {
     ""
 } else if target-os != "windows" {
     "-C linker-plugin-lto "
-} else { "" }
+} else {
+    ""
+}
 
 target-glibc-ver-postfix := if glibc-version != "" {
     if use-cargo-zigbuild != "" {
