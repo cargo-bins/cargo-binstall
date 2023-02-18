@@ -110,23 +110,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
     ""
 }
 
-need-target := if target != target-host {
-    "need"
-} else if cargo-buildstd != "" {
-    "need"
-} else if target-glibc-ver-postfix != "" {
-    "need"
-} else {
-    ""
-}
-
-target-args := if need-target != "" {
-    " --target " + target + target-glibc-ver-postfix
-} else {
-    ""
-}
-
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (target-args) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
 export RUSTFLAGS := "-Z share-generics " + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
