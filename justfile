@@ -92,11 +92,12 @@ rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 # TODO: There is ongoing effort to stabilise this and we will need to update
 # this once it is merged.
 # https://github.com/rust-lang/compiler-team/issues/510
+#
+# If cargo-zigbuild is used, then it will provide the lld linker
+# and this option is not supported on windows, so it will be disabled.
 rust-lld := if use-cargo-zigbuild != "" {
-    # If cargo-zigbuild is used, then it will provide the lld linker.
     ""
 } else if target-os != "windows" {
-    # This option is not supported on windows
     " -Z gcc-ld=lld"
 } else { "" }
 
