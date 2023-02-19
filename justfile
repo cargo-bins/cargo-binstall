@@ -69,7 +69,7 @@ support-pkg-config := if target == target-host {
 
 cargo-features := trim_end_match(if override-features != "" { override-features
     } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin,log_release_max_level_debug" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug" + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug" + (if target-os != "macos" { ",cross-lang-fat-lto" } else { "" }) + extra-features
     } else { extra-features
 }, ",")
 
@@ -92,13 +92,32 @@ rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 # TODO: There is ongoing effort to stabilise this and we will need to update
 # this once it is merged.
 # https://github.com/rust-lang/compiler-team/issues/510
-rust-lld := if target-os != "windows" { " -Z gcc-ld=lld" } else { "" }
+#
+# If cargo-zigbuild is used, then it will provide the lld linker.
+# This option is disabled on windows since it not supported.
+rust-lld := if use-cargo-zigbuild != "" {
+    ""
+} else if target-os != "windows" {
+    " -Z gcc-ld=lld"
+} else {
+    ""
+}
 
 # ICF: link-time identical code folding
 #
 # On windows it works out of the box and on other targets it uses
 # rust-lld.
 rustc-icf := if for-release != "" { " -C link-arg=-Wl,--icf=safe" } else { "" }
+
+# Only enable linker-plugin-lto for release
+# Also disable this on windows since it uses msvc.
+linker-plugin-lto := if for-release == "" {
+    ""
+} else if target-os == "linux" {
+    "-C linker-plugin-lto "
+} else {
+    ""
+}
 
 target-glibc-ver-postfix := if glibc-version != "" {
     if use-cargo-zigbuild != "" {
@@ -111,7 +130,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
 }
 
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
-export RUSTFLAGS := "-Z share-generics " + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
+export RUSTFLAGS := "-Z share-generics " + (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt

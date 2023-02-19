@@ -55,3 +55,4 @@ native-tls = ["binstalk-downloader/native-tls"]
 trust-dns = ["binstalk-downloader/trust-dns"]
 
 zstd-thin = ["binstalk-downloader/zstd-thin"]
+cross-lang-fat-lto = ["binstalk-downloader/cross-lang-fat-lto"]

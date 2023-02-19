@@ -69,3 +69,5 @@ native-tls = ["reqwest/native-tls", "trust-dns-resolver?/dns-over-native-tls"]
 trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]
 
 zstd-thin = ["zstd/thin"]
+
+cross-lang-fat-lto = ["zstd/fat-lto"]
