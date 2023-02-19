@@ -55,7 +55,7 @@ jobs:
 
     - name: Ensure release binary is runnable
       if: "matrix.r"
-      run: ./target/${{ matrix.t }}/release/cargo-binstall -V
+      run: just e2e-tests
 
     - if: inputs.publish
       name: Upload to release
