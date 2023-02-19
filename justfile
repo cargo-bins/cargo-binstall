@@ -113,7 +113,7 @@ rustc-icf := if for-release != "" { " -C link-arg=-Wl,--icf=safe" } else { "" }
 # Also disable this on windows since it uses msvc.
 linker-plugin-lto := if for-release == "" {
     ""
-} else if target-os != "windows" {
+} else if target-os == "linux" {
     "-C linker-plugin-lto "
 } else {
     ""
