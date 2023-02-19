@@ -153,9 +153,11 @@ toolchain components="":
 
 
 build:
+    echo "env RUSTFLAGS=$RUSTFLAGS"
     {{cargo-bin}} build {{cargo-build-args}}
 
 check:
+    echo "env RUSTFLAGS=$RUSTFLAGS"
     {{cargo-bin}} check {{cargo-build-args}}
 
 get-output file outdir=".":
