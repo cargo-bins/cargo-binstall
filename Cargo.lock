@@ -361,6 +361,7 @@ dependencies = [
  "crates_io_api",
  "dirs",
  "embed-resource",
+ "file-format",
  "fs-lock",
  "log",
  "miette",
@@ -726,6 +727,12 @@ checksum = "a7a407cfaa3385c4ae6b23e84623d48c2798d06e3e6a1878f7f59f17b3f86499"
 dependencies = [
  "instant",
 ]
+
+[[package]]
+name = "file-format"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d645737d3dda11cbf14905e9b943a1bd578cdcb751709b581a924ea9b9b18b5c"
 
 [[package]]
 name = "filetime"

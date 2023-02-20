@@ -24,9 +24,10 @@ pkg-fmt = "zip"
 [dependencies]
 binstalk = { path = "../binstalk", version = "0.8.0", default-features = false }
 binstalk-manifests = { path = "../binstalk-manifests", version = "0.3.0" }
-clap = { version = "4.1.6", features = ["derive"] }
+clap = { version = "4.1.6", features = ["derive", "env"] }
 crates_io_api = { version = "0.8.1", default-features = false }
 dirs = "4.0.0"
+file-format = { version = "0.14.0", default-features = false }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
 log = { version = "0.4.17", features = ["std"] }
 miette = "5.5.0"
