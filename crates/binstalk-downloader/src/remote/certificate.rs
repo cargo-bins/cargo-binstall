@@ -1,4 +1,4 @@
-use std::{env, ffi::OsStr, fs, io, path::Path};
+use std::{ffi::OsStr, fs, io, path::Path};
 
 use compact_str::CompactString;
 use reqwest::tls;
@@ -22,17 +22,6 @@ pub enum OpenCertificateError {
 pub struct Certificate(pub(super) tls::Certificate);
 
 impl Certificate {
-    /// Open Certificate with path specified by the environment variable `name`
-    pub fn from_env(name: impl AsRef<OsStr>) -> Result<Option<Self>, OpenCertificateError> {
-        Self::from_env_inner(name.as_ref())
-    }
-
-    fn from_env_inner(name: &OsStr) -> Result<Option<Self>, OpenCertificateError> {
-        env::var_os(name)
-            .map(|value| Self::open_inner(Path::new(&value)))
-            .transpose()
-    }
-
     /// Open Certificate on disk and automatically detect its format based on
     /// its extension.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, OpenCertificateError> {
