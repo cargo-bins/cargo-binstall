@@ -203,6 +203,11 @@ pub struct Args {
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub min_tls_version: Option<TLSVersion>,
 
+    /// Specify the root ceritificates to use for https connnections,
+    /// in additional to default system-wide ones.
+    #[clap(help_heading = "Options", long, env = "BINSTALL_HTTPS_ROOT_CERTS")]
+    pub root_certificates: Vec<PathBuf>,
+
     /// Print logs in json format to be parsable.
     #[clap(help_heading = "Options", long)]
     pub json_output: bool,
@@ -313,7 +318,7 @@ pub fn parse() -> Args {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
-    let mut args: Vec<OsString> = std::env::args_os().collect();
+    let mut args: Vec<OsString> = env::args_os().collect();
     let args = if args.get(1).map(|arg| arg == "binstall").unwrap_or_default() {
         // Equivalent to
         //
