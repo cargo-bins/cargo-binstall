@@ -23,7 +23,7 @@ mod delay_request;
 use delay_request::DelayRequest;
 
 mod certificate;
-pub use certificate::{Certificate, OpenCertificateError};
+pub use certificate::Certificate;
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
