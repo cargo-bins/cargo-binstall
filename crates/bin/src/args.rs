@@ -203,8 +203,8 @@ pub struct Args {
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub min_tls_version: Option<TLSVersion>,
 
-    /// Specify the root ceritificates to use for https connnections,
-    /// in additional to default system-wide ones.
+    /// Specify the root certificates to use for https connnections,
+    /// in addition to default system-wide ones.
     #[clap(help_heading = "Options", long, env = "BINSTALL_HTTPS_ROOT_CERTS")]
     pub root_certificates: Vec<PathBuf>,
 
