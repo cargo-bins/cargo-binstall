@@ -1,4 +1,9 @@
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use binstalk::{
     errors::BinstallError,
@@ -17,6 +22,7 @@ use binstalk::{
 };
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
 use crates_io_api::AsyncClient as CratesIoApiClient;
+use file_format::FileFormat;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;
@@ -77,18 +83,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         args.min_tls_version.map(|v| v.into()),
         Duration::from_millis(rate_limit.duration.get()),
         rate_limit.request_count,
-        args.root_certificates
-            .into_iter()
-            .filter_map(|path| match Certificate::open(&path) {
-                Ok(cert) => Some(cert),
-                Err(err) => {
-                    warn!(
-                        "Failed to load root certificate at {}: {err}",
-                        path.display()
-                    );
-                    None
-                }
-            }),
+        read_root_certs(args.root_certificates),
     )
     .map_err(BinstallError::from)?;
 
@@ -181,6 +176,49 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     }
 
     Ok(())
+}
+
+fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> {
+    use std::io::{Read, Seek};
+
+    let mut file = fs::File::open(path)?;
+    let file_format = FileFormat::from_reader(&mut file)?;
+
+    let open_cert = match file_format {
+        FileFormat::PemCertificate => Certificate::from_pem,
+        FileFormat::DerCertificate => Certificate::from_der,
+        _ => {
+            warn!(
+                "Unable to load {}: Expected pem or der ceritificate but found {file_format}",
+                path.display()
+            );
+
+            return Ok(None);
+        }
+    };
+
+    // Move file back to its head
+    file.rewind()?;
+
+    let mut buffer = Vec::with_capacity(200);
+    file.read_to_end(&mut buffer)?;
+
+    open_cert(&buffer).map_err(From::from).map(Some)
+}
+
+fn read_root_certs(root_certificate_paths: Vec<PathBuf>) -> impl Iterator<Item = Certificate> {
+    root_certificate_paths
+        .into_iter()
+        .filter_map(|path| match do_read_root_cert(&path) {
+            Ok(optional_cert) => optional_cert,
+            Err(err) => {
+                warn!(
+                    "Failed to load root certificate at {}: {err}",
+                    path.display()
+                );
+                None
+            }
+        })
 }
 
 /// Return (install_path, manifests, temp_dir)
