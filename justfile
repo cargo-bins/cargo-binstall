@@ -82,7 +82,8 @@ cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.s
 win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring.git=\"https://github.com/awakecoding/ring\"' --config='patch.crates-io.ring.branch=\"0.16.20_alpha\"'" } else { "" }
 
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
-rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
+# **DISABLED because it's buggy**
+rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 
 # Use rust-lld that is bundled with rustup to speedup linking
 # and support for icf=safe.
