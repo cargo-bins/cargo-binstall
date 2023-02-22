@@ -97,6 +97,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         dry_run: args.dry_run,
         force: args.force,
         quiet: args.log_level == Some(LevelFilter::Off),
+        locked: args.locked,
 
         version_req: args.version_req,
         manifest_path: args.manifest_path,

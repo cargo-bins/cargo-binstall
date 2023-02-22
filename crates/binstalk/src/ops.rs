@@ -21,6 +21,7 @@ pub struct Options {
     pub dry_run: bool,
     pub force: bool,
     pub quiet: bool,
+    pub locked: bool,
 
     pub version_req: Option<VersionReq>,
     pub manifest_path: Option<PathBuf>,
