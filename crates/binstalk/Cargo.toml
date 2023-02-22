@@ -15,7 +15,7 @@ binstalk-downloader = { version = "0.3.3", path = "../binstalk-downloader", defa
 binstalk-types = { version = "0.2.1", path = "../binstalk-types" }
 cargo_toml = "0.15.2"
 command-group = { version = "2.0.1", features = ["with-tokio"] }
-compact_str = { version = "0.6.1", features = ["serde"] }
+compact_str = { version = "0.7.0", features = ["serde"] }
 crates_io_api = { version = "0.8.1", default-features = false }
 detect-targets = { version = "0.1.5", path = "../detect-targets" }
 either = "1.8.1"
