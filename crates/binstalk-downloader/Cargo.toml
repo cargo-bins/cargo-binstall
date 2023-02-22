@@ -16,7 +16,7 @@ async_zip = { version = "0.0.9", features = ["deflate", "bzip2", "lzma", "zstd",
 binstalk-types = { version = "0.2.1", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
-compact_str = "0.6.1"
+compact_str = "0.7.0"
 digest = "0.10.6"
 flate2 = { version = "1.0.25", default-features = false }
 futures-lite = { version = "1.12.0", default-features = false }
