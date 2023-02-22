@@ -150,6 +150,10 @@ impl ResolutionSource {
             cmd.arg("--force");
         }
 
+        if opts.locked {
+            cmd.arg("--locked");
+        }
+
         if !opts.dry_run {
             let mut child = opts
                 .jobserver_client

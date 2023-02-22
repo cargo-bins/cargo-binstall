@@ -188,6 +188,13 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub roots: Option<PathBuf>,
 
+    /// This option will be passed through to `cargo-install` if strategy
+    /// compile is not disabled.
+    ///
+    /// It will require `Cargo.lock` to be up to date.
+    #[clap(help_heading = "Options", long)]
+    pub locked: bool,
+
     /// Deprecated, here for back-compat only. Secure is now on by default.
     #[clap(hide(true), long)]
     pub secure: bool,
