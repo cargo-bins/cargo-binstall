@@ -3,12 +3,12 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use async_zip::{read::ZipEntryReader, ZipEntryExt};
+use async_zip::read::stream::{Reading, ZipFileReader};
 use bytes::{Bytes, BytesMut};
 use futures_lite::future::try_zip as try_join;
 use thiserror::Error as ThisError;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt},
+    io::{AsyncRead, AsyncReadExt, Take},
     sync::mpsc,
 };
 
@@ -34,7 +34,7 @@ impl ZipError {
 }
 
 pub(super) async fn extract_zip_entry<R>(
-    entry: ZipEntryReader<'_, R>,
+    zip_reader: &mut ZipFileReader<Reading<'_, Take<R>>>,
     path: &Path,
     buf: &mut BytesMut,
 ) -> Result<(), DownloadError>
@@ -42,7 +42,7 @@ where
     R: AsyncRead + Unpin + Send + Sync,
 {
     // Sanitize filename
-    let raw_filename = entry.entry().filename();
+    let raw_filename = zip_reader.entry().filename();
     let filename = check_filename_and_normalize(raw_filename)
         .ok_or_else(|| ZipError(ZipErrorInner::InvalidFilePath(raw_filename.into())))?;
 
@@ -56,7 +56,7 @@ where
     {
         use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
-        if let Some(mode) = entry.entry().unix_permissions() {
+        if let Some(mode) = zip_reader.entry().unix_permissions() {
             let mode: u16 = mode;
             perms = Some(Permissions::from_mode(mode as u32));
         }
@@ -98,7 +98,7 @@ where
             Ok(())
         });
 
-        let read_task = copy_file_to_mpsc(entry, tx, buf);
+        let read_task = copy_file_to_mpsc(zip_reader.reader(), tx, buf);
 
         try_join(
             async move { write_task.await.map_err(From::from) },
@@ -115,8 +115,8 @@ where
     Ok(())
 }
 
-async fn copy_file_to_mpsc<R>(
-    mut entry: ZipEntryReader<'_, R>,
+async fn copy_file_to_mpsc<R: AsyncRead>(
+    entry_reader: &mut R,
     tx: mpsc::Sender<Bytes>,
     buf: &mut BytesMut,
 ) -> Result<(), async_zip::error::ZipError>
@@ -125,7 +125,7 @@ where
 {
     // Since BytesMut does not have a max cap, if AsyncReadExt::read_buf returns
     // 0 then it means Eof.
-    while entry.read_buf(buf).await? != 0 {
+    while entry_reader.read_buf(buf).await? != 0 {
         // Ensure AsyncReadExt::read_buf can read at least 4096B to avoid
         // frequent expensive read syscalls.
         //
@@ -150,11 +150,7 @@ where
         }
     }
 
-    if entry.compare_crc() {
-        Ok(())
-    } else {
-        Err(async_zip::error::ZipError::CRC32CheckError)
-    }
+    Ok(())
 }
 
 /// Ensure the file path is safe to use as a [`Path`].

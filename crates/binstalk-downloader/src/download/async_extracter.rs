@@ -48,8 +48,14 @@ where
     let mut zip = ZipFileReader::new(reader);
     let mut buf = BytesMut::with_capacity(4 * 4096);
 
-    while let Some(entry) = zip.entry_reader().await.map_err(ZipError::from_inner)? {
-        extract_zip_entry(entry, path, &mut buf).await?;
+    while let Some(mut zip_reader) = zip.next_entry().await.map_err(ZipError::from_inner)? {
+        extract_zip_entry(&mut zip_reader, path, &mut buf).await?;
+
+        // extract_zip_entry would read the zip_reader until read the file until
+        // eof unless extract_zip itself is cancelled or an error is raised.
+        //
+        // So calling done here should not raise any error.
+        zip = zip_reader.done().await.map_err(ZipError::from_inner)?;
     }
 
     Ok(())
