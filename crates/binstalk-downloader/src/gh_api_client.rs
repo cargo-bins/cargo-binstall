@@ -186,7 +186,7 @@ impl GhApiClient {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
 enum HasReleaseArtifact {
     Yes,
     No,
