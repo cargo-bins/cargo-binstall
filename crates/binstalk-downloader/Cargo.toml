@@ -23,6 +23,8 @@ futures-lite = { version = "1.12.0", default-features = false }
 generic-array = "0.14.6"
 httpdate = "1.0.2"
 reqwest = { version = "0.11.14", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
+serde = { version = "1.0.152", features = ["derive"], optional = true }
+serde_json = { version = "1.0.93", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
 #
@@ -71,3 +73,9 @@ trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]
 zstd-thin = ["zstd/thin"]
 
 cross-lang-fat-lto = ["zstd/fat-lto"]
+
+gh-api-client = ["serde", "serde_json"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
