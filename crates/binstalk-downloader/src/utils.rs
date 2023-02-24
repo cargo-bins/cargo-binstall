@@ -5,7 +5,7 @@ use std::{
 
 use bytes::{Buf, Bytes};
 use futures_lite::{
-    future::try_zip as try_join,
+    future::poll_once,
     stream::{Stream, StreamExt},
 };
 use tokio::{sync::mpsc, task};
@@ -30,35 +30,54 @@ where
         // use trait object here.
         Fut: Future<Output = io::Result<T>> + Send + Sync,
     {
-        let res = try_join(
-            async move {
-                while let Some(bytes) = stream.next().await.transpose()? {
-                    if bytes.is_empty() {
-                        continue;
-                    }
-
-                    if tx.send(bytes).await.is_err() {
-                        // The extract tar returns, which could be that:
-                        //  - Extraction fails with an error
-                        //  - Extraction success without the rest of the data
-                        //
-                        //
-                        // It's hard to tell the difference here, so we assume
-                        // the first scienario occurs.
-                        //
-                        // Even if the second scienario occurs, it won't affect the
-                        // extraction process anyway, so we can jsut ignore it.
-                        return Ok(());
-                    }
+        let read_fut = async move {
+            while let Some(bytes) = stream.next().await.transpose()? {
+                if bytes.is_empty() {
+                    continue;
                 }
 
-                Ok(())
-            },
-            async move { task.await.map_err(E::from) },
-        )
-        .await?;
+                if tx.send(bytes).await.is_err() {
+                    // The extract tar returns, which could be that:
+                    //  - Extraction fails with an error
+                    //  - Extraction success without the rest of the data
+                    //
+                    //
+                    // It's hard to tell the difference here, so we assume
+                    // the first scienario occurs.
+                    //
+                    // Even if the second scienario occurs, it won't affect the
+                    // extraction process anyway, so we can jsut ignore it.
+                    return Ok(());
+                }
+            }
 
-        Ok(res.1)
+            Ok::<_, E>(())
+        };
+        tokio::pin!(read_fut);
+
+        let task_fut = async move { task.await.map_err(E::from) };
+        tokio::pin!(task_fut);
+
+        tokio::select! {
+            biased;
+
+            res = &mut read_fut => {
+                // The stream reaches eof, propagate error and wait for
+                // read task to be done.
+                res?;
+
+                task_fut.await
+            },
+            res = &mut task_fut => {
+                // The task finishes before the read task, return early
+                // after checking for errors in read_fut.
+                if let Some(Err(err)) = poll_once(read_fut).await {
+                    Err(err)
+                } else {
+                    res
+                }
+            }
+        }
     }
 
     // Use channel size = 5 to minimize the waiting time in the extraction task
