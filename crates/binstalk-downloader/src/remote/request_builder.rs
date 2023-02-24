@@ -27,11 +27,11 @@ impl RequestBuilder {
         }
     }
 
-    pub async fn send(self) -> Result<Response, Error> {
+    pub async fn send(self, error_for_status: bool) -> Result<Response, Error> {
         let request = self.inner.build()?;
         let method = request.method().clone();
         Ok(Response {
-            inner: self.client.send_request(request, true).await?,
+            inner: self.client.send_request(request, error_for_status).await?,
             method,
         })
     }

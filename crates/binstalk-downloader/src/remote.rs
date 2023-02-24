@@ -294,7 +294,7 @@ impl Client {
     ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
         debug!("Downloading from: '{url}'");
 
-        Ok(self.get(url).send().await?.bytes_stream())
+        Ok(self.get(url).send(true).await?.bytes_stream())
     }
 
     pub fn request(&self, method: Method, url: Url) -> RequestBuilder {
