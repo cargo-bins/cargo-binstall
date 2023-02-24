@@ -58,6 +58,7 @@ jobs:
     - run: env GITHUB_TOKEN=$GITHUB_TOKEN just test
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RUNNER_DEBUG: 1
 
   linux-cross-check:
     strategy:
