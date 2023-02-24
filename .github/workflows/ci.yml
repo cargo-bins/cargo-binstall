@@ -55,7 +55,7 @@ jobs:
 
     - run: just toolchain
     - run: just ci-install-deps
-    - run: just test
+    - run: env GITHUB_TOKEN=$GITHUB_TOKEN just test
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
