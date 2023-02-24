@@ -91,14 +91,8 @@ pub struct GhApiClient(Arc<Inner>);
 
 impl GhApiClient {
     // TODO:
-    //  - Support github action token
     //  - Use env var `GITHUB_TOKEN` if present for CI
     //  - Or use a built-in `GITHUB_TOKEN` since the default one is just too limited
-    //  - Return an error on reaching rate limit for fallback by checking
-    //    `x-ratelimit-remaining` and wait until `x-ratelimit-reset`, in utc sec.
-    //
-    // Authentication is done using: `Authorization: Bearer my_access_token` or
-    // using `Authorization: Bearer my-oauth-token`.
 
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
         Self(Arc::new(Inner {
@@ -208,4 +202,113 @@ enum HasReleaseArtifact {
     RateLimit {
         retry_after: Instant,
     },
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use std::env;
+
+    /// Mark this as an async fn so that you won't accidentally use it in
+    /// sync context.
+    async fn create_client() -> GhApiClient {
+        GhApiClient::new(
+            remote::Client::new(
+                concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+                None,
+                Duration::from_millis(10),
+                1.try_into().unwrap(),
+                [],
+            )
+            .unwrap(),
+            env::var("GITHUB_TOKEN")
+                .ok()
+                .map(ToCompactString::to_compact_string),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_gh_api_client_cargo_binstall_v0_20_1() {
+        let client = create_client();
+
+        let release = GhRelease {
+            owner: "cargo-bins".to_compact_string(),
+            repo: "cargo-binstall".to_compact_string(),
+            tag: "v0.20.1".to_compact_string(),
+        };
+
+        let artifacts = [
+            "cargo-binstall-aarch64-apple-darwin.full.zip".to_compact_string(),
+            "cargo-binstall-aarch64-apple-darwin.zip".to_compact_string(),
+            "cargo-binstall-aarch64-pc-windows-msvc.full.zip".to_compact_string(),
+            "cargo-binstall-aarch64-pc-windows-msvc.zip".to_compact_string(),
+            "cargo-binstall-aarch64-unknown-linux-gnu.full.tgz".to_compact_string(),
+            "cargo-binstall-aarch64-unknown-linux-gnu.tgz".to_compact_string(),
+            "cargo-binstall-aarch64-unknown-linux-musl.full.tgz".to_compact_string(),
+            "cargo-binstall-aarch64-unknown-linux-musl.tgz".to_compact_string(),
+            "cargo-binstall-armv7-unknown-linux-gnueabihf.full.tgz".to_compact_string(),
+            "cargo-binstall-armv7-unknown-linux-gnueabihf.tgz".to_compact_string(),
+            "cargo-binstall-armv7-unknown-linux-musleabihf.full.tgz".to_compact_string(),
+            "cargo-binstall-armv7-unknown-linux-musleabihf.tgz".to_compact_string(),
+            "cargo-binstall-universal-apple-darwin.full.zip".to_compact_string(),
+            "cargo-binstall-universal-apple-darwin.zip".to_compact_string(),
+            "cargo-binstall-x86_64-apple-darwin.full.zip".to_compact_string(),
+            "cargo-binstall-x86_64-apple-darwin.zip".to_compact_string(),
+            "cargo-binstall-x86_64-pc-windows-msvc.full.zip".to_compact_string(),
+            "cargo-binstall-x86_64-pc-windows-msvc.zip".to_compact_string(),
+            "cargo-binstall-x86_64-unknown-linux-gnu.full.tgz".to_compact_string(),
+            "cargo-binstall-x86_64-unknown-linux-gnu.tgz".to_compact_string(),
+            "cargo-binstall-x86_64-unknown-linux-musl.full.tgz".to_compact_string(),
+            "cargo-binstall-x86_64-unknown-linux-musl.tgz".to_compact_string(),
+        ];
+
+        for artifact_name in artifacts {
+            let ret = client
+                .has_release_artifact(GhReleaseArtifact {
+                    release: release.clone(),
+                    artifact_name,
+                })
+                .unwrap();
+
+            assert!(
+                matches!(
+                    ret,
+                    HasReleaseArtifact::Yes | HasReleaseArtifact::RateLimit { .. }
+                ),
+                "ret = {}",
+                ret
+            );
+        }
+
+        let ret = client
+            .has_release_artifact(GhReleaseArtifact {
+                release,
+                artifact_name: "123z",
+            })
+            .unwrap();
+        assert!(ret, HasReleaseArtifact::No);
+    }
+
+    #[tokio::test]
+    async fn test_gh_api_client_cargo_binstall_no_such_release() {
+        let client = create_client();
+
+        let release = GhRelease {
+            owner: "cargo-bins".to_compact_string(),
+            repo: "cargo-binstall".to_compact_string(),
+            // We are currently at v0.20.1 and we would never release
+            // anything older than v0.20.1
+            tag: "v0.18.2".to_compact_string(),
+        };
+
+        let ret = client
+            .has_release_artifact(GhReleaseArtifact {
+                release,
+                artifact_name: "1234",
+            })
+            .unwrap();
+
+        assert!(ret, HasReleaseArtifact::NoSuchRelease);
+    }
 }
