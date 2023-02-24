@@ -78,9 +78,13 @@ impl GhCrateMeta {
                         HasReleaseArtifact::Yes => return Ok(Some((url, pkg_fmt))),
                         HasReleaseArtifact::No | HasReleaseArtifact::NoSuchRelease=> return Ok(None),
 
-                        HasReleaseArtifact:: RateLimit { retry_after } => {
+                        HasReleaseArtifact::RateLimit { retry_after } => {
                             warn!("Your GitHub API token (if any) has reached its rate limit and cannot be used again until {retry_after:?}, so we will fallback to HEAD/GET on the url.");
                             warn!("If you did not supply the github token, consider supply one since GitHub by default limit the number of requests for unauthoized user to 60 requests per hour per origin IP address.");
+                        }
+                        HasReleaseArtifact::Unauthorized => {
+                            warn!("GitHub API somehow requires a token for the API access, so we will fallback to HEAD/GET on the url.");
+                            warn!("Please consider supplying a token to cargo-binstall to speedup resolution.");
                         }
                     }
                 }

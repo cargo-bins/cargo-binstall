@@ -6,7 +6,7 @@ use std::{
 
 use binstalk_downloader::{
     download::{DownloadError, ZipError},
-    gh_api_client::{GhApiError, GhRelease},
+    gh_api_client::GhApiError,
     remote::{Error as RemoteError, HttpError, ReqwestError},
 };
 use cargo_toml::Error as CargoTomlError;

@@ -64,6 +64,7 @@ pub enum FetchReleaseRet {
     ReachedRateLimit { retry_after: Option<Duration> },
     ReleaseNotFound,
     Artifacts(HashSet<CompactString>),
+    Unauthorized,
 }
 
 /// Returns 404 if not found
@@ -100,6 +101,10 @@ pub(super) async fn fetch_release_artifacts(
                 Some(Duration::from_secs(secs))
             }),
         });
+    }
+
+    if status == remote::StatusCode::UNAUTHORIZED {
+        return Ok(FetchReleaseRet::Unauthorized);
     }
 
     if status == remote::StatusCode::NOT_FOUND {

@@ -117,6 +117,7 @@ impl GhApiClient {
         enum Failure {
             Error(GhApiError),
             RateLimit { retry_after: Instant },
+            Unauthorized,
         }
 
         let once_cell = self.0.release_artifacts.get(release.clone());
@@ -157,6 +158,7 @@ impl GhApiClient {
 
                             Err(Failure::RateLimit { retry_after })
                         }
+                        Ok(Unauthorized) => Err(Failure::Unauthorized),
                         Err(err) => Err(Failure::Error(err)),
                     }
                 })
@@ -173,6 +175,7 @@ impl GhApiClient {
                 })
             }
             Ok(None) => Ok(HasReleaseArtifact::NoSuchRelease),
+            Err(Failure::Unauthorized) => Ok(HasReleaseArtifact::Unauthorized),
             Err(Failure::RateLimit { retry_after }) => {
                 *self.0.retry_after.lock().unwrap() = Some(retry_after);
 
@@ -188,8 +191,11 @@ pub enum HasReleaseArtifact {
     Yes,
     No,
     NoSuchRelease,
+    /// GitHub returns 401 requiring a token.
+    /// In this case, it makes sense to fallback to HEAD/GET.
+    Unauthorized,
 
-    /// Github rate limit is applied per hour, so in case of reaching the rate
+    /// GitHub rate limit is applied per hour, so in case of reaching the rate
     /// limit, [`GhApiClient`] will return this variant and let the user decide
     /// what to do.
     ///
