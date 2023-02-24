@@ -97,10 +97,6 @@ struct Inner {
 pub struct GhApiClient(Arc<Inner>);
 
 impl GhApiClient {
-    // TODO:
-    //  - Use env var `GITHUB_TOKEN` if present for CI
-    //  - Or use a built-in `GITHUB_TOKEN` since the default one is just too limited
-
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
         Self(Arc::new(Inner {
             client,
@@ -313,7 +309,7 @@ mod test {
                 [],
             )
             .unwrap(),
-            std::env::var("GITHUB_TOKEN").ok().map(CompactString::from),
+            None,
         )
     }
 
