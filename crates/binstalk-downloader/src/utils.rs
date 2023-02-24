@@ -7,16 +7,17 @@ use futures_lite::{
 };
 use tokio::{sync::mpsc, task};
 
-pub(super) fn extract_with_blocking_task<S, F, E>(
+pub(super) fn extract_with_blocking_task<S, F, T, E>(
     stream: S,
     f: F,
-) -> impl Future<Output = Result<(), E>>
+) -> impl Future<Output = Result<T, E>>
 where
+    T: Send + 'static,
     E: From<io::Error>,
     S: Stream<Item = Result<Bytes, E>> + Send + Sync + Unpin + 'static,
-    F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<()> + Send + Sync + 'static,
+    F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
 {
-    async fn inner<S, Fut, E>(mut stream: S, task: Fut, tx: mpsc::Sender<Bytes>) -> Result<(), E>
+    async fn inner<S, Fut, T, E>(mut stream: S, task: Fut, tx: mpsc::Sender<Bytes>) -> Result<T, E>
     where
         E: From<io::Error>,
         // We do not use trait object for S since there will only be one
@@ -24,9 +25,9 @@ where
         S: Stream<Item = Result<Bytes, E>> + Send + Sync + Unpin + 'static,
         // asyncify would always return the same future, so no need to
         // use trait object here.
-        Fut: Future<Output = io::Result<()>> + Send + Sync,
+        Fut: Future<Output = io::Result<T>> + Send + Sync,
     {
-        try_join(
+        let res = try_join(
             async move {
                 while let Some(bytes) = stream.next().await.transpose()? {
                     if bytes.is_empty() {
@@ -54,7 +55,7 @@ where
         )
         .await?;
 
-        Ok(())
+        Ok(res.1)
     }
 
     // Use channel size = 5 to minimize the waiting time in the extraction task
