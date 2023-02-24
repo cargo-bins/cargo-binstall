@@ -352,7 +352,15 @@ mod test {
             })
             .await
             .unwrap();
-        assert_eq!(ret, HasReleaseArtifact::No);
+
+        assert!(
+            matches!(
+                ret,
+                HasReleaseArtifact::No | HasReleaseArtifact::RateLimit { .. }
+            ),
+            "ret = {:#?}",
+            ret
+        );
     }
 
     #[tokio::test]
@@ -375,6 +383,13 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(ret, HasReleaseArtifact::NoSuchRelease);
+        assert!(
+            matches!(
+                ret,
+                HasReleaseArtifact::NoSuchRelease | HasReleaseArtifact::RateLimit { .. }
+            ),
+            "ret = {:#?}",
+            ret
+        );
     }
 }
