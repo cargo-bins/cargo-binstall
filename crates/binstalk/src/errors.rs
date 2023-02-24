@@ -310,11 +310,11 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::invalid_pkg_fmt))]
     InvalidPkgFmt(Box<InvalidPkgFmtError>),
 
-    /// Request to GitHub restful API failed
+    /// Request to GitHub Restful API failed
     ///
     /// - Code: `binstall::gh_restful_api_failure`
     /// - Exit: 96
-    #[error("Request to GitHub restful API failed: {0}")]
+    #[error("Request to GitHub Restful API failed: {0}")]
     #[diagnostic(severity(error), code(binstall::gh_restful_api_failure))]
     GhApiErr(#[source] Box<GhApiError>),
 
@@ -322,7 +322,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::no_such_gh_release`
     /// - Exit: 97
-    #[error("Cannot find github release {0:?} specified in pkg-url")]
+    #[error("Cannot find GitHub release {0:?} specified in pkg-url")]
     #[diagnostic(severity(error), code(binstall::no_such_gh_release))]
     NoSuchRelease(GhRelease),
 
