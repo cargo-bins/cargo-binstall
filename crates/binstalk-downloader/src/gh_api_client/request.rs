@@ -106,7 +106,7 @@ pub(super) async fn fetch_release_artifacts(
         return Ok(FetchReleaseRet::ReleaseNotFound);
     }
 
-    let stream = response.bytes_stream();
+    let stream = response.error_for_status()?.bytes_stream();
 
     // Restful API will return a lot of data and we don't want to allocate
     // a buffer for all of them.
