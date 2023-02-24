@@ -66,4 +66,30 @@ impl Response {
     pub fn status(&self) -> StatusCode {
         self.inner.status()
     }
+
+    pub fn url(&self) -> &Url {
+        self.inner.url()
+    }
+
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+
+    pub fn error_for_status_ref(&self) -> Result<&Self, Error> {
+        match self.inner.error_for_status_ref() {
+            Ok(_) => Ok(self),
+            Err(err) => Err(Error::Http(Box::new(HttpError {
+                method: self.method().clone(),
+                url: self.url().clone(),
+                err,
+            }))),
+        }
+    }
+
+    pub fn error_for_status(self) -> Result<Self, Error> {
+        match self.error_for_status_ref() {
+            Ok(_) => Ok(self),
+            Err(err) => Err(err),
+        }
+    }
 }
