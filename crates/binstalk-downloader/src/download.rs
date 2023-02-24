@@ -18,7 +18,6 @@ use async_tar_visitor::extract_tar_based_stream_and_visit;
 pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
 
 mod extracter;
-mod stream_readable;
 
 mod zip_extraction;
 pub use zip_extraction::ZipError;

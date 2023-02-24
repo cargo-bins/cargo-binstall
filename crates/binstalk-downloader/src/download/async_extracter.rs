@@ -13,10 +13,9 @@ use tokio_util::io::StreamReader;
 use tracing::debug;
 
 use super::{
-    extracter::*, stream_readable::StreamReadable, zip_extraction::extract_zip_entry,
-    DownloadError, TarBasedFmt, ZipError,
+    extracter::*, zip_extraction::extract_zip_entry, DownloadError, TarBasedFmt, ZipError,
 };
-use crate::utils::extract_with_blocking_task;
+use crate::utils::{extract_with_blocking_task, StreamReadable};
 
 pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<(), DownloadError>
 where
