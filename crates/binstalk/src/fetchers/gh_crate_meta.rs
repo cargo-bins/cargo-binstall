@@ -72,6 +72,8 @@ impl GhCrateMeta {
                 debug!("Checking for package at: '{url}'");
 
                 if let Some(artifact) = GhReleaseArtifact::try_extract_from_url(&url) {
+                    debug!("Using GitHub Restful API to check for existence of artifact, which will also cache the API response");
+
                     let release = artifact.release.clone();
                     match gh_api_client.has_release_artifact(artifact).await? {
                         HasReleaseArtifact::Yes => return Ok(Some((url, pkg_fmt))),
