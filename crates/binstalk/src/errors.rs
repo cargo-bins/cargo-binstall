@@ -318,14 +318,6 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::gh_restful_api_failure))]
     GhApiErr(#[source] Box<GhApiError>),
 
-    /// Cannot find the GitHub release specified in pkg-url.
-    ///
-    /// - Code: `binstall::no_such_gh_release`
-    /// - Exit: 97
-    #[error("Cannot find GitHub release {0:?} specified in pkg-url")]
-    #[diagnostic(severity(error), code(binstall::no_such_gh_release))]
-    NoSuchRelease(GhRelease),
-
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -361,7 +353,6 @@ impl BinstallError {
             NoFallbackToCargoInstall => 94,
             InvalidPkgFmt(..) => 95,
             GhApiErr(..) => 96,
-            NoSuchRelease(..) => 97,
             CrateContext(context) => context.err.exit_number(),
         };
 
