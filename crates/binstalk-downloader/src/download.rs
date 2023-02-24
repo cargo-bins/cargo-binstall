@@ -23,8 +23,6 @@ mod stream_readable;
 mod zip_extraction;
 pub use zip_extraction::ZipError;
 
-mod utils;
-
 #[derive(Debug, ThisError)]
 pub enum DownloadError {
     #[error("Failed to extract zipfile: {0}")]

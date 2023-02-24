@@ -12,7 +12,8 @@ use tokio::{
     sync::mpsc,
 };
 
-use super::{utils::asyncify, DownloadError};
+use super::DownloadError;
+use crate::utils::asyncify;
 
 #[derive(Debug, ThisError)]
 enum ZipErrorInner {
