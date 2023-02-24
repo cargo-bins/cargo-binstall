@@ -50,7 +50,7 @@ impl GhReleaseArtifact {
         let tag = path_segments.next()?.to_compact_string();
         let artifact_name = path_segments.next()?.to_compact_string();
 
-        Some(Self {
+        path_segments.next().is_none().then_some(Self {
             release: GhRelease { owner, repo, tag },
             artifact_name,
         })
@@ -269,6 +269,7 @@ mod test {
             &format!("https://github.com/{owner}/{repo}/releases/21343"),
             &format!("https://github.com/{owner}/{repo}/releases/download"),
             &format!("https://github.com/{owner}/{repo}/releases/download/{tag}"),
+            &format!("https://github.com/{owner}/{repo}/releases/download/{tag}/a/23"),
         ]);
     }
 
