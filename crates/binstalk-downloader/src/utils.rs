@@ -10,22 +10,28 @@ use futures_lite::{
 };
 use tokio::{sync::mpsc, task};
 
-pub(super) fn extract_with_blocking_task<S, F, T, E>(
+pub(super) fn extract_with_blocking_task<E, StreamError, S, F, T>(
     stream: S,
     f: F,
 ) -> impl Future<Output = Result<T, E>>
 where
     T: Send + 'static,
     E: From<io::Error>,
-    S: Stream<Item = Result<Bytes, E>> + Send + Sync + Unpin + 'static,
+    E: From<StreamError>,
+    S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin + 'static,
     F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
 {
-    async fn inner<S, Fut, T, E>(mut stream: S, task: Fut, tx: mpsc::Sender<Bytes>) -> Result<T, E>
+    async fn inner<S, StreamError, Fut, T, E>(
+        mut stream: S,
+        task: Fut,
+        tx: mpsc::Sender<Bytes>,
+    ) -> Result<T, E>
     where
         E: From<io::Error>,
+        E: From<StreamError>,
         // We do not use trait object for S since there will only be one
         // S used with this function.
-        S: Stream<Item = Result<Bytes, E>> + Send + Sync + Unpin + 'static,
+        S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin + 'static,
         // asyncify would always return the same future, so no need to
         // use trait object here.
         Fut: Future<Output = io::Result<T>> + Send + Sync,

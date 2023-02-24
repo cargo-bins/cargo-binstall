@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    future::Future,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
@@ -110,22 +109,22 @@ impl GhApiClient {
             release,
             artifact_name,
         }: GhReleaseArtifact,
-    ) -> Result<HasReleaseArtifact, remote::Error> {
+    ) -> Result<HasReleaseArtifact, GhApiError> {
         enum Failure {
-            Err(GhApiError),
-            RateLimit { retry_after: Duration },
+            Error(GhApiError),
+            RateLimit { retry_after: Instant },
         }
 
         let once_cell = self.0.release_artifacts.get(release.clone());
         let res = once_cell
             .get_or_try_init(|| {
-                Box::new(async {
+                Box::pin(async {
                     use request::FetchReleaseRet::*;
 
                     {
                         let mut guard = self.0.retry_after.lock().unwrap();
 
-                        if let Some(retry_after) = guard.deref().copied() {
+                        if let Some(retry_after) = *guard {
                             if retry_after.elapsed().is_zero() {
                                 return Err(Failure::RateLimit { retry_after });
                             } else {
@@ -142,12 +141,19 @@ impl GhApiClient {
                     )
                     .await
                     {
-                        Ok(ReleaseNotFound) => Ok(None),
+                        Ok(ReleaseNotFound) => Ok::<_, Failure>(None),
                         Ok(Artifacts(artifacts)) => Ok(Some(artifacts)),
                         Ok(ReachedRateLimit { retry_after }) => {
+                            let retry_after = retry_after.unwrap_or(DEFAULT_RETRY_DURATION);
+
+                            let now = Instant::now();
+                            let retry_after = now
+                                .checked_add(retry_after)
+                                .unwrap_or_else(|| now + DEFAULT_RETRY_DURATION);
+
                             Err(Failure::RateLimit { retry_after })
                         }
-                        Err(err) => Err(Failure::Err(err)),
+                        Err(err) => Err(Failure::Error(err)),
                     }
                 })
             })
@@ -155,33 +161,26 @@ impl GhApiClient {
 
         match res {
             Ok(Some(artifacts)) => {
-                let has_artifact = artifacts.contains(artifact_name);
-                if has_artifact {
+                let has_artifact = artifacts.contains(&artifact_name);
+                Ok(if has_artifact {
                     HasReleaseArtifact::Yes
                 } else {
                     HasReleaseArtifact::No
-                }
+                })
             }
             Ok(None) => Ok(HasReleaseArtifact::NoSuchRelease),
             Err(Failure::RateLimit { retry_after }) => {
-                let retry_after = retry_after.unwrap_or(DEFAULT_RETRY_DURATION);
-
-                let now = Instant::now();
-                let retry_after = now
-                    .checked_add(retry_after)
-                    .unwrap_or_else(|| now + DEFAULT_RETRY_DURATION);
-
-                self.0.retry_after().lock().unwrap().deref_mut() = Some(retry_after);
+                *self.0.retry_after.lock().unwrap() = Some(retry_after);
 
                 Ok(HasReleaseArtifact::RateLimit { retry_after })
             }
-            Err(Failure::Err(err)) => Err(err),
+            Err(Failure::Error(err)) => Err(err),
         }
     }
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-enum HasReleaseArtifact {
+pub enum HasReleaseArtifact {
     Yes,
     No,
     NoSuchRelease,
@@ -222,15 +221,13 @@ mod test {
                 [],
             )
             .unwrap(),
-            env::var("GITHUB_TOKEN")
-                .ok()
-                .map(ToCompactString::to_compact_string),
+            env::var("GITHUB_TOKEN").ok().map(CompactString::from),
         )
     }
 
     #[tokio::test]
     async fn test_gh_api_client_cargo_binstall_v0_20_1() {
-        let client = create_client();
+        let client = create_client().await;
 
         let release = GhRelease {
             owner: "cargo-bins".to_compact_string(),
@@ -269,6 +266,7 @@ mod test {
                     release: release.clone(),
                     artifact_name,
                 })
+                .await
                 .unwrap();
 
             assert!(
@@ -276,7 +274,7 @@ mod test {
                     ret,
                     HasReleaseArtifact::Yes | HasReleaseArtifact::RateLimit { .. }
                 ),
-                "ret = {}",
+                "ret = {:#?}",
                 ret
             );
         }
@@ -284,15 +282,16 @@ mod test {
         let ret = client
             .has_release_artifact(GhReleaseArtifact {
                 release,
-                artifact_name: "123z",
+                artifact_name: "123z".to_compact_string(),
             })
+            .await
             .unwrap();
-        assert!(ret, HasReleaseArtifact::No);
+        assert_eq!(ret, HasReleaseArtifact::No);
     }
 
     #[tokio::test]
     async fn test_gh_api_client_cargo_binstall_no_such_release() {
-        let client = create_client();
+        let client = create_client().await;
 
         let release = GhRelease {
             owner: "cargo-bins".to_compact_string(),
@@ -305,10 +304,11 @@ mod test {
         let ret = client
             .has_release_artifact(GhReleaseArtifact {
                 release,
-                artifact_name: "1234",
+                artifact_name: "1234".to_compact_string(),
             })
+            .await
             .unwrap();
 
-        assert!(ret, HasReleaseArtifact::NoSuchRelease);
+        assert_eq!(ret, HasReleaseArtifact::NoSuchRelease);
     }
 }

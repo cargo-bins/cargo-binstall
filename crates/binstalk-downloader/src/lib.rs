@@ -5,7 +5,7 @@ pub mod download;
 /// Github API client.
 /// Currently only support github.com and does not support other enterprise
 /// github.
-#[cfg(features = "gh-api-client")]
+#[cfg(feature = "gh-api-client")]
 pub mod gh_api_client;
 
 pub mod remote;
