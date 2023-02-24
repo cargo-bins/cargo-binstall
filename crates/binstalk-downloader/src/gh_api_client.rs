@@ -40,20 +40,24 @@ impl GhReleaseArtifact {
 
         let mut path_segments = url.path_segments()?;
 
-        let owner = path_segments.next()?.to_compact_string();
-        let repo = path_segments.next()?.to_compact_string();
+        let owner = path_segments.next()?;
+        let repo = path_segments.next()?;
 
         if (path_segments.next()?, path_segments.next()?) != ("releases", "download") {
             return None;
         }
 
-        let tag = path_segments.next()?.to_compact_string();
-        let artifact_name = path_segments.next()?.to_compact_string();
+        let tag = path_segments.next()?;
+        let artifact_name = path_segments.next()?;
 
         (path_segments.next().is_none() && url.fragment().is_none() && url.query().is_none())
             .then_some(Self {
-                release: GhRelease { owner, repo, tag },
-                artifact_name,
+                release: GhRelease {
+                    owner: owner.to_compact_string(),
+                    repo: repo.to_compact_string(),
+                    tag: tag.to_compact_string(),
+                },
+                artifact_name: artifact_name.to_compact_string(),
             })
     }
 }
