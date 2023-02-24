@@ -6,6 +6,7 @@ use std::{
 
 use binstalk_downloader::{
     download::{DownloadError, ZipError},
+    gh_api_client::{GhApiError, GhRelease},
     remote::{Error as RemoteError, HttpError, ReqwestError},
 };
 use cargo_toml::Error as CargoTomlError;
@@ -309,6 +310,22 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::invalid_pkg_fmt))]
     InvalidPkgFmt(Box<InvalidPkgFmtError>),
 
+    /// Request to GitHub restful API failed
+    ///
+    /// - Code: `binstall::gh_restful_api_failure`
+    /// - Exit: 96
+    #[error("Request to GitHub restful API failed: {0}")]
+    #[diagnostic(severity(error), code(binstall::gh_restful_api_failure))]
+    GhApiErr(#[source] Box<GhApiError>),
+
+    /// Cannot find the GitHub release specified in pkg-url.
+    ///
+    /// - Code: `binstall::no_such_gh_release`
+    /// - Exit: 97
+    #[error("Cannot find github release {0:?} specified in pkg-url")]
+    #[diagnostic(severity(error), code(binstall::no_such_gh_release))]
+    NoSuchRelease(GhRelease),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -343,6 +360,8 @@ impl BinstallError {
             EmptySourceFilePath => 92,
             NoFallbackToCargoInstall => 94,
             InvalidPkgFmt(..) => 95,
+            GhApiErr(..) => 96,
+            NoSuchRelease(..) => 97,
             CrateContext(context) => context.err.exit_number(),
         };
 
@@ -451,5 +470,11 @@ impl From<CargoTomlError> for BinstallError {
 impl From<InvalidPkgFmtError> for BinstallError {
     fn from(e: InvalidPkgFmtError) -> Self {
         BinstallError::InvalidPkgFmt(Box::new(e))
+    }
+}
+
+impl From<GhApiError> for BinstallError {
+    fn from(e: GhApiError) -> Self {
+        BinstallError::GhApiErr(Box::new(e))
     }
 }

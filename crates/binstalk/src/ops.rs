@@ -7,14 +7,14 @@ use semver::VersionReq;
 
 use crate::{
     fetchers::{Data, Fetcher, TargetData},
-    helpers::{jobserver_client::LazyJobserverClient, remote::Client},
+    helpers::{gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client},
     manifests::cargo_toml_binstall::PkgOverride,
     DesiredTargets,
 };
 
 pub mod resolve;
 
-pub type Resolver = fn(Client, Arc<Data>, Arc<TargetData>) -> Arc<dyn Fetcher>;
+pub type Resolver = fn(Client, GhApiClient, Arc<Data>, Arc<TargetData>) -> Arc<dyn Fetcher>;
 
 pub struct Options {
     pub no_symlinks: bool,
@@ -35,5 +35,6 @@ pub struct Options {
     pub install_path: PathBuf,
     pub client: Client,
     pub crates_io_api_client: CratesIoApiClient,
+    pub gh_api_client: GhApiClient,
     pub jobserver_client: LazyJobserverClient,
 }

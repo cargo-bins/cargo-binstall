@@ -13,7 +13,10 @@ use url::Url;
 use crate::{
     errors::{BinstallError, InvalidPkgFmtError},
     helpers::{
-        download::Download, futures_resolver::FuturesResolver, remote::Client,
+        download::Download,
+        futures_resolver::FuturesResolver,
+        gh_api_client::{GhApiClient, GhReleaseArtifact, HasReleaseArtifact},
+        remote::Client,
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -26,6 +29,7 @@ use hosting::RepositoryHost;
 
 pub struct GhCrateMeta {
     client: Client,
+    gh_api_client: GhApiClient,
     data: Arc<Data>,
     target_data: Arc<TargetData>,
     resolution: OnceCell<(Url, PkgFmt)>,
@@ -62,9 +66,23 @@ impl GhCrateMeta {
         // go check all potential URLs at once
         urls.map(move |url| {
             let client = self.client.clone();
+            let gh_api_client = self.gh_api_client.clone();
 
             async move {
                 debug!("Checking for package at: '{url}'");
+
+                if let Some(artifact) = GhReleaseArtifact::try_extract_from_url(&url) {
+                    let release = artifact.release.clone();
+                    match gh_api_client.has_release_artifact(artifact).await? {
+                        HasReleaseArtifact::Yes => return Ok(Some((url, pkg_fmt))),
+                        HasReleaseArtifact::No => return Ok(None),
+                        HasReleaseArtifact::NoSuchRelease => return Err(BinstallError::NoSuchRelease(release)),
+
+                        HasReleaseArtifact:: RateLimit { retry_after } => {
+                            warn!("Your GH API token (if any) has reached its rate limit and cannot be used again until {retry_after:?}, so we will fallback to HEAD/GET on the url");
+                        }
+                    }
+                }
 
                 Ok(client
                     .remote_gettable(url.clone())
@@ -79,11 +97,13 @@ impl GhCrateMeta {
 impl super::Fetcher for GhCrateMeta {
     fn new(
         client: Client,
+        gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetData>,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
+            gh_api_client,
             data,
             target_data,
             resolution: OnceCell::new(),

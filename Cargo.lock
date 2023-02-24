@@ -342,6 +342,7 @@ dependencies = [
  "binstalk",
  "binstalk-manifests",
  "clap",
+ "compact_str",
  "crates_io_api",
  "dirs",
  "embed-resource",
