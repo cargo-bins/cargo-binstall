@@ -22,7 +22,6 @@ use binstalk::{
     },
 };
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
-use compact_str::CompactString;
 use crates_io_api::AsyncClient as CratesIoApiClient;
 use file_format::FileFormat;
 use log::LevelFilter;
