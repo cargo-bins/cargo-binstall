@@ -6,17 +6,17 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures_lite::stream::{Stream, StreamExt};
+use futures_lite::stream::Stream;
 use httpdate::parse_http_date;
 use reqwest::{
     header::{HeaderMap, RETRY_AFTER},
-    Request, Response, StatusCode,
+    Request,
 };
 use thiserror::Error as ThisError;
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
-pub use reqwest::{tls, Error as ReqwestError, Method};
+pub use reqwest::{tls, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
 
 mod delay_request;
@@ -24,6 +24,9 @@ use delay_request::DelayRequest;
 
 mod certificate;
 pub use certificate::Certificate;
+
+mod request_builder;
+pub use request_builder::{RequestBuilder, Response};
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
@@ -129,11 +132,10 @@ impl Client {
     /// to retry.
     async fn do_send_request(
         &self,
-        method: &Method,
+        request: Request,
         url: &Url,
-    ) -> Result<ControlFlow<Response, Result<Response, ReqwestError>>, ReqwestError> {
-        let request = Request::new(method.clone(), url.clone());
-
+    ) -> Result<ControlFlow<reqwest::Response, Result<reqwest::Response, ReqwestError>>, ReqwestError>
+    {
         let future = (&self.0.service).ready().await?.call(request);
 
         let response = match future.await {
@@ -151,7 +153,7 @@ impl Client {
 
         let status = response.status();
 
-        let add_delay_and_continue = |response: Response, duration| {
+        let add_delay_and_continue = |response: reqwest::Response, duration| {
             info!("Receiver status code {status}, will wait for {duration:#?} and retry");
 
             self.0
@@ -180,11 +182,11 @@ impl Client {
         }
     }
 
+    /// * `request` - `Request::try_clone` must always return `Some`.
     async fn send_request_inner(
         &self,
-        method: &Method,
-        url: &Url,
-    ) -> Result<Response, ReqwestError> {
+        request: &Request,
+    ) -> Result<reqwest::Response, ReqwestError> {
         let mut count = 0;
         let max_retry_count = NonZeroU8::new(MAX_RETRY_COUNT).unwrap();
 
@@ -193,7 +195,10 @@ impl Client {
             // Increment the counter before checking for terminal condition.
             count += 1;
 
-            match self.do_send_request(method, url).await? {
+            match self
+                .do_send_request(request.try_clone().unwrap(), request.url())
+                .await?
+            {
                 ControlFlow::Break(response) => break Ok(response),
                 ControlFlow::Continue(res) if count >= max_retry_count.get() => {
                     break res;
@@ -203,13 +208,13 @@ impl Client {
         }
     }
 
+    /// * `request` - `Request::try_clone` must always return `Some`.
     async fn send_request(
         &self,
-        method: Method,
-        url: Url,
+        request: Request,
         error_for_status: bool,
-    ) -> Result<Response, Error> {
-        self.send_request_inner(&method, &url)
+    ) -> Result<reqwest::Response, Error> {
+        self.send_request_inner(&request)
             .await
             .and_then(|response| {
                 if error_for_status {
@@ -218,22 +223,29 @@ impl Client {
                     Ok(response)
                 }
             })
-            .map_err(|err| Error::Http(Box::new(HttpError { method, url, err })))
+            .map_err(|err| {
+                Error::Http(Box::new(HttpError {
+                    method: request.method().clone(),
+                    url: request.url().clone(),
+                    err,
+                }))
+            })
     }
 
     async fn head_or_fallback_to_get(
         &self,
         url: Url,
         error_for_status: bool,
-    ) -> Result<Response, Error> {
+    ) -> Result<reqwest::Response, Error> {
         let res = self
-            .send_request(Method::HEAD, url.clone(), error_for_status)
+            .send_request(Request::new(Method::HEAD, url.clone()), error_for_status)
             .await;
 
         let retry_with_get = move || async move {
             // Retry using GET
             info!("HEAD on {url} is not allowed, fallback to GET");
-            self.send_request(Method::GET, url, error_for_status).await
+            self.send_request(Request::new(Method::GET, url), error_for_status)
+                .await
         };
 
         let is_retryable = |status| {
@@ -282,19 +294,18 @@ impl Client {
     ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
         debug!("Downloading from: '{url}'");
 
-        let response = self.send_request(Method::GET, url.clone(), true).await?;
+        Ok(self.get(url).send().await?.bytes_stream())
+    }
 
-        let url = Box::new(url);
+    pub fn request(&self, method: Method, url: Url) -> RequestBuilder {
+        RequestBuilder {
+            client: self.clone(),
+            inner: self.0.client.request(method, url),
+        }
+    }
 
-        Ok(response.bytes_stream().map(move |res| {
-            res.map_err(|err| {
-                Error::Http(Box::new(HttpError {
-                    method: Method::GET,
-                    url: Url::clone(&*url),
-                    err,
-                }))
-            })
-        }))
+    pub fn get(&self, url: Url) -> RequestBuilder {
+        self.request(Method::GET, url)
     }
 }
 
