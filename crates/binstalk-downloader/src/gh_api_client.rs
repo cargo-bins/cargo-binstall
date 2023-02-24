@@ -16,6 +16,7 @@ pub use request::GhApiError;
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(3);
 
+/// The keys required to identify a github release.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct GhRelease {
     pub owner: CompactString,
@@ -23,6 +24,7 @@ pub struct GhRelease {
     pub tag: CompactString,
 }
 
+/// The Github Release and one of its artifact.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct GhReleaseArtifact {
     pub release: GhRelease,
@@ -30,7 +32,7 @@ pub struct GhReleaseArtifact {
 }
 
 impl GhReleaseArtifact {
-    // https://github.com/cargo-bins/cargo-binstall/releases/download/v0.20.1/cargo-binstall-aarch64-apple-darwin.zip
+    /// Create [`GhReleaseArtifact`] from url.
     pub fn try_extract_from_url(url: &remote::Url) -> Option<Self> {
         if url.domain() != Some("github.com") {
             return None;
