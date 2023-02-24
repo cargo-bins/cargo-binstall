@@ -50,10 +50,11 @@ impl GhReleaseArtifact {
         let tag = path_segments.next()?.to_compact_string();
         let artifact_name = path_segments.next()?.to_compact_string();
 
-        path_segments.next().is_none().then_some(Self {
-            release: GhRelease { owner, repo, tag },
-            artifact_name,
-        })
+        (path_segments.next().is_none() && url.fragment().is_none() && url.query().is_none())
+            .then_some(Self {
+                release: GhRelease { owner, repo, tag },
+                artifact_name,
+            })
     }
 }
 
@@ -250,7 +251,7 @@ mod test {
 
     fn assert_extract_gh_release_artifacts_failures(urls: &[&str]) {
         for url in urls {
-            assert_eq!(try_extract_artifact_from_str(*url), None);
+            assert_eq!(try_extract_artifact_from_str(url), None);
         }
     }
 
@@ -270,6 +271,8 @@ mod test {
             &format!("https://github.com/{owner}/{repo}/releases/download"),
             &format!("https://github.com/{owner}/{repo}/releases/download/{tag}"),
             &format!("https://github.com/{owner}/{repo}/releases/download/{tag}/a/23"),
+            &format!("https://github.com/{owner}/{repo}/releases/download/{tag}/a#a=12"),
+            &format!("https://github.com/{owner}/{repo}/releases/download/{tag}/a?page=3"),
         ]);
     }
 
