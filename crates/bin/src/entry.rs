@@ -89,10 +89,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     )
     .map_err(BinstallError::from)?;
 
-    let gh_api_client = GhApiClient::new(
-        client.clone(),
-        env::var("GITHUB_TOKEN").ok().map(CompactString::from),
-    );
+    let gh_api_client = GhApiClient::new(client.clone(), args.github_token);
 
     // Build crates.io api client
     let crates_io_api_client =
