@@ -18,16 +18,16 @@ pub use request::GhApiError;
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(3);
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-struct GhRelease {
-    owner: CompactString,
-    repo: CompactString,
-    tag: CompactString,
+pub struct GhRelease {
+    pub owner: CompactString,
+    pub repo: CompactString,
+    pub tag: CompactString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct GhReleaseArtifact {
-    release: GhRelease,
-    artifact_name: CompactString,
+    pub release: GhRelease,
+    pub artifact_name: CompactString,
 }
 
 impl GhReleaseArtifact {
