@@ -209,7 +209,88 @@ pub enum HasReleaseArtifact {
 mod test {
     use super::*;
 
-    use std::env;
+    mod cargo_binstall_v0_20_1 {
+        use super::{CompactString, GhRelease};
+
+        pub(super) const RELEASE: GhRelease = GhRelease {
+            owner: CompactString::new_inline("cargo-bins"),
+            repo: CompactString::new_inline("cargo-binstall"),
+            tag: CompactString::new_inline("v0.20.1"),
+        };
+
+        pub(super) const ARTIFACTS: &[&str] = &[
+            "cargo-binstall-aarch64-apple-darwin.full.zip",
+            "cargo-binstall-aarch64-apple-darwin.zip",
+            "cargo-binstall-aarch64-pc-windows-msvc.full.zip",
+            "cargo-binstall-aarch64-pc-windows-msvc.zip",
+            "cargo-binstall-aarch64-unknown-linux-gnu.full.tgz",
+            "cargo-binstall-aarch64-unknown-linux-gnu.tgz",
+            "cargo-binstall-aarch64-unknown-linux-musl.full.tgz",
+            "cargo-binstall-aarch64-unknown-linux-musl.tgz",
+            "cargo-binstall-armv7-unknown-linux-gnueabihf.full.tgz",
+            "cargo-binstall-armv7-unknown-linux-gnueabihf.tgz",
+            "cargo-binstall-armv7-unknown-linux-musleabihf.full.tgz",
+            "cargo-binstall-armv7-unknown-linux-musleabihf.tgz",
+            "cargo-binstall-universal-apple-darwin.full.zip",
+            "cargo-binstall-universal-apple-darwin.zip",
+            "cargo-binstall-x86_64-apple-darwin.full.zip",
+            "cargo-binstall-x86_64-apple-darwin.zip",
+            "cargo-binstall-x86_64-pc-windows-msvc.full.zip",
+            "cargo-binstall-x86_64-pc-windows-msvc.zip",
+            "cargo-binstall-x86_64-unknown-linux-gnu.full.tgz",
+            "cargo-binstall-x86_64-unknown-linux-gnu.tgz",
+            "cargo-binstall-x86_64-unknown-linux-musl.full.tgz",
+            "cargo-binstall-x86_64-unknown-linux-musl.tgz",
+        ];
+    }
+
+    fn try_extract_artifact_from_str(s: &str) -> Option<GhReleaseArtifact> {
+        GhReleaseArtifact::try_extract_from_url(&url::Url::parse(s).unwrap())
+    }
+
+    fn assert_extract_gh_release_artifacts_failures(urls: &[&str]) {
+        for url in urls {
+            assert_eq!(try_extract_artifact_from_str(*url), None);
+        }
+    }
+
+    #[test]
+    fn extract_gh_release_artifacts_failure() {
+        use cargo_binstall_v0_20_1::*;
+
+        let GhRelease { owner, repo, tag } = RELEASE;
+
+        assert_extract_gh_release_artifacts_failures(&[
+            "https://examle.com",
+            "https://github.com",
+            &format!("https://github.com/{owner}"),
+            &format!("https://github.com/{owner}/{repo}"),
+            &format!("https://github.com/{owner}/{repo}/123e"),
+            &format!("https://github.com/{owner}/{repo}/releases/21343"),
+            &format!("https://github.com/{owner}/{repo}/releases/download"),
+            &format!("https://github.com/{owner}/{repo}/releases/download/{tag}"),
+        ]);
+    }
+
+    #[test]
+    fn extract_gh_release_artifacts_success() {
+        use cargo_binstall_v0_20_1::*;
+
+        let GhRelease { owner, repo, tag } = RELEASE;
+
+        for artifact in ARTIFACTS {
+            let GhReleaseArtifact {
+                release,
+                artifact_name,
+            } = try_extract_artifact_from_str(&format!(
+                "https://github.com/{owner}/{repo}/releases/download/{tag}/{artifact}"
+            ))
+            .unwrap();
+
+            assert_eq!(release, RELEASE);
+            assert_eq!(artifact_name, artifact);
+        }
+    }
 
     /// Mark this as an async fn so that you won't accidentally use it in
     /// sync context.
@@ -223,7 +304,7 @@ mod test {
                 [],
             )
             .unwrap(),
-            env::var("GITHUB_TOKEN").ok().map(CompactString::from),
+            std::env::var("GITHUB_TOKEN").ok().map(CompactString::from),
         )
     }
 
@@ -231,36 +312,11 @@ mod test {
     async fn test_gh_api_client_cargo_binstall_v0_20_1() {
         let client = create_client().await;
 
-        let release = GhRelease {
-            owner: "cargo-bins".to_compact_string(),
-            repo: "cargo-binstall".to_compact_string(),
-            tag: "v0.20.1".to_compact_string(),
-        };
+        let release = cargo_binstall_v0_20_1::RELEASE;
 
-        let artifacts = [
-            "cargo-binstall-aarch64-apple-darwin.full.zip".to_compact_string(),
-            "cargo-binstall-aarch64-apple-darwin.zip".to_compact_string(),
-            "cargo-binstall-aarch64-pc-windows-msvc.full.zip".to_compact_string(),
-            "cargo-binstall-aarch64-pc-windows-msvc.zip".to_compact_string(),
-            "cargo-binstall-aarch64-unknown-linux-gnu.full.tgz".to_compact_string(),
-            "cargo-binstall-aarch64-unknown-linux-gnu.tgz".to_compact_string(),
-            "cargo-binstall-aarch64-unknown-linux-musl.full.tgz".to_compact_string(),
-            "cargo-binstall-aarch64-unknown-linux-musl.tgz".to_compact_string(),
-            "cargo-binstall-armv7-unknown-linux-gnueabihf.full.tgz".to_compact_string(),
-            "cargo-binstall-armv7-unknown-linux-gnueabihf.tgz".to_compact_string(),
-            "cargo-binstall-armv7-unknown-linux-musleabihf.full.tgz".to_compact_string(),
-            "cargo-binstall-armv7-unknown-linux-musleabihf.tgz".to_compact_string(),
-            "cargo-binstall-universal-apple-darwin.full.zip".to_compact_string(),
-            "cargo-binstall-universal-apple-darwin.zip".to_compact_string(),
-            "cargo-binstall-x86_64-apple-darwin.full.zip".to_compact_string(),
-            "cargo-binstall-x86_64-apple-darwin.zip".to_compact_string(),
-            "cargo-binstall-x86_64-pc-windows-msvc.full.zip".to_compact_string(),
-            "cargo-binstall-x86_64-pc-windows-msvc.zip".to_compact_string(),
-            "cargo-binstall-x86_64-unknown-linux-gnu.full.tgz".to_compact_string(),
-            "cargo-binstall-x86_64-unknown-linux-gnu.tgz".to_compact_string(),
-            "cargo-binstall-x86_64-unknown-linux-musl.full.tgz".to_compact_string(),
-            "cargo-binstall-x86_64-unknown-linux-musl.tgz".to_compact_string(),
-        ];
+        let artifacts = cargo_binstall_v0_20_1::ARTIFACTS
+            .iter()
+            .map(ToCompactString::to_compact_string);
 
         for artifact_name in artifacts {
             let ret = client
