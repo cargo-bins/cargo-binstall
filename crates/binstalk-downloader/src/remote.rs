@@ -16,7 +16,7 @@ use thiserror::Error as ThisError;
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
-pub use reqwest::{tls, Error as ReqwestError, Method, StatusCode};
+pub use reqwest::{header, tls, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
 
 mod delay_request;

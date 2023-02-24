@@ -4,7 +4,7 @@ use bytes::Bytes;
 use futures_lite::stream::{Stream, StreamExt};
 use reqwest::Method;
 
-use super::{Client, Error, HttpError, StatusCode, Url};
+use super::{header, Client, Error, HttpError, StatusCode, Url};
 
 #[derive(Debug)]
 pub struct RequestBuilder {
@@ -91,5 +91,9 @@ impl Response {
             Ok(_) => Ok(self),
             Err(err) => Err(err),
         }
+    }
+
+    pub fn headers(&self) -> &header::HeaderMap {
+        self.inner.headers()
     }
 }
