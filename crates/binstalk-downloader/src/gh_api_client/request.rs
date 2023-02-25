@@ -51,7 +51,7 @@ impl Hash for Artifact {
     }
 }
 
-// Implement PartialEq and Borrow so that we can use call
+// Implement Borrow so that we can use call
 // `HashSet::contains::<str>`
 
 impl Borrow<str> for Artifact {
