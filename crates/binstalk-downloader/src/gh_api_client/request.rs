@@ -1,4 +1,10 @@
-use std::{collections::HashSet, io, time::Duration};
+use std::{
+    borrow::Borrow,
+    collections::HashSet,
+    hash::{Hash, Hasher},
+    io,
+    time::Duration,
+};
 
 use compact_str::CompactString;
 use serde::Deserialize;
@@ -27,20 +33,48 @@ pub enum GhApiError {
 
 // Only include fields we do care about
 
-#[derive(Deserialize)]
-struct Asset {
+#[derive(Eq, PartialEq, Deserialize, Debug)]
+struct Artifact {
     name: CompactString,
 }
 
-#[derive(Deserialize)]
-struct Response {
-    assets: Vec<Asset>,
+// Manually implement hash to ensure it will always produce the same hash as
+// a str with the same content.
+
+impl Hash for Artifact {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        let s: &str = self.name.as_str();
+        s.hash(state)
+    }
 }
 
-pub enum FetchReleaseRet {
+// Implement PartialEq and Borrow so that we can use call
+// `HashSet::contains::<str>`
+
+impl Borrow<str> for Artifact {
+    fn borrow(&self) -> &str {
+        &self.name
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct Artifacts {
+    assets: HashSet<Artifact>,
+}
+
+impl Artifacts {
+    pub(super) fn contains(&self, artifact_name: &str) -> bool {
+        self.assets.contains(artifact_name)
+    }
+}
+
+pub(super) enum FetchReleaseRet {
     ReachedRateLimit { retry_after: Option<Duration> },
     ReleaseNotFound,
-    Artifacts(HashSet<CompactString>),
+    Artifacts(Artifacts),
     Unauthorized,
 }
 
@@ -90,13 +124,5 @@ pub(super) async fn fetch_release_artifacts(
 
     let bytes = response.error_for_status()?.bytes().await?;
 
-    let response: Response = json_from_slice(&bytes)?;
-
-    Ok(FetchReleaseRet::Artifacts(
-        response
-            .assets
-            .into_iter()
-            .map(|asset| asset.name)
-            .collect(),
-    ))
+    Ok(FetchReleaseRet::Artifacts(json_from_slice(&bytes)?))
 }

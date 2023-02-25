@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
@@ -87,7 +87,7 @@ where
 struct Inner {
     client: remote::Client,
     auth_token: Option<CompactString>,
-    release_artifacts: Map<GhRelease, OnceCell<Option<HashSet<CompactString>>>>,
+    release_artifacts: Map<GhRelease, OnceCell<Option<request::Artifacts>>>,
     retry_after: Mutex<Option<Instant>>,
 }
 
