@@ -109,9 +109,11 @@ rust-lld := "" #if use-cargo-zigbuild != "" {
 # On windows it works out of the box and on linux it uses
 # rust-lld.
 rustc-icf := if for-release != "" {
-    if target-os != "macos" {
+    if target-os == "windows" {
         " -C link-arg=-Wl,--icf=safe"
-    } else {
+     } else if target-os == "linux" {
+        " -C link-arg=-Wl,--icf=safe"
+     } else {
         ""
     }
 } else {
