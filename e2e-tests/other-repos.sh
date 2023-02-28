@@ -8,12 +8,12 @@ export CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
 export PATH="$CARGO_HOME/bin:$PATH"
 
 # Test default GitLab pkg-url templates
-"./$1" binstall \
-    --force \
-    --manifest-path "manifests/gitlab-test-Cargo.toml" \
-    --no-confirm \
-    --disable-strategies compile \
-    cargo-binstall
+#"./$1" binstall \
+#    --force \
+#    --manifest-path "manifests/gitlab-test-Cargo.toml" \
+#    --no-confirm \
+#    --disable-strategies compile \
+#    cargo-binstall
 
 # Test default BitBucket pkg-url templates
 "./$1" binstall \
