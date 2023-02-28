@@ -38,7 +38,7 @@ output-folder := if target != target-host { "target" / target / output-profile-f
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo +nightly" }
+cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
@@ -148,8 +148,8 @@ ci-install-deps:
 ci-install-deps:
 
 toolchain components="":
-    rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
-    {{ if ci != "" { "rustup default nightly" } else { "rustup override set nightly" } }}
+    rustup toolchain install stable {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
+    {{ if ci != "" { "rustup default stable" } else { "rustup override set stable" } }}
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
 
