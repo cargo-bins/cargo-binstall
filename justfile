@@ -48,9 +48,9 @@ ci-or-no := if ci != "" { "ci" } else { "noci" }
 
 # In release builds in CI, build the std library ourselves so it uses our
 # compile profile, and optimise panic messages out with immediate abort.
-cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
-    " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
-    } else { "" }
+cargo-buildstd := "" #if (cargo-profile / ci-or-no) == "release/ci" {
+#" -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
+#} else { "" }
 
 # In musl release builds in CI, statically link gcclibs.
 rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
