@@ -106,9 +106,19 @@ rust-lld := "" #if use-cargo-zigbuild != "" {
 
 # ICF: link-time identical code folding
 #
-# On windows it works out of the box and on other targets it uses
+# On windows it works out of the box and on linux it uses
 # rust-lld.
-rustc-icf := if for-release != "" { " -C link-arg=-Wl,--icf=safe" } else { "" }
+rustc-icf := if for-release != "" {
+    if target-os == "windows" {
+        " -C link-arg=-Wl,--icf=safe"
+     } else if target-os == "linux" {
+        " -C link-arg=-Wl,--icf=safe"
+     } else {
+        ""
+    }
+} else {
+    ""
+}
 
 # Only enable linker-plugin-lto for release
 # Also disable this on windows since it uses msvc.
