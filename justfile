@@ -38,7 +38,7 @@ output-folder := if target != target-host { "target" / target / output-profile-f
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo +nightly" }
+cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
@@ -48,9 +48,9 @@ ci-or-no := if ci != "" { "ci" } else { "noci" }
 
 # In release builds in CI, build the std library ourselves so it uses our
 # compile profile, and optimise panic messages out with immediate abort.
-cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
-    " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
-    } else { "" }
+cargo-buildstd := "" #if (cargo-profile / ci-or-no) == "release/ci" {
+#" -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
+#} else { "" }
 
 # In musl release builds in CI, statically link gcclibs.
 rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
@@ -82,7 +82,8 @@ cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.s
 win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring.git=\"https://github.com/awakecoding/ring\"' --config='patch.crates-io.ring.branch=\"0.16.20_alpha\"'" } else { "" }
 
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
-rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
+# **DISABLED because it's buggy**
+rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 
 # Use rust-lld that is bundled with rustup to speedup linking
 # and support for icf=safe.
@@ -95,13 +96,13 @@ rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 #
 # If cargo-zigbuild is used, then it will provide the lld linker.
 # This option is disabled on windows since it not supported.
-rust-lld := if use-cargo-zigbuild != "" {
-    ""
-} else if target-os != "windows" {
-    " -Z gcc-ld=lld"
-} else {
-    ""
-}
+rust-lld := "" #if use-cargo-zigbuild != "" {
+#""
+#} else if target-os != "windows" {
+#" -Z gcc-ld=lld"
+#} else {
+#""
+#}
 
 # ICF: link-time identical code folding
 #
@@ -130,7 +131,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
 }
 
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
-export RUSTFLAGS := "-Z share-generics " + (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
+export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt
@@ -147,15 +148,17 @@ ci-install-deps:
 ci-install-deps:
 
 toolchain components="":
-    rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
-    {{ if ci != "" { "rustup default nightly" } else { "rustup override set nightly" } }}
+    rustup toolchain install stable {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
+    {{ if ci != "" { "rustup default stable" } else { "rustup override set stable" } }}
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
 
 build:
+    echo "env RUSTFLAGS=$RUSTFLAGS"
     {{cargo-bin}} build {{cargo-build-args}}
 
 check:
+    echo "env RUSTFLAGS=$RUSTFLAGS"
     {{cargo-bin}} check {{cargo-build-args}}
 
 get-output file outdir=".":
@@ -167,7 +170,7 @@ get-binary outdir=".": (get-output output-filename outdir)
     -chmod +x {{ outdir / output-filename }}
 
 e2e-test file *arguments: (get-binary "e2e-tests")
-    cd e2e-tests && bash {{file}}.sh {{output-filename}} {{arguments}}
+    cd e2e-tests && env -u RUSTFLAGS bash {{file}}.sh {{output-filename}} {{arguments}}
 
 e2e-test-live: (e2e-test "live")
 e2e-test-manifest-path: (e2e-test "manifest-path")
