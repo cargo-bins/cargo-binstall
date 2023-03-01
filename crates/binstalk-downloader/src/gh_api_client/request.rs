@@ -33,13 +33,20 @@ pub enum GhApiError {
 
 // Only include fields we do care about
 
-#[derive(Eq, PartialEq, Deserialize, Debug)]
+#[derive(Eq, Deserialize, Debug)]
 struct Artifact {
     name: CompactString,
 }
 
-// Manually implement hash to ensure it will always produce the same hash as
-// a str with the same content.
+// Manually implement PartialEq and Hash to ensure it will always produce the
+// same hash as a str with the same content, and that the comparison will be
+// the same to coparing a string.
+
+impl PartialEq for Artifact {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.eq(&other.name)
+    }
+}
 
 impl Hash for Artifact {
     fn hash<H>(&self, state: &mut H)
