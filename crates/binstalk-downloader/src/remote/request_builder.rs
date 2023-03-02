@@ -8,6 +8,9 @@ use super::{header, Client, Error, HttpError, StatusCode, Url};
 
 #[cfg(feature = "json")]
 pub use serde_json::Error as JsonError;
+#[cfg(feature = "json")]
+pub type JsonDeserializer =
+    serde_json::Deserializer<serde_json::de::IoRead<bytes::buf::Reader<Bytes>>>;
 
 #[derive(Debug)]
 pub struct RequestBuilder {
@@ -107,5 +110,16 @@ impl Response {
     {
         let bytes = self.error_for_status()?.bytes().await?;
         Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    #[cfg(feature = "json")]
+    pub async fn json_deserializer<T>(self) -> Result<JsonDeserializer, Error>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        use bytes::Buf;
+
+        let bytes = self.error_for_status()?.bytes().await?;
+        Ok(JsonDeserializer::from_reader(bytes.reader()))
     }
 }

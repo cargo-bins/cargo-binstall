@@ -29,7 +29,7 @@ mod request_builder;
 pub use request_builder::{RequestBuilder, Response};
 
 #[cfg(feature = "json")]
-pub use request_builder::JsonError;
+pub use request_builder::{JsonDeserializer, JsonError};
 
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
