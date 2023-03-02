@@ -1,7 +1,7 @@
 use std::{
     env,
     ffi::OsString,
-    fmt, fs,
+    fmt, fs, iter,
     num::{NonZeroU64, ParseIntError},
     path::{Path, PathBuf},
     str::FromStr,
@@ -462,20 +462,36 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
     }
 
     if opts.github_token.is_none() && !opts.no_extract_github_token_from_config {
-        if let Some(home) = home_dir() {
-            if let Some(github_token) = try_extract_from_git_credentials(&home) {
-                opts.github_token = Some(github_token);
-            } else if let Ok(github_token) = gh_token::get() {
-                opts.github_token = Some(github_token.into());
-            }
+        if let Some(github_token) = try_extract_from_git_credentials() {
+            opts.github_token = Some(github_token);
+        } else if let Ok(github_token) = gh_token::get() {
+            opts.github_token = Some(github_token.into());
         }
     }
 
     opts
 }
 
-fn try_extract_from_git_credentials(home: &Path) -> Option<CompactString> {
-    fs::read_to_string(home.join(".git-credentials"))
+fn try_extract_from_git_credentials() -> Option<CompactString> {
+    home_dir()
+        .map(|mut home| {
+            home.push(".git-credentials");
+            home
+        })
+        .into_iter()
+        .chain(iter::from_fn(|| {
+            let home = env::var_os("XDG_CONFIG_HOME")?;
+            (!home.is_empty()).then(|| {
+                let mut path = PathBuf::from(home);
+                path.push("git/credentials");
+                path
+            })
+        }))
+        .find_map(try_extract_from_git_credentials_from)
+}
+
+fn try_extract_from_git_credentials_from(path: PathBuf) -> Option<CompactString> {
+    fs::read_to_string(path)
         .ok()?
         .lines()
         .find_map(extract_github_token_from_git_credentials_line)
