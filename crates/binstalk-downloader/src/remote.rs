@@ -38,6 +38,7 @@ const RETRY_DURATION_FOR_TIMEOUT: Duration = Duration::from_millis(200);
 const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
 
 #[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum Error {
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),

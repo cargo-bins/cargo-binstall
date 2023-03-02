@@ -14,6 +14,7 @@ use url::Url;
 use super::{remote, GhRelease};
 
 #[derive(ThisError, Debug)]
+#[non_exhaustive]
 pub enum GhApiError {
     #[error("IO Error: {0}")]
     Io(#[from] io::Error),
