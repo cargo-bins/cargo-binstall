@@ -3,7 +3,7 @@ use std::fmt;
 use compact_str::CompactString;
 use semver::VersionReq;
 use serde::{
-    de::{DeserializeSeed, Deserializer, Error, MapAccess, SeqAccess, Visitor},
+    de::{DeserializeSeed, Deserializer, Error, IgnoredAny, MapAccess, SeqAccess, Visitor},
     Deserialize,
 };
 
@@ -40,6 +40,7 @@ pub(super) fn find_max_version_matched(
                 // Find key versions and deserialize the versions array
 
                 if key != "versions" {
+                    let _: IgnoredAny = map.next_value()?;
                     continue;
                 }
 
