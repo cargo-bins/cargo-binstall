@@ -6,6 +6,9 @@ use reqwest::Method;
 
 use super::{header, Client, Error, HttpError, StatusCode, Url};
 
+#[cfg(feature = "json")]
+pub use serde_json::Error as JsonError;
+
 #[derive(Debug)]
 pub struct RequestBuilder {
     pub(super) client: Client,
@@ -95,5 +98,14 @@ impl Response {
 
     pub fn headers(&self) -> &header::HeaderMap {
         self.inner.headers()
+    }
+
+    #[cfg(feature = "json")]
+    pub async fn json<T>(self) -> Result<T, Error>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        let bytes = self.error_for_status()?.bytes().await?;
+        Ok(serde_json::from_slice(&bytes)?)
     }
 }
