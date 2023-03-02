@@ -21,7 +21,18 @@ mod visitor;
 use visitor::ManifestVisitor;
 
 #[derive(Deserialize)]
-struct Response {
+struct CrateInfo {
+    #[serde(rename = "crate")]
+    inner: CrateInfoInner,
+}
+
+#[derive(Deserialize)]
+struct CrateInfoInner {
+    max_stable_version: CompactString,
+}
+
+#[derive(Deserialize)]
+struct Versions {
     versions: Vec<Version>,
 }
 
@@ -41,9 +52,9 @@ pub async fn fetch_crate_cratesio(
     // Fetch / update index
     debug!("Looking up crate information");
 
-    let response: Response = client
+    let response = client
         .get(Url::parse(&format!(
-            "https://crates.io/api/v1/crates/{name}/versions"
+            "https://crates.io/api/v1/crates/{name}"
         ))?)
         .send(true)
         .await
@@ -52,39 +63,46 @@ pub async fn fetch_crate_cratesio(
                 crate_name: name.into(),
                 err,
             }))
-        })?
-        .json()
-        .await?;
-
-    let (ver_str, version) = response
-        .versions
-        .iter()
-        .filter_map(|item| {
-            if !item.yanked {
-                let num = &item.num;
-
-                // Remove leading `v` for git tags
-                let ver = num.strip_prefix('v').unwrap_or(num);
-
-                // Parse out version
-                let ver = semver::Version::parse(ver).ok()?;
-
-                // Filter by version match
-                version_req.matches(&ver).then_some((num, ver))
-            } else {
-                None
-            }
-        })
-        // Return highest version
-        .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))
-        .ok_or_else(|| BinstallError::VersionMismatch {
-            req: version_req.clone(),
         })?;
+
+    let version = if version_req == &VersionReq::STAR {
+        let crate_info: CrateInfo = response.json().await?;
+        crate_info.inner.max_stable_version
+    } else {
+        let response: Versions = response.json().await?;
+        response
+            .versions
+            .into_iter()
+            .filter_map(|item| {
+                if !item.yanked {
+                    // Remove leading `v` for git tags
+                    let num = if let Some(num) = item.num.strip_prefix('v') {
+                        num.into()
+                    } else {
+                        item.num
+                    };
+
+                    // Parse out version
+                    let ver = semver::Version::parse(&num).ok()?;
+
+                    // Filter by version match
+                    version_req.matches(&ver).then_some((num, ver))
+                } else {
+                    None
+                }
+            })
+            // Return highest version
+            .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))
+            .ok_or_else(|| BinstallError::VersionMismatch {
+                req: version_req.clone(),
+            })?
+            .0
+    };
 
     debug!("Found information for crate version: '{version}'");
 
     // Download crate to temporary dir (crates.io or git?)
-    let crate_url = format!("https://crates.io/api/v1/crates/{name}/{ver_str}/download");
+    let crate_url = format!("https://crates.io/api/v1/crates/{name}/{version}/download");
 
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
