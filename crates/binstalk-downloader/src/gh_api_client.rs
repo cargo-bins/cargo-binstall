@@ -11,7 +11,7 @@ use tokio::sync::OnceCell;
 use crate::remote;
 
 mod request;
-pub use request::{GhApiError, JsonError};
+pub use request::GhApiError;
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(3);

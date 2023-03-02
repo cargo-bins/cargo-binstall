@@ -28,6 +28,9 @@ pub use certificate::Certificate;
 mod request_builder;
 pub use request_builder::{RequestBuilder, Response};
 
+#[cfg(feature = "json")]
+pub use request_builder::JsonError;
+
 const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
 const DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT: Duration = Duration::from_millis(200);
@@ -35,12 +38,17 @@ const RETRY_DURATION_FOR_TIMEOUT: Duration = Duration::from_millis(200);
 const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
 
 #[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum Error {
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
 
     #[error(transparent)]
     Http(Box<HttpError>),
+
+    #[cfg(feature = "json")]
+    #[error("Failed to parse http response body as Json: {0}")]
+    Json(#[from] JsonError),
 }
 
 #[derive(Debug, ThisError)]

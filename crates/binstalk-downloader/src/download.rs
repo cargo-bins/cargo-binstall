@@ -23,6 +23,7 @@ mod zip_extraction;
 pub use zip_extraction::ZipError;
 
 #[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum DownloadError {
     #[error("Failed to extract zipfile: {0}")]
     Unzip(#[from] ZipError),

@@ -8,21 +8,16 @@ use std::{
 
 use compact_str::CompactString;
 use serde::Deserialize;
-use serde_json::from_slice as json_from_slice;
 use thiserror::Error as ThisError;
 use url::Url;
-
-pub use serde_json::Error as JsonError;
 
 use super::{remote, GhRelease};
 
 #[derive(ThisError, Debug)]
+#[non_exhaustive]
 pub enum GhApiError {
     #[error("IO Error: {0}")]
     Io(#[from] io::Error),
-
-    #[error("Failed to parse json: {0}")]
-    Json(#[from] JsonError),
 
     #[error("Remote Error: {0}")]
     Remote(#[from] remote::Error),
@@ -129,7 +124,5 @@ pub(super) async fn fetch_release_artifacts(
         return Ok(FetchReleaseRet::ReleaseNotFound);
     }
 
-    let bytes = response.error_for_status()?.bytes().await?;
-
-    Ok(FetchReleaseRet::Artifacts(json_from_slice(&bytes)?))
+    Ok(FetchReleaseRet::Artifacts(response.json().await?))
 }

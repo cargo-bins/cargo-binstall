@@ -5,9 +5,7 @@ use std::{
 };
 
 use binstalk_downloader::{
-    download::{DownloadError, ZipError},
-    gh_api_client::GhApiError,
-    remote::{Error as RemoteError, HttpError, ReqwestError},
+    download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
 };
 use cargo_toml::Error as CargoTomlError;
 use compact_str::CompactString;
@@ -22,7 +20,7 @@ use tracing::{error, warn};
 pub struct CratesIoApiError {
     pub crate_name: CompactString,
     #[source]
-    pub err: crates_io_api::Error,
+    pub err: RemoteError,
 }
 
 #[derive(Debug, Error)]
@@ -84,14 +82,6 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::url_parse))]
     UrlParse(#[from] url::ParseError),
 
-    /// An error while unzipping a file.
-    ///
-    /// - Code: `binstall::unzip`
-    /// - Exit: 66
-    #[error("Failed to extract zipfile: {0}")]
-    #[diagnostic(severity(error), code(binstall::unzip))]
-    Unzip(#[from] ZipError),
-
     /// A rendering error in a template.
     ///
     /// - Code: `binstall::template`
@@ -100,26 +90,13 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::template))]
     Template(Box<TinyTemplateError>),
 
-    /// A generic error from our HTTP client, reqwest.
+    /// Failed to download or failed to decode the body.
     ///
-    /// Errors resulting from HTTP fetches are handled with [`BinstallError::Http`] instead.
-    ///
-    /// - Code: `binstall::reqwest`
+    /// - Code: `binstall::download`
     /// - Exit: 68
-    #[error("Reqwest error: {0}")]
-    #[diagnostic(severity(error), code(binstall::reqwest))]
-    Reqwest(#[from] ReqwestError),
-
-    /// An HTTP request failed.
-    ///
-    /// This includes both connection/transport failures and when the HTTP status of the response
-    /// is not as expected.
-    ///
-    /// - Code: `binstall::http`
-    /// - Exit: 69
     #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::http))]
-    Http(#[from] Box<HttpError>),
+    #[diagnostic(severity(error), code(binstall::download))]
+    Download(#[from] DownloadError),
 
     /// A subprocess failed.
     ///
@@ -331,10 +308,8 @@ impl BinstallError {
             TaskJoinError(_) => 17,
             UserAbort => 32,
             UrlParse(_) => 65,
-            Unzip(_) => 66,
             Template(_) => 67,
-            Reqwest(_) => 68,
-            Http { .. } => 69,
+            Download(_) => 68,
             SubProcess { .. } => 70,
             Io(_) => 74,
             CratesIoApi { .. } => 76,
@@ -425,24 +400,7 @@ impl From<BinstallError> for io::Error {
 
 impl From<RemoteError> for BinstallError {
     fn from(e: RemoteError) -> Self {
-        use RemoteError::*;
-
-        match e {
-            Reqwest(reqwest_error) => reqwest_error.into(),
-            Http(http_error) => http_error.into(),
-        }
-    }
-}
-
-impl From<DownloadError> for BinstallError {
-    fn from(e: DownloadError) -> Self {
-        use DownloadError::*;
-
-        match e {
-            Unzip(zip_error) => zip_error.into(),
-            Remote(remote_error) => remote_error.into(),
-            Io(io_error) => io_error.into(),
-        }
+        DownloadError::from(e).into()
     }
 }
 

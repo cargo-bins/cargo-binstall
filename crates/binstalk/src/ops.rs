@@ -2,7 +2,6 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use crates_io_api::AsyncClient as CratesIoApiClient;
 use semver::VersionReq;
 
 use crate::{
@@ -34,7 +33,6 @@ pub struct Options {
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,
     pub client: Client,
-    pub crates_io_api_client: CratesIoApiClient,
     pub gh_api_client: GhApiClient,
     pub jobserver_client: LazyJobserverClient,
 }

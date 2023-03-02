@@ -74,7 +74,8 @@ zstd-thin = ["zstd/thin"]
 
 cross-lang-fat-lto = ["zstd/fat-lto"]
 
-gh-api-client = ["serde", "serde_json"]
+gh-api-client = ["json"]
+json = ["serde", "serde_json"]
 
 [package.metadata.docs.rs]
 all-features = true
