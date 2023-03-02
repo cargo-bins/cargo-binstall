@@ -106,7 +106,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        build-cache: false
+        cache-suffix: lint
 
     - run: just toolchain rustfmt,clippy
     - run: just ci-install-deps
