@@ -145,6 +145,14 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long, value_delimiter(','))]
     pub disable_strategies: Vec<Strategy>,
 
+    /// If `--github-token` or environment variable `GITHUB_TOKEN` is not
+    /// specified, then cargo-binstall will try to extract github token from
+    /// `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml` by default.
+    ///
+    /// This option can be used to disable that behavior.
+    #[clap(help_heading = "Overrides", long)]
+    pub no_extract_github_token_from_config: bool,
+
     /// Disable symlinking / versioned updates.
     ///
     /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and
