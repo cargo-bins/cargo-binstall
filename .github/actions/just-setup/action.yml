@@ -47,9 +47,11 @@ runs:
 
   - name: Install rust toolchains
     run: just toolchain
+    shell: bash
 
   - name: rustc version
     run: rustc -vV | tee /tmp/rustc-version
+    shell: bash
 
   - if: inputs.build-cache
     name: Configure build cache
