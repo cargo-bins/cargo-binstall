@@ -108,6 +108,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
+      with:
+        cache: false
 
     - run: just toolchain rustfmt,clippy
     - run: just ci-install-deps
