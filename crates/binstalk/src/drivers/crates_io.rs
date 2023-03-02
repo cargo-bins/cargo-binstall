@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use cargo_toml::Manifest;
+use compact_str::CompactString;
 use semver::VersionReq;
 use serde::Deserialize;
 use tracing::debug;
@@ -14,24 +15,24 @@ use crate::{
     manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
 };
 
-#[derive(Deserialize)]
-struct Response {
-    #[serde(rename = "crate")]
-    inner: Crate,
-}
-
-#[derive(Deserialize)]
-struct Crate {
-    max_stable_version: String,
-}
-
 mod vfs;
 
 mod visitor;
 use visitor::ManifestVisitor;
 
-/// Find the crate by name, get its latest stable version, retrieve its
-/// Cargo.toml and infer all its bins.
+#[derive(Deserialize)]
+struct Response {
+    versions: Vec<Version>,
+}
+
+#[derive(Deserialize)]
+struct Version {
+    num: CompactString,
+    yanked: bool,
+}
+
+/// Find the crate by name, get its latest stable version matches `version_req`,
+/// retrieve its Cargo.toml and infer all its bins.
 pub async fn fetch_crate_cratesio(
     client: Client,
     name: &str,
@@ -42,7 +43,7 @@ pub async fn fetch_crate_cratesio(
 
     let response: Response = client
         .get(Url::parse(&format!(
-            "https://crates.io/api/v1/crates/{name}"
+            "https://crates.io/api/v1/crates/{name}/versions"
         ))?)
         .send(true)
         .await
@@ -55,12 +56,35 @@ pub async fn fetch_crate_cratesio(
         .json()
         .await?;
 
-    let version = response.inner.max_stable_version;
+    let (ver_str, version) = response
+        .versions
+        .iter()
+        .filter_map(|item| {
+            if !item.yanked {
+                let num = &item.num;
+
+                // Remove leading `v` for git tags
+                let ver = num.strip_prefix('v').unwrap_or(num);
+
+                // Parse out version
+                let ver = semver::Version::parse(ver).ok()?;
+
+                // Filter by version match
+                version_req.matches(&ver).then_some((num, ver))
+            } else {
+                None
+            }
+        })
+        // Return highest version
+        .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))
+        .ok_or_else(|| BinstallError::VersionMismatch {
+            req: version_req.clone(),
+        })?;
 
     debug!("Found information for crate version: '{version}'");
 
     // Download crate to temporary dir (crates.io or git?)
-    let crate_url = format!("https://crates.io/api/v1/crates/{name}/{version}/download");
+    let crate_url = format!("https://crates.io/api/v1/crates/{name}/{ver_str}/download");
 
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
