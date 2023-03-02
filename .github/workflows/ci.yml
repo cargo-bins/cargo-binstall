@@ -99,14 +99,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
 
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        cache-suffix: lint
+        cache-suffix: ${{ matrix.target }}-debug
 
     - run: just toolchain rustfmt,clippy
     - run: just ci-install-deps
