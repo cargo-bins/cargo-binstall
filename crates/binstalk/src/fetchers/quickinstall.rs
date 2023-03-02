@@ -6,7 +6,9 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{download::Download, remote::Client, tasks::AutoAbortJoinHandle},
+    helpers::{
+        download::Download, gh_api_client::GhApiClient, remote::Client, tasks::AutoAbortJoinHandle,
+    },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -25,6 +27,7 @@ pub struct QuickInstall {
 impl super::Fetcher for QuickInstall {
     fn new(
         client: Client,
+        _gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetData>,
     ) -> Arc<dyn super::Fetcher> {

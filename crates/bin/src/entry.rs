@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -10,6 +10,7 @@ use binstalk::{
     fetchers::{Fetcher, GhCrateMeta, QuickInstall},
     get_desired_targets,
     helpers::{
+        gh_api_client::GhApiClient,
         jobserver_client::LazyJobserverClient,
         remote::{Certificate, Client},
         tasks::AutoAbortJoinHandle,
@@ -87,6 +88,8 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
     )
     .map_err(BinstallError::from)?;
 
+    let gh_api_client = GhApiClient::new(client.clone(), args.github_token);
+
     // Build crates.io api client
     let crates_io_api_client =
         CratesIoApiClient::with_http_client(client.get_inner().clone(), Duration::from_millis(100));
@@ -111,6 +114,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         install_path,
         client,
         crates_io_api_client,
+        gh_api_client,
         jobserver_client,
     });
 
@@ -342,7 +346,7 @@ fn do_install_fetches(
 
         if no_cleanup {
             // Consume temp_dir without removing it from fs.
-            temp_dir.into_path();
+            let _ = temp_dir.into_path();
         } else {
             temp_dir.close().unwrap_or_else(|err| {
                 warn!("Failed to clean up some resources: {err}");

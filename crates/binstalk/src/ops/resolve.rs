@@ -109,7 +109,12 @@ async fn resolve_inner(
             })
             .cartesian_product(resolvers)
             .map(|(target_data, f)| {
-                let fetcher = f(opts.client.clone(), data.clone(), target_data);
+                let fetcher = f(
+                    opts.client.clone(),
+                    opts.gh_api_client.clone(),
+                    data.clone(),
+                    target_data,
+                );
                 (fetcher.clone(), fetcher.find())
             }),
     );

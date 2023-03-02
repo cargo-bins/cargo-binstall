@@ -56,6 +56,8 @@ jobs:
     - run: just toolchain
     - run: just ci-install-deps
     - run: just test
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   linux-cross-check:
     strategy:

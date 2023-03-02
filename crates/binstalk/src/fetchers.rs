@@ -8,7 +8,7 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{remote::Client, tasks::AutoAbortJoinHandle},
+    helpers::{gh_api_client::GhApiClient, remote::Client, tasks::AutoAbortJoinHandle},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -19,7 +19,12 @@ pub(crate) mod quickinstall;
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
     #[allow(clippy::new_ret_no_self)]
-    fn new(client: Client, data: Arc<Data>, target_data: Arc<TargetData>) -> Arc<dyn Fetcher>
+    fn new(
+        client: Client,
+        gh_api_client: GhApiClient,
+        data: Arc<Data>,
+        target_data: Arc<TargetData>,
+    ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
 

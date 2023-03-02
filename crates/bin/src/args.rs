@@ -13,6 +13,7 @@ use binstalk::{
     ops::resolve::{CrateName, VersionReqExt},
 };
 use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use compact_str::CompactString;
 use log::LevelFilter;
 use semver::VersionReq;
 use strum::EnumCount;
@@ -217,6 +218,10 @@ pub struct Args {
     /// Print logs in json format to be parsable.
     #[clap(help_heading = "Options", long)]
     pub json_output: bool,
+
+    /// Provide the github token for accessing the restful API of api.github.com
+    #[clap(help_heading = "Options", long, env = "GITHUB_TOKEN")]
+    pub github_token: Option<CompactString>,
 
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
