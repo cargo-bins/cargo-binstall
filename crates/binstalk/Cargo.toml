@@ -21,7 +21,7 @@ detect-targets = { version = "0.1.5", path = "../detect-targets" }
 either = "1.8.1"
 home = "0.5.4"
 itertools = "0.10.5"
-jobslot = { version = "0.2.9", features = ["tokio"] }
+jobslot = { version = "0.2.10", features = ["tokio"] }
 maybe-owned = "0.3.4"
 miette = "5.5.0"
 normalize-path = { version = "0.2.0", path = "../normalize-path" }
