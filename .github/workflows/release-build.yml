@@ -42,7 +42,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        cache-suffix: release-${{ matrix.t }}-release
+        cache-suffix: ${{ matrix.t }}-release
 
     - run: just toolchain rust-src
     - run: just ci-install-deps
