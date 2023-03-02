@@ -50,7 +50,7 @@ runs:
     shell: bash
 
   - name: rustc version
-    run: rustc -vV | tee /tmp/rustc-version
+    run: rustc -vV | tee rustc-version
     shell: bash
 
   - if: inputs.build-cache
@@ -59,4 +59,4 @@ runs:
     with:
       path: |
         target/
-      key: ${{ runner.os }}-cargo-build-${{ hashFiles('/tmp/rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
+      key: ${{ runner.os }}-cargo-build-${{ hashFiles('/rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
