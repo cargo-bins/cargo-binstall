@@ -40,10 +40,16 @@ runs:
         ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}-
         ${{ runner.os }}-cargo-index-
 
+  - name: Install rust toolchains
+    run: just toolchain
+
+  - name: rustc version
+    run: rustc -vV | tee /tmp/rustc-version
+
   - if: inputs.cache
     name: Configure build cache
     uses: actions/cache@v3
     with:
       path: |
         target/
-      key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
+      key: ${{ runner.os }}-cargo-build-${{ hashFiles('/tmp/rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}

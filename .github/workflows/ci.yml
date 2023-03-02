@@ -53,7 +53,6 @@ jobs:
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}-debug
 
-    - run: just toolchain
     - run: just ci-install-deps
     - run: just test
       env:
@@ -80,7 +79,6 @@ jobs:
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}-debug
 
-    - run: just toolchain
     - run: just ci-install-deps
     - run: just check
 
@@ -95,7 +93,6 @@ jobs:
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}-debug
 
-    - run: just toolchain
     - run: just check
 
   lint:
