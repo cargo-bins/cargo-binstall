@@ -1,9 +1,9 @@
 use std::{
     env,
     ffi::OsString,
-    fmt,
+    fmt, fs,
     num::{NonZeroU64, ParseIntError},
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
 };
 
@@ -14,6 +14,7 @@ use binstalk::{
 };
 use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use compact_str::CompactString;
+use dirs::home_dir;
 use log::LevelFilter;
 use semver::VersionReq;
 use strum::EnumCount;
@@ -460,7 +461,34 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             .exit()
     }
 
+    if opts.github_token.is_none() && !opts.no_extract_github_token_from_config {
+        if let Some(home) = home_dir() {
+            if let Some(github_token) = try_extract_from_git_credentials(&home) {
+                opts.github_token = Some(github_token);
+            } else if let Ok(github_token) = gh_token::get() {
+                opts.github_token = Some(github_token.into());
+            }
+        }
+    }
+
     opts
+}
+
+fn try_extract_from_git_credentials(home: &Path) -> Option<CompactString> {
+    fs::read_to_string(home.join(".git-credentials"))
+        .ok()?
+        .lines()
+        .find_map(extract_github_token_from_git_credentials_line)
+        .map(CompactString::from)
+}
+
+fn extract_github_token_from_git_credentials_line(line: &str) -> Option<&str> {
+    let cred = line
+        .trim()
+        .strip_prefix("https://")?
+        .strip_suffix("@github.com")?;
+
+    Some(cred.split_once(':')?.1)
 }
 
 #[cfg(test)]
@@ -470,5 +498,25 @@ mod test {
     #[test]
     fn verify_cli() {
         Args::command().debug_assert()
+    }
+
+    const GIT_CREDENTIALS_TEST_CASES: &[(&str, Option<&str>)] = &[
+        // Success
+        ("https://NobodyXu:gho_asdc@github.com", Some("gho_asdc")),
+        (
+            "https://NobodyXu:gho_asdc12dz@github.com",
+            Some("gho_asdc12dz"),
+        ),
+        // Failure
+        ("http://NobodyXu:gho_asdc@github.com", None),
+        ("https://NobodyXu:gho_asdc@gitlab.com", None),
+        ("https://NobodyXugho_asdc@github.com", None),
+    ];
+
+    #[test]
+    fn test_extract_github_token_from_git_credentials_line() {
+        GIT_CREDENTIALS_TEST_CASES.iter().for_each(|(line, res)| {
+            assert_eq!(extract_github_token_from_git_credentials_line(line), *res);
+        })
     }
 }
