@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use cargo_toml::Manifest;
 use crates_io_api::AsyncClient;
 use semver::VersionReq;
+use serde::Deserialize;
 use tracing::debug;
 
 use crate::{
-    errors::{BinstallError, CratesIoApiError},
+    errors::BinstallError,
     helpers::{
         download::Download,
         remote::{Client, Url},
@@ -14,14 +15,24 @@ use crate::{
     manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
 };
 
-use super::find_version;
+#[derive(Deserialize)]
+struct Response {
+    #[serde(rename = "crate")]
+    inner: Crate,
+}
+
+#[derive(Deserialize)]
+struct Crate {
+    max_stable_version: String,
+}
 
 mod vfs;
 
 mod visitor;
 use visitor::ManifestVisitor;
 
-/// Fetch a crate Cargo.toml by name and version from crates.io
+/// Find the crate by name, get its latest stable version, retrieve its
+/// Cargo.toml and infer all its bins.
 pub async fn fetch_crate_cratesio(
     client: Client,
     crates_io_api_client: &AsyncClient,
@@ -31,26 +42,25 @@ pub async fn fetch_crate_cratesio(
     // Fetch / update index
     debug!("Looking up crate information");
 
-    // Fetch online crate information
-    let base_info = crates_io_api_client.get_crate(name).await.map_err(|err| {
-        Box::new(CratesIoApiError {
-            crate_name: name.into(),
-            err,
-        })
-    })?;
+    let response: Response = client
+        .get(Url::parse(&format!(
+            "https://crates.io/api/v1/crates/{name}"
+        ))?)
+        .send(true)
+        .await?
+        .json()
+        .await?;
 
-    // Locate matching version
-    let version_iter = base_info.versions.iter().filter(|v| !v.yanked);
-    let (version, version_name) = find_version(version_req, version_iter)?;
+    let version = response.inner.max_stable_version;
 
-    debug!("Found information for crate version: '{}'", version.num);
+    debug!("Found information for crate version: '{version}'");
 
     // Download crate to temporary dir (crates.io or git?)
-    let crate_url = format!("https://crates.io/{}", version.dl_path);
+    let crate_url = format!("https://crates.io/api/v1/crates/{name}/{version}/download");
 
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
-    let manifest_dir_path: PathBuf = format!("{name}-{version_name}").into();
+    let manifest_dir_path: PathBuf = format!("{name}-{version}").into();
 
     let mut manifest_visitor = ManifestVisitor::new(manifest_dir_path);
 
