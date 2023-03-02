@@ -4,8 +4,13 @@ inputs:
     description: Extra tools
     required: false
     default: ""
-  cache:
-    description: Enable caches
+  index-cache:
+    description: Enable index cache
+    required: true
+    default: true
+    type: boolean
+  build-cache:
+    description: Enable build cache
     required: true
     default: true
     type: boolean
@@ -27,7 +32,7 @@ runs:
     with:
       tool: just,${{ inputs.tools }}
 
-  - if: inputs.cache
+  - if: inputs.index-cache
     name: Configure index cache
     uses: actions/cache@v3
     with:
@@ -46,7 +51,7 @@ runs:
   - name: rustc version
     run: rustc -vV | tee /tmp/rustc-version
 
-  - if: inputs.cache
+  - if: inputs.build-cache
     name: Configure build cache
     uses: actions/cache@v3
     with:
