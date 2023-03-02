@@ -151,7 +151,7 @@ ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev
 [linux]
 ci-install-deps:
     if [ -n "{{ci-apt-deps}}" ]; then sudo apt update && sudo apt install -y --no-install-recommends {{ci-apt-deps}}; fi
-    pip3 install cargo-zigbuild
+    if [ -n "{{use-cargo-zigbuild}}" ]; then pip3 install cargo-zigbuild; fi
 
 [macos]
 [windows]

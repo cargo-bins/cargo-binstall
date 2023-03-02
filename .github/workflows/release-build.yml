@@ -42,7 +42,6 @@ jobs:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        tools: cross
         cache-suffix: release-${{ matrix.t }}
 
     - run: just toolchain rust-src
@@ -87,7 +86,8 @@ jobs:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        cache: false
+        index-cache: false
+        build-cache: false
 
     - uses: actions/download-artifact@v3
       with:
