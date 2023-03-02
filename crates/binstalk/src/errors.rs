@@ -20,7 +20,7 @@ use tracing::{error, warn};
 pub struct CratesIoApiError {
     pub crate_name: CompactString,
     #[source]
-    pub err: crates_io_api::Error,
+    pub err: RemoteError,
 }
 
 #[derive(Debug, Error)]

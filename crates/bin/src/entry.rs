@@ -22,7 +22,6 @@ use binstalk::{
     },
 };
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
-use crates_io_api::AsyncClient as CratesIoApiClient;
 use file_format::FileFormat;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
@@ -90,10 +89,6 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
     let gh_api_client = GhApiClient::new(client.clone(), args.github_token);
 
-    // Build crates.io api client
-    let crates_io_api_client =
-        CratesIoApiClient::with_http_client(client.get_inner().clone(), Duration::from_millis(100));
-
     // Create binstall_opts
     let binstall_opts = Arc::new(ops::Options {
         no_symlinks: args.no_symlinks,
@@ -113,7 +108,6 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         temp_dir: temp_dir.path().to_owned(),
         install_path,
         client,
-        crates_io_api_client,
         gh_api_client,
         jobserver_client,
     });

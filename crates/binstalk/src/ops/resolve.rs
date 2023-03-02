@@ -8,7 +8,6 @@ use std::{
 
 use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
-use crates_io_api::AsyncClient as CratesIoApiClient;
 use itertools::Itertools;
 use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
@@ -72,8 +71,7 @@ async fn resolve_inner(
         crate_name.name,
         curr_version,
         &version_req,
-        opts.client.clone(),
-        &opts.crates_io_api_client).await?
+        opts.client.clone()).await?
     else {
         return Ok(Resolution::AlreadyUpToDate)
     };
@@ -350,20 +348,11 @@ impl PackageInfo {
         curr_version: Option<Version>,
         version_req: &VersionReq,
         client: Client,
-        crates_io_api_client: &CratesIoApiClient,
     ) -> Result<Option<Self>, BinstallError> {
         // Fetch crate via crates.io, git, or use a local manifest path
         let manifest = match opts.manifest_path.as_ref() {
             Some(manifest_path) => load_manifest_path(manifest_path)?,
-            None => {
-                Box::pin(fetch_crate_cratesio(
-                    client,
-                    crates_io_api_client,
-                    &name,
-                    version_req,
-                ))
-                .await?
-            }
+            None => Box::pin(fetch_crate_cratesio(client, &name, version_req)).await?,
         };
 
         let Some(mut package) = manifest.package else {

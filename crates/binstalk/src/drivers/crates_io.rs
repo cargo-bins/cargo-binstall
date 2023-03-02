@@ -1,13 +1,12 @@
 use std::path::PathBuf;
 
 use cargo_toml::Manifest;
-use crates_io_api::AsyncClient;
 use semver::VersionReq;
 use serde::Deserialize;
 use tracing::debug;
 
 use crate::{
-    errors::BinstallError,
+    errors::{BinstallError, CratesIoApiError},
     helpers::{
         download::Download,
         remote::{Client, Url},
@@ -35,7 +34,6 @@ use visitor::ManifestVisitor;
 /// Cargo.toml and infer all its bins.
 pub async fn fetch_crate_cratesio(
     client: Client,
-    crates_io_api_client: &AsyncClient,
     name: &str,
     version_req: &VersionReq,
 ) -> Result<Manifest<Meta>, BinstallError> {
@@ -47,7 +45,13 @@ pub async fn fetch_crate_cratesio(
             "https://crates.io/api/v1/crates/{name}"
         ))?)
         .send(true)
-        .await?
+        .await
+        .map_err(|err| {
+            BinstallError::CratesIoApi(Box::new(CratesIoApiError {
+                crate_name: name.into(),
+                err,
+            }))
+        })?
         .json()
         .await?;
 
