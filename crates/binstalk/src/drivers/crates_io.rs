@@ -20,6 +20,9 @@ mod vfs;
 mod visitor;
 use visitor::ManifestVisitor;
 
+mod versions;
+use versions::find_max_version_matched;
+
 #[derive(Deserialize)]
 struct CrateInfo {
     #[serde(rename = "crate")]
@@ -29,17 +32,6 @@ struct CrateInfo {
 #[derive(Deserialize)]
 struct CrateInfoInner {
     max_stable_version: CompactString,
-}
-
-#[derive(Deserialize)]
-struct Versions {
-    versions: Vec<Version>,
-}
-
-#[derive(Deserialize)]
-struct Version {
-    num: CompactString,
-    yanked: bool,
 }
 
 /// Find the crate by name, get its latest stable version matches `version_req`,
@@ -69,34 +61,7 @@ pub async fn fetch_crate_cratesio(
         let crate_info: CrateInfo = response.json().await?;
         crate_info.inner.max_stable_version
     } else {
-        let response: Versions = response.json().await?;
-        response
-            .versions
-            .into_iter()
-            .filter_map(|item| {
-                if !item.yanked {
-                    // Remove leading `v` for git tags
-                    let num = if let Some(num) = item.num.strip_prefix('v') {
-                        num.into()
-                    } else {
-                        item.num
-                    };
-
-                    // Parse out version
-                    let ver = semver::Version::parse(&num).ok()?;
-
-                    // Filter by version match
-                    version_req.matches(&ver).then_some((num, ver))
-                } else {
-                    None
-                }
-            })
-            // Return highest version
-            .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))
-            .ok_or_else(|| BinstallError::VersionMismatch {
-                req: version_req.clone(),
-            })?
-            .0
+        find_max_version_matched(&mut response.json_deserializer().await?, version_req)?
     };
 
     debug!("Found information for crate version: '{version}'");
