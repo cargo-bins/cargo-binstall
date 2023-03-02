@@ -59,4 +59,4 @@ runs:
     with:
       path: |
         target/
-      key: ${{ runner.os }}-cargo-build-${{ hashFiles('/rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
+      key: ${{ runner.os }}-cargo-build-${{ hashFiles('rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
