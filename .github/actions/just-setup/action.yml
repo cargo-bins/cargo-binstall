@@ -4,12 +4,12 @@ inputs:
     description: Extra tools
     required: false
     default: ""
-  index-cache:
+  indexcache:
     description: Enable index cache
     required: true
     default: true
     type: boolean
-  build-cache:
+  buildcache:
     description: Enable build cache
     required: true
     default: true
@@ -32,7 +32,7 @@ runs:
     with:
       tool: just,${{ inputs.tools }}
 
-  - if: inputs.index-cache
+  - if: inputs.indexcache
     name: Configure index cache
     uses: actions/cache@v3
     with:
@@ -50,13 +50,13 @@ runs:
     shell: bash
 
   - name: rustc version
-    run: rustc -vV | tee /tmp/rustc-version
+    run: rustc -vV | tee rustc-version
     shell: bash
 
-  - if: inputs.build-cache
+  - if: inputs.buildcache
     name: Configure build cache
     uses: actions/cache@v3
     with:
       path: |
         target/
-      key: ${{ runner.os }}-cargo-build-${{ hashFiles('/tmp/rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
+      key: ${{ runner.os }}-cargo-build-${{ hashFiles('rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
