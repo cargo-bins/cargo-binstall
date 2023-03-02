@@ -63,39 +63,6 @@ struct FindMaxVersionMatched<'a>(&'a VersionReq);
 impl<'de> DeserializeSeed<'de> for FindMaxVersionMatched<'_> {
     type Value = Option<CompactString>;
 
-    /// Equivalent to
-    ///
-    /// ```ignore
-    /// #[derive(Deserialize)]
-    /// struct Versions {
-    ///     versions: Vec<Version>,
-    /// }
-    ///
-    /// let versions: Versions = ...;
-    ///
-    /// versions
-    ///     .into_iter()
-    ///     .filter_map(|item| {
-    ///         if !item.yanked {
-    ///             // Remove leading `v` for git tags
-    ///             let ver = item.num.strip_prefix('v').unwrap_or(&item.num);
-    ///
-    ///             // Parse out version
-    ///             let ver = semver::Version::parse(ver).ok()?;
-    ///
-    ///             // Filter by version match
-    ///             version_req.matches(&ver).then_some((item.num, ver))
-    ///         } else {
-    ///             None
-    ///         }
-    ///     })
-    ///     // Return highest version
-    ///     .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))
-    ///     .ok_or_else(|| BinstallError::VersionMismatch {
-    ///         req: version_req.clone(),
-    ///     })?
-    ///     .0
-    /// ```
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -109,6 +76,31 @@ impl<'de> DeserializeSeed<'de> for FindMaxVersionMatched<'_> {
                 f.write_str("The visitor expects a Visitor::visit_seq to be called")
             }
 
+            /// Equivalent to
+            ///
+            /// ```ignore
+            /// let versions: Vec<Version> = ...;
+            ///
+            /// versions
+            ///     .into_iter()
+            ///     .filter_map(|item| {
+            ///         if !item.yanked {
+            ///             // Remove leading `v` for git tags
+            ///             let ver = item.num.strip_prefix('v').unwrap_or(&item.num);
+            ///
+            ///             // Parse out version
+            ///             let ver = semver::Version::parse(ver).ok()?;
+            ///
+            ///             // Filter by version match
+            ///             version_req.matches(&ver).then_some((item.num, ver))
+            ///         } else {
+            ///             None
+            ///         }
+            ///     })
+            ///     // Return highest version
+            ///     .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))?
+            ///     .0
+            /// ```
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
                 A: SeqAccess<'de>,
