@@ -113,10 +113,7 @@ impl Response {
     }
 
     #[cfg(feature = "json")]
-    pub async fn json_deserializer<T>(self) -> Result<JsonDeserializer, Error>
-    where
-        T: serde::de::DeserializeOwned,
-    {
+    pub async fn json_deserializer(self) -> Result<JsonDeserializer, Error> {
         use bytes::Buf;
 
         let bytes = self.error_for_status()?.bytes().await?;
