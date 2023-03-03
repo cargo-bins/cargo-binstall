@@ -74,6 +74,7 @@ pub fn infer_bin_dir_template(data: &Data, extracted_files: &ExtractedFiles) -> 
 pub struct BinFile {
     pub base_name: CompactString,
     pub source: PathBuf,
+    pub archive_source_path: PathBuf,
     pub dest: PathBuf,
     pub link: Option<PathBuf>,
 }
@@ -102,8 +103,11 @@ impl BinFile {
             binary_ext,
         };
 
-        let source = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
-            data.bin_path.to_path_buf()
+        let (source, archive_source_path) = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
+            (
+                data.bin_path.to_path_buf(),
+                data.bin_path.file_name().unwrap().into(),
+            )
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
@@ -121,7 +125,7 @@ impl BinFile {
                 });
             }
 
-            data.bin_path.join(&path_normalized)
+            (data.bin_path.join(&path_normalized), path_normalized)
         };
 
         // Destination at install dir + base-name{.extension}
@@ -148,6 +152,7 @@ impl BinFile {
         Ok(Self {
             base_name: format_compact!("{base_name}{binary_ext}"),
             source,
+            archive_source_path,
             dest,
             link,
         })
@@ -174,7 +179,7 @@ impl BinFile {
         &self,
         extracted_files: &ExtractedFiles,
     ) -> Result<(), BinstallError> {
-        if extracted_files.has_file(&self.source) {
+        if extracted_files.has_file(&self.archive_source_path) {
             Ok(())
         } else {
             Err(BinstallError::BinFileNotFound(self.source.clone()))
