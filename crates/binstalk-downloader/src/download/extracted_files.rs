@@ -5,6 +5,7 @@ use std::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum ExtractedFilesEntry {
     Dir(Box<HashSet<Box<OsStr>>>),
     File,
@@ -21,7 +22,7 @@ impl ExtractedFilesEntry {
 }
 
 #[derive(Debug)]
-pub struct ExtractedFiles(HashMap<Box<Path>, ExtractedFilesEntry>);
+pub struct ExtractedFiles(pub(super) HashMap<Box<Path>, ExtractedFilesEntry>);
 
 impl ExtractedFiles {
     pub(super) fn new() -> Self {
@@ -38,8 +39,11 @@ impl ExtractedFiles {
     }
 
     fn add_dir_if_has_parent(&mut self, path: &Path) {
-        if let Some(parent) = path.parent() {
-            self.add_dir_inner(parent, path.file_name())
+        match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => {
+                self.add_dir_inner(parent, path.file_name())
+            }
+            _ => (),
         }
     }
 

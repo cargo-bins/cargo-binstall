@@ -182,3 +182,85 @@ impl Update for NoDigest {
 }
 
 impl HashMarker for NoDigest {}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use std::{
+        collections::{HashMap, HashSet},
+        ffi::OsStr,
+    };
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_and_extract() {
+        let client = crate::remote::Client::new(
+            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+            None,
+            std::time::Duration::from_millis(10),
+            1.try_into().unwrap(),
+            [],
+        )
+        .unwrap();
+
+        let cargo_binstall_url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v0.20.1/cargo-binstall-aarch64-unknown-linux-musl.tgz";
+
+        let extracted_files =
+            Download::new(client.clone(), Url::parse(cargo_binstall_url).unwrap())
+                .and_extract(PkgFmt::Tgz, tempdir().unwrap())
+                .await
+                .unwrap();
+
+        assert!(extracted_files.has_file(Path::new("cargo-binstall")));
+        assert!(!extracted_files.has_file(Path::new("1234")));
+
+        assert_eq!(
+            extracted_files.0,
+            HashMap::from([(
+                Path::new("cargo-binstall").into(),
+                ExtractedFilesEntry::File
+            )])
+        );
+
+        let cargo_watch_url = "https://github.com/watchexec/cargo-watch/releases/download/v8.4.0/cargo-watch-v8.4.0-aarch64-unknown-linux-gnu.tar.xz";
+
+        let extracted_files = Download::new(client, Url::parse(cargo_watch_url).unwrap())
+            .and_extract(PkgFmt::Txz, tempdir().unwrap())
+            .await
+            .unwrap();
+
+        let dir = Path::new("cargo-watch-v8.4.0-aarch64-unknown-linux-gnu");
+
+        assert_eq!(
+            extracted_files.get_dir(dir).unwrap(),
+            &HashSet::from_iter(
+                [
+                    "README.md",
+                    "LICENSE",
+                    "completions",
+                    "cargo-watch",
+                    "cargo-watch.1"
+                ]
+                .iter()
+                .map(OsStr::new)
+                .map(Box::<OsStr>::from)
+            ),
+        );
+
+        assert_eq!(
+            extracted_files.get_dir(&dir.join("completions")).unwrap(),
+            &HashSet::from([OsStr::new("zsh").into()]),
+        );
+
+        assert!(extracted_files.has_file(&dir.join("cargo-watch")));
+        assert!(extracted_files.has_file(&dir.join("cargo-watch.1")));
+        assert!(extracted_files.has_file(&dir.join("LICENSE")));
+        assert!(extracted_files.has_file(&dir.join("README.md")));
+
+        assert!(!extracted_files.has_file(&dir.join("completions")));
+        assert!(!extracted_files.has_file(&dir.join("asdfcqwe")));
+
+        assert!(extracted_files.has_file(&dir.join("completions/zsh")));
+    }
+}
