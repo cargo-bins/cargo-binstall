@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fs,
     future::Future,
     io::{self, Write},
@@ -68,28 +69,77 @@ where
 
 pub async fn extract_tar_based_stream<S>(
     stream: S,
-    path: &Path,
+    dst: &Path,
     fmt: TarBasedFmt,
-) -> Result<(), DownloadError>
+) -> Result<ExtractedFiles, DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'static,
 {
-    debug!("Extracting from {fmt} archive to {path:#?}");
+    debug!("Extracting from {fmt} archive to {}", dst.display());
 
-    extract_with_blocking_decoder(stream, path, move |rx, path| {
-        create_tar_decoder(StreamReadable::new(rx), fmt)?.unpack(path)
+    extract_with_blocking_decoder(stream, dst, move |rx, dst| {
+        // Adapted from https://docs.rs/tar/latest/src/tar/archive.rs.html#189-219
+
+        if dst.symlink_metadata().is_err() {
+            fs::create_dir_all(dst)?;
+        }
+
+        // Canonicalizing the dst directory will prepend the path with '\\?\'
+        // on windows which will allow windows APIs to treat the path as an
+        // extended-length path with a 32,767 character limit. Otherwise all
+        // unpacked paths over 260 characters will fail on creation with a
+        // NotFound exception.
+        let dst = &dst
+            .canonicalize()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(dst));
+
+        let mut tar = create_tar_decoder(StreamReadable::new(rx), fmt)?;
+        let mut entries = tar.entries()?;
+
+        let mut extracted_files = ExtractedFiles::new();
+
+        // Delay any directory entries until the end (they will be created if needed by
+        // descendants), to ensure that directory permissions do not interfer with descendant
+        // extraction.
+        let mut directories = Vec::new();
+
+        while let Some(mut entry) = entries.next().transpose()? {
+            match entry.header().entry_type() {
+                tar::EntryType::Regular => {
+                    // unpack_in returns false if the path contains ".."
+                    // and is skipped.
+                    if entry.unpack_in(dst)? {
+                        extracted_files.add_file(&entry.path()?);
+                    }
+                }
+                tar::EntryType::Directory => {
+                    directories.push(entry);
+                }
+                _ => (),
+            }
+        }
+
+        for mut dir in directories {
+            if dir.unpack_in(dst)? {
+                extracted_files.add_dir(&dir.path()?, None);
+            }
+        }
+
+        Ok(extracted_files)
     })
     .await
 }
 
-fn extract_with_blocking_decoder<S, F>(
+fn extract_with_blocking_decoder<S, F, T>(
     stream: S,
     path: &Path,
     f: F,
-) -> impl Future<Output = Result<(), DownloadError>>
+) -> impl Future<Output = Result<T, DownloadError>>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'static,
-    F: FnOnce(mpsc::Receiver<Bytes>, &Path) -> io::Result<()> + Send + Sync + 'static,
+    F: FnOnce(mpsc::Receiver<Bytes>, &Path) -> io::Result<T> + Send + Sync + 'static,
+    T: Send + 'static,
 {
     let path = path.to_owned();
 
