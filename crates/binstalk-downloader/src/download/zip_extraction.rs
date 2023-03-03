@@ -65,7 +65,7 @@ where
     }
 
     if raw_filename.ends_with('/') {
-        extracted_files.add_dir(&filename, None);
+        extracted_files.add_dir(&filename);
 
         // This entry is a dir.
         asyncify(move || {

@@ -15,7 +15,7 @@ impl ExtractedFilesEntry {
         ExtractedFilesEntry::Dir(Box::new(
             file_name
                 .map(|file_name| HashSet::from([file_name.into()]))
-                .unwrap_or_else(|| HashSet::default()),
+                .unwrap_or_else(HashSet::default),
         ))
     }
 }
@@ -39,15 +39,24 @@ impl ExtractedFiles {
 
     fn add_dir_if_has_parent(&mut self, path: &Path) {
         if let Some(parent) = path.parent() {
-            self.add_dir(parent, path.file_name())
+            self.add_dir_inner(parent, path.file_name())
         }
     }
 
     /// * `path` - must be canonical and must not be empty
     ///
     /// NOTE that if the entry for the `path` is previously set to a dir,
-    /// it would be replaced with a Dir entry containing `file_name`.
-    pub(super) fn add_dir(&mut self, path: &Path, file_name: Option<&OsStr>) {
+    /// it would be replaced with an empty Dir entry.
+    pub(super) fn add_dir(&mut self, path: &Path) {
+        self.add_dir_inner(path, None);
+    }
+
+    /// * `path` - must be canonical and must not be empty
+    ///
+    /// NOTE that if the entry for the `path` is previously set to a dir,
+    /// it would be replaced with a Dir entry containing `file_name` if it
+    /// is `Some(..)`, or an empty Dir entry.
+    fn add_dir_inner(&mut self, path: &Path, file_name: Option<&OsStr>) {
         match self.0.entry(path.into()) {
             HashMapEntry::Vacant(entry) => {
                 entry.insert(ExtractedFilesEntry::new_dir(file_name));

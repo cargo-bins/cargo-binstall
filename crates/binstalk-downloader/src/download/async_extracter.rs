@@ -122,7 +122,7 @@ where
 
         for mut dir in directories {
             if dir.unpack_in(dst)? {
-                extracted_files.add_dir(&dir.path()?, None);
+                extracted_files.add_dir(&dir.path()?);
             }
         }
 

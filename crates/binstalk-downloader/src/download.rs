@@ -93,9 +93,6 @@ impl Download {
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
     ///
-    /// `cancellation_future` can be used to cancel the extraction and return
-    /// [`DownloadError::UserAbort`] error.
-    ///
     /// NOTE that this API does not support gnu extension sparse file unlike
     /// [`Download::and_extract`].
     #[instrument(skip(visitor))]
@@ -121,15 +118,18 @@ impl Download {
 
     /// Download a file from the provided URL and extract it to the provided path.
     ///
-    /// `cancellation_future` can be used to cancel the extraction and return
-    /// [`DownloadError::UserAbort`] error.
+    /// NOTE that this would only extract directory and regular files.
     #[instrument(skip(path))]
     pub async fn and_extract(
         self,
         fmt: PkgFmt,
         path: impl AsRef<Path>,
-    ) -> Result<(), DownloadError> {
-        async fn inner(this: Download, fmt: PkgFmt, path: &Path) -> Result<(), DownloadError> {
+    ) -> Result<ExtractedFiles, DownloadError> {
+        async fn inner(
+            this: Download,
+            fmt: PkgFmt,
+            path: &Path,
+        ) -> Result<ExtractedFiles, DownloadError> {
             let stream = this
                 .client
                 .get_stream(this.url)
@@ -138,19 +138,15 @@ impl Download {
 
             debug!("Downloading and extracting to: '{}'", path.display());
 
-            match fmt.decompose() {
+            let extracted_files = match fmt.decompose() {
                 PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
-                PkgFmtDecomposed::Bin => {
-                    extract_bin(stream, path).await?;
-                }
-                PkgFmtDecomposed::Zip => {
-                    extract_zip(stream, path).await?;
-                }
-            }
+                PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
+                PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+            };
 
             debug!("Download OK, extracted to: '{}'", path.display());
 
-            Ok(())
+            Ok(extracted_files)
         }
 
         inner(self, fmt, path.as_ref()).await
