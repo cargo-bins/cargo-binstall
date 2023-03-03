@@ -279,11 +279,9 @@ impl Client {
         }
     }
 
-    /// Check if remote exists using `Method::HEAD` or `Method::GET` as fallback.
+    /// Check if remote exists using `Method::GET`.
     pub async fn remote_gettable(&self, url: Url) -> Result<bool, Error> {
-        self.head_or_fallback_to_get(url, false)
-            .await
-            .map(|response| response.status().is_success())
+        Ok(self.get(url).send(false).await?.status().is_success())
     }
 
     /// Attempt to get final redirected url using `Method::HEAD` or fallback
