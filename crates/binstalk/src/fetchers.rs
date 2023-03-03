@@ -8,7 +8,10 @@ use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{gh_api_client::GhApiClient, remote::Client, tasks::AutoAbortJoinHandle},
+    helpers::{
+        download::ExtractedFiles, gh_api_client::GhApiClient, remote::Client,
+        tasks::AutoAbortJoinHandle,
+    },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -29,7 +32,7 @@ pub trait Fetcher: Send + Sync {
         Self: Sized;
 
     /// Fetch a package and extract
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError>;
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError>;
 
     /// Find the package, if it is available for download
     ///

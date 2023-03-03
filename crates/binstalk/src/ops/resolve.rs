@@ -21,7 +21,7 @@ use crate::{
     drivers::fetch_crate_cratesio,
     errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
-    helpers::remote::Client,
+    helpers::{download::ExtractedFiles, remote::Client},
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
 };
 
@@ -200,7 +200,7 @@ async fn download_extract_and_verify(
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Download and extract it.
     // If that fails, then ignore this fetcher.
-    fetcher.fetch_and_extract(bin_path).await?;
+    let extracted_files = fetcher.fetch_and_extract(bin_path).await?;
 
     // Build final metadata
     let meta = fetcher.target_meta();
@@ -230,48 +230,47 @@ async fn download_extract_and_verify(
     }
 
     // Verify that all non-optional bin_files exist
-    block_in_place(|| {
-        let bin_files = collect_bin_files(
-            fetcher,
-            package_info,
-            meta,
-            bin_path,
-            install_path,
-            no_symlinks,
-        )?;
+    let bin_files = collect_bin_files(
+        fetcher,
+        package_info,
+        meta,
+        bin_path,
+        install_path,
+        no_symlinks,
+        &extracted_files,
+    )?;
 
-        let name = &package_info.name;
+    let name = &package_info.name;
 
-        package_info
-            .binaries
-            .iter()
-            .zip(bin_files)
-            .filter_map(|(bin, bin_file)| {
-                match bin_file.check_source_exists() {
-                    Ok(()) => Some(Ok(bin_file)),
+    package_info
+        .binaries
+        .iter()
+        .zip(bin_files)
+        .filter_map(|(bin, bin_file)| {
+            match bin_file.check_source_exists(&extracted_files) {
+                Ok(()) => Some(Ok(bin_file)),
 
-                    // This binary is optional
-                    Err(err) => {
-                        let required_features = &bin.required_features;
+                // This binary is optional
+                Err(err) => {
+                    let required_features = &bin.required_features;
 
-                        if required_features.is_empty() {
-                            // This bin is not optional, error
-                            Some(Err(err))
-                        } else {
-                            // Optional, print a warning and continue.
-                            let bin_name = bin.name.as_str();
-                            let features = required_features.iter().format(",");
-                            warn!(
-                                "When resolving {name} bin {bin_name} is not found. \
+                    if required_features.is_empty() {
+                        // This bin is not optional, error
+                        Some(Err(err))
+                    } else {
+                        // Optional, print a warning and continue.
+                        let bin_name = bin.name.as_str();
+                        let features = required_features.iter().format(",");
+                        warn!(
+                            "When resolving {name} bin {bin_name} is not found. \
                                 But since it requies features {features}, this bin is ignored."
-                            );
-                            None
-                        }
+                        );
+                        None
                     }
                 }
-            })
-            .collect::<Result<Vec<bins::BinFile>, BinstallError>>()
-    })
+            }
+        })
+        .collect::<Result<Vec<bins::BinFile>, BinstallError>>()
 }
 
 fn collect_bin_files(
@@ -281,6 +280,7 @@ fn collect_bin_files(
     bin_path: &Path,
     install_path: &Path,
     no_symlinks: bool,
+    extracted_files: &ExtractedFiles,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // List files to be installed
     // based on those found via Cargo.toml
@@ -299,7 +299,7 @@ fn collect_bin_files(
         .bin_dir
         .as_deref()
         .map(Cow::Borrowed)
-        .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data));
+        .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data, extracted_files));
 
     let mut tt = TinyTemplate::new();
 

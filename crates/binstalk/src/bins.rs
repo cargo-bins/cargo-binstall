@@ -13,6 +13,7 @@ use tracing::debug;
 use crate::{
     errors::BinstallError,
     fs::{atomic_install, atomic_symlink_file},
+    helpers::download::ExtractedFiles,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -30,7 +31,7 @@ fn is_valid_path(path: &Path) -> bool {
 
 /// Must be called after the archive is downloaded and extracted.
 /// This function might uses blocking I/O.
-pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
+pub fn infer_bin_dir_template(data: &Data, extracted_files: &ExtractedFiles) -> Cow<'static, str> {
     let name = data.name;
     let target = data.target;
     let version = data.version;
@@ -55,7 +56,11 @@ pub fn infer_bin_dir_template(data: &Data) -> Cow<'static, str> {
     gen_possible_dirs
         .into_iter()
         .map(|gen_possible_dir| gen_possible_dir(name, target, version))
-        .find(|dirname| data.bin_path.join(dirname).is_dir())
+        .find(|dirname| {
+            extracted_files
+                .get_dir(&data.bin_path.join(dirname))
+                .is_some()
+        })
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
             dir += "/";
@@ -165,16 +170,21 @@ impl BinFile {
     }
 
     /// Return `Ok` if the source exists, otherwise `Err`.
-    pub fn check_source_exists(&self) -> Result<(), BinstallError> {
-        if !self.source.try_exists()? {
-            Err(BinstallError::BinFileNotFound(self.source.clone()))
-        } else {
+    pub fn check_source_exists(
+        &self,
+        extracted_files: &ExtractedFiles,
+    ) -> Result<(), BinstallError> {
+        if extracted_files.has_file(&self.source) {
             Ok(())
+        } else {
+            Err(BinstallError::BinFileNotFound(self.source.clone()))
         }
     }
 
     pub fn install_bin(&self) -> Result<(), BinstallError> {
-        self.check_source_exists()?;
+        if !self.source.try_exists()? {
+            return Err(BinstallError::BinFileNotFound(self.source.clone()));
+        }
 
         debug!(
             "Atomically install file from '{}' to '{}'",
