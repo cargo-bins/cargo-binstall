@@ -7,7 +7,10 @@ use url::Url;
 use crate::{
     errors::BinstallError,
     helpers::{
-        download::Download, gh_api_client::GhApiClient, remote::Client, tasks::AutoAbortJoinHandle,
+        download::{Download, ExtractedFiles},
+        gh_api_client::GhApiClient,
+        remote::Client,
+        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -63,7 +66,7 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
         let url = self.package_url();
         debug!("Downloading package from: '{url}'");
         Ok(Download::new(self.client.clone(), Url::parse(&url)?)

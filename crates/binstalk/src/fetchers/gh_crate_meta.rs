@@ -13,7 +13,7 @@ use url::Url;
 use crate::{
     errors::{BinstallError, InvalidPkgFmtError},
     helpers::{
-        download::Download,
+        download::{Download, ExtractedFiles},
         futures_resolver::FuturesResolver,
         gh_api_client::{GhApiClient, GhReleaseArtifact, HasReleaseArtifact},
         remote::Client,
@@ -216,7 +216,7 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
         let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
         debug!("Downloading package from: '{url}' dst:{dst:?} fmt:{pkg_fmt:?}");
         Ok(Download::new(self.client.clone(), url.clone())

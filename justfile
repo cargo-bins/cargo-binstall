@@ -31,10 +31,7 @@ target-libc := if target =~ "gnu" { "gnu"
 output-ext := if target-os == "windows" { ".exe" } else { "" }
 output-filename := "cargo-binstall" + output-ext
 output-profile-folder := if for-release != "" { "release" } else { "debug" }
-output-folder := if target != target-host { "target" / target / output-profile-folder
-    } else if env_var_or_default("CARGO_BUILD_TARGET", "") != "" { "target" / target / output-profile-folder
-    } else if cargo-buildstd != "" { "target" / target / output-profile-folder
-    } else { "target" / output-profile-folder }
+output-folder := "target" / target / output-profile-folder
 output-path := output-folder / output-filename
 
 # which tool to use for compiling

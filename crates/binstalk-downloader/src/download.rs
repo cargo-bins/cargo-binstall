@@ -19,6 +19,9 @@ pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
 
 mod extracter;
 
+mod extracted_files;
+pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
+
 mod zip_extraction;
 pub use zip_extraction::ZipError;
 
@@ -90,9 +93,6 @@ impl Download {
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
     ///
-    /// `cancellation_future` can be used to cancel the extraction and return
-    /// [`DownloadError::UserAbort`] error.
-    ///
     /// NOTE that this API does not support gnu extension sparse file unlike
     /// [`Download::and_extract`].
     #[instrument(skip(visitor))]
@@ -118,15 +118,18 @@ impl Download {
 
     /// Download a file from the provided URL and extract it to the provided path.
     ///
-    /// `cancellation_future` can be used to cancel the extraction and return
-    /// [`DownloadError::UserAbort`] error.
+    /// NOTE that this would only extract directory and regular files.
     #[instrument(skip(path))]
     pub async fn and_extract(
         self,
         fmt: PkgFmt,
         path: impl AsRef<Path>,
-    ) -> Result<(), DownloadError> {
-        async fn inner(this: Download, fmt: PkgFmt, path: &Path) -> Result<(), DownloadError> {
+    ) -> Result<ExtractedFiles, DownloadError> {
+        async fn inner(
+            this: Download,
+            fmt: PkgFmt,
+            path: &Path,
+        ) -> Result<ExtractedFiles, DownloadError> {
             let stream = this
                 .client
                 .get_stream(this.url)
@@ -135,15 +138,15 @@ impl Download {
 
             debug!("Downloading and extracting to: '{}'", path.display());
 
-            match fmt.decompose() {
+            let extracted_files = match fmt.decompose() {
                 PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
                 PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
                 PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
-            }
+            };
 
             debug!("Download OK, extracted to: '{}'", path.display());
 
-            Ok(())
+            Ok(extracted_files)
         }
 
         inner(self, fmt, path.as_ref()).await
@@ -179,3 +182,99 @@ impl Update for NoDigest {
 }
 
 impl HashMarker for NoDigest {}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use std::{
+        collections::{HashMap, HashSet},
+        ffi::OsStr,
+    };
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_and_extract() {
+        let client = crate::remote::Client::new(
+            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+            None,
+            std::time::Duration::from_millis(10),
+            1.try_into().unwrap(),
+            [],
+        )
+        .unwrap();
+
+        let cargo_binstall_url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v0.20.1/cargo-binstall-aarch64-unknown-linux-musl.tgz";
+
+        let extracted_files =
+            Download::new(client.clone(), Url::parse(cargo_binstall_url).unwrap())
+                .and_extract(PkgFmt::Tgz, tempdir().unwrap())
+                .await
+                .unwrap();
+
+        assert!(extracted_files.has_file(Path::new("cargo-binstall")));
+        assert!(!extracted_files.has_file(Path::new("1234")));
+
+        let files = HashSet::from([OsStr::new("cargo-binstall").into()]);
+        assert_eq!(extracted_files.get_dir(Path::new(".")).unwrap(), &files);
+
+        assert_eq!(
+            extracted_files.0,
+            HashMap::from([
+                (
+                    Path::new("cargo-binstall").into(),
+                    ExtractedFilesEntry::File
+                ),
+                (
+                    Path::new(".").into(),
+                    ExtractedFilesEntry::Dir(Box::new(files))
+                )
+            ])
+        );
+
+        let cargo_watch_url = "https://github.com/watchexec/cargo-watch/releases/download/v8.4.0/cargo-watch-v8.4.0-aarch64-unknown-linux-gnu.tar.xz";
+
+        let extracted_files = Download::new(client, Url::parse(cargo_watch_url).unwrap())
+            .and_extract(PkgFmt::Txz, tempdir().unwrap())
+            .await
+            .unwrap();
+
+        let dir = Path::new("cargo-watch-v8.4.0-aarch64-unknown-linux-gnu");
+
+        assert_eq!(
+            extracted_files.get_dir(Path::new(".")).unwrap(),
+            &HashSet::from([dir.as_os_str().into()])
+        );
+
+        assert_eq!(
+            extracted_files.get_dir(dir).unwrap(),
+            &HashSet::from_iter(
+                [
+                    "README.md",
+                    "LICENSE",
+                    "completions",
+                    "cargo-watch",
+                    "cargo-watch.1"
+                ]
+                .iter()
+                .map(OsStr::new)
+                .map(Box::<OsStr>::from)
+            ),
+        );
+
+        assert_eq!(
+            extracted_files.get_dir(&dir.join("completions")).unwrap(),
+            &HashSet::from([OsStr::new("zsh").into()]),
+        );
+
+        assert!(extracted_files.has_file(&dir.join("cargo-watch")));
+        assert!(extracted_files.has_file(&dir.join("cargo-watch.1")));
+        assert!(extracted_files.has_file(&dir.join("LICENSE")));
+        assert!(extracted_files.has_file(&dir.join("README.md")));
+
+        assert!(!extracted_files.has_file(&dir.join("completions")));
+        assert!(!extracted_files.has_file(&dir.join("asdfcqwe")));
+
+        assert!(extracted_files.has_file(&dir.join("completions/zsh")));
+    }
+}
