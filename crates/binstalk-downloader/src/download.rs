@@ -215,12 +215,21 @@ mod test {
         assert!(extracted_files.has_file(Path::new("cargo-binstall")));
         assert!(!extracted_files.has_file(Path::new("1234")));
 
+        let files = HashSet::from([OsStr::new("cargo-binstall").into()]);
+        assert_eq!(extracted_files.get_dir(Path::new(".")).unwrap(), &files);
+
         assert_eq!(
             extracted_files.0,
-            HashMap::from([(
-                Path::new("cargo-binstall").into(),
-                ExtractedFilesEntry::File
-            )])
+            HashMap::from([
+                (
+                    Path::new("cargo-binstall").into(),
+                    ExtractedFilesEntry::File
+                ),
+                (
+                    Path::new(".").into(),
+                    ExtractedFilesEntry::Dir(Box::new(files))
+                )
+            ])
         );
 
         let cargo_watch_url = "https://github.com/watchexec/cargo-watch/releases/download/v8.4.0/cargo-watch-v8.4.0-aarch64-unknown-linux-gnu.tar.xz";
@@ -231,6 +240,11 @@ mod test {
             .unwrap();
 
         let dir = Path::new("cargo-watch-v8.4.0-aarch64-unknown-linux-gnu");
+
+        assert_eq!(
+            extracted_files.get_dir(Path::new(".")).unwrap(),
+            &HashSet::from([dir.as_os_str().into()])
+        );
 
         assert_eq!(
             extracted_files.get_dir(dir).unwrap(),

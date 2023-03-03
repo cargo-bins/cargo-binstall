@@ -39,11 +39,13 @@ impl ExtractedFiles {
     }
 
     fn add_dir_if_has_parent(&mut self, path: &Path) {
-        match path.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => {
-                self.add_dir_inner(parent, path.file_name())
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                self.add_dir_inner(parent, path.file_name());
+                self.add_dir_if_has_parent(parent);
+            } else {
+                self.add_dir_inner(Path::new("."), path.file_name())
             }
-            _ => (),
         }
     }
 
@@ -53,6 +55,7 @@ impl ExtractedFiles {
     /// it would be replaced with an empty Dir entry.
     pub(super) fn add_dir(&mut self, path: &Path) {
         self.add_dir_inner(path, None);
+        self.add_dir_if_has_parent(path);
     }
 
     /// * `path` - must be canonical and must not be empty
@@ -74,14 +77,16 @@ impl ExtractedFiles {
                 entry => *entry = ExtractedFilesEntry::new_dir(file_name),
             },
         }
-
-        self.add_dir_if_has_parent(path);
     }
 
+    /// * `path` - must be canonical and must not be empty, but could be "."
+    ///            for top-level.
     pub fn get_entry(&self, path: &Path) -> Option<&ExtractedFilesEntry> {
         self.0.get(path)
     }
 
+    /// * `path` - must be canonical and must not be empty, but could be "."
+    ///            for top-level.
     pub fn get_dir(&self, path: &Path) -> Option<&HashSet<Box<OsStr>>> {
         match self.get_entry(path)? {
             ExtractedFilesEntry::Dir(file_names) => Some(file_names),
@@ -89,6 +94,8 @@ impl ExtractedFiles {
         }
     }
 
+    /// * `path` - must be canonical and must not be empty, but could be "."
+    ///            for top-level.
     pub fn has_file(&self, path: &Path) -> bool {
         matches!(self.get_entry(path), Some(ExtractedFilesEntry::File))
     }
