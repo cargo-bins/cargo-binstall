@@ -19,6 +19,9 @@ pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
 
 mod extracter;
 
+mod extracted_files;
+pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
+
 mod zip_extraction;
 pub use zip_extraction::ZipError;
 
