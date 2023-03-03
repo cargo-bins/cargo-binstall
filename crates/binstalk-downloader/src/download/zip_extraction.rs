@@ -12,7 +12,7 @@ use tokio::{
     sync::mpsc,
 };
 
-use super::DownloadError;
+use super::{DownloadError, ExtractedFiles};
 use crate::utils::asyncify;
 
 #[derive(Debug, ThisError)]
@@ -38,6 +38,7 @@ pub(super) async fn extract_zip_entry<R>(
     zip_reader: &mut ZipFileReader<Reading<'_, Take<R>>>,
     path: &Path,
     buf: &mut BytesMut,
+    extracted_files: &mut ExtractedFiles,
 ) -> Result<(), DownloadError>
 where
     R: AsyncRead + Unpin + Send + Sync,
@@ -48,7 +49,7 @@ where
         .ok_or_else(|| ZipError(ZipErrorInner::InvalidFilePath(raw_filename.into())))?;
 
     // Calculates the outpath
-    let outpath = path.join(filename);
+    let outpath = path.join(&filename);
 
     // Get permissions
     let mut perms = None;
@@ -64,6 +65,8 @@ where
     }
 
     if raw_filename.ends_with('/') {
+        extracted_files.add_dir(&filename, None);
+
         // This entry is a dir.
         asyncify(move || {
             std::fs::create_dir_all(&outpath)?;
@@ -75,6 +78,8 @@ where
         })
         .await?;
     } else {
+        extracted_files.add_file(&filename);
+
         // Use channel size = 5 to minimize the waiting time in the extraction task
         let (tx, mut rx) = mpsc::channel::<Bytes>(5);
 

@@ -13,11 +13,12 @@ use tokio_util::io::StreamReader;
 use tracing::debug;
 
 use super::{
-    extracter::*, zip_extraction::extract_zip_entry, DownloadError, TarBasedFmt, ZipError,
+    extracter::*, zip_extraction::extract_zip_entry, DownloadError, ExtractedFiles, TarBasedFmt,
+    ZipError,
 };
 use crate::utils::{extract_with_blocking_task, StreamReadable};
 
-pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<(), DownloadError>
+pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'static,
 {
@@ -32,10 +33,16 @@ where
 
         file.flush()
     })
-    .await
+    .await?;
+
+    let mut extracted_files = ExtractedFiles::new();
+
+    extracted_files.add_file(Path::new(path.file_name().unwrap()));
+
+    Ok(extracted_files)
 }
 
-pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<(), DownloadError>
+pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync + 'static,
 {
@@ -44,9 +51,10 @@ where
     let reader = StreamReader::new(stream);
     let mut zip = ZipFileReader::new(reader);
     let mut buf = BytesMut::with_capacity(4 * 4096);
+    let mut extracted_files = ExtractedFiles::new();
 
     while let Some(mut zip_reader) = zip.next_entry().await.map_err(ZipError::from_inner)? {
-        extract_zip_entry(&mut zip_reader, path, &mut buf).await?;
+        extract_zip_entry(&mut zip_reader, path, &mut buf, &mut extracted_files).await?;
 
         // extract_zip_entry would read the zip_reader until read the file until
         // eof unless extract_zip itself is cancelled or an error is raised.
@@ -55,7 +63,7 @@ where
         zip = zip_reader.done().await.map_err(ZipError::from_inner)?;
     }
 
-    Ok(())
+    Ok(extracted_files)
 }
 
 pub async fn extract_tar_based_stream<S>(

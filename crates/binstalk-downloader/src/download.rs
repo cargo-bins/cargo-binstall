@@ -140,8 +140,12 @@ impl Download {
 
             match fmt.decompose() {
                 PkgFmtDecomposed::Tar(fmt) => extract_tar_based_stream(stream, path, fmt).await?,
-                PkgFmtDecomposed::Bin => extract_bin(stream, path).await?,
-                PkgFmtDecomposed::Zip => extract_zip(stream, path).await?,
+                PkgFmtDecomposed::Bin => {
+                    extract_bin(stream, path).await?;
+                }
+                PkgFmtDecomposed::Zip => {
+                    extract_zip(stream, path).await?;
+                }
             }
 
             debug!("Download OK, extracted to: '{}'", path.display());
