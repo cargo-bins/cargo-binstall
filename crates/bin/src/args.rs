@@ -3,7 +3,7 @@ use std::{
     ffi::OsString,
     fmt, fs, iter,
     num::{NonZeroU64, ParseIntError},
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
 };
 
@@ -152,7 +152,7 @@ pub struct Args {
     ///
     /// This option can be used to disable that behavior.
     #[clap(help_heading = "Overrides", long)]
-    pub no_scrap_github_token: bool,
+    pub no_discover_github_token: bool,
 
     /// Disable symlinking / versioned updates.
     ///
@@ -461,7 +461,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             .exit()
     }
 
-    if opts.github_token.is_none() && !opts.no_scrap_github_token {
+    if opts.github_token.is_none() && !opts.no_discover_github_token {
         if let Some(github_token) = try_extract_from_git_credentials() {
             opts.github_token = Some(github_token);
         } else if let Ok(github_token) = gh_token::get() {
