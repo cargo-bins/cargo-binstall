@@ -195,8 +195,8 @@ pub struct Args {
     /// the metadata files inside the path you specified.
     ///
     /// NOTE that `--install-path` takes precedence over this option.
-    #[clap(help_heading = "Options", long)]
-    pub roots: Option<PathBuf>,
+    #[clap(help_heading = "Options", long, alias = "roots")]
+    pub root: Option<PathBuf>,
 
     /// This option will be passed through to all `cargo-install` invocations.
     ///
