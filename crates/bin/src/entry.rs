@@ -54,7 +54,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
     // Compute paths
     let (install_path, mut manifests, temp_dir) =
-        compute_paths_and_load_manifests(args.roots, args.install_path)?;
+        compute_paths_and_load_manifests(args.root, args.install_path)?;
 
     // Remove installed crates
     let mut crate_names =
