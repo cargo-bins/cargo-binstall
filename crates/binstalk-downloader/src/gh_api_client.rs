@@ -7,6 +7,7 @@ use std::{
 
 use compact_str::{CompactString, ToCompactString};
 use tokio::sync::OnceCell;
+use tracing::warn;
 
 use crate::remote;
 
@@ -98,6 +99,21 @@ pub struct GhApiClient(Arc<Inner>);
 
 impl GhApiClient {
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
+        let auth_token = auth_token.and_then(|auth_token| {
+            let res = (|| {
+                let token = auth_token.strip_prefix("gh")?;
+                let mut chars = token.chars();
+                chars.next()?;
+                (chars.next()? == '_' && chars.next().is_some()).then_some(auth_token)
+            })();
+
+            if res.is_none() {
+                warn!("Invalid auth_token, expected 'gh*_', fallback to unauthorized mode");
+            }
+
+            res
+        });
+
         Self(Arc::new(Inner {
             client,
             auth_token,
