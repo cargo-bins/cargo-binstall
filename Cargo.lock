@@ -806,9 +806,9 @@ dependencies = [
 
 [[package]]
 name = "gh-token"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc623f67e9004eac91ad251d7d4c0b1fa7ac53646c09d9c8ef6e27a21b2d02fd"
+checksum = "74f7f3953b155f5df52140de17556ed1464c9d3c9092e2dc0adf2b55211fd10d"
 dependencies = [
  "home",
  "serde",
