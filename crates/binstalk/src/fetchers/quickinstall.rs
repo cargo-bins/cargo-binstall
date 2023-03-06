@@ -9,7 +9,7 @@ use crate::{
     helpers::{
         download::{Download, ExtractedFiles},
         gh_api_client::GhApiClient,
-        remote::{does_url_exist, Client},
+        remote::{does_url_exist, Client, Method},
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -127,7 +127,7 @@ impl QuickInstall {
         let url = self.stats_url.clone();
         debug!("Sending installation report to quickinstall ({url})");
 
-        self.client.remote_gettable(url).await?;
+        self.client.request(Method::HEAD, url).send(true).await?;
 
         Ok(())
     }
