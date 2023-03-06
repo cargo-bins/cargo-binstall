@@ -32,6 +32,8 @@ pub struct Options {
 
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,
+    pub cargo_root: Option<PathBuf>,
+
     pub client: Client,
     pub gh_api_client: GhApiClient,
     pub jobserver_client: LazyJobserverClient,
