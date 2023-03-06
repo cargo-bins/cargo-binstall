@@ -56,11 +56,7 @@ pub fn infer_bin_dir_template(data: &Data, extracted_files: &ExtractedFiles) -> 
     gen_possible_dirs
         .into_iter()
         .map(|gen_possible_dir| gen_possible_dir(name, target, version))
-        .find(|dirname| {
-            extracted_files
-                .get_dir(&data.bin_path.join(dirname))
-                .is_some()
-        })
+        .find(|dirname| extracted_files.get_dir(Path::new(&dirname)).is_some())
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
             dir += "/";

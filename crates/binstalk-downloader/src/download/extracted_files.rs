@@ -79,14 +79,18 @@ impl ExtractedFiles {
         }
     }
 
-    /// * `path` - must be canonical and must not be empty, but could be "."
-    ///            for top-level.
+    /// * `path` - must be a relative path without `.`, `..`, `/`, `prefix:/`
+    ///            and must not be empty, for these values it is guaranteed to
+    ///            return `None`.
+    ///            But could be set to "." for top-level.
     pub fn get_entry(&self, path: &Path) -> Option<&ExtractedFilesEntry> {
         self.0.get(path)
     }
 
-    /// * `path` - must be canonical and must not be empty, but could be "."
-    ///            for top-level.
+    /// * `path` - must be a relative path without `.`, `..`, `/`, `prefix:/`
+    ///            and must not be empty, for these values it is guaranteed to
+    ///            return `None`.
+    ///            But could be set to "." for top-level.
     pub fn get_dir(&self, path: &Path) -> Option<&HashSet<Box<OsStr>>> {
         match self.get_entry(path)? {
             ExtractedFilesEntry::Dir(file_names) => Some(file_names),
@@ -94,8 +98,10 @@ impl ExtractedFiles {
         }
     }
 
-    /// * `path` - must be canonical and must not be empty, but could be "."
-    ///            for top-level.
+    /// * `path` - must be a relative path without `.`, `..`, `/`, `prefix:/`
+    ///            and must not be empty, for these values it is guaranteed to
+    ///            return `false`.
+    ///            But could be set to "." for top-level.
     pub fn has_file(&self, path: &Path) -> bool {
         matches!(self.get_entry(path), Some(ExtractedFilesEntry::File))
     }

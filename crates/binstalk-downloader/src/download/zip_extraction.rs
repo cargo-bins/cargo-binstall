@@ -54,17 +54,25 @@ where
     // Get permissions
     let mut perms = None;
 
+    let is_dir = raw_filename.ends_with('/');
+
     #[cfg(unix)]
     {
         use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
         if let Some(mode) = zip_reader.entry().unix_permissions() {
-            let mode: u16 = mode;
+            // If it is a dir, then it needs to be at least rwx for the current
+            // user so that we can create new files, search for existing files
+            // and list its contents.
+            //
+            // If it is a file, then it needs to be at least readable for the
+            // current user.
+            let mode: u16 = mode | if is_dir { 0o700 } else { 0o400 };
             perms = Some(Permissions::from_mode(mode as u32));
         }
     }
 
-    if raw_filename.ends_with('/') {
+    if is_dir {
         extracted_files.add_dir(&filename);
 
         // This entry is a dir.
