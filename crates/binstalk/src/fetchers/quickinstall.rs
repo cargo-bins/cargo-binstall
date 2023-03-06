@@ -9,7 +9,7 @@ use crate::{
     helpers::{
         download::{Download, ExtractedFiles},
         gh_api_client::GhApiClient,
-        remote::Client,
+        remote::{does_url_exist, Client},
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -22,6 +22,8 @@ const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 
 pub struct QuickInstall {
     client: Client,
+    gh_api_client: GhApiClient,
+    tag: String,
     package: String,
     target_data: Arc<TargetData>,
 }
@@ -30,7 +32,7 @@ pub struct QuickInstall {
 impl super::Fetcher for QuickInstall {
     fn new(
         client: Client,
-        _gh_api_client: GhApiClient,
+        gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetData>,
     ) -> Arc<dyn super::Fetcher> {
@@ -39,6 +41,8 @@ impl super::Fetcher for QuickInstall {
         let target = &target_data.target;
         Arc::new(Self {
             client,
+            gh_api_client,
+            tag: format!("{crate_name}-{version}"),
             package: format!("{crate_name}-{version}-{target}"),
             target_data,
         })
@@ -61,8 +65,12 @@ impl super::Fetcher for QuickInstall {
             }
 
             let url = self.package_url();
-            debug!("Checking for package at: '{url}'");
-            Ok(self.client.remote_gettable(Url::parse(&url)?).await?)
+            does_url_exist(
+                self.client.clone(),
+                self.gh_api_client.clone(),
+                &Url::parse(&url)?,
+            )
+            .await
         })
     }
 
@@ -105,9 +113,10 @@ impl super::Fetcher for QuickInstall {
 impl QuickInstall {
     fn package_url(&self) -> String {
         format!(
-            "{base_url}/{package}/{package}.tar.gz",
+            "{base_url}/{tag}/{package}.tar.gz",
             base_url = BASE_URL,
-            package = self.package
+            tag = self.tag,
+            package = self.package,
         )
     }
 
@@ -115,7 +124,7 @@ impl QuickInstall {
         format!(
             "{stats_url}/{package}.tar.gz",
             stats_url = STATS_URL,
-            package = self.package
+            package = self.package,
         )
     }
 
