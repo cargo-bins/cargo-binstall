@@ -23,8 +23,11 @@ const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 pub struct QuickInstall {
     client: Client,
     gh_api_client: GhApiClient,
-    tag: String,
+
     package: String,
+    package_url: Url,
+    stats_url: Url,
+
     target_data: Arc<TargetData>,
 }
 
@@ -39,11 +42,21 @@ impl super::Fetcher for QuickInstall {
         let crate_name = &data.name;
         let version = &data.version;
         let target = &target_data.target;
+
+        let package = format!("{crate_name}-{version}-{target}");
+
         Arc::new(Self {
             client,
             gh_api_client,
-            tag: format!("{crate_name}-{version}"),
-            package: format!("{crate_name}-{version}-{target}"),
+
+            package_url: Url::parse(&format!(
+                "{BASE_URL}/{crate_name}-{version}/{package}.tar.gz",
+            ))
+            .expect("package_url is pre-generated and should never be invalid url"),
+            stats_url: Url::parse(&format!("{STATS_URL}/{package}.tar.gz",))
+                .expect("stats_url is pre-generated and should never be invalid url"),
+            package,
+
             target_data,
         })
     }
@@ -64,20 +77,19 @@ impl super::Fetcher for QuickInstall {
                 });
             }
 
-            let url = self.package_url();
             does_url_exist(
                 self.client.clone(),
                 self.gh_api_client.clone(),
-                &Url::parse(&url)?,
+                &self.package_url,
             )
             .await
         })
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
-        let url = self.package_url();
+        let url = &self.package_url;
         debug!("Downloading package from: '{url}'");
-        Ok(Download::new(self.client.clone(), Url::parse(&url)?)
+        Ok(Download::new(self.client.clone(), url.clone())
             .and_extract(self.pkg_fmt(), dst)
             .await?)
     }
@@ -111,25 +123,8 @@ impl super::Fetcher for QuickInstall {
 }
 
 impl QuickInstall {
-    fn package_url(&self) -> String {
-        format!(
-            "{base_url}/{tag}/{package}.tar.gz",
-            base_url = BASE_URL,
-            tag = self.tag,
-            package = self.package,
-        )
-    }
-
-    fn stats_url(&self) -> String {
-        format!(
-            "{stats_url}/{package}.tar.gz",
-            stats_url = STATS_URL,
-            package = self.package,
-        )
-    }
-
     pub async fn report(&self) -> Result<(), BinstallError> {
-        let url = Url::parse(&self.stats_url())?;
+        let url = self.stats_url.clone();
         debug!("Sending installation report to quickinstall ({url})");
 
         self.client.remote_gettable(url).await?;
