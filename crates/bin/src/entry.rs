@@ -53,7 +53,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         .collect();
 
     // Compute paths
-    let cargo_root = args.roots;
+    let cargo_root = args.root;
     let (install_path, mut manifests, temp_dir) =
         compute_paths_and_load_manifests(cargo_root.clone(), args.install_path)?;
 
