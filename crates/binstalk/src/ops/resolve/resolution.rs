@@ -154,6 +154,10 @@ impl ResolutionSource {
             cmd.arg("--locked");
         }
 
+        if let Some(cargo_root) = &opts.cargo_root {
+            cmd.arg("--root").arg(cargo_root);
+        }
+
         if !opts.dry_run {
             let mut child = opts
                 .jobserver_client
