@@ -204,6 +204,7 @@ mod test {
         )
         .unwrap();
 
+        // cargo-binstall
         let cargo_binstall_url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v0.20.1/cargo-binstall-aarch64-unknown-linux-musl.tgz";
 
         let extracted_files =
@@ -232,9 +233,10 @@ mod test {
             ])
         );
 
+        // cargo-watch
         let cargo_watch_url = "https://github.com/watchexec/cargo-watch/releases/download/v8.4.0/cargo-watch-v8.4.0-aarch64-unknown-linux-gnu.tar.xz";
 
-        let extracted_files = Download::new(client, Url::parse(cargo_watch_url).unwrap())
+        let extracted_files = Download::new(client.clone(), Url::parse(cargo_watch_url).unwrap())
             .and_extract(PkgFmt::Txz, tempdir().unwrap())
             .await
             .unwrap();
@@ -276,5 +278,35 @@ mod test {
         assert!(!extracted_files.has_file(&dir.join("asdfcqwe")));
 
         assert!(extracted_files.has_file(&dir.join("completions/zsh")));
+
+        // sccache, tgz and zip
+        let sccache_config = [
+            ("https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.tar.gz", PkgFmt::Tgz),
+            ("https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.zip", PkgFmt::Zip),
+        ];
+
+        for (sccache_url, fmt) in sccache_config {
+            let extracted_files = Download::new(client.clone(), Url::parse(sccache_url).unwrap())
+                .and_extract(fmt, tempdir().unwrap())
+                .await
+                .unwrap();
+
+            let dir = Path::new("sccache-v0.3.3-x86_64-pc-windows-msvc");
+
+            assert_eq!(
+                extracted_files.get_dir(Path::new(".")).unwrap(),
+                &HashSet::from([dir.as_os_str().into()])
+            );
+
+            assert_eq!(
+                extracted_files.get_dir(dir).unwrap(),
+                &HashSet::from_iter(
+                    ["README.md", "LICENSE", "sccache.exe"]
+                        .iter()
+                        .map(OsStr::new)
+                        .map(Box::<OsStr>::from)
+                ),
+            );
+        }
     }
 }
