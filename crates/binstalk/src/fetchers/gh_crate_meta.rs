@@ -15,8 +15,8 @@ use crate::{
     helpers::{
         download::{Download, ExtractedFiles},
         futures_resolver::FuturesResolver,
-        gh_api_client::{GhApiClient, GhReleaseArtifact, HasReleaseArtifact},
-        remote::Client,
+        gh_api_client::GhApiClient,
+        remote::{does_url_exist, Client},
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -69,28 +69,7 @@ impl GhCrateMeta {
             let gh_api_client = self.gh_api_client.clone();
 
             async move {
-                debug!("Checking for package at: '{url}'");
-
-                if let Some(artifact) = GhReleaseArtifact::try_extract_from_url(&url) {
-                    debug!("Using GitHub Restful API to check for existence of artifact, which will also cache the API response");
-
-                    match gh_api_client.has_release_artifact(artifact).await? {
-                        HasReleaseArtifact::Yes => return Ok(Some((url, pkg_fmt))),
-                        HasReleaseArtifact::No | HasReleaseArtifact::NoSuchRelease=> return Ok(None),
-
-                        HasReleaseArtifact::RateLimit { retry_after } => {
-                            warn!("Your GitHub API token (if any) has reached its rate limit and cannot be used again until {retry_after:?}, so we will fallback to HEAD/GET on the url.");
-                            warn!("If you did not supply the github token, consider supply one since GitHub by default limit the number of requests for unauthoized user to 60 requests per hour per origin IP address.");
-                        }
-                        HasReleaseArtifact::Unauthorized => {
-                            warn!("GitHub API somehow requires a token for the API access, so we will fallback to HEAD/GET on the url.");
-                            warn!("Please consider supplying a token to cargo-binstall to speedup resolution.");
-                        }
-                    }
-                }
-
-                Ok(client
-                    .remote_gettable(url.clone())
+                Ok(does_url_exist(client, gh_api_client, &url)
                     .await?
                     .then_some((url, pkg_fmt)))
             }
