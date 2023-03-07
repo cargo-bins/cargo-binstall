@@ -97,21 +97,19 @@ struct Inner {
 #[derive(Clone, Debug)]
 pub struct GhApiClient(Arc<Inner>);
 
+fn gh_prefixed(token: &str) -> bool {
+    matches!((token.get(0..2), token.get(3..4)), (Some("gh"), Some("_")))
+}
+
 impl GhApiClient {
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
         let auth_token = auth_token.and_then(|auth_token| {
-            let res = (|| {
-                let token = auth_token.strip_prefix("gh")?;
-                let mut chars = token.chars();
-                chars.next()?;
-                (chars.next()? == '_' && chars.next().is_some()).then_some(auth_token)
-            })();
-
-            if res.is_none() {
+            if gh_prefixed(&auth_token) {
+                Some(auth_token)
+            } else {
                 warn!("Invalid auth_token, expected 'gh*_', fallback to unauthorized mode");
+                None
             }
-
-            res
         });
 
         Self(Arc::new(Inner {
