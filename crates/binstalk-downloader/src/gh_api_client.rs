@@ -7,6 +7,7 @@ use std::{
 
 use compact_str::{CompactString, ToCompactString};
 use tokio::sync::OnceCell;
+use tracing::warn;
 
 use crate::remote;
 
@@ -96,8 +97,21 @@ struct Inner {
 #[derive(Clone, Debug)]
 pub struct GhApiClient(Arc<Inner>);
 
+fn gh_prefixed(token: &str) -> bool {
+    matches!((token.get(0..2), token.get(3..4)), (Some("gh"), Some("_")))
+}
+
 impl GhApiClient {
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
+        let auth_token = auth_token.and_then(|auth_token| {
+            if gh_prefixed(&auth_token) {
+                Some(auth_token)
+            } else {
+                warn!("Invalid auth_token, expected 'gh*_', fallback to unauthorized mode");
+                None
+            }
+        });
+
         Self(Arc::new(Inner {
             client,
             auth_token,
