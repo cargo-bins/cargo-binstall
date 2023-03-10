@@ -62,14 +62,15 @@ cargo binstall --no-confirm --no-symlinks cargo-edit cargo-watch cargo-tarpaulin
     watchexec-cli cargo-outdated just fnm broot stylua
 ```
 
-If your favorite package fails to install, you may specify the Cargo.toml metadata entries for `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values [as documented below](#supporting-binary-installation).
+If your favorite package fails to install, you may specify the metadata entries for `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values [as documented here](SUPPORT.md).
 
 For example:
 
 ```shell
 $ binstall \
   --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ archive-format }" \
-  --pkg-fmt="txz" crate_name
+  --pkg-fmt="txz" \
+  crate_name
 ```
 
 ## Upgrade installed crates
