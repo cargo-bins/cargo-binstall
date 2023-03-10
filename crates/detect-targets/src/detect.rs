@@ -61,7 +61,7 @@ pub async fn detect_targets() -> Vec<String> {
 
         cfg_if! {
             if #[cfg(target_os = "macos")] {
-                targets.extend(macos::detect_alternative_targets(&targets[0]));
+                targets.extend(macos::detect_alternative_targets(&targets[0]).await);
             } else if #[cfg(target_os = "windows")] {
                 targets.extend(windows::detect_alternative_targets(&targets[0]));
             }
