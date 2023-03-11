@@ -461,11 +461,15 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             .exit()
     }
 
-    if opts.github_token.is_none() && !opts.no_discover_github_token {
-        if let Some(github_token) = try_extract_from_git_credentials() {
-            opts.github_token = Some(github_token);
-        } else if let Ok(github_token) = gh_token::get() {
+    if opts.github_token.is_none() {
+        if let Ok(github_token) = env::var("GH_TOKEN") {
             opts.github_token = Some(github_token.into());
+        } else if !opts.no_discover_github_token {
+            if let Some(github_token) = try_extract_from_git_credentials() {
+                opts.github_token = Some(github_token);
+            } else if let Ok(github_token) = gh_token::get() {
+                opts.github_token = Some(github_token.into());
+            }
         }
     }
 
