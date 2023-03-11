@@ -35,29 +35,33 @@ impl Termination for MainExit {
 }
 
 impl MainExit {
-    pub fn new(result: Result<Result<()>, BinstallError>, done: Duration) -> Self {
-        result.map_or_else(MainExit::Error, |res| {
-            res.map(|()| MainExit::Success(Some(done)))
-                .unwrap_or_else(|err| {
-                    err.downcast::<BinstallError>()
-                        .map(MainExit::Error)
-                        .unwrap_or_else(MainExit::Report)
-                })
-        })
+    pub fn new(res: Result<()>, done: Duration) -> Self {
+        res.map(|()| MainExit::Success(Some(done)))
+            .unwrap_or_else(|err| {
+                err.downcast::<BinstallError>()
+                    .map(MainExit::Error)
+                    .unwrap_or_else(MainExit::Report)
+            })
     }
 }
 
 /// This function would start a tokio multithreading runtime,
-/// spawn a new task on it that runs `f`, then `block_on` it.
+/// spawn a new task on it that runs `f()`, then `block_on` it.
 ///
 /// It will cancel the future if user requested cancellation
 /// via signal.
-pub fn run_tokio_main<F, T>(f: F) -> Result<T, BinstallError>
+pub fn run_tokio_main<Func, Fut>(f: Func) -> Result<()>
 where
-    F: Future<Output = T> + Send + 'static,
-    T: Send + 'static,
+    Func: FnOnce() -> Result<Option<Fut>>,
+    Fut: Future<Output = Result<()>> + Send + 'static,
 {
-    let rt = Runtime::new()?;
-    let handle = AutoAbortJoinHandle::new(rt.spawn(f));
-    rt.block_on(cancel_on_user_sig_term(handle))
+    let rt = Runtime::new().map_err(BinstallError::from)?;
+    let _guard = rt.enter();
+
+    if let Some(fut) = f()? {
+        let handle = AutoAbortJoinHandle::new(rt.spawn(fut));
+        rt.block_on(cancel_on_user_sig_term(handle))?
+    } else {
+        Ok(())
+    }
 }
