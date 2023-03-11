@@ -49,6 +49,13 @@ pub struct Config {
     // which needs `toml_edit::Item`.
 }
 
+fn join_if_relative(path: &mut Option<PathBuf>, dir: &Path) {
+    match path {
+        Some(path) if path.is_relative() => *path = dir.join(&path),
+        _ => (),
+    }
+}
+
 impl Config {
     pub fn default_path() -> Result<PathBuf, ConfigLoadError> {
         Ok(cargo_home()?.join("config.toml"))
@@ -58,24 +65,36 @@ impl Config {
         Self::load_from_path(Self::default_path()?)
     }
 
-    pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, ConfigLoadError> {
-        fn inner(reader: &mut dyn io::Read) -> Result<Config, ConfigLoadError> {
+    /// * `dir` - path to the dir where the config.toml is located.
+    ///           For relative path in the config, `Config::load_from_reader`
+    ///           will join the `dir` and the relative path to form the final
+    ///           path.
+    pub fn load_from_reader<R: io::Read>(
+        mut reader: R,
+        dir: &Path,
+    ) -> Result<Self, ConfigLoadError> {
+        fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
             let mut vec = Vec::new();
             reader.read_to_end(&mut vec)?;
 
             if vec.is_empty() {
                 Ok(Default::default())
             } else {
-                toml_edit::de::from_slice(&vec).map_err(ConfigLoadError::from)
+                let mut config: Config = toml_edit::de::from_slice(&vec)?;
+                join_if_relative(&mut config.install.root, dir);
+                join_if_relative(&mut config.http.cainfo, dir);
+                Ok(config)
             }
         }
 
-        inner(&mut reader)
+        inner(&mut reader, dir)
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, ConfigLoadError> {
+        let path = path.as_ref();
         let file = FileLock::new_shared(File::open(path)?)?;
-        Self::load_from_reader(file)
+        // Any regular file must have a parent dir
+        Self::load_from_reader(file, path.parent().unwrap())
     }
 }
 
@@ -122,7 +141,7 @@ root = "/some/path"         # `cargo install` destination directory
 
     #[test]
     fn test_loading() {
-        let config = Config::load_from_reader(Cursor::new(&CONFIG)).unwrap();
+        let config = Config::load_from_reader(Cursor::new(&CONFIG), Path::new("/root")).unwrap();
 
         assert_eq!(
             config.install.root.as_deref().unwrap(),
@@ -136,7 +155,7 @@ root = "/some/path"         # `cargo install` destination directory
         assert_eq!(config.http.timeout, Some(30));
         assert_eq!(
             config.http.cainfo.as_deref().unwrap(),
-            Path::new("cert.pem")
+            Path::new("/root/cert.pem")
         );
     }
 }
