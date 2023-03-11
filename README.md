@@ -62,12 +62,12 @@ cargo binstall --no-confirm --no-symlinks cargo-edit cargo-watch cargo-tarpaulin
     watchexec-cli cargo-outdated just fnm broot stylua
 ```
 
-If your favorite package fails to install, you may specify the metadata entries for `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values [as documented here](SUPPORT.md).
+If your favorite package fails to install, you can instead specify the `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values as documented in [SUPPORT.md](./SUPPORT.md).
 
 For example:
 
 ```shell
-$ binstall \
+$ cargo-binstall \
   --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ archive-format }" \
   --pkg-fmt="txz" \
   crate_name
