@@ -146,8 +146,8 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long, value_delimiter(','))]
     pub disable_strategies: Vec<Strategy>,
 
-    /// If `--github-token` or environment variable `GITHUB_TOKEN` is not
-    /// specified, then cargo-binstall will try to extract github token from
+    /// If `--github-token` or environment variable `GITHUB_TOKEN`/`GH_TOKEN`
+    /// is not specified, then cargo-binstall will try to extract github token from
     /// `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml` by default.
     ///
     /// This option can be used to disable that behavior.
@@ -229,6 +229,14 @@ pub struct Args {
     pub json_output: bool,
 
     /// Provide the github token for accessing the restful API of api.github.com
+    ///
+    /// Fallback to environment variable `GITHUB_TOKEN` if this option is not
+    /// specified (which is also shown by clap's auto generated doc below), or
+    /// try environment variable `GH_TOKEN`, which is also used by `gh` cli.
+    ///
+    /// If none of them is present, then binstal will try to extract github
+    /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
+    /// unless `--no-discover-github-token` is specified.
     #[clap(help_heading = "Options", long, env = "GITHUB_TOKEN")]
     pub github_token: Option<CompactString>,
 
