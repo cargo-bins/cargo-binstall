@@ -51,7 +51,7 @@ pub struct Config {
 
 impl Config {
     pub fn default_path() -> Result<PathBuf, ConfigLoadError> {
-        Ok(cargo_home()?.join(".cargo/config.toml"))
+        Ok(cargo_home()?.join("config.toml"))
     }
 
     pub fn load() -> Result<Self, ConfigLoadError> {
