@@ -8,8 +8,12 @@ extra-features := env_var_or_default("JUST_EXTRA_FEATURES", "")
 default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
 override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
 glibc-version := env_var_or_default("GLIBC_VERSION", "")
+use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
+
+cargo := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
+export CARGO := cargo
 
 # target information
 target-host := `rustc -vV | grep host: | cut -d ' ' -f 2`
@@ -35,7 +39,11 @@ output-folder := "target" / target / output-profile-folder
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
+cargo-bin := if use-auditable != "" {
+    "cargo-auditable auditable"
+} else {
+    cargo
+}
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
@@ -159,13 +167,13 @@ toolchain components="":
     {{ if ci != "" { "rustup default stable" } else { "rustup override set stable" } }}
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
+print-env:
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
 
-build:
-    echo "env RUSTFLAGS=$RUSTFLAGS"
+build: print-env
     {{cargo-bin}} build {{cargo-build-args}}
 
-check:
-    echo "env RUSTFLAGS=$RUSTFLAGS"
+check: print-env
     {{cargo-bin}} check {{cargo-build-args}}
 
 get-output file outdir=".":
@@ -197,19 +205,18 @@ e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 
 e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall
 
-unit-tests:
+unit-tests: print-env
     {{cargo-bin}} test {{cargo-build-args}}
 
 test: unit-tests build e2e-tests
 
-clippy:
+clippy: print-env
     {{cargo-bin}} clippy --no-deps -- -D clippy::all
 
-fmt:
+fmt: print-env
     cargo fmt --all -- --check
 
-fmt-check:
-    cargo fmt --all -- --check
+fmt-check: fmt
 
 lint: clippy fmt-check
 
