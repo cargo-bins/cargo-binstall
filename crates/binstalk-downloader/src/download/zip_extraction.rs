@@ -52,6 +52,7 @@ where
     let outpath = path.join(&filename);
 
     // Get permissions
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut perms = None;
 
     let is_dir = raw_filename.ends_with('/');
