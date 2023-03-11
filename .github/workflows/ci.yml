@@ -95,6 +95,19 @@ jobs:
 
     - run: just check
 
+  windows-aarch64-check:
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_TARGET: aarch64-pc-windows-msvc
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+
+    - run: just check
+
   lint:
     strategy:
       fail-fast: false
@@ -126,6 +139,7 @@ jobs:
     - linux-cross-check
     - apple-m1-check
     - lint
+    - windows-aarch64-check
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
