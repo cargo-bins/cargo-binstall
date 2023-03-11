@@ -10,6 +10,7 @@ override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
 glibc-version := env_var_or_default("GLIBC_VERSION", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
+export CARGO := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
 
 # target information
 target-host := `rustc -vV | grep host: | cut -d ' ' -f 2`
@@ -35,7 +36,15 @@ output-folder := "target" / target / output-profile-folder
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
+cargo-bin := if for-release != "" {
+    "cargo-auditable auditable"
+} else if use-cargo-zigbuild != "" {
+    "cargo-zigbuild"
+} else if use-cross != "" {
+    "cross"
+} else {
+    "cargo"
+}
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
@@ -161,11 +170,11 @@ toolchain components="":
 
 
 build:
-    echo "env RUSTFLAGS=$RUSTFLAGS"
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
     {{cargo-bin}} build {{cargo-build-args}}
 
 check:
-    echo "env RUSTFLAGS=$RUSTFLAGS"
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
     {{cargo-bin}} check {{cargo-build-args}}
 
 get-output file outdir=".":

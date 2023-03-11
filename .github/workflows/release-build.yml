@@ -43,6 +43,7 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: release-${{ matrix.t }}
+        tools: cargo-auditable
 
     - run: just toolchain rust-src
     - run: just ci-install-deps
