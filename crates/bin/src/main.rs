@@ -32,7 +32,7 @@ fn main() -> MainExit {
 
         let start = Instant::now();
 
-        let result = run_tokio_main(entry::install_crates(args, jobserver_client));
+        let result = run_tokio_main(|| entry::install_crates(args, jobserver_client));
 
         let done = start.elapsed();
         debug!("run time: {done:?}");

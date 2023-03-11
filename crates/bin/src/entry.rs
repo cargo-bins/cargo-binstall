@@ -1,5 +1,6 @@
 use std::{
     env, fs,
+    future::Future,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -35,7 +36,10 @@ use crate::{
     ui::confirm,
 };
 
-pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
+pub fn install_crates(
+    args: Args,
+    jobserver_client: LazyJobserverClient,
+) -> Result<Option<impl Future<Output = Result<()>>>> {
     // Compute Resolvers
     let mut cargo_install_fallback = false;
 
@@ -63,7 +67,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
-        return Ok(());
+        return Ok(None);
     }
 
     // Launch target detection
@@ -131,53 +135,55 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         })
         .collect();
 
-    // Collect results
-    let mut resolution_fetchs = Vec::new();
-    let mut resolution_sources = Vec::new();
+    Ok(Some(async move {
+        // Collect results
+        let mut resolution_fetchs = Vec::new();
+        let mut resolution_sources = Vec::new();
 
-    for task in tasks {
-        match task.await?? {
-            Resolution::AlreadyUpToDate => {}
-            Resolution::Fetch(fetch) => {
-                fetch.print(&binstall_opts);
-                resolution_fetchs.push(fetch)
-            }
-            Resolution::InstallFromSource(source) => {
-                source.print();
-                resolution_sources.push(source)
+        for task in tasks {
+            match task.await?? {
+                Resolution::AlreadyUpToDate => {}
+                Resolution::Fetch(fetch) => {
+                    fetch.print(&binstall_opts);
+                    resolution_fetchs.push(fetch)
+                }
+                Resolution::InstallFromSource(source) => {
+                    source.print();
+                    resolution_sources.push(source)
+                }
             }
         }
-    }
 
-    if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
-        debug!("Nothing to do");
-        return Ok(());
-    }
+        if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
+            debug!("Nothing to do");
+            return Ok(());
+        }
 
-    // Confirm
-    if !dry_run && !no_confirm {
-        confirm().await?;
-    }
+        // Confirm
+        if !dry_run && !no_confirm {
+            confirm().await?;
+        }
 
-    do_install_fetches(
-        resolution_fetchs,
-        manifests,
-        &binstall_opts,
-        dry_run,
-        temp_dir,
-        no_cleanup,
-    )?;
+        do_install_fetches(
+            resolution_fetchs,
+            manifests,
+            &binstall_opts,
+            dry_run,
+            temp_dir,
+            no_cleanup,
+        )?;
 
-    let tasks: Vec<_> = resolution_sources
-        .into_iter()
-        .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
-        .collect();
+        let tasks: Vec<_> = resolution_sources
+            .into_iter()
+            .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
+            .collect();
 
-    for task in tasks {
-        task.await??;
-    }
+        for task in tasks {
+            task.await??;
+        }
 
-    Ok(())
+        Ok(())
+    }))
 }
 
 fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> {
@@ -228,43 +234,41 @@ fn compute_paths_and_load_manifests(
     roots: Option<PathBuf>,
     install_path: Option<PathBuf>,
 ) -> Result<(PathBuf, Option<Manifests>, tempfile::TempDir)> {
-    block_in_place(|| {
-        // Compute cargo_roots
-        let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
-            error!("No viable cargo roots path found of specified, try `--roots`");
-            miette!("No cargo roots path found or specified")
-        })?;
+    // Compute cargo_roots
+    let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
+        error!("No viable cargo roots path found of specified, try `--roots`");
+        miette!("No cargo roots path found or specified")
+    })?;
 
-        // Compute install directory
-        let (install_path, custom_install_path) =
-            install_path::get_install_path(install_path, Some(&cargo_roots));
-        let install_path = install_path.ok_or_else(|| {
-            error!("No viable install path found of specified, try `--install-path`");
-            miette!("No install path found or specified")
-        })?;
-        fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
-        debug!("Using install path: {}", install_path.display());
+    // Compute install directory
+    let (install_path, custom_install_path) =
+        install_path::get_install_path(install_path, Some(&cargo_roots));
+    let install_path = install_path.ok_or_else(|| {
+        error!("No viable install path found of specified, try `--install-path`");
+        miette!("No install path found or specified")
+    })?;
+    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
+    debug!("Using install path: {}", install_path.display());
 
-        // Load manifests
-        let manifests = if !custom_install_path {
-            Some(Manifests::open_exclusive(&cargo_roots)?)
-        } else {
-            None
-        };
+    // Load manifests
+    let manifests = if !custom_install_path {
+        Some(Manifests::open_exclusive(&cargo_roots)?)
+    } else {
+        None
+    };
 
-        // Create a temporary directory for downloads etc.
-        //
-        // Put all binaries to a temporary directory under `dst` first, catching
-        // some failure modes (e.g., out of space) before touching the existing
-        // binaries. This directory will get cleaned up via RAII.
-        let temp_dir = tempfile::Builder::new()
-            .prefix("cargo-binstall")
-            .tempdir_in(&install_path)
-            .map_err(BinstallError::from)
-            .wrap_err("Creating a temporary directory failed.")?;
+    // Create a temporary directory for downloads etc.
+    //
+    // Put all binaries to a temporary directory under `dst` first, catching
+    // some failure modes (e.g., out of space) before touching the existing
+    // binaries. This directory will get cleaned up via RAII.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("cargo-binstall")
+        .tempdir_in(&install_path)
+        .map_err(BinstallError::from)
+        .wrap_err("Creating a temporary directory failed.")?;
 
-        Ok((install_path, manifests, temp_dir))
-    })
+    Ok((install_path, manifests, temp_dir))
 }
 
 /// Return vec of (crate_name, current_version)
