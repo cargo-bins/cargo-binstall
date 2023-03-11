@@ -8,6 +8,7 @@ extra-features := env_var_or_default("JUST_EXTRA_FEATURES", "")
 default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
 override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
 glibc-version := env_var_or_default("GLIBC_VERSION", "")
+use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
 export CARGO := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
@@ -36,7 +37,7 @@ output-folder := "target" / target / output-profile-folder
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if for-release != "" {
+cargo-bin := if use-auditable != "" {
     "cargo-auditable auditable"
 } else if use-cargo-zigbuild != "" {
     "cargo-zigbuild"
@@ -207,17 +208,21 @@ e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall
 
 unit-tests:
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
     {{cargo-bin}} test {{cargo-build-args}}
 
 test: unit-tests build e2e-tests
 
 clippy:
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
     {{cargo-bin}} clippy --no-deps -- -D clippy::all
 
 fmt:
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
     cargo fmt --all -- --check
 
 fmt-check:
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
     cargo fmt --all -- --check
 
 lint: clippy fmt-check

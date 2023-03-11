@@ -37,6 +37,7 @@ jobs:
       GLIBC_VERSION: ${{ matrix.g }}
       JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
       JUST_FOR_RELEASE: true
+      JUST_USE_AUDITABLE: true
 
     steps:
     - uses: actions/checkout@v3
