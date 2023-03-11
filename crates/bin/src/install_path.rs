@@ -16,7 +16,7 @@ pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
         debug!("using CARGO_INSTALL_ROOT ({})", p.display());
         Some(p)
     } else if let Some(root) = Config::load().ok().and_then(|config| config.install.root) {
-        debug!("using $CARGO_HOME/.cargo/config.toml");
+        debug!("using $CARGO_HOME/config.toml");
         Some(root)
     } else if let Ok(p) = cargo_home() {
         debug!("using ({}) as cargo home", p.display());
