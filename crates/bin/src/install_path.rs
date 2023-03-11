@@ -15,12 +15,22 @@ pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
         let p = PathBuf::from(p);
         debug!("using CARGO_INSTALL_ROOT ({})", p.display());
         Some(p)
-    } else if let Some(root) = Config::load().ok().and_then(|config| config.install.root) {
-        debug!("using $CARGO_HOME/config.toml");
-        Some(root)
-    } else if let Ok(p) = cargo_home() {
-        debug!("using ({}) as cargo home", p.display());
-        Some(p)
+    } else if let Ok(cargo_home) = cargo_home() {
+        let config_path = cargo_home.join("config.toml");
+        if let Some(root) = Config::load_from_path(&config_path)
+            .ok()
+            .and_then(|config| config.install.root)
+        {
+            debug!(
+                "using `install.root` {} from config {}",
+                root.display(),
+                config_path.display()
+            );
+            Some(root)
+        } else {
+            debug!("using ({}) as cargo home", cargo_home.display());
+            Some(cargo_home)
+        }
     } else {
         None
     }
