@@ -3,7 +3,7 @@ use std::{
     fs,
     future::Future,
     io::{self, Write},
-    path::Path,
+    path::{Component, Path, PathBuf},
 };
 
 use async_zip::read::stream::ZipFileReader;
@@ -110,7 +110,26 @@ where
                     // unpack_in returns false if the path contains ".."
                     // and is skipped.
                     if entry.unpack_in(dst)? {
-                        extracted_files.add_file(&entry.path()?);
+                        let path = entry.path()?;
+
+                        // create normalized_path in the same way
+                        // tar::Entry::unpack_in would normalize the path.
+                        let mut normalized_path = PathBuf::new();
+
+                        for part in path.components() {
+                            match part {
+                                Component::Prefix(..) | Component::RootDir | Component::CurDir => {
+                                    continue
+                                }
+
+                                // unpack_in would return false if this happens.
+                                Component::ParentDir => unreachable!(),
+
+                                Component::Normal(part) => normalized_path.push(part),
+                            }
+                        }
+
+                        extracted_files.add_file(&normalized_path);
                     }
                 }
                 tar::EntryType::Directory => {

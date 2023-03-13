@@ -202,6 +202,8 @@ async fn download_extract_and_verify(
     // If that fails, then ignore this fetcher.
     let extracted_files = fetcher.fetch_and_extract(bin_path).await?;
 
+    debug!("extracted_files = {extracted_files:#?}");
+
     // Build final metadata
     let meta = fetcher.target_meta();
 
