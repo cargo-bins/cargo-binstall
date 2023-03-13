@@ -13,5 +13,5 @@ mkdir -p "$othertmpdir/bin"
 cp "./$1" "$othertmpdir/bin/"
 
 
-cargo binstall --no-confirm cargo-watch
+cargo binstall --no-confirm cargo-watch@8.4.0
 cargo uninstall cargo-watch
