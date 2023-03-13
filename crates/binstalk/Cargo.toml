@@ -25,7 +25,7 @@ maybe-owned = "0.3.4"
 miette = "5.5.0"
 normalize-path = { version = "0.2.0", path = "../normalize-path" }
 once_cell = "1.17.1"
-semver = { version = "1.0.16", features = ["serde"] }
+semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.155", features = ["derive"] }
 strum = "0.24.1"
 tempfile = "3.4.0"
