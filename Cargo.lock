@@ -150,7 +150,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
