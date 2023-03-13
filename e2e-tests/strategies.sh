@@ -8,7 +8,7 @@ export CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
 export PATH="$CARGO_HOME/bin:$PATH"
 
 ## Test --disable-strategies
-"./$1" binstall --no-confirm --disable-strategies quick-install,compile cargo-update
+"./$1" binstall --no-confirm --disable-strategies quick-install,compile cargo-update@11.1.2
 exit_code="$?"
 
 if [ "$exit_code" != 94 ]; then
@@ -17,7 +17,7 @@ if [ "$exit_code" != 94 ]; then
 fi
 
 ## Test --strategies
-"./$1" binstall --no-confirm --strategies crate-meta-data cargo-update
+"./$1" binstall --no-confirm --strategies crate-meta-data cargo-update@11.1.2
 exit_code="$?"
 
 if [ "$exit_code" != 94 ]; then
@@ -26,4 +26,4 @@ if [ "$exit_code" != 94 ]; then
 fi
 
 ## Test compile-only strategy
-"./$1" binstall --no-confirm --strategies compile cargo-quickinstall
+"./$1" binstall --no-confirm --strategies compile cargo-quickinstall@0.2.8
