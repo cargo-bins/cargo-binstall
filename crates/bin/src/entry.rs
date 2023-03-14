@@ -117,6 +117,7 @@ pub fn install_crates(
         client,
         gh_api_client,
         jobserver_client,
+        crates_io_rate_limit: Default::default(),
     });
 
     // Destruct args before any async function to reduce size of the future

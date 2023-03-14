@@ -354,7 +354,15 @@ impl PackageInfo {
         // Fetch crate via crates.io, git, or use a local manifest path
         let manifest = match opts.manifest_path.as_ref() {
             Some(manifest_path) => load_manifest_path(manifest_path)?,
-            None => Box::pin(fetch_crate_cratesio(client, &name, version_req)).await?,
+            None => {
+                Box::pin(fetch_crate_cratesio(
+                    client,
+                    &name,
+                    version_req,
+                    &opts.crates_io_rate_limit,
+                ))
+                .await?
+            }
         };
 
         let Some(mut package) = manifest.package else {
