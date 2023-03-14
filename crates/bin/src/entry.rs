@@ -26,7 +26,10 @@ use binstalk_manifests::cargo_toml_binstall::PkgOverride;
 use file_format::FileFormat;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
-use tokio::task::block_in_place;
+use tokio::{
+    task::block_in_place,
+    time::{interval, MissedTickBehavior},
+};
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -117,6 +120,11 @@ pub fn install_crates(
         client,
         gh_api_client,
         jobserver_client,
+        crates_io_rate_limit: {
+            let mut interval = interval(Duration::from_secs(1));
+            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            interval.into()
+        },
     });
 
     // Destruct args before any async function to reduce size of the future

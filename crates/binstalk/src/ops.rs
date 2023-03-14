@@ -3,6 +3,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use semver::VersionReq;
+use tokio::{sync::Mutex, time::Interval};
 
 use crate::{
     fetchers::{Data, Fetcher, TargetData},
@@ -37,4 +38,5 @@ pub struct Options {
     pub client: Client,
     pub gh_api_client: GhApiClient,
     pub jobserver_client: LazyJobserverClient,
+    pub crates_io_rate_limit: Mutex<Interval>,
 }
