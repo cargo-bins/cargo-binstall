@@ -26,10 +26,7 @@ use binstalk_manifests::cargo_toml_binstall::PkgOverride;
 use file_format::FileFormat;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
-use tokio::{
-    task::block_in_place,
-    time::{interval, MissedTickBehavior},
-};
+use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -120,22 +117,7 @@ pub fn install_crates(
         client,
         gh_api_client,
         jobserver_client,
-        crates_io_rate_limit: {
-            let mut interval = interval(Duration::from_secs(1));
-            // If somehow one tick is delayed, then next tick should be at least
-            // 1s later than the current tick.
-            //
-            // Other MissedTickBehavior including Burst (default), which will
-            // tick as fast as possible to catch up, and Skip, which will
-            // skip the current tick for the next one.
-            //
-            // Both Burst and Skip is not the expected behavior for rate limit:
-            // ticking as fast as possible would violate crates.io crawler
-            // policy, and skipping the current one will slow down the resolution
-            // process.
-            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-            interval.into()
-        },
+        crates_io_rate_limit: Default::default(),
     });
 
     // Destruct args before any async function to reduce size of the future

@@ -4,7 +4,6 @@ use cargo_toml::Manifest;
 use compact_str::CompactString;
 use semver::VersionReq;
 use serde::Deserialize;
-use tokio::{sync::Mutex, time::Interval};
 use tracing::debug;
 
 use crate::{
@@ -14,6 +13,7 @@ use crate::{
         remote::{Client, Url},
     },
     manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
+    ops::CratesIoRateLimit,
 };
 
 mod vfs;
@@ -49,10 +49,10 @@ pub async fn fetch_crate_cratesio(
     client: Client,
     name: &str,
     version_req: &VersionReq,
-    crates_io_rate_limit: &Mutex<Interval>,
+    crates_io_rate_limit: &CratesIoRateLimit,
 ) -> Result<Manifest<Meta>, BinstallError> {
     // Wait until we can make another request to crates.io
-    crates_io_rate_limit.lock().await.tick().await;
+    crates_io_rate_limit.tick().await;
 
     // Fetch / update index
     debug!("Looking up crate information");
