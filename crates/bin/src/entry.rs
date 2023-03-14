@@ -122,6 +122,17 @@ pub fn install_crates(
         jobserver_client,
         crates_io_rate_limit: {
             let mut interval = interval(Duration::from_secs(1));
+            // If somehow one tick is delayed, then next tick should be at least
+            // 1s later than the current tick.
+            //
+            // Other MissedTickBehavior including Burst (default), which will
+            // tick as fast as possible to catch up, and Skip, which will
+            // skip the current tick for the next one.
+            //
+            // Both Burst and Skip is not the expected behavior for rate limit:
+            // ticking as fast as possible would violate crates.io crawler
+            // policy, and skipping the current one will slow down the resolution
+            // process.
             interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
             interval.into()
         },
