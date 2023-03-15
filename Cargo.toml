@@ -18,9 +18,6 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
-[profile.dev]
-incremental = false
-
 [profile.dev.build-override]
 opt-level = 0
 codegen-units = 1024

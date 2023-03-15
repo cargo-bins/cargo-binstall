@@ -65,3 +65,4 @@ runs:
     run: |
       echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
       echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
