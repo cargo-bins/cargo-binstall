@@ -54,9 +54,15 @@ runs:
     shell: bash
 
   - if: inputs.buildcache
-    name: Configure build cache
-    uses: actions/cache@v3
+    name: Configure sccache
+    uses: mozilla-actions/sccache-action@v0.0.2
     with:
-      path: |
-        target/
-      key: ${{ runner.os }}-cargo-build-${{ hashFiles('rustc-version') }}-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
+      version: "v0.4.0-pre.10"
+
+  - if: inputs.buildcache
+    name: Export env for sccache to work
+    shell: bash
+    run: |
+      echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+      echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
