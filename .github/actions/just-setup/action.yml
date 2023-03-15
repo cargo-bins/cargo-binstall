@@ -61,6 +61,7 @@ runs:
 
   - if: inputs.buildcache
     name: Export env for sccache to work
+    shell: bash
     run: |
       echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
       echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
@@ -68,6 +69,5 @@ runs:
   - if: inputs.buildcache
     name: Configure post run for sccache stat
     uses: webiny/action-post-run@3.0.0
-    id: Post run for sccache stat
     with:
       run: ${SCCACHE_PATH} --show-stats
