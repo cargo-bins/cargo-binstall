@@ -5,6 +5,7 @@ use tokio::process::Command;
 const AARCH64: &str = "aarch64-apple-darwin";
 const X86: &str = "x86_64-apple-darwin";
 const UNIVERSAL: &str = "universal-apple-darwin";
+const UNIVERSAL2: &str = "universal2-apple-darwin";
 
 async fn is_x86_64_supported() -> io::Result<bool> {
     let exit_status = Command::new("arch")
@@ -24,9 +25,10 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
         AARCH64 => [
             is_x86_64_supported().await.unwrap_or(false).then_some(X86),
             Some(UNIVERSAL),
+            Some(UNIVERSAL2),
         ],
-        X86 => [Some(UNIVERSAL), None],
-        _ => [None, None],
+        X86 => [Some(UNIVERSAL), Some(UNIVERSAL2), None],
+        _ => [None, None, None],
     }
     .into_iter()
     .flatten()
