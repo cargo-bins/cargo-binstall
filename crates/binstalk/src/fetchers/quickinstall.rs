@@ -67,20 +67,6 @@ impl super::Fetcher for QuickInstall {
                 return Ok(false);
             }
 
-            if cfg!(debug_assertions) {
-                debug!("Not sending quickinstall report in debug mode");
-            } else {
-                let this = self.clone();
-                tokio::spawn(async move {
-                    if let Err(err) = this.report().await {
-                        warn!(
-                            "Failed to send quickinstall report for package {}: {err}",
-                            this.package
-                        )
-                    }
-                });
-            }
-
             does_url_exist(
                 self.client.clone(),
                 self.gh_api_client.clone(),
@@ -88,6 +74,24 @@ impl super::Fetcher for QuickInstall {
             )
             .await
         })
+    }
+
+    fn report_to_upstream(self: Arc<Self>) {
+        if cfg!(debug_assertions) {
+            debug!("Not sending quickinstall report in debug mode");
+        } else if self.target_data.target != "universal-apple-darwin" {
+            // quickinstall does not support our homebrew target
+            // universal-apple-darwin, it only supports targets supported by
+            // rust officially.
+            tokio::spawn(async move {
+                if let Err(err) = self.report().await {
+                    warn!(
+                        "Failed to send quickinstall report for package {}: {err}",
+                        self.package
+                    )
+                }
+            });
+        }
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {

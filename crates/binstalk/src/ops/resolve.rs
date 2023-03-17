@@ -118,6 +118,7 @@ async fn resolve_inner(
     );
 
     for (fetcher, handle) in handles {
+        fetcher.clone().report_to_upstream();
         match handle.flattened_join().await {
             Ok(true) => {
                 // Generate temporary binary path
