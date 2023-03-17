@@ -63,18 +63,8 @@ impl super::Fetcher for QuickInstall {
 
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
-            if cfg!(debug_assertions) {
-                debug!("Not sending quickinstall report in debug mode");
-            } else {
-                let this = self.clone();
-                tokio::spawn(async move {
-                    if let Err(err) = this.report().await {
-                        warn!(
-                            "Failed to send quickinstall report for package {}: {err}",
-                            this.package
-                        )
-                    }
-                });
+            if self.target_data.target == "universal-apple-darwin" {
+                return Ok(false);
             }
 
             does_url_exist(
@@ -84,6 +74,28 @@ impl super::Fetcher for QuickInstall {
             )
             .await
         })
+    }
+
+    fn report_to_upstream(self: Arc<Self>) {
+        if cfg!(debug_assertions) {
+            debug!("Not sending quickinstall report in debug mode");
+        } else if self.target_data.target == "universal-apple-darwin" {
+            debug!(
+                r#"Not sending quickinstall report for universal-apple-darwin
+quickinstall does not support our homebrew target
+universal-apple-darwin, it only supports targets supported by
+rust officially."#,
+            );
+        } else {
+            tokio::spawn(async move {
+                if let Err(err) = self.report().await {
+                    warn!(
+                        "Failed to send quickinstall report for package {}: {err}",
+                        self.package
+                    )
+                }
+            });
+        }
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {

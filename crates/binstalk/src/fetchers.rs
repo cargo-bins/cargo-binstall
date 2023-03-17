@@ -44,6 +44,10 @@ pub trait Fetcher: Send + Sync {
     /// fatal conditions only.
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>>;
 
+    /// Report to upstream that cargo-binstall tries to use this fetcher.
+    /// Currently it is only overriden by [`quickinstall::QuickInstall`].
+    fn report_to_upstream(self: Arc<Self>) {}
+
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
 
