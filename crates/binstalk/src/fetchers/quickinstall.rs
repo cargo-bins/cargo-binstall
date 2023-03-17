@@ -63,6 +63,10 @@ impl super::Fetcher for QuickInstall {
 
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
+            if self.target_data.target == "universal-apple-darwin" {
+                return Ok(false);
+            }
+
             if cfg!(debug_assertions) {
                 debug!("Not sending quickinstall report in debug mode");
             } else {
