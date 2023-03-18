@@ -147,7 +147,7 @@ impl Client {
         let future = (&self.0.service).ready().await?.call(request);
 
         let response = match future.await {
-            Err(err) if err.is_timeout() => {
+            Err(err) if err.is_timeout() || err.is_connect() => {
                 let duration = RETRY_DURATION_FOR_TIMEOUT;
 
                 info!("Received timeout error from reqwest. Delay future request by {duration:#?}");
