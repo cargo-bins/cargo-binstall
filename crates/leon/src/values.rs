@@ -1,6 +1,7 @@
 use std::{
-    borrow::Cow,
+    borrow::{Borrow, Cow},
     collections::{BTreeMap, HashMap},
+    hash::{BuildHasher, Hash},
 };
 
 pub trait Values {
@@ -52,15 +53,24 @@ impl Values for Vec<(&str, &str)> {
     }
 }
 
-impl Values for HashMap<&str, &str> {
+impl<K, V, S> Values for HashMap<K, V, S>
+where
+    K: Borrow<str> + Eq + Hash,
+    V: AsRef<str>,
+    S: BuildHasher,
+{
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.get(&key).map(|v| Cow::Borrowed(*v))
+        self.get(key).map(|v| Cow::Borrowed(v.as_ref()))
     }
 }
 
-impl Values for BTreeMap<&str, &str> {
+impl<K, V> Values for BTreeMap<K, V>
+where
+    K: Borrow<str> + Ord,
+    V: AsRef<str>,
+{
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.get(&key).map(|v| Cow::Borrowed(*v))
+        self.get(key).map(|v| Cow::Borrowed(v.as_ref()))
     }
 }
 
@@ -100,18 +110,6 @@ impl Values for Vec<(String, &str)> {
     }
 }
 
-impl Values for HashMap<String, &str> {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.get(key).map(|v| Cow::Borrowed(*v))
-    }
-}
-
-impl Values for BTreeMap<String, &str> {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.get(key).map(|v| Cow::Borrowed(*v))
-    }
-}
-
 impl Values for [(String, String)] {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.iter().find_map(|(k, v)| {
@@ -145,18 +143,6 @@ impl Values for Vec<(String, String)> {
                 None
             }
         })
-    }
-}
-
-impl Values for HashMap<String, String> {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.get(key).map(|v| Cow::Owned(v.clone()))
-    }
-}
-
-impl Values for BTreeMap<String, String> {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.get(key).map(|v| Cow::Owned(v.clone()))
     }
 }
 
