@@ -16,39 +16,36 @@ pub enum RenderError {
 
 /// An error that can occur when parsing a template.
 ///
-/// This is a rich miette-powered error which will highlight the source of the
-/// error in the template when output (with miette's `fancy` feature). If you
-/// don't want or need that, you can disable the `miette` feature and a simpler
-/// opaque error will be substituted.
-#[cfg(feature = "miette")]
-#[derive(Clone, Debug, Error, Diagnostic, PartialEq, Eq)]
+/// When the `miette` feature is enabled, this is a rich miette-powered error
+/// which will highlight the source of the error in the template when output
+/// (with miette's `fancy` feature). With `miette` disabled, this is opaque.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[cfg_attr(feature = "miette", derive(Diagnostic))]
+#[cfg_attr(feature = "miette", diagnostic(transparent))]
 #[error(transparent)]
-#[diagnostic(transparent)]
-pub struct ParseError(pub Box<InnerParseError>);
+pub struct ParseError(Box<InnerParseError>);
 
 /// The inner (unboxed) type of [`ParseError`].
-#[cfg(feature = "miette")]
-#[derive(Clone, Debug, Diagnostic, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[cfg_attr(feature = "miette", derive(Diagnostic))]
 #[error("template parse failed")]
-#[non_exhaustive]
-pub struct InnerParseError {
-    #[source_code]
-    pub src: String,
+struct InnerParseError {
+    #[cfg_attr(feature = "miette", source_code)]
+    src: String,
 
-    #[label("This bracket is not opening or closing anything. Try removing it, or escaping it with a backslash.")]
-    pub unbalanced: Option<SourceSpan>,
+    #[cfg_attr(feature = "miette", label("This bracket is not opening or closing anything. Try removing it, or escaping it with a backslash."))]
+    unbalanced: Option<SourceSpan>,
 
-    #[label("This escape is malformed.")]
-    pub escape: Option<SourceSpan>,
+    #[cfg_attr(feature = "miette", label("This escape is malformed."))]
+    escape: Option<SourceSpan>,
 
-    #[label("A key cannot be empty.")]
-    pub key_empty: Option<SourceSpan>,
+    #[cfg_attr(feature = "miette", label("A key cannot be empty."))]
+    key_empty: Option<SourceSpan>,
 
-    #[label("Escapes are not allowed in keys.")]
-    pub key_escape: Option<SourceSpan>,
+    #[cfg_attr(feature = "miette", label("Escapes are not allowed in keys."))]
+    key_escape: Option<SourceSpan>,
 }
 
-#[cfg(feature = "miette")]
 impl ParseError {
     pub(crate) fn unbalanced(src: &str, start: usize, end: usize) -> Self {
         Self(Box::new(InnerParseError {
@@ -88,34 +85,5 @@ impl ParseError {
             key_empty: None,
             key_escape: Some((start, end.saturating_sub(start) + 1).into()),
         }))
-    }
-}
-
-/// An opaque parsing error.
-///
-/// This is the non-miette version of this error, which only implements
-/// [`std::error::Error`] and [`std::fmt::Display`], and does not provide any
-/// programmably-useable detail besides a message.
-#[cfg(not(feature = "miette"))]
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("template parse failed: {0}")]
-pub struct ParseError(String);
-
-#[cfg(not(feature = "miette"))]
-impl ParseError {
-    pub(crate) fn unbalanced(src: &str, start: usize, end: usize) -> Self {
-        Self(format!("unbalanced brace at {start}:{end} in {src:?}"))
-    }
-
-    pub(crate) fn escape(src: &str, start: usize, end: usize) -> Self {
-        Self(format!("malformed escape at {start}:{end} in {src:?}"))
-    }
-
-    pub(crate) fn key_empty(src: &str, start: usize, end: usize) -> Self {
-        Self(format!("empty key at {start}:{end} in {src:?}"))
-    }
-
-    pub(crate) fn key_escape(src: &str, start: usize, end: usize) -> Self {
-        Self(format!("escape in key at {start}:{end} in {src:?}"))
     }
 }
