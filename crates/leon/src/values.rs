@@ -17,11 +17,15 @@ where
     }
 }
 
-impl Values for [(&str, &str)] {
+impl<K, V> Values for [(K, V)]
+where
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.iter().find_map(|(k, v)| {
-            if k == &key {
-                Some(Cow::Borrowed(*v))
+            if k.as_ref() == key {
+                Some(Cow::Borrowed(v.as_ref()))
             } else {
                 None
             }
@@ -62,18 +66,6 @@ where
     }
 }
 
-impl Values for [(String, &str)] {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == key {
-                Some(Cow::Borrowed(*v))
-            } else {
-                None
-            }
-        })
-    }
-}
-
 impl<const N: usize> Values for [(String, &str); N] {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.as_slice().get_value(key)
@@ -83,18 +75,6 @@ impl<const N: usize> Values for [(String, &str); N] {
 impl Values for Vec<(String, &str)> {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.as_slice().get_value(key)
-    }
-}
-
-impl Values for [(String, String)] {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == key {
-                Some(Cow::Borrowed(v.as_str()))
-            } else {
-                None
-            }
-        })
     }
 }
 
