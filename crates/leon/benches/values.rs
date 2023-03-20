@@ -1,97 +1,55 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use leon::{vals, Template};
+use leon::{vals, Template, Values, ValuesFn};
+
+macro_rules! make_values {
+    ($($name:expr => $value:expr),*) => {
+        (
+            &[$(($name, $value)),*],
+            {
+                let mut map = HashMap::new();
+                $(
+                    map.insert($name, $value);
+                )*
+                map
+            },
+            vals(|key| match key {
+                $(
+                    $name => Some(Cow::Borrowed($value)),
+                )*
+                _ => None,
+            })
+        )
+    };
+}
 
 fn one_replace(c: &mut Criterion) {
     const TEMPLATE: &str = "Hello, {name}!";
-    let mut hashmap = HashMap::new();
-    hashmap.insert("name", "marcus");
 
-    let slice = &[("name", "marcus")];
+    let (slice, hashmap, vals) = make_values!(
+        "name" => "marcus"
+    );
 
-    c.bench_function("one replace, fn", |b| {
-        b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(
-                template
-                    .render(&vals(|_| Some(Cow::Borrowed("marcus"))))
-                    .unwrap(),
-            );
-        })
-    });
-    c.bench_function("one replace, hashmap", |b| {
-        b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(template.render(&hashmap).unwrap());
-        })
-    });
-    c.bench_function("one replace, slice", |b| {
-        b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(template.render(&slice).unwrap());
-        })
-    });
+    inner_bench("one replace", c, TEMPLATE, vals, hashmap, slice);
 }
 
 fn some_replaces(c: &mut Criterion) {
     const TEMPLATE: &str = "hello {name}! i am {age} years old. my goal is to {goal}. i like: {flower}, {music}, {animal}, {color}, {food}. i'm drinking {drink}";
-    let mut hashmap = HashMap::new();
-    hashmap.insert("name", "marcus");
-    hashmap.insert("age", "42");
-    hashmap.insert("goal", "primary");
-    hashmap.insert("flower", "lotus");
-    hashmap.insert("music", "jazz");
-    hashmap.insert("animal", "cat");
-    hashmap.insert("color", "blue");
-    hashmap.insert("food", "pizza");
-    hashmap.insert("drink", "coffee");
 
-    let slice = &[
-        ("name", "marcus"),
-        ("age", "42"),
-        ("goal", "primary"),
-        ("flower", "lotus"),
-        ("music", "jazz"),
-        ("animal", "cat"),
-        ("color", "blue"),
-        ("food", "pizza"),
-        ("drink", "coffee"),
-    ];
+    let (slice, hashmap, vals) = make_values!(
+        "name" => "marcus",
+        "age" => "42",
+        "goal" => "primary",
+        "flower" => "lotus",
+        "music" => "jazz",
+        "animal" => "cat",
+        "color" => "blue",
+        "food" => "pizza",
+        "drink" => "coffee"
+    );
 
-    c.bench_function("some replaces, fn", |b| {
-        b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(
-                template
-                    .render(&vals(|key| match key {
-                        "name" => Some(Cow::Borrowed("marcus")),
-                        "age" => Some(Cow::Borrowed("42")),
-                        "goal" => Some(Cow::Borrowed("primary")),
-                        "flower" => Some(Cow::Borrowed("lotus")),
-                        "music" => Some(Cow::Borrowed("jazz")),
-                        "animal" => Some(Cow::Borrowed("cat")),
-                        "color" => Some(Cow::Borrowed("blue")),
-                        "food" => Some(Cow::Borrowed("pizza")),
-                        "drink" => Some(Cow::Borrowed("coffee")),
-                        _ => None,
-                    }))
-                    .unwrap(),
-            );
-        })
-    });
-    c.bench_function("some replaces, hashmap", |b| {
-        b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(template.render(&hashmap).unwrap());
-        })
-    });
-    c.bench_function("some replaces, slice", |b| {
-        b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(template.render(&slice).unwrap());
-        })
-    });
+    inner_bench("some replaces", c, TEMPLATE, vals, hashmap, slice);
 }
 
 fn many_replaces(c: &mut Criterion) {
@@ -197,237 +155,139 @@ fn many_replaces(c: &mut Criterion) {
         {radish}
         {wasabi}
     ";
-    let mut hashmap = HashMap::new();
-    hashmap.insert("artichoke", "Abiu");
-    hashmap.insert("aubergine", "Açaí");
-    hashmap.insert("asparagus", "Acerola");
-    hashmap.insert("broccoflower", "Akebi");
-    hashmap.insert("broccoli", "Ackee");
-    hashmap.insert("brussels sprouts", "African Cherry Orange");
-    hashmap.insert("cabbage", "American Mayapple");
-    hashmap.insert("kohlrabi", "Apple");
-    hashmap.insert("Savoy cabbage", "Apricot");
-    hashmap.insert("red cabbage", "Araza");
-    hashmap.insert("cauliflower", "Avocado");
-    hashmap.insert("celery", "Banana");
-    hashmap.insert("endive", "Bilberry");
-    hashmap.insert("fiddleheads", "Blackberry");
-    hashmap.insert("frisee", "Blackcurrant");
-    hashmap.insert("fennel", "Black sapote");
-    hashmap.insert("greens", "Blueberry");
-    hashmap.insert("arugula", "Boysenberry");
-    hashmap.insert("bok choy", "Breadfruit");
-    hashmap.insert("chard", "Buddha's hand");
-    hashmap.insert("collard greens", "Cactus pear");
-    hashmap.insert("kale", "Canistel");
-    hashmap.insert("lettuce", "Cashew");
-    hashmap.insert("mustard greens", "Cempedak");
-    hashmap.insert("spinach", "Cherimoya");
-    hashmap.insert("herbs", "Cherry");
-    hashmap.insert("anise", "Chico fruit");
-    hashmap.insert("basil", "Cloudberry");
-    hashmap.insert("caraway", "Coco de mer");
-    hashmap.insert("coriander", "Coconut");
-    hashmap.insert("chamomile", "Crab apple");
-    hashmap.insert("daikon", "Cranberry");
-    hashmap.insert("dill", "Currant");
-    hashmap.insert("squash", "Damson");
-    hashmap.insert("lavender", "Date");
-    hashmap.insert("cymbopogon", "Dragonfruit");
-    hashmap.insert("marjoram", "Pitaya");
-    hashmap.insert("oregano", "Durian");
-    hashmap.insert("parsley", "Elderberry");
-    hashmap.insert("rosemary", "Feijoa");
-    hashmap.insert("thyme", "Fig");
-    hashmap.insert("legumes", "Finger Lime");
-    hashmap.insert("alfalfa sprouts", "Caviar Lime");
-    hashmap.insert("azuki beans", "Goji berry");
-    hashmap.insert("bean sprouts", "Gooseberry");
-    hashmap.insert("black beans", "Grape");
-    hashmap.insert("black-eyed peas", "Raisin");
-    hashmap.insert("borlotti bean", "Grapefruit");
-    hashmap.insert("broad beans", "Grewia asiatica");
-    hashmap.insert("chickpeas, garbanzos, or ceci beans", "Guava");
-    hashmap.insert("green beans", "Hala Fruit");
-    hashmap.insert("kidney beans", "Honeyberry");
-    hashmap.insert("lentils", "Huckleberry");
-    hashmap.insert("lima beans or butter bean", "Jabuticaba");
-    hashmap.insert("mung beans", "Jackfruit");
-    hashmap.insert("navy beans", "Jambul");
-    hashmap.insert("peanuts", "Japanese plum");
-    hashmap.insert("pinto beans", "Jostaberry");
-    hashmap.insert("runner beans", "Jujube");
-    hashmap.insert("split peas", "Juniper berry");
-    hashmap.insert("soy beans", "Kaffir Lime");
-    hashmap.insert("peas", "Kiwano");
-    hashmap.insert("mange tout or snap peas", "Kiwifruit");
-    hashmap.insert("mushrooms", "Kumquat");
-    hashmap.insert("nettles", "Lemon");
-    hashmap.insert("New Zealand spinach", "Lime");
-    hashmap.insert("okra", "Loganberry");
-    hashmap.insert("onions", "Longan");
-    hashmap.insert("chives", "Loquat");
-    hashmap.insert("garlic", "Lulo");
-    hashmap.insert("leek", "Lychee");
-    hashmap.insert("onion", "Magellan Barberry");
-    hashmap.insert("shallot", "Mamey Apple");
-    hashmap.insert("scallion", "Mamey Sapote");
-    hashmap.insert("peppers", "Mango");
-    hashmap.insert("bell pepper", "Mangosteen");
-    hashmap.insert("chili pepper", "Marionberry");
-    hashmap.insert("jalapeño", "Melon");
-    hashmap.insert("habanero", "Cantaloupe");
-    hashmap.insert("paprika", "Galia melon");
-    hashmap.insert("tabasco pepper", "Honeydew");
-    hashmap.insert("cayenne pepper", "Mouse melon");
-    hashmap.insert("radicchio", "Musk melon");
-    hashmap.insert("rhubarb", "Watermelon");
-    hashmap.insert("root vegetables", "Miracle fruit");
-    hashmap.insert("beetroot", "Momordica fruit");
-    hashmap.insert("beet", "Monstera deliciosa");
-    hashmap.insert("mangelwurzel", "Mulberry");
-    hashmap.insert("carrot", "Nance");
-    hashmap.insert("celeriac", "Nectarine");
-    hashmap.insert("corms", "Orange");
-    hashmap.insert("eddoe", "Blood orange");
-    hashmap.insert("konjac", "Clementine");
-    hashmap.insert("taro", "Mandarine");
-    hashmap.insert("water chestnut", "Tangerine");
-    hashmap.insert("ginger", "Papaya");
-    hashmap.insert("parsnip", "Passionfruit");
-    hashmap.insert("rutabaga", "Pawpaw");
-    hashmap.insert("radish", "Peach");
-    hashmap.insert("wasabi", "Pear");
 
-    let slice = hashmap
-        .iter()
-        .map(|(k, v)| (*k, *v))
-        .collect::<Vec<(&str, &str)>>();
+    let (slice, hashmap, vals) = make_values!(
+        "artichoke" => "Abiu",
+        "aubergine" => "Açaí",
+        "asparagus" => "Acerola",
+        "broccoflower" => "Akebi",
+        "broccoli" => "Ackee",
+        "brussels sprouts" => "African Cherry Orange",
+        "cabbage" => "American Mayapple",
+        "kohlrabi" => "Apple",
+        "Savoy cabbage" => "Apricot",
+        "red cabbage" => "Araza",
+        "cauliflower" => "Avocado",
+        "celery" => "Banana",
+        "endive" => "Bilberry",
+        "fiddleheads" => "Blackberry",
+        "frisee" => "Blackcurrant",
+        "fennel" => "Black sapote",
+        "greens" => "Blueberry",
+        "arugula" => "Boysenberry",
+        "bok choy" => "Breadfruit",
+        "chard" => "Buddha's hand",
+        "collard greens" => "Cactus pear",
+        "kale" => "Canistel",
+        "lettuce" => "Cashew",
+        "mustard greens" => "Cempedak",
+        "spinach" => "Cherimoya",
+        "herbs" => "Cherry",
+        "anise" => "Chico fruit",
+        "basil" => "Cloudberry",
+        "caraway" => "Coco de mer",
+        "coriander" => "Coconut",
+        "chamomile" => "Crab apple",
+        "daikon" => "Cranberry",
+        "dill" => "Currant",
+        "squash" => "Damson",
+        "lavender" => "Date",
+        "cymbopogon" => "Dragonfruit",
+        "marjoram" => "Pitaya",
+        "oregano" => "Durian",
+        "parsley" => "Elderberry",
+        "rosemary" => "Feijoa",
+        "thyme" => "Fig",
+        "legumes" => "Finger Lime",
+        "alfalfa sprouts" => "Caviar Lime",
+        "azuki beans" => "Goji berry",
+        "bean sprouts" => "Gooseberry",
+        "black beans" => "Grape",
+        "black-eyed peas" => "Raisin",
+        "borlotti bean" => "Grapefruit",
+        "broad beans" => "Grewia asiatica",
+        "chickpeas, garbanzos, or ceci beans" => "Guava",
+        "green beans" => "Hala Fruit",
+        "kidney beans" => "Honeyberry",
+        "lentils" => "Huckleberry",
+        "lima beans or butter bean" => "Jabuticaba",
+        "mung beans" => "Jackfruit",
+        "navy beans" => "Jambul",
+        "peanuts" => "Japanese plum",
+        "pinto beans" => "Jostaberry",
+        "runner beans" => "Jujube",
+        "split peas" => "Juniper berry",
+        "soy beans" => "Kaffir Lime",
+        "peas" => "Kiwano",
+        "mange tout or snap peas" => "Kiwifruit",
+        "mushrooms" => "Kumquat",
+        "nettles" => "Lemon",
+        "New Zealand spinach" => "Lime",
+        "okra" => "Loganberry",
+        "onions" => "Longan",
+        "chives" => "Loquat",
+        "garlic" => "Lulo",
+        "leek" => "Lychee",
+        "onion" => "Magellan Barberry",
+        "shallot" => "Mamey Apple",
+        "scallion" => "Mamey Sapote",
+        "peppers" => "Mango",
+        "bell pepper" => "Mangosteen",
+        "chili pepper" => "Marionberry",
+        "jalapeño" => "Melon",
+        "habanero" => "Cantaloupe",
+        "paprika" => "Galia melon",
+        "tabasco pepper" => "Honeydew",
+        "cayenne pepper" => "Mouse melon",
+        "radicchio" => "Musk melon",
+        "rhubarb" => "Watermelon",
+        "root vegetables" => "Miracle fruit",
+        "beetroot" => "Momordica fruit",
+        "beet" => "Monstera deliciosa",
+        "mangelwurzel" => "Mulberry",
+        "carrot" => "Nance",
+        "celeriac" => "Nectarine",
+        "corms" => "Orange",
+        "eddoe" => "Blood orange",
+        "konjac" => "Clementine",
+        "taro" => "Mandarine",
+        "water chestnut" => "Tangerine",
+        "ginger" => "Papaya",
+        "parsnip" => "Passionfruit",
+        "rutabaga" => "Pawpaw",
+        "radish" => "Peach",
+        "wasabi" => "Pear"
+    );
 
-    c.bench_function("many replaces, fn", |b| {
+    inner_bench("many replaces", c, TEMPLATE, vals, hashmap, slice);
+}
+
+fn inner_bench<F>(
+    name: &str,
+    c: &mut Criterion,
+    template_str: &str,
+    vals: ValuesFn<F>,
+    hashmap: HashMap<&str, &str>,
+    slice: &[(&str, &str)],
+) where
+    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
+{
+    c.bench_function(&format!("{name}, fn"), |b| {
         b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(
-                template
-                    .render(&vals(|key| {
-                        Some(Cow::Borrowed(match key {
-                            "artichoke" => "Abiu",
-                            "aubergine" => "Açaí",
-                            "asparagus" => "Acerola",
-                            "broccoflower" => "Akebi",
-                            "broccoli" => "Ackee",
-                            "brussels sprouts" => "African Cherry Orange",
-                            "cabbage" => "American Mayapple",
-                            "kohlrabi" => "Apple",
-                            "Savoy cabbage" => "Apricot",
-                            "red cabbage" => "Araza",
-                            "cauliflower" => "Avocado",
-                            "celery" => "Banana",
-                            "endive" => "Bilberry",
-                            "fiddleheads" => "Blackberry",
-                            "frisee" => "Blackcurrant",
-                            "fennel" => "Black sapote",
-                            "greens" => "Blueberry",
-                            "arugula" => "Boysenberry",
-                            "bok choy" => "Breadfruit",
-                            "chard" => "Buddha's hand",
-                            "collard greens" => "Cactus pear",
-                            "kale" => "Canistel",
-                            "lettuce" => "Cashew",
-                            "mustard greens" => "Cempedak",
-                            "spinach" => "Cherimoya",
-                            "herbs" => "Cherry",
-                            "anise" => "Chico fruit",
-                            "basil" => "Cloudberry",
-                            "caraway" => "Coco de mer",
-                            "coriander" => "Coconut",
-                            "chamomile" => "Crab apple",
-                            "daikon" => "Cranberry",
-                            "dill" => "Currant",
-                            "squash" => "Damson",
-                            "lavender" => "Date",
-                            "cymbopogon" => "Dragonfruit",
-                            "marjoram" => "Pitaya",
-                            "oregano" => "Durian",
-                            "parsley" => "Elderberry",
-                            "rosemary" => "Feijoa",
-                            "thyme" => "Fig",
-                            "legumes" => "Finger Lime",
-                            "alfalfa sprouts" => "Caviar Lime",
-                            "azuki beans" => "Goji berry",
-                            "bean sprouts" => "Gooseberry",
-                            "black beans" => "Grape",
-                            "black-eyed peas" => "Raisin",
-                            "borlotti bean" => "Grapefruit",
-                            "broad beans" => "Grewia asiatica",
-                            "chickpeas, garbanzos, or ceci beans" => "Guava",
-                            "green beans" => "Hala Fruit",
-                            "kidney beans" => "Honeyberry",
-                            "lentils" => "Huckleberry",
-                            "lima beans or butter bean" => "Jabuticaba",
-                            "mung beans" => "Jackfruit",
-                            "navy beans" => "Jambul",
-                            "peanuts" => "Japanese plum",
-                            "pinto beans" => "Jostaberry",
-                            "runner beans" => "Jujube",
-                            "split peas" => "Juniper berry",
-                            "soy beans" => "Kaffir Lime",
-                            "peas" => "Kiwano",
-                            "mange tout or snap peas" => "Kiwifruit",
-                            "mushrooms" => "Kumquat",
-                            "nettles" => "Lemon",
-                            "New Zealand spinach" => "Lime",
-                            "okra" => "Loganberry",
-                            "onions" => "Longan",
-                            "chives" => "Loquat",
-                            "garlic" => "Lulo",
-                            "leek" => "Lychee",
-                            "onion" => "Magellan Barberry",
-                            "shallot" => "Mamey Apple",
-                            "scallion" => "Mamey Sapote",
-                            "peppers" => "Mango",
-                            "bell pepper" => "Mangosteen",
-                            "chili pepper" => "Marionberry",
-                            "jalapeño" => "Melon",
-                            "habanero" => "Cantaloupe",
-                            "paprika" => "Galia melon",
-                            "tabasco pepper" => "Honeydew",
-                            "cayenne pepper" => "Mouse melon",
-                            "radicchio" => "Musk melon",
-                            "rhubarb" => "Watermelon",
-                            "root vegetables" => "Miracle fruit",
-                            "beetroot" => "Momordica fruit",
-                            "beet" => "Monstera deliciosa",
-                            "mangelwurzel" => "Mulberry",
-                            "carrot" => "Nance",
-                            "celeriac" => "Nectarine",
-                            "corms" => "Orange",
-                            "eddoe" => "Blood orange",
-                            "konjac" => "Clementine",
-                            "taro" => "Mandarine",
-                            "water chestnut" => "Tangerine",
-                            "ginger" => "Papaya",
-                            "parsnip" => "Passionfruit",
-                            "rutabaga" => "Pawpaw",
-                            "radish" => "Peach",
-                            "wasabi" => "Pear",
-                            _ => return None,
-                        }))
-                    }))
-                    .unwrap(),
-            );
+            let template = Template::parse(black_box(template_str)).unwrap();
+            black_box(template.render(&vals).unwrap());
         })
     });
-    c.bench_function("many replaces, hashmap", |b| {
+    c.bench_function(&format!("{name}, hashmap"), |b| {
         b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
+            let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&hashmap).unwrap());
         })
     });
-    c.bench_function("many replaces, slice", |b| {
+    c.bench_function(&format!("{name}, slice"), |b| {
         b.iter(|| {
-            let template = Template::parse(black_box(TEMPLATE)).unwrap();
-            black_box(template.render(&slice).unwrap());
+            let template = Template::parse(black_box(template_str)).unwrap();
+            black_box(template.render(&slice as &dyn Values).unwrap());
         })
     });
 }
