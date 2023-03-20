@@ -40,7 +40,7 @@ fn main() -> miette::Result<()> {
     }
 
     let args = Args::parse();
-    let mut values = HashMap::from_iter(args.values);
+    let mut values: HashMap<String, String> = HashMap::from_iter(args.values);
     if args.env {
         for (key, value) in std::env::vars() {
             values.entry(key).or_insert(value);
