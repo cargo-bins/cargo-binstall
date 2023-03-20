@@ -10,7 +10,7 @@ pub enum RenderError {
     MissingKey(String),
 
     /// An I/O error passed through from [`Template::render_into`].
-    #[error(transparent)]
+    #[error("write failed: {0}")]
     Io(#[from] std::io::Error),
 }
 
