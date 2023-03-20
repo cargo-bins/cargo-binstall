@@ -139,8 +139,12 @@ impl<'s> Template<'s> {
     }
 
     pub fn has_key(&self, key: &str) -> bool {
+        self.has_keys(&[key])
+    }
+
+    pub fn has_keys(&self, keys: &[&str]) -> bool {
         self.items.iter().any(|token| match token {
-            Item::Key(k) => k == &key,
+            Item::Key(k) => keys.contains(&k),
             _ => false,
         })
     }
