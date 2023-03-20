@@ -31,10 +31,10 @@ const BUFFER_SIZE: usize = 4096 * 5;
 #[derive(Debug, Diagnostic, Error)]
 #[non_exhaustive]
 pub enum Error {
-    #[error(transparent)]
+    #[error("I/O Error: {0}")]
     Io(#[from] io::Error),
 
-    #[error(transparent)]
+    #[error("Failed to parse json: {0}")]
     SerdeJsonParse(#[from] serde_json::Error),
 }
 

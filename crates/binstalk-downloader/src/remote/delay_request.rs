@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
+    iter::Peekable,
     pin::Pin,
     sync::Mutex,
     task::{Context, Poll},
@@ -10,9 +11,40 @@ use compact_str::{CompactString, ToCompactString};
 use reqwest::{Request, Url};
 use tokio::{
     sync::Mutex as AsyncMutex,
-    time::{sleep_until, Instant},
+    time::{sleep_until, Duration, Instant},
 };
 use tower::{Service, ServiceExt};
+
+trait IterExt: Iterator {
+    fn dedup(self) -> Dedup<Self>
+    where
+        Self: Sized,
+        Self::Item: PartialEq,
+    {
+        Dedup(self.peekable())
+    }
+}
+
+impl<It: Iterator> IterExt for It {}
+
+struct Dedup<It: Iterator>(Peekable<It>);
+
+impl<It> Iterator for Dedup<It>
+where
+    It: Iterator,
+    It::Item: PartialEq,
+{
+    type Item = It::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr = self.0.next()?;
+
+        // Drop all consecutive dup values
+        while self.0.next_if_eq(&curr).is_some() {}
+
+        Some(curr)
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct DelayRequest<S> {
@@ -28,31 +60,33 @@ impl<S> DelayRequest<S> {
         }
     }
 
-    pub(super) fn add_urls_to_delay<'a, Urls>(&self, urls: Urls, deadline: Instant)
-    where
-        Urls: IntoIterator<Item = &'a Url>,
-    {
+    pub(super) fn add_urls_to_delay(&self, urls: &[&Url], delay_duration: Duration) {
+        let deadline = Instant::now() + delay_duration;
+
         let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
-        urls.into_iter().filter_map(Url::host_str).for_each(|host| {
-            hosts_to_delay
-                .entry(host.to_compact_string())
-                .and_modify(|old_dl| {
-                    *old_dl = deadline.max(*old_dl);
-                })
-                .or_insert(deadline);
-        });
+        urls.iter()
+            .filter_map(|url| url.host_str())
+            .dedup()
+            .for_each(|host| {
+                hosts_to_delay
+                    .entry(host.to_compact_string())
+                    .and_modify(|old_dl| {
+                        *old_dl = deadline.max(*old_dl);
+                    })
+                    .or_insert(deadline);
+            });
     }
 
     fn wait_until_available(&self, url: &Url) -> impl Future<Output = ()> + Send + 'static {
         let mut hosts_to_delay = self.hosts_to_delay.lock().unwrap();
 
-        let sleep = url
+        let deadline = url
             .host_str()
             .and_then(|host| hosts_to_delay.get(host).map(|deadline| (*deadline, host)))
             .and_then(|(deadline, host)| {
                 if deadline.elapsed().is_zero() {
-                    Some(sleep_until(deadline))
+                    Some(deadline)
                 } else {
                     // We have already gone past the deadline,
                     // so we should remove it instead.
@@ -62,8 +96,8 @@ impl<S> DelayRequest<S> {
             });
 
         async move {
-            if let Some(sleep) = sleep {
-                sleep.await;
+            if let Some(deadline) = deadline {
+                sleep_until(deadline).await;
             }
         }
     }

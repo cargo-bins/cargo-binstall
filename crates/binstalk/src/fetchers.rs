@@ -3,10 +3,15 @@ use std::{path::Path, sync::Arc};
 use compact_str::CompactString;
 pub use gh_crate_meta::*;
 pub use quickinstall::*;
+use tokio::sync::OnceCell;
+use url::Url;
 
 use crate::{
     errors::BinstallError,
-    helpers::{remote::Client, tasks::AutoAbortJoinHandle},
+    helpers::{
+        download::ExtractedFiles, gh_api_client::GhApiClient, remote::Client,
+        tasks::AutoAbortJoinHandle,
+    },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -17,12 +22,17 @@ pub(crate) mod quickinstall;
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
     #[allow(clippy::new_ret_no_self)]
-    fn new(client: Client, data: Arc<Data>, target_data: Arc<TargetData>) -> Arc<dyn Fetcher>
+    fn new(
+        client: Client,
+        gh_api_client: GhApiClient,
+        data: Arc<Data>,
+        target_data: Arc<TargetData>,
+    ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
 
     /// Fetch a package and extract
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError>;
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError>;
 
     /// Find the package, if it is available for download
     ///
@@ -33,6 +43,10 @@ pub trait Fetcher: Send + Sync {
     /// Must return `true` if a package is available, `false` if none is, and reserve errors to
     /// fatal conditions only.
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>>;
+
+    /// Report to upstream that cargo-binstall tries to use this fetcher.
+    /// Currently it is only overriden by [`quickinstall::QuickInstall`].
+    fn report_to_upstream(self: Arc<Self>) {}
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
@@ -60,9 +74,37 @@ pub trait Fetcher: Send + Sync {
 /// Data required to fetch a package
 #[derive(Clone, Debug)]
 pub struct Data {
-    pub name: CompactString,
-    pub version: CompactString,
-    pub repo: Option<String>,
+    name: CompactString,
+    version: CompactString,
+    repo: Option<String>,
+    repo_final_url: OnceCell<Option<Url>>,
+}
+
+impl Data {
+    pub fn new(name: CompactString, version: CompactString, repo: Option<String>) -> Self {
+        Self {
+            name,
+            version,
+            repo,
+            repo_final_url: OnceCell::new(),
+        }
+    }
+
+    async fn resolve_final_repo_url(&self, client: &Client) -> Result<&Option<Url>, BinstallError> {
+        self.repo_final_url
+            .get_or_try_init(move || {
+                Box::pin(async move {
+                    if let Some(repo) = self.repo.as_deref() {
+                        Ok(Some(
+                            client.get_redirected_final_url(Url::parse(repo)?).await?,
+                        ))
+                    } else {
+                        Ok(None)
+                    }
+                })
+            })
+            .await
+    }
 }
 
 /// Target specific data required to fetch a package

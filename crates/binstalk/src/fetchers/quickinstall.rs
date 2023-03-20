@@ -7,8 +7,9 @@ use url::Url;
 use crate::{
     errors::BinstallError,
     helpers::{
-        download::Download,
-        remote::{Client, Method},
+        download::{Download, ExtractedFiles},
+        gh_api_client::GhApiClient,
+        remote::{does_url_exist, Client, Method},
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -19,9 +20,18 @@ use super::{Data, TargetData};
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 
+fn is_universal_macos(target: &str) -> bool {
+    ["universal-apple-darwin", "universal2-apple-darwin"].contains(&target)
+}
+
 pub struct QuickInstall {
     client: Client,
+    gh_api_client: GhApiClient,
+
     package: String,
+    package_url: Url,
+    stats_url: Url,
+
     target_data: Arc<TargetData>,
 }
 
@@ -29,48 +39,73 @@ pub struct QuickInstall {
 impl super::Fetcher for QuickInstall {
     fn new(
         client: Client,
+        gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetData>,
     ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
         let target = &target_data.target;
+
+        let package = format!("{crate_name}-{version}-{target}");
+
         Arc::new(Self {
             client,
-            package: format!("{crate_name}-{version}-{target}"),
+            gh_api_client,
+
+            package_url: Url::parse(&format!(
+                "{BASE_URL}/{crate_name}-{version}/{package}.tar.gz",
+            ))
+            .expect("package_url is pre-generated and should never be invalid url"),
+            stats_url: Url::parse(&format!("{STATS_URL}/{package}.tar.gz",))
+                .expect("stats_url is pre-generated and should never be invalid url"),
+            package,
+
             target_data,
         })
     }
 
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
-            if cfg!(debug_assertions) {
-                debug!("Not sending quickinstall report in debug mode");
-            } else {
-                let this = self.clone();
-                tokio::spawn(async move {
-                    if let Err(err) = this.report().await {
-                        warn!(
-                            "Failed to send quickinstall report for package {}: {err}",
-                            this.package
-                        )
-                    }
-                });
+            if is_universal_macos(&self.target_data.target) {
+                return Ok(false);
             }
 
-            let url = self.package_url();
-            debug!("Checking for package at: '{url}'");
-            Ok(self
-                .client
-                .remote_exists(Url::parse(&url)?, Method::HEAD)
-                .await?)
+            does_url_exist(
+                self.client.clone(),
+                self.gh_api_client.clone(),
+                &self.package_url,
+            )
+            .await
         })
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
-        let url = self.package_url();
+    fn report_to_upstream(self: Arc<Self>) {
+        if cfg!(debug_assertions) {
+            debug!("Not sending quickinstall report in debug mode");
+        } else if is_universal_macos(&self.target_data.target) {
+            debug!(
+                r#"Not sending quickinstall report for universal-apple-darwin
+and universal2-apple-darwin.
+Quickinstall does not support these targets, it only supports targets supported
+by rust officially."#,
+            );
+        } else {
+            tokio::spawn(async move {
+                if let Err(err) = self.report().await {
+                    warn!(
+                        "Failed to send quickinstall report for package {}: {err}",
+                        self.package
+                    )
+                }
+            });
+        }
+    }
+
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
+        let url = &self.package_url;
         debug!("Downloading package from: '{url}'");
-        Ok(Download::new(self.client.clone(), Url::parse(&url)?)
+        Ok(Download::new(self.client.clone(), url.clone())
             .and_extract(self.pkg_fmt(), dst)
             .await?)
     }
@@ -104,27 +139,11 @@ impl super::Fetcher for QuickInstall {
 }
 
 impl QuickInstall {
-    fn package_url(&self) -> String {
-        format!(
-            "{base_url}/{package}/{package}.tar.gz",
-            base_url = BASE_URL,
-            package = self.package
-        )
-    }
-
-    fn stats_url(&self) -> String {
-        format!(
-            "{stats_url}/{package}.tar.gz",
-            stats_url = STATS_URL,
-            package = self.package
-        )
-    }
-
     pub async fn report(&self) -> Result<(), BinstallError> {
-        let url = Url::parse(&self.stats_url())?;
+        let url = self.stats_url.clone();
         debug!("Sending installation report to quickinstall ({url})");
 
-        self.client.remote_exists(url, Method::HEAD).await?;
+        self.client.request(Method::HEAD, url).send(true).await?;
 
         Ok(())
     }

@@ -2,12 +2,18 @@
 ci := env_var_or_default("CI", "")
 for-release := env_var_or_default("JUST_FOR_RELEASE", "")
 use-cross := env_var_or_default("JUST_USE_CROSS", "")
+use-cargo-zigbuild  := env_var_or_default("JUST_USE_CARGO_ZIGBUILD", "")
 extra-build-args := env_var_or_default("JUST_EXTRA_BUILD_ARGS", "")
 extra-features := env_var_or_default("JUST_EXTRA_FEATURES", "")
 default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
 override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
+glibc-version := env_var_or_default("GLIBC_VERSION", "")
+use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
+
+cargo := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
+export CARGO := cargo
 
 # target information
 target-host := `rustc -vV | grep host: | cut -d ' ' -f 2`
@@ -29,14 +35,15 @@ target-libc := if target =~ "gnu" { "gnu"
 output-ext := if target-os == "windows" { ".exe" } else { "" }
 output-filename := "cargo-binstall" + output-ext
 output-profile-folder := if for-release != "" { "release" } else { "debug" }
-output-folder := if target != target-host { "target" / target / output-profile-folder
-    } else if env_var_or_default("CARGO_BUILD_TARGET", "") != "" { "target" / target / output-profile-folder
-    } else if cargo-buildstd != "" { "target" / target / output-profile-folder
-    } else { "target" / output-profile-folder }
+output-folder := "target" / target / output-profile-folder
 output-path := output-folder / output-filename
 
 # which tool to use for compiling
-cargo-bin := if use-cross != "" { "cross" } else { "cargo +nightly" }
+cargo-bin := if use-auditable != "" {
+    "cargo-auditable auditable"
+} else {
+    cargo
+}
 
 # cargo compile options
 cargo-profile := if for-release != "" { "release" } else { "dev" }
@@ -46,13 +53,13 @@ ci-or-no := if ci != "" { "ci" } else { "noci" }
 
 # In release builds in CI, build the std library ourselves so it uses our
 # compile profile, and optimise panic messages out with immediate abort.
-cargo-buildstd := if (cargo-profile / ci-or-no) == "release/ci" {
-    " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
-    } else { "" }
+cargo-buildstd := "" #if (cargo-profile / ci-or-no) == "release/ci" {
+#" -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
+#} else { "" }
 
 # In musl release builds in CI, statically link gcclibs.
 rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
-    " -C link-arg=-lgcc -C link-arg=-static-libgcc"
+    if use-cargo-zigbuild != "" { "-C link-arg=-static-libgcc" } else { " -C link-arg=-lgcc -C link-arg=-static-libgcc" }
 } else { "" }
 
 # disable default features in CI for debug builds, for speed
@@ -61,9 +68,13 @@ cargo-no-default-features := if default-features == "false" { " --no-default-fea
     } else if (cargo-profile / ci-or-no) == "dev/ci" { " --no-default-features"
     } else { "" }
 
+support-pkg-config := if target == target-host {
+    if target-os == "linux" { "true" } else { "" }
+} else { "" }
+
 cargo-features := trim_end_match(if override-features != "" { override-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin" + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "rustls,fancy-no-backtrace,zstd-thin" + extra-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin,log_release_max_level_debug" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto" + extra-features
     } else { extra-features
 }, ",")
 
@@ -76,41 +87,93 @@ cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.s
 win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring.git=\"https://github.com/awakecoding/ring\"' --config='patch.crates-io.ring.branch=\"0.16.20_alpha\"'" } else { "" }
 
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
-rustc-miropt := if for-release != "" { " -Z mir-opt-level=4" } else { "" }
+# **DISABLED because it's buggy**
+rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
+
+# Use rust-lld that is bundled with rustup to speedup linking
+# and support for icf=safe.
+#
+# -Zgcc-ld=lld uses the rust-lld that is bundled with rustup.
+#
+# TODO: There is ongoing effort to stabilise this and we will need to update
+# this once it is merged.
+# https://github.com/rust-lang/compiler-team/issues/510
+#
+# If cargo-zigbuild is used, then it will provide the lld linker.
+# This option is disabled on windows since it not supported.
+rust-lld := "" #if use-cargo-zigbuild != "" {
+#""
+#} else if target-os != "windows" {
+#" -Z gcc-ld=lld"
+#} else {
+#""
+#}
 
 # ICF: link-time identical code folding
-# disabled for now, as it requires the gold linker
-rustc-icf := "" #if for-release != "" { " -C link-arg=-Wl,--icf=all" } else { "" }
+#
+# On windows it works out of the box and on linux it uses
+# rust-lld.
+rustc-icf := if for-release != "" {
+    if target-os == "windows" {
+        " -C link-arg=-Wl,--icf=safe"
+     } else if target-os == "linux" {
+        " -C link-arg=-Wl,--icf=safe"
+     } else {
+        ""
+    }
+} else {
+    ""
+}
 
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (if target != target-host { " --target " + target } else if cargo-buildstd != "" { " --target " + target } else { "" }) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
-export RUSTFLAGS := (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
+# Only enable linker-plugin-lto for release
+# Also disable this on windows since it uses msvc.
+linker-plugin-lto := if for-release == "" {
+    ""
+} else if target-os == "linux" {
+    "-C linker-plugin-lto "
+} else {
+    ""
+}
+
+target-glibc-ver-postfix := if glibc-version != "" {
+    if use-cargo-zigbuild != "" {
+        "." + glibc-version
+    } else {
+        ""
+    }
+} else {
+    ""
+}
+
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
+export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt
 ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev"
-    } else if target == "x86_64-unknown-linux-musl" { "musl-tools"
-    } else if target == "aarch64-unknown-linux-gnu" { "g++-aarch64-linux-gnu libc6-dev-arm64-cross binutils binutils-aarch64-linux-gnu libblocksruntime-dev"
     } else { "" }
 
 [linux]
 ci-install-deps:
-    {{ if ci-apt-deps == "" { "exit" } else { "" } }}
-    sudo apt update && sudo apt install -y --no-install-recommends {{ci-apt-deps}}
+    if [ -n "{{ci-apt-deps}}" ]; then sudo apt update && sudo apt install -y --no-install-recommends {{ci-apt-deps}}; fi
+    if [ -n "{{use-cargo-zigbuild}}" ]; then pip3 install cargo-zigbuild; fi
 
 [macos]
 [windows]
 ci-install-deps:
 
 toolchain components="":
-    rustup toolchain install nightly {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
-    {{ if ci != "" { "rustup default nightly" } else { "rustup override set nightly" } }}
+    rustup toolchain install stable {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
+    {{ if ci != "" { "rustup default stable" } else { "rustup override set stable" } }}
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
+print-env:
+    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
 
-build:
+build: print-env
     {{cargo-bin}} build {{cargo-build-args}}
 
-check:
+check: print-env
     {{cargo-bin}} check {{cargo-build-args}}
 
 get-output file outdir=".":
@@ -122,7 +185,7 @@ get-binary outdir=".": (get-output output-filename outdir)
     -chmod +x {{ outdir / output-filename }}
 
 e2e-test file *arguments: (get-binary "e2e-tests")
-    cd e2e-tests && bash {{file}}.sh {{output-filename}} {{arguments}}
+    cd e2e-tests && env -u RUSTFLAGS bash {{file}}.sh {{output-filename}} {{arguments}}
 
 e2e-test-live: (e2e-test "live")
 e2e-test-manifest-path: (e2e-test "manifest-path")
@@ -131,6 +194,7 @@ e2e-test-strategies: (e2e-test "strategies")
 e2e-test-version-syntax: (e2e-test "version-syntax")
 e2e-test-upgrade: (e2e-test "upgrade")
 e2e-test-self-upgrade-no-symlink: (e2e-test "self-upgrade-no-symlink")
+e2e-test-uninstall: (e2e-test "uninstall")
 
 # WinTLS (Windows in CI) does not have TLS 1.3 support
 [windows]
@@ -139,21 +203,20 @@ e2e-test-tls: (e2e-test "tls" "1.2")
 [macos]
 e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall
 
-unit-tests:
+unit-tests: print-env
     {{cargo-bin}} test {{cargo-build-args}}
 
 test: unit-tests build e2e-tests
 
-clippy:
+clippy: print-env
     {{cargo-bin}} clippy --no-deps -- -D clippy::all
 
-fmt:
+fmt: print-env
     cargo fmt --all -- --check
 
-fmt-check:
-    cargo fmt --all -- --check
+fmt-check: fmt
 
 lint: clippy fmt-check
 

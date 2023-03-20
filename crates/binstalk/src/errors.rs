@@ -5,8 +5,7 @@ use std::{
 };
 
 use binstalk_downloader::{
-    download::{DownloadError, ZipError},
-    remote::{Error as RemoteError, HttpError, ReqwestError},
+    download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
 };
 use cargo_toml::Error as CargoTomlError;
 use compact_str::CompactString;
@@ -21,7 +20,7 @@ use tracing::{error, warn};
 pub struct CratesIoApiError {
     pub crate_name: CompactString,
     #[source]
-    pub err: crates_io_api::Error,
+    pub err: RemoteError,
 }
 
 #[derive(Debug, Error)]
@@ -79,46 +78,25 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::url_parse`
     /// - Exit: 65
-    #[error(transparent)]
+    #[error("Failed to parse url: {0}")]
     #[diagnostic(severity(error), code(binstall::url_parse))]
     UrlParse(#[from] url::ParseError),
-
-    /// An error while unzipping a file.
-    ///
-    /// - Code: `binstall::unzip`
-    /// - Exit: 66
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::unzip))]
-    Unzip(#[from] ZipError),
 
     /// A rendering error in a template.
     ///
     /// - Code: `binstall::template`
     /// - Exit: 67
-    #[error(transparent)]
+    #[error("Failed to render template: {0}")]
     #[diagnostic(severity(error), code(binstall::template))]
     Template(Box<TinyTemplateError>),
 
-    /// A generic error from our HTTP client, reqwest.
+    /// Failed to download or failed to decode the body.
     ///
-    /// Errors resulting from HTTP fetches are handled with [`BinstallError::Http`] instead.
-    ///
-    /// - Code: `binstall::reqwest`
+    /// - Code: `binstall::download`
     /// - Exit: 68
     #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::reqwest))]
-    Reqwest(#[from] ReqwestError),
-
-    /// An HTTP request failed.
-    ///
-    /// This includes both connection/transport failures and when the HTTP status of the response
-    /// is not as expected.
-    ///
-    /// - Code: `binstall::http`
-    /// - Exit: 69
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::http))]
-    Http(#[from] Box<HttpError>),
+    #[diagnostic(severity(error), code(binstall::download))]
+    Download(#[from] DownloadError),
 
     /// A subprocess failed.
     ///
@@ -137,7 +115,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::io`
     /// - Exit: 74
-    #[error(transparent)]
+    #[error("I/O Error: {0}")]
     #[diagnostic(severity(error), code(binstall::io))]
     Io(io::Error),
 
@@ -171,7 +149,7 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 78
-    #[error(transparent)]
+    #[error("Failed to parse cargo manifest: {0}")]
     #[diagnostic(
         severity(error),
         code(binstall::cargo_manifest),
@@ -309,6 +287,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::invalid_pkg_fmt))]
     InvalidPkgFmt(Box<InvalidPkgFmtError>),
 
+    /// Request to GitHub Restful API failed
+    ///
+    /// - Code: `binstall::gh_restful_api_failure`
+    /// - Exit: 96
+    #[error("Request to GitHub Restful API failed: {0}")]
+    #[diagnostic(severity(error), code(binstall::gh_restful_api_failure))]
+    GhApiErr(#[source] Box<GhApiError>),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -322,10 +308,8 @@ impl BinstallError {
             TaskJoinError(_) => 17,
             UserAbort => 32,
             UrlParse(_) => 65,
-            Unzip(_) => 66,
             Template(_) => 67,
-            Reqwest(_) => 68,
-            Http { .. } => 69,
+            Download(_) => 68,
             SubProcess { .. } => 70,
             Io(_) => 74,
             CratesIoApi { .. } => 76,
@@ -343,6 +327,7 @@ impl BinstallError {
             EmptySourceFilePath => 92,
             NoFallbackToCargoInstall => 94,
             InvalidPkgFmt(..) => 95,
+            GhApiErr(..) => 96,
             CrateContext(context) => context.err.exit_number(),
         };
 
@@ -415,24 +400,7 @@ impl From<BinstallError> for io::Error {
 
 impl From<RemoteError> for BinstallError {
     fn from(e: RemoteError) -> Self {
-        use RemoteError::*;
-
-        match e {
-            Reqwest(reqwest_error) => reqwest_error.into(),
-            Http(http_error) => http_error.into(),
-        }
-    }
-}
-
-impl From<DownloadError> for BinstallError {
-    fn from(e: DownloadError) -> Self {
-        use DownloadError::*;
-
-        match e {
-            Unzip(zip_error) => zip_error.into(),
-            Remote(remote_error) => remote_error.into(),
-            Io(io_error) => io_error.into(),
-        }
+        DownloadError::from(e).into()
     }
 }
 
@@ -451,5 +419,11 @@ impl From<CargoTomlError> for BinstallError {
 impl From<InvalidPkgFmtError> for BinstallError {
     fn from(e: InvalidPkgFmtError) -> Self {
         BinstallError::InvalidPkgFmt(Box::new(e))
+    }
+}
+
+impl From<GhApiError> for BinstallError {
+    fn from(e: GhApiError) -> Self {
+        BinstallError::GhApiErr(Box::new(e))
     }
 }

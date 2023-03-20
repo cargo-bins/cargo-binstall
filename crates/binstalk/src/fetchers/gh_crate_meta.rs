@@ -13,9 +13,10 @@ use url::Url;
 use crate::{
     errors::{BinstallError, InvalidPkgFmtError},
     helpers::{
-        download::Download,
+        download::{Download, ExtractedFiles},
         futures_resolver::FuturesResolver,
-        remote::{Client, Method},
+        gh_api_client::GhApiClient,
+        remote::{does_url_exist, Client},
         tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
@@ -28,6 +29,7 @@ use hosting::RepositoryHost;
 
 pub struct GhCrateMeta {
     client: Client,
+    gh_api_client: GhApiClient,
     data: Arc<Data>,
     target_data: Arc<TargetData>,
     resolution: OnceCell<(Url, PkgFmt)>,
@@ -64,12 +66,11 @@ impl GhCrateMeta {
         // go check all potential URLs at once
         urls.map(move |url| {
             let client = self.client.clone();
+            let gh_api_client = self.gh_api_client.clone();
 
             async move {
-                debug!("Checking for package at: '{url}'");
-
-                Ok((client.remote_exists(url.clone(), Method::HEAD).await?
-                    || client.remote_exists(url.clone(), Method::GET).await?)
+                Ok(does_url_exist(client, gh_api_client, &url)
+                    .await?
                     .then_some((url, pkg_fmt)))
             }
         })
@@ -80,11 +81,13 @@ impl GhCrateMeta {
 impl super::Fetcher for GhCrateMeta {
     fn new(
         client: Client,
+        gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetData>,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
+            gh_api_client,
             data,
             target_data,
             resolution: OnceCell::new(),
@@ -93,11 +96,7 @@ impl super::Fetcher for GhCrateMeta {
 
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
-            let repo = if let Some(repo) = self.data.repo.as_deref() {
-                Some(Box::pin(self.client.get_redirected_final_url(Url::parse(repo)?)).await?)
-            } else {
-                None
-            };
+            let repo = self.data.resolve_final_repo_url(&self.client).await?;
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -157,8 +156,7 @@ impl super::Fetcher for GhCrateMeta {
             };
 
             // Convert Option<Url> to Option<String> to reduce size of future.
-            let repo = repo.map(String::from);
-            let repo = repo.as_deref().map(|u| u.trim_end_matches('/'));
+            let repo = repo.as_ref().map(|u| u.as_str().trim_end_matches('/'));
 
             // Use reference to self to fix error of closure
             // launch_baseline_find_tasks which moves `this`
@@ -197,7 +195,7 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<(), BinstallError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
         let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
         debug!("Downloading package from: '{url}' dst:{dst:?} fmt:{pkg_fmt:?}");
         Ok(Download::new(self.client.clone(), url.clone())
@@ -338,11 +336,11 @@ mod test {
 
     #[test]
     fn defaults() {
-        let data = Data {
-            name: "cargo-binstall".to_compact_string(),
-            version: "1.2.3".to_compact_string(),
-            repo: Some("https://github.com/ryankurte/cargo-binstall".to_string()),
-        };
+        let data = Data::new(
+            "cargo-binstall".to_compact_string(),
+            "1.2.3".to_compact_string(),
+            Some("https://github.com/ryankurte/cargo-binstall".to_string()),
+        );
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
@@ -355,11 +353,11 @@ mod test {
     #[should_panic]
     fn no_repo() {
         let meta = PkgMeta::default();
-        let data = Data {
-            name: "cargo-binstall".to_compact_string(),
-            version: "1.2.3".to_compact_string(),
-            repo: None,
-        };
+        let data = Data::new(
+            "cargo-binstall".to_compact_string(),
+            "1.2.3".to_compact_string(),
+            None,
+        );
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap();
@@ -372,11 +370,11 @@ mod test {
             ..Default::default()
         };
 
-        let data = Data {
-            name: "cargo-binstall".to_compact_string(),
-            version: "1.2.3".to_compact_string(),
-            repo: None,
-        };
+        let data = Data::new(
+            "cargo-binstall".to_compact_string(),
+            "1.2.3".to_compact_string(),
+            None,
+        );
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
@@ -394,11 +392,11 @@ mod test {
             ..Default::default()
         };
 
-        let data = Data {
-            name: "radio-sx128x".to_compact_string(),
-            version: "0.14.1-alpha.5".to_compact_string(),
-            repo: Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
-        };
+        let data = Data::new(
+            "radio-sx128x".to_compact_string(),
+            "0.14.1-alpha.5".to_compact_string(),
+            Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
+        );
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
@@ -414,11 +412,11 @@ mod test {
             ..Default::default()
         };
 
-        let data = Data {
-            name: "radio-sx128x".to_compact_string(),
-            version: "0.14.1-alpha.5".to_compact_string(),
-            repo: Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
-        };
+        let data = Data::new(
+            "radio-sx128x".to_compact_string(),
+            "0.14.1-alpha.5".to_compact_string(),
+            Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
+        );
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
@@ -438,11 +436,11 @@ mod test {
             ..Default::default()
         };
 
-        let data = Data {
-            name: "cargo-watch".to_compact_string(),
-            version: "9.0.0".to_compact_string(),
-            repo: Some("https://github.com/watchexec/cargo-watch".to_string()),
-        };
+        let data = Data::new(
+            "cargo-watch".to_compact_string(),
+            "9.0.0".to_compact_string(),
+            Some("https://github.com/watchexec/cargo-watch".to_string()),
+        );
 
         let ctx = Context::from_data(&data, "aarch64-apple-darwin", ".txz");
         assert_eq!(
@@ -459,11 +457,11 @@ mod test {
             ..Default::default()
         };
 
-        let data = Data {
-            name: "cargo-watch".to_compact_string(),
-            version: "9.0.0".to_compact_string(),
-            repo: Some("https://github.com/watchexec/cargo-watch".to_string()),
-        };
+        let data = Data::new(
+            "cargo-watch".to_compact_string(),
+            "9.0.0".to_compact_string(),
+            Some("https://github.com/watchexec/cargo-watch".to_string()),
+        );
 
         let ctx = Context::from_data(&data, "aarch64-pc-windows-msvc", ".bin");
         assert_eq!(

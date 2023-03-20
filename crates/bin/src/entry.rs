@@ -1,10 +1,21 @@
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    env, fs,
+    future::Future,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use binstalk::{
     errors::BinstallError,
     fetchers::{Fetcher, GhCrateMeta, QuickInstall},
     get_desired_targets,
-    helpers::{jobserver_client::LazyJobserverClient, remote::Client, tasks::AutoAbortJoinHandle},
+    helpers::{
+        gh_api_client::GhApiClient,
+        jobserver_client::LazyJobserverClient,
+        remote::{Certificate, Client},
+        tasks::AutoAbortJoinHandle,
+    },
     ops::{
         self,
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
@@ -12,7 +23,7 @@ use binstalk::{
     },
 };
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
-use crates_io_api::AsyncClient as CratesIoApiClient;
+use file_format::FileFormat;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;
@@ -25,7 +36,10 @@ use crate::{
     ui::confirm,
 };
 
-pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -> Result<()> {
+pub fn install_crates(
+    args: Args,
+    jobserver_client: LazyJobserverClient,
+) -> Result<Option<impl Future<Output = Result<()>>>> {
     // Compute Resolvers
     let mut cargo_install_fallback = false;
 
@@ -43,8 +57,9 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         .collect();
 
     // Compute paths
+    let cargo_root = args.root;
     let (install_path, mut manifests, temp_dir) =
-        compute_paths_and_load_manifests(args.roots, args.install_path)?;
+        compute_paths_and_load_manifests(cargo_root.clone(), args.install_path)?;
 
     // Remove installed crates
     let mut crate_names =
@@ -52,7 +67,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
-        return Ok(());
+        return Ok(None);
     }
 
     // Launch target detection
@@ -73,12 +88,11 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         args.min_tls_version.map(|v| v.into()),
         Duration::from_millis(rate_limit.duration.get()),
         rate_limit.request_count,
+        read_root_certs(args.root_certificates),
     )
     .map_err(BinstallError::from)?;
 
-    // Build crates.io api client
-    let crates_io_api_client =
-        CratesIoApiClient::with_http_client(client.get_inner().clone(), Duration::from_millis(100));
+    let gh_api_client = GhApiClient::new(client.clone(), args.github_token);
 
     // Create binstall_opts
     let binstall_opts = Arc::new(ops::Options {
@@ -86,6 +100,7 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         dry_run: args.dry_run,
         force: args.force,
         quiet: args.log_level == Some(LevelFilter::Off),
+        locked: args.locked,
 
         version_req: args.version_req,
         manifest_path: args.manifest_path,
@@ -97,9 +112,12 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
 
         temp_dir: temp_dir.path().to_owned(),
         install_path,
+        cargo_root,
+
         client,
-        crates_io_api_client,
+        gh_api_client,
         jobserver_client,
+        crates_io_rate_limit: Default::default(),
     });
 
     // Destruct args before any async function to reduce size of the future
@@ -118,53 +136,98 @@ pub async fn install_crates(args: Args, jobserver_client: LazyJobserverClient) -
         })
         .collect();
 
-    // Collect results
-    let mut resolution_fetchs = Vec::new();
-    let mut resolution_sources = Vec::new();
+    Ok(Some(async move {
+        // Collect results
+        let mut resolution_fetchs = Vec::new();
+        let mut resolution_sources = Vec::new();
 
-    for task in tasks {
-        match task.await?? {
-            Resolution::AlreadyUpToDate => {}
-            Resolution::Fetch(fetch) => {
-                fetch.print(&binstall_opts);
-                resolution_fetchs.push(fetch)
-            }
-            Resolution::InstallFromSource(source) => {
-                source.print();
-                resolution_sources.push(source)
+        for task in tasks {
+            match task.await?? {
+                Resolution::AlreadyUpToDate => {}
+                Resolution::Fetch(fetch) => {
+                    fetch.print(&binstall_opts);
+                    resolution_fetchs.push(fetch)
+                }
+                Resolution::InstallFromSource(source) => {
+                    source.print();
+                    resolution_sources.push(source)
+                }
             }
         }
-    }
 
-    if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
-        debug!("Nothing to do");
-        return Ok(());
-    }
+        if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
+            debug!("Nothing to do");
+            return Ok(());
+        }
 
-    // Confirm
-    if !dry_run && !no_confirm {
-        confirm().await?;
-    }
+        // Confirm
+        if !dry_run && !no_confirm {
+            confirm().await?;
+        }
 
-    do_install_fetches(
-        resolution_fetchs,
-        manifests,
-        &binstall_opts,
-        dry_run,
-        temp_dir,
-        no_cleanup,
-    )?;
+        do_install_fetches(
+            resolution_fetchs,
+            manifests,
+            &binstall_opts,
+            dry_run,
+            temp_dir,
+            no_cleanup,
+        )?;
 
-    let tasks: Vec<_> = resolution_sources
+        let tasks: Vec<_> = resolution_sources
+            .into_iter()
+            .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
+            .collect();
+
+        for task in tasks {
+            task.await??;
+        }
+
+        Ok(())
+    }))
+}
+
+fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> {
+    use std::io::{Read, Seek};
+
+    let mut file = fs::File::open(path)?;
+    let file_format = FileFormat::from_reader(&mut file)?;
+
+    let open_cert = match file_format {
+        FileFormat::PemCertificate => Certificate::from_pem,
+        FileFormat::DerCertificate => Certificate::from_der,
+        _ => {
+            warn!(
+                "Unable to load {}: Expected pem or der ceritificate but found {file_format}",
+                path.display()
+            );
+
+            return Ok(None);
+        }
+    };
+
+    // Move file back to its head
+    file.rewind()?;
+
+    let mut buffer = Vec::with_capacity(200);
+    file.read_to_end(&mut buffer)?;
+
+    open_cert(&buffer).map_err(From::from).map(Some)
+}
+
+fn read_root_certs(root_certificate_paths: Vec<PathBuf>) -> impl Iterator<Item = Certificate> {
+    root_certificate_paths
         .into_iter()
-        .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
-        .collect();
-
-    for task in tasks {
-        task.await??;
-    }
-
-    Ok(())
+        .filter_map(|path| match do_read_root_cert(&path) {
+            Ok(optional_cert) => optional_cert,
+            Err(err) => {
+                warn!(
+                    "Failed to load root certificate at {}: {err}",
+                    path.display()
+                );
+                None
+            }
+        })
 }
 
 /// Return (install_path, manifests, temp_dir)
@@ -172,43 +235,41 @@ fn compute_paths_and_load_manifests(
     roots: Option<PathBuf>,
     install_path: Option<PathBuf>,
 ) -> Result<(PathBuf, Option<Manifests>, tempfile::TempDir)> {
-    block_in_place(|| {
-        // Compute cargo_roots
-        let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
-            error!("No viable cargo roots path found of specified, try `--roots`");
-            miette!("No cargo roots path found or specified")
-        })?;
+    // Compute cargo_roots
+    let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
+        error!("No viable cargo roots path found of specified, try `--roots`");
+        miette!("No cargo roots path found or specified")
+    })?;
 
-        // Compute install directory
-        let (install_path, custom_install_path) =
-            install_path::get_install_path(install_path, Some(&cargo_roots));
-        let install_path = install_path.ok_or_else(|| {
-            error!("No viable install path found of specified, try `--install-path`");
-            miette!("No install path found or specified")
-        })?;
-        fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
-        debug!("Using install path: {}", install_path.display());
+    // Compute install directory
+    let (install_path, custom_install_path) =
+        install_path::get_install_path(install_path, Some(&cargo_roots));
+    let install_path = install_path.ok_or_else(|| {
+        error!("No viable install path found of specified, try `--install-path`");
+        miette!("No install path found or specified")
+    })?;
+    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
+    debug!("Using install path: {}", install_path.display());
 
-        // Load manifests
-        let manifests = if !custom_install_path {
-            Some(Manifests::open_exclusive(&cargo_roots)?)
-        } else {
-            None
-        };
+    // Load manifests
+    let manifests = if !custom_install_path {
+        Some(Manifests::open_exclusive(&cargo_roots)?)
+    } else {
+        None
+    };
 
-        // Create a temporary directory for downloads etc.
-        //
-        // Put all binaries to a temporary directory under `dst` first, catching
-        // some failure modes (e.g., out of space) before touching the existing
-        // binaries. This directory will get cleaned up via RAII.
-        let temp_dir = tempfile::Builder::new()
-            .prefix("cargo-binstall")
-            .tempdir_in(&install_path)
-            .map_err(BinstallError::from)
-            .wrap_err("Creating a temporary directory failed.")?;
+    // Create a temporary directory for downloads etc.
+    //
+    // Put all binaries to a temporary directory under `dst` first, catching
+    // some failure modes (e.g., out of space) before touching the existing
+    // binaries. This directory will get cleaned up via RAII.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("cargo-binstall")
+        .tempdir_in(&install_path)
+        .map_err(BinstallError::from)
+        .wrap_err("Creating a temporary directory failed.")?;
 
-        Ok((install_path, manifests, temp_dir))
-    })
+    Ok((install_path, manifests, temp_dir))
 }
 
 /// Return vec of (crate_name, current_version)
@@ -287,7 +348,7 @@ fn do_install_fetches(
 
         if no_cleanup {
             // Consume temp_dir without removing it from fs.
-            temp_dir.into_path();
+            let _ = temp_dir.into_path();
         } else {
             temp_dir.close().unwrap_or_else(|err| {
                 warn!("Failed to clean up some resources: {err}");

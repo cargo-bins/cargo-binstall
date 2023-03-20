@@ -13,6 +13,8 @@ use binstalk::{
     ops::resolve::{CrateName, VersionReqExt},
 };
 use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use compact_str::CompactString;
+
 use log::LevelFilter;
 use semver::VersionReq;
 use strum::EnumCount;
@@ -118,7 +120,7 @@ pub struct Args {
 
     /// Override the rate limit duration.
     ///
-    /// By default, cargo-binstall allows one request per 5 ms.
+    /// By default, cargo-binstall allows one request per 10 ms.
     ///
     /// Example:
     ///
@@ -143,6 +145,14 @@ pub struct Args {
     /// then it will be removed.
     #[clap(help_heading = "Overrides", long, value_delimiter(','))]
     pub disable_strategies: Vec<Strategy>,
+
+    /// If `--github-token` or environment variable `GITHUB_TOKEN`/`GH_TOKEN`
+    /// is not specified, then cargo-binstall will try to extract github token from
+    /// `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml` by default.
+    ///
+    /// This option can be used to disable that behavior.
+    #[clap(help_heading = "Overrides", long)]
+    pub no_discover_github_token: bool,
 
     /// Disable symlinking / versioned updates.
     ///
@@ -185,8 +195,14 @@ pub struct Args {
     /// the metadata files inside the path you specified.
     ///
     /// NOTE that `--install-path` takes precedence over this option.
+    #[clap(help_heading = "Options", long, alias = "roots")]
+    pub root: Option<PathBuf>,
+
+    /// This option will be passed through to all `cargo-install` invocations.
+    ///
+    /// It will require `Cargo.lock` to be up to date.
     #[clap(help_heading = "Options", long)]
-    pub roots: Option<PathBuf>,
+    pub locked: bool,
 
     /// Deprecated, here for back-compat only. Secure is now on by default.
     #[clap(hide(true), long)]
@@ -203,9 +219,26 @@ pub struct Args {
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub min_tls_version: Option<TLSVersion>,
 
+    /// Specify the root certificates to use for https connnections,
+    /// in addition to default system-wide ones.
+    #[clap(help_heading = "Options", long, env = "BINSTALL_HTTPS_ROOT_CERTS")]
+    pub root_certificates: Vec<PathBuf>,
+
     /// Print logs in json format to be parsable.
     #[clap(help_heading = "Options", long)]
     pub json_output: bool,
+
+    /// Provide the github token for accessing the restful API of api.github.com
+    ///
+    /// Fallback to environment variable `GITHUB_TOKEN` if this option is not
+    /// specified (which is also shown by clap's auto generated doc below), or
+    /// try environment variable `GH_TOKEN`, which is also used by `gh` cli.
+    ///
+    /// If none of them is present, then binstal will try to extract github
+    /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
+    /// unless `--no-discover-github-token` is specified.
+    #[clap(help_heading = "Options", long, env = "GITHUB_TOKEN")]
+    pub github_token: Option<CompactString>,
 
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
@@ -226,6 +259,10 @@ pub struct Args {
     ///
     /// Set to `off` to disable logging completely, this will also
     /// disable output from `cargo-install`.
+    ///
+    /// If `--log-level` is not specified on cmdline, then cargo-binstall
+    /// will try to read environment variable `BINSTALL_LOG_LEVEL` and
+    /// interpret it as a log-level.
     #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
     pub log_level: Option<LevelFilter>,
 
@@ -286,7 +323,7 @@ impl FromStr for RateLimit {
 impl Default for RateLimit {
     fn default() -> Self {
         Self {
-            duration: NonZeroU64::new(5).unwrap(),
+            duration: NonZeroU64::new(10).unwrap(),
             request_count: NonZeroU64::new(1).unwrap(),
         }
     }
@@ -309,7 +346,7 @@ pub fn parse() -> Args {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
-    let mut args: Vec<OsString> = std::env::args_os().collect();
+    let mut args: Vec<OsString> = env::args_os().collect();
     let args = if args.get(1).map(|arg| arg == "binstall").unwrap_or_default() {
         // Equivalent to
         //
@@ -430,6 +467,18 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
                 "Compile strategy must be the last one",
             )
             .exit()
+    }
+
+    if opts.github_token.is_none() {
+        if let Ok(github_token) = env::var("GH_TOKEN") {
+            opts.github_token = Some(github_token.into());
+        } else if !opts.no_discover_github_token {
+            if let Some(github_token) = crate::git_credentials::try_from_home() {
+                opts.github_token = Some(github_token);
+            } else if let Ok(github_token) = gh_token::get() {
+                opts.github_token = Some(github_token.into());
+            }
+        }
     }
 
     opts

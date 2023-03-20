@@ -11,7 +11,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_UNSTABLE_SPARSE_REGISTRY: "true"
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
   build:
@@ -19,30 +19,32 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { o: macos-latest,    t: x86_64-apple-darwin                      }
-          - { o: macos-latest,    t: aarch64-apple-darwin                     }
-          - { o: ubuntu-20.04,    t: x86_64-unknown-linux-gnu                 }
-          - { o: ubuntu-20.04,    t: armv7-unknown-linux-gnueabihf,   c: true }
-          - { o: ubuntu-20.04,    t: aarch64-unknown-linux-gnu                }
-          - { o: ubuntu-latest,   t: x86_64-unknown-linux-musl                }
-          - { o: ubuntu-latest,   t: armv7-unknown-linux-musleabihf,  c: true }
-          - { o: ubuntu-latest,   t: aarch64-unknown-linux-musl,      c: true }
-          - { o: windows-latest,  t: x86_64-pc-windows-msvc                   }
-          - { o: windows-latest,  t: aarch64-pc-windows-msvc                  }
+          - { o: macos-latest,   t: x86_64-apple-darwin,                    r: true          }
+          - { o: macos-latest,   t: aarch64-apple-darwin                                     }
+          - { o: ubuntu-latest,  t: x86_64-unknown-linux-gnu,      g: 2.17, r: true, c: true }
+          - { o: ubuntu-latest,  t: armv7-unknown-linux-gnueabihf, g: 2.17,          c: true }
+          - { o: ubuntu-latest,  t: aarch64-unknown-linux-gnu,     g: 2.17,          c: true }
+          - { o: ubuntu-latest,  t: x86_64-unknown-linux-musl,              r: true, c: true }
+          - { o: ubuntu-latest,  t: armv7-unknown-linux-musleabihf,                  c: true }
+          - { o: ubuntu-latest,  t: aarch64-unknown-linux-musl,                      c: true }
+          - { o: windows-latest, t: x86_64-pc-windows-msvc,                 r: true          }
+          - { o: windows-latest, t: aarch64-pc-windows-msvc                                  }
 
     name: ${{ matrix.t }}
     runs-on: ${{ matrix.o }}
     env:
       CARGO_BUILD_TARGET: ${{ matrix.t }}
-      JUST_USE_CROSS: ${{ matrix.c }}
+      GLIBC_VERSION: ${{ matrix.g }}
+      JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
       JUST_FOR_RELEASE: true
+      JUST_USE_AUDITABLE: true
 
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        tools: cross
         cache-suffix: release-${{ matrix.t }}
+        tools: cargo-auditable
 
     - run: just toolchain rust-src
     - run: just ci-install-deps
@@ -51,6 +53,12 @@ jobs:
       run: Get-ChildItem packages/
     - if: runner.os != 'Windows'
       run: ls -shal packages/
+
+    - name: Ensure release binary is runnable
+      if: "matrix.r"
+      run: just e2e-tests
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - if: inputs.publish
       name: Upload to release
@@ -80,7 +88,8 @@ jobs:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        cache: false
+        indexcache: false
+        buildcache: false
 
     - uses: actions/download-artifact@v3
       with:

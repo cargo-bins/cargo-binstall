@@ -44,12 +44,24 @@ pkg-fmt = "zip"
 
 ### Defaults
 
-By default, `binstall` will try all supported package formats and would have `bin-dir` set to
-`"{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"` (where `bin` is the cargo binary name and
-`binary-ext` is `.exe` on windows and empty on other platforms).
+By default, `binstall` will try all supported package formats and would do the same for `bin-dir`.
 
-All binaries must contain a folder named `{ name }-{ target }-v{ version }` (so that prior binary
-files are not overwritten when manually executing `tar -xvf ...`).
+It will first extract the archives, then iterate over the following list, finding the first dir
+that exists:
+
+ - `{ name }-{ target }-v{ version }`
+ - `{ name }-{ target }-{ version }`
+ - `{ name }-{ version }-{ target }`
+ - `{ name }-v{ version }-{ target }`
+ - `{ name }-{ target }`
+ - `{ name }-{ version }`
+ - `{ name }-v{ version }`
+ - `{ name }`
+
+Then it will concat the dir with `"{ bin }{ binary-ext }"` and use that as the final `bin-dir`.
+
+`name` here is name of the crate, `bin` is the cargo binary name and `binary-ext` is `.exe`
+on windows and empty on other platforms).
 
 The default value for `pkg-url` will depend on the repository of the package.
 
@@ -71,7 +83,6 @@ are:
 - `{ name }_{ version }_{ target }{ archive-suffix }`
 - `{ name }_v{ version }_{ target }{ archive-suffix }`
 - `{ name }-{ target }{ archive-suffix }` ("versionless")
-- `{ name }{ archive-suffix }` ("versionless")
 - `{ name }_{ target }{ archive-suffix }` ("versionless")
 
 The paths are:

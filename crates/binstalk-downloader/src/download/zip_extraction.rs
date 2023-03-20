@@ -3,16 +3,17 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use async_zip::{read::ZipEntryReader, ZipEntryExt};
+use async_zip::read::stream::{Reading, ZipFileReader};
 use bytes::{Bytes, BytesMut};
 use futures_lite::future::try_zip as try_join;
 use thiserror::Error as ThisError;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt},
+    io::{AsyncRead, AsyncReadExt, Take},
     sync::mpsc,
 };
 
-use super::{utils::asyncify, DownloadError};
+use super::{DownloadError, ExtractedFiles};
+use crate::utils::asyncify;
 
 #[derive(Debug, ThisError)]
 enum ZipErrorInner {
@@ -34,35 +35,47 @@ impl ZipError {
 }
 
 pub(super) async fn extract_zip_entry<R>(
-    entry: ZipEntryReader<'_, R>,
+    zip_reader: &mut ZipFileReader<Reading<'_, Take<R>>>,
     path: &Path,
     buf: &mut BytesMut,
+    extracted_files: &mut ExtractedFiles,
 ) -> Result<(), DownloadError>
 where
     R: AsyncRead + Unpin + Send + Sync,
 {
     // Sanitize filename
-    let raw_filename = entry.entry().filename();
+    let raw_filename = zip_reader.entry().filename();
     let filename = check_filename_and_normalize(raw_filename)
         .ok_or_else(|| ZipError(ZipErrorInner::InvalidFilePath(raw_filename.into())))?;
 
     // Calculates the outpath
-    let outpath = path.join(filename);
+    let outpath = path.join(&filename);
 
     // Get permissions
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut perms = None;
+
+    let is_dir = raw_filename.ends_with('/');
 
     #[cfg(unix)]
     {
         use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
-        if let Some(mode) = entry.entry().unix_permissions() {
-            let mode: u16 = mode;
+        if let Some(mode) = zip_reader.entry().unix_permissions() {
+            // If it is a dir, then it needs to be at least rwx for the current
+            // user so that we can create new files, search for existing files
+            // and list its contents.
+            //
+            // If it is a file, then it needs to be at least readable for the
+            // current user.
+            let mode: u16 = mode | if is_dir { 0o700 } else { 0o400 };
             perms = Some(Permissions::from_mode(mode as u32));
         }
     }
 
-    if raw_filename.ends_with('/') {
+    if is_dir {
+        extracted_files.add_dir(&filename);
+
         // This entry is a dir.
         asyncify(move || {
             std::fs::create_dir_all(&outpath)?;
@@ -74,6 +87,8 @@ where
         })
         .await?;
     } else {
+        extracted_files.add_file(&filename);
+
         // Use channel size = 5 to minimize the waiting time in the extraction task
         let (tx, mut rx) = mpsc::channel::<Bytes>(5);
 
@@ -98,7 +113,7 @@ where
             Ok(())
         });
 
-        let read_task = copy_file_to_mpsc(entry, tx, buf);
+        let read_task = copy_file_to_mpsc(zip_reader.reader(), tx, buf);
 
         try_join(
             async move { write_task.await.map_err(From::from) },
@@ -115,8 +130,8 @@ where
     Ok(())
 }
 
-async fn copy_file_to_mpsc<R>(
-    mut entry: ZipEntryReader<'_, R>,
+async fn copy_file_to_mpsc<R: AsyncRead>(
+    entry_reader: &mut R,
     tx: mpsc::Sender<Bytes>,
     buf: &mut BytesMut,
 ) -> Result<(), async_zip::error::ZipError>
@@ -125,7 +140,7 @@ where
 {
     // Since BytesMut does not have a max cap, if AsyncReadExt::read_buf returns
     // 0 then it means Eof.
-    while entry.read_buf(buf).await? != 0 {
+    while entry_reader.read_buf(buf).await? != 0 {
         // Ensure AsyncReadExt::read_buf can read at least 4096B to avoid
         // frequent expensive read syscalls.
         //
@@ -150,11 +165,7 @@ where
         }
     }
 
-    if entry.compare_crc() {
-        Ok(())
-    } else {
-        Err(async_zip::error::ZipError::CRC32CheckError)
-    }
+    Ok(())
 }
 
 /// Ensure the file path is safe to use as a [`Path`].

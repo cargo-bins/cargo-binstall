@@ -3,7 +3,7 @@ name = "binstalk-manifests"
 description = "The binstall toolkit for manipulating with manifest"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-manifests"
-version = "0.2.0"
+version = "0.4.0"
 rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -11,19 +11,19 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 beef = { version = "0.5.2", features = ["impl_serde"] }
-binstalk-types = { version = "0.2.0", path = "../binstalk-types" }
-compact_str = { version = "0.6.1", features = ["serde"] }
+binstalk-types = { version = "0.3.0", path = "../binstalk-types" }
+compact_str = { version = "0.7.0", features = ["serde"] }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
 home = "0.5.4"
-miette = "5.5.0"
-semver = { version = "1.0.16", features = ["serde"] }
-serde = { version = "1.0.152", features = ["derive"] }
+miette = "5.6.0"
+semver = { version = "1.0.17", features = ["serde"] }
+serde = { version = "1.0.157", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
-serde_json = "1.0.92"
-thiserror = "1.0.38"
-toml_edit = { version = "0.19.2", features = ["serde"] }
+serde_json = "1.0.94"
+thiserror = "1.0.40"
+toml_edit = { version = "0.19.7", features = ["serde"] }
 url = { version = "2.3.1", features = ["serde"] }
 
 [dev-dependencies]
-detect-targets = { version = "0.1.5", path = "../detect-targets" }
-tempfile = "3.3.0"
+detect-targets = { version = "0.1.6", path = "../detect-targets" }
+tempfile = "3.4.0"

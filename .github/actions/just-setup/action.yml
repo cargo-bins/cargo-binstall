@@ -4,8 +4,13 @@ inputs:
     description: Extra tools
     required: false
     default: ""
-  cache:
-    description: Enable caches
+  indexcache:
+    description: Enable index cache
+    required: true
+    default: true
+    type: boolean
+  buildcache:
+    description: Enable build cache
     required: true
     default: true
     type: boolean
@@ -27,7 +32,7 @@ runs:
     with:
       tool: just,${{ inputs.tools }}
 
-  - if: inputs.cache
+  - if: inputs.indexcache
     name: Configure index cache
     uses: actions/cache@v3
     with:
@@ -40,10 +45,24 @@ runs:
         ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}-
         ${{ runner.os }}-cargo-index-
 
-  - if: inputs.cache
-    name: Configure build cache
-    uses: actions/cache@v3
+  - name: Install rust toolchains
+    run: just toolchain
+    shell: bash
+
+  - name: rustc version
+    run: rustc -vV | tee rustc-version
+    shell: bash
+
+  - if: inputs.buildcache
+    name: Configure sccache
+    uses: mozilla-actions/sccache-action@v0.0.2
     with:
-      path: |
-        target/
-      key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-suffix }}
+      version: "v0.4.0-pre.10"
+
+  - if: inputs.buildcache
+    name: Export env for sccache to work
+    shell: bash
+    run: |
+      echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+      echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+      echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV

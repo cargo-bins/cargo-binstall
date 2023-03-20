@@ -8,9 +8,15 @@ on:
       - reopened
       - synchronize
       - auto_merge_enabled
+    paths-ignore:
+      - README.md
+      - SUPPORT.md
   push:
     branches:
       - main
+    paths-ignore:
+      - README.md
+      - SUPPORT.md
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -18,7 +24,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_UNSTABLE_SPARSE_REGISTRY: "true"
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
   test:
@@ -32,12 +38,14 @@ jobs:
             os: ubuntu-latest
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
+            c: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
 
     runs-on: ${{ matrix.os }}
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
+      JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
 
     steps:
     - uses: actions/checkout@v3
@@ -45,9 +53,10 @@ jobs:
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
-    - run: just toolchain
     - run: just ci-install-deps
     - run: just test
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   linux-cross-check:
     strategy:
@@ -62,16 +71,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
-      JUST_USE_CROSS: true
+      JUST_USE_CARGO_ZIGBUILD: true
 
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
       with:
-        tools: cross
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
-    - run: just toolchain
     - run: just ci-install-deps
     - run: just check
 
@@ -86,19 +93,39 @@ jobs:
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
 
-    - run: just toolchain
+    - run: just check
+
+  windows-aarch64-check:
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_TARGET: aarch64-pc-windows-msvc
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+
     - run: just check
 
   lint:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
 
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
+      with:
+        cache-suffix: ${{ matrix.target }}
 
     - run: just toolchain rustfmt,clippy
     - run: just ci-install-deps
@@ -112,6 +139,7 @@ jobs:
     - linux-cross-check
     - apple-m1-check
     - lint
+    - windows-aarch64-check
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
