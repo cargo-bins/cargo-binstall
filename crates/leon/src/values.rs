@@ -33,13 +33,31 @@ where
     }
 }
 
-impl<const N: usize> Values for [(&str, &str); N] {
+impl<K, V> Values for &[(K, V)]
+where
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        (*self).get_value(key)
+    }
+}
+
+impl<K, V, const N: usize> Values for [(K, V); N]
+where
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.as_slice().get_value(key)
     }
 }
 
-impl Values for Vec<(&str, &str)> {
+impl<K, V> Values for Vec<(K, V)>
+where
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.as_slice().get_value(key)
     }
@@ -63,30 +81,6 @@ where
 {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.get(key).map(|v| Cow::Borrowed(v.as_ref()))
-    }
-}
-
-impl<const N: usize> Values for [(String, &str); N] {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.as_slice().get_value(key)
-    }
-}
-
-impl Values for Vec<(String, &str)> {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.as_slice().get_value(key)
-    }
-}
-
-impl<const N: usize> Values for [(String, String); N] {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.as_slice().get_value(key)
-    }
-}
-
-impl Values for Vec<(String, String)> {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.as_slice().get_value(key)
     }
 }
 
