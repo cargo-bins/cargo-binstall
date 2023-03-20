@@ -31,25 +31,13 @@ impl Values for [(&str, &str)] {
 
 impl<const N: usize> Values for [(&str, &str); N] {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == &key {
-                Some(Cow::Borrowed(*v))
-            } else {
-                None
-            }
-        })
+        self.as_slice().get_value(key)
     }
 }
 
 impl Values for Vec<(&str, &str)> {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == &key {
-                Some(Cow::Borrowed(*v))
-            } else {
-                None
-            }
-        })
+        self.as_slice().get_value(key)
     }
 }
 
@@ -88,41 +76,17 @@ impl Values for [(String, &str)] {
 
 impl<const N: usize> Values for [(String, &str); N] {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == key {
-                Some(Cow::Borrowed(*v))
-            } else {
-                None
-            }
-        })
+        self.as_slice().get_value(key)
     }
 }
 
 impl Values for Vec<(String, &str)> {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == key {
-                Some(Cow::Borrowed(*v))
-            } else {
-                None
-            }
-        })
+        self.as_slice().get_value(key)
     }
 }
 
 impl Values for [(String, String)] {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == key {
-                Some(Cow::Owned(v.clone()))
-            } else {
-                None
-            }
-        })
-    }
-}
-
-impl<const N: usize> Values for [(String, String); N] {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.iter().find_map(|(k, v)| {
             if k == key {
@@ -134,15 +98,15 @@ impl<const N: usize> Values for [(String, String); N] {
     }
 }
 
+impl<const N: usize> Values for [(String, String); N] {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        self.as_slice().get_value(key)
+    }
+}
+
 impl Values for Vec<(String, String)> {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
-        self.iter().find_map(|(k, v)| {
-            if k == key {
-                Some(Cow::Owned(v.clone()))
-            } else {
-                None
-            }
-        })
+        self.as_slice().get_value(key)
     }
 }
 
