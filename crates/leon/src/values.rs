@@ -126,7 +126,7 @@ impl<const N: usize> Values for [(String, String); N] {
     fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
         self.iter().find_map(|(k, v)| {
             if k == key {
-                Some(Cow::Owned(v.clone()))
+                Some(Cow::Borrowed(v.as_str()))
             } else {
                 None
             }
