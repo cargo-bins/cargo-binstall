@@ -53,7 +53,7 @@ fn main() -> miette::Result<()> {
         template.set_default(default);
     }
 
-    template.render_into(&mut stdout(), &values)?;
+    template.render_into(&mut stdout().lock(), &values)?;
     Ok(())
 }
 
