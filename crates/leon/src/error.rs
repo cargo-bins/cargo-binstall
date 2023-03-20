@@ -21,20 +21,10 @@ pub enum RenderError {
 /// don't want or need that, you can disable the `miette` feature and a simpler
 /// opaque error will be substituted.
 #[cfg(feature = "miette")]
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, Diagnostic, PartialEq, Eq)]
 #[error(transparent)]
+#[diagnostic(transparent)]
 pub struct ParseError(pub Box<InnerParseError>);
-
-#[cfg(feature = "miette")]
-impl Diagnostic for ParseError {
-    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        self.0.source_code()
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        self.0.labels()
-    }
-}
 
 /// The inner (unboxed) type of [`ParseError`].
 #[cfg(feature = "miette")]
