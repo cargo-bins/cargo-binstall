@@ -58,7 +58,9 @@
 //! #
 //! # let template = Template::parse("hello {name}").unwrap();
 //! assert_eq!(
-//!     template.render(&vals(|_key| Some("marcus".into()))).unwrap().as_str(),
+//!     template.render(
+//!         &vals(|_key| Some("marcus".into()))
+//!     ).unwrap().as_str(),
 //!     "hello marcus",
 //! );
 //! ```
@@ -72,7 +74,14 @@
 //! #
 //! # let template = Template::parse("hello {name}").unwrap();
 //! let mut buf: Vec<u8> = Vec::new();
-//! template.render_into(&mut buf, &vals(|key| if key == "name" { Some("julius".into()) } else { None })).unwrap();
+//! template.render_into(
+//!     &mut buf,
+//!     &vals(|key| if key == "name" {
+//!         Some("julius".into())
+//!     } else {
+//!         None
+//!     })
+//! ).unwrap();
 //! assert_eq!(buf.as_slice(), b"hello julius");
 //! ```
 //!
