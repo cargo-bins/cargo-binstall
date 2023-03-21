@@ -33,7 +33,7 @@ impl<'s> Template<'s> {
                     match chars.next() {
                         Some('\\' | '{' | '}') => {
                             let t = s.get(1..2).unwrap();
-                            assert!(["\\", "{", "}"].contains(&t), "{}", t);
+                            debug_assert!(["\\", "{", "}"].contains(&t), "{}", t);
                             items.push(Item::Text(t));
 
                             // Move cursor forward
