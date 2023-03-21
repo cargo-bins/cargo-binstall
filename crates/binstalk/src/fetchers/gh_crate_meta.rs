@@ -3,10 +3,9 @@ use std::{borrow::Cow, future::Future, iter, path::Path, sync::Arc};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use itertools::Itertools;
+use leon::Template;
 use once_cell::sync::OnceCell;
-use serde::Serialize;
 use strum::IntoEnumIterator;
-use tinytemplate::TinyTemplate;
 use tracing::{debug, warn};
 use url::Url;
 
@@ -42,7 +41,7 @@ impl GhCrateMeta {
     fn launch_baseline_find_tasks<'a>(
         &'a self,
         pkg_fmt: PkgFmt,
-        tt: &'a TinyTemplate,
+        tt: &'a Template<'a>,
         pkg_url: &'a str,
         repo: Option<&'a str>,
     ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
@@ -172,9 +171,7 @@ impl super::Fetcher for GhCrateMeta {
 
             // Iterate over pkg_urls first to avoid String::clone.
             for pkg_url in pkg_urls {
-                let mut tt = TinyTemplate::new();
-
-                tt.add_template("pkg_url", &pkg_url)?;
+                let tt = Template::parse(&pkg_url)?;
 
                 //             Clone iter pkg_fmts to ensure all pkg_fmts is
                 //             iterated over for each pkg_url, which is
@@ -242,7 +239,7 @@ impl super::Fetcher for GhCrateMeta {
 }
 
 /// Template for constructing download paths
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 struct Context<'c> {
     pub name: &'c str,
     pub repo: Option<&'c str>,
@@ -253,15 +250,31 @@ struct Context<'c> {
     pub format: &'c str,
 
     /// Archive format e.g. tar.gz, zip
-    #[serde(rename = "archive-format")]
     pub archive_format: &'c str,
 
-    #[serde(rename = "archive-suffix")]
     pub archive_suffix: &'c str,
 
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
-    #[serde(rename = "binary-ext")]
     pub binary_ext: &'c str,
+}
+
+impl leon::Values for Context<'_> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        match key {
+            "name" => Some(Cow::Borrowed(self.name)),
+            "repo" => self.repo.map(Cow::Borrowed),
+            "target" => Some(Cow::Borrowed(self.target)),
+            "version" => Some(Cow::Borrowed(self.version)),
+
+            "format" => Some(Cow::Borrowed(self.format)),
+            "archive-format" => Some(Cow::Borrowed(self.archive_format)),
+            "archive-suffix" => Some(Cow::Borrowed(self.archive_suffix)),
+
+            "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
+
+            _ => None,
+        }
+    }
 }
 
 impl<'c> Context<'c> {
@@ -304,18 +317,17 @@ impl<'c> Context<'c> {
     /// * `tt` - must have added a template named "pkg_url".
     pub(self) fn render_url_with_compiled_tt(
         &self,
-        tt: &TinyTemplate,
+        tt: &Template<'_>,
         template: &str,
     ) -> Result<Url, BinstallError> {
         debug!("Render {template} using context: {self:?}");
 
-        Ok(Url::parse(&tt.render("pkg_url", self)?)?)
+        Ok(Url::parse(&tt.render(self)?)?)
     }
 
     #[cfg(test)]
     pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
-        let mut tt = TinyTemplate::new();
-        tt.add_template("pkg_url", template)?;
+        let tt = Template::parse(template)?;
         self.render_url_with_compiled_tt(&tt, template)
     }
 }
@@ -366,7 +378,7 @@ mod test {
     #[test]
     fn no_repo_but_full_url() {
         let meta = PkgMeta {
-            pkg_url: Some(format!("https://example.com{DEFAULT_PKG_URL}")),
+            pkg_url: Some(format!("https://example.com{}", &DEFAULT_PKG_URL[8..])),
             ..Default::default()
         };
 
