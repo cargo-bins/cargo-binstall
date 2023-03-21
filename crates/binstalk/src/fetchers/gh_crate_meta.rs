@@ -246,9 +246,6 @@ struct Context<'c> {
     pub target: &'c str,
     pub version: &'c str,
 
-    /// Soft-deprecated alias for archive-format
-    pub format: &'c str,
-
     /// Archive format e.g. tar.gz, zip
     pub archive_format: &'c str,
 
@@ -266,8 +263,11 @@ impl leon::Values for Context<'_> {
             "target" => Some(Cow::Borrowed(self.target)),
             "version" => Some(Cow::Borrowed(self.version)),
 
-            "format" => Some(Cow::Borrowed(self.format)),
             "archive-format" => Some(Cow::Borrowed(self.archive_format)),
+
+            // Soft-deprecated alias for archive-format
+            "format" => Some(Cow::Borrowed(self.archive_format)),
+
             "archive-suffix" => Some(Cow::Borrowed(self.archive_suffix)),
 
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
@@ -298,7 +298,6 @@ impl<'c> Context<'c> {
             repo,
             target,
             version: &data.version,
-            format: archive_format,
             archive_format,
             archive_suffix,
             binary_ext: if target.contains("windows") {
