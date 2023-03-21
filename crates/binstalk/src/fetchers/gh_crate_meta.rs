@@ -334,7 +334,7 @@ impl<'c> Context<'c> {
 
 #[cfg(test)]
 mod test {
-    use crate::manifests::cargo_toml_binstall::{PkgFmt, PkgMeta};
+    use crate::manifests::cargo_toml_binstall::PkgMeta;
 
     use super::{super::Data, Context};
     use compact_str::ToCompactString;
@@ -377,10 +377,7 @@ mod test {
 
     #[test]
     fn no_repo_but_full_url() {
-        let meta = PkgMeta {
-            pkg_url: Some(format!("https://example.com{}", &DEFAULT_PKG_URL[8..])),
-            ..Default::default()
-        };
+        let pkg_url = &format!("https://example.com{}", &DEFAULT_PKG_URL[8..]);
 
         let data = Data::new(
             "cargo-binstall".to_compact_string(),
@@ -390,19 +387,15 @@ mod test {
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
         );
     }
 
     #[test]
     fn different_url() {
-        let meta = PkgMeta {
-            pkg_url: Some(
-            "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }"
-                .to_string()),
-            ..Default::default()
-        };
+        let pkg_url =
+            "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }";
 
         let data = Data::new(
             "radio-sx128x".to_compact_string(),
@@ -412,17 +405,14 @@ mod test {
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
         );
     }
 
     #[test]
     fn deprecated_format() {
-        let meta = PkgMeta {
-            pkg_url: Some("{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".to_string()),
-            ..Default::default()
-        };
+        let pkg_url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }";
 
         let data = Data::new(
             "radio-sx128x".to_compact_string(),
@@ -432,21 +422,15 @@ mod test {
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
         );
     }
 
     #[test]
     fn different_ext() {
-        let meta = PkgMeta {
-            pkg_url: Some(
-                "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
-                    .to_string(),
-            ),
-            pkg_fmt: Some(PkgFmt::Txz),
-            ..Default::default()
-        };
+        let pkg_url =
+            "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz";
 
         let data = Data::new(
             "cargo-watch".to_compact_string(),
@@ -456,18 +440,15 @@ mod test {
 
         let ctx = Context::from_data(&data, "aarch64-apple-darwin", ".txz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz")
         );
     }
 
     #[test]
     fn no_archive() {
-        let meta = PkgMeta {
-            pkg_url: Some("{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".to_string()),
-            pkg_fmt: Some(PkgFmt::Bin),
-            ..Default::default()
-        };
+        let pkg_url =  "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }"
+        ;
 
         let data = Data::new(
             "cargo-watch".to_compact_string(),
@@ -477,7 +458,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "aarch64-pc-windows-msvc", ".bin");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe")
         );
     }
