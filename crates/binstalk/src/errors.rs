@@ -90,6 +90,34 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::template))]
     Template(Box<TinyTemplateError>),
 
+    /// Failed to parse template.
+    ///
+    /// - Code: `binstall::template`
+    /// - Exit: 67
+    #[error(transparent)]
+    #[diagnostic(severity(error), code(binstall::template))]
+    #[source_code(transparent)]
+    #[label(transparent)]
+    TemplateParseError(
+        #[from]
+        #[diagnostic_source]
+        leon::ParseError,
+    ),
+
+    /// Failed to render template.
+    ///
+    /// - Code: `binstall::template`
+    /// - Exit: 69
+    #[error("Failed to render template: {0}")]
+    #[diagnostic(severity(error), code(binstall::template))]
+    #[source_code(transparent)]
+    #[label(transparent)]
+    TemplateRenderError(
+        #[from]
+        #[diagnostic_source]
+        leon::RenderError,
+    ),
+
     /// Failed to download or failed to decode the body.
     ///
     /// - Code: `binstall::download`
@@ -309,6 +337,8 @@ impl BinstallError {
             UserAbort => 32,
             UrlParse(_) => 65,
             Template(_) => 67,
+            TemplateParseError(..) => 67,
+            TemplateRenderError(..) => 69,
             Download(_) => 68,
             SubProcess { .. } => 70,
             Io(_) => 74,
