@@ -16,6 +16,7 @@ on:
           - detect-wasi
           - fs-lock
           - normalize-path
+          - leon
       version:
         description: Version to release
         required: true

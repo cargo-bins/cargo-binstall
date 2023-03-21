@@ -1,0 +1,33 @@
+[package]
+name = "leon"
+description = "Dead-simple string templating"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/leon"
+version = "0.0.1"
+rust-version = "1.61.0"
+authors = ["Félix Saparelli <felix@passcod.name>"]
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+clap = { version = "4.1.4", features = ["derive"], optional = true }
+miette = { version = "5.5.0", default-features = false, optional = true }
+thiserror = "1.0.38"
+
+[features]
+default = ["miette"]
+cli = ["dep:clap", "miette?/fancy-no-backtrace"]
+miette = ["dep:miette"]
+
+[dev-dependencies]
+criterion = { version = "0.4.0", default-features = false, features = ["cargo_bench_support"] }
+serde = { version = "1.0.152", features = ["derive"] }
+tinytemplate = "1.2.1"
+
+[[bench]]
+name = "values"
+harness = false
+
+[[bench]]
+name = "others"
+harness = false

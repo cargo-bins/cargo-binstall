@@ -48,3 +48,7 @@ updates:
     directory: "/crates/detect-targets"
     schedule:
       interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/leon"
+    schedule:
+      interval: "daily"
