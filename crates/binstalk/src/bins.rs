@@ -95,7 +95,6 @@ impl BinFile {
             target: data.target,
             version: data.version,
             bin: base_name,
-            format: binary_ext,
             binary_ext,
         };
 
@@ -107,7 +106,7 @@ impl BinFile {
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
-            let path = ctx.render_with_compiled_tt(tt)?;
+            let path = tt.render(&ctx)?;
 
             let path_normalized = Path::new(&path).normalize();
 
@@ -246,9 +245,6 @@ struct Context<'c> {
     pub version: &'c str,
     pub bin: &'c str,
 
-    /// Soft-deprecated alias for binary-ext
-    pub format: &'c str,
-
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
     #[serde(rename = "binary-ext")]
     pub binary_ext: &'c str,
@@ -262,16 +258,11 @@ impl leon::Values for Context<'_> {
             "target" => Some(Cow::Borrowed(self.target)),
             "version" => Some(Cow::Borrowed(self.version)),
             "bin" => Some(Cow::Borrowed(self.bin)),
-            "format" => Some(Cow::Borrowed(self.format)),
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
+            // Soft-deprecated alias for binary-ext
+            "format" => Some(Cow::Borrowed(self.binary_ext)),
             _ => None,
         }
-    }
-}
-
-impl<'c> Context<'c> {
-    fn render_with_compiled_tt(&self, tt: &Template<'_>) -> Result<String, BinstallError> {
-        Ok(tt.render(self)?)
     }
 }
 
