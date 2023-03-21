@@ -1,249 +1,77 @@
-use std::mem::replace;
-
 use crate::{Item, ParseError, Template};
 
-#[derive(Debug, Clone, Copy)]
-enum Token {
-    Text {
-        start: usize,
-        end: usize,
-    },
-    BracePair {
-        start: usize,
-        key_seen: bool,
-        end: usize,
-    },
-    Escape {
-        start: usize,
-        end: usize,
-        ch: Option<char>,
-    },
-}
-
-impl Token {
-    fn start_text(pos: usize, ch: char) -> Self {
-        Self::Text {
-            start: pos,
-            end: pos + ch.len_utf8(),
-        }
-    }
-
-    fn start_text_single(pos: usize) -> Self {
-        Self::Text {
-            start: pos,
-            end: pos,
-        }
-    }
-
-    fn start_brace_pair(pos: usize, ch: char) -> Self {
-        Self::BracePair {
-            start: pos,
-            key_seen: false,
-            end: pos + ch.len_utf8(),
-        }
-    }
-
-    fn start_escape(pos: usize, ch: char) -> Self {
-        Self::Escape {
-            start: pos,
-            end: pos + ch.len_utf8(),
-            ch: None,
-        }
-    }
-
-    fn is_empty(&self, source_len: usize) -> bool {
-        match self {
-            Self::Text { start, end } => {
-                *start >= source_len || *end >= source_len || *start > *end
-            }
-            Self::BracePair {
-                start,
-                key_seen,
-                end,
-            } => !key_seen || *start >= source_len || *end >= source_len || *start > *end,
-            Self::Escape { start, end, .. } => {
-                *start >= source_len || *end >= source_len || *start > *end
-            }
-        }
-    }
-
-    fn start(&self) -> usize {
-        match self {
-            Self::Text { start, .. }
-            | Self::BracePair { start, .. }
-            | Self::Escape { start, .. } => *start,
-        }
-    }
-
-    fn end(&self) -> usize {
-        match self {
-            Self::Text { end, .. } | Self::BracePair { end, .. } | Self::Escape { end, .. } => *end,
-        }
-    }
-
-    fn set_end(&mut self, pos: usize) {
-        match self {
-            Self::Text { end, .. } | Self::BracePair { end, .. } | Self::Escape { end, .. } => {
-                *end = pos
-            }
-        }
-    }
-}
-
 impl<'s> Template<'s> {
-    pub(crate) fn parse_items(s: &'s str) -> Result<Vec<Item<'s>>, ParseError> {
-        let source_len = s.len();
-        let mut tokens = Vec::new();
+    pub(crate) fn parse_items(source: &'s str) -> Result<Vec<Item<'s>>, ParseError> {
+        let mut items = Vec::new();
 
-        let mut current = Token::start_text(0, '\0');
+        let mut start = 0;
+        let mut s = source;
 
-        for (pos, chara) in s.char_indices() {
-            match (&mut current, chara) {
-                (tok @ (Token::Text { .. } | Token::Escape { ch: Some(_), .. }), ch @ '{') => {
-                    if matches!(tok, Token::Text { .. }) && tok.start() == pos {
-                        *tok = Token::start_brace_pair(pos, ch);
-                    } else {
-                        if let Token::Text { end, .. } = tok {
-                            *end = pos - 1;
+        loop {
+            if let Some(index) = s.find(['\\', '{', '}']) {
+                if index != 0 {
+                    let (first, last) = s.split_at(index);
+                    items.push(Item::Text(first));
+
+                    // Move cursor forward
+                    start += index;
+                    s = last;
+                }
+            } else {
+                if !s.is_empty() {
+                    items.push(Item::Text(s));
+                }
+
+                break Ok(items);
+            };
+
+            let mut chars = s.chars();
+            let ch = chars.next().unwrap();
+
+            match ch {
+                '\\' => {
+                    match chars.next() {
+                        Some('\\' | '{' | '}') => {
+                            let t = s.get(1..2).unwrap();
+                            debug_assert!(["\\", "{", "}"].contains(&t), "{}", t);
+                            items.push(Item::Text(t));
+
+                            // Move cursor forward
+                            start += 2;
+                            s = s.get(2..).unwrap();
                         }
-                        tokens.push(replace(tok, Token::start_brace_pair(pos, ch)));
+                        _ => {
+                            return Err(ParseError::escape(source, start, start + 1));
+                        }
                     }
                 }
-                (txt @ Token::Text { .. }, ch @ '\\') => {
-                    if txt.is_empty(source_len) || txt.start() == pos {
-                        *txt = Token::start_escape(pos, ch);
-                    } else {
-                        if let Token::Text { end, .. } = txt {
-                            *end = pos - 1;
-                        }
-                        tokens.push(replace(txt, Token::start_escape(pos, ch)));
-                    }
-                }
-                (bp @ Token::BracePair { .. }, '}') => {
-                    if let Token::BracePair { end, .. } = bp {
-                        *end = pos;
-                    } else {
-                        unreachable!("bracepair isn't bracepair");
+                '{' => {
+                    let Some((key, rest)) = s[1..].split_once('}') else {
+                        return Err(ParseError::unbalanced(source, start, start + s.len()));
+                    };
+                    if let Some(index) = key.find('\\') {
+                        return Err(ParseError::key_escape(source, start, start + 1 + index));
                     }
 
-                    tokens.push(replace(bp, Token::start_text_single(pos + 1)));
-                }
-                (Token::BracePair { start, .. }, '\\') => {
-                    return Err(ParseError::key_escape(s, *start, pos));
-                }
-                (Token::BracePair { key_seen, end, .. }, ws) if ws.is_whitespace() => {
-                    if *key_seen {
-                        *end = pos;
-                    } else {
-                        // We're in a brace pair, but we're not in the key yet.
+                    let k = key.trim();
+                    if k.is_empty() {
+                        return Err(ParseError::key_empty(source, start, start + key.len() + 1));
                     }
+                    items.push(Item::Key(k));
+
+                    // Move cursor forward
+                    //       for the '{'
+                    //       |              for the '}'
+                    //       |               |
+                    start += 1 + key.len() + 1;
+                    s = rest;
                 }
-                (Token::BracePair { key_seen, end, .. }, _) => {
-                    *key_seen = true;
-                    *end = pos + 1;
+                '}' => {
+                    return Err(ParseError::unbalanced(source, start, start));
                 }
-                (Token::Text { .. }, '}') => {
-                    return Err(ParseError::unbalanced(s, pos, pos));
-                }
-                (Token::Text { end, .. }, _) => {
-                    *end = pos;
-                }
-                (esc @ Token::Escape { .. }, es @ ('\\' | '{' | '}')) => {
-                    if let Token::Escape { start, end, ch, .. } = esc {
-                        if ch.is_none() {
-                            *end = pos;
-                            *ch = Some(es);
-                        } else if es == '\\' {
-                            // A new escape right after a completed escape.
-                            tokens.push(replace(esc, Token::start_escape(pos, es)));
-                        } else if es == '{' {
-                            // A new brace pair right after a completed escape, should be handled prior to this.
-                            unreachable!("escape followed by brace pair, unhandled");
-                        } else {
-                            // } right after a completed escape, probably unreachable but just in case:
-                            return Err(ParseError::key_escape(s, *start, pos));
-                        }
-                    } else {
-                        unreachable!("escape is not an escape");
-                    }
-                }
-                (
-                    Token::Escape {
-                        start, ch: None, ..
-                    },
-                    _,
-                ) => {
-                    return Err(ParseError::escape(s, *start, pos));
-                }
-                (Token::Escape { ch: Some(_), .. }, _) => {
-                    tokens.push(replace(&mut current, Token::start_text_single(pos)));
-                }
+                _ => unreachable!(),
             }
         }
-
-        if !current.is_empty(source_len) {
-            if current.end() < source_len - 1 {
-                current.set_end(source_len - 1);
-            }
-
-            tokens.push(current);
-        }
-
-        if let Token::BracePair { start, end, .. } = current {
-            return Err(ParseError::unbalanced(s, start, end));
-        }
-
-        if let Token::Escape {
-            start,
-            end,
-            ch: None,
-        } = current
-        {
-            return Err(ParseError::escape(s, start, end));
-        }
-
-        let mut items = Vec::with_capacity(tokens.len());
-        for token in tokens {
-            match token {
-                Token::Text { start, end } => {
-                    items.push(Item::Text(&s[start..=end]));
-                }
-                Token::BracePair {
-                    start,
-                    end,
-                    key_seen: false,
-                } => {
-                    return Err(ParseError::key_empty(s, start, end));
-                }
-                Token::BracePair {
-                    start,
-                    end,
-                    key_seen: true,
-                } => {
-                    let key = s[start..=end]
-                        .trim_matches(|c: char| c.is_whitespace() || c == '{' || c == '}');
-                    if key.is_empty() {
-                        return Err(ParseError::key_empty(s, start, end));
-                    } else {
-                        items.push(Item::Key(key));
-                    }
-                }
-                Token::Escape {
-                    ch: Some(_), end, ..
-                } => {
-                    items.push(Item::Text(&s[end..=end]));
-                }
-                Token::Escape {
-                    ch: None,
-                    start,
-                    end,
-                } => {
-                    return Err(ParseError::escape(s, start, end));
-                }
-            }
-        }
-
-        Ok(items)
     }
 }
 
