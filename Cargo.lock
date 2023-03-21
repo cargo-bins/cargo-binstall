@@ -169,6 +169,7 @@ dependencies = [
  "home",
  "itertools",
  "jobslot",
+ "leon",
  "maybe-owned",
  "miette",
  "normalize-path",
