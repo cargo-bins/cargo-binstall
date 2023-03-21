@@ -5,9 +5,9 @@ use std::{
 };
 
 use compact_str::{format_compact, CompactString};
+use leon::Template;
 use normalize_path::NormalizePath;
 use serde::Serialize;
-use tinytemplate::TinyTemplate;
 use tracing::debug;
 
 use crate::{
@@ -80,7 +80,7 @@ impl BinFile {
     pub fn new(
         data: &Data<'_>,
         base_name: &str,
-        tt: &TinyTemplate,
+        tt: &Template<'_>,
         no_symlinks: bool,
     ) -> Result<Self, BinstallError> {
         let binary_ext = if data.target.contains("windows") {
@@ -254,10 +254,24 @@ struct Context<'c> {
     pub binary_ext: &'c str,
 }
 
+impl leon::Values for Context<'_> {
+    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+        match key {
+            "name" => Some(Cow::Borrowed(self.name)),
+            "repo" => self.repo.map(Cow::Borrowed),
+            "target" => Some(Cow::Borrowed(self.target)),
+            "version" => Some(Cow::Borrowed(self.version)),
+            "bin" => Some(Cow::Borrowed(self.bin)),
+            "format" => Some(Cow::Borrowed(self.format)),
+            "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
+            _ => None,
+        }
+    }
+}
+
 impl<'c> Context<'c> {
-    /// * `tt` - must have a template with name "bin_dir"
-    fn render_with_compiled_tt(&self, tt: &TinyTemplate) -> Result<String, BinstallError> {
-        Ok(tt.render("bin_dir", self)?)
+    fn render_with_compiled_tt(&self, tt: &Template<'_>) -> Result<String, BinstallError> {
+        Ok(tt.render(self)?)
     }
 }
 
