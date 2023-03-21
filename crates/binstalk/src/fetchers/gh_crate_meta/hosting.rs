@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use leon::{template2, Item, Template};
 use url::Url;
 
 use crate::errors::BinstallError;
@@ -14,20 +15,63 @@ pub enum RepositoryHost {
 
 /// Make sure to update possible_dirs in `bins::infer_bin_dir_template`
 /// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
-pub const FULL_FILENAMES: &[&str] = &[
-    "{ name }-{ target }-v{ version }{ archive-suffix }",
-    "{ name }-{ target }-{ version }{ archive-suffix }",
-    "{ name }-{ version }-{ target }{ archive-suffix }",
-    "{ name }-v{ version }-{ target }{ archive-suffix }",
-    "{ name }_{ target }_v{ version }{ archive-suffix }",
-    "{ name }_{ target }_{ version }{ archive-suffix }",
-    "{ name }_{ version }_{ target }{ archive-suffix }",
-    "{ name }_v{ version }_{ target }{ archive-suffix }",
+pub const FULL_FILENAMES: &[Template<'_>] = &[
+    template2!({ "name" }, "-", { "target" }, "-v", { "version" }, {
+        "archive-suffix"
+    }),
+    template2!({ "name" }, "-", { "target" }, "-", { "version" }, {
+        "archive-suffix"
+    }),
+    template2!({ "name" }, "-", { "version" }, "-", { "target" }, {
+        "archive-suffix"
+    }),
+    template2!({ "name" }, "-v", { "version" }, "-", { "target" }, {
+        "archive-suffix"
+    }),
+    template2!({ "name" }, "_", { "target" }, "_v", { "version" }, {
+        "archive-suffix"
+    }),
+    template2!({ "name" }, "_", { "target" }, "_", { "version" }, {
+        "archive-suffix"
+    }),
+    template2!({ "name" }, "_", { "version" }, "_", { "target" }, {
+        "archive-suffix"
+    }),
+    template2!({ "name" }, "_v", { "version" }, "_", { "target" }, {
+        "archive-suffix"
+    }),
 ];
 
-pub const NOVERSION_FILENAMES: &[&str] = &[
-    "{ name }-{ target }{ archive-suffix }",
-    "{ name }_{ target }{ archive-suffix }",
+pub const NOVERSION_FILENAMES: &[Template<'_>] = &[
+    template2!({ "name" }, "-", { "target" }, { "archive-suffix" }),
+    template2!({ "name" }, "_", { "target" }, { "archive-suffix" }),
+];
+
+const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
+    template2!({ "repo" }, "/releases/download/", { "version" }),
+    template2!({ "repo" }, "/releases/download/v", { "version" }),
+];
+
+const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
+    template2!(
+        { "repo" },
+        "/-/releases/",
+        { "version" },
+        "/downloads/binaries"
+    ),
+    template2!(
+        { "repo" },
+        "/-/releases/v",
+        { "version" },
+        "/downloads/binaries"
+    ),
+];
+
+const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template2!({ "repo" }, "/downloads")];
+
+const SOURCEFORGE_RELEASEW_PATHS: &[Template<'_>] = &[
+    template2!({ "repo" }, "/files/binaries/", { "version" }),
+    template2!({ "repo" }, "/files/binaries/v", { "version" }),
 ];
 
 impl RepositoryHost {
@@ -45,36 +89,27 @@ impl RepositoryHost {
 
     pub fn get_default_pkg_url_template(
         self,
-    ) -> Option<impl Iterator<Item = String> + Clone + 'static> {
+    ) -> Option<impl Iterator<Item = Template<'static>> + Clone + 'static> {
         use RepositoryHost::*;
 
         match self {
             GitHub => Some(apply_filenames_to_paths(
-                &[
-                    "{ repo }/releases/download/{ version }",
-                    "{ repo }/releases/download/v{ version }",
-                ],
+                GITHUB_RELEASE_PATHS,
                 &[FULL_FILENAMES, NOVERSION_FILENAMES],
                 "",
             )),
             GitLab => Some(apply_filenames_to_paths(
-                &[
-                    "{ repo }/-/releases/{ version }/downloads/binaries",
-                    "{ repo }/-/releases/v{ version }/downloads/binaries",
-                ],
+                GITLAB_RELEASE_PATHS,
                 &[FULL_FILENAMES, NOVERSION_FILENAMES],
                 "",
             )),
             BitBucket => Some(apply_filenames_to_paths(
-                &["{ repo }/downloads"],
+                BITBUCKET_RELEASE_PATHS,
                 &[FULL_FILENAMES],
                 "",
             )),
             SourceForge => Some(apply_filenames_to_paths(
-                &[
-                    "{ repo }/files/binaries/{ version }",
-                    "{ repo }/files/binaries/v{ version }",
-                ],
+                SOURCEFORGE_RELEASEW_PATHS,
                 &[FULL_FILENAMES, NOVERSION_FILENAMES],
                 "/download",
             )),
@@ -84,13 +119,17 @@ impl RepositoryHost {
 }
 
 fn apply_filenames_to_paths(
-    paths: &'static [&'static str],
-    filenames: &'static [&'static [&'static str]],
+    paths: &'static [Template<'static>],
+    filenames: &'static [&'static [Template<'static>]],
     suffix: &'static str,
-) -> impl Iterator<Item = String> + Clone + 'static {
+) -> impl Iterator<Item = Template<'static>> + Clone + 'static {
     filenames
         .iter()
         .flat_map(|fs| fs.iter())
         .cartesian_product(paths.iter())
-        .map(move |(filename, path)| format!("{path}/{filename}{suffix}"))
+        .map(move |(filename, path)| {
+            let mut template = filename.clone() + path.clone();
+            template.items.to_mut().push(Item::Text(suffix));
+            template
+        })
 }

@@ -37,12 +37,10 @@ pub struct GhCrateMeta {
 type FindTaskRes = Result<Option<(Url, PkgFmt)>, BinstallError>;
 
 impl GhCrateMeta {
-    /// * `tt` - must have added a template named "pkg_url".
     fn launch_baseline_find_tasks<'a>(
         &'a self,
         pkg_fmt: PkgFmt,
-        tt: &'a Template<'a>,
-        pkg_url: &'a str,
+        pkg_url: &'a Template<'a>,
         repo: Option<&'a str>,
     ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
         // build up list of potential URLs
@@ -52,7 +50,7 @@ impl GhCrateMeta {
             .filter_map(move |ext| {
                 let ctx =
                     Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
-                match ctx.render_url_with_compiled_tt(tt, pkg_url) {
+                match ctx.render_url_with_compiled_tt(pkg_url) {
                     Ok(url) => Some(url),
                     Err(err) => {
                         warn!("Failed to render url for {ctx:#?}: {err}");
@@ -125,12 +123,13 @@ impl super::Fetcher for GhCrateMeta {
                         .into());
                     }
                 }
-                Either::Left(iter::once(Cow::Borrowed(pkg_url)))
+                let pkg_url = Template::parse(pkg_url)?;
+                Either::Left(iter::once(pkg_url))
             } else if let Some(repo) = repo.as_ref() {
                 if let Some(pkg_urls) =
                     RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
                 {
-                    Either::Right(pkg_urls.map(Cow::Owned))
+                    Either::Right(pkg_urls)
                 } else {
                     warn!(
                         concat!(
@@ -171,14 +170,12 @@ impl super::Fetcher for GhCrateMeta {
 
             // Iterate over pkg_urls first to avoid String::clone.
             for pkg_url in pkg_urls {
-                let tt = Template::parse(&pkg_url)?;
-
                 //             Clone iter pkg_fmts to ensure all pkg_fmts is
                 //             iterated over for each pkg_url, which is
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    resolver.extend(this.launch_baseline_find_tasks(pkg_fmt, &tt, &pkg_url, repo));
+                    resolver.extend(this.launch_baseline_find_tasks(pkg_fmt, &pkg_url, repo));
                 }
             }
 
@@ -317,17 +314,18 @@ impl<'c> Context<'c> {
     pub(self) fn render_url_with_compiled_tt(
         &self,
         tt: &Template<'_>,
-        template: &str,
     ) -> Result<Url, BinstallError> {
-        debug!("Render {template} using context: {self:?}");
+        debug!("Render {tt:#?} using context: {self:?}");
 
         Ok(Url::parse(&tt.render(self)?)?)
     }
 
     #[cfg(test)]
     pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
+        debug!("Render {template} using context in render_url: {self:?}");
+
         let tt = Template::parse(template)?;
-        self.render_url_with_compiled_tt(&tt, template)
+        self.render_url_with_compiled_tt(&tt)
     }
 }
 
