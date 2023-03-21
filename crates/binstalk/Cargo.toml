@@ -21,6 +21,7 @@ either = "1.8.1"
 home = "0.5.4"
 itertools = "0.10.5"
 jobslot = { version = "0.2.10", features = ["tokio"] }
+leon = { version = "1.0.0", path = "../leon" }
 maybe-owned = "0.3.4"
 miette = "5.6.0"
 normalize-path = { version = "0.2.0", path = "../normalize-path" }
