@@ -154,14 +154,10 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long)]
     pub no_discover_github_token: bool,
 
-    /// Disable symlinking / versioned updates.
+    /// This flag is now enabled by default thus a no-op.
     ///
-    /// By default, Binstall will install a binary named `<name>-<version>` in the install path, and
-    /// either symlink or copy it to (depending on platform) the plain binary name. This makes it
-    /// possible to have multiple versions of the same binary, for example for testing or rollback.
-    ///
-    /// Pass this flag to disable this behavior.
-    #[clap(help_heading = "Options", long)]
+    /// By default, Binstall will install a binary as-is in the install path.
+    #[clap(help_heading = "Options", long, default_value_t = true)]
     pub no_symlinks: bool,
 
     /// Dry run, fetch and show changes without installing binaries.
