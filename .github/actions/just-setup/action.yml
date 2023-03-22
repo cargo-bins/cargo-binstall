@@ -18,9 +18,11 @@ inputs:
     description: Suffix for cache key
     required: false
     default: ""
+
+env:
+  tools: "just"
+
 runs:
-  env:
-    tools: "just"
   using: composite
   steps:
   - if: inputs.buildcache
