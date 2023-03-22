@@ -45,6 +45,8 @@ jobs:
       with:
         cache-suffix: release-${{ matrix.t }}
         tools: cargo-auditable
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just toolchain rust-src
     - run: just ci-install-deps

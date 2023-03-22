@@ -52,6 +52,8 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just ci-install-deps
     - run: just test
@@ -78,6 +80,8 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just ci-install-deps
     - run: just check
@@ -92,6 +96,8 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just check
 
@@ -105,6 +111,8 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just check
 
