@@ -23,7 +23,7 @@ pkg-fmt = "zip"
 
 [dependencies]
 binstalk = { path = "../binstalk", version = "0.10.0", default-features = false }
-binstalk-manifests = { path = "../binstalk-manifests", version = "0.4.0" }
+binstalk-manifests = { path = "../binstalk-manifests", version = "0.4.1" }
 clap = { version = "4.1.11", features = ["derive", "env"] }
 compact_str = "0.7.0"
 dirs = "5.0.0"
