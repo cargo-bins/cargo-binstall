@@ -42,6 +42,8 @@ runs:
     uses: taiki-e/install-action@v2
     with:
       tool: ${{ env.tools }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   - if: inputs.indexcache
     name: Configure index cache
