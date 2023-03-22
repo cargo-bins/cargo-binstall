@@ -19,12 +19,12 @@ inputs:
     required: false
     default: ""
 runs:
-  using: composite
   env:
     tools: "just"
+  using: composite
   steps:
-  - name: Add sccache to tools to install
-    if: inputs.buildcache
+  - if: inputs.buildcache
+    name: Add sccache to tools to install
     run: echo "tools=$tools,sccache" >>$GITHUB_ENV
     shell: bash
 
