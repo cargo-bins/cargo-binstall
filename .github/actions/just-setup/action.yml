@@ -26,11 +26,6 @@ runs:
     run: echo "tools=just" >>$GITHUB_ENV
     shell: bash
 
-  - if: inputs.buildcache
-    name: Add sccache to tools to install
-    run: echo "tools=$tools,sccache" >>$GITHUB_ENV
-    shell: bash
-
   - name: Add inputs.tools to tools to install
     if: inputs.tools != ''
     env:
@@ -42,6 +37,11 @@ runs:
     uses: taiki-e/install-action@v2
     with:
       tool: ${{ env.tools }}
+
+  - if: inputs.buildcache
+    name: Install sccache
+    run: cargo binstall --force --no-symlinks -y sccache
+    shell: bash
 
   - if: inputs.indexcache
     name: Configure index cache
