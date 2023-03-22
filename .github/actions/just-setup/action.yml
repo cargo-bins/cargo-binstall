@@ -20,17 +20,25 @@ inputs:
     default: ""
 runs:
   using: composite
+  env:
+    tools: "just"
   steps:
-  - if: inputs.tools == ''
-    name: Install just
+  - name: Add sccache to tools to install
+    if: inputs.buildcache
+    run: echo "tools=$tools,sccache" >>$GITHUB_ENV
+    shell: bash
+
+  - name: Add inputs.tools to tools to install
+    if: inputs.tools != ''
+    env:
+      inputs_tools: ${{ inputs.tools }}
+    run: echo "tools=$tools,$inputs_tools" >>$GITHUB_ENV
+    shell: bash
+
+  - name: Install tools
     uses: taiki-e/install-action@v2
     with:
-      tool: just
-  - if: inputs.tools != ''
-    name: Install just and tools
-    uses: taiki-e/install-action@v2
-    with:
-      tool: just,${{ inputs.tools }}
+      tool: ${{ env.tools }}
 
   - if: inputs.indexcache
     name: Configure index cache
@@ -55,9 +63,11 @@ runs:
 
   - if: inputs.buildcache
     name: Configure sccache
-    uses: mozilla-actions/sccache-action@v0.0.2
+    uses: actions/github-script@v6
     with:
-      version: "v0.4.0-pre.10"
+      script: |
+        core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+        core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
   - if: inputs.buildcache
     name: Export env for sccache to work
