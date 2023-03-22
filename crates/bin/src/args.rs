@@ -161,7 +161,7 @@ pub struct Args {
     /// possible to have multiple versions of the same binary, for example for testing or rollback.
     ///
     /// Pass this flag to disable this behavior.
-    #[clap(help_heading = "Options", long)]
+    #[clap(help_heading = "Options", long, default_value_t = true)]
     pub no_symlinks: bool,
 
     /// Dry run, fetch and show changes without installing binaries.
