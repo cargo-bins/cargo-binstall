@@ -23,7 +23,7 @@ runs:
   using: composite
   steps:
   - name: Add just to tools to install
-    run: echo "tools=just" >>$GITHUB_ENV
+    run: echo "tools=just,cargo-binstall" >>$GITHUB_ENV
     shell: bash
 
   - name: Add inputs.tools to tools to install
