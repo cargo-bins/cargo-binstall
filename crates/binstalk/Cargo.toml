@@ -16,7 +16,7 @@ binstalk-types = { version = "0.3.0", path = "../binstalk-types" }
 cargo_toml = "0.15.2"
 command-group = { version = "2.1.0", features = ["with-tokio"] }
 compact_str = { version = "0.7.0", features = ["serde"] }
-detect-targets = { version = "0.1.6", path = "../detect-targets" }
+detect-targets = { version = "0.1.7", path = "../detect-targets" }
 either = "1.8.1"
 home = "0.5.4"
 itertools = "0.10.5"
