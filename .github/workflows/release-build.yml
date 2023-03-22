@@ -46,6 +46,8 @@ jobs:
         cache-suffix: release-${{ matrix.t }}
         tools: cargo-auditable
       env:
+        # just-setup use binstall to install sccache and cargo-auditable,
+        # which works better when we provide it with GITHUB_TOKEN.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just toolchain rust-src
