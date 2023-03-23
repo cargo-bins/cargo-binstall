@@ -118,6 +118,8 @@ impl super::Fetcher for GhCrateMeta {
                     // just a best-effort
                     pkg_fmt = PkgFmt::guess_pkg_format(pkg_url);
 
+                    // TODO: Add warn
+
                     if pkg_fmt.is_none() {
                         return Err(InvalidPkgFmtError {
                             crate_name: self.data.name.clone(),
@@ -197,7 +199,10 @@ impl super::Fetcher for GhCrateMeta {
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
         let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
-        debug!("Downloading package from: '{url}' dst:{dst:?} fmt:{pkg_fmt:?}");
+        debug!(
+            "Downloading package from: '{url}' dst:{} fmt:{pkg_fmt:?}",
+            dst.display()
+        );
         Ok(Download::new(self.client.clone(), url.clone())
             .and_extract(*pkg_fmt, dst)
             .await?)
