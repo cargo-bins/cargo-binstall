@@ -37,12 +37,12 @@ pub struct GhCrateMeta {
 type FindTaskRes = Result<Option<(Url, PkgFmt)>, BinstallError>;
 
 impl GhCrateMeta {
-    fn launch_baseline_find_tasks<'a>(
-        &'a self,
+    fn launch_baseline_find_tasks(
+        &self,
         pkg_fmt: PkgFmt,
-        pkg_url: &'a Template<'a>,
-        repo: Option<&'a str>,
-    ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
+        pkg_url: &Template<'_>,
+        repo: Option<&str>,
+    ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + '_ {
         // build up list of potential URLs
         let urls = pkg_fmt
             .extensions()
@@ -58,6 +58,7 @@ impl GhCrateMeta {
                     }
                 }
             })
+            .sorted_unstable()
             .dedup();
 
         // go check all potential URLs at once
