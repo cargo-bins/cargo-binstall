@@ -179,7 +179,6 @@ dependencies = [
  "strum",
  "tempfile",
  "thiserror",
- "tinytemplate",
  "tokio",
  "tracing",
  "url",

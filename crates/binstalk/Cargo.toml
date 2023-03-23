@@ -31,7 +31,6 @@ serde = { version = "1.0.157", features = ["derive"] }
 strum = "0.24.1"
 tempfile = "3.4.0"
 thiserror = "1.0.40"
-tinytemplate = "1.2.1"
 # parking_lot for `tokio::sync::OnceCell::const_new`
 tokio = { version = "1.26.0", features = ["rt", "process", "sync", "signal", "parking_lot"], default-features = false }
 tracing = "0.1.37"

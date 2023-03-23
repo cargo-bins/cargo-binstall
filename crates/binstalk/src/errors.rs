@@ -11,7 +11,6 @@ use cargo_toml::Error as CargoTomlError;
 use compact_str::CompactString;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
-use tinytemplate::error::Error as TinyTemplateError;
 use tokio::task;
 use tracing::{error, warn};
 
@@ -81,14 +80,6 @@ pub enum BinstallError {
     #[error("Failed to parse url: {0}")]
     #[diagnostic(severity(error), code(binstall::url_parse))]
     UrlParse(#[from] url::ParseError),
-
-    /// A rendering error in a template.
-    ///
-    /// - Code: `binstall::template`
-    /// - Exit: 67
-    #[error("Failed to render template: {0}")]
-    #[diagnostic(severity(error), code(binstall::template))]
-    Template(Box<TinyTemplateError>),
 
     /// Failed to parse template.
     ///
@@ -336,7 +327,6 @@ impl BinstallError {
             TaskJoinError(_) => 17,
             UserAbort => 32,
             UrlParse(_) => 65,
-            Template(_) => 67,
             TemplateParseError(..) => 67,
             TemplateRenderError(..) => 69,
             Download(_) => 68,
@@ -431,12 +421,6 @@ impl From<BinstallError> for io::Error {
 impl From<RemoteError> for BinstallError {
     fn from(e: RemoteError) -> Self {
         DownloadError::from(e).into()
-    }
-}
-
-impl From<TinyTemplateError> for BinstallError {
-    fn from(e: TinyTemplateError) -> Self {
-        BinstallError::Template(Box::new(e))
     }
 }
 
