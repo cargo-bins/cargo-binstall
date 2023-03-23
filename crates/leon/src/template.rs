@@ -138,17 +138,20 @@ impl<'s> Template<'s> {
         Ok(String::from_utf8(buf).unwrap())
     }
 
+    /// If the template contains key `key`.
     pub fn has_key(&self, key: &str) -> bool {
-        self.has_keys(&[key])
+        self.has_any_of_keys(&[key])
     }
 
-    pub fn has_keys(&self, keys: &[&str]) -> bool {
+    /// If the template contains any one of the `keys`.
+    pub fn has_any_of_keys(&self, keys: &[&str]) -> bool {
         self.items.iter().any(|token| match token {
             Item::Key(k) => keys.contains(k),
             _ => false,
         })
     }
 
+    /// Returns all keys in this template.
     pub fn keys(&self) -> impl Iterator<Item = &&str> {
         self.items.iter().filter_map(|token| match token {
             Item::Key(k) => Some(k),
