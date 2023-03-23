@@ -43,23 +43,30 @@ impl GhCrateMeta {
         pkg_url: &Template<'_>,
         repo: Option<&str>,
     ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + '_ {
-        // build up list of potential URLs
-        let urls = pkg_fmt
-            .extensions()
-            .iter()
-            .filter_map(move |ext| {
-                let ctx =
-                    Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
-                match ctx.render_url_with_compiled_tt(pkg_url) {
-                    Ok(url) => Some(url),
-                    Err(err) => {
-                        warn!("Failed to render url for {ctx:#?}: {err}");
-                        None
-                    }
+        let render_url = |ext| {
+            let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
+            match ctx.render_url_with_compiled_tt(pkg_url) {
+                Ok(url) => Some(url),
+                Err(err) => {
+                    warn!("Failed to render url for {ctx:#?}: {err}");
+                    None
                 }
-            })
-            .sorted_unstable()
-            .dedup();
+            }
+        };
+
+        let urls = if pkg_url.has_any_of_keys(&["format", "archive-format", "archive-suffix"]) {
+            // build up list of potential URLs
+            Either::Left(
+                pkg_fmt
+                    .extensions()
+                    .iter()
+                    .filter_map(|ext| render_url(Some(ext)))
+                    .sorted_unstable()
+                    .dedup(),
+            )
+        } else {
+            Either::Right(render_url(None).into_iter())
+        };
 
         // go check all potential URLs at once
         urls.map(move |url| {
@@ -245,9 +252,9 @@ struct Context<'c> {
     pub version: &'c str,
 
     /// Archive format e.g. tar.gz, zip
-    pub archive_format: &'c str,
+    pub archive_format: Option<&'c str>,
 
-    pub archive_suffix: &'c str,
+    pub archive_suffix: Option<&'c str>,
 
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
     pub binary_ext: &'c str,
@@ -261,12 +268,12 @@ impl leon::Values for Context<'_> {
             "target" => Some(Cow::Borrowed(self.target)),
             "version" => Some(Cow::Borrowed(self.version)),
 
-            "archive-format" => Some(Cow::Borrowed(self.archive_format)),
+            "archive-format" => self.archive_format.map(Cow::Borrowed),
 
             // Soft-deprecated alias for archive-format
-            "format" => Some(Cow::Borrowed(self.archive_format)),
+            "format" => self.archive_format.map(Cow::Borrowed),
 
-            "archive-suffix" => Some(Cow::Borrowed(self.archive_suffix)),
+            "archive-suffix" => self.archive_suffix.map(Cow::Borrowed),
 
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
 
@@ -279,17 +286,19 @@ impl<'c> Context<'c> {
     pub(self) fn from_data_with_repo(
         data: &'c Data,
         target: &'c str,
-        archive_suffix: &'c str,
+        archive_suffix: Option<&'c str>,
         repo: Option<&'c str>,
     ) -> Self {
-        let archive_format = if archive_suffix.is_empty() {
-            // Empty archive_suffix means PkgFmt::Bin
-            "bin"
-        } else {
-            debug_assert!(archive_suffix.starts_with('.'), "{archive_suffix}");
+        let archive_format = archive_suffix.map(|archive_suffix| {
+            if archive_suffix.is_empty() {
+                // Empty archive_suffix means PkgFmt::Bin
+                "bin"
+            } else {
+                debug_assert!(archive_suffix.starts_with('.'), "{archive_suffix}");
 
-            &archive_suffix[1..]
-        };
+                &archive_suffix[1..]
+            }
+        });
 
         Self {
             name: &data.name,
@@ -308,7 +317,7 @@ impl<'c> Context<'c> {
 
     #[cfg(test)]
     pub(self) fn from_data(data: &'c Data, target: &'c str, archive_format: &'c str) -> Self {
-        Self::from_data_with_repo(data, target, archive_format, data.repo.as_deref())
+        Self::from_data_with_repo(data, target, Some(archive_format), data.repo.as_deref())
     }
 
     /// * `tt` - must have added a template named "pkg_url".
