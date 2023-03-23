@@ -130,7 +130,7 @@ impl super::Fetcher for GhCrateMeta {
                 if let Some(pkg_urls) =
                     RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
                 {
-                    Either::Right(pkg_urls)
+                    Either::Right(pkg_urls.map(Template::cast))
                 } else {
                     warn!(
                         concat!(
