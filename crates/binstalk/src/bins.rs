@@ -7,7 +7,6 @@ use std::{
 use compact_str::{format_compact, CompactString};
 use leon::Template;
 use normalize_path::NormalizePath;
-use serde::Serialize;
 use tracing::debug;
 
 use crate::{
@@ -237,7 +236,7 @@ pub struct Data<'a> {
     pub install_path: &'a Path,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 struct Context<'c> {
     pub name: &'c str,
     pub repo: Option<&'c str>,
@@ -246,7 +245,6 @@ struct Context<'c> {
     pub bin: &'c str,
 
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
-    #[serde(rename = "binary-ext")]
     pub binary_ext: &'c str,
 }
 
