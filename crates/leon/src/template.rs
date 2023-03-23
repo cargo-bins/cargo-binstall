@@ -160,6 +160,21 @@ impl<'s> Template<'s> {
     pub fn set_default(&mut self, default: &dyn Display) {
         self.default = Some(Cow::Owned(default.to_string()));
     }
+
+    /// Cast `Template<'s>` to `Template<'t>` where `'s` is a subtype of `'t`,
+    /// meaning that `Template<'s>` outlives `Template<'t>`.
+    pub fn cast<'t>(self) -> Template<'t>
+    where
+        's: 't,
+    {
+        Template {
+            items: match self.items {
+                Cow::Owned(vec) => Cow::Owned(vec),
+                Cow::Borrowed(slice) => Cow::Borrowed(slice as &'t [Item<'t>]),
+            },
+            default: self.default.map(|default| default as Cow<'t, str>),
+        }
+    }
 }
 
 impl<'s> Add for Template<'s> {
@@ -178,7 +193,10 @@ impl<'s> Add for Template<'s> {
 
 #[cfg(test)]
 mod test {
-    use crate::Item::{Key, Text};
+    use crate::{
+        Item::{Key, Text},
+        Template,
+    };
 
     #[test]
     fn concat_templates() {
@@ -194,5 +212,14 @@ mod test {
                 Text("day")
             ),
         );
+    }
+
+    #[test]
+    fn test_cast() {
+        fn inner<'a>(_: &'a u32, _: Template<'a>) {}
+
+        let template: Template<'static> = crate::template2!("hello");
+        let i = 1;
+        inner(&i, template.cast());
     }
 }
