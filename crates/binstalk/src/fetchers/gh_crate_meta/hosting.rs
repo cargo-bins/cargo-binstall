@@ -128,7 +128,7 @@ fn apply_filenames_to_paths(
         .flat_map(|fs| fs.iter())
         .cartesian_product(paths.iter())
         .map(move |(filename, path)| {
-            let mut template = filename.clone() + path.clone();
+            let mut template = path.clone() + filename.clone();
             template.items.to_mut().push(Item::Text(suffix));
             template
         })
