@@ -16,35 +16,35 @@ pub enum RepositoryHost {
 /// Make sure to update possible_dirs in `bins::infer_bin_dir_template`
 /// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
 pub const FULL_FILENAMES: &[Template<'_>] = &[
-    template2!({ "name" }, "-", { "target" }, "-v", { "version" }, {
+    template2!("/", { "name" }, "-", { "target" }, "-v", { "version" }, {
         "archive-suffix"
     }),
-    template2!({ "name" }, "-", { "target" }, "-", { "version" }, {
+    template2!("/", { "name" }, "-", { "target" }, "-", { "version" }, {
         "archive-suffix"
     }),
-    template2!({ "name" }, "-", { "version" }, "-", { "target" }, {
+    template2!("/", { "name" }, "-", { "version" }, "-", { "target" }, {
         "archive-suffix"
     }),
-    template2!({ "name" }, "-v", { "version" }, "-", { "target" }, {
+    template2!("/", { "name" }, "-v", { "version" }, "-", { "target" }, {
         "archive-suffix"
     }),
-    template2!({ "name" }, "_", { "target" }, "_v", { "version" }, {
+    template2!("/", { "name" }, "_", { "target" }, "_v", { "version" }, {
         "archive-suffix"
     }),
-    template2!({ "name" }, "_", { "target" }, "_", { "version" }, {
+    template2!("/", { "name" }, "_", { "target" }, "_", { "version" }, {
         "archive-suffix"
     }),
-    template2!({ "name" }, "_", { "version" }, "_", { "target" }, {
+    template2!("/", { "name" }, "_", { "version" }, "_", { "target" }, {
         "archive-suffix"
     }),
-    template2!({ "name" }, "_v", { "version" }, "_", { "target" }, {
+    template2!("/", { "name" }, "_v", { "version" }, "_", { "target" }, {
         "archive-suffix"
     }),
 ];
 
 pub const NOVERSION_FILENAMES: &[Template<'_>] = &[
-    template2!({ "name" }, "-", { "target" }, { "archive-suffix" }),
-    template2!({ "name" }, "_", { "target" }, { "archive-suffix" }),
+    template2!("/", { "name" }, "-", { "target" }, { "archive-suffix" }),
+    template2!("/", { "name" }, "_", { "target" }, { "archive-suffix" }),
 ];
 
 const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
