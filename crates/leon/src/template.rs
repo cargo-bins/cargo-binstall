@@ -196,24 +196,15 @@ impl<'s> Add for Template<'s> {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        Item::{Key, Text},
-        Template,
-    };
+    use crate::Template;
 
     #[test]
     fn concat_templates() {
-        let t1 = crate::template!(Text("Hello"), Key("name"));
-        let t2 = crate::template!(Text("have a"), Key("adjective"), Text("day"));
+        let t1 = crate::template!("Hello", { "name" });
+        let t2 = crate::template!("have a", { "adjective" }, "day");
         assert_eq!(
             t1 + t2,
-            crate::template!(
-                Text("Hello"),
-                Key("name"),
-                Text("have a"),
-                Key("adjective"),
-                Text("day")
-            ),
+            crate::template!("Hello", { "name" }, "have a", { "adjective" }, "day"),
         );
     }
 
@@ -221,7 +212,7 @@ mod test {
     fn test_cast() {
         fn inner<'a>(_: &'a u32, _: Template<'a>) {}
 
-        let template: Template<'static> = crate::template2!("hello");
+        let template: Template<'static> = crate::template!("hello");
         let i = 1;
         inner(&i, template.cast());
     }
