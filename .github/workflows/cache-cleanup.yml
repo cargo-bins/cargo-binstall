@@ -4,8 +4,8 @@ on:
   # Run twice every day to remove the cache so that the caches from the closed prs
   # are removed.
   schedule:
-    - cron: "0 3 * * *"
-    - cron: "30 4 * * *"
+    - cron: "0 17 * * *"
+    - cron: "30 18 * * *"
   workflow_dispatch:
 
 jobs:
