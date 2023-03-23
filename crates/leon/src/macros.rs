@@ -78,7 +78,6 @@ macro_rules! template {
         $crate::__template_impl!($( $token ),* ; ::core::option::Option::None)
     };
 
-    //
     ($( $token:tt ),* $(,)? ; $default:expr) => {
         $crate::__template_impl!($( $token ),* ; ::core::option::Option::Some($default))
     };
