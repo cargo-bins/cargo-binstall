@@ -46,14 +46,23 @@ impl PkgFmt {
 
     /// List of possible file extensions for the format
     /// (with prefix `.`).
-    pub fn extensions(self) -> &'static [&'static str] {
+    ///
+    /// * `is_windows` - if true and `self == PkgFmt::Bin`, then it will return
+    ///   `.exe` in additional to other bin extension names.
+    pub fn extensions(self, is_windows: bool) -> &'static [&'static str] {
         match self {
             PkgFmt::Tar => &[".tar"],
             PkgFmt::Tbz2 => &[".tbz2", ".tar.bz2"],
             PkgFmt::Tgz => &[".tgz", ".tar.gz"],
             PkgFmt::Txz => &[".txz", ".tar.xz"],
             PkgFmt::Tzstd => &[".tzstd", ".tzst", ".tar.zst"],
-            PkgFmt::Bin => &[".bin", ".exe", ""],
+            PkgFmt::Bin => {
+                if is_windows {
+                    &[".bin", "", ".exe"]
+                } else {
+                    &[".bin", ""]
+                }
+            }
             PkgFmt::Zip => &[".zip"],
         }
     }

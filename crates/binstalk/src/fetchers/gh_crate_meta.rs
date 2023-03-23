@@ -52,11 +52,13 @@ impl GhCrateMeta {
             }
         };
 
+        let is_windows = self.target_data.target.contains("windows");
+
         let urls = if pkg_url.has_any_of_keys(&["format", "archive-format", "archive-suffix"]) {
             // build up list of potential URLs
             Either::Left(
                 pkg_fmt
-                    .extensions()
+                    .extensions(is_windows)
                     .iter()
                     .filter_map(|ext| render_url(Some(ext))),
             )
