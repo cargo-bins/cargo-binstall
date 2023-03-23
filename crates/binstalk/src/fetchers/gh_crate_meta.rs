@@ -1,8 +1,7 @@
-use std::{borrow::Cow, future::Future, iter, path::Path, sync::Arc};
+use std::{borrow::Cow, iter, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
-use itertools::Itertools;
 use leon::Template;
 use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
@@ -34,15 +33,14 @@ pub struct GhCrateMeta {
     resolution: OnceCell<(Url, PkgFmt)>,
 }
 
-type FindTaskRes = Result<Option<(Url, PkgFmt)>, BinstallError>;
-
 impl GhCrateMeta {
     fn launch_baseline_find_tasks(
         &self,
+        futures_resolver: &FuturesResolver<(Url, PkgFmt), BinstallError>,
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
         repo: Option<&str>,
-    ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + '_ {
+    ) {
         let render_url = |ext| {
             let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
             match ctx.render_url_with_compiled_tt(pkg_url) {
@@ -60,16 +58,14 @@ impl GhCrateMeta {
                 pkg_fmt
                     .extensions()
                     .iter()
-                    .filter_map(|ext| render_url(Some(ext)))
-                    .sorted_unstable()
-                    .dedup(),
+                    .filter_map(|ext| render_url(Some(ext))),
             )
         } else {
             Either::Right(render_url(None).into_iter())
         };
 
         // go check all potential URLs at once
-        urls.map(move |url| {
+        futures_resolver.extend(urls.map(move |url| {
             let client = self.client.clone();
             let gh_api_client = self.gh_api_client.clone();
 
@@ -78,7 +74,7 @@ impl GhCrateMeta {
                     .await?
                     .then_some((url, pkg_fmt)))
             }
-        })
+        }));
     }
 }
 
@@ -183,7 +179,7 @@ impl super::Fetcher for GhCrateMeta {
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    resolver.extend(this.launch_baseline_find_tasks(pkg_fmt, &pkg_url, repo));
+                    this.launch_baseline_find_tasks(&resolver, pkg_fmt, &pkg_url, repo);
                 }
             }
 
