@@ -99,10 +99,10 @@ impl super::Fetcher for GhCrateMeta {
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+                let template = Template::parse(pkg_url)?;
+
                 if pkg_fmt.is_none()
-                    && !(pkg_url.contains("format")
-                        || pkg_url.contains("archive-format")
-                        || pkg_url.contains("archive-suffix"))
+                    && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
                 {
                     // The crate does not specify the pkg-fmt, yet its pkg-url
                     // template doesn't contains format, archive-format or
@@ -124,8 +124,8 @@ impl super::Fetcher for GhCrateMeta {
                         .into());
                     }
                 }
-                let pkg_url = Template::parse(pkg_url)?;
-                Either::Left(iter::once(pkg_url))
+
+                Either::Left(iter::once(template))
             } else if let Some(repo) = repo.as_ref() {
                 if let Some(pkg_urls) =
                     RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
