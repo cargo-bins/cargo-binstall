@@ -93,7 +93,7 @@ pub struct ValuesFn<F> {
 
 impl<'s, F> Values for &'s ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'s, str>> + Send + 's,
+    F: Fn(&str) -> Option<Cow<'s, str>> + 's,
 {
     fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         (self.inner)(key)
@@ -102,7 +102,7 @@ where
 
 impl<'f, F> From<F> for ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'f, str>> + Send + 'f,
+    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
 {
     fn from(inner: F) -> Self {
         Self { inner }
@@ -124,7 +124,7 @@ where
 /// ```
 pub const fn vals<'f, F>(func: F) -> ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'f, str>> + Send + 'f,
+    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
 {
     ValuesFn { inner: func }
 }
