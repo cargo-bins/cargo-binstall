@@ -253,7 +253,7 @@ struct Context<'c> {
 }
 
 impl leon::Values for Context<'_> {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value<'s>(&'s self, key: &str) -> Option<Cow<'s, str>> {
         match key {
             "name" => Some(Cow::Borrowed(self.name)),
             "repo" => self.repo.map(Cow::Borrowed),

@@ -59,7 +59,7 @@
 //! # let template = Template::parse("hello {name}").unwrap();
 //! assert_eq!(
 //!     template.render(
-//!         &vals(|_key| Some("marcus".into()))
+//!         &&vals(|_key| Some("marcus".into()))
 //!     ).unwrap().as_str(),
 //!     "hello marcus",
 //! );
@@ -76,7 +76,7 @@
 //! let mut buf: Vec<u8> = Vec::new();
 //! template.render_into(
 //!     &mut buf,
-//!     &vals(|key| if key == "name" {
+//!     &&vals(|key| if key == "name" {
 //!         Some("julius".into())
 //!     } else {
 //!         None
@@ -107,7 +107,7 @@
 //!   name: &'static str,
 //! }
 //! impl Values for MyMap {
-//!    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+//!    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
 //!       if key == "name" {
 //!         Some(self.name.into())
 //!      } else {
