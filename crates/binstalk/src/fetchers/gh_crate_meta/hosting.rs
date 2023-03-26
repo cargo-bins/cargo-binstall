@@ -69,7 +69,7 @@ const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
 
 const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template!({ "repo" }, "/downloads")];
 
-const SOURCEFORGE_RELEASEW_PATHS: &[Template<'_>] = &[
+const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
     template!({ "repo" }, "/files/binaries/", { "version" }),
     template!({ "repo" }, "/files/binaries/v", { "version" }),
 ];
@@ -109,7 +109,7 @@ impl RepositoryHost {
                 "",
             )),
             SourceForge => Some(apply_filenames_to_paths(
-                SOURCEFORGE_RELEASEW_PATHS,
+                SOURCEFORGE_RELEASE_PATHS,
                 &[FULL_FILENAMES, NOVERSION_FILENAMES],
                 "/download",
             )),
