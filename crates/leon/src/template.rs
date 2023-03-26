@@ -205,6 +205,13 @@ impl<'s, 'rhs: 's> ops::AddAssign<Template<'rhs>> for Template<'s> {
     }
 }
 
+/// Add a new text item to the template
+impl<'s, 'rhs: 's> ops::AddAssign<&'rhs str> for Template<'s> {
+    fn add_assign(&mut self, s: &'rhs str) {
+        self.items.to_mut().push(Item::Text(s));
+    }
+}
+
 impl<'s, 'rhs: 's> ops::Add<Template<'rhs>> for Template<'s> {
     type Output = Self;
 
@@ -219,6 +226,16 @@ impl<'s, 'rhs: 's> ops::Add<&Template<'rhs>> for Template<'s> {
 
     fn add(mut self, rhs: &Template<'rhs>) -> Self::Output {
         self += rhs;
+        self
+    }
+}
+
+/// Add a new text item to the template
+impl<'s, 'rhs: 's> ops::Add<&'rhs str> for Template<'s> {
+    type Output = Self;
+
+    fn add(mut self, s: &'rhs str) -> Self::Output {
+        self += s;
         self
     }
 }
