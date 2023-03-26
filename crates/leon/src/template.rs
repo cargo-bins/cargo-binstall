@@ -214,6 +214,15 @@ impl<'s, 'rhs: 's> ops::Add<Template<'rhs>> for Template<'s> {
     }
 }
 
+impl<'s, 'rhs: 's> ops::Add<&Template<'rhs>> for Template<'s> {
+    type Output = Self;
+
+    fn add(mut self, rhs: &Template<'rhs>) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::Template;
