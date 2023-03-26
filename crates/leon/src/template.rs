@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, io::Write, ops::Add};
+use std::{borrow::Cow, fmt::Display, io::Write, ops};
 
 use crate::{ParseError, RenderError, Values};
 
@@ -180,16 +180,36 @@ impl<'s> Template<'s> {
     }
 }
 
-impl<'s> Add for Template<'s> {
-    type Output = Self;
-
-    fn add(mut self, rhs: Self) -> Self::Output {
+impl<'s, 'rhs: 's> ops::AddAssign<&Template<'rhs>> for Template<'s> {
+    fn add_assign(&mut self, rhs: &Template<'rhs>) {
         self.items
             .to_mut()
             .extend(rhs.items.as_ref().iter().cloned());
+
+        if let Some(default) = &rhs.default {
+            self.default = Some(default.clone());
+        }
+    }
+}
+
+impl<'s, 'rhs: 's> ops::AddAssign<Template<'rhs>> for Template<'s> {
+    fn add_assign(&mut self, rhs: Template<'rhs>) {
+        match rhs.items {
+            Cow::Borrowed(items) => self.items.to_mut().extend(items.iter().cloned()),
+            Cow::Owned(items) => self.items.to_mut().extend(items.into_iter()),
+        }
+
         if let Some(default) = rhs.default {
             self.default = Some(default);
         }
+    }
+}
+
+impl<'s, 'rhs: 's> ops::Add<Template<'rhs>> for Template<'s> {
+    type Output = Self;
+
+    fn add(mut self, rhs: Template<'rhs>) -> Self::Output {
+        self += rhs;
         self
     }
 }
