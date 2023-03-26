@@ -134,16 +134,10 @@ impl super::Fetcher for GhCrateMeta {
                     }
 
                     warn!(
-                        concat!(
-                        "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt ",
-                        "but its pkg-url also does not contain key format, archive-format or ", 
-                        "archive-suffix.\nbinstall was able to guess that from pkg-url, but ",
-                        "just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
-                        ),
-                        crate_name = crate_name,
-                        version = version,
-                        target = target,
-                        pkg_url = pkg_url,
+                        "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt \
+                        but its pkg-url also does not contain key format, archive-format or \
+                        archive-suffix.\nbinstall was able to guess that from pkg-url, but \
+                        just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
                         pkg_fmt = pkg_fmt.unwrap(),
                     );
                 }
