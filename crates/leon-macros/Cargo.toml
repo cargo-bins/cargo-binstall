@@ -1,0 +1,18 @@
+[package]
+name = "leon-macros"
+version = "0.0.0"
+edition = "2021"
+description = "Proc macros for crate leon"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/leon-macros"
+rust-version = "1.61.0"
+authors = ["Félix Saparelli <felix@passcod.name>", "Jiahao XU Jiahao_XU@outlook"]
+license = "Apache-2.0 OR MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+leon = { version = "1.0.0", path = "../leon" }
+proc-macro2 = "1.0.53"
+syn = "2.0.10"
