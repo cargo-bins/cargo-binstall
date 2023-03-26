@@ -121,6 +121,18 @@
 //! assert_eq!(template.render(&values).unwrap().as_str(), "hello pontifex");
 //! ```
 //!
+//! # Parse template at compile time
+//!
+//! [`leon-macros`] provides proc-macros [`leon_macros::const_parse_template!`]
+//! to parse the template at compile time.
+//!
+//! NOTE that in order to use that it, you would have to add leon as a dependency
+//! to your crate first.
+//!
+//! If proc-macro is way too costy for you, have a try at [`leon::template`],
+//! a light-weight alternative that requires you to split items into text and
+//! keys yourself but does not bring in proc-macro2/syn/quote.
+//!
 //! # Errors
 //!
 //! Leon will return a [`LeonError::InvalidTemplate`] if the template fails to
