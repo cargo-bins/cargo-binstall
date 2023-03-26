@@ -52,6 +52,10 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        # just-setup use binstall to install sccache,
+        # which works better when we provide it with GITHUB_TOKEN.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just ci-install-deps
     - run: just test
@@ -78,6 +82,10 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        # just-setup use binstall to install sccache,
+        # which works better when we provide it with GITHUB_TOKEN.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just ci-install-deps
     - run: just check
@@ -92,6 +100,10 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        # just-setup use binstall to install sccache,
+        # which works better when we provide it with GITHUB_TOKEN.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just check
 
@@ -105,6 +117,10 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+      env:
+        # just-setup use binstall to install sccache,
+        # which works better when we provide it with GITHUB_TOKEN.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just check
 
