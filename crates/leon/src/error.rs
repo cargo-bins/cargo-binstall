@@ -1,4 +1,6 @@
-#[derive(Debug, thiserror::Error)]
+use thiserror::Error as ThisError;
+
+#[derive(Debug, ThisError)]
 #[cfg_attr(feature = "miette", derive(miette::Diagnostic))]
 pub enum RenderError {
     /// A key was missing from the provided values.
@@ -15,71 +17,73 @@ pub enum RenderError {
 /// When the `miette` feature is enabled, this is a rich miette-powered error
 /// which will highlight the source of the error in the template when output
 /// (with miette's `fancy` feature). With `miette` disabled, this is opaque.
-#[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Clone, Debug, ThisError, PartialEq, Eq)]
 #[cfg_attr(feature = "miette", derive(miette::Diagnostic))]
 #[cfg_attr(feature = "miette", diagnostic(transparent))]
 #[error(transparent)]
 pub struct ParseError(Box<InnerParseError>);
 
 /// The inner (unboxed) type of [`ParseError`].
-#[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
-#[cfg_attr(feature = "miette", derive(miette::Diagnostic))]
-#[error("template parse failed")]
+#[derive(Clone, Debug, ThisError, PartialEq, Eq)]
+#[error("{kind} at span start = {offset}, len = {len}: {src}")]
 struct InnerParseError {
-    #[cfg_attr(feature = "miette", source_code)]
     src: String,
+    offset: usize,
+    len: usize,
+    kind: ErrorKind,
+}
 
-    #[cfg_attr(feature = "miette", label("This bracket is not opening or closing anything. Try removing it, or escaping it with a backslash."))]
-    unbalanced: Option<(usize, usize)>,
+#[cfg(feature = "miette")]
+impl miette::Diagnostic for InnerParseError {
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        Some(&self.src)
+    }
 
-    #[cfg_attr(feature = "miette", label("This escape is malformed."))]
-    escape: Option<(usize, usize)>,
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        Some(Box::new(std::iter::once_with(|| {
+            miette::LabeledSpan::new(Some(self.kind.to_string()), self.offset, self.len)
+        })))
+    }
+}
 
-    #[cfg_attr(feature = "miette", label("A key cannot be empty."))]
-    key_empty: Option<(usize, usize)>,
+#[derive(Clone, Debug, ThisError, PartialEq, Eq)]
+enum ErrorKind {
+    #[error("This bracket is not opening or closing anything. Try removing it, or escaping it with a backslash.")]
+    Unbalanced,
 
-    #[cfg_attr(feature = "miette", label("Escapes are not allowed in keys."))]
-    key_escape: Option<(usize, usize)>,
+    #[error("This escape is malformed.")]
+    Escape,
+
+    #[error("A key cannot be empty.")]
+    KeyEmpty,
+
+    #[error("Escapes are not allowed in keys.")]
+    KeyEscape,
 }
 
 impl ParseError {
-    pub(crate) fn unbalanced(src: &str, start: usize, end: usize) -> Self {
+    fn new(src: &str, start: usize, end: usize, kind: ErrorKind) -> Self {
         Self(Box::new(InnerParseError {
             src: String::from(src),
-            unbalanced: Some((start, end.saturating_sub(start) + 1)),
-            escape: None,
-            key_empty: None,
-            key_escape: None,
+            offset: start,
+            len: end.saturating_sub(start) + 1,
+            kind,
         }))
+    }
+
+    pub(crate) fn unbalanced(src: &str, start: usize, end: usize) -> Self {
+        Self::new(src, start, end, ErrorKind::Unbalanced)
     }
 
     pub(crate) fn escape(src: &str, start: usize, end: usize) -> Self {
-        Self(Box::new(InnerParseError {
-            src: String::from(src),
-            unbalanced: None,
-            escape: Some((start, end.saturating_sub(start) + 1)),
-            key_empty: None,
-            key_escape: None,
-        }))
+        Self::new(src, start, end, ErrorKind::Escape)
     }
 
     pub(crate) fn key_empty(src: &str, start: usize, end: usize) -> Self {
-        Self(Box::new(InnerParseError {
-            src: String::from(src),
-            unbalanced: None,
-            escape: None,
-            key_empty: Some((start, end.saturating_sub(start) + 1)),
-            key_escape: None,
-        }))
+        Self::new(src, start, end, ErrorKind::KeyEmpty)
     }
 
     pub(crate) fn key_escape(src: &str, start: usize, end: usize) -> Self {
-        Self(Box::new(InnerParseError {
-            src: String::from(src),
-            unbalanced: None,
-            escape: None,
-            key_empty: None,
-            key_escape: Some((start, end.saturating_sub(start) + 1)),
-        }))
+        Self::new(src, start, end, ErrorKind::KeyEscape)
     }
 }
