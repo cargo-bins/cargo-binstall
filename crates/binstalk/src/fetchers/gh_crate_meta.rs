@@ -1,12 +1,10 @@
-use std::{borrow::Cow, future::Future, iter, path::Path, sync::Arc};
+use std::{borrow::Cow, iter, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
-use itertools::Itertools;
+use leon::Template;
 use once_cell::sync::OnceCell;
-use serde::Serialize;
 use strum::IntoEnumIterator;
-use tinytemplate::TinyTemplate;
 use tracing::{debug, warn};
 use url::Url;
 
@@ -35,36 +33,41 @@ pub struct GhCrateMeta {
     resolution: OnceCell<(Url, PkgFmt)>,
 }
 
-type FindTaskRes = Result<Option<(Url, PkgFmt)>, BinstallError>;
-
 impl GhCrateMeta {
-    /// * `tt` - must have added a template named "pkg_url".
-    fn launch_baseline_find_tasks<'a>(
-        &'a self,
+    fn launch_baseline_find_tasks(
+        &self,
+        futures_resolver: &FuturesResolver<(Url, PkgFmt), BinstallError>,
         pkg_fmt: PkgFmt,
-        tt: &'a TinyTemplate,
-        pkg_url: &'a str,
-        repo: Option<&'a str>,
-    ) -> impl Iterator<Item = impl Future<Output = FindTaskRes> + 'static> + 'a {
-        // build up list of potential URLs
-        let urls = pkg_fmt
-            .extensions()
-            .iter()
-            .filter_map(move |ext| {
-                let ctx =
-                    Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
-                match ctx.render_url_with_compiled_tt(tt, pkg_url) {
-                    Ok(url) => Some(url),
-                    Err(err) => {
-                        warn!("Failed to render url for {ctx:#?}: {err}");
-                        None
-                    }
+        pkg_url: &Template<'_>,
+        repo: Option<&str>,
+    ) {
+        let render_url = |ext| {
+            let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
+            match ctx.render_url_with_compiled_tt(pkg_url) {
+                Ok(url) => Some(url),
+                Err(err) => {
+                    warn!("Failed to render url for {ctx:#?}: {err}");
+                    None
                 }
-            })
-            .dedup();
+            }
+        };
+
+        let is_windows = self.target_data.target.contains("windows");
+
+        let urls = if pkg_url.has_any_of_keys(&["format", "archive-format", "archive-suffix"]) {
+            // build up list of potential URLs
+            Either::Left(
+                pkg_fmt
+                    .extensions(is_windows)
+                    .iter()
+                    .filter_map(|ext| render_url(Some(ext))),
+            )
+        } else {
+            Either::Right(render_url(None).into_iter())
+        };
 
         // go check all potential URLs at once
-        urls.map(move |url| {
+        futures_resolver.extend(urls.map(move |url| {
             let client = self.client.clone();
             let gh_api_client = self.gh_api_client.clone();
 
@@ -73,7 +76,7 @@ impl GhCrateMeta {
                     .await?
                     .then_some((url, pkg_fmt)))
             }
-        })
+        }));
     }
 }
 
@@ -101,10 +104,10 @@ impl super::Fetcher for GhCrateMeta {
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+                let template = Template::parse(pkg_url)?;
+
                 if pkg_fmt.is_none()
-                    && !(pkg_url.contains("format")
-                        || pkg_url.contains("archive-format")
-                        || pkg_url.contains("archive-suffix"))
+                    && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
                 {
                     // The crate does not specify the pkg-fmt, yet its pkg-url
                     // template doesn't contains format, archive-format or
@@ -115,23 +118,36 @@ impl super::Fetcher for GhCrateMeta {
                     // just a best-effort
                     pkg_fmt = PkgFmt::guess_pkg_format(pkg_url);
 
+                    let crate_name = &self.data.name;
+                    let version = &self.data.version;
+                    let target = &self.target_data.target;
+
                     if pkg_fmt.is_none() {
                         return Err(InvalidPkgFmtError {
-                            crate_name: self.data.name.clone(),
-                            version: self.data.version.clone(),
-                            target: self.target_data.target.clone(),
+                            crate_name: crate_name.clone(),
+                            version: version.clone(),
+                            target: target.clone(),
                             pkg_url: pkg_url.to_string(),
                             reason: "pkg-fmt is not specified, yet pkg-url does not contain format, archive-format or archive-suffix which is required for automatically deducing pkg-fmt",
                         }
                         .into());
                     }
+
+                    warn!(
+                        "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt \
+                        but its pkg-url also does not contain key format, archive-format or \
+                        archive-suffix.\nbinstall was able to guess that from pkg-url, but \
+                        just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
+                        pkg_fmt = pkg_fmt.unwrap(),
+                    );
                 }
-                Either::Left(iter::once(Cow::Borrowed(pkg_url)))
+
+                Either::Left(iter::once(template))
             } else if let Some(repo) = repo.as_ref() {
                 if let Some(pkg_urls) =
                     RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
                 {
-                    Either::Right(pkg_urls.map(Cow::Owned))
+                    Either::Right(pkg_urls.map(Template::cast))
                 } else {
                     warn!(
                         concat!(
@@ -172,16 +188,12 @@ impl super::Fetcher for GhCrateMeta {
 
             // Iterate over pkg_urls first to avoid String::clone.
             for pkg_url in pkg_urls {
-                let mut tt = TinyTemplate::new();
-
-                tt.add_template("pkg_url", &pkg_url)?;
-
                 //             Clone iter pkg_fmts to ensure all pkg_fmts is
                 //             iterated over for each pkg_url, which is
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    resolver.extend(this.launch_baseline_find_tasks(pkg_fmt, &tt, &pkg_url, repo));
+                    this.launch_baseline_find_tasks(&resolver, pkg_fmt, &pkg_url, repo);
                 }
             }
 
@@ -197,7 +209,10 @@ impl super::Fetcher for GhCrateMeta {
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
         let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
-        debug!("Downloading package from: '{url}' dst:{dst:?} fmt:{pkg_fmt:?}");
+        debug!(
+            "Downloading package from: '{url}' dst:{} fmt:{pkg_fmt:?}",
+            dst.display()
+        );
         Ok(Download::new(self.client.clone(), url.clone())
             .and_extract(*pkg_fmt, dst)
             .await?)
@@ -242,50 +257,67 @@ impl super::Fetcher for GhCrateMeta {
 }
 
 /// Template for constructing download paths
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 struct Context<'c> {
     pub name: &'c str,
     pub repo: Option<&'c str>,
     pub target: &'c str,
     pub version: &'c str,
 
-    /// Soft-deprecated alias for archive-format
-    pub format: &'c str,
-
     /// Archive format e.g. tar.gz, zip
-    #[serde(rename = "archive-format")]
-    pub archive_format: &'c str,
+    pub archive_format: Option<&'c str>,
 
-    #[serde(rename = "archive-suffix")]
-    pub archive_suffix: &'c str,
+    pub archive_suffix: Option<&'c str>,
 
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
-    #[serde(rename = "binary-ext")]
     pub binary_ext: &'c str,
+}
+
+impl leon::Values for Context<'_> {
+    fn get_value<'s>(&'s self, key: &str) -> Option<Cow<'s, str>> {
+        match key {
+            "name" => Some(Cow::Borrowed(self.name)),
+            "repo" => self.repo.map(Cow::Borrowed),
+            "target" => Some(Cow::Borrowed(self.target)),
+            "version" => Some(Cow::Borrowed(self.version)),
+
+            "archive-format" => self.archive_format.map(Cow::Borrowed),
+
+            // Soft-deprecated alias for archive-format
+            "format" => self.archive_format.map(Cow::Borrowed),
+
+            "archive-suffix" => self.archive_suffix.map(Cow::Borrowed),
+
+            "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
+
+            _ => None,
+        }
+    }
 }
 
 impl<'c> Context<'c> {
     pub(self) fn from_data_with_repo(
         data: &'c Data,
         target: &'c str,
-        archive_suffix: &'c str,
+        archive_suffix: Option<&'c str>,
         repo: Option<&'c str>,
     ) -> Self {
-        let archive_format = if archive_suffix.is_empty() {
-            // Empty archive_suffix means PkgFmt::Bin
-            "bin"
-        } else {
-            debug_assert!(archive_suffix.starts_with('.'), "{archive_suffix}");
+        let archive_format = archive_suffix.map(|archive_suffix| {
+            if archive_suffix.is_empty() {
+                // Empty archive_suffix means PkgFmt::Bin
+                "bin"
+            } else {
+                debug_assert!(archive_suffix.starts_with('.'), "{archive_suffix}");
 
-            &archive_suffix[1..]
-        };
+                &archive_suffix[1..]
+            }
+        });
 
         Self {
             name: &data.name,
             repo,
             target,
             version: &data.version,
-            format: archive_format,
             archive_format,
             archive_suffix,
             binary_ext: if target.contains("windows") {
@@ -298,31 +330,31 @@ impl<'c> Context<'c> {
 
     #[cfg(test)]
     pub(self) fn from_data(data: &'c Data, target: &'c str, archive_format: &'c str) -> Self {
-        Self::from_data_with_repo(data, target, archive_format, data.repo.as_deref())
+        Self::from_data_with_repo(data, target, Some(archive_format), data.repo.as_deref())
     }
 
     /// * `tt` - must have added a template named "pkg_url".
     pub(self) fn render_url_with_compiled_tt(
         &self,
-        tt: &TinyTemplate,
-        template: &str,
+        tt: &Template<'_>,
     ) -> Result<Url, BinstallError> {
-        debug!("Render {template} using context: {self:?}");
+        debug!("Render {tt:#?} using context: {self:?}");
 
-        Ok(Url::parse(&tt.render("pkg_url", self)?)?)
+        Ok(Url::parse(&tt.render(self)?)?)
     }
 
     #[cfg(test)]
     pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
-        let mut tt = TinyTemplate::new();
-        tt.add_template("pkg_url", template)?;
-        self.render_url_with_compiled_tt(&tt, template)
+        debug!("Render {template} using context in render_url: {self:?}");
+
+        let tt = Template::parse(template)?;
+        self.render_url_with_compiled_tt(&tt)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::manifests::cargo_toml_binstall::{PkgFmt, PkgMeta};
+    use crate::manifests::cargo_toml_binstall::PkgMeta;
 
     use super::{super::Data, Context};
     use compact_str::ToCompactString;
@@ -365,10 +397,7 @@ mod test {
 
     #[test]
     fn no_repo_but_full_url() {
-        let meta = PkgMeta {
-            pkg_url: Some(format!("https://example.com{DEFAULT_PKG_URL}")),
-            ..Default::default()
-        };
+        let pkg_url = &format!("https://example.com{}", &DEFAULT_PKG_URL[8..]);
 
         let data = Data::new(
             "cargo-binstall".to_compact_string(),
@@ -378,19 +407,15 @@ mod test {
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz")
         );
     }
 
     #[test]
     fn different_url() {
-        let meta = PkgMeta {
-            pkg_url: Some(
-            "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }"
-                .to_string()),
-            ..Default::default()
-        };
+        let pkg_url =
+            "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }";
 
         let data = Data::new(
             "radio-sx128x".to_compact_string(),
@@ -400,17 +425,14 @@ mod test {
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
         );
     }
 
     #[test]
     fn deprecated_format() {
-        let meta = PkgMeta {
-            pkg_url: Some("{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }".to_string()),
-            ..Default::default()
-        };
+        let pkg_url = "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }";
 
         let data = Data::new(
             "radio-sx128x".to_compact_string(),
@@ -420,21 +442,15 @@ mod test {
 
         let ctx = Context::from_data(&data, "x86_64-unknown-linux-gnu", ".tgz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz")
         );
     }
 
     #[test]
     fn different_ext() {
-        let meta = PkgMeta {
-            pkg_url: Some(
-                "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
-                    .to_string(),
-            ),
-            pkg_fmt: Some(PkgFmt::Txz),
-            ..Default::default()
-        };
+        let pkg_url =
+            "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz";
 
         let data = Data::new(
             "cargo-watch".to_compact_string(),
@@ -444,18 +460,15 @@ mod test {
 
         let ctx = Context::from_data(&data, "aarch64-apple-darwin", ".txz");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz")
         );
     }
 
     #[test]
     fn no_archive() {
-        let meta = PkgMeta {
-            pkg_url: Some("{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }".to_string()),
-            pkg_fmt: Some(PkgFmt::Bin),
-            ..Default::default()
-        };
+        let pkg_url =  "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }"
+        ;
 
         let data = Data::new(
             "cargo-watch".to_compact_string(),
@@ -465,7 +478,7 @@ mod test {
 
         let ctx = Context::from_data(&data, "aarch64-pc-windows-msvc", ".bin");
         assert_eq!(
-            ctx.render_url(meta.pkg_url.as_deref().unwrap()).unwrap(),
+            ctx.render_url(pkg_url).unwrap(),
             url("https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe")
         );
     }

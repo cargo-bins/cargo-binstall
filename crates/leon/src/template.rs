@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, io::Write, ops::Add};
+use std::{borrow::Cow, fmt::Display, io::Write, ops};
 
 use crate::{ParseError, RenderError, Values};
 
@@ -138,17 +138,20 @@ impl<'s> Template<'s> {
         Ok(String::from_utf8(buf).unwrap())
     }
 
+    /// If the template contains key `key`.
     pub fn has_key(&self, key: &str) -> bool {
-        self.has_keys(&[key])
+        self.has_any_of_keys(&[key])
     }
 
-    pub fn has_keys(&self, keys: &[&str]) -> bool {
+    /// If the template contains any one of the `keys`.
+    pub fn has_any_of_keys(&self, keys: &[&str]) -> bool {
         self.items.iter().any(|token| match token {
             Item::Key(k) => keys.contains(k),
             _ => false,
         })
     }
 
+    /// Returns all keys in this template.
     pub fn keys(&self) -> impl Iterator<Item = &&str> {
         self.items.iter().filter_map(|token| match token {
             Item::Key(k) => Some(k),
@@ -160,39 +163,116 @@ impl<'s> Template<'s> {
     pub fn set_default(&mut self, default: &dyn Display) {
         self.default = Some(Cow::Owned(default.to_string()));
     }
+
+    /// Cast `Template<'s>` to `Template<'t>` where `'s` is a subtype of `'t`,
+    /// meaning that `Template<'s>` outlives `Template<'t>`.
+    pub fn cast<'t>(self) -> Template<'t>
+    where
+        's: 't,
+    {
+        Template {
+            items: match self.items {
+                Cow::Owned(vec) => Cow::Owned(vec),
+                Cow::Borrowed(slice) => Cow::Borrowed(slice as &'t [Item<'t>]),
+            },
+            default: self.default.map(|default| default as Cow<'t, str>),
+        }
+    }
 }
 
-impl<'s> Add for Template<'s> {
-    type Output = Self;
-
-    fn add(mut self, rhs: Self) -> Self::Output {
+impl<'s, 'rhs: 's> ops::AddAssign<&Template<'rhs>> for Template<'s> {
+    fn add_assign(&mut self, rhs: &Template<'rhs>) {
         self.items
             .to_mut()
             .extend(rhs.items.as_ref().iter().cloned());
+
+        if let Some(default) = &rhs.default {
+            self.default = Some(default.clone());
+        }
+    }
+}
+
+impl<'s, 'rhs: 's> ops::AddAssign<Template<'rhs>> for Template<'s> {
+    fn add_assign(&mut self, rhs: Template<'rhs>) {
+        match rhs.items {
+            Cow::Borrowed(items) => self.items.to_mut().extend(items.iter().cloned()),
+            Cow::Owned(items) => self.items.to_mut().extend(items.into_iter()),
+        }
+
         if let Some(default) = rhs.default {
             self.default = Some(default);
         }
+    }
+}
+
+impl<'s, 'item: 's> ops::AddAssign<Item<'item>> for Template<'s> {
+    fn add_assign(&mut self, item: Item<'item>) {
+        self.items.to_mut().push(item);
+    }
+}
+
+impl<'s, 'item: 's> ops::AddAssign<&Item<'item>> for Template<'s> {
+    fn add_assign(&mut self, item: &Item<'item>) {
+        self.add_assign(item.clone())
+    }
+}
+
+impl<'s, 'rhs: 's> ops::Add<Template<'rhs>> for Template<'s> {
+    type Output = Self;
+
+    fn add(mut self, rhs: Template<'rhs>) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
+impl<'s, 'rhs: 's> ops::Add<&Template<'rhs>> for Template<'s> {
+    type Output = Self;
+
+    fn add(mut self, rhs: &Template<'rhs>) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
+impl<'s, 'item: 's> ops::Add<Item<'item>> for Template<'s> {
+    type Output = Self;
+
+    fn add(mut self, item: Item<'item>) -> Self::Output {
+        self += item;
+        self
+    }
+}
+
+impl<'s, 'item: 's> ops::Add<&Item<'item>> for Template<'s> {
+    type Output = Self;
+
+    fn add(mut self, item: &Item<'item>) -> Self::Output {
+        self += item;
         self
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::Item::{Key, Text};
+    use crate::Template;
 
     #[test]
     fn concat_templates() {
-        let t1 = crate::template!(Text("Hello"), Key("name"));
-        let t2 = crate::template!(Text("have a"), Key("adjective"), Text("day"));
+        let t1 = crate::template!("Hello", { "name" });
+        let t2 = crate::template!("have a", { "adjective" }, "day");
         assert_eq!(
             t1 + t2,
-            crate::template!(
-                Text("Hello"),
-                Key("name"),
-                Text("have a"),
-                Key("adjective"),
-                Text("day")
-            ),
+            crate::template!("Hello", { "name" }, "have a", { "adjective" }, "day"),
         );
+    }
+
+    #[test]
+    fn test_cast() {
+        fn inner<'a>(_: &'a u32, _: Template<'a>) {}
+
+        let template: Template<'static> = crate::template!("hello");
+        let i = 1;
+        inner(&i, template.cast());
     }
 }

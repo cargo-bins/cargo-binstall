@@ -21,6 +21,7 @@ either = "1.8.1"
 home = "0.5.4"
 itertools = "0.10.5"
 jobslot = { version = "0.2.10", features = ["tokio"] }
+leon = { version = "1.0.0", path = "../leon" }
 maybe-owned = "0.3.4"
 miette = "5.6.0"
 normalize-path = { version = "0.2.0", path = "../normalize-path" }
@@ -30,7 +31,6 @@ serde = { version = "1.0.157", features = ["derive"] }
 strum = "0.24.1"
 tempfile = "3.4.0"
 thiserror = "1.0.40"
-tinytemplate = "1.2.1"
 # parking_lot for `tokio::sync::OnceCell::const_new`
 tokio = { version = "1.26.0", features = ["rt", "process", "sync", "signal", "parking_lot"], default-features = false }
 tracing = "0.1.37"

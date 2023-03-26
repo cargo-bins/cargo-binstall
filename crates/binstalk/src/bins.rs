@@ -5,9 +5,8 @@ use std::{
 };
 
 use compact_str::{format_compact, CompactString};
+use leon::Template;
 use normalize_path::NormalizePath;
-use serde::Serialize;
-use tinytemplate::TinyTemplate;
 use tracing::debug;
 
 use crate::{
@@ -80,7 +79,7 @@ impl BinFile {
     pub fn new(
         data: &Data<'_>,
         base_name: &str,
-        tt: &TinyTemplate,
+        tt: &Template<'_>,
         no_symlinks: bool,
     ) -> Result<Self, BinstallError> {
         let binary_ext = if data.target.contains("windows") {
@@ -95,7 +94,6 @@ impl BinFile {
             target: data.target,
             version: data.version,
             bin: base_name,
-            format: binary_ext,
             binary_ext,
         };
 
@@ -107,7 +105,7 @@ impl BinFile {
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
-            let path = ctx.render_with_compiled_tt(tt)?;
+            let path = tt.render(&ctx)?;
 
             let path_normalized = Path::new(&path).normalize();
 
@@ -238,7 +236,7 @@ pub struct Data<'a> {
     pub install_path: &'a Path,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 struct Context<'c> {
     pub name: &'c str,
     pub repo: Option<&'c str>,
@@ -246,18 +244,23 @@ struct Context<'c> {
     pub version: &'c str,
     pub bin: &'c str,
 
-    /// Soft-deprecated alias for binary-ext
-    pub format: &'c str,
-
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
-    #[serde(rename = "binary-ext")]
     pub binary_ext: &'c str,
 }
 
-impl<'c> Context<'c> {
-    /// * `tt` - must have a template with name "bin_dir"
-    fn render_with_compiled_tt(&self, tt: &TinyTemplate) -> Result<String, BinstallError> {
-        Ok(tt.render("bin_dir", self)?)
+impl leon::Values for Context<'_> {
+    fn get_value<'s>(&'s self, key: &str) -> Option<Cow<'s, str>> {
+        match key {
+            "name" => Some(Cow::Borrowed(self.name)),
+            "repo" => self.repo.map(Cow::Borrowed),
+            "target" => Some(Cow::Borrowed(self.target)),
+            "version" => Some(Cow::Borrowed(self.version)),
+            "bin" => Some(Cow::Borrowed(self.bin)),
+            "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
+            // Soft-deprecated alias for binary-ext
+            "format" => Some(Cow::Borrowed(self.binary_ext)),
+            _ => None,
+        }
     }
 }
 

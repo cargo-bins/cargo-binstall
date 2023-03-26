@@ -9,9 +9,9 @@ use std::{
 use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
+use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
-use tinytemplate::TinyTemplate;
 use tokio::task::block_in_place;
 use tracing::{debug, info, instrument, warn};
 
@@ -304,15 +304,13 @@ fn collect_bin_files(
         .map(Cow::Borrowed)
         .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data, extracted_files));
 
-    let mut tt = TinyTemplate::new();
-
-    tt.add_template("bin_dir", &bin_dir)?;
+    let template = Template::parse(&bin_dir)?;
 
     // Create bin_files
     let bin_files = package_info
         .binaries
         .iter()
-        .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &tt, no_symlinks))
+        .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &template, no_symlinks))
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
     let mut source_set = BTreeSet::new();

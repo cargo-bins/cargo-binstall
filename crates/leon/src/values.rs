@@ -5,14 +5,14 @@ use std::{
 };
 
 pub trait Values {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>>;
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>>;
 }
 
 impl<T> Values for &T
 where
     T: Values,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         T::get_value(self, key)
     }
 }
@@ -22,7 +22,7 @@ where
     K: AsRef<str>,
     V: AsRef<str>,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         self.iter().find_map(|(k, v)| {
             if k.as_ref() == key {
                 Some(Cow::Borrowed(v.as_ref()))
@@ -38,7 +38,7 @@ where
     K: AsRef<str>,
     V: AsRef<str>,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         (*self).get_value(key)
     }
 }
@@ -48,7 +48,7 @@ where
     K: AsRef<str>,
     V: AsRef<str>,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         self.as_slice().get_value(key)
     }
 }
@@ -58,7 +58,7 @@ where
     K: AsRef<str>,
     V: AsRef<str>,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         self.as_slice().get_value(key)
     }
 }
@@ -69,7 +69,7 @@ where
     V: AsRef<str>,
     S: BuildHasher,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         self.get(key).map(|v| Cow::Borrowed(v.as_ref()))
     }
 }
@@ -79,7 +79,7 @@ where
     K: Borrow<str> + Ord,
     V: AsRef<str>,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         self.get(key).map(|v| Cow::Borrowed(v.as_ref()))
     }
 }
@@ -87,25 +87,22 @@ where
 /// Workaround to allow using functions as [`Values`].
 ///
 /// As this isn't constructible you'll want to use [`vals()`] instead.
-pub struct ValuesFn<F>
-where
-    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
-{
+pub struct ValuesFn<F> {
     inner: F,
 }
 
-impl<F> Values for ValuesFn<F>
+impl<'s, F> Values for &'s ValuesFn<F>
 where
-    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
+    F: Fn(&str) -> Option<Cow<'s, str>> + 's,
 {
-    fn get_value<'s, 'k: 's>(&'s self, key: &'k str) -> Option<Cow<'s, str>> {
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         (self.inner)(key)
     }
 }
 
-impl<F> From<F> for ValuesFn<F>
+impl<'f, F> From<F> for ValuesFn<F>
 where
-    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
+    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
 {
     fn from(inner: F) -> Self {
         Self { inner }
@@ -123,11 +120,11 @@ where
 ///
 /// fn use_values(_values: impl Values) {}
 ///
-/// use_values(vals(|_| Some("hello".into())));
+/// use_values(&vals(|_| Some("hello".into())));
 /// ```
-pub const fn vals<F>(func: F) -> ValuesFn<F>
+pub const fn vals<'f, F>(func: F) -> ValuesFn<F>
 where
-    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
+    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
 {
     ValuesFn { inner: func }
 }
