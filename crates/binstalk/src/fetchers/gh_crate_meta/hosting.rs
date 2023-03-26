@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use leon::{template, Template};
+use leon::{template, Item, Template};
 use url::Url;
 
 use crate::errors::BinstallError;
@@ -129,7 +129,7 @@ fn apply_filenames_to_paths(
         .cartesian_product(paths.iter())
         .map(move |(filename, path)| {
             let mut template = path.clone() + filename;
-            template += suffix;
+            template += Item::Text(suffix);
             template
         })
 }
