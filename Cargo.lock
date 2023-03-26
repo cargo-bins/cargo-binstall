@@ -231,6 +231,7 @@ dependencies = [
  "itertools",
  "jobslot",
  "leon",
+ "leon-macros",
  "maybe-owned",
  "miette",
  "normalize-path",
