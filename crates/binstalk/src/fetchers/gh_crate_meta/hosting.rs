@@ -1,5 +1,6 @@
 use itertools::Itertools;
-use leon::{template, Item, Template};
+use leon::{Item, Template};
+use leon_macros::const_parse_template;
 use url::Url;
 
 use crate::errors::BinstallError;
@@ -16,62 +17,36 @@ pub enum RepositoryHost {
 /// Make sure to update possible_dirs in `bins::infer_bin_dir_template`
 /// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
 pub const FULL_FILENAMES: &[Template<'_>] = &[
-    template!("/", { "name" }, "-", { "target" }, "-v", { "version" }, {
-        "archive-suffix"
-    }),
-    template!("/", { "name" }, "-", { "target" }, "-", { "version" }, {
-        "archive-suffix"
-    }),
-    template!("/", { "name" }, "-", { "version" }, "-", { "target" }, {
-        "archive-suffix"
-    }),
-    template!("/", { "name" }, "-v", { "version" }, "-", { "target" }, {
-        "archive-suffix"
-    }),
-    template!("/", { "name" }, "_", { "target" }, "_v", { "version" }, {
-        "archive-suffix"
-    }),
-    template!("/", { "name" }, "_", { "target" }, "_", { "version" }, {
-        "archive-suffix"
-    }),
-    template!("/", { "name" }, "_", { "version" }, "_", { "target" }, {
-        "archive-suffix"
-    }),
-    template!("/", { "name" }, "_v", { "version" }, "_", { "target" }, {
-        "archive-suffix"
-    }),
+    const_parse_template!("/{ name }-{ target }-v{ version }{ archive-suffix }"),
+    const_parse_template!("/{ name }-{ target }-{ version }{ archive-suffix }"),
+    const_parse_template!("/{ name }-{ version }-{ target }{ archive-suffix }"),
+    const_parse_template!("/{ name }-v{ version }-{ target }{ archive-suffix }"),
+    const_parse_template!("/{ name }_{ target }_v{ version }{ archive-suffix }"),
+    const_parse_template!("/{ name }_{ target }_{ version }{ archive-suffix }"),
+    const_parse_template!("/{ name }_{ version }_{ target }{ archive-suffix }"),
+    const_parse_template!("/{ name }_v{ version }_{ target }{ archive-suffix }"),
 ];
 
 pub const NOVERSION_FILENAMES: &[Template<'_>] = &[
-    template!("/", { "name" }, "-", { "target" }, { "archive-suffix" }),
-    template!("/", { "name" }, "_", { "target" }, { "archive-suffix" }),
+    const_parse_template!("/{ name }-{ target }{ archive-suffix }"),
+    const_parse_template!("/{ name }_{ target }{ archive-suffix }"),
 ];
 
 const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
-    template!({ "repo" }, "/releases/download/", { "version" }),
-    template!({ "repo" }, "/releases/download/v", { "version" }),
+    const_parse_template!("{ repo }/releases/download/{ version }"),
+    const_parse_template!("{ repo }/releases/download/v{ version }"),
 ];
 
 const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
-    template!(
-        { "repo" },
-        "/-/releases/",
-        { "version" },
-        "/downloads/binaries"
-    ),
-    template!(
-        { "repo" },
-        "/-/releases/v",
-        { "version" },
-        "/downloads/binaries"
-    ),
+    const_parse_template!("{ repo }/-/releases/{ version }/downloads/binaries"),
+    const_parse_template!("{ repo }/-/releases/v{ version }/downloads/binaries"),
 ];
 
-const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template!({ "repo" }, "/downloads")];
+const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[const_parse_template!("{ repo }/downloads")];
 
 const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
-    template!({ "repo" }, "/files/binaries/", { "version" }),
-    template!({ "repo" }, "/files/binaries/v", { "version" }),
+    const_parse_template!("{ repo }/files/binaries/{  version }"),
+    const_parse_template!("{ repo }/files/binaries/v{ version }"),
 ];
 
 impl RepositoryHost {
