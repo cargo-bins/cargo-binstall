@@ -50,15 +50,15 @@ const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
 ];
 
 impl RepositoryHost {
-    pub fn guess_git_hosting_services(repo: &Url) -> Result<Self, BinstallError> {
+    pub fn guess_git_hosting_services(repo: &Url) -> Self {
         use RepositoryHost::*;
 
         match repo.domain() {
-            Some(domain) if domain.starts_with("github") => Ok(GitHub),
-            Some(domain) if domain.starts_with("gitlab") => Ok(GitLab),
-            Some(domain) if domain == "bitbucket.org" => Ok(BitBucket),
-            Some(domain) if domain == "sourceforge.net" => Ok(SourceForge),
-            _ => Ok(Unknown),
+            Some(domain) if domain.starts_with("github") => GitHub,
+            Some(domain) if domain.starts_with("gitlab") => GitLab,
+            Some(domain) if domain == "bitbucket.org" => BitBucket,
+            Some(domain) if domain == "sourceforge.net" => SourceForge,
+            _ => Unknown,
         }
     }
 

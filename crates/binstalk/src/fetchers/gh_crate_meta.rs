@@ -100,6 +100,38 @@ impl super::Fetcher for GhCrateMeta {
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
             let repo = self.data.resolve_final_repo_url(&self.client).await?;
+            let repository_host = repo
+                .as_ref()
+                .map(RepositoryHost::guess_git_hosting_services);
+
+            if let Some(RepositoryHost::GitHub) = repository_host {
+                // TODO: Add this as a new variable to Context.
+                //
+                // Add new variable to `GITHUB_RELEASE_PATHS` just before `{ version }`
+                // along with a `/`
+                let subcrate_name = (|| {
+                    let mut path_segments = repo.as_ref().unwrap().path_segments()?;
+                    // Skip repo owner
+                    path_segments.next()?;
+                    // Skip repo name
+                    path_segments.next()?;
+
+                    // Skip path segment "tree" and "main"
+                    if (path_segments.next()?, path_segments.next()?) == ("tree", "main") {
+                        return None;
+                    }
+
+                    // cargo-audit
+                    let subcrate_name = path_segments.next()?;
+
+                    if path_segments.next().is_some() {
+                        // A subcrate url should not contain anything more.
+                        None
+                    } else {
+                        Some(subcrate_name)
+                    }
+                })();
+            }
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -143,10 +175,8 @@ impl super::Fetcher for GhCrateMeta {
                 }
 
                 Either::Left(iter::once(template))
-            } else if let Some(repo) = repo.as_ref() {
-                if let Some(pkg_urls) =
-                    RepositoryHost::guess_git_hosting_services(repo)?.get_default_pkg_url_template()
-                {
+            } else if let Some(repository_host) = repository_host {
+                if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
                     Either::Right(pkg_urls.map(Template::cast))
                 } else {
                     warn!(
@@ -154,7 +184,7 @@ impl super::Fetcher for GhCrateMeta {
                             "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
                             "Please ask the upstream to provide it for target {}."
                         ),
-                        repo, self.target_data.target
+                        repo.as_ref().unwrap(), self.target_data.target
                     );
 
                     return Ok(false);
