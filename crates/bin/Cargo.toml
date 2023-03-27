@@ -46,7 +46,7 @@ tracing-log = { version = "0.1.3", default-features = false }
 tracing-subscriber = { version = "0.3.16", features = ["fmt", "json", "ansi"], default-features = false }
 
 [build-dependencies]
-embed-resource = "1.8.0"
+embed-resource = "2.0.0"
 
 [features]
 default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin"]
