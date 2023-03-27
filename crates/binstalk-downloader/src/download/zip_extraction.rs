@@ -3,14 +3,16 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use async_zip::read::stream::{Reading, ZipFileReader};
+use async_zip::{base::read::stream::Reading, tokio::read::stream::ZipFileReader};
 use bytes::{Bytes, BytesMut};
 use futures_lite::future::try_zip as try_join;
+use futures_util::io::Take;
 use thiserror::Error as ThisError;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, Take},
+    io::{AsyncRead, AsyncReadExt},
     sync::mpsc,
 };
+use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
 
 use super::{DownloadError, ExtractedFiles};
 use crate::utils::asyncify;
@@ -35,7 +37,7 @@ impl ZipError {
 }
 
 pub(super) async fn extract_zip_entry<R>(
-    zip_reader: &mut ZipFileReader<Reading<'_, Take<R>>>,
+    zip_reader: &mut ZipFileReader<Reading<'_, Take<Compat<R>>>>,
     path: &Path,
     buf: &mut BytesMut,
     extracted_files: &mut ExtractedFiles,
@@ -113,7 +115,7 @@ where
             Ok(())
         });
 
-        let read_task = copy_file_to_mpsc(zip_reader.reader(), tx, buf);
+        let read_task = copy_file_to_mpsc(zip_reader.reader().compat(), tx, buf);
 
         try_join(
             async move { write_task.await.map_err(From::from) },
@@ -131,7 +133,7 @@ where
 }
 
 async fn copy_file_to_mpsc<R: AsyncRead>(
-    entry_reader: &mut R,
+    mut entry_reader: R,
     tx: mpsc::Sender<Bytes>,
     buf: &mut BytesMut,
 ) -> Result<(), async_zip::error::ZipError>

@@ -68,6 +68,7 @@ dependencies = [
  "bzip2",
  "flate2",
  "futures-core",
+ "futures-io",
  "memchr",
  "pin-project-lite",
  "tokio",
@@ -89,16 +90,18 @@ dependencies = [
 
 [[package]]
 name = "async_zip"
-version = "0.0.12"
+version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2105142db9c6203b9dadc83b0553394589a6cb31b1449a3b46b42f47c3434d0"
+checksum = "79eaa2b44cfdce59cfff6cb013c96900635085fe7c28fbcbe926c9e5ad0ddfbc"
 dependencies = [
  "async-compression",
  "crc32fast",
+ "futures-util",
  "log",
  "pin-project",
  "thiserror",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -201,6 +204,7 @@ dependencies = [
  "digest",
  "flate2",
  "futures-lite",
+ "futures-util",
  "generic-array",
  "httpdate",
  "reqwest",
@@ -2459,6 +2463,7 @@ checksum = "5427d89453009325de0d8f342c9490009f76e999cb7672d77e46267448f7e6b2"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",

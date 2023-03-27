@@ -6,7 +6,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use async_zip::read::stream::ZipFileReader;
+use async_zip::tokio::read::stream::ZipFileReader;
 use bytes::{Bytes, BytesMut};
 use futures_lite::stream::Stream;
 use tokio::sync::mpsc;
