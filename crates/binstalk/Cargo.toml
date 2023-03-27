@@ -10,7 +10,7 @@ edition = "2021"
 license = "GPL-3.0"
 
 [dependencies]
-async-trait = "0.1.67"
+async-trait = "0.1.68"
 binstalk-downloader = { version = "0.4.2", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
 binstalk-types = { version = "0.3.0", path = "../binstalk-types" }
 cargo_toml = "0.15.2"
