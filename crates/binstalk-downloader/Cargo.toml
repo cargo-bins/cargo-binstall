@@ -12,7 +12,7 @@ license = "GPL-3.0"
 [dependencies]
 async-trait = "0.1.68"
 async-compression = { version = "0.3.15", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
-async_zip = { version = "0.0.13", features = ["deflate", "bzip2", "lzma", "zstd", "xz"] }
+async_zip = { version = "0.0.13", features = ["deflate", "bzip2", "lzma", "zstd", "xz", "tokio"] }
 binstalk-types = { version = "0.3.0", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
@@ -20,6 +20,7 @@ compact_str = "0.7.0"
 digest = "0.10.6"
 flate2 = { version = "1.0.25", default-features = false }
 futures-lite = { version = "1.12.0", default-features = false }
+futures-util = "0.3.27"
 generic-array = "0.14.6"
 httpdate = "1.0.2"
 reqwest = { version = "0.11.15", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
