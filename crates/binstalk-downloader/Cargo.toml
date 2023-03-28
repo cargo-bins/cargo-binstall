@@ -33,7 +33,7 @@ serde_json = { version = "1.0.94", optional = true }
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.4.0"
 thiserror = "1.0.40"
-tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
+tokio = { version = "1.27.0", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
 tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.7", features = ["io"] }
 tower = { version = "0.4.13", features = ["limit", "util"] }
