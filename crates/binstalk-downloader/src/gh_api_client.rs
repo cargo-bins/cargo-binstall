@@ -99,6 +99,7 @@ pub struct GhApiClient(Arc<Inner>);
 
 fn gh_prefixed(token: &str) -> bool {
     matches!((token.get(0..2), token.get(3..4)), (Some("gh"), Some("_")))
+        || token.starts_with("github_")
 }
 
 impl GhApiClient {
@@ -107,7 +108,7 @@ impl GhApiClient {
             if gh_prefixed(&auth_token) {
                 Some(auth_token)
             } else {
-                warn!("Invalid auth_token, expected 'gh*_', fallback to unauthorized mode");
+                warn!("Invalid auth_token, expected 'gh*_' or `github_*`, fallback to unauthorized mode");
                 None
             }
         });
