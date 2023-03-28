@@ -23,7 +23,7 @@ futures-lite = { version = "1.12.0", default-features = false }
 futures-util = "0.3.27"
 generic-array = "0.14.6"
 httpdate = "1.0.2"
-reqwest = { version = "0.11.15", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
+reqwest = { version = "0.11.16", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
 serde = { version = "1.0.157", features = ["derive"], optional = true }
 serde_json = { version = "1.0.94", optional = true }
 # Use a fork here since we need PAX support, but the upstream
