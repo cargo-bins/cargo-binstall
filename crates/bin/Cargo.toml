@@ -27,7 +27,7 @@ binstalk-manifests = { path = "../binstalk-manifests", version = "0.4.1" }
 clap = { version = "4.1.14", features = ["derive", "env"] }
 compact_str = "0.7.0"
 dirs = "5.0.0"
-file-format = { version = "0.15.0", default-features = false }
+file-format = { version = "0.16.0", default-features = false }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
 gh-token = "0.1.1"
 log = { version = "0.4.17", features = ["std"] }
