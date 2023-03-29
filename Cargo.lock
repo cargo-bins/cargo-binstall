@@ -786,9 +786,9 @@ dependencies = [
 
 [[package]]
 name = "file-format"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbe20e5f282c61432e5cf0e33185e5dde032b2c2e4281c4735c31ce5b455a869"
+checksum = "71a5df8a0f4b423e8bc25526b39852bf64dfb7bd734ed99ed343c5925762c9c8"
 
 [[package]]
 name = "filetime"
