@@ -38,7 +38,7 @@ semver = "1.0.17"
 strum = "0.24.1"
 strum_macros = "0.24.3"
 supports-color = "2.0.0"
-tempfile = "3.4.0"
+tempfile = "3.5.0"
 tokio = { version = "1.27.0", features = ["rt-multi-thread"], default-features = false }
 tracing-core = "0.1.30"
 tracing = { version = "0.1.37", default-features = false }
