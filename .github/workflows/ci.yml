@@ -85,6 +85,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just ci-install-deps
+    - run: just avoid-dev-deps
     - run: just check
 
   apple-m1-check:
@@ -102,6 +103,7 @@ jobs:
         # which works better when we provide it with GITHUB_TOKEN.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - run: just avoid-dev-deps
     - run: just check
 
   windows-aarch64-check:
@@ -119,6 +121,7 @@ jobs:
         # which works better when we provide it with GITHUB_TOKEN.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - run: just avoid-dev-deps
     - run: just check
 
   lint:
@@ -142,6 +145,7 @@ jobs:
 
     - run: just toolchain rustfmt,clippy
     - run: just ci-install-deps
+    - run: just avoid-dev-deps
     - run: just lint
 
   # Dummy job to have a stable name for the "all tests pass" requirement
