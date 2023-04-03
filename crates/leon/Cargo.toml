@@ -11,7 +11,7 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 clap = { version = "4.2.1", features = ["derive"], optional = true }
-miette = { version = "5.5.0", default-features = false, optional = true }
+miette = { version = "5.7.0", default-features = false, optional = true }
 thiserror = "1.0.38"
 
 [features]
