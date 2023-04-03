@@ -58,6 +58,12 @@ jobs:
     - if: runner.os != 'Windows'
       run: ls -shal packages/
 
+    - name: Run unit tests in release build
+      if: "matrix.r"
+      run: just unit-tests
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Ensure release binary is runnable
       if: "matrix.r"
       run: just e2e-tests
