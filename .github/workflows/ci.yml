@@ -36,16 +36,12 @@ jobs:
             os: macos-latest
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            c: true
           - target: x86_64-pc-windows-msvc
             os: windows-latest
 
     runs-on: ${{ matrix.os }}
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
-      JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
 
     steps:
     - uses: actions/checkout@v3
@@ -71,6 +67,7 @@ jobs:
         - armv7-unknown-linux-gnueabihf
         - aarch64-unknown-linux-musl
         - aarch64-unknown-linux-gnu
+        - x86_64-unknown-linux-musl
 
     runs-on: ubuntu-latest
     env:
