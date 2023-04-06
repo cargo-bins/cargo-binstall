@@ -163,9 +163,9 @@ jobs:
     # fail if ANY dependency has failed or been skipped or cancelled
     - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') || contains(needs.*.result, 'cancelled')"
       run: exit 1
+    # Wait for 30s before release build to avoid overloading GitHub.
+    - run: sleep 30
 
-  # if everything succeeds and PR is ready for review, test the release/package process
   release-builds:
-    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'workflow_dispatch'
     needs: tests-pass
     uses: ./.github/workflows/release-build.yml
