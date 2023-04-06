@@ -220,13 +220,19 @@ fmt-check: fmt
 
 lint: clippy fmt-check
 
-# Some dev-dependencies require a newer version of Rust, but it doesn't matter for MSRV check
+# Rm dev-dependencies for `cargo-check` and clippy to speedup compilation.
 # This is a workaround for the cargo nightly option `-Z avoid-dev-deps`
 avoid-dev-deps:
     for crate in ./crates/*; do \
         sed 's/\[dev-dependencies\]/[workaround-avoid-dev-deps]/g' "$crate/Cargo.toml" >"$crate/Cargo.toml.tmp"; \
         mv "$crate/Cargo.toml.tmp" "$crate/Cargo.toml" \
     ; done
+
+# leon dev-dependencies pulls in crates for benchmark but not used in test.
+# This is a workaround for the lack of `benchmark-dependencies`.
+avoid-benchmark-deps:
+    sed 's/\[dev-dependencies\]/[workaround-avoid-dev-deps]/g' ./crates/leon/Cargo.toml >./crates/leon/Cargo.toml.tmp
+    mv ./crates/leon/Cargo.toml.tmp ./crates/leon/Cargo.toml
 
 package-dir:
     rm -rf packages/prep

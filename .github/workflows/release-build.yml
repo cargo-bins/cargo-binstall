@@ -60,7 +60,9 @@ jobs:
 
     - name: Run unit tests in release build
       if: "matrix.r"
-      run: just unit-tests
+      run: |
+        just avoid-benchmark-deps
+        just unit-tests
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
