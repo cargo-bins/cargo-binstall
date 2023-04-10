@@ -89,8 +89,8 @@ impl CratesToml<'_> {
             this: &CratesToml<'_>,
             writer: &mut dyn io::Write,
         ) -> Result<(), CratesTomlParseError> {
-            let data = toml_edit::ser::to_vec(&this)?;
-            writer.write_all(&data)?;
+            let data = toml_edit::ser::to_string_pretty(&this)?;
+            writer.write_all(data.as_bytes())?;
             Ok(())
         }
 
