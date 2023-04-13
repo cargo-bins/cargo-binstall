@@ -25,7 +25,7 @@ generic-array = "0.14.7"
 httpdate = "1.0.2"
 reqwest = { version = "0.11.16", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
 serde = { version = "1.0.160", features = ["derive"], optional = true }
-serde_json = { version = "1.0.95", optional = true }
+serde_json = { version = "1.0.96", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
 #
