@@ -1299,16 +1299,16 @@ dependencies = [
 
 [[package]]
 name = "jobslot"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6650f8f817795211f076e9923ba9f35e66aad1946ac19c960ef5b114cd75c727"
+checksum = "f0953ea85c43ff26a6e5bd84152363d694a3a82435df66be0880bef38913cce9"
 dependencies = [
  "cfg-if",
  "getrandom",
  "libc",
  "scopeguard",
  "tokio",
- "windows-sys 0.45.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
