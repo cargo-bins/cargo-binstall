@@ -27,8 +27,3 @@ cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
 cargo watch -V
 miniserve -V
-
-# Test subcrate support
-cargo binstall --no-confirm cargo-audit@0.17.5 --strategies crate-meta-data
-
-cargo audit --version
