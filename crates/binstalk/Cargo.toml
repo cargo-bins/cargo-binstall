@@ -20,7 +20,7 @@ detect-targets = { version = "0.1.7", path = "../detect-targets" }
 either = "1.8.1"
 home = "0.5.4"
 itertools = "0.10.5"
-jobslot = { version = "0.2.10", features = ["tokio"] }
+jobslot = { version = "0.2.11", features = ["tokio"] }
 leon = { version = "1.0.0", path = "../leon" }
 maybe-owned = "0.3.4"
 miette = "5.7.0"
