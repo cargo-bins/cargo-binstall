@@ -123,7 +123,7 @@
 //!
 //! # Parse template at compile time
 //!
-//! [`leon-macros`] provides proc-macros [`leon_macros::const_parse_template!`]
+//! [`leon-macros`] provides proc-macros [`leon_macros::template!`]
 //! to parse the template at compile time.
 //!
 //! NOTE that in order to use that it, you would have to add leon as a dependency
