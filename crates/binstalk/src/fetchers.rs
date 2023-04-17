@@ -4,8 +4,8 @@ use compact_str::CompactString;
 pub use gh_crate_meta::*;
 pub use quickinstall::*;
 use tokio::sync::OnceCell;
+use tracing::instrument;
 use url::Url;
-using tracing::instrument;
 
 use crate::{
     errors::BinstallError,
@@ -102,7 +102,6 @@ impl Data {
 
     #[instrument(level = "debug")]
     async fn get_repo_info(&self, client: &Client) -> Result<&Option<RepoInfo>, BinstallError> {
-
         self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
