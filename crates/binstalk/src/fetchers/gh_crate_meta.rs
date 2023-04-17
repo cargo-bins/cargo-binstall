@@ -330,7 +330,7 @@ impl leon::Values for Context<'_> {
 
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
 
-            "subcrate_prefix" => self.subcrate_prefix.map(Cow::Borrowed),
+            "subcrate_prefix" => Some(Cow::Borrowed(self.subcrate_prefix.unwrap_or(""))),
 
             _ => None,
         }
