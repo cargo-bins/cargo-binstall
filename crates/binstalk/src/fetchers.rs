@@ -4,7 +4,7 @@ use compact_str::CompactString;
 pub use gh_crate_meta::*;
 pub use quickinstall::*;
 use tokio::sync::OnceCell;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::{
@@ -109,14 +109,18 @@ impl Data {
                         let mut repo = client.get_redirected_final_url(Url::parse(repo)?).await?;
                         let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
-                        Ok(Some(RepoInfo {
+                        let repo_info = RepoInfo {
                             subcrate_prefix: RepoInfo::detect_subcrate_prefix(
                                 &mut repo,
                                 repository_host,
                             ),
                             repo,
                             repository_host,
-                        }))
+                        };
+
+                        debug!("Resolved repo_info = {repo_info:#?}");
+
+                        Ok(Some(repo_info))
                     } else {
                         Ok(None)
                     }
