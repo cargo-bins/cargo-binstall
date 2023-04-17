@@ -4,7 +4,7 @@ set -euxo pipefail
 
 unset CARGO_INSTALL_ROOT
 
-crates="b3sum@1.3.3 cargo-release@0.24.5 cargo-binstall@0.20.1 cargo-watch@8.4.0 miniserve@0.23.0 sccache@0.3.3"
+crates="b3sum@1.3.3 cargo-release@0.24.9 cargo-binstall@0.20.1 cargo-watch@8.4.0 miniserve@0.23.0 sccache@0.3.3"
 
 export CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
 othertmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-test')
