@@ -1346,7 +1346,7 @@ dependencies = [
  "leon",
  "proc-macro2",
  "quote",
- "syn 2.0.10",
+ "syn 2.0.15",
 ]
 
 [[package]]
