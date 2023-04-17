@@ -4,7 +4,8 @@ set -euxo pipefail
 
 unset CARGO_INSTALL_ROOT
 
-export CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
+CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
+export CARGO_HOME
 othertmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-test')
 export PATH="$CARGO_HOME/bin:$othertmpdir/bin:$PATH"
 
