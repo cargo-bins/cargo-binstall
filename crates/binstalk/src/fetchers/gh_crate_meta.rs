@@ -20,7 +20,7 @@ use crate::{
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
-use super::{Data, TargetData};
+use super::{Data, RepoInfo, TargetData};
 
 pub(crate) mod hosting;
 
@@ -108,7 +108,6 @@ impl super::Fetcher for GhCrateMeta {
             let info = self.data.get_repo_info(&self.client).await?.as_ref();
 
             let repo = info.map(|info| &info.repo);
-            let repository_host = info.map(|info| info.repository_host);
             let subcrate_prefix = info.and_then(|info| info.subcrate_prefix.as_deref());
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
@@ -153,7 +152,12 @@ impl super::Fetcher for GhCrateMeta {
                 }
 
                 Either::Left(iter::once(template))
-            } else if let Some(repository_host) = repository_host {
+            } else if let Some(RepoInfo {
+                repo,
+                repository_host,
+                ..
+            }) = info
+            {
                 if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
                     Either::Right(pkg_urls.map(Template::cast))
                 } else {
@@ -162,7 +166,7 @@ impl super::Fetcher for GhCrateMeta {
                             "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
                             "Please ask the upstream to provide it for target {}."
                         ),
-                        repo.unwrap(), self.target_data.target
+                        repo, self.target_data.target
                     );
 
                     return Ok(false);
