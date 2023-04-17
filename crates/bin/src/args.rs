@@ -31,7 +31,7 @@ use strum_macros::EnumCount;
 pub struct Args {
     /// Packages to install.
     ///
-    /// Syntax: crate[@version]
+    /// Syntax: `crate[@version]`
     ///
     /// Each value is either a crate name alone, or a crate name followed by @ and the version to
     /// install. The version syntax is as with the --version option.

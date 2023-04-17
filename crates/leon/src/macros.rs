@@ -29,7 +29,7 @@ macro_rules! __template_impl {
 }
 
 /// Construct a template constant using syntax similar to the template to be
-/// passed to [`Template::parse`].
+/// passed to [`Template::parse`](crate::Template::parse).
 ///
 /// This is essentially a shorthand for:
 ///

@@ -231,6 +231,7 @@ dependencies = [
  "itertools",
  "jobslot",
  "leon",
+ "leon-macros",
  "maybe-owned",
  "miette",
  "normalize-path",
@@ -1336,6 +1337,16 @@ dependencies = [
  "serde",
  "thiserror",
  "tinytemplate",
+]
+
+[[package]]
+name = "leon-macros"
+version = "0.0.0"
+dependencies = [
+ "leon",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.15",
 ]
 
 [[package]]

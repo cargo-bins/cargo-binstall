@@ -52,3 +52,7 @@ updates:
     directory: "/crates/leon"
     schedule:
       interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/leon-macros"
+    schedule:
+      interval: "daily"

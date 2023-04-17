@@ -47,7 +47,7 @@ impl<'s> Template<'s> {
     /// assert_eq!(TEMPLATE.render(&[("unrelated", "value")]).unwrap(), "Hello world");
     /// ```
     ///
-    /// For an even more ergonomic syntax, see the [`leon::template!`] macro.
+    /// For an even more ergonomic syntax, see the [`leon::template!`](crate::template!) macro.
     pub const fn new(items: &'s [Item<'s>], default: Option<&'s str>) -> Template<'s> {
         Template {
             items: Cow::Borrowed(items),

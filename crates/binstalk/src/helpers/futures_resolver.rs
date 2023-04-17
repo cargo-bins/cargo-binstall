@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin};
 use tokio::sync::mpsc;
 
-/// Given multiple futures with output = Result<Option<T>, E>,
+/// Given multiple futures with output = `Result<Option<T>, E>`,
 /// returns the the first one that returns either `Err(_)` or
 /// `Ok(Some(_))`.
 pub struct FuturesResolver<T, E> {

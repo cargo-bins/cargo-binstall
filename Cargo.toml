@@ -10,6 +10,7 @@ members = [
     "crates/normalize-path",
     "crates/detect-targets",
     "crates/leon",
+    "crates/leon-macros",
 ]
 
 [profile.release]

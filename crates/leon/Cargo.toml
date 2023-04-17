@@ -8,6 +8,7 @@ rust-version = "1.61.0"
 authors = ["Félix Saparelli <felix@passcod.name>"]
 edition = "2021"
 license = "Apache-2.0 OR MIT"
+exclude = ["fuzz"]
 
 [dependencies]
 clap = { version = "4.2.2", features = ["derive"], optional = true }
