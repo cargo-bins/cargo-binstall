@@ -111,29 +111,43 @@ impl super::Fetcher for GhCrateMeta {
                 .as_ref()
                 .map(RepositoryHost::guess_git_hosting_services);
 
-            let subcrate_prefix = (|| {
-                let mut path_segments = repo.as_ref().unwrap().path_segments()?;
-                // Skip repo owner
-                path_segments.next()?;
-                // Skip repo name
-                path_segments.next()?;
+            let subcrate = (|| {
+                if let Some(RepositoryHost::GitHub) = repository_host {
+                    let repo = repo.as_ref().unwrap();
+                    let mut path_segments = repo.path_segments()?;
 
-                // Skip path segment "tree" and "main"
-                if (path_segments.next()?, path_segments.next()?) == ("tree", "main") {
-                    return None;
-                }
+                    let repo_owner = path_segments.next()?;
+                    let repo_name = path_segments.next()?;
 
-                // cargo-audit
-                let subcrate_name = path_segments.next()?;
+                    // Skip path segment "tree" and "main"
+                    if (path_segments.next()?, path_segments.next()?) != ("tree", "main") {
+                        return None;
+                    }
 
-                if path_segments.next().is_some() {
-                    // A subcrate url should not contain anything more.
-                    None
+                    // cargo-audit
+                    let subcrate_name = path_segments.next()?;
+
+                    if path_segments.next().is_some() {
+                        // A subcrate url should not contain anything more.
+                        None
+                    } else {
+                        Some((
+                            // %2F is escaped form of '/'
+                            format!("{subcrate_name}%2F"),
+                            {
+                                let mut url = repo.clone();
+                                url.set_path(&format!("{repo_owner}/{repo_name}"));
+                                url
+                            },
+                        ))
+                    }
                 } else {
-                    // %2F is escaped form of '/'
-                    Some(format!("{subcrate_name}%2F"))
+                    None
                 }
             })();
+
+            let subcrate_prefix = subcrate.as_ref().map(|t| t.0.as_str());
+            let repo = subcrate.as_ref().map(|t| &t.1).or(repo.as_ref());
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -186,7 +200,7 @@ impl super::Fetcher for GhCrateMeta {
                             "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
                             "Please ask the upstream to provide it for target {}."
                         ),
-                        repo.as_ref().unwrap(), self.target_data.target
+                        repo.unwrap(), self.target_data.target
                     );
 
                     return Ok(false);
@@ -204,7 +218,7 @@ impl super::Fetcher for GhCrateMeta {
             };
 
             // Convert Option<Url> to Option<String> to reduce size of future.
-            let repo = repo.as_ref().map(|u| u.as_str().trim_end_matches('/'));
+            let repo = repo.map(|u| u.as_str().trim_end_matches('/'));
 
             // Use reference to self to fix error of closure
             // launch_baseline_find_tasks which moves `this`
@@ -230,7 +244,7 @@ impl super::Fetcher for GhCrateMeta {
                         pkg_fmt,
                         &pkg_url,
                         repo,
-                        subcrate_prefix.as_deref(),
+                        subcrate_prefix,
                     );
                 }
             }
