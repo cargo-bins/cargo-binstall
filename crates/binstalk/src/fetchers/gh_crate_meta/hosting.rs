@@ -31,20 +31,20 @@ pub const NOVERSION_FILENAMES: &[Template<'_>] = &[
 ];
 
 const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
-    template!("{ repo }/releases/download/{ version }"),
-    template!("{ repo }/releases/download/v{ version }"),
+    template!("{ repo }/releases/download/{ subcrate_prefix }{ version }"),
+    template!("{ repo }/releases/download/{ subcrate_prefix }v{ version }"),
 ];
 
 const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
-    template!("{ repo }/-/releases/{ version }/downloads/binaries"),
-    template!("{ repo }/-/releases/v{ version }/downloads/binaries"),
+    template!("{ repo }/-/releases/{ subcrate_prefix }{ version }/downloads/binaries"),
+    template!("{ repo }/-/releases/{ subcrate_prefix }v{ version }/downloads/binaries"),
 ];
 
 const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template!("{ repo }/downloads")];
 
 const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
-    template!("{ repo }/files/binaries/{  version }"),
-    template!("{ repo }/files/binaries/v{ version }"),
+    template!("{ repo }/files/binaries/{ subcrate_prefix }{  version }"),
+    template!("{ repo }/files/binaries/{ subcrate_prefix }v{ version }"),
 ];
 
 impl RepositoryHost {
