@@ -3,8 +3,6 @@ use leon::{Item, Template};
 use leon_macros::template;
 use url::Url;
 
-use crate::errors::BinstallError;
-
 #[derive(Copy, Clone, Debug)]
 pub enum RepositoryHost {
     GitHub,

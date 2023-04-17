@@ -40,9 +40,16 @@ impl GhCrateMeta {
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
         repo: Option<&str>,
+        subcrate_prefix: Option<&str>,
     ) {
         let render_url = |ext| {
-            let ctx = Context::from_data_with_repo(&self.data, &self.target_data.target, ext, repo);
+            let ctx = Context::from_data_with_repo(
+                &self.data,
+                &self.target_data.target,
+                ext,
+                repo,
+                subcrate_prefix,
+            );
             match ctx.render_url_with_compiled_tt(pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
@@ -104,34 +111,29 @@ impl super::Fetcher for GhCrateMeta {
                 .as_ref()
                 .map(RepositoryHost::guess_git_hosting_services);
 
-            if let Some(RepositoryHost::GitHub) = repository_host {
-                // TODO: Add this as a new variable to Context.
-                //
-                // Add new variable to `GITHUB_RELEASE_PATHS` just before `{ version }`
-                // along with a `/`
-                let subcrate_name = (|| {
-                    let mut path_segments = repo.as_ref().unwrap().path_segments()?;
-                    // Skip repo owner
-                    path_segments.next()?;
-                    // Skip repo name
-                    path_segments.next()?;
+            let subcrate_prefix = (|| {
+                let mut path_segments = repo.as_ref().unwrap().path_segments()?;
+                // Skip repo owner
+                path_segments.next()?;
+                // Skip repo name
+                path_segments.next()?;
 
-                    // Skip path segment "tree" and "main"
-                    if (path_segments.next()?, path_segments.next()?) == ("tree", "main") {
-                        return None;
-                    }
+                // Skip path segment "tree" and "main"
+                if (path_segments.next()?, path_segments.next()?) == ("tree", "main") {
+                    return None;
+                }
 
-                    // cargo-audit
-                    let subcrate_name = path_segments.next()?;
+                // cargo-audit
+                let subcrate_name = path_segments.next()?;
 
-                    if path_segments.next().is_some() {
-                        // A subcrate url should not contain anything more.
-                        None
-                    } else {
-                        Some(subcrate_name)
-                    }
-                })();
-            }
+                if path_segments.next().is_some() {
+                    // A subcrate url should not contain anything more.
+                    None
+                } else {
+                    // %2F is escaped form of '/'
+                    Some(format!("{subcrate_name}%2F"))
+                }
+            })();
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -223,7 +225,13 @@ impl super::Fetcher for GhCrateMeta {
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    this.launch_baseline_find_tasks(&resolver, pkg_fmt, &pkg_url, repo);
+                    this.launch_baseline_find_tasks(
+                        &resolver,
+                        pkg_fmt,
+                        &pkg_url,
+                        repo,
+                        subcrate_prefix.as_deref(),
+                    );
                 }
             }
 
@@ -301,6 +309,8 @@ struct Context<'c> {
 
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
     pub binary_ext: &'c str,
+
+    pub subcrate_prefix: Option<&'c str>,
 }
 
 impl leon::Values for Context<'_> {
@@ -320,6 +330,8 @@ impl leon::Values for Context<'_> {
 
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
 
+            "subcrate_prefix" => self.subcrate_prefix.map(Cow::Borrowed),
+
             _ => None,
         }
     }
@@ -331,6 +343,7 @@ impl<'c> Context<'c> {
         target: &'c str,
         archive_suffix: Option<&'c str>,
         repo: Option<&'c str>,
+        subcrate_prefix: Option<&'c str>,
     ) -> Self {
         let archive_format = archive_suffix.map(|archive_suffix| {
             if archive_suffix.is_empty() {
@@ -355,12 +368,19 @@ impl<'c> Context<'c> {
             } else {
                 ""
             },
+            subcrate_prefix,
         }
     }
 
     #[cfg(test)]
     pub(self) fn from_data(data: &'c Data, target: &'c str, archive_format: &'c str) -> Self {
-        Self::from_data_with_repo(data, target, Some(archive_format), data.repo.as_deref())
+        Self::from_data_with_repo(
+            data,
+            target,
+            Some(archive_format),
+            data.repo.as_deref(),
+            None,
+        )
     }
 
     /// * `tt` - must have added a template named "pkg_url".
