@@ -23,7 +23,6 @@ use crate::{
 use super::{Data, TargetData};
 
 pub(crate) mod hosting;
-use hosting::RepositoryHost;
 
 pub struct GhCrateMeta {
     client: Client,
@@ -106,48 +105,11 @@ impl super::Fetcher for GhCrateMeta {
 
     fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
         AutoAbortJoinHandle::spawn(async move {
-            let repo = self.data.resolve_final_repo_url(&self.client).await?;
-            let repository_host = repo
-                .as_ref()
-                .map(RepositoryHost::guess_git_hosting_services);
+            let info = self.data.get_repo_info(&self.client).await?.as_ref();
 
-            let subcrate = (|| {
-                if let Some(RepositoryHost::GitHub) = repository_host {
-                    let repo = repo.as_ref().unwrap();
-                    let mut path_segments = repo.path_segments()?;
-
-                    let repo_owner = path_segments.next()?;
-                    let repo_name = path_segments.next()?;
-
-                    // Skip path segment "tree" and "main"
-                    if (path_segments.next()?, path_segments.next()?) != ("tree", "main") {
-                        return None;
-                    }
-
-                    // cargo-audit
-                    let subcrate_name = path_segments.next()?;
-
-                    if path_segments.next().is_some() {
-                        // A subcrate url should not contain anything more.
-                        None
-                    } else {
-                        Some((
-                            // %2F is escaped form of '/'
-                            format!("{subcrate_name}%2F"),
-                            {
-                                let mut url = repo.clone();
-                                url.set_path(&format!("{repo_owner}/{repo_name}"));
-                                url
-                            },
-                        ))
-                    }
-                } else {
-                    None
-                }
-            })();
-
-            let subcrate_prefix = subcrate.as_ref().map(|t| t.0.as_str());
-            let repo = subcrate.as_ref().map(|t| &t.1).or(repo.as_ref());
+            let repo = info.map(|info| &info.repo);
+            let repository_host = info.map(|info| info.repository_host);
+            let subcrate_prefix = info.and_then(|info| info.subcrate_prefix.as_deref());
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 

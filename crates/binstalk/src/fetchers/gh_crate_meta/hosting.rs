@@ -3,7 +3,7 @@ use leon::{Item, Template};
 use leon_macros::template;
 use url::Url;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum RepositoryHost {
     GitHub,
     GitLab,
