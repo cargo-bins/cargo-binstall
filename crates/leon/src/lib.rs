@@ -121,24 +121,21 @@
 //! assert_eq!(template.render(&values).unwrap().as_str(), "hello pontifex");
 //! ```
 //!
-//! # Parse template at compile time
+//! //! # Compile-time parsing
 //!
-//! [`leon-macros`] provides proc-macros [`leon_macros::template!`]
-//! to parse the template at compile time.
-//!
-//! NOTE that in order to use that it, you would have to add leon as a dependency
-//! to your crate first.
-//!
-//! If proc-macro is way too costy for you, have a try at [`leon::template`],
-//! a light-weight alternative that requires you to split items into text and
-//! keys yourself but does not bring in proc-macro2/syn/quote.
+//! You can either use [`leon-macros`](https://docs.rs/leon-macros)'s
+//! [`template!`](https://docs.rs/leon-macros/latest/leon_macros/macro.template.html),
+//! a proc-macro, with the exact same syntax as the normal parser, or this
+//! crate's [`template!`] rules-macro, which requires a slightly different
+//! syntax but doesn't bring in additional dependencies. In either case,
+//! the leon library is required as a runtime dependency.
 //!
 //! # Errors
 //!
-//! Leon will return a [`LeonError::InvalidTemplate`] if the template fails to
+//! Leon will return a [`ParseError`] if the template fails to
 //! parse. This can happen if there are unbalanced braces, or if a key is empty.
 //!
-//! Leon will return a [`LeonError::MissingKey`] if a key is missing from keyed
+//! Leon will return a [`RenderError::MissingKey`] if a key is missing from keyed
 //! values passed to [`Template::render()`], unless a default value is provided
 //! with [`Template.default`].
 //!

@@ -7,7 +7,7 @@ pub enum RenderError {
     #[error("missing key `{0}`")]
     MissingKey(String),
 
-    /// An I/O error passed through from [`Template::render_into`].
+    /// An I/O error passed through from [`Template::render_into`](crate::Template::render_into).
     #[error("write failed: {0}")]
     Io(#[from] std::io::Error),
 }

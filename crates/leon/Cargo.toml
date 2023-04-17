@@ -24,7 +24,6 @@ miette = ["dep:miette"]
 criterion = { version = "0.4.0", default-features = false, features = ["cargo_bench_support"] }
 serde = { version = "1.0.160", features = ["derive"] }
 tinytemplate = "1.2.1"
-leon-macros = { version = "0.0.0", path = "../leon-macros" }
 
 [[bench]]
 name = "values"
