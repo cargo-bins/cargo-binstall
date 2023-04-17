@@ -121,7 +121,7 @@
 //! assert_eq!(template.render(&values).unwrap().as_str(), "hello pontifex");
 //! ```
 //!
-//! //! # Compile-time parsing
+//! # Compile-time parsing
 //!
 //! You can either use [`leon-macros`](https://docs.rs/leon-macros)'s
 //! [`template!`](https://docs.rs/leon-macros/latest/leon_macros/macro.template.html),
