@@ -44,7 +44,7 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: release-${{ matrix.t }}
-        tools: cargo-auditable
+        tools: cargo-auditable,cargo-nextest
       env:
         # just-setup use binstall to install sccache and cargo-auditable,
         # which works better when we provide it with GITHUB_TOKEN.

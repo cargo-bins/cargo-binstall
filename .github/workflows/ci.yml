@@ -48,6 +48,7 @@ jobs:
     - uses: ./.github/actions/just-setup
       with:
         cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
+        tools: cargo-nextest
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
