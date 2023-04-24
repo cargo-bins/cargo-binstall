@@ -2,6 +2,9 @@ use std::{
     borrow::{Borrow, Cow},
     collections::{BTreeMap, HashMap},
     hash::{BuildHasher, Hash},
+    ops::Deref,
+    rc::Rc,
+    sync::Arc,
 };
 
 pub trait Values {
@@ -14,6 +17,24 @@ where
 {
     fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         T::get_value(self, key)
+    }
+}
+
+impl<T> Values for Arc<T>
+where
+    T: Values,
+{
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
+        T::get_value(self.deref(), key)
+    }
+}
+
+impl<T> Values for Rc<T>
+where
+    T: Values,
+{
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
+        T::get_value(self.deref(), key)
     }
 }
 
