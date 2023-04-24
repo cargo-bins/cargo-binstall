@@ -214,12 +214,15 @@ test: unit-tests build e2e-tests
 clippy: print-env
     {{cargo-bin}} clippy --no-deps -- -D clippy::all
 
+doc: print-env
+    cargo doc --no-deps --workspace
+
 fmt: print-env
     cargo fmt --all -- --check
 
 fmt-check: fmt
 
-lint: clippy fmt-check
+lint: clippy fmt-check doc
 
 # Rm dev-dependencies for `cargo-check` and clippy to speedup compilation.
 # This is a workaround for the cargo nightly option `-Z avoid-dev-deps`
