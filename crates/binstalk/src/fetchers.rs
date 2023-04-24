@@ -133,8 +133,8 @@ impl RepoInfo {
     /// `scheme:/{repo_owner}/{repo_name}`
     fn detect_subcrate(repo: &mut Url, repository_host: RepositoryHost) -> Option<String> {
         match repository_host {
-            RepositoryHost::GitHub => Self::detect_subcrate_common(repo, &["tree", "main"]),
-            RepositoryHost::GitLab => Self::detect_subcrate_common(repo, &["-", "blob", "main"]),
+            RepositoryHost::GitHub => Self::detect_subcrate_common(repo, &["tree"]),
+            RepositoryHost::GitLab => Self::detect_subcrate_common(repo, &["-", "blob"]),
             _ => None,
         }
     }
@@ -151,6 +151,9 @@ impl RepoInfo {
                 return None;
             }
         }
+
+        // Skip branch name
+        let _branch_name = path_segments.next()?;
 
         let subcrate = path_segments.next()?;
 
@@ -169,6 +172,7 @@ impl RepoInfo {
             let mut paths = repo.path_segments_mut().unwrap();
 
             paths.pop(); // pop subcrate
+            paths.pop(); // pop branch name
             seps.iter().for_each(|_| {
                 paths.pop();
             }); // pop separators
@@ -191,36 +195,45 @@ mod test {
 
     #[test]
     fn test_detect_subcrate_github() {
-        let mut repo =
-            Url::parse("https://github.com/RustSec/rustsec/tree/main/cargo-audit").unwrap();
+        let urls = [
+            "https://github.com/RustSec/rustsec/tree/main/cargo-audit",
+            "https://github.com/RustSec/rustsec/tree/master/cargo-audit",
+        ];
+        for url in urls {
+            let mut repo = Url::parse(url).unwrap();
 
-        let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-        assert_eq!(repository_host, RepositoryHost::GitHub);
+            let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+            assert_eq!(repository_host, RepositoryHost::GitHub);
 
-        let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
-        assert_eq!(subcrate_prefix, "cargo-audit");
+            let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
+            assert_eq!(subcrate_prefix, "cargo-audit");
 
-        assert_eq!(
-            repo,
-            Url::parse("https://github.com/RustSec/rustsec").unwrap()
-        );
+            assert_eq!(
+                repo,
+                Url::parse("https://github.com/RustSec/rustsec").unwrap()
+            );
+        }
     }
 
     #[test]
     fn test_detect_subcrate_gitlab() {
-        let mut repo =
-            Url::parse("https://gitlab.kitware.com/NobodyXu/hello/-/blob/main/cargo-binstall")
-                .unwrap();
+        let urls = [
+            "https://gitlab.kitware.com/NobodyXu/hello/-/blob/main/cargo-binstall",
+            "https://gitlab.kitware.com/NobodyXu/hello/-/blob/master/cargo-binstall",
+        ];
+        for url in urls {
+            let mut repo = Url::parse(url).unwrap();
 
-        let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-        assert_eq!(repository_host, RepositoryHost::GitLab);
+            let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+            assert_eq!(repository_host, RepositoryHost::GitLab);
 
-        let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
-        assert_eq!(subcrate_prefix, "cargo-binstall");
+            let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
+            assert_eq!(subcrate_prefix, "cargo-binstall");
 
-        assert_eq!(
-            repo,
-            Url::parse("https://gitlab.kitware.com/NobodyXu/hello").unwrap()
-        );
+            assert_eq!(
+                repo,
+                Url::parse("https://gitlab.kitware.com/NobodyXu/hello").unwrap()
+            );
+        }
     }
 }
