@@ -39,7 +39,7 @@ impl GhCrateMeta {
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
         repo: Option<&str>,
-        subcrate_prefix: Option<&str>,
+        subcrate: Option<&str>,
     ) {
         let render_url = |ext| {
             let ctx = Context::from_data_with_repo(
@@ -47,7 +47,7 @@ impl GhCrateMeta {
                 &self.target_data.target,
                 ext,
                 repo,
-                subcrate_prefix,
+                subcrate,
             );
             match ctx.render_url_with_compiled_tt(pkg_url) {
                 Ok(url) => Some(url),
@@ -108,7 +108,7 @@ impl super::Fetcher for GhCrateMeta {
             let info = self.data.get_repo_info(&self.client).await?.as_ref();
 
             let repo = info.map(|info| &info.repo);
-            let subcrate_prefix = info.and_then(|info| info.subcrate_prefix.as_deref());
+            let subcrate = info.and_then(|info| info.subcrate.as_deref());
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -159,7 +159,16 @@ impl super::Fetcher for GhCrateMeta {
             }) = info
             {
                 if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
-                    Either::Right(pkg_urls.map(Template::cast))
+                    let has_subcrate = subcrate.is_some();
+
+                    Either::Right(
+                        pkg_urls
+                            .map(Template::cast)
+                            // If subcrate is Some, then all templates will be included.
+                            // Otherwise, only templates without key "subcrate" will be
+                            // included.
+                            .filter(move |template| has_subcrate || !template.has_key("subcrate")),
+                    )
                 } else {
                     warn!(
                         concat!(
@@ -205,13 +214,7 @@ impl super::Fetcher for GhCrateMeta {
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    this.launch_baseline_find_tasks(
-                        &resolver,
-                        pkg_fmt,
-                        &pkg_url,
-                        repo,
-                        subcrate_prefix,
-                    );
+                    this.launch_baseline_find_tasks(&resolver, pkg_fmt, &pkg_url, repo, subcrate);
                 }
             }
 
@@ -290,7 +293,8 @@ struct Context<'c> {
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
     pub binary_ext: &'c str,
 
-    pub subcrate_prefix: Option<&'c str>,
+    /// Workspace of the crate inside the repository.
+    pub subcrate: Option<&'c str>,
 }
 
 impl leon::Values for Context<'_> {
@@ -310,7 +314,7 @@ impl leon::Values for Context<'_> {
 
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
 
-            "subcrate_prefix" => Some(Cow::Borrowed(self.subcrate_prefix.unwrap_or(""))),
+            "subcrate" => self.subcrate.map(Cow::Borrowed),
 
             _ => None,
         }
@@ -323,7 +327,7 @@ impl<'c> Context<'c> {
         target: &'c str,
         archive_suffix: Option<&'c str>,
         repo: Option<&'c str>,
-        subcrate_prefix: Option<&'c str>,
+        subcrate: Option<&'c str>,
     ) -> Self {
         let archive_format = archive_suffix.map(|archive_suffix| {
             if archive_suffix.is_empty() {
@@ -348,7 +352,7 @@ impl<'c> Context<'c> {
             } else {
                 ""
             },
-            subcrate_prefix,
+            subcrate,
         }
     }
 

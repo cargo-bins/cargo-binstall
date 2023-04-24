@@ -78,7 +78,7 @@ pub trait Fetcher: Send + Sync {
 struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
-    subcrate_prefix: Option<String>,
+    subcrate: Option<String>,
 }
 
 /// Data required to fetch a package
@@ -110,10 +110,7 @@ impl Data {
                         let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
                         let repo_info = RepoInfo {
-                            subcrate_prefix: RepoInfo::detect_subcrate_prefix(
-                                &mut repo,
-                                repository_host,
-                            ),
+                            subcrate: RepoInfo::detect_subcrate(&mut repo, repository_host),
                             repo,
                             repository_host,
                         };
@@ -134,7 +131,7 @@ impl RepoInfo {
     /// If `repo` contains a subcrate, then extracts that and return it as
     /// `{subcrate}%2F` and removes that subcrate path from `repo` to match
     /// `scheme:/{repo_owner}/{repo_name}`
-    fn detect_subcrate_prefix(repo: &mut Url, repository_host: RepositoryHost) -> Option<String> {
+    fn detect_subcrate(repo: &mut Url, repository_host: RepositoryHost) -> Option<String> {
         if repository_host != RepositoryHost::GitHub {
             return None;
         }
@@ -149,14 +146,13 @@ impl RepoInfo {
             return None;
         }
 
-        let subcrate_name = path_segments.next()?;
+        let subcrate = path_segments.next()?;
 
         if path_segments.next().is_some() {
             // A subcrate url should not contain anything more.
             None
         } else {
-            // %2F is escaped form of '/'
-            let subcrate_prefix = format!("{subcrate_name}%2F");
+            let subcrate = subcrate.to_string();
 
             // Pop subcrate path to match regular repo style:
             //
@@ -166,11 +162,11 @@ impl RepoInfo {
             // must also succeeds.
             let mut paths = repo.path_segments_mut().unwrap();
 
-            paths.pop(); // pop subcrate_name
+            paths.pop(); // pop subcrate
             paths.pop(); // pop "main"
             paths.pop(); // pop "tree"
 
-            Some(subcrate_prefix)
+            Some(subcrate)
         }
     }
 }
@@ -187,15 +183,15 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_detect_subcrate_prefix() {
+    fn test_detect_subcrate() {
         let mut repo =
             Url::parse("https://github.com/RustSec/rustsec/tree/main/cargo-audit").unwrap();
 
         let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
         assert_eq!(repository_host, RepositoryHost::GitHub);
 
-        let subcrate_prefix = RepoInfo::detect_subcrate_prefix(&mut repo, repository_host).unwrap();
-        assert_eq!(subcrate_prefix, "cargo-audit%2F");
+        let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
+        assert_eq!(subcrate_prefix, "cargo-audit");
 
         assert_eq!(
             repo,
