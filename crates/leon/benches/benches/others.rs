@@ -22,7 +22,7 @@ fn compare_impls(c: &mut Criterion) {
         }))
     }
 
-    #[derive(Serialize)]
+    #[derive(Copy, Clone, Serialize)]
     struct Context<'c> {
         name: &'c str,
         age: u8,

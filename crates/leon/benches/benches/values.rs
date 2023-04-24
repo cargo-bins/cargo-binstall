@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use leon::{vals, Template, Values, ValuesFn};
@@ -279,7 +279,9 @@ fn inner_bench<F>(
             black_box(template.render(&vals).unwrap());
         })
     });
+    let hashmap = Arc::new(hashmap);
     c.bench_function(&format!("{name}, hashmap"), move |b| {
+        let hashmap = Arc::clone(&hashmap);
         b.iter(move || {
             let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&hashmap).unwrap());
