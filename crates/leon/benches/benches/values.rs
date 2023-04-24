@@ -279,14 +279,14 @@ fn inner_bench<F>(
             black_box(template.render(&vals).unwrap());
         })
     });
-    c.bench_function(&format!("{name}, hashmap"), |b| {
-        b.iter(|| {
+    c.bench_function(&format!("{name}, hashmap"), move |b| {
+        b.iter(move || {
             let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&hashmap).unwrap());
         })
     });
-    c.bench_function(&format!("{name}, slice"), |b| {
-        b.iter(|| {
+    c.bench_function(&format!("{name}, slice"), move |b| {
+        b.iter(move || {
             let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&slice as &dyn Values).unwrap());
         })

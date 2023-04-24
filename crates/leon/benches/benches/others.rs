@@ -55,8 +55,8 @@ fn compare_impls(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("std, string replaces", |b| {
-        b.iter(|| {
+    c.bench_function("std, string replaces", move |b| {
+        b.iter(move || {
             let mut output = black_box(TEMPLATE).to_string();
             for (key, value) in [
                 ("name", "marcus"),
@@ -75,8 +75,8 @@ fn compare_impls(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("tiny template", |b| {
-        b.iter(|| {
+    c.bench_function("tiny template", move |b| {
+        b.iter(move || {
             let mut tt = TinyTemplate::new();
             tt.add_template("tmp", black_box(TEMPLATE)).unwrap();
             let output = tt.render("tmp", &tt_context).unwrap();
