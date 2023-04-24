@@ -7,7 +7,7 @@ use std::{
 
 use compact_str::{CompactString, ToCompactString};
 use tokio::sync::OnceCell;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::remote;
 
@@ -106,6 +106,7 @@ impl GhApiClient {
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
         let auth_token = auth_token.and_then(|auth_token| {
             if gh_prefixed(&auth_token) {
+                debug!("Using gh api token");
                 Some(auth_token)
             } else {
                 warn!("Invalid auth_token, expected 'gh*_' or `github_*`, fallback to unauthorized mode");

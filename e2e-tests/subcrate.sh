@@ -13,6 +13,6 @@ mkdir -p "$othertmpdir/bin"
 # Copy it to bin to test use of env var `CARGO`
 cp "./$1" "$othertmpdir/bin/"
 
+cargo binstall --no-confirm cargo-audit@0.17.5 --strategies crate-meta-data
 
-cargo binstall --no-confirm cargo-watch@8.4.0
-cargo uninstall cargo-watch
+cargo audit --version

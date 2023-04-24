@@ -3,9 +3,7 @@ use leon::{Item, Template};
 use leon_macros::template;
 use url::Url;
 
-use crate::errors::BinstallError;
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum RepositoryHost {
     GitHub,
     GitLab,
@@ -35,11 +33,17 @@ pub const NOVERSION_FILENAMES: &[Template<'_>] = &[
 const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
     template!("{ repo }/releases/download/{ version }"),
     template!("{ repo }/releases/download/v{ version }"),
+    // %2F is escaped form of '/'
+    template!("{ repo }/releases/download/{ subcrate }%2F{ version }"),
+    template!("{ repo }/releases/download/{ subcrate }%2Fv{ version }"),
 ];
 
 const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
     template!("{ repo }/-/releases/{ version }/downloads/binaries"),
     template!("{ repo }/-/releases/v{ version }/downloads/binaries"),
+    // %2F is escaped form of '/'
+    template!("{ repo }/-/releases/{ subcrate }%2F{ version }/downloads/binaries"),
+    template!("{ repo }/-/releases/{ subcrate }%2Fv{ version }/downloads/binaries"),
 ];
 
 const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template!("{ repo }/downloads")];
@@ -47,18 +51,21 @@ const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template!("{ repo }/downloads
 const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
     template!("{ repo }/files/binaries/{  version }"),
     template!("{ repo }/files/binaries/v{ version }"),
+    // %2F is escaped form of '/'
+    template!("{ repo }/files/binaries/{ subcrate }%2F{  version }"),
+    template!("{ repo }/files/binaries/{ subcrate }%2Fv{ version }"),
 ];
 
 impl RepositoryHost {
-    pub fn guess_git_hosting_services(repo: &Url) -> Result<Self, BinstallError> {
+    pub fn guess_git_hosting_services(repo: &Url) -> Self {
         use RepositoryHost::*;
 
         match repo.domain() {
-            Some(domain) if domain.starts_with("github") => Ok(GitHub),
-            Some(domain) if domain.starts_with("gitlab") => Ok(GitLab),
-            Some(domain) if domain == "bitbucket.org" => Ok(BitBucket),
-            Some(domain) if domain == "sourceforge.net" => Ok(SourceForge),
-            _ => Ok(Unknown),
+            Some(domain) if domain.starts_with("github") => GitHub,
+            Some(domain) if domain.starts_with("gitlab") => GitLab,
+            Some(domain) if domain == "bitbucket.org" => BitBucket,
+            Some(domain) if domain == "sourceforge.net" => SourceForge,
+            _ => Unknown,
         }
     }
 

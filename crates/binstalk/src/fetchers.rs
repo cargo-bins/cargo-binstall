@@ -4,6 +4,7 @@ use compact_str::CompactString;
 pub use gh_crate_meta::*;
 pub use quickinstall::*;
 use tokio::sync::OnceCell;
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::{
@@ -17,6 +18,8 @@ use crate::{
 
 pub(crate) mod gh_crate_meta;
 pub(crate) mod quickinstall;
+
+use gh_crate_meta::hosting::RepositoryHost;
 
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
@@ -71,13 +74,20 @@ pub trait Fetcher: Send + Sync {
     fn target(&self) -> &str;
 }
 
+#[derive(Clone, Debug)]
+struct RepoInfo {
+    repo: Url,
+    repository_host: RepositoryHost,
+    subcrate: Option<String>,
+}
+
 /// Data required to fetch a package
 #[derive(Clone, Debug)]
 pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
-    repo_final_url: OnceCell<Option<Url>>,
+    repo_info: OnceCell<Option<RepoInfo>>,
 }
 
 impl Data {
@@ -86,18 +96,28 @@ impl Data {
             name,
             version,
             repo,
-            repo_final_url: OnceCell::new(),
+            repo_info: OnceCell::new(),
         }
     }
 
-    async fn resolve_final_repo_url(&self, client: &Client) -> Result<&Option<Url>, BinstallError> {
-        self.repo_final_url
+    #[instrument(level = "debug")]
+    async fn get_repo_info(&self, client: &Client) -> Result<&Option<RepoInfo>, BinstallError> {
+        self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
                     if let Some(repo) = self.repo.as_deref() {
-                        Ok(Some(
-                            client.get_redirected_final_url(Url::parse(repo)?).await?,
-                        ))
+                        let mut repo = client.get_redirected_final_url(Url::parse(repo)?).await?;
+                        let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+
+                        let repo_info = RepoInfo {
+                            subcrate: RepoInfo::detect_subcrate(&mut repo, repository_host),
+                            repo,
+                            repository_host,
+                        };
+
+                        debug!("Resolved repo_info = {repo_info:#?}");
+
+                        Ok(Some(repo_info))
                     } else {
                         Ok(None)
                     }
@@ -107,9 +127,113 @@ impl Data {
     }
 }
 
+impl RepoInfo {
+    /// If `repo` contains a subcrate, then extracts and returns it.
+    /// It will also remove that subcrate path from `repo` to match
+    /// `scheme:/{repo_owner}/{repo_name}`
+    fn detect_subcrate(repo: &mut Url, repository_host: RepositoryHost) -> Option<String> {
+        match repository_host {
+            RepositoryHost::GitHub => Self::detect_subcrate_common(repo, &["tree"]),
+            RepositoryHost::GitLab => Self::detect_subcrate_common(repo, &["-", "blob"]),
+            _ => None,
+        }
+    }
+
+    fn detect_subcrate_common(repo: &mut Url, seps: &[&str]) -> Option<String> {
+        let mut path_segments = repo.path_segments()?;
+
+        let _repo_owner = path_segments.next()?;
+        let _repo_name = path_segments.next()?;
+
+        // Skip separators
+        for sep in seps.iter().copied() {
+            if path_segments.next()? != sep {
+                return None;
+            }
+        }
+
+        // Skip branch name
+        let _branch_name = path_segments.next()?;
+
+        let subcrate = path_segments.next()?;
+
+        if path_segments.next().is_some() {
+            // A subcrate url should not contain anything more.
+            None
+        } else {
+            let subcrate = subcrate.to_string();
+
+            // Pop subcrate path to match regular repo style:
+            //
+            // scheme:/{addr}/{repo_owner}/{repo_name}
+            //
+            // path_segments() succeeds, so path_segments_mut()
+            // must also succeeds.
+            let mut paths = repo.path_segments_mut().unwrap();
+
+            paths.pop(); // pop subcrate
+            paths.pop(); // pop branch name
+            seps.iter().for_each(|_| {
+                paths.pop();
+            }); // pop separators
+
+            Some(subcrate)
+        }
+    }
+}
+
 /// Target specific data required to fetch a package
 #[derive(Clone, Debug)]
 pub struct TargetData {
     pub target: String,
     pub meta: PkgMeta,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_detect_subcrate_github() {
+        let urls = [
+            "https://github.com/RustSec/rustsec/tree/main/cargo-audit",
+            "https://github.com/RustSec/rustsec/tree/master/cargo-audit",
+        ];
+        for url in urls {
+            let mut repo = Url::parse(url).unwrap();
+
+            let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+            assert_eq!(repository_host, RepositoryHost::GitHub);
+
+            let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
+            assert_eq!(subcrate_prefix, "cargo-audit");
+
+            assert_eq!(
+                repo,
+                Url::parse("https://github.com/RustSec/rustsec").unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn test_detect_subcrate_gitlab() {
+        let urls = [
+            "https://gitlab.kitware.com/NobodyXu/hello/-/blob/main/cargo-binstall",
+            "https://gitlab.kitware.com/NobodyXu/hello/-/blob/master/cargo-binstall",
+        ];
+        for url in urls {
+            let mut repo = Url::parse(url).unwrap();
+
+            let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+            assert_eq!(repository_host, RepositoryHost::GitLab);
+
+            let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
+            assert_eq!(subcrate_prefix, "cargo-binstall");
+
+            assert_eq!(
+                repo,
+                Url::parse("https://gitlab.kitware.com/NobodyXu/hello").unwrap()
+            );
+        }
+    }
 }
