@@ -7,7 +7,7 @@ use tinytemplate::TinyTemplate;
 
 fn compare_impls(c: &mut Criterion) {
     const TEMPLATE: &str = "hello {name}! i am {age} years old. my goal is to {goal}. i like: {flower}, {music}, {animal}, {color}, {food}. i'm drinking {drink}";
-    fn replace_fn<'s>(key: &'s str) -> Option<Cow<'s, str>> {
+    fn replace_fn(key: &str) -> Option<Cow<'static, str>> {
         Some(Cow::Borrowed(match key {
             "name" => "marcus",
             "age" => "42",
@@ -47,8 +47,8 @@ fn compare_impls(c: &mut Criterion) {
         drink: "coffee",
     };
 
-    c.bench_function("leon", |b| {
-        b.iter(|| {
+    c.bench_function("leon", move |b| {
+        b.iter(move || {
             let template = Template::parse(black_box(TEMPLATE)).unwrap();
             let output = template.render(&vals(replace_fn)).unwrap();
             black_box(output);

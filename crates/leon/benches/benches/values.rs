@@ -270,10 +270,11 @@ fn inner_bench<F>(
     hashmap: HashMap<&str, &str>,
     slice: &[(&str, &str)],
 ) where
-    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
+    F: Fn(&str) -> Option<Cow<'static, str>> + Send + Clone + 'static,
 {
-    c.bench_function(&format!("{name}, fn"), |b| {
-        b.iter(|| {
+    c.bench_function(&format!("{name}, fn"), move |b| {
+        let vals = vals.clone();
+        b.iter(move || {
             let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&vals).unwrap());
         })

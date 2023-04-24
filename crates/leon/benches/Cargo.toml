@@ -1,0 +1,23 @@
+[package]
+name = "leon-benches"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[dependencies]
+leon = { path = ".." }
+criterion = { version = "0.4.0", default-features = false, features = ["cargo_bench_support"] }
+serde = { version = "1.0.160", features = ["derive"] }
+tinytemplate = "1.2.1"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bench]]
+name = "values"
+harness = false
+
+[[bench]]
+name = "others"
+harness = false

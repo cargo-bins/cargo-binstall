@@ -87,22 +87,23 @@ where
 /// Workaround to allow using functions as [`Values`].
 ///
 /// As this isn't constructible you'll want to use [`vals()`] instead.
+#[derive(Copy, Clone, Debug)]
 pub struct ValuesFn<F> {
     inner: F,
 }
 
-impl<'s, F> Values for &'s ValuesFn<F>
+impl<F> Values for ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'s, str>> + 's,
+    F: Fn(&str) -> Option<Cow<'static, str>>,
 {
     fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         (self.inner)(key)
     }
 }
 
-impl<'f, F> From<F> for ValuesFn<F>
+impl<F> From<F> for ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
+    F: Fn(&str) -> Option<Cow<'static, str>>,
 {
     fn from(inner: F) -> Self {
         Self { inner }
@@ -122,9 +123,9 @@ where
 ///
 /// use_values(&vals(|_| Some("hello".into())));
 /// ```
-pub const fn vals<'f, F>(func: F) -> ValuesFn<F>
+pub const fn vals<F>(func: F) -> ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
+    F: Fn(&str) -> Option<Cow<'static, str>>,
 {
     ValuesFn { inner: func }
 }

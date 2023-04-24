@@ -8,7 +8,7 @@ rust-version = "1.61.0"
 authors = ["Félix Saparelli <felix@passcod.name>"]
 edition = "2021"
 license = "Apache-2.0 OR MIT"
-exclude = ["fuzz"]
+exclude = ["fuzz", "benches"]
 
 [dependencies]
 clap = { version = "4.2.4", features = ["derive"], optional = true }
@@ -19,16 +19,3 @@ thiserror = "1.0.38"
 default = ["miette"]
 cli = ["dep:clap", "miette?/fancy-no-backtrace"]
 miette = ["dep:miette"]
-
-[dev-dependencies]
-criterion = { version = "0.4.0", default-features = false, features = ["cargo_bench_support"] }
-serde = { version = "1.0.160", features = ["derive"] }
-tinytemplate = "1.2.1"
-
-[[bench]]
-name = "values"
-harness = false
-
-[[bench]]
-name = "others"
-harness = false
