@@ -128,8 +128,8 @@ impl Data {
 }
 
 impl RepoInfo {
-    /// If `repo` contains a subcrate, then extracts that and return it as
-    /// `{subcrate}%2F` and removes that subcrate path from `repo` to match
+    /// If `repo` contains a subcrate, then extracts and returns it.
+    /// It will also remove that subcrate path from `repo` to match
     /// `scheme:/{repo_owner}/{repo_name}`
     fn detect_subcrate(repo: &mut Url, repository_host: RepositoryHost) -> Option<String> {
         match repository_host {
