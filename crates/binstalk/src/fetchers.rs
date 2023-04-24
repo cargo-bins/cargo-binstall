@@ -133,21 +133,23 @@ impl RepoInfo {
     /// `scheme:/{repo_owner}/{repo_name}`
     fn detect_subcrate(repo: &mut Url, repository_host: RepositoryHost) -> Option<String> {
         match repository_host {
-            RepositoryHost::GitHub => Self::detect_subcrate_github(repo),
-            RepositoryHost::GitLab => Self::detect_subcrate_gitlab(repo),
+            RepositoryHost::GitHub => Self::detect_subcrate_common(repo, &["tree", "main"]),
+            RepositoryHost::GitLab => Self::detect_subcrate_common(repo, &["-", "blob", "main"]),
             _ => None,
         }
     }
 
-    fn detect_subcrate_github(repo: &mut Url) -> Option<String> {
+    fn detect_subcrate_common(repo: &mut Url, seps: &[&str]) -> Option<String> {
         let mut path_segments = repo.path_segments()?;
 
         let _repo_owner = path_segments.next()?;
         let _repo_name = path_segments.next()?;
 
-        // Skip path segment "tree" and "main"
-        if (path_segments.next()?, path_segments.next()?) != ("tree", "main") {
-            return None;
+        // Skip separators
+        for sep in seps.iter().copied() {
+            if path_segments.next()? != sep {
+                return None;
+            }
         }
 
         let subcrate = path_segments.next()?;
@@ -167,49 +169,9 @@ impl RepoInfo {
             let mut paths = repo.path_segments_mut().unwrap();
 
             paths.pop(); // pop subcrate
-            paths.pop(); // pop "main"
-            paths.pop(); // pop "tree"
-
-            Some(subcrate)
-        }
-    }
-
-    fn detect_subcrate_gitlab(repo: &mut Url) -> Option<String> {
-        let mut path_segments = repo.path_segments()?;
-
-        let _repo_owner = path_segments.next()?;
-        let _repo_name = path_segments.next()?;
-
-        // Skip path segment "-", "blob" and "main"
-        if (
-            path_segments.next()?,
-            path_segments.next()?,
-            path_segments.next()?,
-        ) != ("-", "blob", "main")
-        {
-            return None;
-        }
-
-        let subcrate = path_segments.next()?;
-
-        if path_segments.next().is_some() {
-            // A subcrate url should not contain anything more.
-            None
-        } else {
-            let subcrate = subcrate.to_string();
-
-            // Pop subcrate path to match regular repo style:
-            //
-            // scheme:/{addr}/{repo_owner}/{repo_name}
-            //
-            // path_segments() succeeds, so path_segments_mut()
-            // must also succeeds.
-            let mut paths = repo.path_segments_mut().unwrap();
-
-            paths.pop(); // pop subcrate
-            paths.pop(); // pop "main"
-            paths.pop(); // pop "blob"
-            paths.pop(); // pop "-"
+            seps.iter().for_each(|_| {
+                paths.pop();
+            }); // pop separators
 
             Some(subcrate)
         }
