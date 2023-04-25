@@ -122,6 +122,7 @@ where
     }
 }
 
+/// See doc of [`vals`]
 impl<F> From<F> for ValuesFn<F>
 where
     F: Fn(&str) -> Option<Cow<'static, str>>,
@@ -131,9 +132,17 @@ where
     }
 }
 
-/// Workaround to allow using functions as [`Values`].
+/// Wraps your function so it implements [`Values`],
+/// though it only works if your function returns `Cow<'static, str>`.
 ///
-/// Wraps your function so it implements [`Values`].
+/// Since regular function pointers cannot return anything other than
+/// `Cow<'static, str>` and closure in Rust currently does not support
+/// returning borrows of captured data, supporting anything other than
+/// `Cow<'static, str>` for functions is pointless and would only cause
+/// more confusion and compile-time errors.
+///
+/// To return `&str` owned by the values itself, please create a newtype
+/// and implement [`Values`] on it manually instead of using this function.
 ///
 /// # Example
 ///
