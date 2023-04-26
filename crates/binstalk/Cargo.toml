@@ -22,7 +22,7 @@ home = "0.5.5"
 itertools = "0.10.5"
 jobslot = { version = "0.2.11", features = ["tokio"] }
 leon = { version = "2.0.0", path = "../leon" }
-leon-macros = { version = "0.0.0", path = "../leon-macros" }
+leon-macros = { version = "1.0.0", path = "../leon-macros" }
 maybe-owned = "0.3.4"
 miette = "5.8.0"
 normalize-path = { version = "0.2.0", path = "../normalize-path" }
