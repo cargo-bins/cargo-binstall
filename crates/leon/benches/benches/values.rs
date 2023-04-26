@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use leon::{vals, Template, Values, ValuesFn};
@@ -270,22 +270,25 @@ fn inner_bench<F>(
     hashmap: HashMap<&str, &str>,
     slice: &[(&str, &str)],
 ) where
-    F: for<'s> Fn(&'s str) -> Option<Cow<'s, str>> + Send + 'static,
+    F: Fn(&str) -> Option<Cow<'static, str>> + Send + Clone + 'static,
 {
-    c.bench_function(&format!("{name}, fn"), |b| {
-        b.iter(|| {
+    c.bench_function(&format!("{name}, fn"), move |b| {
+        let vals = vals.clone();
+        b.iter(move || {
             let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&vals).unwrap());
         })
     });
-    c.bench_function(&format!("{name}, hashmap"), |b| {
-        b.iter(|| {
+    let hashmap = Arc::new(hashmap);
+    c.bench_function(&format!("{name}, hashmap"), move |b| {
+        let hashmap = Arc::clone(&hashmap);
+        b.iter(move || {
             let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&hashmap).unwrap());
         })
     });
-    c.bench_function(&format!("{name}, slice"), |b| {
-        b.iter(|| {
+    c.bench_function(&format!("{name}, slice"), move |b| {
+        b.iter(move || {
             let template = Template::parse(black_box(template_str)).unwrap();
             black_box(template.render(&slice as &dyn Values).unwrap());
         })

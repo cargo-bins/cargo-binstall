@@ -2,6 +2,9 @@ use std::{
     borrow::{Borrow, Cow},
     collections::{BTreeMap, HashMap},
     hash::{BuildHasher, Hash},
+    ops::Deref,
+    rc::Rc,
+    sync::Arc,
 };
 
 pub trait Values {
@@ -14,6 +17,24 @@ where
 {
     fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         T::get_value(self, key)
+    }
+}
+
+impl<T> Values for Arc<T>
+where
+    T: Values,
+{
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
+        T::get_value(self.deref(), key)
+    }
+}
+
+impl<T> Values for Rc<T>
+where
+    T: Values,
+{
+    fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
+        T::get_value(self.deref(), key)
     }
 }
 
@@ -87,31 +108,41 @@ where
 /// Workaround to allow using functions as [`Values`].
 ///
 /// As this isn't constructible you'll want to use [`vals()`] instead.
+#[derive(Copy, Clone, Debug)]
 pub struct ValuesFn<F> {
     inner: F,
 }
 
-impl<'s, F> Values for &'s ValuesFn<F>
+impl<F> Values for ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'s, str>> + 's,
+    F: Fn(&str) -> Option<Cow<'static, str>>,
 {
     fn get_value(&self, key: &str) -> Option<Cow<'_, str>> {
         (self.inner)(key)
     }
 }
 
-impl<'f, F> From<F> for ValuesFn<F>
+/// See doc of [`vals`]
+impl<F> From<F> for ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
+    F: Fn(&str) -> Option<Cow<'static, str>>,
 {
     fn from(inner: F) -> Self {
         Self { inner }
     }
 }
 
-/// Workaround to allow using functions as [`Values`].
+/// Wraps your function so it implements [`Values`],
+/// though it only works if your function returns `Cow<'static, str>`.
 ///
-/// Wraps your function so it implements [`Values`].
+/// Since regular function pointers cannot return anything other than
+/// `Cow<'static, str>` and closure in Rust currently does not support
+/// returning borrows of captured data, supporting anything other than
+/// `Cow<'static, str>` for functions is pointless and would only cause
+/// more confusion and compile-time errors.
+///
+/// To return `&str` owned by the values itself, please create a newtype
+/// and implement [`Values`] on it manually instead of using this function.
 ///
 /// # Example
 ///
@@ -122,9 +153,9 @@ where
 ///
 /// use_values(&vals(|_| Some("hello".into())));
 /// ```
-pub const fn vals<'f, F>(func: F) -> ValuesFn<F>
+pub const fn vals<F>(func: F) -> ValuesFn<F>
 where
-    F: Fn(&str) -> Option<Cow<'f, str>> + 'f,
+    F: Fn(&str) -> Option<Cow<'static, str>>,
 {
     ValuesFn { inner: func }
 }

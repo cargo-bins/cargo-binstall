@@ -7,7 +7,7 @@ use tinytemplate::TinyTemplate;
 
 fn compare_impls(c: &mut Criterion) {
     const TEMPLATE: &str = "hello {name}! i am {age} years old. my goal is to {goal}. i like: {flower}, {music}, {animal}, {color}, {food}. i'm drinking {drink}";
-    fn replace_fn<'s>(key: &'s str) -> Option<Cow<'s, str>> {
+    fn replace_fn(key: &str) -> Option<Cow<'static, str>> {
         Some(Cow::Borrowed(match key {
             "name" => "marcus",
             "age" => "42",
@@ -22,7 +22,7 @@ fn compare_impls(c: &mut Criterion) {
         }))
     }
 
-    #[derive(Serialize)]
+    #[derive(Copy, Clone, Serialize)]
     struct Context<'c> {
         name: &'c str,
         age: u8,
@@ -47,16 +47,16 @@ fn compare_impls(c: &mut Criterion) {
         drink: "coffee",
     };
 
-    c.bench_function("leon", |b| {
-        b.iter(|| {
+    c.bench_function("leon", move |b| {
+        b.iter(move || {
             let template = Template::parse(black_box(TEMPLATE)).unwrap();
             let output = template.render(&vals(replace_fn)).unwrap();
             black_box(output);
         })
     });
 
-    c.bench_function("std, string replaces", |b| {
-        b.iter(|| {
+    c.bench_function("std, string replaces", move |b| {
+        b.iter(move || {
             let mut output = black_box(TEMPLATE).to_string();
             for (key, value) in [
                 ("name", "marcus"),
@@ -75,8 +75,8 @@ fn compare_impls(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("tiny template", |b| {
-        b.iter(|| {
+    c.bench_function("tiny template", move |b| {
+        b.iter(move || {
             let mut tt = TinyTemplate::new();
             tt.add_template("tmp", black_box(TEMPLATE)).unwrap();
             let output = tt.render("tmp", &tt_context).unwrap();
