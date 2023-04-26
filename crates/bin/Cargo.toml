@@ -69,5 +69,8 @@ cross-lang-fat-lto = ["binstalk/cross-lang-fat-lto"]
 fancy-no-backtrace = ["miette/fancy-no-backtrace"]
 fancy-with-backtrace = ["fancy-no-backtrace", "miette/fancy"]
 
+log_max_level_info = ["log/max_level_info", "tracing/max_level_info", "log_release_max_level_info"]
+log_max_level_debug = ["log/max_level_debug", "tracing/max_level_debug", "log_release_max_level_debug"]
+
 log_release_max_level_info = ["log/release_max_level_info", "tracing/release_max_level_info"]
 log_release_max_level_debug = ["log/release_max_level_debug", "tracing/release_max_level_debug"]
