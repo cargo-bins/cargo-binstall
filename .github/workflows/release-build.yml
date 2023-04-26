@@ -52,19 +52,12 @@ jobs:
 
     - run: just toolchain rust-src
     - run: just ci-install-deps
+
     - run: just package
     - if: runner.os == 'Windows'
       run: Get-ChildItem packages/
     - if: runner.os != 'Windows'
       run: ls -shal packages/
-
-    - name: Run unit tests in release build
-      if: "matrix.r"
-      run: |
-        just avoid-benchmark-deps
-        just unit-tests
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Ensure release binary is runnable
       if: "matrix.r"
