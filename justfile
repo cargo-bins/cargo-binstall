@@ -232,12 +232,6 @@ avoid-dev-deps:
         mv "$crate/Cargo.toml.tmp" "$crate/Cargo.toml" \
     ; done
 
-# leon dev-dependencies pulls in crates for benchmark but not used in test.
-# This is a workaround for the lack of `benchmark-dependencies`.
-avoid-benchmark-deps:
-    sed 's/\[dev-dependencies\]/[workaround-avoid-dev-deps]/g' ./crates/leon/Cargo.toml >./crates/leon/Cargo.toml.tmp
-    mv ./crates/leon/Cargo.toml.tmp ./crates/leon/Cargo.toml
-
 package-dir:
     rm -rf packages/prep
     mkdir -p packages/prep
