@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-types"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "compact_str",
  "maybe-owned",
