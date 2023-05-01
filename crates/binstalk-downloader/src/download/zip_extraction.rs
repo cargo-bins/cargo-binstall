@@ -1,9 +1,13 @@
 use std::{
+    borrow::Cow,
     io::Write,
     path::{Component, Path, PathBuf},
 };
 
-use async_zip::{base::read::stream::Reading, tokio::read::stream::ZipFileReader};
+use async_zip::{
+    base::{read::WithEntry, read::ZipEntryReader},
+    ZipString,
+};
 use bytes::{Bytes, BytesMut};
 use futures_lite::future::try_zip as try_join;
 use futures_util::io::Take;
@@ -37,7 +41,7 @@ impl ZipError {
 }
 
 pub(super) async fn extract_zip_entry<R>(
-    zip_reader: &mut ZipFileReader<Reading<'_, Take<Compat<R>>>>,
+    zip_reader: &mut ZipEntryReader<'_, Take<Compat<R>>, WithEntry<'_>>,
     path: &Path,
     buf: &mut BytesMut,
     extracted_files: &mut ExtractedFiles,
@@ -47,8 +51,7 @@ where
 {
     // Sanitize filename
     let raw_filename = zip_reader.entry().filename();
-    let filename = check_filename_and_normalize(raw_filename)
-        .ok_or_else(|| ZipError(ZipErrorInner::InvalidFilePath(raw_filename.into())))?;
+    let (filename, is_dir) = check_filename_and_normalize(raw_filename)?;
 
     // Calculates the outpath
     let outpath = path.join(&filename);
@@ -56,8 +59,6 @@ where
     // Get permissions
     #[cfg_attr(not(unix), allow(unused_mut))]
     let mut perms = None;
-
-    let is_dir = raw_filename.ends_with('/');
 
     #[cfg(unix)]
     {
@@ -115,7 +116,17 @@ where
             Ok(())
         });
 
-        let read_task = copy_file_to_mpsc(zip_reader.reader().compat(), tx, buf);
+        let read_task = async move {
+            // Read everything into `tx`
+            copy_file_to_mpsc(zip_reader.compat(), tx, buf).await?;
+            // Check crc32 checksum.
+            //
+            // NOTE that since everything is alread read into the channel,
+            // this function should not read any byte into the `Vec` and
+            // should return `0`.
+            assert_eq!(zip_reader.read_to_end_checked(&mut Vec::new()).await?, 0);
+            Ok(())
+        };
 
         try_join(
             async move { write_task.await.map_err(From::from) },
@@ -183,29 +194,40 @@ where
 /// to path-based exploits.
 ///
 /// This function is adapted from `zip::ZipFile::enclosed_name`.
-fn check_filename_and_normalize(filename: &str) -> Option<PathBuf> {
+fn check_filename_and_normalize(filename: &ZipString) -> Result<(PathBuf, bool), DownloadError> {
+    let filename = filename
+        .as_str()
+        .map(Cow::Borrowed)
+        .unwrap_or_else(|_| String::from_utf8_lossy(filename.as_bytes()));
+
+    let bail = |filename: Cow<'_, str>| {
+        Err(ZipError(ZipErrorInner::InvalidFilePath(
+            filename.into_owned().into(),
+        )))
+    };
+
     if filename.contains('\0') {
-        return None;
+        return bail(filename)?;
     }
 
     let mut path = PathBuf::new();
 
     // The following loop is adapted from
     // `normalize_path::NormalizePath::normalize`.
-    for component in Path::new(filename).components() {
+    for component in Path::new(&*filename).components() {
         match component {
-            Component::Prefix(_) | Component::RootDir => return None,
+            Component::Prefix(_) | Component::RootDir => return bail(filename)?,
             Component::CurDir => (),
             Component::ParentDir => {
                 if !path.pop() {
                     // `PathBuf::pop` returns false if there is no parent.
                     // which means the path is invalid.
-                    return None;
+                    return bail(filename)?;
                 }
             }
             Component::Normal(c) => path.push(c),
         }
     }
 
-    Some(path)
+    Ok((path, filename.ends_with('/')))
 }
