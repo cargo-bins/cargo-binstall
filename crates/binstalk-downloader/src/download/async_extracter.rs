@@ -6,7 +6,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use async_zip::tokio::read::stream::ZipFileReader;
+use async_zip::base::read::stream::ZipFileReader;
 use bytes::{Bytes, BytesMut};
 use futures_lite::stream::Stream;
 use tokio::sync::mpsc;
@@ -50,12 +50,18 @@ where
     debug!("Decompressing from zip archive to `{}`", path.display());
 
     let reader = StreamReader::new(stream);
-    let mut zip = ZipFileReader::new(reader);
+    let mut zip = ZipFileReader::with_tokio(reader);
     let mut buf = BytesMut::with_capacity(4 * 4096);
     let mut extracted_files = ExtractedFiles::new();
 
-    while let Some(mut zip_reader) = zip.next_entry().await.map_err(ZipError::from_inner)? {
-        extract_zip_entry(&mut zip_reader, path, &mut buf, &mut extracted_files).await?;
+    while let Some(mut zip_reader) = zip.next_with_entry().await.map_err(ZipError::from_inner)? {
+        extract_zip_entry(
+            zip_reader.reader_mut(),
+            path,
+            &mut buf,
+            &mut extracted_files,
+        )
+        .await?;
 
         // extract_zip_entry would read the zip_reader until read the file until
         // eof unless extract_zip itself is cancelled or an error is raised.
