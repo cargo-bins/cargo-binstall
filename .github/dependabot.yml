@@ -12,47 +12,7 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/bin"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-manifests"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-types"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-downloader"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/detect-wasi"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/fs-lock"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/normalize-path"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/detect-targets"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/leon"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/leon-macros"
-    schedule:
-      interval: "daily"
+    allow:
+      - dependency-name: "*"
+        # Update all dependencies, including the dependencies of direct dependencies.
+        dependency-type: "all"
