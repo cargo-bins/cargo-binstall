@@ -16,4 +16,4 @@ proc-macro = true
 leon = { version = "2.0.0", path = "../leon", default-features = false }
 proc-macro2 = "1.0.56"
 syn = { version = "2.0.15", default-features = false, features = ["proc-macro", "parsing"] }
-quote = "1.0.26"
+quote = "1.0.27"
