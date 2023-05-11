@@ -121,6 +121,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-compression"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b0122885821398cc923ece939e24d1056a2384ee719432397fa9db87230ff11"
+dependencies = [
+ "bzip2",
+ "flate2",
+ "futures-core",
+ "memchr",
+ "pin-project-lite",
+ "tokio",
+ "xz2",
+ "zstd 0.12.3+zstd.1.5.2",
+ "zstd-safe 6.0.5+zstd.1.5.4",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -137,7 +154,7 @@ version = "0.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "795310de3218cde15219fc98c1cf7d8fe9db4865aab27fcf1d535d6cb61c6b54"
 dependencies = [
- "async-compression",
+ "async-compression 0.3.15",
  "crc32fast",
  "futures-util",
  "log",
@@ -235,7 +252,7 @@ dependencies = [
 name = "binstalk-downloader"
 version = "0.5.0"
 dependencies = [
- "async-compression",
+ "async-compression 0.4.0",
  "async-trait",
  "async_zip",
  "binstalk-types",
@@ -1764,7 +1781,7 @@ version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13293b639a097af28fc8a90f22add145a9c954e49d77da06263d58cf44d5fb91"
 dependencies = [
- "async-compression",
+ "async-compression 0.3.15",
  "base64 0.21.0",
  "bytes",
  "encoding_rs",
