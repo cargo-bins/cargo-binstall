@@ -20,18 +20,20 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
-[profile.dev.build-override]
+[profile.dev]
 opt-level = 0
+debug = true
+lto = false
+debug-assertions = true
+overflow-checks = true
 codegen-units = 1024
+
+[profile.dev.build-override]
+inherits = "dev"
 debug = false
 debug-assertions = false
 overflow-checks = false
 incremental = false
 
 [profile.release.build-override]
-opt-level = 0
-codegen-units = 1024
-debug = false
-debug-assertions = false
-overflow-checks = false
-incremental = false
+inherits = "dev.build-override"
