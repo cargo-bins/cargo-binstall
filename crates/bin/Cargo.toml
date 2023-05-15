@@ -29,7 +29,7 @@ compact_str = "0.7.0"
 dirs = "5.0.1"
 file-format = { version = "0.16.0", default-features = false }
 fs-lock = { version = "0.1.0", path = "../fs-lock" }
-gh-token = "0.1.1"
+gh-token = "0.1.2"
 log = { version = "0.4.17", features = ["std"] }
 miette = "5.8.0"
 mimalloc = { version = "0.1.37", default-features = false, optional = true }
