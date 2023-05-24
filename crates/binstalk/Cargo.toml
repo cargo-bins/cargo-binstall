@@ -34,7 +34,7 @@ tempfile = "3.5.0"
 thiserror = "1.0.40"
 # parking_lot for `tokio::sync::OnceCell::const_new`
 tokio = { version = "1.28.1", features = ["rt", "process", "sync", "signal", "parking_lot"], default-features = false }
-tracing = "0.1.38"
+tracing = "0.1.37"
 url = { version = "2.3.1", features = ["serde"] }
 xz2 = "0.1.7"
 
