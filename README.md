@@ -15,6 +15,12 @@ You probably want to **[see this page as it was when the latest version was publ
 
 ## Installation
 
+Here are the one-liners for installing pre-compiled `cargo-binstall` binary from release on Linux and acOS:
+
+```
+curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+```
+
 To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)), then extract it using `tar` or `unzip` and move it into `$HOME/.cargo/bin`.
 We recommend using the pre-compiled ones because we optimize those more than a standard source build does.
 
