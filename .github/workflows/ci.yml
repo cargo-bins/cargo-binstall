@@ -149,6 +149,9 @@ jobs:
     - run: just avoid-dev-deps
     - run: just lint
 
+  release-builds:
+    uses: ./.github/workflows/release-build.yml
+
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Tests pass
@@ -158,15 +161,11 @@ jobs:
     - apple-m1-check
     - lint
     - windows-aarch64-check
+    - release-builds
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
     # fail if ANY dependency has failed or been skipped or cancelled
     - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'skipped') || contains(needs.*.result, 'cancelled')"
       run: exit 1
-    # Wait for 30s before release build to avoid overloading GitHub.
-    - run: sleep 30
-
-  release-builds:
-    needs: tests-pass
-    uses: ./.github/workflows/release-build.yml
+    - run: exit 0
