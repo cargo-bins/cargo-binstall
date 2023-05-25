@@ -15,7 +15,7 @@ You probably want to **[see this page as it was when the latest version was publ
 
 ## Installation
 
-Here are the one-liners for installing pre-compiled `cargo-binstall` binary from release on Linux and acOS:
+Here are the one-liners for installing pre-compiled `cargo-binstall` binary from release on Linux and macOS:
 
 ```
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
