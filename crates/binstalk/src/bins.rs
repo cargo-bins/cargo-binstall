@@ -11,7 +11,10 @@ use tracing::debug;
 
 use crate::{
     errors::BinstallError,
-    fs::{atomic_install, atomic_symlink_file},
+    fs::{
+        atomic_install, atomic_install_noclobber, atomic_symlink_file,
+        atomic_symlink_file_noclobber,
+    },
     helpers::download::ExtractedFiles,
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -180,16 +183,10 @@ impl BinFile {
         }
     }
 
-    pub fn install_bin(&self) -> Result<(), BinstallError> {
+    fn pre_install_bin(&self) -> Result<(), BinstallError> {
         if !self.source.try_exists()? {
             return Err(BinstallError::BinFileNotFound(self.source.clone()));
         }
-
-        debug!(
-            "Atomically install file from '{}' to '{}'",
-            self.source.display(),
-            self.dest.display()
-        );
 
         #[cfg(unix)]
         std::fs::set_permissions(
@@ -197,7 +194,33 @@ impl BinFile {
             std::os::unix::fs::PermissionsExt::from_mode(0o755),
         )?;
 
+        Ok(())
+    }
+
+    pub fn install_bin(&self) -> Result<(), BinstallError> {
+        self.pre_install_bin()?;
+
+        debug!(
+            "Atomically install file from '{}' to '{}'",
+            self.source.display(),
+            self.dest.display()
+        );
+
         atomic_install(&self.source, &self.dest)?;
+
+        Ok(())
+    }
+
+    pub fn install_bin_noclobber(&self) -> Result<(), BinstallError> {
+        self.pre_install_bin()?;
+
+        debug!(
+            "Installing file from '{}' to '{}' only if dst not exists",
+            self.source.display(),
+            self.dest.display()
+        );
+
+        atomic_install_noclobber(&self.source, &self.dest)?;
 
         Ok(())
     }
@@ -211,6 +234,20 @@ impl BinFile {
                 dest.display()
             );
             atomic_symlink_file(dest, link)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn install_link_noclobber(&self) -> Result<(), BinstallError> {
+        if let Some(link) = &self.link {
+            let dest = self.link_dest();
+            debug!(
+                "Create link '{}' pointing to '{}' only if dst not exists",
+                link.display(),
+                dest.display()
+            );
+            atomic_symlink_file_noclobber(dest, link)?;
         }
 
         Ok(())

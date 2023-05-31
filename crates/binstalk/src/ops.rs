@@ -25,6 +25,7 @@ pub struct Options {
     pub force: bool,
     pub quiet: bool,
     pub locked: bool,
+    pub no_track: bool,
 
     pub version_req: Option<VersionReq>,
     pub manifest_path: Option<PathBuf>,

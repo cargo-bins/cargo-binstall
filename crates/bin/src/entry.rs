@@ -59,7 +59,7 @@ pub fn install_crates(
     // Compute paths
     let cargo_root = args.root;
     let (install_path, mut manifests, temp_dir) =
-        compute_paths_and_load_manifests(cargo_root.clone(), args.install_path)?;
+        compute_paths_and_load_manifests(cargo_root.clone(), args.install_path, args.no_track)?;
 
     // Remove installed crates
     let mut crate_names =
@@ -101,6 +101,7 @@ pub fn install_crates(
         force: args.force,
         quiet: args.log_level == Some(LevelFilter::Off),
         locked: args.locked,
+        no_track: args.no_track,
 
         version_req: args.version_req,
         manifest_path: args.manifest_path,
@@ -234,6 +235,7 @@ fn read_root_certs(root_certificate_paths: Vec<PathBuf>) -> impl Iterator<Item =
 fn compute_paths_and_load_manifests(
     roots: Option<PathBuf>,
     install_path: Option<PathBuf>,
+    no_track: bool,
 ) -> Result<(PathBuf, Option<Manifests>, tempfile::TempDir)> {
     // Compute cargo_roots
     let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
@@ -251,8 +253,10 @@ fn compute_paths_and_load_manifests(
     fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
     debug!("Using install path: {}", install_path.display());
 
+    let no_manifests = no_track || custom_install_path;
+
     // Load manifests
-    let manifests = if !custom_install_path {
+    let manifests = if !no_manifests {
         Some(Manifests::open_exclusive(&cargo_roots)?)
     } else {
         None

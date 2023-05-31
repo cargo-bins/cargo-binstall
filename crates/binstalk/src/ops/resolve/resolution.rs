@@ -51,15 +51,26 @@ impl Resolution {
 
 impl ResolutionFetch {
     pub fn install(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
+        type InstallFp = fn(&bins::BinFile) -> Result<(), BinstallError>;
+
+        let (install_bin, install_link): (InstallFp, InstallFp) = match (opts.no_track, opts.force)
+        {
+            (true, true) | (false, _) => (bins::BinFile::install_bin, bins::BinFile::install_link),
+            (true, false) => (
+                bins::BinFile::install_bin_noclobber,
+                bins::BinFile::install_link_noclobber,
+            ),
+        };
+
         info!("Installing binaries...");
         for file in &self.bin_files {
-            file.install_bin()?;
+            install_bin(file)?;
         }
 
         // Generate symlinks
         if !opts.no_symlinks {
             for file in &self.bin_files {
-                file.install_link()?;
+                install_link(file)?;
             }
         }
 
@@ -156,6 +167,10 @@ impl ResolutionSource {
 
         if let Some(cargo_root) = &opts.cargo_root {
             cmd.arg("--root").arg(cargo_root);
+        }
+
+        if opts.no_track {
+            cmd.arg("--no-track");
         }
 
         if !opts.dry_run {

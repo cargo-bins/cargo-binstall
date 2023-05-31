@@ -3,6 +3,54 @@ use std::{fs, io, path::Path};
 use tempfile::{NamedTempFile, TempPath};
 use tracing::{debug, warn};
 
+fn copy_to_tempfile(src: &Path, dst: &Path) -> io::Result<NamedTempFile> {
+    let mut src_file = fs::File::open(src)?;
+
+    let parent = dst.parent().unwrap();
+    debug!("Creating named tempfile at '{}'", parent.display());
+    let mut tempfile = NamedTempFile::new_in(parent)?;
+
+    debug!(
+        "Copying from '{}' to '{}'",
+        src.display(),
+        tempfile.path().display()
+    );
+    io::copy(&mut src_file, tempfile.as_file_mut())?;
+
+    debug!("Retrieving permissions of '{}'", src.display());
+    let permissions = src_file.metadata()?.permissions();
+
+    debug!(
+        "Setting permissions of '{}' to '{permissions:#?}'",
+        tempfile.path().display()
+    );
+    tempfile.as_file().set_permissions(permissions)?;
+
+    Ok(tempfile)
+}
+
+/// Install a file.
+///
+/// This is a blocking function, must be called in `block_in_place` mode.
+pub fn atomic_install_noclobber(src: &Path, dst: &Path) -> io::Result<()> {
+    debug!(
+        "Attempting to rename from '{}' to '{}'.",
+        src.display(),
+        dst.display()
+    );
+
+    let tempfile = copy_to_tempfile(src, dst)?;
+
+    debug!(
+        "Persisting '{}' to '{}', fail if dst already exists",
+        tempfile.path().display(),
+        dst.display()
+    );
+    tempfile.persist_noclobber(dst)?;
+
+    Ok(())
+}
+
 /// Atomically install a file.
 ///
 /// This is a blocking function, must be called in `block_in_place` mode.
@@ -33,29 +81,7 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
         // Fallback to creating NamedTempFile on the parent dir of
         // dst.
 
-        let mut src_file = fs::File::open(src)?;
-
-        let parent = dst.parent().unwrap();
-        debug!("Creating named tempfile at '{}'", parent.display());
-        let mut tempfile = NamedTempFile::new_in(parent)?;
-
-        debug!(
-            "Copying from '{}' to '{}'",
-            src.display(),
-            tempfile.path().display()
-        );
-        io::copy(&mut src_file, tempfile.as_file_mut())?;
-
-        debug!("Retrieving permissions of '{}'", src.display());
-        let permissions = src_file.metadata()?.permissions();
-
-        debug!(
-            "Setting permissions of '{}' to '{permissions:#?}'",
-            tempfile.path().display()
-        );
-        tempfile.as_file().set_permissions(permissions)?;
-
-        persist(tempfile.into_temp_path(), dst)?;
+        persist(copy_to_tempfile(src, dst)?.into_temp_path(), dst)?;
     } else {
         debug!("Attempting at atomically succeeded.");
     }
@@ -63,15 +89,28 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn symlink_file(original: &Path, link: &Path) -> io::Result<()> {
+fn symlink_file_inner(dest: &Path, link: &Path) -> io::Result<()> {
     #[cfg(target_family = "unix")]
-    std::os::unix::fs::symlink(original, link)?;
+    std::os::unix::fs::symlink(dest, link)?;
 
-    // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
     #[cfg(target_family = "windows")]
-    std::os::windows::fs::symlink_file(original, link)
-        .or_else(|_| std::fs::copy(original, link).map(drop))?;
+    std::os::windows::fs::symlink_file(dest, link)?;
+
     Ok(())
+}
+
+pub fn atomic_symlink_file_noclobber(dest: &Path, link: &Path) -> io::Result<()> {
+    match symlink_file_inner(dest, link) {
+        Ok(_) => Ok(()),
+
+        #[cfg(target_family = "windows")]
+        // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
+        // Fallback to copy if it fails.
+        Err(_) => atomic_install_noclobber(dest, link),
+
+        #[cfg(not(target_family = "windows"))]
+        Err(err) => Err(err),
+    }
 }
 
 /// Atomically install symlink "link" to a file "dst".
@@ -82,6 +121,8 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
 
     debug!("Creating tempPath at '{}'", parent.display());
     let temp_path = NamedTempFile::new_in(parent)?.into_temp_path();
+    // Remove this file so that we can create a symlink
+    // with the name.
     fs::remove_file(&temp_path)?;
 
     debug!(
@@ -89,9 +130,18 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
         temp_path.display(),
         dest.display()
     );
-    symlink_file(dest, &temp_path)?;
 
-    persist(temp_path, link)
+    match symlink_file_inner(dest, &temp_path) {
+        Ok(_) => persist(temp_path, link),
+
+        #[cfg(target_family = "windows")]
+        // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
+        // Fallback to copy if it fails.
+        Err(_) => atomic_install(dest, link),
+
+        #[cfg(not(target_family = "windows"))]
+        Err(err) => Err(err),
+    }
 }
 
 fn persist(temp_path: TempPath, to: &Path) -> io::Result<()> {
