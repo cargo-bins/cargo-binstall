@@ -20,7 +20,7 @@ on:
       - SUPPORT.md
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
