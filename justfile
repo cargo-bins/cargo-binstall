@@ -9,6 +9,7 @@ default-features := env_var_or_default("JUST_DEFAULT_FEATURES", "")
 override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
 glibc-version := env_var_or_default("GLIBC_VERSION", "")
 use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
+timings := env_var_or_default("JUST_TIMINGS", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
 
@@ -145,7 +146,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
     ""
 }
 
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16)
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16) + (if timings != "" { " --timings" } else { "" })
 export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
