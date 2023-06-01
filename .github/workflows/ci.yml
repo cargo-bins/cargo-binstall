@@ -151,6 +151,9 @@ jobs:
 
   release-builds:
     uses: ./.github/workflows/release-build.yml
+    with:
+      CARGO_PROFILE_RELEASE_LTO: no
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1024
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:

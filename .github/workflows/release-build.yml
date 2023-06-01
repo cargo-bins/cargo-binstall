@@ -8,6 +8,14 @@ on:
         description: "Set to the release metadata JSON to publish the release"
         required: false
         type: string
+      CARGO_PROFILE_RELEASE_LTO:
+        description: "Set to override default release profile lto settings"
+        required: false
+        type: string
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS:
+        description: "Set to override default release profile codegen-units settings"
+        required: false
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -53,6 +61,14 @@ jobs:
 
     - run: just toolchain rust-src
     - run: just ci-install-deps
+
+    - name: Override release profile lto settings
+      if: inputs.CARGO_PROFILE_RELEASE_LTO
+      run: echo "CARGO_PROFILE_RELEASE_LTO=${{ inputs.CARGO_PROFILE_RELEASE_LTO }}" >> "$GITHUB_ENV"
+
+    - name: Override release profile codegen-units settings
+      if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
+      run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
 
     - run: just package
     - if: runner.os == 'Windows'
