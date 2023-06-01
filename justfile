@@ -128,10 +128,12 @@ rustc-icf := if for-release != "" {
 
 # Only enable linker-plugin-lto for release
 # Also disable this on windows since it uses msvc.
+#
+# Temporarily disable this on linux due to mismatch llvm version
+# } else if target-os == "linux" {
+#     "-C linker-plugin-lto "
 linker-plugin-lto := if for-release == "" {
     ""
-} else if target-os == "linux" {
-    "-C linker-plugin-lto "
 } else {
     ""
 }
@@ -169,7 +171,10 @@ toolchain components="":
     {{ if target != "" { "rustup target add " + target } else { "" } }}
 
 print-env:
-    echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
+    @echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
+
+print-rustflags:
+    @echo "$RUSTFLAGS"
 
 build: print-env
     {{cargo-bin}} build {{cargo-build-args}}
