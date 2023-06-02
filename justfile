@@ -151,7 +151,7 @@ export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (ru
 
 
 # libblocksruntime-dev provides compiler-rt
-ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev"
+ci-apt-deps := if target == "x86_64-unknown-linux-gnu" { "liblzma-dev libzip-dev libzstd-dev lld"
     } else { "" }
 
 [linux]
