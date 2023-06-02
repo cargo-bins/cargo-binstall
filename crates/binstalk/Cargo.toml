@@ -13,7 +13,7 @@ license = "GPL-3.0"
 async-trait = "0.1.68"
 binstalk-downloader = { version = "0.5.1", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
 binstalk-types = { version = "0.4.0", path = "../binstalk-types" }
-cargo_toml = "0.15.2"
+cargo_toml = "0.15.3"
 command-group = { version = "2.1.0", features = ["with-tokio"] }
 compact_str = { version = "0.7.0", features = ["serde"] }
 detect-targets = { version = "0.1.7", path = "../detect-targets" }
