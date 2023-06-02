@@ -47,8 +47,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
-      with:
-        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
@@ -78,8 +76,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
-      with:
-        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
@@ -97,8 +93,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
-      with:
-        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
@@ -115,8 +109,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
-      with:
-        cache-suffix: ${{ env.CARGO_BUILD_TARGET }}
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
@@ -141,8 +133,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
-      with:
-        cache-suffix: ${{ matrix.target }}
 
     - run: just toolchain rustfmt,clippy
     - run: just ci-install-deps
