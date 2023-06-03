@@ -24,6 +24,14 @@ export PATH="$CARGO_HOME/bin:$PATH"
     --disable-strategies compile \
     cargo-binstall
 
+# Test that the installed binaries can be run
+cargo binstall --help >/dev/null
+
+cargo_binstall_version="$(cargo binstall -V)"
+echo "$cargo_binstall_version"
+
+[ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
+
 # Test default Github pkg-url templates,
 # with bin-dir provided
 "./$1" binstall \
@@ -32,3 +40,11 @@ export PATH="$CARGO_HOME/bin:$PATH"
     --no-confirm \
     --disable-strategies compile \
     cargo-binstall
+
+# Test that the installed binaries can be run
+cargo binstall --help >/dev/null
+
+cargo_binstall_version="$(cargo binstall -V)"
+echo "$cargo_binstall_version"
+
+[ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]

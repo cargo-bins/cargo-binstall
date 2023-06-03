@@ -15,4 +15,7 @@ cp "./$1" "$othertmpdir/bin/"
 
 cargo binstall --no-confirm cargo-audit@0.17.5 --strategies crate-meta-data
 
-cargo audit --version
+cargo_audit_version="$(cargo audit --version)"
+echo "$cargo_audit_version"
+
+[ "$cargo_audit_version" = "cargo-audit 0.17.5" ]
