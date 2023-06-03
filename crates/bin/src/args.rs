@@ -172,6 +172,21 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub no_cleanup: bool,
 
+    /// By default, binstall keeps track of the installed packages with metadata files
+    /// stored in the installation root directory.
+    ///
+    /// This flag tells binstall not to use or create that file.
+    ///
+    /// With this flag, binstall will refuse to overwrite any existing files unless the
+    /// `--force` flag is used.
+    ///
+    /// This also disables binstall’s ability to protect against multiple concurrent
+    /// invocations of binstall installing at the same time.
+    ///
+    /// This flag will also be passed to `cargo-install` if it is invoked.
+    #[clap(help_heading = "Options", long)]
+    pub no_track: bool,
+
     /// Install binaries in a custom location.
     ///
     /// By default, binaries are installed to the global location `$CARGO_HOME/bin`, and global
