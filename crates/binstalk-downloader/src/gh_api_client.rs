@@ -1,7 +1,10 @@
 use std::{
     collections::HashMap,
     ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Arc, Mutex, RwLock,
+    },
     time::{Duration, Instant},
 };
 
@@ -87,9 +90,11 @@ where
 #[derive(Debug)]
 struct Inner {
     client: remote::Client,
-    auth_token: Option<CompactString>,
     release_artifacts: Map<GhRelease, OnceCell<Option<request::Artifacts>>>,
     retry_after: Mutex<Option<Instant>>,
+
+    auth_token: Option<CompactString>,
+    is_auth_token_valid: AtomicBool,
 }
 
 /// Github API client for querying whether a release artifact exitsts.
@@ -116,10 +121,46 @@ impl GhApiClient {
 
         Self(Arc::new(Inner {
             client,
-            auth_token,
             release_artifacts: Default::default(),
             retry_after: Default::default(),
+
+            auth_token,
+            is_auth_token_valid: AtomicBool::new(true),
         }))
+    }
+}
+
+enum FetchReleaseArtifactError {
+    Error(GhApiError),
+    RateLimit { retry_after: Instant },
+    Unauthorized,
+}
+
+impl GhApiClient {
+    async fn do_fetch_release_artifacts(
+        &self,
+        release: &GhRelease,
+        auth_token: Option<&str>,
+    ) -> Result<Option<request::Artifacts>, FetchReleaseArtifactError> {
+        use request::FetchReleaseRet::*;
+        use FetchReleaseArtifactError as Error;
+
+        match request::fetch_release_artifacts(&self.0.client, release, auth_token).await {
+            Ok(ReleaseNotFound) => Ok(None),
+            Ok(Artifacts(artifacts)) => Ok(Some(artifacts)),
+            Ok(ReachedRateLimit { retry_after }) => {
+                let retry_after = retry_after.unwrap_or(DEFAULT_RETRY_DURATION);
+
+                let now = Instant::now();
+                let retry_after = now
+                    .checked_add(retry_after)
+                    .unwrap_or_else(|| now + DEFAULT_RETRY_DURATION);
+
+                Err(Error::RateLimit { retry_after })
+            }
+            Ok(Unauthorized) => Err(Error::Unauthorized),
+            Err(err) => Err(Error::Error(err)),
+        }
     }
 
     /// The returned future is guaranteed to be pointer size.
@@ -130,24 +171,18 @@ impl GhApiClient {
             artifact_name,
         }: GhReleaseArtifact,
     ) -> Result<HasReleaseArtifact, GhApiError> {
-        enum Failure {
-            Error(GhApiError),
-            RateLimit { retry_after: Instant },
-            Unauthorized,
-        }
+        use FetchReleaseArtifactError as Error;
 
         let once_cell = self.0.release_artifacts.get(release.clone());
         let res = once_cell
             .get_or_try_init(|| {
                 Box::pin(async {
-                    use request::FetchReleaseRet::*;
-
                     {
                         let mut guard = self.0.retry_after.lock().unwrap();
 
                         if let Some(retry_after) = *guard {
                             if retry_after.elapsed().is_zero() {
-                                return Err(Failure::RateLimit { retry_after });
+                                return Err(Error::RateLimit { retry_after });
                             } else {
                                 // Instant retry_after is already reached.
                                 *guard = None;
@@ -155,28 +190,19 @@ impl GhApiClient {
                         };
                     }
 
-                    match request::fetch_release_artifacts(
-                        &self.0.client,
-                        release,
-                        self.0.auth_token.as_deref(),
-                    )
-                    .await
-                    {
-                        Ok(ReleaseNotFound) => Ok::<_, Failure>(None),
-                        Ok(Artifacts(artifacts)) => Ok(Some(artifacts)),
-                        Ok(ReachedRateLimit { retry_after }) => {
-                            let retry_after = retry_after.unwrap_or(DEFAULT_RETRY_DURATION);
-
-                            let now = Instant::now();
-                            let retry_after = now
-                                .checked_add(retry_after)
-                                .unwrap_or_else(|| now + DEFAULT_RETRY_DURATION);
-
-                            Err(Failure::RateLimit { retry_after })
+                    if self.0.is_auth_token_valid.load(Relaxed) {
+                        match self
+                            .do_fetch_release_artifacts(&release, self.0.auth_token.as_deref())
+                            .await
+                        {
+                            Err(Error::Unauthorized) => {
+                                self.0.is_auth_token_valid.store(false, Relaxed);
+                            }
+                            res => return res,
                         }
-                        Ok(Unauthorized) => Err(Failure::Unauthorized),
-                        Err(err) => Err(Failure::Error(err)),
                     }
+
+                    self.do_fetch_release_artifacts(&release, None).await
                 })
             })
             .await;
@@ -191,13 +217,13 @@ impl GhApiClient {
                 })
             }
             Ok(None) => Ok(HasReleaseArtifact::NoSuchRelease),
-            Err(Failure::Unauthorized) => Ok(HasReleaseArtifact::Unauthorized),
-            Err(Failure::RateLimit { retry_after }) => {
+            Err(Error::Unauthorized) => Ok(HasReleaseArtifact::Unauthorized),
+            Err(Error::RateLimit { retry_after }) => {
                 *self.0.retry_after.lock().unwrap() = Some(retry_after);
 
                 Ok(HasReleaseArtifact::RateLimit { retry_after })
             }
-            Err(Failure::Error(err)) => Err(err),
+            Err(Error::Error(err)) => Err(err),
         }
     }
 }
