@@ -306,12 +306,12 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::invalid_pkg_fmt))]
     InvalidPkgFmt(Box<InvalidPkgFmtError>),
 
-    /// Request to GitHub Restful API failed
+    /// Request to GitHub API failed
     ///
-    /// - Code: `binstall::gh_restful_api_failure`
+    /// - Code: `binstall::gh_api_failure`
     /// - Exit: 96
-    #[error("Request to GitHub Restful API failed: {0}")]
-    #[diagnostic(severity(error), code(binstall::gh_restful_api_failure))]
+    #[error("Request to GitHub API failed: {0}")]
+    #[diagnostic(severity(error), code(binstall::gh_api_failure))]
     GhApiErr(#[source] Box<GhApiError>),
 
     /// A wrapped error providing the context of which crate the error is about.

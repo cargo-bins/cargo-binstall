@@ -15,7 +15,7 @@ pub async fn does_url_exist(
     debug!("Checking for package at: '{url}'");
 
     if let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url) {
-        debug!("Using GitHub Restful API to check for existence of artifact, which will also cache the API response");
+        debug!("Using GitHub API to check for existence of artifact, which will also cache the API response");
 
         // The future returned has the same size as a pointer
         match gh_api_client.has_release_artifact(artifact).await? {

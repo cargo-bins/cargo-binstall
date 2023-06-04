@@ -6,6 +6,8 @@ use reqwest::Method;
 
 use super::{header, Client, Error, HttpError, StatusCode, Url};
 
+pub use reqwest::Body;
+
 #[cfg(feature = "json")]
 pub use serde_json::Error as JsonError;
 
@@ -16,17 +18,24 @@ pub struct RequestBuilder {
 }
 
 impl RequestBuilder {
-    pub fn bearer_auth(self, token: &dyn fmt::Display) -> RequestBuilder {
+    pub fn bearer_auth(self, token: &dyn fmt::Display) -> Self {
         Self {
             client: self.client,
             inner: self.inner.bearer_auth(token),
         }
     }
 
-    pub fn header(self, key: &str, value: &str) -> RequestBuilder {
+    pub fn header(self, key: &str, value: &str) -> Self {
         Self {
             client: self.client,
             inner: self.inner.header(key, value),
+        }
+    }
+
+    pub fn body(self, body: impl Into<Body>) -> Self {
+        Self {
+            client: self.client,
+            inner: self.inner.body(body.into()),
         }
     }
 

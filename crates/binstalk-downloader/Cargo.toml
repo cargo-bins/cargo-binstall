@@ -24,7 +24,9 @@ futures-util = "0.3.28"
 generic-array = "0.14.7"
 httpdate = "1.0.2"
 reqwest = { version = "0.11.18", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
+percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"], optional = true }
+serde-tuple-vec-map = "1.0.1"
 serde_json = { version = "1.0.96", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
