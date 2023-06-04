@@ -83,7 +83,7 @@ pub(super) enum FetchReleaseRet {
 /// Returns 404 if not found
 pub(super) async fn fetch_release_artifacts(
     client: &remote::Client,
-    GhRelease { owner, repo, tag }: GhRelease,
+    GhRelease { owner, repo, tag }: &GhRelease,
     auth_token: Option<&str>,
 ) -> Result<FetchReleaseRet, GhApiError> {
     let mut request_builder = client
