@@ -26,7 +26,7 @@ mod certificate;
 pub use certificate::Certificate;
 
 mod request_builder;
-pub use request_builder::{RequestBuilder, Response};
+pub use request_builder::{Body, RequestBuilder, Response};
 
 #[cfg(feature = "json")]
 pub use request_builder::JsonError;
@@ -303,6 +303,7 @@ impl Client {
         Ok(self.get(url).send(true).await?.bytes_stream())
     }
 
+    /// Create a new request.
     pub fn request(&self, method: Method, url: Url) -> RequestBuilder {
         RequestBuilder {
             client: self.clone(),
@@ -310,8 +311,14 @@ impl Client {
         }
     }
 
+    /// Create a new GET request.
     pub fn get(&self, url: Url) -> RequestBuilder {
         self.request(Method::GET, url)
+    }
+
+    /// Create a new POST request.
+    pub fn post(&self, url: Url, body: impl Into<Body>) -> RequestBuilder {
+        self.request(Method::POST, url).body(body.into())
     }
 }
 

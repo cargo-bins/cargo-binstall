@@ -8,17 +8,42 @@ use std::{
     time::{Duration, Instant},
 };
 
-use compact_str::{CompactString, ToCompactString};
+use compact_str::CompactString;
+use percent_encoding::{
+    percent_decode_str, utf8_percent_encode, AsciiSet, PercentEncode, CONTROLS,
+};
 use tokio::sync::OnceCell;
 use tracing::{debug, warn};
 
 use crate::remote;
 
 mod request;
-pub use request::GhApiError;
+pub use request::{GhApiContextError, GhApiError, GhGraphQLErrors};
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(3);
+
+fn percent_encode_http_url_path(path: &str) -> PercentEncode<'_> {
+    /// https://url.spec.whatwg.org/#fragment-percent-encode-set
+    const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
+
+    /// https://url.spec.whatwg.org/#path-percent-encode-set
+    const PATH: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
+
+    const PATH_SEGMENT: &AsciiSet = &PATH.add(b'/').add(b'%');
+
+    // The backslash (\) character is treated as a path separator in special URLs
+    // so it needs to be additionally escaped in that case.
+    //
+    // http is considered to have special path.
+    const SPECIAL_PATH_SEGMENT: &AsciiSet = &PATH_SEGMENT.add(b'\\');
+
+    utf8_percent_encode(path, SPECIAL_PATH_SEGMENT)
+}
+
+fn percent_decode_http_url_path(input: &str) -> CompactString {
+    percent_decode_str(input).decode_utf8_lossy().into()
+}
 
 /// The keys required to identify a github release.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -57,11 +82,11 @@ impl GhReleaseArtifact {
         (path_segments.next().is_none() && url.fragment().is_none() && url.query().is_none()).then(
             || Self {
                 release: GhRelease {
-                    owner: owner.to_compact_string(),
-                    repo: repo.to_compact_string(),
-                    tag: tag.to_compact_string(),
+                    owner: percent_decode_http_url_path(owner),
+                    repo: percent_decode_http_url_path(repo),
+                    tag: percent_decode_http_url_path(tag),
                 },
-                artifact_name: artifact_name.to_compact_string(),
+                artifact_name: percent_decode_http_url_path(artifact_name),
             },
         )
     }
@@ -258,6 +283,8 @@ pub enum HasReleaseArtifact {
 #[cfg(test)]
 mod test {
     use super::*;
+    use compact_str::{CompactString, ToCompactString};
+    use std::env;
 
     mod cargo_binstall_v0_20_1 {
         use super::{CompactString, GhRelease};
@@ -347,35 +374,52 @@ mod test {
 
     /// Mark this as an async fn so that you won't accidentally use it in
     /// sync context.
-    async fn create_client() -> GhApiClient {
-        GhApiClient::new(
-            remote::Client::new(
-                concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
-                None,
-                Duration::from_millis(10),
-                1.try_into().unwrap(),
-                [],
-            )
-            .unwrap(),
+    async fn create_client() -> Vec<GhApiClient> {
+        let client = remote::Client::new(
+            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
+            Duration::from_millis(10),
+            1.try_into().unwrap(),
+            [],
         )
+        .unwrap();
+
+        let mut gh_clients = vec![GhApiClient::new(client.clone(), None)];
+
+        if let Ok(token) = env::var("GITHUB_TOKEN") {
+            gh_clients.push(GhApiClient::new(client, Some(token.into())));
+        }
+
+        gh_clients
     }
 
-    #[tokio::test]
-    async fn test_gh_api_client_cargo_binstall_v0_20_1() {
-        let client = create_client().await;
+    async fn test_specific_release(release: &GhRelease, artifacts: &[&str]) {
+        for client in create_client().await {
+            eprintln!("In client {client:?}");
 
-        let release = cargo_binstall_v0_20_1::RELEASE;
+            for artifact_name in artifacts {
+                let ret = client
+                    .has_release_artifact(GhReleaseArtifact {
+                        release: release.clone(),
+                        artifact_name: artifact_name.to_compact_string(),
+                    })
+                    .await
+                    .unwrap();
 
-        let artifacts = cargo_binstall_v0_20_1::ARTIFACTS
-            .iter()
-            .map(ToCompactString::to_compact_string);
+                assert!(
+                    matches!(
+                        ret,
+                        HasReleaseArtifact::Yes | HasReleaseArtifact::RateLimit { .. }
+                    ),
+                    "for '{artifact_name}': answer is {:#?}",
+                    ret
+                );
+            }
 
-        for artifact_name in artifacts {
             let ret = client
                 .has_release_artifact(GhReleaseArtifact {
                     release: release.clone(),
-                    artifact_name,
+                    artifact_name: "123z".to_compact_string(),
                 })
                 .await
                 .unwrap();
@@ -383,58 +427,91 @@ mod test {
             assert!(
                 matches!(
                     ret,
-                    HasReleaseArtifact::Yes | HasReleaseArtifact::RateLimit { .. }
+                    HasReleaseArtifact::No | HasReleaseArtifact::RateLimit { .. }
                 ),
                 "ret = {:#?}",
                 ret
             );
         }
+    }
 
-        let ret = client
-            .has_release_artifact(GhReleaseArtifact {
-                release,
-                artifact_name: "123z".to_compact_string(),
-            })
-            .await
-            .unwrap();
-
-        assert!(
-            matches!(
-                ret,
-                HasReleaseArtifact::No | HasReleaseArtifact::RateLimit { .. }
-            ),
-            "ret = {:#?}",
-            ret
-        );
+    #[tokio::test]
+    async fn test_gh_api_client_cargo_binstall_v0_20_1() {
+        test_specific_release(
+            &cargo_binstall_v0_20_1::RELEASE,
+            cargo_binstall_v0_20_1::ARTIFACTS,
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_gh_api_client_cargo_binstall_no_such_release() {
-        let client = create_client().await;
+        for client in create_client().await {
+            let release = GhRelease {
+                owner: "cargo-bins".to_compact_string(),
+                repo: "cargo-binstall".to_compact_string(),
+                // We are currently at v0.20.1 and we would never release
+                // anything older than v0.20.1
+                tag: "v0.18.2".to_compact_string(),
+            };
 
-        let release = GhRelease {
-            owner: "cargo-bins".to_compact_string(),
-            repo: "cargo-binstall".to_compact_string(),
-            // We are currently at v0.20.1 and we would never release
-            // anything older than v0.20.1
-            tag: "v0.18.2".to_compact_string(),
+            let ret = client
+                .has_release_artifact(GhReleaseArtifact {
+                    release,
+                    artifact_name: "1234".to_compact_string(),
+                })
+                .await
+                .unwrap();
+
+            assert!(
+                matches!(
+                    ret,
+                    HasReleaseArtifact::NoSuchRelease | HasReleaseArtifact::RateLimit { .. }
+                ),
+                "ret = {:#?}",
+                ret
+            );
+        }
+    }
+
+    mod cargo_audit_v_0_17_6 {
+        use super::*;
+
+        const RELEASE: GhRelease = GhRelease {
+            owner: CompactString::new_inline("rustsec"),
+            repo: CompactString::new_inline("rustsec"),
+            tag: CompactString::new_inline("cargo-audit/v0.17.6"),
         };
 
-        let ret = client
-            .has_release_artifact(GhReleaseArtifact {
-                release,
-                artifact_name: "1234".to_compact_string(),
-            })
-            .await
-            .unwrap();
+        const ARTIFACTS: &[&str] = &[
+            "cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz",
+            "cargo-audit-armv7-unknown-linux-gnueabihf-v0.17.6.tgz",
+            "cargo-audit-x86_64-apple-darwin-v0.17.6.tgz",
+            "cargo-audit-x86_64-pc-windows-msvc-v0.17.6.zip",
+            "cargo-audit-x86_64-unknown-linux-gnu-v0.17.6.tgz",
+            "cargo-audit-x86_64-unknown-linux-gnu-v0.17.6.tgz",
+        ];
 
-        assert!(
-            matches!(
-                ret,
-                HasReleaseArtifact::NoSuchRelease | HasReleaseArtifact::RateLimit { .. }
-            ),
-            "ret = {:#?}",
-            ret
-        );
+        #[test]
+        fn extract_with_escaped_characters() {
+            let release_artifact = try_extract_artifact_from_str(
+"https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz"
+                ).unwrap();
+
+            assert_eq!(
+                release_artifact,
+                GhReleaseArtifact {
+                    release: RELEASE,
+                    artifact_name: CompactString::from(
+                        "cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz",
+                    )
+                }
+            );
+        }
+
+        #[tokio::test]
+        async fn test_gh_api_client_cargo_audit_v_0_17_6() {
+            test_specific_release(&RELEASE, ARTIFACTS).await
+        }
     }
 }
