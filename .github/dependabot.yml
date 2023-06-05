@@ -12,7 +12,4 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    allow:
-      - dependency-name: "*"
-        # Update all dependencies, including the dependencies of direct dependencies.
-        dependency-type: "all"
+    versioning-strategy: increase-if-necessary

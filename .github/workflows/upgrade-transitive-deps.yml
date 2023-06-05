@@ -1,0 +1,48 @@
+name: Upgrade transitive dependencies
+
+on:
+  workflow_dispatch: # Allow running on-demand
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  upgrade:
+    name: Upgrade & Open Pull Request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          persist-credentials: true
+
+      - name: Generate branch name
+        run: |
+          git checkout -b deps/transitive/${{ github.run_id }}
+
+      - name: Install rust
+        run: |
+          rustup toolchain install stable --no-self-update --profile minimal
+
+      - name: Upgrade transitive dependencies
+        run: cargo update --aggressive
+
+      - name: Detect changes
+        id: changes
+        run:
+          # This output boolean tells us if the dependencies have actually changed
+          echo "count=$(git status --porcelain=v1 | wc -l)" >> $GITHUB_OUTPUT
+
+      - name: Commit and push changes
+        # Only push if changes exist
+        if: steps.changes.outputs.count > 0
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git commit -am "dep: Upgrade transitive dependencies"
+          git push origin HEAD
+
+      - name: Open pull request if needed
+        if: steps.changes.outputs.count > 0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create --base main --fill --label 'PR: dependencies'
