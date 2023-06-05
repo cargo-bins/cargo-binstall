@@ -599,7 +599,7 @@ dependencies = [
  "guess_host_triple",
  "tokio",
  "windows-dll",
- "windows-sys 0.42.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
