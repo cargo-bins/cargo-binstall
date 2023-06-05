@@ -7,14 +7,12 @@ BRANCH="${BRANCH?}"
 
 while true; do
     echo "Fetching list of cache key for $BRANCH"
-    cacheKeysForPR="$(gh actions-cache list -R "$REPO" -B "$BRANCH" -L 100 | cut -f 1 )"
+    cacheKeysForPR="$(gh actions-cache list -R "$REPO" -B "$BRANCH" -L 100 | cut -f 1)"
 
     if [ -z "$cacheKeysForPR" ]; then
         break
     fi
 
-    ## Setting this to not fail the workflow while deleting cache keys. 
-    set +e
     echo "Deleting caches..."
     for cacheKey in $cacheKeysForPR
     do
