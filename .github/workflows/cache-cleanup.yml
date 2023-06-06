@@ -31,7 +31,7 @@ jobs:
               done
           )
           # Remove merge queue cache, since they cannot be reused
-          gh actions-cache list -L 100 | cut -f 3 | grep 'gh-readonly-queue' | sort -u | (
+          gh actions-cache list -L 100 | cut -f 3 | (grep 'gh-readonly-queue' || true) | sort -u | (
               while IFS='$\n' read -r branch; do
                   BRANCH="$branch" ./cleanup-cache.sh
               done
