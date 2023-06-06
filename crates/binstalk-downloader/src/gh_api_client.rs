@@ -21,7 +21,7 @@ mod request;
 pub use request::{GhApiContextError, GhApiError, GhGraphQLErrors};
 
 /// default retry duration if x-ratelimit-reset is not found in response header
-const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(3);
+const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(5 * 60);
 
 fn percent_encode_http_url_path(path: &str) -> PercentEncode<'_> {
     /// https://url.spec.whatwg.org/#fragment-percent-encode-set
@@ -42,7 +42,12 @@ fn percent_encode_http_url_path(path: &str) -> PercentEncode<'_> {
 }
 
 fn percent_decode_http_url_path(input: &str) -> CompactString {
-    percent_decode_str(input).decode_utf8_lossy().into()
+    if input.contains('%') {
+        percent_decode_str(input).decode_utf8_lossy().into()
+    } else {
+        // No '%', no need to decode.
+        CompactString::new(input)
+    }
 }
 
 /// The keys required to identify a github release.
