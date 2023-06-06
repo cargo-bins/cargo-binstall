@@ -8,8 +8,53 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+  # If we include `/`, then dependabot would also create PR
+  # for every compatible updates.
+  #
+  # We only want incompatible updates for direct dependencies
+  # from dependabot since compatible updates is covered by
+  # `update-transitive-deps.yml`
   - package-ecosystem: "cargo"
-    directory: "/"
+    directory: "/bin"
     schedule:
       interval: "daily"
-    versioning-strategy: increase-if-necessary
+  - package-ecosystem: "cargo"
+    directory: "/binstalk"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/binstalk-downloader"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/binstalk-manifests"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/binstalk-types"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/detect-targets"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/detect-wasi"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/fs-lock"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/leon"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/leon-macros"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/normalize-path"
+    schedule:
+      interval: "daily"
