@@ -111,29 +111,26 @@ pub(super) enum FetchReleaseRet {
 }
 
 fn check_for_status(status: StatusCode, headers: &HeaderMap) -> Option<FetchReleaseRet> {
-    if status == remote::StatusCode::FORBIDDEN
-        && headers
-            .get("x-ratelimit-remaining")
-            .map(|val| val == "0")
-            .unwrap_or(false)
-    {
-        return Some(FetchReleaseRet::ReachedRateLimit {
-            retry_after: headers.get("x-ratelimit-reset").and_then(|value| {
-                let secs = value.to_str().ok()?.parse().ok()?;
-                Some(Duration::from_secs(secs))
-            }),
-        });
-    }
+    match status {
+        remote::StatusCode::FORBIDDEN
+            if headers
+                .get("x-ratelimit-remaining")
+                .map(|val| val == "0")
+                .unwrap_or(false) =>
+        {
+            Some(FetchReleaseRet::ReachedRateLimit {
+                retry_after: headers.get("x-ratelimit-reset").and_then(|value| {
+                    let secs = value.to_str().ok()?.parse().ok()?;
+                    Some(Duration::from_secs(secs))
+                }),
+            })
+        }
 
-    if status == remote::StatusCode::UNAUTHORIZED {
-        return Some(FetchReleaseRet::Unauthorized);
-    }
+        remote::StatusCode::UNAUTHORIZED => Some(FetchReleaseRet::Unauthorized),
+        remote::StatusCode::NOT_FOUND => Some(FetchReleaseRet::ReleaseNotFound),
 
-    if status == remote::StatusCode::NOT_FOUND {
-        return Some(FetchReleaseRet::ReleaseNotFound);
+        _ => None,
     }
-
-    None
 }
 
 async fn fetch_release_artifacts_restful_api(
@@ -157,14 +154,11 @@ async fn fetch_release_artifacts_restful_api(
 
     let response = request_builder.send(false).await?;
 
-    let status = response.status();
-    let headers = response.headers();
-
-    if let Some(ret) = check_for_status(status, headers) {
-        return Ok(ret);
+    if let Some(ret) = check_for_status(response.status(), response.headers()) {
+        Ok(ret)
+    } else {
+        Ok(FetchReleaseRet::Artifacts(response.json().await?))
     }
-
-    Ok(FetchReleaseRet::Artifacts(response.json().await?))
 }
 
 #[derive(Deserialize)]
