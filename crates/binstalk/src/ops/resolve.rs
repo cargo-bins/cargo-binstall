@@ -3,6 +3,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     iter, mem,
     path::Path,
+    str::FromStr,
     sync::Arc,
 };
 
@@ -21,7 +22,7 @@ use crate::{
     drivers::fetch_crate_cratesio,
     errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
-    helpers::{download::ExtractedFiles, remote::Client},
+    helpers::{download::ExtractedFiles, remote::Client, target_triple::TargetTriple},
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
 };
 
@@ -76,7 +77,13 @@ async fn resolve_inner(
         return Ok(Resolution::AlreadyUpToDate)
     };
 
-    let desired_targets = opts.desired_targets.get().await;
+    let desired_targets = opts
+        .desired_targets
+        .get()
+        .await
+        .iter()
+        .map(|target| TargetTriple::from_str(target).map(|triple| (triple, target)))
+        .collect::<Result<Vec<_>, _>>()?;
     let resolvers = &opts.resolvers;
 
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
@@ -90,8 +97,8 @@ async fn resolve_inner(
 
     handles.extend(
         desired_targets
-            .iter()
-            .map(|target| {
+            .into_iter()
+            .map(|(triple, target)| {
                 debug!("Building metadata for target: {target}");
 
                 let target_meta = package_info.meta.merge_overrides(
@@ -102,6 +109,7 @@ async fn resolve_inner(
 
                 Arc::new(TargetData {
                     target: target.clone(),
+                    triple,
                     meta: target_meta,
                 })
             })
@@ -295,6 +303,7 @@ fn collect_bin_files(
         meta,
         bin_path,
         install_path,
+        triple: &fetcher.target_data().triple,
     };
 
     let bin_dir = bin_data

@@ -9,6 +9,7 @@ use crate::{
     helpers::{
         download::{Download, ExtractedFiles},
         gh_api_client::GhApiClient,
+        is_universal_macos,
         remote::{does_url_exist, Client, Method},
         tasks::AutoAbortJoinHandle,
     },
@@ -19,10 +20,6 @@ use super::{Data, TargetData};
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
-
-fn is_universal_macos(target: &str) -> bool {
-    ["universal-apple-darwin", "universal2-apple-darwin"].contains(&target)
-}
 
 pub struct QuickInstall {
     client: Client,
@@ -135,6 +132,10 @@ by rust officially."#,
 
     fn target(&self) -> &str {
         &self.target_data.target
+    }
+
+    fn target_data(&self) -> &Arc<TargetData> {
+        &self.target_data
     }
 }
 

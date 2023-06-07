@@ -11,7 +11,7 @@ use crate::{
     errors::BinstallError,
     helpers::{
         download::ExtractedFiles, gh_api_client::GhApiClient, remote::Client,
-        tasks::AutoAbortJoinHandle,
+        target_triple::TargetTriple, tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
@@ -72,6 +72,8 @@ pub trait Fetcher: Send + Sync {
 
     /// Return the target for this fetcher
     fn target(&self) -> &str;
+
+    fn target_data(&self) -> &Arc<TargetData>;
 }
 
 #[derive(Clone, Debug)]
@@ -186,6 +188,7 @@ impl RepoInfo {
 #[derive(Clone, Debug)]
 pub struct TargetData {
     pub target: String,
+    pub triple: TargetTriple,
     pub meta: PkgMeta,
 }
 
