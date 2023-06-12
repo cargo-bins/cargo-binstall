@@ -3,7 +3,7 @@ name: Upgrade transitive dependencies
 on:
   workflow_dispatch: # Allow running on-demand
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * 5'
 
 jobs:
   upgrade:
