@@ -15,46 +15,46 @@ updates:
   # from dependabot since compatible updates is covered by
   # `update-transitive-deps.yml`
   - package-ecosystem: "cargo"
-    directory: "/bin"
+    directory: "/crates/bin"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/binstalk"
+    directory: "/crates/binstalk"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/binstalk-downloader"
+    directory: "/crates/binstalk-downloader"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/binstalk-manifests"
+    directory: "/crates/binstalk-manifests"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/binstalk-types"
+    directory: "/crates/binstalk-types"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/detect-targets"
+    directory: "/crates/detect-targets"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/detect-wasi"
+    directory: "/crates/detect-wasi"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/fs-lock"
+    directory: "/crates/fs-lock"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/leon"
+    directory: "/crates/leon"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/leon-macros"
+    directory: "/crates/leon-macros"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/normalize-path"
+    directory: "/crates/normalize-path"
     schedule:
       interval: "daily"
