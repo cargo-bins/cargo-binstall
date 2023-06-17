@@ -8,10 +8,6 @@ on:
       - opened
       - reopened
       - synchronize
-      - auto_merge_enabled
-    paths-ignore:
-      - README.md
-      - SUPPORT.md
   push:
     branches:
       - main
