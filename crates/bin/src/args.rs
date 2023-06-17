@@ -24,7 +24,7 @@ use strum_macros::EnumCount;
 #[clap(
     version,
     about = "Install a Rust binary... from binaries!",
-    after_long_help = "License: GPLv3. Source available at https://github.com/cargo-bins/cargo-binstall"),
+    after_long_help = "License: GPLv3. Source available at https://github.com/cargo-bins/cargo-binstall",
     arg_required_else_help(true),
     // Avoid conflict with version_req
     disable_version_flag(true),
