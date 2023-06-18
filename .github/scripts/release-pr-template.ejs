@@ -13,26 +13,11 @@ This is a release PR for **<%= crate.name %>** version **<%= version.actual %>**
 **Use squash merge.**
 
 <% if (crate.name == "cargo-binstall") { %>
-Upon merging, this will automatically create the tag `v<%= version.actual %>`, build the CLI, and create a GitHub release with the release notes below.
-You will still need to manually publish the cargo crate:
-
-```
-$ git switch main
-$ git pull
-$ git switch --detach v<%= version.actual %>
-$ cargo publish -p <%= crate.name %>
-```
+Upon merging, this will automatically create the tag `v<%= version.actual %>`, build the CLI,
+create a GitHub release with the release notes below
 <% } else { %>
-Upon merging, this will create the tag `<%= crate.name %>-v<%= version.actual %>`.
-You will still need to manually publish the cargo crate:
-
-```
-$ git switch main
-$ git pull
-$ git switch --detach <%= crate.name %>-v<%= version.actual %>
-$ cargo publish -p <%= crate.name %>
-```
-<% } %>
+Upon merging, this will create the tag `<%= crate.name %>-v<%= version.actual %>`
+<% } %>, and CI will publish to crates.io on merge of this PR.
 
 **To trigger builds initially, close and then immediately re-open this PR once.**
 
