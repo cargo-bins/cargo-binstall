@@ -60,7 +60,13 @@ pkg-config = ["zstd/pkg-config"]
 
 zlib-ng = ["flate2/zlib-ng"]
 
+# Dummy feature, enabled if rustls or native-tls is enabled.
+# Used to avoid compilation error when no feature is enabled.
+__tls = []
+
 rustls = [
+    "__tls",
+
     "reqwest/rustls-tls",
 
     # Enable the following features only if trust-dns-resolver is enabled.
@@ -69,7 +75,7 @@ rustls = [
     "trust-dns-resolver?/dns-over-https-rustls",
     "trust-dns-resolver?/dns-over-quic",
 ]
-native-tls = ["reqwest/native-tls", "trust-dns-resolver?/dns-over-native-tls"]
+native-tls = ["__tls", "reqwest/native-tls", "trust-dns-resolver?/dns-over-native-tls"]
 
 # Enable trust-dns-resolver so that features on it will also be enabled.
 trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]

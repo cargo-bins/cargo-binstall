@@ -8,7 +8,7 @@ use std::{
 };
 
 use binstalk::{
-    helpers::remote::tls::Version,
+    helpers::remote,
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
 };
@@ -293,11 +293,11 @@ pub enum TLSVersion {
     Tls1_3,
 }
 
-impl From<TLSVersion> for Version {
+impl From<TLSVersion> for remote::TLSVersion {
     fn from(ver: TLSVersion) -> Self {
         match ver {
-            TLSVersion::Tls1_2 => Version::TLS_1_2,
-            TLSVersion::Tls1_3 => Version::TLS_1_3,
+            TLSVersion::Tls1_2 => remote::TLSVersion::TLS_1_2,
+            TLSVersion::Tls1_3 => remote::TLSVersion::TLS_1_3,
         }
     }
 }
