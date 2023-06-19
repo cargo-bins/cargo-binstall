@@ -148,7 +148,8 @@ target-glibc-ver-postfix := if glibc-version != "" {
     ""
 }
 
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-no-default-features) + (cargo-split-debuginfo) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (win-arm64-ring16) + (if timings != "" { " --timings" } else { "" })
+cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo) + (win-arm64-ring16)
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
 export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
 
 
@@ -181,6 +182,12 @@ build: print-env
 
 check: print-env
     {{cargo-bin}} check {{cargo-build-args}}
+    cargo-hack hack check --feature-powerset -p leon {{cargo-check-args}}
+    {{cargo-bin}} check -p binstalk-downloader --no-default-features
+    cargo-hack hack check -p binstalk-downloader \
+        --feature-powerset \
+        --include-features default,json,gh-api-client \
+        {{cargo-check-args}}
 
 get-output file outdir=".":
     test -d "{{outdir}}" || mkdir -p {{outdir}}

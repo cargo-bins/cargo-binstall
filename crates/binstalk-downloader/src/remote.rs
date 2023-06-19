@@ -16,7 +16,7 @@ use thiserror::Error as ThisError;
 use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
-pub use reqwest::{header, tls, Error as ReqwestError, Method, StatusCode};
+pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
 
 mod delay_request;
@@ -28,6 +28,9 @@ pub use certificate::Certificate;
 mod request_builder;
 pub use request_builder::{Body, RequestBuilder, Response};
 
+mod tls_version;
+pub use tls_version::TLSVersion;
+
 #[cfg(feature = "json")]
 pub use request_builder::JsonError;
 
@@ -35,7 +38,7 @@ const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
 const DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT: Duration = Duration::from_millis(200);
 const RETRY_DURATION_FOR_TIMEOUT: Duration = Duration::from_millis(200);
-const DEFAULT_MIN_TLS: tls::Version = tls::Version::TLS_1_2;
+const DEFAULT_MIN_TLS: TLSVersion = TLSVersion::TLS_1_2;
 
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
@@ -69,6 +72,7 @@ struct Inner {
 #[derive(Clone, Debug)]
 pub struct Client(Arc<Inner>);
 
+#[cfg_attr(not(feature = "__tls"), allow(unused_variables, unused_mut))]
 impl Client {
     /// * `per` - must not be 0.
     /// * `num_request` - maximum number of requests to be processed for
@@ -77,30 +81,34 @@ impl Client {
     /// The Client created would use at least tls 1.2
     pub fn new(
         user_agent: impl AsRef<str>,
-        min_tls: Option<tls::Version>,
+        min_tls: Option<TLSVersion>,
         per: Duration,
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
     ) -> Result<Self, Error> {
         fn inner(
             user_agent: &str,
-            min_tls: Option<tls::Version>,
+            min_tls: Option<TLSVersion>,
             per: Duration,
             num_request: NonZeroU64,
             certificates: &mut dyn Iterator<Item = Certificate>,
         ) -> Result<Client, Error> {
-            let tls_ver = min_tls
-                .map(|tls| tls.max(DEFAULT_MIN_TLS))
-                .unwrap_or(DEFAULT_MIN_TLS);
-
             let mut builder = reqwest::ClientBuilder::new()
                 .user_agent(user_agent)
                 .https_only(true)
-                .min_tls_version(tls_ver)
                 .tcp_nodelay(false);
 
-            for certificate in certificates {
-                builder = builder.add_root_certificate(certificate.0);
+            #[cfg(feature = "__tls")]
+            {
+                let tls_ver = min_tls
+                    .map(|tls| tls.max(DEFAULT_MIN_TLS))
+                    .unwrap_or(DEFAULT_MIN_TLS);
+
+                builder = builder.min_tls_version(tls_ver.into());
+
+                for certificate in certificates {
+                    builder = builder.add_root_certificate(certificate.0);
+                }
             }
 
             let client = builder.build()?;

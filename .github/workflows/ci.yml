@@ -53,63 +53,43 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  linux-cross-check:
+  cross-check:
     strategy:
       fail-fast: false
       matrix:
-        target:
-        - armv7-unknown-linux-musleabihf
-        - armv7-unknown-linux-gnueabihf
-        - aarch64-unknown-linux-musl
-        - aarch64-unknown-linux-gnu
-        - x86_64-unknown-linux-musl
-
-    runs-on: ubuntu-latest
+        include:
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-latest
+          - target: armv7-unknown-linux-gnueabihf
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
-      JUST_USE_CARGO_ZIGBUILD: true
-
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
+      with:
+        tools: cargo-hack
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Enable cargo-zigbuild
+      if: matrix.os == 'ubuntu-latest'
+      run: echo JUST_USE_CARGO_ZIGBUILD=true >> "$GITHUB_ENV"
 
     - run: just ci-install-deps
-    - run: just avoid-dev-deps
-    - run: just check
-
-  apple-m1-check:
-    runs-on: macos-latest
-    env:
-      CARGO_BUILD_TARGET: aarch64-apple-darwin
-
-    steps:
-    - uses: actions/checkout@v3
-    - uses: ./.github/actions/just-setup
-      env:
-        # just-setup use binstall to install sccache,
-        # which works better when we provide it with GITHUB_TOKEN.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - run: just avoid-dev-deps
-    - run: just check
-
-  windows-aarch64-check:
-    runs-on: windows-latest
-    env:
-      CARGO_BUILD_TARGET: aarch64-pc-windows-msvc
-
-    steps:
-    - uses: actions/checkout@v3
-    - uses: ./.github/actions/just-setup
-      env:
-        # just-setup use binstall to install sccache,
-        # which works better when we provide it with GITHUB_TOKEN.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     - run: just avoid-dev-deps
     - run: just check
 
@@ -146,10 +126,8 @@ jobs:
     name: Tests pass
     needs:
     - test
-    - linux-cross-check
-    - apple-m1-check
+    - cross-check
     - lint
-    - windows-aarch64-check
     - release-builds
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
