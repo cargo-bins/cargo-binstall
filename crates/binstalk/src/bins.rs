@@ -15,7 +15,7 @@ use crate::{
         atomic_install, atomic_install_noclobber, atomic_symlink_file,
         atomic_symlink_file_noclobber,
     },
-    helpers::download::ExtractedFiles,
+    helpers::{download::ExtractedFiles, target_triple::TargetTriple},
     manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
 };
 
@@ -98,6 +98,8 @@ impl BinFile {
             version: data.version,
             bin: base_name,
             binary_ext,
+
+            triple: data.triple,
         };
 
         let (source, archive_source_path) = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
@@ -271,6 +273,7 @@ pub struct Data<'a> {
     pub meta: PkgMeta,
     pub bin_path: &'a Path,
     pub install_path: &'a Path,
+    pub triple: &'a TargetTriple,
 }
 
 #[derive(Clone, Debug)]
@@ -283,6 +286,8 @@ struct Context<'c> {
 
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
     pub binary_ext: &'c str,
+
+    pub triple: &'c TargetTriple,
 }
 
 impl leon::Values for Context<'_> {
@@ -296,7 +301,8 @@ impl leon::Values for Context<'_> {
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
             // Soft-deprecated alias for binary-ext
             "format" => Some(Cow::Borrowed(self.binary_ext)),
-            _ => None,
+
+            key => self.triple.get_value(key),
         }
     }
 }

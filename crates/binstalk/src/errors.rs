@@ -10,6 +10,7 @@ use binstalk_downloader::{
 use cargo_toml::Error as CargoTomlError;
 use compact_str::CompactString;
 use miette::{Diagnostic, Report};
+use target_lexicon::ParseError as TargetTripleParseError;
 use thiserror::Error;
 use tokio::task;
 use tracing::{error, warn};
@@ -314,6 +315,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::gh_api_failure))]
     GhApiErr(#[source] Box<GhApiError>),
 
+    /// Failed to parse target triple
+    ///
+    /// - Code: `binstall::target_triple_parse_error`
+    /// - Exit: 97
+    #[error("Failed to parse target triple: {0}")]
+    #[diagnostic(severity(error), code(binstall::target_triple_parse_error))]
+    TargetTripleParseError(#[source] Box<TargetTripleParseError>),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -348,6 +357,7 @@ impl BinstallError {
             NoFallbackToCargoInstall => 94,
             InvalidPkgFmt(..) => 95,
             GhApiErr(..) => 96,
+            TargetTripleParseError(..) => 97,
             CrateContext(context) => context.err.exit_number(),
         };
 
@@ -439,5 +449,11 @@ impl From<InvalidPkgFmtError> for BinstallError {
 impl From<GhApiError> for BinstallError {
     fn from(e: GhApiError) -> Self {
         BinstallError::GhApiErr(Box::new(e))
+    }
+}
+
+impl From<target_lexicon::ParseError> for BinstallError {
+    fn from(e: target_lexicon::ParseError) -> Self {
+        BinstallError::TargetTripleParseError(Box::new(e))
     }
 }
