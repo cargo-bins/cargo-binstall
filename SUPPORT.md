@@ -24,7 +24,9 @@ With the following configuration keys:
 
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
-Template variables use the format `{ VAR }` where `VAR` is the name of the variable, with the following variables available:
+Template variables use the format `{ VAR }` where `VAR` is the name of the variable,
+`\{` for literal `{`, `\}` for literal `}` and `\\` for literal `\`,
+with the following variables available:
 - `name` is the name of the crate/package
 - `version` is the crate version (per `--version` and the crate manifest)
 - `repo` is the repository linked in `Cargo.toml`
@@ -34,6 +36,16 @@ Template variables use the format `{ VAR }` where `VAR` is the name of the varia
 - `archive-format` is the soft-deprecated filename extension of the package archive format that does not include the prefix `.`, e.g. `tgz` for tgz or `exe`/`""` for bin.
 - `binary-ext` is the string `.exe` if the `target` is for Windows, or the empty string otherwise
 - `format` is a soft-deprecated alias for `archive-format` in `pkg-url`, and alias for `binary-ext` in `bin-dir`; in the future, this may warn at install time.
+- `target-family`: Operating system of the target from [`target_lexicon::OperatingSystem`]
+- `target-arch`: Architecture of the target, `universal` on `{universal, universal2}-apple-darwin`,
+  otherwise from [`target_lexicon::Architecture`]
+- `target-libc`: ABI environment of the target from [`target_lexicon::Environment`]
+- `target-vendor`: Vendor of the target from [`target_lexicon::Vendor`]
+
+[`target_lexicon::OperatingSystem`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.OperatingSystem.html
+[`target_lexicon::Architecture`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Architecture.html
+[`target_lexicon::Environment`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Environment.html
+[`target_lexicon::Vendor`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Vendor.html
 
 `pkg-url`, `pkg-fmt` and `bin-dir` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
