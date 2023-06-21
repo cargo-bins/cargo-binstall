@@ -30,7 +30,7 @@ once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
 strum = "0.25.0"
-target-lexicon = { version = "0.12.7", features = ["std"] }
+target-lexicon = { version = "0.12.8", features = ["std"] }
 tempfile = "3.5.0"
 thiserror = "1.0.40"
 # parking_lot for `tokio::sync::OnceCell::const_new`

@@ -7,11 +7,9 @@ use crate::{errors::BinstallError, helpers::is_universal_macos};
 
 #[derive(Clone, Debug)]
 pub struct TargetTriple {
-    // TODO: Once https://github.com/bytecodealliance/target-lexicon/pull/90
-    // lands, consider replacing use of CompactString with `Cow<'_, str>`.
-    pub target_family: CompactString,
-    pub target_arch: CompactString,
-    pub target_libc: CompactString,
+    pub target_family: Cow<'static, str>,
+    pub target_arch: Cow<'static, str>,
+    pub target_libc: Cow<'static, str>,
     pub target_vendor: CompactString,
 }
 
@@ -28,13 +26,13 @@ impl FromStr for TargetTriple {
         let triple = Triple::from_str(s)?;
 
         Ok(Self {
-            target_family: triple.operating_system.to_compact_string(),
+            target_family: triple.operating_system.into_str(),
             target_arch: if is_universal_macos {
-                "universal".to_compact_string()
+                Cow::Borrowed("universal")
             } else {
-                triple.architecture.to_compact_string()
+                triple.architecture.into_str()
             },
-            target_libc: triple.environment.to_compact_string(),
+            target_libc: triple.environment.into_str(),
             target_vendor: triple.vendor.to_compact_string(),
         })
     }
