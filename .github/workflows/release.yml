@@ -22,9 +22,16 @@ jobs:
         event-data: ${{ toJSON(github.event) }}
         extract-notes-under: '### Release notes'
 
-  tag:
+  test:
     if: needs.info.outputs.is-release == 'true'
     needs: info
+    uses: ./.github/workflows/ci.yml
+
+  tag:
+    if: needs.info.outputs.is-release == 'true'
+    needs:
+    - info
+    - test
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -42,6 +49,11 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ needs.info.outputs.version }}
         tag_prefix: v
+    - name: Publish to crates.io
+      run: |
+        cargo publish --no-verify -p '${{ needs.info.outputs.crate }}'
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   package:
     if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
