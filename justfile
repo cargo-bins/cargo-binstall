@@ -74,8 +74,8 @@ support-pkg-config := if target == target-host {
 } else { "" }
 
 cargo-features := trim_end_match(if override-features != "" { override-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto" + extra-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto" + extra-features
     } else { extra-features
 }, ",")
 
@@ -184,6 +184,7 @@ check: print-env
     {{cargo-bin}} check {{cargo-build-args}}
     cargo-hack hack check --feature-powerset -p leon {{cargo-check-args}}
     {{cargo-bin}} check -p binstalk-downloader --no-default-features
+    {{cargo-bin}} check -p cargo-binstall --no-default-features --features rustls {{cargo-check-args}}
     cargo-hack hack check -p binstalk-downloader \
         --feature-powerset \
         --include-features default,json,gh-api-client \
@@ -210,6 +211,7 @@ e2e-test-upgrade: (e2e-test "upgrade")
 e2e-test-self-upgrade-no-symlink: (e2e-test "self-upgrade-no-symlink")
 e2e-test-uninstall: (e2e-test "uninstall")
 e2e-test-no-track: (e2e-test "no-track")
+e2e-test-git: (e2e-test "git")
 
 # WinTLS (Windows in CI) does not have TLS 1.3 support
 [windows]
@@ -218,7 +220,7 @@ e2e-test-tls: (e2e-test "tls" "1.2")
 [macos]
 e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-subcrate e2e-test-no-track
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-subcrate e2e-test-no-track
 
 unit-tests: print-env
     {{cargo-bin}} test {{cargo-build-args}}

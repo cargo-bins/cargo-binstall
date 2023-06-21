@@ -19,7 +19,7 @@ use binstalk::{
     ops::{
         self,
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
-        Resolver,
+        CargoTomlFetchOverride, Options, Resolver,
     },
 };
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
@@ -95,7 +95,7 @@ pub fn install_crates(
     let gh_api_client = GhApiClient::new(client.clone(), args.github_token);
 
     // Create binstall_opts
-    let binstall_opts = Arc::new(ops::Options {
+    let binstall_opts = Arc::new(Options {
         no_symlinks: args.no_symlinks,
         dry_run: args.dry_run,
         force: args.force,
@@ -104,7 +104,16 @@ pub fn install_crates(
         no_track: args.no_track,
 
         version_req: args.version_req,
-        manifest_path: args.manifest_path,
+        #[cfg(feature = "git")]
+        cargo_toml_fetch_override: match (args.manifest_path, args.git) {
+            (Some(manifest_path), None) => Some(CargoTomlFetchOverride::Path(manifest_path)),
+            (None, Some(git_url)) => Some(CargoTomlFetchOverride::Git(git_url)),
+            (None, None) => None,
+            _ => unreachable!("manifest_path and git cannot be specified at the same time"),
+        },
+
+        #[cfg(not(feature = "git"))]
+        cargo_toml_fetch_override: args.manifest_path.map(CargoTomlFetchOverride::Path),
         cli_overrides,
 
         desired_targets,
@@ -326,7 +335,7 @@ fn do_install_fetches(
     resolution_fetchs: Vec<Box<ResolutionFetch>>,
     // Take manifests by value to drop the `FileLock`.
     manifests: Option<Manifests>,
-    binstall_opts: &ops::Options,
+    binstall_opts: &Options,
     dry_run: bool,
     temp_dir: tempfile::TempDir,
     no_cleanup: bool,

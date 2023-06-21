@@ -1,0 +1,7 @@
+[package]
+name = "cargo-watch"
+version = "8.4.0"
+repository = "https://github.com/watchexec/cargo-watch"
+
+[[bin]]
+name = "cargo-watch"

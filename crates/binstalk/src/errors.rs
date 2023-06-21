@@ -15,6 +15,8 @@ use thiserror::Error;
 use tokio::task;
 use tracing::{error, warn};
 
+use crate::helpers::cargo_toml_workspace::LoadManifestFromWSError;
+
 #[derive(Debug, Error)]
 #[error("crates.io API error for {crate_name}: {err}")]
 pub struct CratesIoApiError {
@@ -323,6 +325,23 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::target_triple_parse_error))]
     TargetTripleParseError(#[source] Box<TargetTripleParseError>),
 
+    /// Failed to shallow clone git repository
+    ///
+    /// - Code: `binstall::git`
+    /// - Exit: 98
+    #[cfg(feature = "git")]
+    #[error("Failed to shallow clone git repository: {0}")]
+    #[diagnostic(severity(error), code(binstall::git))]
+    GitError(#[from] crate::helpers::git::GitError),
+
+    /// Failed to load manifest from workspace
+    ///
+    /// - Code: `binstall::load_manifest_from_workspace`
+    /// - Exit: 99
+    #[error(transparent)]
+    #[diagnostic(severity(error), code(binstall::load_manifest_from_workspace))]
+    LoadManifestFromWSError(#[from] Box<LoadManifestFromWSError>),
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -358,6 +377,9 @@ impl BinstallError {
             InvalidPkgFmt(..) => 95,
             GhApiErr(..) => 96,
             TargetTripleParseError(..) => 97,
+            #[cfg(feature = "git")]
+            GitError(_) => 98,
+            LoadManifestFromWSError(_) => 99,
             CrateContext(context) => context.err.exit_number(),
         };
 

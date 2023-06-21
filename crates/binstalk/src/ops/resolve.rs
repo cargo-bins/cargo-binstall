@@ -13,17 +13,18 @@ use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
-use tokio::task::block_in_place;
+use tempfile::TempDir;
+use tokio::task::{block_in_place, spawn_blocking};
 use tracing::{debug, info, instrument, warn};
 
-use super::Options;
 use crate::{
     bins,
     drivers::fetch_crate_cratesio,
     errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
-    helpers::{download::ExtractedFiles, remote::Client, target_triple::TargetTriple},
+    helpers::{self, download::ExtractedFiles, remote::Client, target_triple::TargetTriple},
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
+    ops::{CargoTomlFetchOverride, Options},
 };
 
 mod crate_name;
@@ -359,9 +360,24 @@ impl PackageInfo {
         version_req: &VersionReq,
         client: Client,
     ) -> Result<Option<Self>, BinstallError> {
+        use CargoTomlFetchOverride::*;
+
         // Fetch crate via crates.io, git, or use a local manifest path
-        let manifest = match opts.manifest_path.as_ref() {
-            Some(manifest_path) => load_manifest_path(manifest_path)?,
+        let manifest = match opts.cargo_toml_fetch_override.as_ref() {
+            Some(Path(manifest_path)) => load_manifest_path(manifest_path)?,
+            #[cfg(feature = "git")]
+            Some(Git(git_url)) => {
+                let git_url = git_url.clone();
+                let name = name.clone();
+
+                spawn_blocking(move || {
+                    let dir = TempDir::new()?;
+                    helpers::git::Repository::shallow_clone(git_url, dir.as_ref())?;
+
+                    helpers::cargo_toml_workspace::load_manifest_from_workspace(dir.as_ref(), &name)
+                })
+                .await??
+            }
             None => {
                 Box::pin(fetch_crate_cratesio(
                     client,

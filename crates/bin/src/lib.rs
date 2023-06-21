@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
 pub mod args;
 pub mod bin_util;
 pub mod entry;

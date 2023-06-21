@@ -1,0 +1,8 @@
+[package]
+name = "cargo-binstall"
+version = "0.12.0"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+
+[[bin]]
+name = "cargo-binstall"
+path = "src/main.rs"

@@ -10,7 +10,9 @@ use tokio::{
 
 use crate::{
     fetchers::{Data, Fetcher, TargetData},
-    helpers::{gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client},
+    helpers::{
+        self, gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client,
+    },
     manifests::cargo_toml_binstall::PkgOverride,
     DesiredTargets,
 };
@@ -18,6 +20,13 @@ use crate::{
 pub mod resolve;
 
 pub type Resolver = fn(Client, GhApiClient, Arc<Data>, Arc<TargetData>) -> Arc<dyn Fetcher>;
+
+#[non_exhaustive]
+pub enum CargoTomlFetchOverride {
+    #[cfg(feature = "git")]
+    Git(helpers::git::GitUrl),
+    Path(PathBuf),
+}
 
 pub struct Options {
     pub no_symlinks: bool,
@@ -28,7 +37,7 @@ pub struct Options {
     pub no_track: bool,
 
     pub version_req: Option<VersionReq>,
-    pub manifest_path: Option<PathBuf>,
+    pub cargo_toml_fetch_override: Option<CargoTomlFetchOverride>,
     pub cli_overrides: PkgOverride,
 
     pub desired_targets: DesiredTargets,
