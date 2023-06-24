@@ -41,7 +41,7 @@ jobs:
       - name: Install cargo-release
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-release
+          tool: cargo-release,cargo-semver-checks
 
       - uses: cargo-bins/release-pr@v2
         with:
@@ -51,3 +51,4 @@ jobs:
           pr-label: release
           pr-release-notes: ${{ inputs.crate == 'bin' }}
           pr-template-file: .github/scripts/release-pr-template.ejs
+          check-semver: true
