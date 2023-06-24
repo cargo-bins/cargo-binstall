@@ -49,7 +49,9 @@ tracing-subscriber = { version = "0.3.17", features = ["fmt", "json", "ansi"], d
 embed-resource = "2.1.1"
 
 [features]
-default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin"]
+default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin", "git"]
+
+git = ["binstalk/git"]
 
 mimalloc = ["dep:mimalloc"]
 
@@ -74,3 +76,6 @@ log_max_level_debug = ["log/max_level_debug", "tracing/max_level_debug", "log_re
 
 log_release_max_level_info = ["log/release_max_level_info", "tracing/release_max_level_info"]
 log_release_max_level_debug = ["log/release_max_level_debug", "tracing/release_max_level_debug"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]

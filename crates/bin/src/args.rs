@@ -38,7 +38,7 @@ pub struct Args {
     /// install. The version syntax is as with the --version option.
     ///
     /// When multiple names are provided, the --version option and override option
-    /// `manifest_path` is unavailable due to ambiguity.
+    /// `--manifest-path` and `--git` are unavailable due to ambiguity.
     ///
     /// If duplicate names are provided, the last one (and their version requirement)
     /// is kept.
@@ -88,8 +88,20 @@ pub struct Args {
     /// This skips searching crates.io for a manifest and uses the specified path directly, useful
     /// for debugging and when adding Binstall support. This may be either the path to the folder
     /// containing a Cargo.toml file, or the Cargo.toml file itself.
+    ///
+    /// This option cannot be used with `--git`.
     #[clap(help_heading = "Overrides", long)]
     pub manifest_path: Option<PathBuf>,
+
+    #[cfg(feature = "git")]
+    /// Override how to fetch Cargo.toml package manifest.
+    ///
+    /// This skip searching crates.io and instead clone the repository specified and
+    /// runs as if `--manifest-path $cloned_repo` is passed to binstall.
+    ///
+    /// This option cannot be used with `--manifest-path`.
+    #[clap(help_heading = "Overrides", long)]
+    pub git: Option<binstalk::helpers::git::GitUrl>,
 
     /// Override Cargo.toml package manifest bin-dir.
     #[clap(help_heading = "Overrides", long)]
@@ -391,13 +403,36 @@ pub fn parse() -> Args {
     // Ensure no conflict
     let mut command = Args::command();
 
+    #[cfg(feature = "git")]
+    if opts.manifest_path.is_some() && opts.git.is_some() {
+        command
+            .error(
+                ErrorKind::ArgumentConflict,
+                format_args!(
+                    r#"Multiple override options for Cargo.toml fetching.
+You cannot use --manifest-path and --git. Do one or the other."#
+                ),
+            )
+            .exit();
+    }
+
     if opts.crate_names.len() > 1 {
         let option = if opts.version_req.is_some() {
             "version"
         } else if opts.manifest_path.is_some() {
             "manifest-path"
         } else {
-            ""
+            #[cfg(not(feature = "git"))]
+            {
+                ""
+            }
+
+            #[cfg(feature = "git")]
+            if opts.git.is_some() {
+                "git"
+            } else {
+                ""
+            }
         };
 
         if !option.is_empty() {

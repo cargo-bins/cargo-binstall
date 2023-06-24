@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/*/*/*/*/*/*", "b/*/*/*/*"]
+exclude = ["b/c/d/e/*"]

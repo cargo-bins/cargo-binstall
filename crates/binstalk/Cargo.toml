@@ -18,6 +18,8 @@ command-group = { version = "2.1.0", features = ["with-tokio"] }
 compact_str = { version = "0.7.0", features = ["serde"] }
 detect-targets = { version = "0.1.7", path = "../detect-targets" }
 either = "1.8.1"
+gix = { version = "0.47.0", features = ["blocking-http-transport-reqwest-rust-tls"], optional = true }
+glob = "0.3.1"
 home = "0.5.5"
 itertools = "0.11.0"
 jobslot = { version = "0.2.11", features = ["tokio"] }
@@ -43,7 +45,9 @@ xz2 = "0.1.7"
 windows = { version = "0.48.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
 
 [features]
-default = ["static", "rustls"]
+default = ["static", "rustls", "git"]
+
+git = ["dep:gix"]
 
 static = ["binstalk-downloader/static"]
 pkg-config = ["binstalk-downloader/pkg-config"]
@@ -57,3 +61,6 @@ trust-dns = ["binstalk-downloader/trust-dns"]
 
 zstd-thin = ["binstalk-downloader/zstd-thin"]
 cross-lang-fat-lto = ["binstalk-downloader/cross-lang-fat-lto"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]

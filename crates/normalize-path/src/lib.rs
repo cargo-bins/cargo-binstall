@@ -29,6 +29,11 @@ pub trait NormalizePath {
     /// However, this does not resolve links.
     fn normalize(&self) -> PathBuf;
 
+    /// Same as [`NormalizePath::normalize`] except that if
+    /// `Component::Prefix`/`Component::RootDir` is encountered,
+    /// or if the path points outside of current dir, returns `None`.
+    fn try_normalize(&self) -> Option<PathBuf>;
+
     /// Return `true` if the path is normalized.
     ///
     /// # Quirk
@@ -66,6 +71,27 @@ impl NormalizePath for Path {
         }
 
         ret
+    }
+
+    fn try_normalize(&self) -> Option<PathBuf> {
+        let mut ret = PathBuf::new();
+
+        for component in self.components() {
+            match component {
+                Component::Prefix(..) | Component::RootDir => return None,
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    if !ret.pop() {
+                        return None;
+                    }
+                }
+                Component::Normal(c) => {
+                    ret.push(c);
+                }
+            }
+        }
+
+        Some(ret)
     }
 
     fn is_normalized(&self) -> bool {
