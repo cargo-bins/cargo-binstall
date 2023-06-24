@@ -51,7 +51,7 @@ jobs:
         tag_prefix: v
     - name: Publish to crates.io
       run: |
-        cargo publish --no-verify -p '${{ needs.info.outputs.crate }}'
+        cargo publish -p '${{ needs.info.outputs.crate }}'
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
