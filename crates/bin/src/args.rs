@@ -318,6 +318,10 @@ pub struct Args {
     #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
     pub log_level: Option<LevelFilter>,
 
+    /// Used with `--version` to print out verbose information.
+    #[clap(help_heading = "Meta", short, long, default_value_t = false)]
+    pub verbose: bool,
+
     /// Equivalent to setting `log_level` to `off`.
     ///
     /// This would override the `log_level`.
