@@ -27,7 +27,7 @@ leon = { version = "2.0.1", path = "../leon" }
 leon-macros = { version = "1.0.0", path = "../leon-macros" }
 maybe-owned = "0.3.4"
 miette = "5.9.0"
-normalize-path = { version = "0.2.0", path = "../normalize-path" }
+normalize-path = { version = "0.2.1", path = "../normalize-path" }
 once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
