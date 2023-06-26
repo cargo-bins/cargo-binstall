@@ -52,3 +52,4 @@ jobs:
           pr-release-notes: ${{ inputs.crate == 'bin' }}
           pr-template-file: .github/scripts/release-pr-template.ejs
           check-semver: true
+          check-package: true
