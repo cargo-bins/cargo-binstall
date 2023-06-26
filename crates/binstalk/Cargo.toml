@@ -11,7 +11,7 @@ license = "GPL-3.0"
 
 [dependencies]
 async-trait = "0.1.68"
-binstalk-downloader = { version = "0.5.1", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
+binstalk-downloader = { version = "0.6.0", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
 binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
 cargo_toml = "0.15.3"
 command-group = { version = "2.1.0", features = ["with-tokio"] }
