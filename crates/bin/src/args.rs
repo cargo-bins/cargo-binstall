@@ -8,6 +8,7 @@ use std::{
 };
 
 use binstalk::{
+    drivers::Registry,
     helpers::remote,
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
@@ -221,6 +222,10 @@ pub struct Args {
     /// NOTE that `--install-path` takes precedence over this option.
     #[clap(help_heading = "Options", long, alias = "roots")]
     pub root: Option<PathBuf>,
+
+    /// The URL of the registry index to use
+    #[clap(help_heading = "Options", long)]
+    pub index: Option<Registry>,
 
     /// This option will be passed through to all `cargo-install` invocations.
     ///

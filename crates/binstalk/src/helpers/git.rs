@@ -8,6 +8,8 @@ use tracing::debug;
 mod progress_tracing;
 use progress_tracing::TracingProgress;
 
+pub use gix::url::parse::Error as GitUrlParseError;
+
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
 pub enum GitError {
@@ -43,7 +45,7 @@ impl From<clone::checkout::main_worktree::Error> for GitError {
 pub struct GitUrl(Url);
 
 impl FromStr for GitUrl {
-    type Err = gix::url::parse::Error;
+    type Err = GitUrlParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Url::try_from(s).map(Self)

@@ -19,7 +19,6 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::{
     bins,
-    drivers::fetch_crate_cratesio,
     errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
     helpers::{self, download::ExtractedFiles, remote::Client, target_triple::TargetTriple},
@@ -379,12 +378,10 @@ impl PackageInfo {
                 .await??
             }
             None => {
-                Box::pin(fetch_crate_cratesio(
-                    client,
-                    &name,
-                    version_req,
-                    &opts.crates_io_rate_limit,
-                ))
+                Box::pin(
+                    opts.registry
+                        .fetch_crate_matched(client, &name, version_req),
+                )
                 .await?
             }
         };

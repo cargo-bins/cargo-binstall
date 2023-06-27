@@ -1,4 +1,5 @@
 pub use binstalk_downloader::remote::*;
+pub use url::ParseError as UrlParseError;
 
 use binstalk_downloader::gh_api_client::{GhApiClient, GhReleaseArtifact, HasReleaseArtifact};
 use tracing::{debug, warn};

@@ -31,6 +31,7 @@ normalize-path = { version = "0.2.1", path = "../normalize-path" }
 once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.99"
 strum = "0.25.0"
 target-lexicon = { version = "0.12.8", features = ["std"] }
 tempfile = "3.5.0"
@@ -40,6 +41,9 @@ tokio = { version = "1.28.2", features = ["rt", "process", "sync", "signal", "pa
 tracing = "0.1.37"
 url = { version = "2.3.1", features = ["serde"] }
 xz2 = "0.1.7"
+
+[dev-dependencies]
+toml_edit = { version = "0.19.11", features = ["serde"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.48.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }

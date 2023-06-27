@@ -1,31 +1,49 @@
-use std::path::PathBuf;
-
+use binstalk_downloader::remote::Error as RemoteError;
 use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
+use tokio::{
+    sync::Mutex,
+    time::{interval, Duration, Interval, MissedTickBehavior},
+};
 use tracing::debug;
 
 use crate::{
-    errors::{BinstallError, CratesIoApiError},
-    helpers::{
-        download::Download,
-        remote::{Client, Url},
-    },
-    manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
-    ops::CratesIoRateLimit,
+    drivers::registry::{parse_manifest, RegistryError},
+    errors::BinstallError,
+    helpers::remote::{Client, Url},
+    manifests::cargo_toml_binstall::Meta,
 };
 
-mod vfs;
+#[derive(Debug)]
+pub struct CratesIoRateLimit(Mutex<Interval>);
 
-mod visitor;
-use visitor::ManifestVisitor;
+impl Default for CratesIoRateLimit {
+    fn default() -> Self {
+        let mut interval = interval(Duration::from_secs(1));
+        // If somehow one tick is delayed, then next tick should be at least
+        // 1s later than the current tick.
+        //
+        // Other MissedTickBehavior including Burst (default), which will
+        // tick as fast as possible to catch up, and Skip, which will
+        // skip the current tick for the next one.
+        //
+        // Both Burst and Skip is not the expected behavior for rate limit:
+        // ticking as fast as possible would violate crates.io crawler
+        // policy, and skipping the current one will slow down the resolution
+        // process.
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        Self(Mutex::new(interval))
+    }
+}
 
-async fn is_crate_yanked(
-    client: &Client,
-    name: &str,
-    version: &str,
-) -> Result<bool, BinstallError> {
+impl CratesIoRateLimit {
+    pub(super) async fn tick(&self) {
+        self.0.lock().await.tick().await;
+    }
+}
+async fn is_crate_yanked(client: &Client, url: Url) -> Result<bool, RemoteError> {
     #[derive(Deserialize)]
     struct CrateInfo {
         version: Inner,
@@ -39,29 +57,16 @@ async fn is_crate_yanked(
     // Fetch / update index
     debug!("Looking up crate information");
 
-    let response = client
-        .get(Url::parse(&format!(
-            "https://crates.io/api/v1/crates/{name}/{version}"
-        ))?)
-        .send(true)
-        .await
-        .map_err(|err| {
-            BinstallError::CratesIoApi(Box::new(CratesIoApiError {
-                crate_name: name.into(),
-                err,
-            }))
-        })?;
-
-    let info: CrateInfo = response.json().await?;
+    let info: CrateInfo = client.get(url).send(true).await?.json().await?;
 
     Ok(info.version.yanked)
 }
 
 async fn fetch_crate_cratesio_version_matched(
     client: &Client,
-    name: &str,
+    url: Url,
     version_req: &VersionReq,
-) -> Result<CompactString, BinstallError> {
+) -> Result<Option<CompactString>, RemoteError> {
     #[derive(Deserialize)]
     struct CrateInfo {
         #[serde(rename = "crate")]
@@ -87,22 +92,11 @@ async fn fetch_crate_cratesio_version_matched(
     // Fetch / update index
     debug!("Looking up crate information");
 
-    let response = client
-        .get(Url::parse(&format!(
-            "https://crates.io/api/v1/crates/{name}"
-        ))?)
-        .send(true)
-        .await
-        .map_err(|err| {
-            BinstallError::CratesIoApi(Box::new(CratesIoApiError {
-                crate_name: name.into(),
-                err,
-            }))
-        })?;
+    let response = client.get(url).send(true).await?;
 
     let version = if version_req == &VersionReq::STAR {
         let crate_info: CrateInfo = response.json().await?;
-        crate_info.inner.max_stable_version
+        Some(crate_info.inner.max_stable_version)
     } else {
         let response: Versions = response.json().await?;
         response
@@ -128,13 +122,8 @@ async fn fetch_crate_cratesio_version_matched(
             })
             // Return highest version
             .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))
-            .ok_or_else(|| BinstallError::VersionMismatch {
-                req: version_req.clone(),
-            })?
-            .0
+            .map(|(ver_str, _)| ver_str)
     };
-
-    debug!("Found information for crate version: '{version}'");
 
     Ok(version)
 }
@@ -149,6 +138,8 @@ pub async fn fetch_crate_cratesio(
 ) -> Result<Manifest<Meta>, BinstallError> {
     // Wait until we can make another request to crates.io
     crates_io_rate_limit.tick().await;
+
+    let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))?;
 
     let version = match version_req.comparators.as_slice() {
         [Comparator {
@@ -167,29 +158,32 @@ pub async fn fetch_crate_cratesio(
             }
             .to_compact_string();
 
-            if is_crate_yanked(&client, name, &version).await? {
-                return Err(BinstallError::VersionMismatch {
-                    req: version_req.clone(),
-                });
-            }
+            let mut url = url.clone();
+            url.path_segments_mut().unwrap().push(&version);
 
-            version
+            is_crate_yanked(&client, url)
+                .await
+                .map(|yanked| (!yanked).then_some(version))
         }
-        _ => fetch_crate_cratesio_version_matched(&client, name, version_req).await?,
-    };
+        _ => fetch_crate_cratesio_version_matched(&client, url.clone(), version_req).await,
+    }
+    .map_err(|e| match e {
+        RemoteError::Http(e) if e.is_status() => RegistryError::NotFound(name.into()),
+        e => e.into(),
+    })?
+    .ok_or_else(|| BinstallError::VersionMismatch {
+        req: version_req.clone(),
+    })?;
+
+    debug!("Found information for crate version: '{version}'");
 
     // Download crate to temporary dir (crates.io or git?)
-    let crate_url = format!("https://crates.io/api/v1/crates/{name}/{version}/download");
+    let mut crate_url = url;
+    crate_url
+        .path_segments_mut()
+        .unwrap()
+        .push(&version)
+        .push("download");
 
-    debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
-
-    let manifest_dir_path: PathBuf = format!("{name}-{version}").into();
-
-    let mut manifest_visitor = ManifestVisitor::new(manifest_dir_path);
-
-    Download::new(client, Url::parse(&crate_url)?)
-        .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
-        .await?;
-
-    manifest_visitor.load_manifest()
+    parse_manifest(client, name, &version, crate_url).await
 }
