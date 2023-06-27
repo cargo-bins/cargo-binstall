@@ -86,6 +86,7 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
+        release_name: v${{ fromJSON(inputs.publish).version }}
         tag: v${{ fromJSON(inputs.publish).version }}
         body: ${{ fromJSON(inputs.publish).notes }}
         file: packages/cargo-binstall-*
