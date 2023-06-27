@@ -50,6 +50,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+
+    - name: Override release profile lto settings
+      if: inputs.CARGO_PROFILE_RELEASE_LTO
+      run: echo "CARGO_PROFILE_RELEASE_LTO=${{ inputs.CARGO_PROFILE_RELEASE_LTO }}" >> "$GITHUB_ENV"
+
+    - name: Override release profile codegen-units settings
+      if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
+      run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
+
     - uses: ./.github/actions/just-setup
       with:
         tools: cargo-auditable
@@ -60,14 +69,6 @@ jobs:
 
     - run: just toolchain rust-src
     - run: just ci-install-deps
-
-    - name: Override release profile lto settings
-      if: inputs.CARGO_PROFILE_RELEASE_LTO
-      run: echo "CARGO_PROFILE_RELEASE_LTO=${{ inputs.CARGO_PROFILE_RELEASE_LTO }}" >> "$GITHUB_ENV"
-
-    - name: Override release profile codegen-units settings
-      if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
-      run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
 
     - run: just package
     - if: runner.os == 'Windows'
