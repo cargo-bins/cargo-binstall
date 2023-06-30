@@ -63,6 +63,13 @@ pub struct HttpError {
     err: reqwest::Error,
 }
 
+impl HttpError {
+    /// Returns true if the error is from [`Response::error_for_status`].
+    pub fn is_status(&self) -> bool {
+        self.err.is_status()
+    }
+}
+
 #[derive(Debug)]
 struct Inner {
     client: reqwest::Client,

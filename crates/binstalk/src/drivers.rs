@@ -1,2 +1,8 @@
-mod crates_io;
-pub use crates_io::fetch_crate_cratesio;
+mod registry;
+pub use registry::{
+    fetch_crate_cratesio, CratesIoRateLimit, InvalidRegistryError, Registry, RegistryError,
+    SparseRegistry,
+};
+
+#[cfg(feature = "git")]
+pub use registry::GitRegistry;

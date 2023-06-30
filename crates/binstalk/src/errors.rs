@@ -15,15 +15,7 @@ use thiserror::Error;
 use tokio::task;
 use tracing::{error, warn};
 
-use crate::helpers::cargo_toml_workspace::LoadManifestFromWSError;
-
-#[derive(Debug, Error)]
-#[error("crates.io API error for {crate_name}: {err}")]
-pub struct CratesIoApiError {
-    pub crate_name: CompactString,
-    #[source]
-    pub err: RemoteError,
-}
+use crate::{drivers::RegistryError, helpers::cargo_toml_workspace::LoadManifestFromWSError};
 
 #[derive(Debug, Error)]
 #[error("version string '{v}' is not semver: {err}")]
@@ -145,15 +137,11 @@ pub enum BinstallError {
     ///
     /// This could either be a "not found" or a server/transport error.
     ///
-    /// - Code: `binstall::crates_io_api`
+    /// - Code: `binstall::cargo_registry`
     /// - Exit: 76
     #[error(transparent)]
-    #[diagnostic(
-        severity(error),
-        code(binstall::crates_io_api),
-        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={}", .0.crate_name)
-    )]
-    CratesIoApi(#[from] Box<CratesIoApiError>),
+    #[diagnostic(transparent)]
+    RegistryError(#[from] Box<RegistryError>),
 
     /// The override path to the cargo manifest is invalid or cannot be resolved.
     ///
@@ -360,7 +348,7 @@ impl BinstallError {
             Download(_) => 68,
             SubProcess { .. } => 70,
             Io(_) => 74,
-            CratesIoApi { .. } => 76,
+            RegistryError { .. } => 76,
             CargoManifestPath => 77,
             CargoManifest { .. } => 78,
             VersionParse { .. } => 80,
@@ -477,5 +465,11 @@ impl From<GhApiError> for BinstallError {
 impl From<target_lexicon::ParseError> for BinstallError {
     fn from(e: target_lexicon::ParseError) -> Self {
         BinstallError::TargetTripleParseError(Box::new(e))
+    }
+}
+
+impl From<RegistryError> for BinstallError {
+    fn from(e: RegistryError) -> Self {
+        BinstallError::RegistryError(Box::new(e))
     }
 }
