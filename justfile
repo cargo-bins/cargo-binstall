@@ -181,13 +181,14 @@ build: print-env
     {{cargo-bin}} build {{cargo-build-args}}
 
 check: print-env
-    {{cargo-bin}} check {{cargo-build-args}}
-    cargo-hack hack check --feature-powerset -p leon {{cargo-check-args}}
-    {{cargo-bin}} check -p binstalk-downloader --no-default-features
-    {{cargo-bin}} check -p cargo-binstall --no-default-features --features rustls {{cargo-check-args}}
+    {{cargo-bin}} check {{cargo-build-args}} --profile check-only
+    cargo-hack hack check --feature-powerset -p leon {{cargo-check-args}} --profile check-only
+    {{cargo-bin}} check -p binstalk-downloader --no-default-features --profile check-only
+    {{cargo-bin}} check -p cargo-binstall --no-default-features --features rustls {{cargo-check-args}} --profile check-only
     cargo-hack hack check -p binstalk-downloader \
         --feature-powerset \
         --include-features default,json,gh-api-client \
+        --profile check-only \
         {{cargo-check-args}}
 
 get-output file outdir=".":

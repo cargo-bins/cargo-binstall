@@ -14,11 +14,14 @@ members = [
 ]
 
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+[profile.release.build-override]
+inherits = "dev.build-override"
 
 [profile.dev]
 opt-level = 0
@@ -28,6 +31,10 @@ debug-assertions = true
 overflow-checks = true
 codegen-units = 1024
 
+# Set the default for dependencies on debug.
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.dev.build-override]
 inherits = "dev"
 debug = false
@@ -35,5 +42,15 @@ debug-assertions = false
 overflow-checks = false
 incremental = false
 
-[profile.release.build-override]
-inherits = "dev.build-override"
+[profile.check-only]
+inherits = "dev"
+debug = false
+debug-assertions = false
+overflow-checks = false
+panic = "abort"
+
+[profile.check-only.build-override]
+inherits = "check-only"
+
+[profile.check-only.package."*"]
+inherits = "check-only"
