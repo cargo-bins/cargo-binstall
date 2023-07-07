@@ -3,11 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use binstalk::home::cargo_home;
 use binstalk_manifests::cargo_config::Config;
 use tracing::debug;
 
-pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
+pub fn get_cargo_roots_path(
+    cargo_roots: Option<PathBuf>,
+    cargo_home: PathBuf,
+    config: &mut Config,
+) -> Option<PathBuf> {
     if let Some(p) = cargo_roots {
         Some(p)
     } else if let Some(p) = var_os("CARGO_INSTALL_ROOT") {
@@ -15,24 +18,12 @@ pub fn get_cargo_roots_path(cargo_roots: Option<PathBuf>) -> Option<PathBuf> {
         let p = PathBuf::from(p);
         debug!("using CARGO_INSTALL_ROOT ({})", p.display());
         Some(p)
-    } else if let Ok(cargo_home) = cargo_home() {
-        let config_path = cargo_home.join("config.toml");
-        if let Some(root) = Config::load_from_path(&config_path)
-            .ok()
-            .and_then(|config| config.install.root)
-        {
-            debug!(
-                "using `install.root` {} from config {}",
-                root.display(),
-                config_path.display()
-            );
-            Some(root)
-        } else {
-            debug!("using ({}) as cargo home", cargo_home.display());
-            Some(cargo_home)
-        }
+    } else if let Some(root) = config.install.take().and_then(|install| install.root) {
+        debug!("using `install.root` {} from cargo config", root.display());
+        Some(root)
     } else {
-        None
+        debug!("using ({}) as cargo home", cargo_home.display());
+        Some(cargo_home)
     }
 }
 
