@@ -289,7 +289,7 @@ struct GraphQLReleaseAssets {
 #[derive(Deserialize)]
 struct GraphQLPageInfo {
     #[serde(rename = "endCursor")]
-    end_cursor: CompactString,
+    end_cursor: Option<CompactString>,
     #[serde(rename = "hasNextPage")]
     has_next_page: bool,
 }
@@ -376,11 +376,14 @@ query {{
         if let Some(assets) = assets {
             artifacts.assets.extend(assets.nodes);
 
-            let page_info = assets.page_info;
-            if !page_info.has_next_page {
-                break Ok(FetchReleaseRet::Artifacts(artifacts));
-            } else {
-                cond = FilterCondition::After(page_info.end_cursor);
+            match assets.page_info {
+                GraphQLPageInfo {
+                    end_cursor: Some(end_cursor),
+                    has_next_page: true,
+                } => {
+                    cond = FilterCondition::After(end_cursor);
+                }
+                _ => break Ok(FetchReleaseRet::Artifacts(artifacts)),
             }
         } else {
             break Ok(FetchReleaseRet::ReleaseNotFound);
