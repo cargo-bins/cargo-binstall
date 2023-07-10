@@ -73,9 +73,32 @@ support-pkg-config := if target == target-host {
     if target-os == "linux" { "true" } else { "" }
 } else { "" }
 
+enable-git-max-perf-feature := if target == "x86_64-apple-darwin" {
+    "true"
+} else if target == "aarch64-apple-darwin" {
+    "true"
+} else if target == "x86_64-unknown-linux-gnu" {
+    "true"
+} else if target == "x86_64-unknown-linux-musl" {
+    "true"
+} else {
+    "false"
+}
+git-max-perf-feature := if enable-git-max-perf-feature == "true" {
+    ",git-max-perf"
+} else if target-os == "windows" {
+    ",zlib-ng"
+} else if target == "aarch64-unknown-linux-gnu" {
+    ",zlib-ng"
+} else if target == "aarch64-unknown-linux-musl" {
+    ",zlib-ng"
+} else {
+    ""
+}
+
 cargo-features := trim_end_match(if override-features != "" { override-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto" + extra-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug" + git-max-perf-feature + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto"  + git-max-perf-feature + extra-features
     } else { extra-features
 }, ",")
 

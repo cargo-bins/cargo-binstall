@@ -52,6 +52,7 @@ embed-resource = "2.1.1"
 default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin", "git"]
 
 git = ["binstalk/git"]
+git-max-perf = ["binstalk/git-max-perf"]
 
 mimalloc = ["dep:mimalloc"]
 
