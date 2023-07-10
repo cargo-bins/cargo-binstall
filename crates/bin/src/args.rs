@@ -101,7 +101,7 @@ pub struct Args {
     /// runs as if `--manifest-path $cloned_repo` is passed to binstall.
     ///
     /// This option cannot be used with `--manifest-path`.
-    #[clap(help_heading = "Overrides", long)]
+    #[clap(help_heading = "Overrides", long, conflicts_with("manifest_path"))]
     pub git: Option<binstalk::helpers::git::GitUrl>,
 
     /// Override Cargo.toml package manifest bin-dir.
@@ -242,7 +242,12 @@ pub struct Args {
     /// reading from `registries.<name>.index`.
     ///
     /// Cannot be used with `--index`.
-    #[clap(help_heading = "Options", long, env = "CARGO_REGISTRY_DEFAULT")]
+    #[clap(
+        help_heading = "Options",
+        long,
+        env = "CARGO_REGISTRY_DEFAULT",
+        conflicts_with("index")
+    )]
     pub registry: Option<CompactString>,
 
     /// This option will be passed through to all `cargo-install` invocations.
@@ -425,31 +430,6 @@ pub fn parse() -> Args {
 
     // Ensure no conflict
     let mut command = Args::command();
-
-    #[cfg(feature = "git")]
-    if opts.manifest_path.is_some() && opts.git.is_some() {
-        command
-            .error(
-                ErrorKind::ArgumentConflict,
-                format_args!(
-                    r#"Multiple override options for Cargo.toml fetching.
-You cannot use --manifest-path and --git. Do one or the other."#
-                ),
-            )
-            .exit();
-    }
-
-    if opts.index.is_some() && opts.registry.is_some() {
-        command
-            .error(
-                ErrorKind::ArgumentConflict,
-                format_args!(
-                    r#"Multiple override options for registry.
-You cannot use --index and --registry. Do one or the other."#
-                ),
-            )
-            .exit();
-    }
 
     if opts.crate_names.len() > 1 {
         let option = if opts.version_req.is_some() {
