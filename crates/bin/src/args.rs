@@ -223,9 +223,27 @@ pub struct Args {
     #[clap(help_heading = "Options", long, alias = "roots")]
     pub root: Option<PathBuf>,
 
-    /// The URL of the registry index to use
+    /// The URL of the registry index to use.
+    ///
+    /// Cannot be used with `--registry`.
     #[clap(help_heading = "Options", long)]
     pub index: Option<Registry>,
+
+    /// Name of the registry to use. Registry names are defined in Cargo config
+    /// files <https://doc.rust-lang.org/cargo/reference/config.html>.
+    ///
+    /// If not specified in cmdline or via environment variable, the default
+    /// registry is used, which is defined by the
+    /// `registry.default` config key in `.cargo/config.toml` which defaults
+    /// to crates-io.
+    ///
+    /// If it is set, then it will try to read environment variable
+    /// `CARGO_REGISTRIES_{registry_name}_INDEX` for index url and fallback to
+    /// reading from `registries.<name>.index`.
+    ///
+    /// Cannot be used with `--index`.
+    #[clap(help_heading = "Options", long, env = "CARGO_REGISTRY_DEFAULT")]
+    pub registry: Option<CompactString>,
 
     /// This option will be passed through to all `cargo-install` invocations.
     ///
@@ -416,6 +434,18 @@ pub fn parse() -> Args {
                 format_args!(
                     r#"Multiple override options for Cargo.toml fetching.
 You cannot use --manifest-path and --git. Do one or the other."#
+                ),
+            )
+            .exit();
+    }
+
+    if opts.index.is_some() && opts.registry.is_some() {
+        command
+            .error(
+                ErrorKind::ArgumentConflict,
+                format_args!(
+                    r#"Multiple override options for registry.
+You cannot use --index and --registry. Do one or the other."#
                 ),
             )
             .exit();

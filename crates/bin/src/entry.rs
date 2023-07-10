@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     env, fs,
     future::Future,
     path::{Path, PathBuf},
@@ -16,12 +17,14 @@ use binstalk::{
         remote::{Certificate, Client},
         tasks::AutoAbortJoinHandle,
     },
+    home::cargo_home,
     ops::{
         self,
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
         CargoTomlFetchOverride, Options, Resolver,
     },
 };
+use binstalk_manifests::cargo_config::Config;
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
 use file_format::FileFormat;
 use log::LevelFilter;
@@ -56,10 +59,19 @@ pub fn install_crates(
         })
         .collect();
 
+    // Load .cargo/config.toml
+    let cargo_home = cargo_home().map_err(BinstallError::from)?;
+    let mut config = Config::load_from_path(cargo_home.join("config.toml"))?;
+
     // Compute paths
     let cargo_root = args.root;
-    let (install_path, mut manifests, temp_dir) =
-        compute_paths_and_load_manifests(cargo_root.clone(), args.install_path, args.no_track)?;
+    let (install_path, mut manifests, temp_dir) = compute_paths_and_load_manifests(
+        cargo_root.clone(),
+        args.install_path,
+        args.no_track,
+        cargo_home,
+        &mut config,
+    )?;
 
     // Remove installed crates
     let mut crate_names =
@@ -83,12 +95,17 @@ pub fn install_crates(
     // Initialize reqwest client
     let rate_limit = args.rate_limit;
 
+    let mut http = config.http.take();
+
     let client = Client::new(
         concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
         args.min_tls_version.map(|v| v.into()),
         Duration::from_millis(rate_limit.duration.get()),
         rate_limit.request_count,
-        read_root_certs(args.root_certificates),
+        read_root_certs(
+            args.root_certificates,
+            http.as_mut().and_then(|http| http.cainfo.take()),
+        ),
     )
     .map_err(BinstallError::from)?;
 
@@ -127,7 +144,27 @@ pub fn install_crates(
         client,
         gh_api_client,
         jobserver_client,
-        registry: args.index.unwrap_or_default(),
+        registry: if let Some(index) = args.index {
+            index
+        } else if let Some(registry_name) = args
+            .registry
+            .or_else(|| config.registry.map(|registry| registry.default))
+        {
+            env::var(format!("CARGO_REGISTRIES_{registry_name}_INDEX"))
+                .map(Cow::Owned)
+                .or_else(|_| {
+                    config
+                        .registries
+                        .as_ref()
+                        .and_then(|registries| registries.get(&registry_name))
+                        .map(|registry| Cow::Borrowed(registry.index.as_str()))
+                        .ok_or_else(|| BinstallError::UnknownRegistryName(registry_name))
+                })?
+                .parse()
+                .map_err(BinstallError::from)?
+        } else {
+            Default::default()
+        },
     });
 
     // Destruct args before any async function to reduce size of the future
@@ -225,9 +262,13 @@ fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> 
     open_cert(&buffer).map_err(From::from).map(Some)
 }
 
-fn read_root_certs(root_certificate_paths: Vec<PathBuf>) -> impl Iterator<Item = Certificate> {
+fn read_root_certs(
+    root_certificate_paths: Vec<PathBuf>,
+    config_cainfo: Option<PathBuf>,
+) -> impl Iterator<Item = Certificate> {
     root_certificate_paths
         .into_iter()
+        .chain(config_cainfo)
         .filter_map(|path| match do_read_root_cert(&path) {
             Ok(optional_cert) => optional_cert,
             Err(err) => {
@@ -245,12 +286,15 @@ fn compute_paths_and_load_manifests(
     roots: Option<PathBuf>,
     install_path: Option<PathBuf>,
     no_track: bool,
+    cargo_home: PathBuf,
+    config: &mut Config,
 ) -> Result<(PathBuf, Option<Manifests>, tempfile::TempDir)> {
     // Compute cargo_roots
-    let cargo_roots = install_path::get_cargo_roots_path(roots).ok_or_else(|| {
-        error!("No viable cargo roots path found of specified, try `--roots`");
-        miette!("No cargo roots path found or specified")
-    })?;
+    let cargo_roots =
+        install_path::get_cargo_roots_path(roots, cargo_home, config).ok_or_else(|| {
+            error!("No viable cargo roots path found of specified, try `--roots`");
+            miette!("No cargo roots path found or specified")
+        })?;
 
     // Compute install directory
     let (install_path, custom_install_path) =

@@ -15,7 +15,10 @@ use thiserror::Error;
 use tokio::task;
 use tracing::{error, warn};
 
-use crate::{drivers::RegistryError, helpers::cargo_toml_workspace::LoadManifestFromWSError};
+use crate::{
+    drivers::{InvalidRegistryError, RegistryError},
+    helpers::cargo_toml_workspace::LoadManifestFromWSError,
+};
 
 #[derive(Debug, Error)]
 #[error("version string '{v}' is not semver: {err}")]
@@ -133,6 +136,14 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::io))]
     Io(io::Error),
 
+    /// Unknown registry name
+    ///
+    /// - Code: `binstall::cargo_registry`
+    /// - Exit: 75
+    #[error("Unknown registry name {0}, env `CARGO_REGISTRIES_{0}_INDEX` nor is it in .cargo/config.toml")]
+    #[diagnostic(severity(error), code(binstall::cargo_registry))]
+    UnknownRegistryName(CompactString),
+
     /// An error interacting with the crates.io API.
     ///
     /// This could either be a "not found" or a server/transport error.
@@ -166,6 +177,14 @@ pub enum BinstallError {
         help("If you used --manifest-path, check the Cargo.toml syntax.")
     )]
     CargoManifest(Box<CargoTomlError>),
+
+    /// Failure to parse registry index url
+    ///
+    /// - Code: `binstall::cargo_registry`
+    /// - Exit: 79
+    #[error(transparent)]
+    #[diagnostic(severity(error), code(binstall::cargo_registry))]
+    RegistryParseError(#[from] Box<InvalidRegistryError>),
 
     /// A version is not valid semver.
     ///
@@ -348,9 +367,11 @@ impl BinstallError {
             Download(_) => 68,
             SubProcess { .. } => 70,
             Io(_) => 74,
+            UnknownRegistryName(_) => 75,
             RegistryError { .. } => 76,
             CargoManifestPath => 77,
             CargoManifest { .. } => 78,
+            RegistryParseError(..) => 79,
             VersionParse { .. } => 80,
             VersionMismatch { .. } => 82,
             SuperfluousVersionOption => 84,
@@ -471,5 +492,11 @@ impl From<target_lexicon::ParseError> for BinstallError {
 impl From<RegistryError> for BinstallError {
     fn from(e: RegistryError) -> Self {
         BinstallError::RegistryError(Box::new(e))
+    }
+}
+
+impl From<InvalidRegistryError> for BinstallError {
+    fn from(e: InvalidRegistryError) -> Self {
+        BinstallError::RegistryParseError(Box::new(e))
     }
 }
