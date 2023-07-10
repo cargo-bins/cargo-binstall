@@ -1,24 +1,27 @@
 use std::{fs, io, path::Path};
 
+use reflink_copy::reflink_or_copy;
 use tempfile::{NamedTempFile, TempPath};
 use tracing::{debug, warn};
 
 fn copy_to_tempfile(src: &Path, dst: &Path) -> io::Result<NamedTempFile> {
-    let mut src_file = fs::File::open(src)?;
-
     let parent = dst.parent().unwrap();
     debug!("Creating named tempfile at '{}'", parent.display());
-    let mut tempfile = NamedTempFile::new_in(parent)?;
+    let tempfile = NamedTempFile::new_in(parent)?;
 
     debug!(
         "Copying from '{}' to '{}'",
         src.display(),
         tempfile.path().display()
     );
-    io::copy(&mut src_file, tempfile.as_file_mut())?;
+    // src and dst is likely to be on the same filesystem.
+    // Uses reflink if the fs support it, or fallback to
+    // `fs::copy` if it doesn't support it or it is not on the
+    // same filesystem.
+    reflink_or_copy(src, tempfile.path())?;
 
     debug!("Retrieving permissions of '{}'", src.display());
-    let permissions = src_file.metadata()?.permissions();
+    let permissions = src.metadata()?.permissions();
 
     debug!(
         "Setting permissions of '{}' to '{permissions:#?}'",

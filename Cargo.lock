@@ -261,6 +261,7 @@ dependencies = [
  "miette",
  "normalize-path",
  "once_cell",
+ "reflink-copy",
  "semver",
  "serde",
  "serde_json",
@@ -2006,6 +2007,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ioctl-sys"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bd11f3a29434026f5ff98c730b668ba74b1033637b8817940b54d040696133c"
+
+[[package]]
 name = "ipconfig"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2748,6 +2755,18 @@ dependencies = [
  "getrandom",
  "redox_syscall 0.2.16",
  "thiserror",
+]
+
+[[package]]
+name = "reflink-copy"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9c6f4912869a1c9abaf4038e7051d88544960da7c9560b8baeaabfa3c95e05b"
+dependencies = [
+ "cfg-if",
+ "ioctl-sys",
+ "libc",
+ "windows 0.48.0",
 ]
 
 [[package]]
