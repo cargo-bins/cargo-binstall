@@ -144,7 +144,7 @@ pub struct Args {
     ///    allows 2 requests per 6ms.
     ///
     /// Both duration and request count must not be 0.
-    #[clap(help_heading = "Overrides", long, default_value_t = RateLimit::default())]
+    #[clap(help_heading = "Overrides", long, default_value_t = RateLimit::default(), env = "BINSTALL_RATE_LIMIT")]
     pub rate_limit: RateLimit,
 
     /// Specify the strategies to be used,
