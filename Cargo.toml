@@ -35,7 +35,7 @@ debug = true
 lto = false
 debug-assertions = true
 overflow-checks = true
-codegen-units = 1024
+codegen-units = 32
 
 # Set the default for dependencies on debug.
 [profile.dev.package."*"]
