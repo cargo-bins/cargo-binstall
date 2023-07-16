@@ -83,7 +83,7 @@ impl Download {
         Self {
             client,
             url,
-            _digest: PhantomData::default(),
+            _digest: PhantomData,
             _checksum: Vec::new(),
         }
     }
@@ -158,7 +158,7 @@ impl<D: Digest> Download<D> {
         Self {
             client,
             url,
-            _digest: PhantomData::default(),
+            _digest: PhantomData,
             _checksum: checksum,
         }
     }
