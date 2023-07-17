@@ -41,7 +41,7 @@ impl GitIndex {
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!("config.toml not found in repository `{url}`"),
+                        format!("config.json not found in repository `{url}`"),
                     )
                 })?;
 
