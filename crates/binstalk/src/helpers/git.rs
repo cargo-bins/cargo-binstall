@@ -19,8 +19,17 @@ pub enum GitError {
     #[error("Failed to fetch: {0}")]
     FetchError(#[source] Box<clone::fetch::Error>),
 
-    #[error("Failed to checkout: {0}")]
-    CheckOutError(#[source] Box<clone::checkout::main_worktree::Error>),
+    #[error("HEAD ref was corrupt in crates-io index repository clone")]
+    HeadCommit(#[source] Box<gix::reference::head_commit::Error>),
+
+    #[error("tree of head commit wasn't present in crates-io index repository clone")]
+    GetTreeOfCommit(#[source] Box<gix::object::commit::Error>),
+
+    #[error("config.json missing in crates.io repository")]
+    MissingConfigJson,
+
+    #[error("An object was missing in the crates-io index repository clone")]
+    ObjectLookup(#[source] Box<gix::object::find::existing::Error>),
 }
 
 impl From<clone::Error> for GitError {
@@ -35,9 +44,21 @@ impl From<clone::fetch::Error> for GitError {
     }
 }
 
-impl From<clone::checkout::main_worktree::Error> for GitError {
-    fn from(e: clone::checkout::main_worktree::Error) -> Self {
-        Self::CheckOutError(Box::new(e))
+impl From<gix::reference::head_commit::Error> for GitError {
+    fn from(e: gix::reference::head_commit::Error) -> Self {
+        Self::HeadCommit(Box::new(e))
+    }
+}
+
+impl From<gix::object::commit::Error> for GitError {
+    fn from(e: gix::object::commit::Error) -> Self {
+        Self::GetTreeOfCommit(Box::new(e))
+    }
+}
+
+impl From<gix::object::find::existing::Error> for GitError {
+    fn from(e: gix::object::find::existing::Error) -> Self {
+        Self::ObjectLookup(Box::new(e))
     }
 }
 
@@ -83,7 +104,7 @@ impl Repository {
                 NonZeroU32::new(1).unwrap(),
             ))
             .fetch_only(&mut progress, &AtomicBool::new(false))?
-            .0
+            .0,
         ))
     }
 }
