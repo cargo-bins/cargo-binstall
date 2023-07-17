@@ -119,7 +119,7 @@ impl GitRegistry {
                 .get_or_try_init(|| GitIndex::new(this.0.url.clone()))?;
 
             let MatchedVersion { version, cksum } =
-                Self::find_crate_matched_ver(&repo, &crate_name, &crate_prefix, &version_req)?;
+                Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
 
             let url = Url::parse(&render_dl_template(
                 dl_template,
