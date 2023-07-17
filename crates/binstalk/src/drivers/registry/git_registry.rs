@@ -33,7 +33,7 @@ impl GitIndex {
     fn new(url: GitUrl) -> Result<Self, BinstallError> {
         let tempdir = TempDir::new()?;
 
-        let repo = Repository::shallow_clone_bare(url, tempdir.as_ref())?;
+        let repo = Repository::shallow_clone_bare(url.clone(), tempdir.as_ref())?;
 
         let config: RegistryConfig = {
             let config = repo
@@ -41,7 +41,7 @@ impl GitIndex {
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
-                        "config.toml not found in crates.io-index repository",
+                        format!("config.toml not found in repository `{url}`"),
                     )
                 })?;
 

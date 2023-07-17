@@ -1,4 +1,4 @@
-use std::{mem, num::NonZeroU32, path::Path, str::FromStr, sync::atomic::AtomicBool};
+use std::{fmt, mem, num::NonZeroU32, path::Path, str::FromStr, sync::atomic::AtomicBool};
 
 use compact_str::CompactString;
 use gix::{clone, create, open, remote, Url};
@@ -71,6 +71,15 @@ impl From<gix::object::find::existing::Error> for GitError {
 #[derive(Clone, Debug)]
 pub struct GitUrl(Url);
 
+impl fmt::Display for GitUrl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let url_bstr = self.0.to_bstring();
+        let url_str = String::from_utf8_lossy(&url_bstr);
+
+        f.write_str(&url_str)
+    }
+}
+
 impl FromStr for GitUrl {
     type Err = GitUrlParseError;
 
@@ -83,35 +92,41 @@ impl FromStr for GitUrl {
 pub struct Repository(gix::ThreadSafeRepository);
 
 impl Repository {
+    fn prepare_fetch(
+        url: GitUrl,
+        path: &Path,
+        kind: create::Kind,
+    ) -> Result<clone::PrepareFetch, GitError> {
+        Ok(clone::PrepareFetch::new(
+            url.0,
+            path,
+            kind,
+            create::Options {
+                destination_must_be_empty: true,
+                ..Default::default()
+            },
+            open::Options::isolated(),
+        )?
+        .with_shallow(remote::fetch::Shallow::DepthAtRemote(
+            NonZeroU32::new(1).unwrap(),
+        )))
+    }
+
     /// WARNING: This is a blocking operation, if you want to use it in
     /// async context then you must wrap the call in [`tokio::task::spawn_blocking`].
     ///
     /// WARNING: This function must be called after tokio runtime is initialized.
     pub fn shallow_clone_bare(url: GitUrl, path: &Path) -> Result<Self, GitError> {
-        let url_bstr = url.0.to_bstring();
-        let url_str = String::from_utf8_lossy(&url_bstr);
-
-        debug!("Shallow cloning {url_str} to {}", path.display());
-
-        let mut progress = TracingProgress::new(CompactString::new("Cloning"));
+        debug!("Shallow cloning {url} to {}", path.display());
 
         Ok(Self(
-            clone::PrepareFetch::new(
-                url.0,
-                path,
-                create::Kind::Bare,
-                create::Options {
-                    destination_must_be_empty: true,
-                    ..Default::default()
-                },
-                open::Options::isolated(),
-            )?
-            .with_shallow(remote::fetch::Shallow::DepthAtRemote(
-                NonZeroU32::new(1).unwrap(),
-            ))
-            .fetch_only(&mut progress, &AtomicBool::new(false))?
-            .0
-            .into(),
+            Self::prepare_fetch(url, path, create::Kind::Bare)?
+                .fetch_only(
+                    &mut TracingProgress::new(CompactString::new("Cloning")),
+                    &AtomicBool::new(false),
+                )?
+                .0
+                .into(),
         ))
     }
 
@@ -120,35 +135,17 @@ impl Repository {
     ///
     /// WARNING: This function must be called after tokio runtime is initialized.
     pub fn shallow_clone(url: GitUrl, path: &Path) -> Result<Self, GitError> {
-        let url_bstr = url.0.to_bstring();
-        let url_str = String::from_utf8_lossy(&url_bstr);
-
-        debug!(
-            "Shallow cloning {url_str} to {} with worktree",
-            path.display()
-        );
+        debug!("Shallow cloning {url} to {} with worktree", path.display());
 
         let mut progress = TracingProgress::new(CompactString::new("Cloning"));
 
         Ok(Self(
-            clone::PrepareFetch::new(
-                url.0,
-                path,
-                create::Kind::WithWorktree,
-                create::Options {
-                    destination_must_be_empty: true,
-                    ..Default::default()
-                },
-                open::Options::isolated(),
-            )?
-            .with_shallow(remote::fetch::Shallow::DepthAtRemote(
-                NonZeroU32::new(1).unwrap(),
-            ))
-            .fetch_then_checkout(&mut progress, &AtomicBool::new(false))?
-            .0
-            .main_worktree(&mut progress, &AtomicBool::new(false))?
-            .0
-            .into(),
+            Self::prepare_fetch(url, path, create::Kind::WithWorktree)?
+                .fetch_then_checkout(&mut progress, &AtomicBool::new(false))?
+                .0
+                .main_worktree(&mut progress, &AtomicBool::new(false))?
+                .0
+                .into(),
         ))
     }
 
