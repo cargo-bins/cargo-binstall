@@ -12,7 +12,7 @@ use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
 timings := env_var_or_default("JUST_TIMINGS", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
-export BINSTALL_RATE_LIMIT := "100/1"
+export BINSTALL_RATE_LIMIT := "30/1"
 
 cargo := if use-cargo-zigbuild != "" { "cargo-zigbuild" } else if use-cross != "" { "cross" } else { "cargo" }
 export CARGO := cargo
