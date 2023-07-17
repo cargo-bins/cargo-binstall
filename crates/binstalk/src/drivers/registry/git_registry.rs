@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{io, path::PathBuf, sync::Arc};
 
 use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
@@ -9,7 +9,6 @@ use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use url::Url;
 
-use crate::helpers::git::GitError;
 use crate::{
     drivers::registry::{
         crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion,
@@ -26,7 +25,7 @@ use crate::{
 #[derive(Debug)]
 struct GitIndex {
     _tempdir: TempDir,
-    repo: gix::ThreadSafeRepository,
+    repo: Repository,
     dl_template: CompactString,
 }
 
@@ -34,25 +33,24 @@ impl GitIndex {
     fn new(url: GitUrl) -> Result<Self, BinstallError> {
         let tempdir = TempDir::new()?;
 
-        let repo = Repository::shallow_clone(url, tempdir.as_ref())?.0;
+        let repo = Repository::shallow_clone_bare(url, tempdir.as_ref())?;
 
         let config: RegistryConfig = {
             let config = repo
-                .head_commit()
-                .map_err(GitError::from)?
-                .tree()
-                .map_err(GitError::from)?
-                .lookup_entry_by_path("config.json")
-                .expect("root-lookups can't fail as object is parsed")
-                .ok_or(GitError::MissingConfigJson)?
-                .object()
-                .map_err(GitError::from)?;
-            json_from_slice(&config.data).map_err(RegistryError::from)?
+                .get_head_commit_entry_data_by_path("config.json")?
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "config.toml not found in crates.io-index repository",
+                    )
+                })?;
+
+            json_from_slice(&config).map_err(RegistryError::from)?
         };
 
         Ok(Self {
             _tempdir: tempdir,
-            repo: repo.into(),
+            repo,
             dl_template: config.dl,
         })
     }
@@ -77,7 +75,7 @@ impl GitRegistry {
 
     /// WARNING: This is a blocking operation.
     fn find_crate_matched_ver(
-        repo: &gix::Repository,
+        repo: &Repository,
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
@@ -90,18 +88,11 @@ impl GitRegistry {
 
         path.push(&*crate_name.to_lowercase());
         let crate_versions = repo
-            .head_commit()
-            .map_err(GitError::from)?
-            .tree()
-            .map_err(GitError::from)?
-            .lookup_entry_by_path(path)
-            .map_err(GitError::from)?
-            .ok_or_else(|| RegistryError::NotFound(crate_name.into()))?
-            .object()
-            .map_err(GitError::from)?;
+            .get_head_commit_entry_data_by_path(path)?
+            .ok_or_else(|| RegistryError::NotFound(crate_name.into()))?;
 
         MatchedVersion::find(
-            &mut JsonDeserializer::from_slice(&crate_versions.data).into_iter(),
+            &mut JsonDeserializer::from_slice(&crate_versions).into_iter(),
             version_req,
         )
     }
@@ -127,12 +118,8 @@ impl GitRegistry {
                 .git_index
                 .get_or_try_init(|| GitIndex::new(this.0.url.clone()))?;
 
-            let MatchedVersion { version, cksum } = Self::find_crate_matched_ver(
-                &repo.to_thread_local(),
-                &crate_name,
-                &crate_prefix,
-                &version_req,
-            )?;
+            let MatchedVersion { version, cksum } =
+                Self::find_crate_matched_ver(&repo, &crate_name, &crate_prefix, &version_req)?;
 
             let url = Url::parse(&render_dl_template(
                 dl_template,
