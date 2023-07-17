@@ -1,9 +1,4 @@
-use std::{
-    fs::File,
-    io::{self, BufReader, Read},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{io, path::PathBuf, sync::Arc};
 
 use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
@@ -29,7 +24,8 @@ use crate::{
 
 #[derive(Debug)]
 struct GitIndex {
-    path: TempDir,
+    _tempdir: TempDir,
+    repo: Repository,
     dl_template: CompactString,
 }
 
@@ -37,15 +33,24 @@ impl GitIndex {
     fn new(url: GitUrl) -> Result<Self, BinstallError> {
         let tempdir = TempDir::new()?;
 
-        Repository::shallow_clone(url, tempdir.as_ref())?;
+        let repo = Repository::shallow_clone_bare(url.clone(), tempdir.as_ref())?;
 
-        let mut v = Vec::with_capacity(100);
-        File::open(tempdir.as_ref().join("config.json"))?.read_to_end(&mut v)?;
+        let config: RegistryConfig = {
+            let config = repo
+                .get_head_commit_entry_data_by_path("config.json")?
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::NotFound,
+                        format!("config.json not found in repository `{url}`"),
+                    )
+                })?;
 
-        let config: RegistryConfig = json_from_slice(&v).map_err(RegistryError::from)?;
+            json_from_slice(&config).map_err(RegistryError::from)?
+        };
 
         Ok(Self {
-            path: tempdir,
+            _tempdir: tempdir,
+            repo,
             dl_template: config.dl,
         })
     }
@@ -70,27 +75,24 @@ impl GitRegistry {
 
     /// WARNING: This is a blocking operation.
     fn find_crate_matched_ver(
-        mut path: PathBuf,
+        repo: &Repository,
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
     ) -> Result<MatchedVersion, BinstallError> {
+        let mut path = PathBuf::with_capacity(128);
         path.push(&**c1);
         if let Some(c2) = c2 {
             path.push(&**c2);
         }
 
         path.push(&*crate_name.to_lowercase());
-
-        let f = File::open(path)
-            .map_err(|e| match e.kind() {
-                io::ErrorKind::NotFound => RegistryError::NotFound(crate_name.into()).into(),
-                _ => BinstallError::from(e),
-            })
-            .map(BufReader::new)?;
+        let crate_versions = repo
+            .get_head_commit_entry_data_by_path(path)?
+            .ok_or_else(|| RegistryError::NotFound(crate_name.into()))?;
 
         MatchedVersion::find(
-            &mut JsonDeserializer::from_reader(f).into_iter(),
+            &mut JsonDeserializer::from_slice(&crate_versions).into_iter(),
             version_req,
         )
     }
@@ -107,17 +109,17 @@ impl GitRegistry {
         let this = self.clone();
 
         let (version, dl_url) = spawn_blocking(move || {
-            let GitIndex { path, dl_template } = this
+            let GitIndex {
+                _tempdir: _,
+                repo,
+                dl_template,
+            } = this
                 .0
                 .git_index
                 .get_or_try_init(|| GitIndex::new(this.0.url.clone()))?;
 
-            let MatchedVersion { version, cksum } = Self::find_crate_matched_ver(
-                path.as_ref().to_owned(),
-                &crate_name,
-                &crate_prefix,
-                &version_req,
-            )?;
+            let MatchedVersion { version, cksum } =
+                Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
 
             let url = Url::parse(&render_dl_template(
                 dl_template,
