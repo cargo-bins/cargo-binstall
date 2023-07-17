@@ -53,7 +53,7 @@ impl FromStr for GitUrl {
 }
 
 #[derive(Debug)]
-pub struct Repository(gix::Repository);
+pub struct Repository(pub(crate) gix::Repository);
 
 impl Repository {
     /// WARNING: This is a blocking operation, if you want to use it in
@@ -72,7 +72,7 @@ impl Repository {
             clone::PrepareFetch::new(
                 url.0,
                 path,
-                create::Kind::WithWorktree,
+                create::Kind::Bare,
                 create::Options {
                     destination_must_be_empty: true,
                     ..Default::default()
@@ -82,10 +82,8 @@ impl Repository {
             .with_shallow(remote::fetch::Shallow::DepthAtRemote(
                 NonZeroU32::new(1).unwrap(),
             ))
-            .fetch_then_checkout(&mut progress, &AtomicBool::new(false))?
+            .fetch_only(&mut progress, &AtomicBool::new(false))?
             .0
-            .main_worktree(&mut progress, &AtomicBool::new(false))?
-            .0,
         ))
     }
 }

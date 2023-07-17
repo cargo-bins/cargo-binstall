@@ -30,6 +30,7 @@ use crate::{
 #[derive(Debug)]
 struct GitIndex {
     path: TempDir,
+    repo: gix::ThreadSafeRepository,
     dl_template: CompactString,
 }
 
@@ -37,7 +38,7 @@ impl GitIndex {
     fn new(url: GitUrl) -> Result<Self, BinstallError> {
         let tempdir = TempDir::new()?;
 
-        Repository::shallow_clone(url, tempdir.as_ref())?;
+        let repo = Repository::shallow_clone(url, tempdir.as_ref())?.0;
 
         let mut v = Vec::with_capacity(100);
         File::open(tempdir.as_ref().join("config.json"))?.read_to_end(&mut v)?;
@@ -46,6 +47,7 @@ impl GitIndex {
 
         Ok(Self {
             path: tempdir,
+            repo: repo.into(),
             dl_template: config.dl,
         })
     }
@@ -107,7 +109,7 @@ impl GitRegistry {
         let this = self.clone();
 
         let (version, dl_url) = spawn_blocking(move || {
-            let GitIndex { path, dl_template } = this
+            let GitIndex { path, repo, dl_template } = this
                 .0
                 .git_index
                 .get_or_try_init(|| GitIndex::new(this.0.url.clone()))?;
