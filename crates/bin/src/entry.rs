@@ -148,7 +148,7 @@ pub fn install_crates(
             index
         } else if let Some(registry_name) = args
             .registry
-            .or_else(|| config.registry.map(|registry| registry.default))
+            .or_else(|| config.registry.and_then(|registry| registry.default))
         {
             env::var(format!("CARGO_REGISTRIES_{registry_name}_INDEX"))
                 .map(Cow::Owned)
@@ -157,7 +157,7 @@ pub fn install_crates(
                         .registries
                         .as_ref()
                         .and_then(|registries| registries.get(&registry_name))
-                        .map(|registry| Cow::Borrowed(registry.index.as_str()))
+                        .and_then(|registry| registry.index.as_deref().map(Cow::Borrowed))
                         .ok_or_else(|| BinstallError::UnknownRegistryName(registry_name))
                 })?
                 .parse()
