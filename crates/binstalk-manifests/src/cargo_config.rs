@@ -52,12 +52,12 @@ pub enum Env {
 
 #[derive(Debug, Deserialize)]
 pub struct Registry {
-    pub index: CompactString,
+    pub index: Option<CompactString>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DefaultRegistry {
-    pub default: CompactString,
+    pub default: Option<CompactString>,
 }
 
 #[derive(Debug, Default, Deserialize)]
