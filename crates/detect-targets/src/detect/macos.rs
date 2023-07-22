@@ -4,6 +4,20 @@ use tokio::process::Command;
 
 const AARCH64: &str = "aarch64-apple-darwin";
 const X86: &str = "x86_64-apple-darwin";
+/// https://doc.rust-lang.org/nightly/rustc/platform-support/x86_64h-apple-darwin.html
+///
+/// This target is an x86_64 target that only supports Apple's late-gen
+/// (Haswell-compatible) Intel chips.
+///
+/// It enables a set of target features available on these chips (AVX2 and similar),
+/// and MachO binaries built with this target may be used as the x86_64h entry in
+/// universal binaries ("fat" MachO binaries), and will fail to load on machines
+/// that do not support this.
+///
+/// It is similar to x86_64-apple-darwin in nearly all respects, although
+/// the minimum supported OS version is slightly higher (it requires 10.8
+/// rather than x86_64-apple-darwin's 10.7).
+const X86H: &str = "x86_64h-apple-darwin";
 const UNIVERSAL: &str = "universal-apple-darwin";
 const UNIVERSAL2: &str = "universal2-apple-darwin";
 
@@ -13,8 +27,7 @@ async fn is_x86_64_supported() -> io::Result<bool> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn()?
-        .wait()
+        .status()
         .await?;
 
     Ok(exit_status.success())
@@ -22,13 +35,20 @@ async fn is_x86_64_supported() -> io::Result<bool> {
 
 pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
     match target {
-        AARCH64 => [
-            is_x86_64_supported().await.unwrap_or(false).then_some(X86),
-            Some(UNIVERSAL),
-            Some(UNIVERSAL2),
-        ],
-        X86 => [Some(UNIVERSAL), Some(UNIVERSAL2), None],
-        _ => [None, None, None],
+        AARCH64 => {
+            let is_x86_64_supported = is_x86_64_supported().await.unwrap_or(false);
+            [
+                // Prefer universal as it provides native arm executable
+                Some(UNIVERSAL),
+                Some(UNIVERSAL2),
+                // Prefer x86h since it is more optimized
+                is_x86_64_supported.then_some(X86H),
+                is_x86_64_supported.then_some(X86),
+            ]
+        }
+        X86 => [Some(UNIVERSAL), Some(UNIVERSAL2), None, None],
+        X86H => [Some(X86), Some(UNIVERSAL), Some(UNIVERSAL2), None],
+        _ => [None, None, None, None],
     }
     .into_iter()
     .flatten()
