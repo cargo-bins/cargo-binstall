@@ -4,7 +4,6 @@ use std::{
     future::Future,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
 };
 
 use binstalk::{
@@ -100,7 +99,7 @@ pub fn install_crates(
     let client = Client::new(
         concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
         args.min_tls_version.map(|v| v.into()),
-        Duration::from_millis(rate_limit.duration.get()),
+        rate_limit.duration,
         rate_limit.request_count,
         read_root_certs(
             args.root_certificates,

@@ -223,6 +223,7 @@ mod test {
     use std::{
         collections::{HashMap, HashSet},
         ffi::OsStr,
+        num::NonZeroU16,
     };
     use tempfile::tempdir;
 
@@ -231,7 +232,7 @@ mod test {
         let client = crate::remote::Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
-            std::time::Duration::from_millis(10),
+            NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
         )

@@ -164,7 +164,7 @@ impl FromStr for Registry {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::num::NonZeroU16;
 
     use toml_edit::ser::to_string;
 
@@ -176,7 +176,7 @@ mod test {
         Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
-            Duration::from_millis(10),
+            NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
         )

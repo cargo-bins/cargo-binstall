@@ -2,7 +2,7 @@ use std::{
     env,
     ffi::OsString,
     fmt,
-    num::{NonZeroU64, ParseIntError},
+    num::{NonZeroU16, NonZeroU64, ParseIntError},
     path::PathBuf,
     str::FromStr,
 };
@@ -348,7 +348,7 @@ impl From<TLSVersion> for remote::TLSVersion {
 
 #[derive(Copy, Clone, Debug)]
 pub struct RateLimit {
-    pub duration: NonZeroU64,
+    pub duration: NonZeroU16,
     pub request_count: NonZeroU64,
 }
 
@@ -379,7 +379,7 @@ impl FromStr for RateLimit {
 impl Default for RateLimit {
     fn default() -> Self {
         Self {
-            duration: NonZeroU64::new(10).unwrap(),
+            duration: NonZeroU16::new(10).unwrap(),
             request_count: NonZeroU64::new(1).unwrap(),
         }
     }
