@@ -161,7 +161,7 @@ impl Repository {
                     .to_thread_local()
                     .head_commit()?
                     .tree()?
-                    .lookup_entry_by_path(path)?
+                    .peel_to_entry_by_path(path)?
                 {
                     Some(mem::take(&mut entry.object()?.data))
                 } else {
