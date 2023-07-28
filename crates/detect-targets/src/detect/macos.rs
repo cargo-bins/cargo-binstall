@@ -1,4 +1,4 @@
-use std::{io, process::Stdio};
+use std::process::Stdio;
 
 use tokio::process::Command;
 
@@ -21,22 +21,22 @@ const X86H: &str = "x86_64h-apple-darwin";
 const UNIVERSAL: &str = "universal-apple-darwin";
 const UNIVERSAL2: &str = "universal2-apple-darwin";
 
-async fn is_x86_64_supported() -> io::Result<bool> {
-    let exit_status = Command::new("arch")
-        .args(["-arch", "x86_64", "/usr/bin/true"])
+async fn is_arch_supported(arch_name: &str) -> bool {
+    Command::new("arch")
+        .args(["-arch", arch_name, "/usr/bin/true"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .await?;
-
-    Ok(exit_status.success())
+        .await
+        .map(|exit_status| exit_status.success())
+        .unwrap_or(false)
 }
 
 pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
     match target {
         AARCH64 => {
-            let is_x86_64_supported = is_x86_64_supported().await.unwrap_or(false);
+            let is_x86_64_supported = is_arch_supported("x86_64").await;
             [
                 // Prefer universal as it provides native arm executable
                 Some(UNIVERSAL),
@@ -46,7 +46,12 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
                 is_x86_64_supported.then_some(X86),
             ]
         }
-        X86 => [Some(UNIVERSAL), Some(UNIVERSAL2), None, None],
+        X86 => [
+            is_arch_supported("x86_64h").await.then_some(X86H),
+            Some(UNIVERSAL),
+            Some(UNIVERSAL2),
+            None,
+        ],
         X86H => [Some(X86), Some(UNIVERSAL), Some(UNIVERSAL2), None],
         _ => [None, None, None, None],
     }
