@@ -10,6 +10,7 @@ override-features := env_var_or_default("JUST_OVERRIDE_FEATURES", "")
 glibc-version := env_var_or_default("GLIBC_VERSION", "")
 use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
 timings := env_var_or_default("JUST_TIMINGS", "")
+build-std := env_var_or_default("JUST_BUILD_STD", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
 export BINSTALL_RATE_LIMIT := "30/1"
@@ -55,9 +56,11 @@ ci-or-no := if ci != "" { "ci" } else { "noci" }
 
 # In release builds in CI, build the std library ourselves so it uses our
 # compile profile, and optimise panic messages out with immediate abort.
-cargo-buildstd := "" #if (cargo-profile / ci-or-no) == "release/ci" {
-#" -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
-#} else { "" }
+cargo-buildstd := if build-std != "" {
+    " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
+} else if target == "x86_64h-apple-darwin" {
+    " -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort"
+} else { "" }
 
 # In musl release builds in CI, statically link gcclibs.
 rustc-gcclibs := if (cargo-profile / ci-or-no / target-libc) == "release/ci/musl" {
@@ -79,6 +82,8 @@ support-pkg-config := if target == target-host {
 #} else if target == "x86_64-unknown-linux-musl" {
 #    ",zlib-ng"
 git-max-perf-feature := if target == "x86_64-apple-darwin" {
+    ",zlib-ng"
+} else if target == "x86_64h-apple-darwin" {
     ",zlib-ng"
 } else if target == "aarch64-apple-darwin" {
     ",zlib-ng"
@@ -185,10 +190,15 @@ ci-install-deps:
 [windows]
 ci-install-deps:
 
-toolchain components="":
-    rustup toolchain install stable {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal
-    {{ if ci != "" { "rustup default stable" } else { "rustup override set stable" } }}
-    {{ if target != "" { "rustup target add " + target } else { "" } }}
+toolchain-name := if cargo-buildstd != "" { "nightly" } else { "stable" }
+# x86_64h-apple-darwin does not contain pre-built libstd, instead we will
+# install rust-src and use build-std to build it.
+target-name := if target == "x86_64h-apple-darwin" { "" } else { target }
+default-components := if cargo-buildstd != "" { "rust-src" } else { "" }
+
+toolchain components=default-components:
+    rustup toolchain install {{toolchain-name}} {{ if components != "" { "--component " + components } else { "" } }} --no-self-update --profile minimal {{ if target-name != "" { "--target " + target-name } else { "" } }}
+    rustup override set {{toolchain-name}}
 
 print-env:
     @echo "env RUSTFLAGS='$RUSTFLAGS', CARGO='$CARGO'"
