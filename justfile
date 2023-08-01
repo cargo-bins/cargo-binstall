@@ -74,19 +74,14 @@ support-pkg-config := if target == target-host {
     if target-os == "linux" { "true" } else { "" }
 } else { "" }
 
-enable-git-max-perf-feature := if target == "x86_64-apple-darwin" {
-    "true"
+#} else if target == "x86_64-unknown-linux-gnu" {
+#    ",zlib-ng"
+#} else if target == "x86_64-unknown-linux-musl" {
+#    ",zlib-ng"
+git-max-perf-feature := if target == "x86_64-apple-darwin" {
+    ",zlib-ng"
 } else if target == "aarch64-apple-darwin" {
-    "true"
-} else if target == "x86_64-unknown-linux-gnu" {
-    "true"
-} else if target == "x86_64-unknown-linux-musl" {
-    "true"
-} else {
-    "false"
-}
-git-max-perf-feature := if enable-git-max-perf-feature == "true" {
-    ",git-max-perf"
+    ",zlib-ng"
 } else if target-os == "windows" {
     ",zlib-ng"
 } else if target == "aarch64-unknown-linux-gnu" {
