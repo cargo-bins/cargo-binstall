@@ -27,7 +27,7 @@ fi
 
 ./cargo-binstall -y --force cargo-binstall
 
-if ! [[ $CARGO_HOME ]]; then
+if ! [[ -v CARGO_HOME ]]; then
     CARGO_HOME=$HOME/.cargo
 fi
 if ! [[ ":$PATH:" == *":$CARGO_HOME/bin:"* ]]; then
