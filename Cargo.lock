@@ -1064,9 +1064,9 @@ checksum = "b6c80984affa11d98d1b88b66ac8853f143217b399d3c74116778ff8fdb4ed2e"
 
 [[package]]
 name = "gix"
-version = "0.50.1"
+version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "275b1bfa0d6f6ed31a2e2e878a4539f4994eac8840546283ab3aebbd8fcaa42d"
+checksum = "4ce5c049b1afcae9bb9e10c0f6dd8eb1335e8647fb7fd34732a66133ca3b9886"
 dependencies = [
  "gix-actor",
  "gix-archive",
@@ -1118,9 +1118,9 @@ dependencies = [
 
 [[package]]
 name = "gix-actor"
-version = "0.24.1"
+version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7606482631d56cc6bfba3394ae42fc64927635024298befbb7923b6144774e8"
+checksum = "abd2566c12095a584716f2c16f051850bd8987f57556f1fef4a7cce0300b83d0"
 dependencies = [
  "bstr",
  "btoi",
@@ -1203,9 +1203,9 @@ dependencies = [
 
 [[package]]
 name = "gix-config"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b51e83bd9d08118e0ff06ea14be953c418b4c056e57d93c8103e777584e48b0a"
+checksum = "2135b921a699a4c36167148193bea23c653a16ef0686f6a280e383469709a773"
 dependencies = [
  "bstr",
  "gix-config-value",
@@ -1216,11 +1216,11 @@ dependencies = [
  "gix-sec",
  "log",
  "memchr",
- "nom",
  "once_cell",
  "smallvec",
  "thiserror",
  "unicode-bom",
+ "winnow",
 ]
 
 [[package]]
@@ -1453,9 +1453,9 @@ dependencies = [
 
 [[package]]
 name = "gix-object"
-version = "0.33.1"
+version = "0.33.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70f18b688854af4440695b943e705877f94171325b8bcacaee2d898ecf2766d2"
+checksum = "bfdd87520c71a19afecfa616863a4b761621074878f5a3999243b3e37e233943"
 dependencies = [
  "bstr",
  "btoi",
@@ -1473,9 +1473,9 @@ dependencies = [
 
 [[package]]
 name = "gix-odb"
-version = "0.50.1"
+version = "0.50.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dc2129d25313b594adfb5a71f2a617aaa2c3c4cfd3b2943823692db12fbc1db"
+checksum = "e827dbda6d3dabadb94cd437d0e0fe8c314a60d136a3235fc6f5bf7b96b976ac"
 dependencies = [
  "arc-swap",
  "gix-date",
@@ -1550,9 +1550,9 @@ dependencies = [
 
 [[package]]
 name = "gix-prompt"
-version = "0.5.4"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f755e8eb83ee9a06642a8fbd3009b033db2b5bd774f3aaf3de0b07f9b6ebdc5"
+checksum = "2c22decaf4a063ccae2b2108820c8630c01bd6756656df3fe464b32b8958a5ea"
 dependencies = [
  "gix-command",
  "gix-config-value",
@@ -1563,9 +1563,9 @@ dependencies = [
 
 [[package]]
 name = "gix-protocol"
-version = "0.36.1"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f8cf8b48ad5510a6ea3c8b529f51fd0f31009a2e46579f3a0ed917669035170"
+checksum = "53c7627b8c54349b93f2a89218effc7c13a5506d2abc2571e0baaf1562a9c105"
 dependencies = [
  "bstr",
  "btoi",
@@ -1592,9 +1592,9 @@ dependencies = [
 
 [[package]]
 name = "gix-ref"
-version = "0.33.2"
+version = "0.33.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c16776eab78f4a918464064fa9c0f640014e8f1c3f9d1d366e929251c7193b2c"
+checksum = "25db11edd78bf33043d1969fff51c567a4b30edd77ab44f6f8eb460a4c14985d"
 dependencies = [
  "gix-actor",
  "gix-date",
@@ -1690,9 +1690,9 @@ checksum = "96b6d623a1152c3facb79067d6e2ecdae48130030cf27d6eb21109f13bd7b836"
 
 [[package]]
 name = "gix-transport"
-version = "0.34.1"
+version = "0.34.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99fffe5a95a522200ad47b97c19c9b0c204fc415dffa4a993d727394e6d59ef8"
+checksum = "640cf03acc506e0350bc434dd6d7093d91343ed508d2c2166a41da856ab6e5e3"
 dependencies = [
  "base64 0.21.2",
  "bstr",
@@ -1758,9 +1758,9 @@ dependencies = [
 
 [[package]]
 name = "gix-worktree"
-version = "0.23.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fd60b32d15287aef77e4fb1955627e0db1f13e40bf9a3481100223a51791f5f"
+checksum = "9f8bb6dd57dc6c9dfa03cc2cf2cc0942edae405eb6dfd1c34dbd2be00a90cab2"
 dependencies = [
  "bstr",
  "filetime",
