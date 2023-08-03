@@ -16,7 +16,8 @@ use crate::{errors::BinstallError, manifests::cargo_toml_binstall::Meta};
 ///
 /// WARNING: This is a blocking operation.
 ///
-///  * `workspace_path` - should be a directory
+///  * `workspace_path` - can be a directory (path to workspace) or
+///    a file (path to `Cargo.toml`).
 pub fn load_manifest_from_workspace(
     workspace_path: impl AsRef<Path>,
     crate_name: impl AsRef<str>,
@@ -72,16 +73,21 @@ fn load_manifest_from_workspace_inner(
         workspace_path.display()
     );
 
-    let mut workspace_paths = vec![workspace_path.to_owned()];
+    let manifest_path = if workspace_path.is_file() {
+        workspace_path.to_owned()
+    } else {
+        workspace_path.join("Cargo.toml")
+    };
 
-    while let Some(workspace_path) = workspace_paths.pop() {
-        let p = workspace_path.join("Cargo.toml");
-        let manifest = Manifest::<Meta>::from_path_with_metadata(&p)?;
+    let mut manifest_paths = vec![manifest_path];
+
+    while let Some(manifest_path) = manifest_paths.pop() {
+        let manifest = Manifest::<Meta>::from_path_with_metadata(&manifest_path)?;
 
         let name = manifest.package.as_ref().map(|p| &*p.name);
         debug!(
             "Loading from {}, manifest.package.name = {:#?}",
-            p.display(),
+            manifest_path.display(),
             name
         );
 
@@ -102,13 +108,15 @@ fn load_manifest_from_workspace_inner(
                 .map(|pat| Pattern::new(&pat))
                 .collect::<Result<Vec<_>, _>>()?;
 
+            let workspace_path = manifest_path.parent().unwrap();
+
             for member in members {
-                for path in Pattern::new(&member)?.glob_dirs(&workspace_path)? {
+                for path in Pattern::new(&member)?.glob_dirs(workspace_path)? {
                     if !exclude_patterns
                         .iter()
                         .any(|exclude| exclude.matches_with_trailing(&path))
                     {
-                        workspace_paths.push(workspace_path.join(path));
+                        manifest_paths.push(workspace_path.join(path).join("Cargo.toml"));
                     }
                 }
             }

@@ -14,14 +14,17 @@ use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
 use tempfile::TempDir;
-use tokio::task::{block_in_place, spawn_blocking};
+use tokio::task::spawn_blocking;
 use tracing::{debug, info, instrument, warn};
 
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
-    helpers::{self, download::ExtractedFiles, remote::Client, target_triple::TargetTriple},
+    helpers::{
+        self, cargo_toml_workspace::load_manifest_from_workspace, download::ExtractedFiles,
+        remote::Client, target_triple::TargetTriple,
+    },
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
     ops::{CargoTomlFetchOverride, Options},
 };
@@ -363,7 +366,12 @@ impl PackageInfo {
 
         // Fetch crate via crates.io, git, or use a local manifest path
         let manifest = match opts.cargo_toml_fetch_override.as_ref() {
-            Some(Path(manifest_path)) => load_manifest_path(manifest_path)?,
+            Some(Path(manifest_path)) => {
+                let manifest_path = manifest_path.clone();
+                let name = name.clone();
+
+                spawn_blocking(move || load_manifest_path(manifest_path, &name)).await??
+            }
             #[cfg(feature = "git")]
             Some(Git(git_url)) => {
                 let git_url = git_url.clone();
@@ -373,7 +381,7 @@ impl PackageInfo {
                     let dir = TempDir::new()?;
                     helpers::git::Repository::shallow_clone(git_url, dir.as_ref())?;
 
-                    helpers::cargo_toml_workspace::load_manifest_from_workspace(dir.as_ref(), &name)
+                    load_manifest_from_workspace(dir.as_ref(), &name)
                 })
                 .await??
             }
@@ -448,29 +456,24 @@ impl PackageInfo {
 }
 
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
-pub fn load_manifest_path<P: AsRef<Path>>(
+///
+/// This is a blocking function.
+pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
     manifest_path: P,
+    name: N,
 ) -> Result<Manifest<Meta>, BinstallError> {
-    let manifest_path = manifest_path.as_ref();
-
-    block_in_place(|| {
-        let manifest_path = if manifest_path.is_dir() {
-            Cow::Owned(manifest_path.join("Cargo.toml"))
-        } else if manifest_path.is_file() {
-            Cow::Borrowed(manifest_path)
-        } else {
-            return Err(BinstallError::CargoManifestPath);
-        };
-
+    fn inner(manifest_path: &Path, crate_name: &str) -> Result<Manifest<Meta>, BinstallError> {
         debug!(
-            "Reading manifest at local path: {}",
+            "Reading crate {crate_name} manifest at local path: {}",
             manifest_path.display()
         );
 
         // Load and parse manifest (this checks file system for binary output names)
-        let manifest = Manifest::<Meta>::from_path_with_metadata(manifest_path)?;
+        let manifest = load_manifest_from_workspace(manifest_path, crate_name)?;
 
         // Return metadata
         Ok(manifest)
-    })
+    }
+
+    inner(manifest_path.as_ref(), name.as_ref())
 }

@@ -1,12 +1,14 @@
 use binstalk::ops::resolve::load_manifest_path;
 use cargo_toml::Product;
+use std::path::PathBuf;
 
 #[test]
 fn parse_meta() {
-    let mut manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    manifest_dir.push_str("/tests/parse-meta.Cargo.toml");
+    let mut manifest_dir = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    manifest_dir.push("tests/parse-meta.Cargo.toml");
 
-    let manifest = load_manifest_path(&manifest_dir).expect("Error parsing metadata");
+    let manifest =
+        load_manifest_path(&manifest_dir, "cargo-binstall-test").expect("Error parsing metadata");
     let package = manifest.package.unwrap();
     let meta = package.metadata.and_then(|m| m.binstall).unwrap();
 
