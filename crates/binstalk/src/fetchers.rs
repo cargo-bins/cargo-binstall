@@ -80,7 +80,7 @@ pub trait Fetcher: Send + Sync {
 struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
-    subcrate: Option<String>,
+    subcrate: Option<CompactString>,
 }
 
 /// Data required to fetch a package
@@ -133,7 +133,7 @@ impl RepoInfo {
     /// If `repo` contains a subcrate, then extracts and returns it.
     /// It will also remove that subcrate path from `repo` to match
     /// `scheme:/{repo_owner}/{repo_name}`
-    fn detect_subcrate(repo: &mut Url, repository_host: RepositoryHost) -> Option<String> {
+    fn detect_subcrate(repo: &mut Url, repository_host: RepositoryHost) -> Option<CompactString> {
         match repository_host {
             RepositoryHost::GitHub => Self::detect_subcrate_common(repo, &["tree"]),
             RepositoryHost::GitLab => Self::detect_subcrate_common(repo, &["-", "blob"]),
@@ -141,7 +141,7 @@ impl RepoInfo {
         }
     }
 
-    fn detect_subcrate_common(repo: &mut Url, seps: &[&str]) -> Option<String> {
+    fn detect_subcrate_common(repo: &mut Url, seps: &[&str]) -> Option<CompactString> {
         let mut path_segments = repo.path_segments()?;
 
         let _repo_owner = path_segments.next()?;
@@ -157,13 +157,18 @@ impl RepoInfo {
         // Skip branch name
         let _branch_name = path_segments.next()?;
 
-        let subcrate = path_segments.next()?;
+        let (subcrate, is_crate_present) = match path_segments.next()? {
+            // subcrate url is of path /crates/$subcrate_name, e.g. wasm-bindgen-cli
+            "crates" => (path_segments.next()?, true),
+            // subcrate url is of path $subcrate_name, e.g. cargo-audit
+            subcrate => (subcrate, false),
+        };
 
         if path_segments.next().is_some() {
             // A subcrate url should not contain anything more.
             None
         } else {
-            let subcrate = subcrate.to_string();
+            let subcrate = subcrate.into();
 
             // Pop subcrate path to match regular repo style:
             //
@@ -174,6 +179,9 @@ impl RepoInfo {
             let mut paths = repo.path_segments_mut().unwrap();
 
             paths.pop(); // pop subcrate
+            if is_crate_present {
+                paths.pop(); // pop crate
+            }
             paths.pop(); // pop branch name
             seps.iter().for_each(|_| {
                 paths.pop();
@@ -198,6 +206,7 @@ mod test {
 
     #[test]
     fn test_detect_subcrate_github() {
+        // cargo-audit
         let urls = [
             "https://github.com/RustSec/rustsec/tree/main/cargo-audit",
             "https://github.com/RustSec/rustsec/tree/master/cargo-audit",
@@ -214,6 +223,26 @@ mod test {
             assert_eq!(
                 repo,
                 Url::parse("https://github.com/RustSec/rustsec").unwrap()
+            );
+        }
+
+        // wasm-bindgen-cli
+        let urls = [
+            "https://github.com/rustwasm/wasm-bindgen/tree/main/crates/cli",
+            "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/cli",
+        ];
+        for url in urls {
+            let mut repo = Url::parse(url).unwrap();
+
+            let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+            assert_eq!(repository_host, RepositoryHost::GitHub);
+
+            let subcrate_prefix = RepoInfo::detect_subcrate(&mut repo, repository_host).unwrap();
+            assert_eq!(subcrate_prefix, "cli");
+
+            assert_eq!(
+                repo,
+                Url::parse("https://github.com/rustwasm/wasm-bindgen").unwrap()
             );
         }
     }
