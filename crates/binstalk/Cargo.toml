@@ -18,7 +18,7 @@ command-group = { version = "2.1.0", features = ["with-tokio"] }
 compact_str = { version = "0.7.0", features = ["serde"] }
 detect-targets = { version = "0.1.8", path = "../detect-targets" }
 either = "1.8.1"
-gix = { version = "0.50.0", features = ["blocking-http-transport-reqwest-rust-tls"], optional = true }
+gix = { version = "0.51.0", features = ["blocking-http-transport-reqwest-rust-tls"], optional = true }
 glob = "0.3.1"
 home = "0.5.5"
 itertools = "0.11.0"
