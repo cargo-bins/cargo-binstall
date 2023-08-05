@@ -21,7 +21,7 @@ use crate::utils::{extract_with_blocking_task, StreamReadable};
 
 pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'static,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
 {
     debug!("Writing to `{}`", path.display());
 
@@ -45,7 +45,7 @@ where
 
 pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync + 'static,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync,
 {
     debug!("Decompressing from zip archive to `{}`", path.display());
 
@@ -79,7 +79,7 @@ pub async fn extract_tar_based_stream<S>(
     fmt: TarBasedFmt,
 ) -> Result<ExtractedFiles, DownloadError>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'static,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
 {
     debug!("Extracting from {fmt} archive to {}", dst.display());
 
@@ -162,7 +162,7 @@ fn extract_with_blocking_decoder<S, F, T>(
     f: F,
 ) -> impl Future<Output = Result<T, DownloadError>>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'static,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>, &Path) -> io::Result<T> + Send + Sync + 'static,
     T: Send + 'static,
 {
