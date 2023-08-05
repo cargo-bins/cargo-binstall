@@ -134,22 +134,6 @@ rust-lld := "" #if use-cargo-zigbuild != "" {
 #""
 #}
 
-# ICF: link-time identical code folding
-#
-# On windows it works out of the box and on linux it uses
-# rust-lld.
-rustc-icf := if for-release != "" {
-    if target-os == "windows" {
-        " -C link-arg=-Wl,--icf=safe"
-     } else if target-os == "linux" {
-        " -C link-arg=-Wl,--icf=safe"
-     } else {
-        ""
-    }
-} else {
-    ""
-}
-
 # Only enable linker-plugin-lto for release
 # Also disable this on windows since it uses msvc.
 #
@@ -174,7 +158,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
 
 cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo) + (win-arm64-ring16)
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
-export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
+export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld)
 
 
 # libblocksruntime-dev provides compiler-rt
