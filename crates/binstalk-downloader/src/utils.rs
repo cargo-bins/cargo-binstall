@@ -18,7 +18,7 @@ where
     T: Send + 'static,
     E: From<io::Error>,
     E: From<StreamError>,
-    S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin + 'static,
+    S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
 {
     async fn inner<S, StreamError, Fut, T, E>(
@@ -31,7 +31,7 @@ where
         E: From<StreamError>,
         // We do not use trait object for S since there will only be one
         // S used with this function.
-        S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin + 'static,
+        S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
         // asyncify would always return the same future, so no need to
         // use trait object here.
         Fut: Future<Output = io::Result<T>> + Send + Sync,

@@ -1,8 +1,8 @@
-use std::{fmt::Debug, io, marker::PhantomData, path::Path};
+use std::{fmt, io, marker::PhantomData, path::Path};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
-use digest::{Digest, FixedOutput, HashMarker, Output, OutputSizeUser, Update};
-use futures_lite::stream::StreamExt;
+use bytes::Bytes;
+use futures_lite::stream::{Stream, StreamExt};
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
@@ -70,24 +70,95 @@ impl From<DownloadError> for io::Error {
     }
 }
 
-#[derive(Debug)]
-pub struct Download<D: Digest = NoDigest> {
-    client: Client,
-    url: Url,
-    _digest: PhantomData<D>,
-    _checksum: Vec<u8>,
+pub trait DataVerifier: Send + Sync {
+    /// Digest input data.
+    ///
+    /// This method can be called repeatedly for use with streaming messages,
+    /// it will be called in the order of the message received.
+    fn update(&mut self, data: &Bytes);
 }
 
-impl Download {
+impl<T> DataVerifier for T
+where
+    T: FnMut(&Bytes) + Send + Sync,
+{
+    fn update(&mut self, data: &Bytes) {
+        (*self)(data)
+    }
+}
+
+pub struct Download<'a> {
+    client: Client,
+    url: Url,
+    data_verifier: Option<&'a mut dyn DataVerifier>,
+}
+
+impl fmt::Debug for Download<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[allow(dead_code, clippy::type_complexity)]
+        #[derive(Debug)]
+        struct Download<'a> {
+            client: &'a Client,
+            url: &'a Url,
+            data_verifier: Option<PhantomData<&'a mut dyn DataVerifier>>,
+        }
+
+        fmt::Debug::fmt(
+            &Download {
+                client: &self.client,
+                url: &self.url,
+                data_verifier: self.data_verifier.as_ref().map(|_| PhantomData),
+            },
+            f,
+        )
+    }
+}
+
+impl Download<'static> {
     pub fn new(client: Client, url: Url) -> Self {
         Self {
             client,
             url,
-            _digest: PhantomData,
-            _checksum: Vec::new(),
+            data_verifier: None,
         }
     }
+}
 
+impl<'a> Download<'a> {
+    pub fn new_with_data_verifier(
+        client: Client,
+        url: Url,
+        data_verifier: &'a mut dyn DataVerifier,
+    ) -> Self {
+        Self {
+            client,
+            url,
+            data_verifier: Some(data_verifier),
+        }
+    }
+}
+
+impl<'a> Download<'a> {
+    async fn get_stream(
+        self,
+    ) -> Result<
+        impl Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'a,
+        DownloadError,
+    > {
+        let mut data_verifier = self.data_verifier;
+        Ok(self.client.get_stream(self.url).await?.map(move |res| {
+            let bytes = res?;
+
+            if let Some(data_verifier) = &mut data_verifier {
+                data_verifier.update(&bytes);
+            }
+
+            Ok(bytes)
+        }))
+    }
+}
+
+impl Download<'_> {
     /// Download a file from the provided URL and process them in memory.
     ///
     /// This does not support verifying a checksum due to the partial extraction
@@ -101,11 +172,7 @@ impl Download {
         fmt: TarBasedFmt,
         visitor: &mut dyn TarEntriesVisitor,
     ) -> Result<(), DownloadError> {
-        let stream = self
-            .client
-            .get_stream(self.url)
-            .await?
-            .map(|res| res.map_err(DownloadError::from));
+        let stream = self.get_stream().await?;
 
         debug!("Downloading and extracting then in-memory processing");
 
@@ -126,15 +193,11 @@ impl Download {
         path: impl AsRef<Path>,
     ) -> Result<ExtractedFiles, DownloadError> {
         async fn inner(
-            this: Download,
+            this: Download<'_>,
             fmt: PkgFmt,
             path: &Path,
         ) -> Result<ExtractedFiles, DownloadError> {
-            let stream = this
-                .client
-                .get_stream(this.url)
-                .await?
-                .map(|res| res.map_err(DownloadError::from));
+            let stream = this.get_stream().await?;
 
             debug!("Downloading and extracting to: '{}'", path.display());
 
@@ -152,36 +215,6 @@ impl Download {
         inner(self, fmt, path.as_ref()).await
     }
 }
-
-impl<D: Digest> Download<D> {
-    pub fn new_with_checksum(client: Client, url: Url, checksum: Vec<u8>) -> Self {
-        Self {
-            client,
-            url,
-            _digest: PhantomData,
-            _checksum: checksum,
-        }
-    }
-
-    // TODO: implement checking the sum, may involve bringing (parts of) and_extract() back in here
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct NoDigest;
-
-impl FixedOutput for NoDigest {
-    fn finalize_into(self, _out: &mut Output<Self>) {}
-}
-
-impl OutputSizeUser for NoDigest {
-    type OutputSize = generic_array::typenum::U0;
-}
-
-impl Update for NoDigest {
-    fn update(&mut self, _data: &[u8]) {}
-}
-
-impl HashMarker for NoDigest {}
 
 #[cfg(test)]
 mod test {
