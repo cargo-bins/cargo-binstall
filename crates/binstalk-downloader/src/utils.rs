@@ -4,10 +4,7 @@ use std::{
 };
 
 use bytes::{Buf, Bytes};
-use futures_lite::{
-    future::poll_once,
-    stream::{Stream, StreamExt},
-};
+use futures_util::{FutureExt, Stream, StreamExt};
 use tokio::{sync::mpsc, task};
 
 pub(super) fn extract_with_blocking_task<E, StreamError, S, F, T>(
@@ -77,7 +74,7 @@ where
             res = &mut task_fut => {
                 // The task finishes before the read task, return early
                 // after checking for errors in read_fut.
-                if let Some(Err(err)) = poll_once(read_fut).await {
+                if let Some(Err(err)) = read_fut.now_or_never() {
                     Err(err)
                 } else {
                     res

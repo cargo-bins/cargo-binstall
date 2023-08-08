@@ -9,7 +9,7 @@ use async_zip::{
     ZipString,
 };
 use bytes::{Bytes, BytesMut};
-use futures_lite::future::try_zip as try_join;
+use futures_util::future::try_join;
 use futures_util::io::Take;
 use thiserror::Error as ThisError;
 use tokio::{
