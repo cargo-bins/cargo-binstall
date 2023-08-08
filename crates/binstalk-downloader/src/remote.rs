@@ -1,5 +1,5 @@
 use std::{
-    num::{NonZeroU64, NonZeroU8},
+    num::{NonZeroU16, NonZeroU64, NonZeroU8},
     ops::ControlFlow,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -13,7 +13,6 @@ use reqwest::{
     Request,
 };
 use thiserror::Error as ThisError;
-use tower::{limit::rate::RateLimit, Service, ServiceBuilder, ServiceExt};
 use tracing::{debug, info};
 
 pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
@@ -73,7 +72,7 @@ impl HttpError {
 #[derive(Debug)]
 struct Inner {
     client: reqwest::Client,
-    service: DelayRequest<RateLimit<reqwest::Client>>,
+    service: DelayRequest,
 }
 
 #[derive(Clone, Debug)]
@@ -81,7 +80,9 @@ pub struct Client(Arc<Inner>);
 
 #[cfg_attr(not(feature = "__tls"), allow(unused_variables, unused_mut))]
 impl Client {
-    /// * `per` - must not be 0.
+    /// * `per_millis` - The duration (in millisecond) for which at most
+    ///   `num_request` can be sent, itcould be increased if rate-limit
+    ///   happens.
     /// * `num_request` - maximum number of requests to be processed for
     ///   each `per` duration.
     ///
@@ -89,14 +90,14 @@ impl Client {
     pub fn new(
         user_agent: impl AsRef<str>,
         min_tls: Option<TLSVersion>,
-        per: Duration,
+        per_millis: NonZeroU16,
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
     ) -> Result<Self, Error> {
         fn inner(
             user_agent: &str,
             min_tls: Option<TLSVersion>,
-            per: Duration,
+            per_millis: NonZeroU16,
             num_request: NonZeroU64,
             certificates: &mut dyn Iterator<Item = Certificate>,
         ) -> Result<Client, Error> {
@@ -123,9 +124,9 @@ impl Client {
             Ok(Client(Arc::new(Inner {
                 client: client.clone(),
                 service: DelayRequest::new(
-                    ServiceBuilder::new()
-                        .rate_limit(num_request.get(), per)
-                        .service(client),
+                    num_request,
+                    Duration::from_millis(per_millis.get() as u64),
+                    client,
                 ),
             })))
         }
@@ -133,7 +134,7 @@ impl Client {
         inner(
             user_agent.as_ref(),
             min_tls,
-            per,
+            per_millis,
             num_request,
             &mut certificates.into_iter(),
         )
@@ -159,9 +160,7 @@ impl Client {
         url: &Url,
     ) -> Result<ControlFlow<reqwest::Response, Result<reqwest::Response, ReqwestError>>, ReqwestError>
     {
-        let future = (&self.0.service).ready().await?.call(request);
-
-        let response = match future.await {
+        let response = match self.0.service.call(request).await {
             Err(err) if err.is_timeout() || err.is_connect() => {
                 let duration = RETRY_DURATION_FOR_TIMEOUT;
 

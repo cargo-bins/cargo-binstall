@@ -208,7 +208,7 @@ impl QuickInstall {
 #[cfg(test)]
 mod test {
     use super::{get_quickinstall_supported_targets, Client, CompactString};
-    use std::time::Duration;
+    use std::num::NonZeroU16;
 
     /// Mark this as an async fn so that you won't accidentally use it in
     /// sync context.
@@ -216,7 +216,7 @@ mod test {
         Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
-            Duration::from_millis(10),
+            NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
         )

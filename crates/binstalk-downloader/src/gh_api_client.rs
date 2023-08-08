@@ -21,7 +21,7 @@ mod request;
 pub use request::{GhApiContextError, GhApiError, GhGraphQLErrors};
 
 /// default retry duration if x-ratelimit-reset is not found in response header
-const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(5 * 60);
+const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
 
 fn percent_encode_http_url_path(path: &str) -> PercentEncode<'_> {
     /// https://url.spec.whatwg.org/#fragment-percent-encode-set
@@ -289,7 +289,7 @@ pub enum HasReleaseArtifact {
 mod test {
     use super::*;
     use compact_str::{CompactString, ToCompactString};
-    use std::env;
+    use std::{env, num::NonZeroU16};
 
     mod cargo_binstall_v0_20_1 {
         use super::{CompactString, GhRelease};
@@ -383,7 +383,7 @@ mod test {
         let client = remote::Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
-            Duration::from_millis(10),
+            NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
         )
