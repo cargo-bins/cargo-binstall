@@ -149,18 +149,29 @@ pub fn install_crates(
             .registry
             .or_else(|| config.registry.and_then(|registry| registry.default))
         {
-            env::var(format!("CARGO_REGISTRIES_{registry_name}_INDEX"))
-                .map(Cow::Owned)
-                .or_else(|_| {
-                    config
-                        .registries
-                        .as_ref()
-                        .and_then(|registries| registries.get(&registry_name))
-                        .and_then(|registry| registry.index.as_deref().map(Cow::Borrowed))
-                        .ok_or_else(|| BinstallError::UnknownRegistryName(registry_name))
-                })?
-                .parse()
-                .map_err(BinstallError::from)?
+            let registry_name_lowercase = registry_name.to_lowercase();
+
+            let v = env::vars().find_map(|(k, v)| {
+                let name_lowercase = k
+                    .strip_prefix("CARGO_REGISTRIES_")?
+                    .strip_suffix("_INDEX")?
+                    .to_lowercase();
+
+                (name_lowercase == registry_name_lowercase).then_some(v)
+            });
+
+            if let Some(v) = &v {
+                v
+            } else {
+                config
+                    .registries
+                    .as_ref()
+                    .and_then(|registries| registries.get(&registry_name))
+                    .and_then(|registry| registry.index.as_deref())
+                    .ok_or_else(|| BinstallError::UnknownRegistryName(registry_name))?
+            }
+            .parse()
+            .map_err(BinstallError::from)?
         } else {
             Default::default()
         },
