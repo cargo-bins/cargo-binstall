@@ -11,6 +11,8 @@ glibc-version := env_var_or_default("GLIBC_VERSION", "")
 use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
 timings := env_var_or_default("JUST_TIMINGS", "")
 build-std := env_var_or_default("JUST_BUILD_STD", "")
+use-linker-plugin-lto := env_var_or_default("JUST_USE_CROSS_LANG_LTO", "")
+use-icf := env_var_or_default("JUST_USE_ICF", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
 export BINSTALL_RATE_LIMIT := "30/1"
@@ -115,33 +117,13 @@ win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.c
 # **DISABLED because it's buggy**
 rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 
-# Use rust-lld that is bundled with rustup to speedup linking
-# and support for icf=safe.
-#
-# -Zgcc-ld=lld uses the rust-lld that is bundled with rustup.
-#
-# TODO: There is ongoing effort to stabilise this and we will need to update
-# this once it is merged.
-# https://github.com/rust-lang/compiler-team/issues/510
-#
-# If cargo-zigbuild is used, then it will provide the lld linker.
-# This option is disabled on windows since it not supported.
-rust-lld := "" #if use-cargo-zigbuild != "" {
-#""
-#} else if target-os != "windows" {
-#" -Z gcc-ld=lld"
-#} else {
-#""
-#}
-
 # ICF: link-time identical code folding
-#
-# On windows it works out of the box and on linux it uses
-# rust-lld.
 rustc-icf := if for-release != "" {
     if target-os == "windows" {
         " -C link-arg=-Wl,--icf=safe"
      } else if target-os == "linux" {
+        " -C link-arg=-Wl,--icf=safe"
+     } else if use-icf != "" {
         " -C link-arg=-Wl,--icf=safe"
      } else {
         ""
@@ -151,13 +133,8 @@ rustc-icf := if for-release != "" {
 }
 
 # Only enable linker-plugin-lto for release
-# Also disable this on windows since it uses msvc.
-#
-# Temporarily disable this on linux due to mismatch llvm version
-# } else if target-os == "linux" {
-#     "-C linker-plugin-lto "
-linker-plugin-lto := if for-release == "" {
-    ""
+linker-plugin-lto := if use-linker-plugin-lto != "" {
+    "-C linker-plugin-lto "
 } else {
     ""
 }
@@ -174,7 +151,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
 
 cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo) + (win-arm64-ring16)
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
-export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
+export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rustc-icf)
 
 
 # libblocksruntime-dev provides compiler-rt

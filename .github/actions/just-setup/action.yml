@@ -18,6 +18,12 @@ inputs:
 runs:
   using: composite
   steps:
+  - name: Use rust-lld
+    run: |
+      TARGET="$(echo "${CARGO_BUILD_TARGET?}" | tr '[:lower:]' '[:upper:]' | sed 's/-/_/g')"
+      echo "CARGO_TARGET_${TARGET?}_LINKER=rust-lld"  >> "$GITHUB_ENV"
+    shell: bash -euo pipefail
+
   - name: Add just to tools to install
     run: echo "tools=just" >>$GITHUB_ENV
     shell: bash

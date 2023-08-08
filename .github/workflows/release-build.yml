@@ -51,6 +51,13 @@ jobs:
       JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
       JUST_FOR_RELEASE: true
       JUST_USE_AUDITABLE: true
+      # Since rust-lld is used, we can turn on cross-lang-LTO since the
+      # llvm version is always the same as `rustc` and it is always higher than
+      # the one found in `zig`.
+      JUST_USE_CROSS_LANG_LTO: true
+      # Since rust-lld is used, we can turn on ICF since it is guaranteed
+      # to be supported.
+      JUST_USE_ICF: true
 
     steps:
     - uses: actions/checkout@v3
@@ -62,10 +69,6 @@ jobs:
     - name: Override release profile codegen-units settings
       if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
       run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
-
-    - name: Use rust-lld
-      run: |
-        echo "CARGO_TARGET_${CARGO_BUILD_TARGET}_LINKER=rust-lld" >> "$GITHUB_ENV"
 
     - uses: ./.github/actions/just-setup
       with:
