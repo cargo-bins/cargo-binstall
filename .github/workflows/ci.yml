@@ -38,18 +38,11 @@ jobs:
             os: windows-latest
 
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
     - uses: actions/checkout@v3
-    - name: Use rust-lld
-      run: |
-        echo "CARGO_TARGET_${CARGO_BUILD_TARGET}_LINKER=rust-lld" >> "$GITHUB_ENV"
-
     - uses: ./.github/actions/just-setup
       env:
         # just-setup use binstall to install sccache,
@@ -81,17 +74,10 @@ jobs:
           - target: aarch64-pc-windows-msvc
             os: windows-latest
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
     - uses: actions/checkout@v3
-    - name: Use rust-lld
-      run: |
-        echo "CARGO_TARGET_${CARGO_BUILD_TARGET}_LINKER=rust-lld" >> "$GITHUB_ENV"
-
     - uses: ./.github/actions/just-setup
       with:
         tools: cargo-hack
@@ -121,9 +107,6 @@ jobs:
             os: windows-latest
 
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
