@@ -42,9 +42,6 @@ jobs:
 
     name: ${{ matrix.t }}
     runs-on: ${{ matrix.o }}
-    defaults:
-      run:
-        shell: bash
     env:
       CARGO_BUILD_TARGET: ${{ matrix.t }}
       GLIBC_VERSION: ${{ matrix.g }}
@@ -63,10 +60,6 @@ jobs:
       if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
       run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
 
-    - name: Use rust-lld
-      run: |
-        echo "CARGO_TARGET_${CARGO_BUILD_TARGET}_LINKER=rust-lld" >> "$GITHUB_ENV"
-
     - uses: ./.github/actions/just-setup
       with:
         tools: cargo-auditable
@@ -80,7 +73,6 @@ jobs:
 
     - run: just package
     - if: runner.os == 'Windows'
-      shell: pwsh
       run: Get-ChildItem packages/
     - if: runner.os != 'Windows'
       run: ls -shal packages/
