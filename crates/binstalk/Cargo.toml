@@ -65,6 +65,10 @@ native-tls = ["binstalk-downloader/native-tls"]
 
 trust-dns = ["binstalk-downloader/trust-dns"]
 
+# Experimental HTTP/3 client, this would require `--cfg reqwest_unstable`
+# to be passed to `rustc`.
+http3 = ["binstalk-downloader/http3"]
+
 zstd-thin = ["binstalk-downloader/zstd-thin"]
 cross-lang-fat-lto = ["binstalk-downloader/cross-lang-fat-lto"]
 

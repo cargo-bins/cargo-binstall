@@ -48,6 +48,7 @@ jobs:
       JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
       JUST_FOR_RELEASE: true
       JUST_USE_AUDITABLE: true
+      JUST_ENABLE_H3: true
 
     steps:
     - uses: actions/checkout@v3
