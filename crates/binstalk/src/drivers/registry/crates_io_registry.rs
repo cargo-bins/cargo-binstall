@@ -10,7 +10,7 @@ use tokio::{
 use tracing::debug;
 
 use crate::{
-    drivers::registry::{parse_manifest, RegistryError},
+    drivers::registry::{parse_manifest, MatchedVersion, RegistryError},
     errors::BinstallError,
     helpers::remote::{Client, Url},
     manifests::cargo_toml_binstall::Meta,
@@ -43,7 +43,9 @@ impl CratesIoRateLimit {
         self.0.lock().await.tick().await;
     }
 }
-async fn is_crate_yanked(client: &Client, url: Url) -> Result<bool, RemoteError> {
+
+/// Return `Some(checksum)` if the version is not yanked, otherwise `None`.
+async fn is_crate_yanked(client: &Client, url: Url) -> Result<Option<String>, RemoteError> {
     #[derive(Deserialize)]
     struct CrateInfo {
         version: Inner,
@@ -52,25 +54,29 @@ async fn is_crate_yanked(client: &Client, url: Url) -> Result<bool, RemoteError>
     #[derive(Deserialize)]
     struct Inner {
         yanked: bool,
+        checksum: String,
     }
 
     // Fetch / update index
     debug!("Looking up crate information");
 
     let info: CrateInfo = client.get(url).send(true).await?.json().await?;
+    let version = info.version;
 
-    Ok(info.version.yanked)
+    Ok((!version.yanked).then_some(version.checksum))
 }
 
 async fn fetch_crate_cratesio_version_matched(
     client: &Client,
     url: Url,
     version_req: &VersionReq,
-) -> Result<Option<CompactString>, RemoteError> {
+) -> Result<Option<(CompactString, String)>, RemoteError> {
     #[derive(Deserialize)]
     struct CrateInfo {
         #[serde(rename = "crate")]
         inner: CrateInfoInner,
+
+        versions: Vec<Version>,
     }
 
     #[derive(Deserialize)]
@@ -79,27 +85,26 @@ async fn fetch_crate_cratesio_version_matched(
     }
 
     #[derive(Deserialize)]
-    struct Versions {
-        versions: Vec<Version>,
-    }
-
-    #[derive(Deserialize)]
     struct Version {
         num: CompactString,
         yanked: bool,
+        checksum: String,
     }
 
     // Fetch / update index
     debug!("Looking up crate information");
 
-    let response = client.get(url).send(true).await?;
+    let crate_info: CrateInfo = client.get(url).send(true).await?.json().await?;
 
-    let version = if version_req == &VersionReq::STAR {
-        let crate_info: CrateInfo = response.json().await?;
-        Some(crate_info.inner.max_stable_version)
+    let version_with_checksum = if version_req == &VersionReq::STAR {
+        let version = crate_info.inner.max_stable_version;
+        crate_info
+            .versions
+            .into_iter()
+            .find_map(|v| (v.num.as_str() == version.as_str()).then_some(v.checksum))
+            .map(|checksum| (version, checksum))
     } else {
-        let response: Versions = response.json().await?;
-        response
+        crate_info
             .versions
             .into_iter()
             .filter_map(|item| {
@@ -115,17 +120,23 @@ async fn fetch_crate_cratesio_version_matched(
                     let ver = semver::Version::parse(&num).ok()?;
 
                     // Filter by version match
-                    version_req.matches(&ver).then_some((num, ver))
+                    version_req
+                        .matches(&ver)
+                        .then_some((num, ver, item.checksum))
                 } else {
                     None
                 }
             })
             // Return highest version
-            .max_by(|(_ver_str_x, ver_x), (_ver_str_y, ver_y)| ver_x.cmp(ver_y))
-            .map(|(ver_str, _)| ver_str)
+            .max_by(
+                |(_ver_str_x, ver_x, _checksum_x), (_ver_str_y, ver_y, _checksum_y)| {
+                    ver_x.cmp(ver_y)
+                },
+            )
+            .map(|(ver_str, _, checksum)| (ver_str, checksum))
     };
 
-    Ok(version)
+    Ok(version_with_checksum)
 }
 
 /// Find the crate by name, get its latest stable version matches `version_req`,
@@ -141,7 +152,7 @@ pub async fn fetch_crate_cratesio(
 
     let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))?;
 
-    let version = match version_req.comparators.as_slice() {
+    let (version, cksum) = match version_req.comparators.as_slice() {
         [Comparator {
             op: ComparatorOp::Exact,
             major,
@@ -163,7 +174,7 @@ pub async fn fetch_crate_cratesio(
 
             is_crate_yanked(&client, url)
                 .await
-                .map(|yanked| (!yanked).then_some(version))
+                .map(|ret| ret.map(|checksum| (version, checksum)))
         }
         _ => fetch_crate_cratesio_version_matched(&client, url.clone(), version_req).await,
     }
@@ -185,5 +196,5 @@ pub async fn fetch_crate_cratesio(
         .push(&version)
         .push("download");
 
-    parse_manifest(client, name, &version, crate_url).await
+    parse_manifest(client, name, crate_url, MatchedVersion { version, cksum }).await
 }

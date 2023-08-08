@@ -88,7 +88,7 @@ impl SparseRegistry {
     ) -> Result<Manifest<Meta>, BinstallError> {
         let crate_prefix = crate_prefix_components(crate_name)?;
         let dl_template = self.get_dl_template(&client).await?;
-        let MatchedVersion { version, cksum } = Self::find_crate_matched_ver(
+        let matched_version = Self::find_crate_matched_ver(
             &client,
             self.url.clone(),
             crate_name,
@@ -100,10 +100,9 @@ impl SparseRegistry {
             dl_template,
             crate_name,
             &crate_prefix,
-            &version,
-            &cksum,
+            &matched_version,
         )?)?;
 
-        parse_manifest(client, crate_name, &version, dl_url).await
+        parse_manifest(client, crate_name, dl_url, matched_version).await
     }
 }

@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     env, fs,
     future::Future,
     path::{Path, PathBuf},

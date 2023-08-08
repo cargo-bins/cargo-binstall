@@ -204,6 +204,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base16"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d27c3610c36aee21ce8ac510e6224498de4228ad772a171ed65643a24693a5a8"
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -229,6 +235,7 @@ name = "binstalk"
 version = "0.14.1"
 dependencies = [
  "async-trait",
+ "base16",
  "binstalk-downloader",
  "binstalk-types",
  "cargo_toml",
@@ -251,6 +258,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2",
  "strum",
  "target-lexicon",
  "tempfile",
@@ -280,6 +288,7 @@ dependencies = [
  "generic-array",
  "httpdate",
  "percent-encoding",
+ "quinn 0.10.2",
  "reqwest",
  "serde",
  "serde-tuple-vec-map",
@@ -3257,6 +3266,17 @@ name = "sha1_smol"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae1a47186c03a32177042e55dbc5fd5aee900b8e0069a8d70fba96a9375cd012"
+
+[[package]]
+name = "sha2"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "479fb9d862239e610720565ca91403019f2f00410f1864c5aa7479b950a76ed8"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest",
+]
 
 [[package]]
 name = "sharded-slab"

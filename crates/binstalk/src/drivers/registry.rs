@@ -1,5 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
+use base16::DecodeError as Base16DecodeError;
 use cargo_toml::Manifest;
 use compact_str::CompactString;
 use leon::{ParseError, RenderError};
@@ -56,6 +57,12 @@ pub enum RegistryError {
 
     #[error("Failed to render dl config: {0}")]
     RenderDlConfig(#[from] RenderError),
+
+    #[error("Failed to parse checksum encoded in hex: {0}")]
+    InvalidHex(#[from] Base16DecodeError),
+
+    #[error("Expected checksum `{expected}`, actual checksum `{actual}`")]
+    UnmatchedChecksum { expected: String, actual: String },
 }
 
 #[derive(Clone, Debug)]

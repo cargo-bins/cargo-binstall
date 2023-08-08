@@ -1,18 +1,21 @@
-use std::{borrow::Cow, path::PathBuf};
+use std::borrow::Cow;
 
+use base16::{decode as decode_base16, encode_lower as encode_base16};
 use cargo_toml::Manifest;
 use compact_str::{format_compact, CompactString, ToCompactString};
 use leon::{Template, Values};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::Error as JsonError;
+use sha2::{Digest, Sha256};
 use tracing::debug;
 
 use crate::{
     drivers::registry::{visitor::ManifestVisitor, RegistryError},
     errors::BinstallError,
     helpers::{
-        download::Download,
+        bytes::Bytes,
+        download::{DataVerifier, Download},
         remote::{Client, Url},
     },
     manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
@@ -23,23 +26,48 @@ pub(super) struct RegistryConfig {
     pub(super) dl: CompactString,
 }
 
+struct Sha256Digest(Sha256);
+
+impl Default for Sha256Digest {
+    fn default() -> Self {
+        Sha256Digest(Sha256::new())
+    }
+}
+
+impl DataVerifier for Sha256Digest {
+    fn update(&mut self, data: &Bytes) {
+        self.0.update(data);
+    }
+}
+
 pub(super) async fn parse_manifest(
     client: Client,
     crate_name: &str,
-    version: &str,
     crate_url: Url,
+    MatchedVersion { version, cksum }: MatchedVersion,
 ) -> Result<Manifest<Meta>, BinstallError> {
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
-    let manifest_dir_path: PathBuf = format!("{crate_name}-{version}").into();
+    let mut manifest_visitor = ManifestVisitor::new(format!("{crate_name}-{version}").into());
 
-    let mut manifest_visitor = ManifestVisitor::new(manifest_dir_path);
+    let checksum = decode_base16(cksum.as_bytes()).map_err(RegistryError::from)?;
+    let mut sha256_digest = Sha256Digest::default();
 
-    Download::new(client, crate_url)
+    Download::new_with_data_verifier(client, crate_url, &mut sha256_digest)
         .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
         .await?;
 
-    manifest_visitor.load_manifest()
+    let digest_checksum = sha256_digest.0.finalize();
+
+    if digest_checksum.as_slice() != checksum.as_slice() {
+        Err(RegistryError::UnmatchedChecksum {
+            expected: cksum,
+            actual: encode_base16(digest_checksum.as_slice()),
+        }
+        .into())
+    } else {
+        manifest_visitor.load_manifest()
+    }
 }
 
 /// Return components of crate prefix
@@ -68,8 +96,7 @@ pub(super) fn render_dl_template(
     dl_template: &str,
     crate_name: &str,
     (c1, c2): &(CompactString, Option<CompactString>),
-    version: &str,
-    cksum: &str,
+    MatchedVersion { version, cksum }: &MatchedVersion,
 ) -> Result<String, RegistryError> {
     let template = Template::parse(dl_template)?;
     if template.keys().next().is_some() {
@@ -114,12 +141,13 @@ pub(super) fn render_dl_template(
 pub(super) struct RegistryIndexEntry {
     vers: CompactString,
     yanked: bool,
-    cksum: CompactString,
+    cksum: String,
 }
 
 pub(super) struct MatchedVersion {
     pub(super) version: CompactString,
-    pub(super) cksum: CompactString,
+    /// sha256 checksum encoded in base16
+    pub(super) cksum: String,
 }
 
 impl MatchedVersion {
