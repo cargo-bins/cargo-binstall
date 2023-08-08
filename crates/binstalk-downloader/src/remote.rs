@@ -6,7 +6,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures_lite::stream::Stream;
+use futures_util::Stream;
 use httpdate::parse_http_date;
 use reqwest::{
     header::{HeaderMap, RETRY_AFTER},

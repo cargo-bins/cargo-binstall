@@ -8,7 +8,7 @@ use std::{
 
 use async_zip::base::read::stream::ZipFileReader;
 use bytes::{Bytes, BytesMut};
-use futures_lite::stream::Stream;
+use futures_util::Stream;
 use tokio::sync::mpsc;
 use tokio_util::io::StreamReader;
 use tracing::debug;

@@ -1,7 +1,7 @@
 use std::fmt;
 
 use bytes::Bytes;
-use futures_lite::stream::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 use reqwest::Method;
 
 use super::{header, Client, Error, HttpError, StatusCode, Url};

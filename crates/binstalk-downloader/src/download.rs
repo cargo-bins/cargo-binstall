@@ -2,7 +2,7 @@ use std::{fmt, io, marker::PhantomData, path::Path};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use bytes::Bytes;
-use futures_lite::stream::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument};
 
