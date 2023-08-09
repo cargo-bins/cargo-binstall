@@ -53,3 +53,5 @@ jobs:
           pr-template-file: .github/scripts/release-pr-template.ejs
           check-semver: ${{ inputs.crate != 'bin' }}
           check-package: true
+        env:
+          RUSTFLAGS: --cfg reqwest_unstable
