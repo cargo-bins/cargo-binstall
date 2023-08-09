@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[cfg(feature = "git")]
-use crate::helpers::git::{GitUrl, GitUrlParseError};
+pub use crate::helpers::git::{GitUrl, GitUrlParseError};
 
 mod vfs;
 

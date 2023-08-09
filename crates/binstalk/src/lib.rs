@@ -4,7 +4,7 @@ pub mod bins;
 pub mod drivers;
 pub mod errors;
 pub mod fetchers;
-pub mod fs;
+pub(crate) mod fs;
 pub mod helpers;
 pub mod ops;
 
