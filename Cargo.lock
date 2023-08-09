@@ -280,6 +280,7 @@ dependencies = [
  "generic-array",
  "httpdate",
  "percent-encoding",
+ "quinn 0.10.2",
  "reqwest",
  "serde",
  "serde-tuple-vec-map",
@@ -727,7 +728,7 @@ checksum = "7684a49fb1af197853ef7b2ee694bc1f5b4179556f1e5710e1760c5db6f5e929"
 
 [[package]]
 name = "detect-targets"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
