@@ -11,6 +11,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 async-trait = "0.1.68"
+base16 = "0.2.1"
 binstalk-downloader = { version = "0.6.1", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
 binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
 cargo_toml = "0.15.3"
@@ -33,6 +34,7 @@ reflink-copy = "0.1.5"
 semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.99"
+sha2 = "0.10.7"
 strum = "0.25.0"
 target-lexicon = { version = "0.12.11", features = ["std"] }
 tempfile = "3.5.0"

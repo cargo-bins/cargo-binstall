@@ -108,7 +108,7 @@ impl GitRegistry {
         let version_req = version_req.clone();
         let this = self.clone();
 
-        let (version, dl_url) = spawn_blocking(move || {
+        let (matched_version, dl_url) = spawn_blocking(move || {
             let GitIndex {
                 _tempdir: _,
                 repo,
@@ -118,21 +118,20 @@ impl GitRegistry {
                 .git_index
                 .get_or_try_init(|| GitIndex::new(this.0.url.clone()))?;
 
-            let MatchedVersion { version, cksum } =
+            let matched_version =
                 Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
 
             let url = Url::parse(&render_dl_template(
                 dl_template,
                 &crate_name,
                 &crate_prefix,
-                &version,
-                &cksum,
+                &matched_version,
             )?)?;
 
-            Ok::<_, BinstallError>((version, url))
+            Ok::<_, BinstallError>((matched_version, url))
         })
         .await??;
 
-        parse_manifest(client, name, &version, dl_url).await
+        parse_manifest(client, name, dl_url, matched_version).await
     }
 }
