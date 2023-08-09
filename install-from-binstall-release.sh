@@ -27,9 +27,8 @@ fi
 
 ./cargo-binstall -y --force cargo-binstall
 
-if ! [[ -v CARGO_HOME ]]; then
-    CARGO_HOME=$HOME/.cargo
-fi
+CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+
 if ! [[ ":$PATH:" == *":$CARGO_HOME/bin:"* ]]; then
     echo
     printf "\033[0;31mYour path is missing %s, you might want to add it.\033[0m\n" "$CARGO_HOME/bin"
