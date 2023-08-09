@@ -11,6 +11,7 @@ glibc-version := env_var_or_default("GLIBC_VERSION", "")
 use-auditable := env_var_or_default("JUST_USE_AUDITABLE", "")
 timings := env_var_or_default("JUST_TIMINGS", "")
 build-std := env_var_or_default("JUST_BUILD_STD", "")
+enable-h3 := env_var_or_default("JUST_ENABLE_H3", "")
 
 export BINSTALL_LOG_LEVEL := if env_var_or_default("RUNNER_DEBUG", "0") == "1" { "debug" } else { "info" }
 export BINSTALL_RATE_LIMIT := "30/1"
@@ -97,10 +98,13 @@ git-max-perf-feature := if target == "x86_64-apple-darwin" {
     ""
 }
 
-cargo-features := trim_end_match(if override-features != "" { override-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug" + git-max-perf-feature + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto"  + git-max-perf-feature + extra-features
-    } else { extra-features
+h3-features := if enable-h3 != "" { ",http3" } else { "" }
+cargo-features := trim_end_match(if override-features != "" { override-features + h3-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug" + git-max-perf-feature + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + h3-features + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto"  + git-max-perf-feature + h3-features + extra-features
+    } else if extra-features != "" { extra-features + h3-features
+    } else if enable-h3 != "" { "http3"
+    } else { ""
 }, ",")
 
 # it seems we can't split debuginfo for non-buildstd builds
@@ -174,7 +178,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
 
 cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo) + (win-arm64-ring16)
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
-export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf)
+export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf) + (if enable-h3 != "" { " --cfg reqwest_unstable" } else { "" })
 
 
 # libblocksruntime-dev provides compiler-rt
