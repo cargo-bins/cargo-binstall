@@ -107,6 +107,10 @@ Supported crates such as `cargo-binstall` itself can also be updated with `cargo
   - You can find a full description of errors including exit codes here: <https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
 - Can I use it in CI?
   - Yes! For GitHub Actions, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has explicit support for selected tools and uses `cargo-binstall` for everything else.
+  - Additionally, we provide a minimal GitHub Action that installs `cargo-binstall`:
+    ```yml
+      - uses: cargo-bins/cargo-binstall@main
+    ``` 
 - Are debug symbols available?
   - Yes! Extra pre-built packages with a `.full` suffix are available and contain split debuginfo, documentation files, and extra binaries like the `detect-wasi` utility.
 

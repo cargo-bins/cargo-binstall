@@ -1,0 +1,36 @@
+name: Test GitHub Action installer
+on:
+  merge_group:
+  pull_request:
+    paths:
+      - install-from-binstall-release.ps1
+      - install-from-binstall-release.sh
+      - action.yml
+  push:
+    branches:
+      - main
+    paths:
+      - install-from-binstall-release.ps1
+      - install-from-binstall-release.sh
+      - action.yml
+
+jobs:
+  test-gha-installer:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ macos-latest, ubuntu-latest, windows-latest ]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install cargo-binstall
+        uses: ./ # uses action.yml from root of the repo
+
+      - name: Verify successful installation - display cargo-binstall's help
+        run: cargo binstall --help
+
+      - name: Verify successful installation - install example binary using cargo-binstall
+        run: cargo binstall -y ripgrep
+
+      - name: Verify successful installation - display help of installed binary
+        run: rg --help
