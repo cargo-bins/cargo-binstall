@@ -102,7 +102,7 @@ pub struct Args {
     ///
     /// This option cannot be used with `--manifest-path`.
     #[clap(help_heading = "Overrides", long, conflicts_with("manifest_path"))]
-    pub git: Option<binstalk::helpers::git::GitUrl>,
+    pub git: Option<binstalk::drivers::GitUrl>,
 
     /// Override Cargo.toml package manifest bin-dir.
     #[clap(help_heading = "Overrides", long)]

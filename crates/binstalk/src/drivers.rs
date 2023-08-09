@@ -5,4 +5,4 @@ pub use registry::{
 };
 
 #[cfg(feature = "git")]
-pub use registry::GitRegistry;
+pub use registry::{GitRegistry, GitUrl, GitUrlParseError};
