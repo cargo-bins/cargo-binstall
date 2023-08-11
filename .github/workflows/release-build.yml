@@ -129,6 +129,10 @@ jobs:
         path: packages/
     - uses: actions/download-artifact@v3
       with:
+        name: x86_64-apple-darwin
+        path: packages/
+    - uses: actions/download-artifact@v3
+      with:
         name: aarch64-apple-darwin
         path: packages/
 
