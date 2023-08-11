@@ -36,14 +36,20 @@ async fn is_arch_supported(arch_name: &str) -> bool {
 pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
     match target {
         AARCH64 => {
-            let is_x86_64_supported = is_arch_supported("x86_64").await;
+            // Spawn `arch` in parallel (probably from different threads if
+            // mutlti-thread runtime is used).
+            //
+            // These two tasks are never cancelled, so it can only fail due to
+            // panic, in which cause we would propagate by also panic here.
+            let x86_64h_task = tokio::spawn(is_arch_supported("x86_64h"));
+            let x86_64_task = tokio::spawn(is_arch_supported("x86_64"));
             [
                 // Prefer universal as it provides native arm executable
                 Some(UNIVERSAL),
                 Some(UNIVERSAL2),
                 // Prefer x86h since it is more optimized
-                is_x86_64_supported.then_some(X86H),
-                is_x86_64_supported.then_some(X86),
+                x86_64h_task.await.unwrap().then_some(X86H),
+                x86_64_task.await.unwrap().then_some(X86),
             ]
         }
         X86 => [
