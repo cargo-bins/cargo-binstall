@@ -373,16 +373,26 @@ impl PackageInfo {
             }
             #[cfg(feature = "git")]
             Some(Git(git_url)) => {
+                use helpers::git::{GitCancellationToken, Repository as GitRepository};
+
                 let git_url = git_url.clone();
                 let name = name.clone();
+                let cancellation_token = GitCancellationToken::default();
+                // Cancel git operation if the future is cancelled (dropped).
+                let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
-                spawn_blocking(move || {
+                let ret = spawn_blocking(move || {
                     let dir = TempDir::new()?;
-                    helpers::git::Repository::shallow_clone(git_url, dir.as_ref())?;
+                    GitRepository::shallow_clone(git_url, dir.as_ref(), Some(cancellation_token))?;
 
                     load_manifest_from_workspace(dir.as_ref(), &name).map_err(BinstallError::from)
                 })
-                .await??
+                .await??;
+
+                // Git operation done, disarm it
+                cancel_on_drop.disarm();
+
+                ret
             }
             None => {
                 Box::pin(

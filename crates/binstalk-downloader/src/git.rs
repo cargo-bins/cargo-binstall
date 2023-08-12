@@ -1,12 +1,14 @@
 use std::{fmt, mem, num::NonZeroU32, path::Path, str::FromStr, sync::atomic::AtomicBool};
 
-use compact_str::CompactString;
 use gix::{clone, create, open, remote, Url};
 use thiserror::Error as ThisError;
 use tracing::debug;
 
 mod progress_tracing;
 use progress_tracing::TracingProgress;
+
+mod cancellation_token;
+pub use cancellation_token::{GitCancelOnDrop, GitCancellationToken};
 
 pub use gix::url::parse::Error as GitUrlParseError;
 
@@ -116,14 +118,21 @@ impl Repository {
     /// async context then you must wrap the call in [`tokio::task::spawn_blocking`].
     ///
     /// WARNING: This function must be called after tokio runtime is initialized.
-    pub fn shallow_clone_bare(url: GitUrl, path: &Path) -> Result<Self, GitError> {
+    pub fn shallow_clone_bare(
+        url: GitUrl,
+        path: &Path,
+        cancellation_token: Option<GitCancellationToken>,
+    ) -> Result<Self, GitError> {
         debug!("Shallow cloning {url} to {}", path.display());
 
         Ok(Self(
             Self::prepare_fetch(url, path, create::Kind::Bare)?
                 .fetch_only(
-                    &mut TracingProgress::new(CompactString::new("Cloning")),
-                    &AtomicBool::new(false),
+                    &mut TracingProgress::new("Cloning bare"),
+                    cancellation_token
+                        .as_ref()
+                        .map(GitCancellationToken::get_atomic)
+                        .unwrap_or(&AtomicBool::new(false)),
                 )?
                 .0
                 .into(),
@@ -134,16 +143,26 @@ impl Repository {
     /// async context then you must wrap the call in [`tokio::task::spawn_blocking`].
     ///
     /// WARNING: This function must be called after tokio runtime is initialized.
-    pub fn shallow_clone(url: GitUrl, path: &Path) -> Result<Self, GitError> {
+    pub fn shallow_clone(
+        url: GitUrl,
+        path: &Path,
+        cancellation_token: Option<GitCancellationToken>,
+    ) -> Result<Self, GitError> {
         debug!("Shallow cloning {url} to {} with worktree", path.display());
 
-        let mut progress = TracingProgress::new(CompactString::new("Cloning"));
+        let mut progress = TracingProgress::new("Cloning with worktree");
 
         Ok(Self(
             Self::prepare_fetch(url, path, create::Kind::WithWorktree)?
                 .fetch_then_checkout(&mut progress, &AtomicBool::new(false))?
                 .0
-                .main_worktree(&mut progress, &AtomicBool::new(false))?
+                .main_worktree(
+                    &mut progress,
+                    cancellation_token
+                        .as_ref()
+                        .map(GitCancellationToken::get_atomic)
+                        .unwrap_or(&AtomicBool::new(false)),
+                )?
                 .0
                 .into(),
         ))

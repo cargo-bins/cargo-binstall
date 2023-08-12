@@ -16,7 +16,7 @@ use crate::{
     errors::BinstallError,
     helpers::{
         cargo_toml::Manifest,
-        git::{GitUrl, Repository},
+        git::{GitCancellationToken, GitUrl, Repository},
         remote::Client,
     },
     manifests::cargo_toml_binstall::Meta,
@@ -30,10 +30,14 @@ struct GitIndex {
 }
 
 impl GitIndex {
-    fn new(url: GitUrl) -> Result<Self, BinstallError> {
+    fn new(url: GitUrl, cancellation_token: GitCancellationToken) -> Result<Self, BinstallError> {
         let tempdir = TempDir::new()?;
 
-        let repo = Repository::shallow_clone_bare(url.clone(), tempdir.as_ref())?;
+        let repo = Repository::shallow_clone_bare(
+            url.clone(),
+            tempdir.as_ref(),
+            Some(cancellation_token),
+        )?;
 
         let config: RegistryConfig = {
             let config = repo
@@ -108,6 +112,10 @@ impl GitRegistry {
         let version_req = version_req.clone();
         let this = self.clone();
 
+        let cancellation_token = GitCancellationToken::default();
+        // Cancel git operation if the future is cancelled (dropped).
+        let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
+
         let (matched_version, dl_url) = spawn_blocking(move || {
             let GitIndex {
                 _tempdir: _,
@@ -116,7 +124,7 @@ impl GitRegistry {
             } = this
                 .0
                 .git_index
-                .get_or_try_init(|| GitIndex::new(this.0.url.clone()))?;
+                .get_or_try_init(|| GitIndex::new(this.0.url.clone(), cancellation_token))?;
 
             let matched_version =
                 Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
@@ -131,6 +139,9 @@ impl GitRegistry {
             Ok::<_, BinstallError>((matched_version, url))
         })
         .await??;
+
+        // Git operation done, disarm it
+        cancel_on_drop.disarm();
 
         parse_manifest(client, name, dl_url, matched_version).await
     }

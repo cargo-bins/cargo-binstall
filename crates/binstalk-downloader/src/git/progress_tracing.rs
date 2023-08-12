@@ -27,7 +27,7 @@ const SEP: &str = "::";
 
 impl TracingProgress {
     /// Create a new instanCompactce from `name`.
-    pub fn new(name: CompactString) -> Self {
+    pub fn new(name: &str) -> Self {
         let trigger = Arc::new(AtomicBool::new(true));
         tokio::spawn({
             let mut interval = time::interval(Duration::from_secs_f32(EMIT_LOG_EVERY_S));
@@ -43,7 +43,7 @@ impl TracingProgress {
             }
         });
         Self {
-            name,
+            name: CompactString::new(name),
             id: UNKNOWN,
             max: None,
             step: 0,
