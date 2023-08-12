@@ -20,6 +20,7 @@ compact_str = "0.7.0"
 flate2 = { version = "1.0.26", default-features = false }
 futures-util = "0.3.28"
 generic-array = "0.14.7"
+gix = { version = "0.51.0", features = ["blocking-http-transport-reqwest-rust-tls"], optional = true }
 httpdate = "1.0.2"
 reqwest = { version = "0.11.18", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
 percent-encoding = "2.2.0"
@@ -91,6 +92,9 @@ cross-lang-fat-lto = ["zstd/fat-lto"]
 gh-api-client = ["json"]
 json = ["serde", "serde_json"]
 
+git = ["dep:gix"]
+git-max-perf = ["gix?/max-performance"]
+
 [package.metadata.docs.rs]
-all-features = true
+features = ["gh-api-client", "git"]
 rustdoc-args = ["--cfg", "docsrs"]
