@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/atomic-file-install",
     "crates/bin",
     "crates/binstalk",
     "crates/binstalk-manifests",
