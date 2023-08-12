@@ -1,8 +1,18 @@
+//! Atomically install a regular file or a symlink to destination,
+//! can be either noclobber (fail if destination already exists) or
+//! replacing it atomically if it exists.
+
 use std::{fs, io, path::Path};
 
 use reflink_copy::reflink_or_copy;
 use tempfile::{NamedTempFile, TempPath};
 use tracing::{debug, warn};
+
+#[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_file_inner;
+
+#[cfg(windows)]
+use std::os::windows::fs::symlink_file as symlink_file_inner;
 
 fn copy_to_tempfile(src: &Path, dst: &Path) -> io::Result<NamedTempFile> {
     let parent = dst.parent().unwrap();
@@ -32,7 +42,7 @@ fn copy_to_tempfile(src: &Path, dst: &Path) -> io::Result<NamedTempFile> {
     Ok(tempfile)
 }
 
-/// Install a file.
+/// Install a file, this fails if the `dst` already exists.
 ///
 /// This is a blocking function, must be called in `block_in_place` mode.
 pub fn atomic_install_noclobber(src: &Path, dst: &Path) -> io::Result<()> {
@@ -54,7 +64,7 @@ pub fn atomic_install_noclobber(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Atomically install a file.
+/// Atomically install a file, this atomically replace `dst` if it exists.
 ///
 /// This is a blocking function, must be called in `block_in_place` mode.
 pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
@@ -65,17 +75,17 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     );
 
     if let Err(err) = fs::rename(src, dst) {
-        warn!("Attempting at atomic rename failed: {err:#?}, fallback to other methods.");
+        warn!("Attempting at atomic rename failed: {err}, fallback to other methods.");
 
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             match win::replace_file(src, dst) {
                 Ok(()) => {
-                    debug!("ReplaceFileW succeeded.",);
+                    debug!("ReplaceFileW succeeded.");
                     return Ok(());
                 }
                 Err(err) => {
-                    warn!("ReplaceFileW failed: {err}, fallback to using tempfile plus rename",);
+                    warn!("ReplaceFileW failed: {err}, fallback to using tempfile plus rename")
                 }
             }
         }
@@ -92,31 +102,26 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn symlink_file_inner(dest: &Path, link: &Path) -> io::Result<()> {
-    #[cfg(target_family = "unix")]
-    std::os::unix::fs::symlink(dest, link)?;
-
-    #[cfg(target_family = "windows")]
-    std::os::windows::fs::symlink_file(dest, link)?;
-
-    Ok(())
-}
-
+/// Create a symlink at `link` to `dest`, this fails if the `link`
+/// already exists.
+///
+/// This is a blocking function, must be called in `block_in_place` mode.
 pub fn atomic_symlink_file_noclobber(dest: &Path, link: &Path) -> io::Result<()> {
     match symlink_file_inner(dest, link) {
         Ok(_) => Ok(()),
 
-        #[cfg(target_family = "windows")]
+        #[cfg(windows)]
         // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
         // Fallback to copy if it fails.
         Err(_) => atomic_install_noclobber(dest, link),
 
-        #[cfg(not(target_family = "windows"))]
+        #[cfg(not(windows))]
         Err(err) => Err(err),
     }
 }
 
-/// Atomically install symlink "link" to a file "dst".
+/// Atomically create a symlink at `link` to `dest`, this atomically replace
+/// `link` if it already exists.
 ///
 /// This is a blocking function, must be called in `block_in_place` mode.
 pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
@@ -137,12 +142,12 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
     match symlink_file_inner(dest, &temp_path) {
         Ok(_) => persist(temp_path, link),
 
-        #[cfg(target_family = "windows")]
+        #[cfg(windows)]
         // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
         // Fallback to copy if it fails.
         Err(_) => atomic_install(dest, link),
 
-        #[cfg(not(target_family = "windows"))]
+        #[cfg(not(windows))]
         Err(err) => Err(err),
     }
 }
@@ -151,7 +156,7 @@ fn persist(temp_path: TempPath, to: &Path) -> io::Result<()> {
     debug!("Persisting '{}' to '{}'", temp_path.display(), to.display());
     match temp_path.persist(to) {
         Ok(()) => Ok(()),
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         Err(tempfile::PathPersistError {
             error,
             path: temp_path,
@@ -163,12 +168,12 @@ fn persist(temp_path: TempPath, to: &Path) -> io::Result<()> {
             );
             win::replace_file(&temp_path, to).map_err(io::Error::from)
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(windows))]
         Err(err) => Err(err.into()),
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 mod win {
     use std::{os::windows::ffi::OsStrExt, path::Path};
 
