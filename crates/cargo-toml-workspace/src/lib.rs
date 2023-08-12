@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
 use glob::PatternError;
@@ -10,7 +11,7 @@ use normalize_path::NormalizePath;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument, warn};
 
-use crate::{errors::BinstallError, manifests::cargo_toml_binstall::Meta};
+pub use cargo_toml;
 
 /// Load binstall metadata `Cargo.toml` from workspace at the provided path
 ///
@@ -21,15 +22,12 @@ use crate::{errors::BinstallError, manifests::cargo_toml_binstall::Meta};
 pub fn load_manifest_from_workspace(
     workspace_path: impl AsRef<Path>,
     crate_name: impl AsRef<str>,
-) -> Result<Manifest<Meta>, BinstallError> {
-    fn inner(workspace_path: &Path, crate_name: &str) -> Result<Manifest<Meta>, BinstallError> {
-        load_manifest_from_workspace_inner(workspace_path, crate_name).map_err(|inner| {
-            Box::new(LoadManifestFromWSError {
-                workspace_path: workspace_path.into(),
-                crate_name: crate_name.into(),
-                inner,
-            })
-            .into()
+) -> Result<Manifest<Meta>, Error> {
+    fn inner(workspace_path: &Path, crate_name: &str) -> Result<Manifest<Meta>, Error> {
+        load_manifest_from_workspace_inner(workspace_path, crate_name).map_err(|inner| Error {
+            workspace_path: workspace_path.into(),
+            crate_name: crate_name.into(),
+            inner,
         })
     }
 
@@ -38,15 +36,15 @@ pub fn load_manifest_from_workspace(
 
 #[derive(Debug, ThisError)]
 #[error("Failed to load {crate_name} from {}: {inner}", workspace_path.display())]
-pub struct LoadManifestFromWSError {
+pub struct Error {
     workspace_path: Box<Path>,
     crate_name: CompactString,
     #[source]
-    inner: LoadManifestFromWSErrorInner,
+    inner: ErrorInner,
 }
 
 #[derive(Debug, ThisError)]
-enum LoadManifestFromWSErrorInner {
+enum ErrorInner {
     #[error("Invalid pattern in workspace.members or workspace.exclude: {0}")]
     PatternError(#[from] PatternError),
 
@@ -67,7 +65,7 @@ enum LoadManifestFromWSErrorInner {
 fn load_manifest_from_workspace_inner(
     workspace_path: &Path,
     crate_name: &str,
-) -> Result<Manifest<Meta>, LoadManifestFromWSErrorInner> {
+) -> Result<Manifest<Meta>, ErrorInner> {
     debug!(
         "Loading manifest of crate {crate_name} from workspace: {}",
         workspace_path.display()
@@ -123,16 +121,16 @@ fn load_manifest_from_workspace_inner(
         }
     }
 
-    Err(LoadManifestFromWSErrorInner::NotFound)
+    Err(ErrorInner::NotFound)
 }
 
 struct Pattern(Vec<glob::Pattern>);
 
 impl Pattern {
-    fn new(pat: &str) -> Result<Self, LoadManifestFromWSErrorInner> {
+    fn new(pat: &str) -> Result<Self, ErrorInner> {
         Path::new(pat)
             .try_normalize()
-            .ok_or_else(|| LoadManifestFromWSErrorInner::InvalidPatternError(pat.into()))?
+            .ok_or_else(|| ErrorInner::InvalidPatternError(pat.into()))?
             .iter()
             .map(|c| glob::Pattern::new(c.to_str().unwrap()))
             .collect::<Result<Vec<_>, _>>()
@@ -142,7 +140,7 @@ impl Pattern {
 
     /// * `glob_path` - path to dir to glob for
     /// return paths relative to `glob_path`.
-    fn glob_dirs(&self, glob_path: &Path) -> Result<Vec<PathBuf>, LoadManifestFromWSErrorInner> {
+    fn glob_dirs(&self, glob_path: &Path) -> Result<Vec<PathBuf>, ErrorInner> {
         let mut paths = vec![PathBuf::new()];
 
         for pattern in &self.0 {
@@ -255,11 +253,7 @@ mod test {
         assert_eq!(manifest.bin[0].path.as_deref().unwrap(), "src/main.rs");
 
         let err = load_manifest_from_workspace_inner(&p, "cargo-binstall2").unwrap_err();
-        assert!(
-            matches!(err, LoadManifestFromWSErrorInner::NotFound),
-            "{:#?}",
-            err
-        );
+        assert!(matches!(err, ErrorInner::NotFound), "{:#?}", err);
 
         let manifest = load_manifest_from_workspace(&p, "cargo-watch").unwrap();
         let package = manifest.package.unwrap();

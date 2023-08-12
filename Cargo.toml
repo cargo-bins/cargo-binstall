@@ -5,6 +5,7 @@ members = [
     "crates/binstalk-manifests",
     "crates/binstalk-types",
     "crates/binstalk-downloader",
+    "crates/cargo-toml-workspace",
     "crates/detect-wasi",
     "crates/fs-lock",
     "crates/normalize-path",

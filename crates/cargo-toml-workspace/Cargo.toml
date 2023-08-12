@@ -1,0 +1,22 @@
+[package]
+name = "cargo-toml-workspace"
+version = "0.0.0"
+edition = "2021"
+description = "Parse cargo workspace and load specific crate"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/cargo-toml-workspace"
+rust-version = "1.65.0"
+authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
+cargo_toml = "0.15.3"
+compact_str = { version = "0.7.0", features = ["serde"] }
+glob = "0.3.1"
+normalize-path = { version = "0.2.1", path = "../normalize-path" }
+thiserror = "1.0.40"
+tracing = "0.1.37"
+
+[dev-dependencies]
+tempfile = "3.5.0"

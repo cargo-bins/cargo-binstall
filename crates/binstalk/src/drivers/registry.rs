@@ -1,7 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
 use base16::DecodeError as Base16DecodeError;
-use cargo_toml::Manifest;
 use compact_str::CompactString;
 use leon::{ParseError, RenderError};
 use miette::Diagnostic;
@@ -11,7 +10,10 @@ use thiserror::Error as ThisError;
 
 use crate::{
     errors::BinstallError,
-    helpers::remote::{Client, Error as RemoteError, Url, UrlParseError},
+    helpers::{
+        cargo_toml::Manifest,
+        remote::{Client, Error as RemoteError, Url, UrlParseError},
+    },
     manifests::cargo_toml_binstall::Meta,
 };
 

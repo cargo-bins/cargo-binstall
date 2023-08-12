@@ -1,4 +1,3 @@
-use cargo_toml::Manifest;
 use compact_str::CompactString;
 use semver::VersionReq;
 use serde_json::Deserializer as JsonDeserializer;
@@ -11,7 +10,10 @@ use crate::{
         RegistryConfig, RegistryError,
     },
     errors::BinstallError,
-    helpers::remote::{Client, Error as RemoteError},
+    helpers::{
+        cargo_toml::Manifest,
+        remote::{Client, Error as RemoteError},
+    },
     manifests::cargo_toml_binstall::Meta,
 };
 

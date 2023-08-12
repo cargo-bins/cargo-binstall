@@ -197,6 +197,7 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
         "binstalk",
         "binstalk_downloader",
         "cargo_binstall",
+        "cargo_toml_workspace",
     ]);
 
     // Forward log to tracing

@@ -1,5 +1,4 @@
 use binstalk_downloader::remote::Error as RemoteError;
-use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
@@ -12,7 +11,10 @@ use tracing::debug;
 use crate::{
     drivers::registry::{parse_manifest, MatchedVersion, RegistryError},
     errors::BinstallError,
-    helpers::remote::{Client, Url},
+    helpers::{
+        cargo_toml::Manifest,
+        remote::{Client, Url},
+    },
     manifests::cargo_toml_binstall::Meta,
 };
 

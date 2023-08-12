@@ -1,6 +1,5 @@
 use std::{io, path::PathBuf, sync::Arc};
 
-use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
@@ -16,6 +15,7 @@ use crate::{
     },
     errors::BinstallError,
     helpers::{
+        cargo_toml::Manifest,
         git::{GitUrl, Repository},
         remote::Client,
     },
