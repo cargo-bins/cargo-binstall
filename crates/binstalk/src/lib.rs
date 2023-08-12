@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-pub mod bins;
+mod bins;
 pub mod drivers;
 pub mod errors;
 pub mod fetchers;

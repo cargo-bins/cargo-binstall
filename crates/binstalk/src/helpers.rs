@@ -4,7 +4,6 @@ pub(crate) mod futures_resolver;
 pub(crate) mod git;
 pub mod jobserver_client;
 pub mod remote;
-pub mod signal;
 pub(crate) mod target_triple;
 pub mod tasks;
 

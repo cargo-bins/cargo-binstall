@@ -3,8 +3,9 @@
 pub mod args;
 pub mod bin_util;
 pub mod entry;
-pub mod git_credentials;
-pub mod install_path;
+mod git_credentials;
+mod install_path;
 pub mod logging;
-pub mod manifests;
-pub mod ui;
+mod manifests;
+mod signal;
+mod ui;

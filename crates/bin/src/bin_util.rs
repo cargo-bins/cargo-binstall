@@ -5,10 +5,12 @@ use std::{
 };
 
 use binstalk::errors::BinstallError;
-use binstalk::helpers::{signal::cancel_on_user_sig_term, tasks::AutoAbortJoinHandle};
+use binstalk::helpers::tasks::AutoAbortJoinHandle;
 use miette::Result;
 use tokio::runtime::Runtime;
 use tracing::{error, info};
+
+use crate::signal::cancel_on_user_sig_term;
 
 pub enum MainExit {
     Success(Option<Duration>),

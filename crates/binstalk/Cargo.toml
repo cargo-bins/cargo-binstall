@@ -39,7 +39,7 @@ strum = "0.25.0"
 target-lexicon = { version = "0.12.11", features = ["std"] }
 tempfile = "3.5.0"
 thiserror = "1.0.40"
-tokio = { version = "1.30.0", features = ["rt", "process", "sync", "signal"], default-features = false }
+tokio = { version = "1.30.0", features = ["rt", "process", "sync"], default-features = false }
 tracing = "0.1.37"
 url = { version = "2.3.1", features = ["serde"] }
 xz2 = "0.1.7"
