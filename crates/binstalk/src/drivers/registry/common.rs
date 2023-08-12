@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use base16::{decode as decode_base16, encode_lower as encode_base16};
-use cargo_toml::Manifest;
 use compact_str::{format_compact, CompactString, ToCompactString};
 use leon::{Template, Values};
 use semver::{Version, VersionReq};
@@ -15,6 +14,7 @@ use crate::{
     errors::BinstallError,
     helpers::{
         bytes::Bytes,
+        cargo_toml::Manifest,
         download::{DataVerifier, Download},
         remote::{Client, Url},
     },

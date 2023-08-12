@@ -1,5 +1,5 @@
 use binstalk::ops::resolve::load_manifest_path;
-use cargo_toml::Product;
+use cargo_toml_workspace::cargo_toml::{Edition, Product};
 use std::path::PathBuf;
 
 #[test]
@@ -24,7 +24,7 @@ fn parse_meta() {
         &[Product {
             name: Some("cargo-binstall".to_string()),
             path: Some("src/main.rs".to_string()),
-            edition: cargo_toml::Edition::E2021,
+            edition: Edition::E2021,
             ..Default::default()
         },],
     );

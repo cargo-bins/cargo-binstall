@@ -1,4 +1,3 @@
-pub(crate) mod cargo_toml_workspace;
 pub(crate) mod futures_resolver;
 pub mod jobserver_client;
 pub mod remote;
@@ -11,6 +10,7 @@ pub(crate) use binstalk_downloader::{bytes, download};
 
 #[cfg(feature = "git")]
 pub(crate) use binstalk_downloader::git;
+pub(crate) use cargo_toml_workspace::{self, cargo_toml};
 
 pub(crate) fn is_universal_macos(target: &str) -> bool {
     ["universal-apple-darwin", "universal2-apple-darwin"].contains(&target)

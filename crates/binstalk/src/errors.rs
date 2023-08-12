@@ -7,7 +7,6 @@ use std::{
 use binstalk_downloader::{
     download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
 };
-use cargo_toml::Error as CargoTomlError;
 use compact_str::CompactString;
 use miette::{Diagnostic, Report};
 use target_lexicon::ParseError as TargetTripleParseError;
@@ -17,7 +16,9 @@ use tracing::{error, warn};
 
 use crate::{
     drivers::{InvalidRegistryError, RegistryError},
-    helpers::cargo_toml_workspace::LoadManifestFromWSError,
+    helpers::{
+        cargo_toml::Error as CargoTomlError, cargo_toml_workspace::Error as LoadManifestFromWSError,
+    },
 };
 
 #[derive(Debug, Error)]
@@ -498,5 +499,11 @@ impl From<RegistryError> for BinstallError {
 impl From<InvalidRegistryError> for BinstallError {
     fn from(e: InvalidRegistryError) -> Self {
         BinstallError::RegistryParseError(Box::new(e))
+    }
+}
+
+impl From<LoadManifestFromWSError> for BinstallError {
+    fn from(e: LoadManifestFromWSError) -> Self {
+        BinstallError::LoadManifestFromWSError(Box::new(e))
     }
 }

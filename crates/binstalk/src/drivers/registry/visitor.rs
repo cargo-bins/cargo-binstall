@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use cargo_toml::{Manifest, Value};
 use normalize_path::NormalizePath;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
@@ -8,7 +7,10 @@ use tracing::debug;
 use super::vfs::Vfs;
 use crate::{
     errors::BinstallError,
-    helpers::download::{DownloadError, TarEntriesVisitor, TarEntry},
+    helpers::{
+        cargo_toml::{Manifest, Value},
+        download::{DownloadError, TarEntriesVisitor, TarEntry},
+    },
     manifests::cargo_toml_binstall::Meta,
 };
 

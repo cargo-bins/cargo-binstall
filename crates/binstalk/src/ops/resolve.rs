@@ -7,7 +7,6 @@ use std::{
     sync::Arc,
 };
 
-use cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
@@ -22,8 +21,8 @@ use crate::{
     errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
     helpers::{
-        self, cargo_toml_workspace::load_manifest_from_workspace, download::ExtractedFiles,
-        remote::Client, target_triple::TargetTriple,
+        self, cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
+        download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
     },
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
     ops::{CargoTomlFetchOverride, Options},
@@ -381,7 +380,7 @@ impl PackageInfo {
                     let dir = TempDir::new()?;
                     helpers::git::Repository::shallow_clone(git_url, dir.as_ref())?;
 
-                    load_manifest_from_workspace(dir.as_ref(), &name)
+                    load_manifest_from_workspace(dir.as_ref(), &name).map_err(BinstallError::from)
                 })
                 .await??
             }

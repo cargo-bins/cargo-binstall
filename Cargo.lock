@@ -238,12 +238,11 @@ dependencies = [
  "base16",
  "binstalk-downloader",
  "binstalk-types",
- "cargo_toml",
+ "cargo-toml-workspace",
  "command-group",
  "compact_str",
  "detect-targets",
  "either",
- "glob",
  "home",
  "itertools",
  "jobslot",
@@ -486,6 +485,20 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "vergen",
+]
+
+[[package]]
+name = "cargo-toml-workspace"
+version = "0.0.0"
+dependencies = [
+ "binstalk-types",
+ "cargo_toml",
+ "compact_str",
+ "glob",
+ "normalize-path",
+ "tempfile",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
