@@ -48,7 +48,7 @@ pub struct Args {
         value_name = "crate[@version]",
         required_unless_present_any = ["version", "help"],
     )]
-    pub crate_names: Vec<CrateName>,
+    pub(crate) crate_names: Vec<CrateName>,
 
     /// Package version to install.
     ///
@@ -62,7 +62,7 @@ pub struct Args {
         long = "version",
         value_parser(VersionReq::parse_from_cli)
     )]
-    pub version_req: Option<VersionReq>,
+    pub(crate) version_req: Option<VersionReq>,
 
     /// Override binary target set.
     ///
@@ -82,7 +82,7 @@ pub struct Args {
         long,
         value_name = "TRIPLE"
     )]
-    pub targets: Option<Vec<String>>,
+    pub(crate) targets: Option<Vec<String>>,
 
     /// Override Cargo.toml package manifest path.
     ///
@@ -92,7 +92,7 @@ pub struct Args {
     ///
     /// This option cannot be used with `--git`.
     #[clap(help_heading = "Overrides", long)]
-    pub manifest_path: Option<PathBuf>,
+    pub(crate) manifest_path: Option<PathBuf>,
 
     #[cfg(feature = "git")]
     /// Override how to fetch Cargo.toml package manifest.
@@ -102,11 +102,11 @@ pub struct Args {
     ///
     /// This option cannot be used with `--manifest-path`.
     #[clap(help_heading = "Overrides", long, conflicts_with("manifest_path"))]
-    pub git: Option<binstalk::drivers::GitUrl>,
+    pub(crate) git: Option<binstalk::drivers::GitUrl>,
 
     /// Override Cargo.toml package manifest bin-dir.
     #[clap(help_heading = "Overrides", long)]
-    pub bin_dir: Option<String>,
+    pub(crate) bin_dir: Option<String>,
 
     /// Override Cargo.toml package manifest pkg-fmt.
     ///
@@ -126,11 +126,11 @@ pub struct Args {
     ///
     /// - bin: Download format is raw / binary
     #[clap(help_heading = "Overrides", long, value_name = "PKG_FMT")]
-    pub pkg_fmt: Option<PkgFmt>,
+    pub(crate) pkg_fmt: Option<PkgFmt>,
 
     /// Override Cargo.toml package manifest pkg-url.
     #[clap(help_heading = "Overrides", long)]
-    pub pkg_url: Option<String>,
+    pub(crate) pkg_url: Option<String>,
 
     /// Override the rate limit duration.
     ///
@@ -145,20 +145,20 @@ pub struct Args {
     ///
     /// Both duration and request count must not be 0.
     #[clap(help_heading = "Overrides", long, default_value_t = RateLimit::default(), env = "BINSTALL_RATE_LIMIT")]
-    pub rate_limit: RateLimit,
+    pub(crate) rate_limit: RateLimit,
 
     /// Specify the strategies to be used,
     /// binstall will run the strategies specified in order.
     ///
     /// Default value is "crate-meta-data,quick-install,compile".
     #[clap(help_heading = "Overrides", long, value_delimiter(','))]
-    pub strategies: Vec<Strategy>,
+    pub(crate) strategies: Vec<Strategy>,
 
     /// Disable the strategies specified.
     /// If a strategy is specified in `--strategies` and `--disable-strategies`,
     /// then it will be removed.
     #[clap(help_heading = "Overrides", long, value_delimiter(','))]
-    pub disable_strategies: Vec<Strategy>,
+    pub(crate) disable_strategies: Vec<Strategy>,
 
     /// If `--github-token` or environment variable `GITHUB_TOKEN`/`GH_TOKEN`
     /// is not specified, then cargo-binstall will try to extract github token from
@@ -166,25 +166,25 @@ pub struct Args {
     ///
     /// This option can be used to disable that behavior.
     #[clap(help_heading = "Overrides", long)]
-    pub no_discover_github_token: bool,
+    pub(crate) no_discover_github_token: bool,
 
     /// This flag is now enabled by default thus a no-op.
     ///
     /// By default, Binstall will install a binary as-is in the install path.
     #[clap(help_heading = "Options", long, default_value_t = true)]
-    pub no_symlinks: bool,
+    pub(crate) no_symlinks: bool,
 
     /// Dry run, fetch and show changes without installing binaries.
     #[clap(help_heading = "Options", long)]
-    pub dry_run: bool,
+    pub(crate) dry_run: bool,
 
     /// Disable interactive mode / confirmation prompts.
     #[clap(help_heading = "Options", short = 'y', long)]
-    pub no_confirm: bool,
+    pub(crate) no_confirm: bool,
 
     /// Do not cleanup temporary files.
     #[clap(help_heading = "Options", long)]
-    pub no_cleanup: bool,
+    pub(crate) no_cleanup: bool,
 
     /// By default, binstall keeps track of the installed packages with metadata files
     /// stored in the installation root directory.
@@ -199,7 +199,7 @@ pub struct Args {
     ///
     /// This flag will also be passed to `cargo-install` if it is invoked.
     #[clap(help_heading = "Options", long)]
-    pub no_track: bool,
+    pub(crate) no_track: bool,
 
     /// Install binaries in a custom location.
     ///
@@ -208,7 +208,7 @@ pub struct Args {
     /// switches over to a "local" install, where binaries are installed at the path given, and the
     /// global metadata files are not updated.
     #[clap(help_heading = "Options", long)]
-    pub install_path: Option<PathBuf>,
+    pub(crate) install_path: Option<PathBuf>,
 
     /// Install binaries with a custom cargo root.
     ///
@@ -221,13 +221,13 @@ pub struct Args {
     ///
     /// NOTE that `--install-path` takes precedence over this option.
     #[clap(help_heading = "Options", long, alias = "roots")]
-    pub root: Option<PathBuf>,
+    pub(crate) root: Option<PathBuf>,
 
     /// The URL of the registry index to use.
     ///
     /// Cannot be used with `--registry`.
     #[clap(help_heading = "Options", long)]
-    pub index: Option<Registry>,
+    pub(crate) index: Option<Registry>,
 
     /// Name of the registry to use. Registry names are defined in Cargo config
     /// files <https://doc.rust-lang.org/cargo/reference/config.html>.
@@ -248,33 +248,33 @@ pub struct Args {
         env = "CARGO_REGISTRY_DEFAULT",
         conflicts_with("index")
     )]
-    pub registry: Option<CompactString>,
+    pub(crate) registry: Option<CompactString>,
 
     /// This option will be passed through to all `cargo-install` invocations.
     ///
     /// It will require `Cargo.lock` to be up to date.
     #[clap(help_heading = "Options", long)]
-    pub locked: bool,
+    pub(crate) locked: bool,
 
     /// Deprecated, here for back-compat only. Secure is now on by default.
     #[clap(hide(true), long)]
-    pub secure: bool,
+    pub(crate) secure: bool,
 
     /// Force a crate to be installed even if it is already installed.
     #[clap(help_heading = "Options", long)]
-    pub force: bool,
+    pub(crate) force: bool,
 
     /// Require a minimum TLS version from remote endpoints.
     ///
     /// The default is not to require any minimum TLS version, and use the negotiated highest
     /// version available to both this client and the remote server.
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
-    pub min_tls_version: Option<TLSVersion>,
+    pub(crate) min_tls_version: Option<TLSVersion>,
 
     /// Specify the root certificates to use for https connnections,
     /// in addition to default system-wide ones.
     #[clap(help_heading = "Options", long, env = "BINSTALL_HTTPS_ROOT_CERTS")]
-    pub root_certificates: Vec<PathBuf>,
+    pub(crate) root_certificates: Vec<PathBuf>,
 
     /// Print logs in json format to be parsable.
     #[clap(help_heading = "Options", long)]
@@ -290,7 +290,7 @@ pub struct Args {
     /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
     /// unless `--no-discover-github-token` is specified.
     #[clap(help_heading = "Options", long, env = "GITHUB_TOKEN")]
-    pub github_token: Option<CompactString>,
+    pub(crate) github_token: Option<CompactString>,
 
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
@@ -326,11 +326,11 @@ pub struct Args {
     ///
     /// This would override the `log_level`.
     #[clap(help_heading = "Meta", short, long)]
-    pub quiet: bool,
+    pub(crate) quiet: bool,
 }
 
 #[derive(Debug, Copy, Clone, ValueEnum)]
-pub enum TLSVersion {
+pub(crate) enum TLSVersion {
     #[clap(name = "1.2")]
     Tls1_2,
     #[clap(name = "1.3")]
@@ -347,9 +347,9 @@ impl From<TLSVersion> for remote::TLSVersion {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct RateLimit {
-    pub duration: NonZeroU16,
-    pub request_count: NonZeroU64,
+pub(crate) struct RateLimit {
+    pub(crate) duration: NonZeroU16,
+    pub(crate) request_count: NonZeroU64,
 }
 
 impl fmt::Display for RateLimit {
@@ -388,7 +388,7 @@ impl Default for RateLimit {
 /// Strategy for installing the package
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum, EnumCount)]
 #[repr(u8)]
-pub enum Strategy {
+pub(crate) enum Strategy {
     /// Attempt to download official pre-built artifacts using
     /// information provided in `Cargo.toml`.
     CrateMetaData,
