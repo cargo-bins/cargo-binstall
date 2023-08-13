@@ -246,8 +246,8 @@ version = "0.15.0"
 dependencies = [
  "async-trait",
  "atomic-file-install",
- "base16",
  "binstalk-downloader",
+ "binstalk-registry",
  "binstalk-types",
  "cargo-toml-workspace",
  "command-group",
@@ -264,18 +264,13 @@ dependencies = [
  "normalize-path",
  "once_cell",
  "semver",
- "serde",
- "serde_json",
- "sha2",
  "strum",
  "target-lexicon",
  "tempfile",
  "thiserror",
  "tokio",
- "toml_edit",
  "tracing",
  "url",
- "xz2",
 ]
 
 [[package]]
@@ -332,6 +327,32 @@ dependencies = [
  "tempfile",
  "thiserror",
  "toml_edit",
+ "url",
+]
+
+[[package]]
+name = "binstalk-registry"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "base16",
+ "binstalk-downloader",
+ "binstalk-types",
+ "cargo-toml-workspace",
+ "compact_str",
+ "leon",
+ "miette",
+ "normalize-path",
+ "once_cell",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml_edit",
+ "tracing",
  "url",
 ]
 

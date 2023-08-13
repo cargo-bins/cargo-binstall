@@ -1,5 +1,11 @@
 use std::{io, path::PathBuf, sync::Arc};
 
+use binstalk_downloader::{
+    git::{GitCancellationToken, GitUrl, Repository},
+    remote::Client,
+};
+use binstalk_types::cargo_toml_binstall::Meta;
+use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
@@ -9,17 +15,8 @@ use tokio::task::spawn_blocking;
 use url::Url;
 
 use crate::{
-    drivers::registry::{
-        crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion,
-        RegistryConfig, RegistryError,
-    },
-    errors::BinstallError,
-    helpers::{
-        cargo_toml::Manifest,
-        git::{GitCancellationToken, GitUrl, Repository},
-        remote::Client,
-    },
-    manifests::cargo_toml_binstall::Meta,
+    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryConfig,
+    RegistryError,
 };
 
 #[derive(Debug)]
@@ -30,7 +27,7 @@ struct GitIndex {
 }
 
 impl GitIndex {
-    fn new(url: GitUrl, cancellation_token: GitCancellationToken) -> Result<Self, BinstallError> {
+    fn new(url: GitUrl, cancellation_token: GitCancellationToken) -> Result<Self, RegistryError> {
         let tempdir = TempDir::new()?;
 
         let repo = Repository::shallow_clone_bare(
@@ -83,7 +80,7 @@ impl GitRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
-    ) -> Result<MatchedVersion, BinstallError> {
+    ) -> Result<MatchedVersion, RegistryError> {
         let mut path = PathBuf::with_capacity(128);
         path.push(&**c1);
         if let Some(c2) = c2 {
@@ -106,7 +103,7 @@ impl GitRegistry {
         client: Client,
         name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, BinstallError> {
+    ) -> Result<Manifest<Meta>, RegistryError> {
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
         let version_req = version_req.clone();
@@ -136,7 +133,7 @@ impl GitRegistry {
                 &matched_version,
             )?)?;
 
-            Ok::<_, BinstallError>((matched_version, url))
+            Ok::<_, RegistryError>((matched_version, url))
         })
         .await??;
 

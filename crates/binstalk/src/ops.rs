@@ -5,12 +5,12 @@ use std::{path::PathBuf, sync::Arc};
 use semver::VersionReq;
 
 use crate::{
-    drivers::Registry,
     fetchers::{Data, Fetcher, TargetData},
     helpers::{
         self, gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client,
     },
     manifests::cargo_toml_binstall::PkgOverride,
+    registry::Registry,
     DesiredTargets,
 };
 

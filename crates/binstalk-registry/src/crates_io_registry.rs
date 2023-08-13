@@ -1,4 +1,6 @@
-use binstalk_downloader::remote::Error as RemoteError;
+use binstalk_downloader::remote::{Client, Error as RemoteError, Url};
+use binstalk_types::cargo_toml_binstall::Meta;
+use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
@@ -8,15 +10,7 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{
-    drivers::registry::{parse_manifest, MatchedVersion, RegistryError},
-    errors::BinstallError,
-    helpers::{
-        cargo_toml::Manifest,
-        remote::{Client, Url},
-    },
-    manifests::cargo_toml_binstall::Meta,
-};
+use crate::{parse_manifest, MatchedVersion, RegistryError};
 
 #[derive(Debug)]
 pub struct CratesIoRateLimit(Mutex<Interval>);
@@ -148,7 +142,7 @@ pub async fn fetch_crate_cratesio(
     name: &str,
     version_req: &VersionReq,
     crates_io_rate_limit: &CratesIoRateLimit,
-) -> Result<Manifest<Meta>, BinstallError> {
+) -> Result<Manifest<Meta>, RegistryError> {
     // Wait until we can make another request to crates.io
     crates_io_rate_limit.tick().await;
 
@@ -184,7 +178,7 @@ pub async fn fetch_crate_cratesio(
         RemoteError::Http(e) if e.is_status() => RegistryError::NotFound(name.into()),
         e => e.into(),
     })?
-    .ok_or_else(|| BinstallError::VersionMismatch {
+    .ok_or_else(|| RegistryError::VersionMismatch {
         req: version_req.clone(),
     })?;
 

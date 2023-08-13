@@ -1,6 +1,13 @@
 use std::borrow::Cow;
 
 use base16::{decode as decode_base16, encode_lower as encode_base16};
+use binstalk_downloader::{
+    bytes::Bytes,
+    download::{DataVerifier, Download},
+    remote::{Client, Url},
+};
+use binstalk_types::cargo_toml_binstall::{Meta, TarBasedFmt};
+use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{format_compact, CompactString, ToCompactString};
 use leon::{Template, Values};
 use semver::{Version, VersionReq};
@@ -9,17 +16,7 @@ use serde_json::Error as JsonError;
 use sha2::{Digest, Sha256};
 use tracing::debug;
 
-use crate::{
-    drivers::registry::{visitor::ManifestVisitor, RegistryError},
-    errors::BinstallError,
-    helpers::{
-        bytes::Bytes,
-        cargo_toml::Manifest,
-        download::{DataVerifier, Download},
-        remote::{Client, Url},
-    },
-    manifests::cargo_toml_binstall::{Meta, TarBasedFmt},
-};
+use crate::{visitor::ManifestVisitor, RegistryError};
 
 #[derive(Deserialize)]
 pub(super) struct RegistryConfig {
@@ -45,7 +42,7 @@ pub(super) async fn parse_manifest(
     crate_name: &str,
     crate_url: Url,
     MatchedVersion { version, cksum }: MatchedVersion,
-) -> Result<Manifest<Meta>, BinstallError> {
+) -> Result<Manifest<Meta>, RegistryError> {
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
     let mut manifest_visitor = ManifestVisitor::new(format!("{crate_name}-{version}").into());
@@ -61,10 +58,9 @@ pub(super) async fn parse_manifest(
 
     if digest_checksum.as_slice() != checksum.as_slice() {
         Err(RegistryError::UnmatchedChecksum {
-            expected: cksum,
-            actual: encode_base16(digest_checksum.as_slice()),
-        }
-        .into())
+            expected: cksum.into(),
+            actual: encode_base16(digest_checksum.as_slice()).into(),
+        })
     } else {
         manifest_visitor.load_manifest()
     }
@@ -154,7 +150,7 @@ impl MatchedVersion {
     pub(super) fn find(
         it: &mut dyn Iterator<Item = Result<RegistryIndexEntry, JsonError>>,
         version_req: &VersionReq,
-    ) -> Result<Self, BinstallError> {
+    ) -> Result<Self, RegistryError> {
         let mut ret = Option::<(Self, Version)>::None;
 
         for res in it {
@@ -189,7 +185,7 @@ impl MatchedVersion {
         }
 
         ret.map(|(num, _)| num)
-            .ok_or_else(|| BinstallError::VersionMismatch {
+            .ok_or_else(|| RegistryError::VersionMismatch {
                 req: version_req.clone(),
             })
     }

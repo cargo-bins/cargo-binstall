@@ -1,24 +1,25 @@
-use std::{str::FromStr, sync::Arc};
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
+use std::{io, str::FromStr, sync::Arc};
 
 use base16::DecodeError as Base16DecodeError;
+use binstalk_downloader::{
+    download::DownloadError,
+    remote::{Client, Error as RemoteError},
+};
+use binstalk_types::cargo_toml_binstall::Meta;
+use cargo_toml_workspace::cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
 use leon::{ParseError, RenderError};
 use miette::Diagnostic;
 use semver::VersionReq;
 use serde_json::Error as JsonError;
 use thiserror::Error as ThisError;
-
-use crate::{
-    errors::BinstallError,
-    helpers::{
-        cargo_toml::Manifest,
-        remote::{Client, Error as RemoteError, Url, UrlParseError},
-    },
-    manifests::cargo_toml_binstall::Meta,
-};
+use tokio::task;
+use url::{ParseError as UrlParseError, Url};
 
 #[cfg(feature = "git")]
-pub use crate::helpers::git::{GitUrl, GitUrlParseError};
+pub use binstalk_downloader::git::{GitError, GitUrl, GitUrlParseError};
 
 mod vfs;
 
@@ -64,7 +65,39 @@ pub enum RegistryError {
     InvalidHex(#[from] Base16DecodeError),
 
     #[error("Expected checksum `{expected}`, actual checksum `{actual}`")]
-    UnmatchedChecksum { expected: String, actual: String },
+    UnmatchedChecksum {
+        expected: Box<str>,
+        actual: Box<str>,
+    },
+
+    #[error("no version matching requirement '{req}'")]
+    VersionMismatch { req: semver::VersionReq },
+
+    #[error("Failed to parse cargo manifest: {0}")]
+    #[diagnostic(help("If you used --manifest-path, check the Cargo.toml syntax."))]
+    CargoManifest(#[from] Box<CargoTomlError>),
+
+    #[error("Failed to parse url: {0}")]
+    UrlParse(#[from] url::ParseError),
+
+    #[error(transparent)]
+    Download(#[from] DownloadError),
+
+    #[error("I/O Error: {0}")]
+    Io(#[from] io::Error),
+
+    #[error(transparent)]
+    TaskJoinError(#[from] task::JoinError),
+
+    #[cfg(feature = "git")]
+    #[error("Failed to shallow clone git repository: {0}")]
+    GitError(#[from] GitError),
+}
+
+impl From<CargoTomlError> for RegistryError {
+    fn from(e: CargoTomlError) -> Self {
+        Self::from(Box::new(e))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -101,8 +134,8 @@ enum InvalidRegistryErrorInner {
     #[error("failed to parse sparse registry url: {0}")]
     UrlParseErr(#[from] UrlParseError),
 
-    #[error("expected protocol http(s), actual protocl {0}")]
-    InvalidScheme(CompactString),
+    #[error("expected protocol http(s), actual url `{0}`")]
+    InvalidScheme(Box<Url>),
 
     #[cfg(not(feature = "git"))]
     #[error("git registry not supported")]
@@ -116,7 +149,7 @@ impl Registry {
 
             let scheme = url.scheme();
             if scheme != "http" && scheme != "https" {
-                Err(InvalidRegistryErrorInner::InvalidScheme(scheme.into()))
+                Err(InvalidRegistryErrorInner::InvalidScheme(Box::new(url)))
             } else {
                 Ok(Self::Sparse(Arc::new(SparseRegistry::new(url))))
             }
@@ -140,7 +173,7 @@ impl Registry {
         client: Client,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, BinstallError> {
+    ) -> Result<Manifest<Meta>, RegistryError> {
         match self {
             Self::CratesIo(rate_limit) => {
                 fetch_crate_cratesio(client, crate_name, version_req, rate_limit).await
