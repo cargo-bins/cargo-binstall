@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 use semver::VersionReq;
 
 use crate::{
-    fetchers::{Data, Fetcher, TargetData},
+    fetchers::{Data, Fetcher, TargetDataErased},
     helpers::{
         self, gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client,
     },
@@ -16,7 +16,7 @@ use crate::{
 
 pub mod resolve;
 
-pub type Resolver = fn(Client, GhApiClient, Arc<Data>, Arc<TargetData>) -> Arc<dyn Fetcher>;
+pub type Resolver = fn(Client, GhApiClient, Arc<Data>, Arc<TargetDataErased>) -> Arc<dyn Fetcher>;
 
 #[non_exhaustive]
 pub enum CargoTomlFetchOverride {

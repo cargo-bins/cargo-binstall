@@ -1,4 +1,3 @@
-pub(crate) mod futures_resolver;
 pub mod jobserver_client;
 pub mod remote;
 pub(crate) mod target_triple;

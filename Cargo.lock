@@ -244,9 +244,9 @@ dependencies = [
 name = "binstalk"
 version = "0.15.0"
 dependencies = [
- "async-trait",
  "atomic-file-install",
  "binstalk-downloader",
+ "binstalk-fetchers",
  "binstalk-registry",
  "binstalk-types",
  "cargo-toml-workspace",
@@ -258,11 +258,9 @@ dependencies = [
  "itertools",
  "jobslot",
  "leon",
- "leon-macros",
  "maybe-owned",
  "miette",
  "normalize-path",
- "once_cell",
  "semver",
  "strum",
  "target-lexicon",
@@ -307,6 +305,27 @@ dependencies = [
  "url",
  "xz2",
  "zstd 0.12.4",
+]
+
+[[package]]
+name = "binstalk-fetchers"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "binstalk-downloader",
+ "binstalk-types",
+ "compact_str",
+ "either",
+ "itertools",
+ "leon",
+ "leon-macros",
+ "miette",
+ "once_cell",
+ "strum",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]

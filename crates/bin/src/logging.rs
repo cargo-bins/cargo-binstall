@@ -197,6 +197,8 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
         "atomic_file_install",
         "binstalk",
         "binstalk_downloader",
+        "binstalk_fetchers",
+        "binstalk_registry",
         "cargo_binstall",
         "cargo_toml_workspace",
     ]);

@@ -7,6 +7,7 @@ use std::{
 use binstalk_downloader::{
     download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
 };
+use binstalk_fetchers::FetchError;
 use compact_str::CompactString;
 use miette::{Diagnostic, Report};
 use target_lexicon::ParseError as TargetTripleParseError;
@@ -93,6 +94,16 @@ pub enum BinstallError {
         #[diagnostic_source]
         leon::ParseError,
     ),
+
+    /// Failed to fetch pre-built binaries.
+    ///
+    /// - Code: `binstall::fetch`
+    /// - Exit: 68
+    #[error(transparent)]
+    #[diagnostic(severity(error), code(binstall::fetch))]
+    #[source_code(transparent)]
+    #[label(transparent)]
+    FetchError(Box<FetchError>),
 
     /// Failed to render template.
     ///
@@ -352,6 +363,7 @@ impl BinstallError {
             UserAbort => 32,
             UrlParse(_) => 65,
             TemplateParseError(..) => 67,
+            FetchError(..) => 68,
             TemplateRenderError(..) => 69,
             Download(_) => 68,
             SubProcess { .. } => 70,
@@ -492,5 +504,11 @@ impl From<InvalidRegistryError> for BinstallError {
 impl From<LoadManifestFromWSError> for BinstallError {
     fn from(e: LoadManifestFromWSError) -> Self {
         BinstallError::LoadManifestFromWSError(Box::new(e))
+    }
+}
+
+impl From<FetchError> for BinstallError {
+    fn from(e: FetchError) -> Self {
+        BinstallError::FetchError(Box::new(e))
     }
 }

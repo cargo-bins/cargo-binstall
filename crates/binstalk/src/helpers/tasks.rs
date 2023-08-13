@@ -60,8 +60,11 @@ impl<T> Future for AutoAbortJoinHandle<T> {
     }
 }
 
-impl<T> AutoAbortJoinHandle<Result<T, BinstallError>> {
+impl<T, E> AutoAbortJoinHandle<Result<T, E>>
+where
+    E: Into<BinstallError>,
+{
     pub async fn flattened_join(self) -> Result<T, BinstallError> {
-        self.await?
+        self.await?.map_err(Into::into)
     }
 }
