@@ -15,10 +15,10 @@ use tokio::task;
 use tracing::{error, warn};
 
 use crate::{
-    drivers::{InvalidRegistryError, RegistryError},
     helpers::{
         cargo_toml::Error as CargoTomlError, cargo_toml_workspace::Error as LoadManifestFromWSError,
     },
+    registry::{InvalidRegistryError, RegistryError},
 };
 
 #[derive(Debug, Error)]
@@ -198,18 +198,6 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::version::parse))]
     VersionParse(#[from] Box<VersionParseError>),
 
-    /// No available version matches the requirements.
-    ///
-    /// This may be the case when using the `--version` option.
-    ///
-    /// Note that using `--version 1.2.3` is interpreted as the requirement `=1.2.3`.
-    ///
-    /// - Code: `binstall::version::mismatch`
-    /// - Exit: 82
-    #[error("no version matching requirement '{req}'")]
-    #[diagnostic(severity(error), code(binstall::version::mismatch))]
-    VersionMismatch { req: semver::VersionReq },
-
     /// The crate@version syntax was used at the same time as the --version option.
     ///
     /// You can't do that as it's ambiguous which should apply.
@@ -374,7 +362,6 @@ impl BinstallError {
             CargoManifest { .. } => 78,
             RegistryParseError(..) => 79,
             VersionParse { .. } => 80,
-            VersionMismatch { .. } => 82,
             SuperfluousVersionOption => 84,
             UnspecifiedBinaries => 86,
             NoViableTargets => 87,

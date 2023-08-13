@@ -1,3 +1,6 @@
+use binstalk_downloader::remote::{Client, Error as RemoteError};
+use binstalk_types::cargo_toml_binstall::Meta;
+use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
 use semver::VersionReq;
 use serde_json::Deserializer as JsonDeserializer;
@@ -5,16 +8,8 @@ use tokio::sync::OnceCell;
 use url::Url;
 
 use crate::{
-    drivers::registry::{
-        crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion,
-        RegistryConfig, RegistryError,
-    },
-    errors::BinstallError,
-    helpers::{
-        cargo_toml::Manifest,
-        remote::{Client, Error as RemoteError},
-    },
-    manifests::cargo_toml_binstall::Meta,
+    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryConfig,
+    RegistryError,
 };
 
 #[derive(Debug)]
@@ -53,7 +48,7 @@ impl SparseRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
-    ) -> Result<MatchedVersion, BinstallError> {
+    ) -> Result<MatchedVersion, RegistryError> {
         {
             let mut path = url.path_segments_mut().unwrap();
 
@@ -87,7 +82,7 @@ impl SparseRegistry {
         client: Client,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, BinstallError> {
+    ) -> Result<Manifest<Meta>, RegistryError> {
         let crate_prefix = crate_prefix_components(crate_name)?;
         let dl_template = self.get_dl_template(&client).await?;
         let matched_version = Self::find_crate_matched_ver(

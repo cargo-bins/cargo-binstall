@@ -1,18 +1,13 @@
 use std::path::{Path, PathBuf};
 
+use binstalk_downloader::download::{DownloadError, TarEntriesVisitor, TarEntry};
+use binstalk_types::cargo_toml_binstall::Meta;
+use cargo_toml_workspace::cargo_toml::{Manifest, Value};
 use normalize_path::NormalizePath;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
-use super::vfs::Vfs;
-use crate::{
-    errors::BinstallError,
-    helpers::{
-        cargo_toml::{Manifest, Value},
-        download::{DownloadError, TarEntriesVisitor, TarEntry},
-    },
-    manifests::cargo_toml_binstall::Meta,
-};
+use crate::{vfs::Vfs, RegistryError};
 
 #[derive(Debug)]
 pub(super) struct ManifestVisitor {
@@ -71,7 +66,7 @@ impl TarEntriesVisitor for ManifestVisitor {
 
 impl ManifestVisitor {
     /// Load binstall metadata using the extracted information stored in memory.
-    pub(super) fn load_manifest(self) -> Result<Manifest<Meta>, BinstallError> {
+    pub(super) fn load_manifest(self) -> Result<Manifest<Meta>, RegistryError> {
         debug!("Loading manifest directly from extracted file");
 
         // Load and parse manifest

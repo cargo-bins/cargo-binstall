@@ -8,10 +8,10 @@ use std::{
 };
 
 use binstalk::{
-    drivers::Registry,
     helpers::remote,
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
+    registry::Registry,
 };
 use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use compact_str::CompactString;
@@ -102,7 +102,7 @@ pub struct Args {
     ///
     /// This option cannot be used with `--manifest-path`.
     #[clap(help_heading = "Overrides", long, conflicts_with("manifest_path"))]
-    pub(crate) git: Option<binstalk::drivers::GitUrl>,
+    pub(crate) git: Option<binstalk::registry::GitUrl>,
 
     /// Override Cargo.toml package manifest bin-dir.
     #[clap(help_heading = "Overrides", long)]

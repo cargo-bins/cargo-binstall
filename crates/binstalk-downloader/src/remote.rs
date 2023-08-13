@@ -37,6 +37,7 @@ const MAX_RETRY_DURATION: Duration = Duration::from_secs(120);
 const MAX_RETRY_COUNT: u8 = 3;
 const DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT: Duration = Duration::from_millis(200);
 const RETRY_DURATION_FOR_TIMEOUT: Duration = Duration::from_millis(200);
+#[allow(dead_code)]
 const DEFAULT_MIN_TLS: TLSVersion = TLSVersion::TLS_1_2;
 
 #[derive(Debug, ThisError)]

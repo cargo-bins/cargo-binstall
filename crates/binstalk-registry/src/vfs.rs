@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::helpers::cargo_toml::AbstractFilesystem;
+use cargo_toml_workspace::cargo_toml::AbstractFilesystem;
 use normalize_path::NormalizePath;
 
 /// This type stores the filesystem structure for the crate tarball
