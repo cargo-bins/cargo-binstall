@@ -14,8 +14,17 @@ use std::os::unix::fs::symlink as symlink_file_inner;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file as symlink_file_inner;
 
+fn parent(p: &Path) -> io::Result<&Path> {
+    p.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("`{}` does not have a parent", p.display()),
+        )
+    })
+}
+
 fn copy_to_tempfile(src: &Path, dst: &Path) -> io::Result<NamedTempFile> {
-    let parent = dst.parent().unwrap();
+    let parent = parent(dst)?;
     debug!("Creating named tempfile at '{}'", parent.display());
     let tempfile = NamedTempFile::new_in(parent)?;
 
@@ -125,7 +134,7 @@ pub fn atomic_symlink_file_noclobber(dest: &Path, link: &Path) -> io::Result<()>
 ///
 /// This is a blocking function, must be called in `block_in_place` mode.
 pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
-    let parent = link.parent().unwrap();
+    let parent = parent(link)?;
 
     debug!("Creating tempPath at '{}'", parent.display());
     let temp_path = NamedTempFile::new_in(parent)?.into_temp_path();
