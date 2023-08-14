@@ -16,6 +16,7 @@ use tokio::task;
 use tracing::{error, warn};
 
 use crate::{
+    bins,
     helpers::{
         cargo_toml::Error as CargoTomlError, cargo_toml_workspace::Error as LoadManifestFromWSError,
     },
@@ -104,20 +105,6 @@ pub enum BinstallError {
     #[source_code(transparent)]
     #[label(transparent)]
     FetchError(Box<FetchError>),
-
-    /// Failed to render template.
-    ///
-    /// - Code: `binstall::template`
-    /// - Exit: 69
-    #[error("Failed to render template: {0}")]
-    #[diagnostic(severity(error), code(binstall::template))]
-    #[source_code(transparent)]
-    #[label(transparent)]
-    TemplateRenderError(
-        #[from]
-        #[diagnostic_source]
-        leon::RenderError,
-    ),
 
     /// Failed to download or failed to decode the body.
     ///
@@ -257,13 +244,17 @@ pub enum BinstallError {
     )]
     NoViableTargets,
 
-    /// Bin file is not found.
+    /// Failed to find or install binaries.
     ///
-    /// - Code: `binstall::binfile`
+    /// - Code: `binstall::bins`
     /// - Exit: 88
-    #[error("bin file {0} not found")]
-    #[diagnostic(severity(error), code(binstall::binfile))]
-    BinFileNotFound(PathBuf),
+    #[error("failed to find or install binaries: {0}")]
+    #[diagnostic(
+        severity(error),
+        code(binstall::targets::none_host),
+        help("Try to specify --target")
+    )]
+    BinFile(#[from] bins::Error),
 
     /// `Cargo.toml` of the crate does not have section "Package".
     ///
@@ -280,25 +271,6 @@ pub enum BinstallError {
     #[error("bin-dir configuration provided generates duplicate source path: {path}")]
     #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     DuplicateSourceFilePath { path: PathBuf },
-
-    /// bin-dir configuration provided generates source path outside
-    /// of the temporary dir.
-    ///
-    /// - Code: `binstall::cargo_manifest`
-    /// - Exit: 91
-    #[error(
-        "bin-dir configuration provided generates source path outside of the temporary dir: {path}"
-    )]
-    #[diagnostic(severity(error), code(binstall::SourceFilePath))]
-    InvalidSourceFilePath { path: PathBuf },
-
-    /// bin-dir configuration provided generates empty source path.
-    ///
-    /// - Code: `binstall::cargo_manifest`
-    /// - Exit: 92
-    #[error("bin-dir configuration provided generates empty source path")]
-    #[diagnostic(severity(error), code(binstall::SourceFilePath))]
-    EmptySourceFilePath,
 
     /// Fallback to `cargo-install` is disabled.
     ///
@@ -364,7 +336,6 @@ impl BinstallError {
             UrlParse(_) => 65,
             TemplateParseError(..) => 67,
             FetchError(..) => 68,
-            TemplateRenderError(..) => 69,
             Download(_) => 68,
             SubProcess { .. } => 70,
             Io(_) => 74,
@@ -377,11 +348,9 @@ impl BinstallError {
             SuperfluousVersionOption => 84,
             UnspecifiedBinaries => 86,
             NoViableTargets => 87,
-            BinFileNotFound(_) => 88,
+            BinFile(_) => 88,
             CargoTomlMissingPackage(_) => 89,
             DuplicateSourceFilePath { .. } => 90,
-            InvalidSourceFilePath { .. } => 91,
-            EmptySourceFilePath => 92,
             NoFallbackToCargoInstall => 94,
             InvalidPkgFmt(..) => 95,
             GhApiErr(..) => 96,

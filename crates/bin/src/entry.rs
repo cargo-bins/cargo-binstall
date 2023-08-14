@@ -15,7 +15,6 @@ use binstalk::{
         remote::{Certificate, Client},
         tasks::AutoAbortJoinHandle,
     },
-    home::cargo_home,
     ops::{
         self,
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
@@ -25,6 +24,7 @@ use binstalk::{
 use binstalk_manifests::cargo_config::Config;
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
 use file_format::FileFormat;
+use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;

@@ -261,7 +261,7 @@ async fn download_extract_and_verify(
         .iter()
         .zip(bin_files)
         .filter_map(|(bin, bin_file)| {
-            match bin_file.check_source_exists(&extracted_files) {
+            match bin_file.check_source_exists(&mut |p| extracted_files.has_file(p)) {
                 Ok(()) => Some(Ok(bin_file)),
 
                 // This binary is optional
@@ -284,7 +284,8 @@ async fn download_extract_and_verify(
                 }
             }
         })
-        .collect::<Result<Vec<bins::BinFile>, BinstallError>>()
+        .collect::<Result<Vec<bins::BinFile>, bins::Error>>()
+        .map_err(BinstallError::from)
 }
 
 fn collect_bin_files(
@@ -314,7 +315,9 @@ fn collect_bin_files(
         .bin_dir
         .as_deref()
         .map(Cow::Borrowed)
-        .unwrap_or_else(|| bins::infer_bin_dir_template(&bin_data, extracted_files));
+        .unwrap_or_else(|| {
+            bins::infer_bin_dir_template(&bin_data, &mut |p| extracted_files.get_dir(p).is_some())
+        });
 
     let template = Template::parse(&bin_dir)?;
 
@@ -323,7 +326,7 @@ fn collect_bin_files(
         .binaries
         .iter()
         .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &template, no_symlinks))
-        .collect::<Result<Vec<_>, BinstallError>>()?;
+        .collect::<Result<Vec<_>, bins::Error>>()?;
 
     let mut source_set = BTreeSet::new();
 

@@ -51,7 +51,7 @@ impl Resolution {
 
 impl ResolutionFetch {
     pub fn install(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
-        type InstallFp = fn(&bins::BinFile) -> Result<(), BinstallError>;
+        type InstallFp = fn(&bins::BinFile) -> Result<(), bins::Error>;
 
         let (install_bin, install_link): (InstallFp, InstallFp) = match (opts.no_track, opts.force)
         {

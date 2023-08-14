@@ -3,6 +3,7 @@ members = [
     "crates/atomic-file-install",
     "crates/bin",
     "crates/binstalk",
+    "crates/binstalk-bins",
     "crates/binstalk-fetchers",
     "crates/binstalk-registry",
     "crates/binstalk-manifests",

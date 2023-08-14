@@ -18,8 +18,8 @@ exit_code="$?"
 
 set -e
 
-if [ "$exit_code" != 74 ]; then
-    echo "Expected exit code 74 Io Error, but actual exit code $exit_code"
+if [ "$exit_code" != 88 ]; then
+    echo "Expected exit code 88 BinFile Error, but actual exit code $exit_code"
     exit 1
 fi
 

@@ -196,6 +196,7 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
     let allowed_targets = (log_level != LevelFilter::Trace).then_some([
         "atomic_file_install",
         "binstalk",
+        "binstalk_bins",
         "binstalk_downloader",
         "binstalk_fetchers",
         "binstalk_registry",

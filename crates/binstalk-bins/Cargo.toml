@@ -1,0 +1,21 @@
+[package]
+name = "binstalk-bins"
+version = "0.0.0"
+edition = "2021"
+
+description = "The binstall binaries discovery and installation crate."
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/binstalk-bins"
+rust-version = "1.65.0"
+authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
+license = "GPL-3.0-only"
+
+[dependencies]
+atomic-file-install = { version = "0.0.0", path = "../atomic-file-install" }
+binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
+compact_str = { version = "0.7.0", features = ["serde"] }
+leon = { version = "2.0.1", path = "../leon" }
+miette = "5.9.0"
+normalize-path = { version = "0.2.1", path = "../normalize-path" }
+thiserror = "1.0.40"
+tracing = "0.1.37"
