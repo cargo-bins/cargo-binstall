@@ -10,9 +10,9 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [dependencies]
-async-trait = "0.1.68"
 atomic-file-install = { version = "0.0.0", path = "../atomic-file-install" }
 binstalk-downloader = { version = "0.7.0", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
+binstalk-fetchers = { version = "0.0.0", path = "../binstalk-fetchers" }
 binstalk-registry = { version = "0.0.0", path = "../binstalk-registry" }
 binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "0.0.0", path = "../cargo-toml-workspace" }
@@ -24,11 +24,9 @@ home = "0.5.5"
 itertools = "0.11.0"
 jobslot = { version = "0.2.11", features = ["tokio"] }
 leon = { version = "2.0.1", path = "../leon" }
-leon-macros = { version = "1.0.0", path = "../leon-macros" }
 maybe-owned = "0.3.4"
 miette = "5.9.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
-once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }
 strum = "0.25.0"
 target-lexicon = { version = "0.12.11", features = ["std"] }

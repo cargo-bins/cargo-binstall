@@ -1,4 +1,4 @@
-use std::{borrow::Cow, iter, path::Path, sync::Arc};
+use std::{borrow::Cow, fmt, iter, marker::PhantomData, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -9,19 +9,9 @@ use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
-    errors::{BinstallError, InvalidPkgFmtError},
-    helpers::{
-        download::{Download, ExtractedFiles},
-        futures_resolver::FuturesResolver,
-        gh_api_client::GhApiClient,
-        remote::{does_url_exist, Client},
-        target_triple::TargetTriple,
-        tasks::AutoAbortJoinHandle,
-    },
-    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
+    common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
+    TargetDataErased,
 };
-
-use super::{Data, RepoInfo, TargetData};
 
 pub(crate) mod hosting;
 
@@ -29,14 +19,14 @@ pub struct GhCrateMeta {
     client: Client,
     gh_api_client: GhApiClient,
     data: Arc<Data>,
-    target_data: Arc<TargetData>,
+    target_data: Arc<TargetDataErased>,
     resolution: OnceCell<(Url, PkgFmt)>,
 }
 
 impl GhCrateMeta {
     fn launch_baseline_find_tasks(
         &self,
-        futures_resolver: &FuturesResolver<(Url, PkgFmt), BinstallError>,
+        futures_resolver: &FuturesResolver<(Url, PkgFmt), FetchError>,
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
         repo: Option<&str>,
@@ -46,7 +36,7 @@ impl GhCrateMeta {
             let ctx = Context::from_data_with_repo(
                 &self.data,
                 &self.target_data.target,
-                &self.target_data.triple,
+                &self.target_data.target_related_info,
                 ext,
                 repo,
                 subcrate,
@@ -94,7 +84,7 @@ impl super::Fetcher for GhCrateMeta {
         client: Client,
         gh_api_client: GhApiClient,
         data: Arc<Data>,
-        target_data: Arc<TargetData>,
+        target_data: Arc<TargetDataErased>,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
@@ -105,8 +95,8 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
-        AutoAbortJoinHandle::spawn(async move {
+    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
+        tokio::spawn(async move {
             let info = self.data.get_repo_info(&self.client).await?.as_ref();
 
             let repo = info.map(|info| &info.repo);
@@ -137,9 +127,11 @@ impl super::Fetcher for GhCrateMeta {
                         return Err(InvalidPkgFmtError {
                             crate_name: crate_name.clone(),
                             version: version.clone(),
-                            target: target.clone(),
-                            pkg_url: pkg_url.to_string(),
-                            reason: "pkg-fmt is not specified, yet pkg-url does not contain format, archive-format or archive-suffix which is required for automatically deducing pkg-fmt",
+                            target: target.into(),
+                            pkg_url: pkg_url.into(),
+                            reason:
+                                &"pkg-fmt is not specified, yet pkg-url does not contain format, \
+archive-format or archive-suffix which is required for automatically deducing pkg-fmt",
                         }
                         .into());
                     }
@@ -230,7 +222,7 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
         let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
         debug!(
             "Downloading package from: '{url}' dst:{} fmt:{pkg_fmt:?}",
@@ -278,31 +270,74 @@ impl super::Fetcher for GhCrateMeta {
         &self.target_data.target
     }
 
-    fn target_data(&self) -> &Arc<TargetData> {
+    fn target_data(&self) -> &Arc<TargetDataErased> {
         &self.target_data
     }
 }
 
 /// Template for constructing download paths
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Context<'c> {
-    pub name: &'c str,
-    pub repo: Option<&'c str>,
-    pub target: &'c str,
-    pub version: &'c str,
+    name: &'c str,
+    repo: Option<&'c str>,
+    target: &'c str,
+    version: &'c str,
 
     /// Archive format e.g. tar.gz, zip
-    pub archive_format: Option<&'c str>,
+    archive_format: Option<&'c str>,
 
-    pub archive_suffix: Option<&'c str>,
+    archive_suffix: Option<&'c str>,
 
     /// Filename extension on the binary, i.e. .exe on Windows, nothing otherwise
-    pub binary_ext: &'c str,
+    binary_ext: &'c str,
 
     /// Workspace of the crate inside the repository.
-    pub subcrate: Option<&'c str>,
+    subcrate: Option<&'c str>,
 
-    pub triple: &'c TargetTriple,
+    target_related_info: &'c dyn leon::Values,
+}
+
+impl fmt::Debug for Context<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[allow(dead_code)]
+        #[derive(Debug)]
+        struct Context<'c> {
+            name: &'c str,
+            repo: Option<&'c str>,
+            target: &'c str,
+            version: &'c str,
+
+            archive_format: Option<&'c str>,
+
+            archive_suffix: Option<&'c str>,
+
+            binary_ext: &'c str,
+
+            subcrate: Option<&'c str>,
+
+            target_related_info: PhantomData<&'c dyn leon::Values>,
+        }
+
+        fmt::Debug::fmt(
+            &Context {
+                name: self.name,
+                repo: self.repo,
+                target: self.target,
+                version: self.version,
+
+                archive_format: self.archive_format,
+
+                archive_suffix: self.archive_suffix,
+
+                binary_ext: self.binary_ext,
+
+                subcrate: self.subcrate,
+
+                target_related_info: PhantomData,
+            },
+            f,
+        )
+    }
 }
 
 impl leon::Values for Context<'_> {
@@ -324,7 +359,7 @@ impl leon::Values for Context<'_> {
 
             "subcrate" => self.subcrate.map(Cow::Borrowed),
 
-            key => self.triple.get_value(key),
+            key => self.target_related_info.get_value(key),
         }
     }
 }
@@ -333,7 +368,7 @@ impl<'c> Context<'c> {
     fn from_data_with_repo(
         data: &'c Data,
         target: &'c str,
-        triple: &'c TargetTriple,
+        target_related_info: &'c dyn leon::Values,
         archive_suffix: Option<&'c str>,
         repo: Option<&'c str>,
         subcrate: Option<&'c str>,
@@ -364,22 +399,19 @@ impl<'c> Context<'c> {
             },
             subcrate,
 
-            triple,
+            target_related_info,
         }
     }
 
     /// * `tt` - must have added a template named "pkg_url".
-    pub(self) fn render_url_with_compiled_tt(
-        &self,
-        tt: &Template<'_>,
-    ) -> Result<Url, BinstallError> {
+    fn render_url_with_compiled_tt(&self, tt: &Template<'_>) -> Result<Url, FetchError> {
         debug!("Render {tt:#?} using context: {self:?}");
 
         Ok(Url::parse(&tt.render(self)?)?)
     }
 
     #[cfg(test)]
-    pub(self) fn render_url(&self, template: &str) -> Result<Url, BinstallError> {
+    fn render_url(&self, template: &str) -> Result<Url, FetchError> {
         debug!("Render {template} using context in render_url: {self:?}");
 
         let tt = Template::parse(template)?;
@@ -389,10 +421,7 @@ impl<'c> Context<'c> {
 
 #[cfg(test)]
 mod test {
-
-    use std::str::FromStr;
-
-    use super::{super::Data, Context, TargetTriple};
+    use super::{super::Data, Context};
     use compact_str::ToCompactString;
     use url::Url;
 
@@ -405,12 +434,14 @@ mod test {
         template: &str,
         expected_url: &str,
     ) {
-        let triple = &TargetTriple::from_str(target).unwrap();
+        // The template provided doesn't need this, so just returning None
+        // is OK.
+        let target_info = leon::vals(|_| None);
 
         let ctx = Context::from_data_with_repo(
             data,
             target,
-            triple,
+            &target_info,
             Some(archive_format),
             data.repo.as_deref(),
             None,

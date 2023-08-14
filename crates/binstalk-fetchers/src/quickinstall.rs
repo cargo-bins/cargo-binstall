@@ -1,23 +1,10 @@
 use std::{path::Path, sync::Arc};
 
-use compact_str::CompactString;
+use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 use tokio::sync::OnceCell;
-use tracing::{debug, warn};
 use url::Url;
 
-use crate::{
-    errors::BinstallError,
-    helpers::{
-        download::{Download, ExtractedFiles},
-        gh_api_client::GhApiClient,
-        is_universal_macos,
-        remote::{does_url_exist, Client, Method},
-        tasks::AutoAbortJoinHandle,
-    },
-    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
-};
-
-use super::{Data, TargetData};
+use crate::{common::*, Data, FetchError, TargetDataErased};
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
@@ -25,9 +12,13 @@ const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 const QUICKINSTALL_SUPPORTED_TARGETS_URL: &str =
     "https://raw.githubusercontent.com/cargo-bins/cargo-quickinstall/main/supported-targets";
 
+fn is_universal_macos(target: &str) -> bool {
+    ["universal-apple-darwin", "universal2-apple-darwin"].contains(&target)
+}
+
 async fn get_quickinstall_supported_targets(
     client: &Client,
-) -> Result<&'static [CompactString], BinstallError> {
+) -> Result<&'static [CompactString], FetchError> {
     static SUPPORTED_TARGETS: OnceCell<Box<[CompactString]>> = OnceCell::const_new();
 
     SUPPORTED_TARGETS
@@ -60,11 +51,11 @@ pub struct QuickInstall {
     package_url: Url,
     stats_url: Url,
 
-    target_data: Arc<TargetData>,
+    target_data: Arc<TargetDataErased>,
 }
 
 impl QuickInstall {
-    async fn is_supported(&self) -> Result<bool, BinstallError> {
+    async fn is_supported(&self) -> Result<bool, FetchError> {
         self.is_supported_v
             .get_or_try_init(|| async {
                 Ok(get_quickinstall_supported_targets(&self.client)
@@ -83,7 +74,7 @@ impl super::Fetcher for QuickInstall {
         client: Client,
         gh_api_client: GhApiClient,
         data: Arc<Data>,
-        target_data: Arc<TargetData>,
+        target_data: Arc<TargetDataErased>,
     ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
@@ -108,8 +99,8 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>> {
-        AutoAbortJoinHandle::spawn(async move {
+    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
+        tokio::spawn(async move {
             if !self.is_supported().await? {
                 return Ok(false);
             }
@@ -145,7 +136,7 @@ by rust officially."#,
         }
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
         let url = &self.package_url;
         debug!("Downloading package from: '{url}'");
         Ok(Download::new(self.client.clone(), url.clone())
@@ -180,13 +171,13 @@ by rust officially."#,
         &self.target_data.target
     }
 
-    fn target_data(&self) -> &Arc<TargetData> {
+    fn target_data(&self) -> &Arc<TargetDataErased> {
         &self.target_data
     }
 }
 
 impl QuickInstall {
-    pub async fn report(&self) -> Result<(), BinstallError> {
+    pub async fn report(&self) -> Result<(), FetchError> {
         if !self.is_supported().await? {
             debug!(
                 "Not sending quickinstall report for {} since Quickinstall does not support these targets.",

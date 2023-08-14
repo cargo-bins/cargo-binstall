@@ -1,25 +1,71 @@
 use std::{path::Path, sync::Arc};
 
-use compact_str::CompactString;
-pub use gh_crate_meta::*;
-pub use quickinstall::*;
-use tokio::sync::OnceCell;
-use tracing::{debug, instrument};
-use url::Url;
-
-use crate::{
-    errors::BinstallError,
-    helpers::{
-        download::ExtractedFiles, gh_api_client::GhApiClient, remote::Client,
-        target_triple::TargetTriple, tasks::AutoAbortJoinHandle,
-    },
-    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
+use binstalk_downloader::{
+    download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
 };
+use thiserror::Error as ThisError;
+use tokio::sync::OnceCell;
+pub use url::ParseError as UrlParseError;
 
-pub(crate) mod gh_crate_meta;
-pub(crate) mod quickinstall;
+mod gh_crate_meta;
+pub use gh_crate_meta::*;
+
+mod quickinstall;
+pub use quickinstall::*;
+
+mod common;
+use common::*;
+
+mod futures_resolver;
 
 use gh_crate_meta::hosting::RepositoryHost;
+
+#[derive(Debug, ThisError)]
+#[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
+pub struct InvalidPkgFmtError {
+    pub crate_name: CompactString,
+    pub version: CompactString,
+    pub target: CompactString,
+    pub pkg_url: Box<str>,
+    pub reason: &'static &'static str,
+}
+
+#[derive(Debug, ThisError, miette::Diagnostic)]
+#[non_exhaustive]
+#[cfg_attr(feature = "miette", derive(miette::Diagnostic))]
+pub enum FetchError {
+    #[error(transparent)]
+    Download(#[from] DownloadError),
+
+    #[error("Failed to parse template: {0}")]
+    #[diagnostic(transparent)]
+    TemplateParse(#[from] leon::ParseError),
+
+    #[error("Failed to render template: {0}")]
+    #[diagnostic(transparent)]
+    TemplateRender(#[from] leon::RenderError),
+
+    #[error("Failed to render template: {0}")]
+    GhApi(#[from] GhApiError),
+
+    #[error(transparent)]
+    InvalidPkgFmt(Box<InvalidPkgFmtError>),
+
+    #[error("Failed to parse url: {0}")]
+    UrlParse(#[from] UrlParseError),
+}
+
+impl From<RemoteError> for FetchError {
+    fn from(e: RemoteError) -> Self {
+        DownloadError::from(e).into()
+    }
+}
+
+impl From<InvalidPkgFmtError> for FetchError {
+    fn from(e: InvalidPkgFmtError) -> Self {
+        Self::InvalidPkgFmt(Box::new(e))
+    }
+}
 
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
@@ -29,13 +75,13 @@ pub trait Fetcher: Send + Sync {
         client: Client,
         gh_api_client: GhApiClient,
         data: Arc<Data>,
-        target_data: Arc<TargetData>,
+        target_data: Arc<TargetDataErased>,
     ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
 
     /// Fetch a package and extract
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, BinstallError>;
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError>;
 
     /// Find the package, if it is available for download
     ///
@@ -45,7 +91,7 @@ pub trait Fetcher: Send + Sync {
     ///
     /// Must return `true` if a package is available, `false` if none is, and reserve errors to
     /// fatal conditions only.
-    fn find(self: Arc<Self>) -> AutoAbortJoinHandle<Result<bool, BinstallError>>;
+    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>>;
 
     /// Report to upstream that cargo-binstall tries to use this fetcher.
     /// Currently it is only overriden by [`quickinstall::QuickInstall`].
@@ -73,7 +119,7 @@ pub trait Fetcher: Send + Sync {
     /// Return the target for this fetcher
     fn target(&self) -> &str;
 
-    fn target_data(&self) -> &Arc<TargetData>;
+    fn target_data(&self) -> &Arc<TargetDataErased>;
 }
 
 #[derive(Clone, Debug)]
@@ -103,7 +149,7 @@ impl Data {
     }
 
     #[instrument(level = "debug")]
-    async fn get_repo_info(&self, client: &Client) -> Result<&Option<RepoInfo>, BinstallError> {
+    async fn get_repo_info(&self, client: &Client) -> Result<&Option<RepoInfo>, FetchError> {
         self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
@@ -194,11 +240,18 @@ impl RepoInfo {
 
 /// Target specific data required to fetch a package
 #[derive(Clone, Debug)]
-pub struct TargetData {
+pub struct TargetData<T: leon::Values + ?Sized> {
     pub target: String,
-    pub triple: TargetTriple,
     pub meta: PkgMeta,
+    /// More target related info, it's recommend to provide the following keys:
+    ///  - target_family,
+    ///  - target_arch
+    ///  - target_libc
+    ///  - target_vendor
+    pub target_related_info: T,
 }
+
+pub type TargetDataErased = TargetData<dyn leon::Values + Send + Sync + 'static>;
 
 #[cfg(test)]
 mod test {

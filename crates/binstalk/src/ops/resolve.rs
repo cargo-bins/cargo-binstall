@@ -23,6 +23,7 @@ use crate::{
     helpers::{
         self, cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
+        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
     ops::{CargoTomlFetchOverride, Options},
@@ -111,8 +112,8 @@ async fn resolve_inner(
 
                 Arc::new(TargetData {
                     target: target.clone(),
-                    triple,
                     meta: target_meta,
+                    target_related_info: triple,
                 })
             })
             .cartesian_product(resolvers)
@@ -123,7 +124,7 @@ async fn resolve_inner(
                     data.clone(),
                     target_data,
                 );
-                (fetcher.clone(), fetcher.find())
+                (fetcher.clone(), AutoAbortJoinHandle::new(fetcher.find()))
             }),
     );
 
@@ -305,7 +306,7 @@ fn collect_bin_files(
         meta,
         bin_path,
         install_path,
-        triple: &fetcher.target_data().triple,
+        target_related_info: &fetcher.target_data().target_related_info,
     };
 
     let bin_dir = bin_data
