@@ -244,7 +244,7 @@ dependencies = [
 name = "binstalk"
 version = "0.15.0"
 dependencies = [
- "atomic-file-install",
+ "binstalk-bins",
  "binstalk-downloader",
  "binstalk-fetchers",
  "binstalk-registry",
@@ -254,13 +254,11 @@ dependencies = [
  "compact_str",
  "detect-targets",
  "either",
- "home",
  "itertools",
  "jobslot",
  "leon",
  "maybe-owned",
  "miette",
- "normalize-path",
  "semver",
  "strum",
  "target-lexicon",
@@ -269,6 +267,20 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "binstalk-bins"
+version = "0.0.0"
+dependencies = [
+ "atomic-file-install",
+ "binstalk-types",
+ "compact_str",
+ "leon",
+ "miette",
+ "normalize-path",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -520,6 +532,7 @@ dependencies = [
  "file-format",
  "fs-lock",
  "gh-token",
+ "home",
  "log",
  "miette",
  "mimalloc",

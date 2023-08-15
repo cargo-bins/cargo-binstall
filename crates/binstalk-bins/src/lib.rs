@@ -1,23 +1,44 @@
 use std::{
     borrow::Cow,
-    fmt,
+    fmt, io,
     path::{self, Component, Path, PathBuf},
 };
 
+use atomic_file_install::{
+    atomic_install, atomic_install_noclobber, atomic_symlink_file, atomic_symlink_file_noclobber,
+};
+use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 use compact_str::{format_compact, CompactString};
 use leon::Template;
+use miette::Diagnostic;
 use normalize_path::NormalizePath;
+use thiserror::Error as ThisError;
 use tracing::debug;
 
-use crate::{
-    errors::BinstallError,
-    fs::{
-        atomic_install, atomic_install_noclobber, atomic_symlink_file,
-        atomic_symlink_file_noclobber,
-    },
-    helpers::download::ExtractedFiles,
-    manifests::cargo_toml_binstall::{PkgFmt, PkgMeta},
-};
+#[derive(Debug, ThisError, Diagnostic)]
+pub enum Error {
+    /// bin-dir configuration provided generates source path outside
+    /// of the temporary dir.
+    #[error(
+        "bin-dir configuration provided generates source path outside of the temporary dir: {}", .0.display()
+    )]
+    InvalidSourceFilePath(Box<Path>),
+
+    /// bin-dir configuration provided generates empty source path.
+    #[error("bin-dir configuration provided generates empty source path")]
+    EmptySourceFilePath,
+
+    /// Bin file is not found.
+    #[error("bin file {} not found", .0.display())]
+    BinFileNotFound(Box<Path>),
+
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    #[error("Failed to render template: {0}")]
+    #[diagnostic(transparent)]
+    TemplateRender(#[from] leon::RenderError),
+}
 
 /// Return true if the path does not look outside of current dir
 ///
@@ -33,7 +54,10 @@ fn is_valid_path(path: &Path) -> bool {
 
 /// Must be called after the archive is downloaded and extracted.
 /// This function might uses blocking I/O.
-pub fn infer_bin_dir_template(data: &Data, extracted_files: &ExtractedFiles) -> Cow<'static, str> {
+pub fn infer_bin_dir_template(
+    data: &Data,
+    has_dir: &mut dyn FnMut(&Path) -> bool,
+) -> Cow<'static, str> {
     let name = data.name;
     let target = data.target;
     let version = data.version;
@@ -58,7 +82,7 @@ pub fn infer_bin_dir_template(data: &Data, extracted_files: &ExtractedFiles) -> 
     gen_possible_dirs
         .into_iter()
         .map(|gen_possible_dir| gen_possible_dir(name, target, version))
-        .find(|dirname| extracted_files.get_dir(Path::new(&dirname)).is_some())
+        .find(|dirname| has_dir(Path::new(&dirname)))
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
             dir += "/";
@@ -84,7 +108,7 @@ impl BinFile {
         base_name: &str,
         tt: &Template<'_>,
         no_symlinks: bool,
-    ) -> Result<Self, BinstallError> {
+    ) -> Result<Self, Error> {
         let binary_ext = if data.target.contains("windows") {
             ".exe"
         } else {
@@ -115,13 +139,11 @@ impl BinFile {
             let path_normalized = Path::new(&path).normalize();
 
             if path_normalized.components().next().is_none() {
-                return Err(BinstallError::EmptySourceFilePath);
+                return Err(Error::EmptySourceFilePath);
             }
 
             if !is_valid_path(&path_normalized) {
-                return Err(BinstallError::InvalidSourceFilePath {
-                    path: path_normalized,
-                });
+                return Err(Error::InvalidSourceFilePath(path_normalized.into()));
             }
 
             (data.bin_path.join(&path_normalized), path_normalized)
@@ -176,18 +198,18 @@ impl BinFile {
     /// Return `Ok` if the source exists, otherwise `Err`.
     pub fn check_source_exists(
         &self,
-        extracted_files: &ExtractedFiles,
-    ) -> Result<(), BinstallError> {
-        if extracted_files.has_file(&self.archive_source_path) {
+        has_file: &mut dyn FnMut(&Path) -> bool,
+    ) -> Result<(), Error> {
+        if has_file(&self.archive_source_path) {
             Ok(())
         } else {
-            Err(BinstallError::BinFileNotFound(self.source.clone()))
+            Err(Error::BinFileNotFound((&*self.source).into()))
         }
     }
 
-    fn pre_install_bin(&self) -> Result<(), BinstallError> {
+    fn pre_install_bin(&self) -> Result<(), Error> {
         if !self.source.try_exists()? {
-            return Err(BinstallError::BinFileNotFound(self.source.clone()));
+            return Err(Error::BinFileNotFound((&*self.source).into()));
         }
 
         #[cfg(unix)]
@@ -199,7 +221,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_bin(&self) -> Result<(), BinstallError> {
+    pub fn install_bin(&self) -> Result<(), Error> {
         self.pre_install_bin()?;
 
         debug!(
@@ -213,7 +235,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_bin_noclobber(&self) -> Result<(), BinstallError> {
+    pub fn install_bin_noclobber(&self) -> Result<(), Error> {
         self.pre_install_bin()?;
 
         debug!(
@@ -227,7 +249,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_link(&self) -> Result<(), BinstallError> {
+    pub fn install_link(&self) -> Result<(), Error> {
         if let Some(link) = &self.link {
             let dest = self.link_dest();
             debug!(
@@ -241,7 +263,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_link_noclobber(&self) -> Result<(), BinstallError> {
+    pub fn install_link_noclobber(&self) -> Result<(), Error> {
         if let Some(link) = &self.link {
             let dest = self.link_dest();
             debug!(
