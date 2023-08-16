@@ -27,7 +27,7 @@ serde_json = "1.0.99"
 sha2 = "0.10.7"
 tempfile = "3.5.0"
 thiserror = "1.0.40"
-tokio = { version = "1.30.0", features = ["rt", "sync", "time"], default-features = false }
+tokio = { version = "1.30.0", features = ["rt", "sync"], default-features = false }
 tracing = "0.1.37"
 url = "2.3.1"
 
