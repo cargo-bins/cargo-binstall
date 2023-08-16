@@ -8,7 +8,7 @@ use std::{
 };
 
 use binstalk::{
-    helpers::remote,
+    helpers::{logging::LevelFilter, remote},
     manifests::cargo_toml_binstall::PkgFmt,
     ops::resolve::{CrateName, VersionReqExt},
     registry::Registry,
@@ -16,7 +16,6 @@ use binstalk::{
 use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use compact_str::CompactString;
 
-use log::LevelFilter;
 use semver::VersionReq;
 use strum::EnumCount;
 use strum_macros::EnumCount;
@@ -30,7 +29,7 @@ use strum_macros::EnumCount;
     // Avoid conflict with version_req
     disable_version_flag(true),
 )]
-pub struct Args {
+pub(crate) struct Args {
     /// Packages to install.
     ///
     /// Syntax: `crate[@version]`
@@ -278,7 +277,7 @@ pub struct Args {
 
     /// Print logs in json format to be parsable.
     #[clap(help_heading = "Options", long)]
-    pub json_output: bool,
+    pub(crate) json_output: bool,
 
     /// Provide the github token for accessing the restful API of api.github.com
     ///
@@ -294,7 +293,7 @@ pub struct Args {
 
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
-    pub version: bool,
+    pub(crate) version: bool,
 
     /// Utility log level
     ///
@@ -316,11 +315,11 @@ pub struct Args {
     /// will try to read environment variable `BINSTALL_LOG_LEVEL` and
     /// interpret it as a log-level.
     #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
-    pub log_level: Option<LevelFilter>,
+    pub(crate) log_level: Option<LevelFilter>,
 
     /// Used with `--version` to print out verbose information.
     #[clap(help_heading = "Meta", short, long, default_value_t = false)]
-    pub verbose: bool,
+    pub(crate) verbose: bool,
 
     /// Equivalent to setting `log_level` to `off`.
     ///
@@ -398,7 +397,7 @@ pub(crate) enum Strategy {
     Compile,
 }
 
-pub fn parse() -> Args {
+pub(crate) fn parse() -> Args {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]

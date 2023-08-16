@@ -1,10 +1,9 @@
 use std::{
-    cmp::min,
     io::{self, Write},
     iter::repeat,
 };
 
-use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
+use log::{Log, STATIC_MAX_LEVEL};
 use once_cell::sync::Lazy;
 use supports_color::{on as supports_color_on_stream, Stream::Stdout};
 use tracing::{
@@ -20,6 +19,8 @@ use tracing_subscriber::{
     fmt::{fmt, MakeWriter},
     layer::SubscriberExt,
 };
+
+pub use log::LevelFilter;
 
 // Shamelessly taken from tracing-log
 
@@ -189,9 +190,9 @@ impl<'a> MakeWriter<'a> for ErrorFreeWriter {
     }
 }
 
-pub fn logging(log_level: LevelFilter, json_output: bool) {
+pub fn setup_logging(log_level: LevelFilter, json_output: bool) {
     // Calculate log_level
-    let log_level = min(log_level, STATIC_MAX_LEVEL);
+    let log_level = log_level.min(STATIC_MAX_LEVEL);
 
     let allowed_targets = (log_level != LevelFilter::Trace).then_some([
         "atomic_file_install",

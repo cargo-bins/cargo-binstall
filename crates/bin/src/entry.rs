@@ -12,6 +12,7 @@ use binstalk::{
     helpers::{
         gh_api_client::GhApiClient,
         jobserver_client::LazyJobserverClient,
+        logging::LevelFilter,
         remote::{Certificate, Client},
         tasks::AutoAbortJoinHandle,
     },
@@ -25,7 +26,6 @@ use binstalk_manifests::cargo_config::Config;
 use binstalk_manifests::cargo_toml_binstall::PkgOverride;
 use file_format::FileFormat;
 use home::cargo_home;
-use log::LevelFilter;
 use miette::{miette, Result, WrapErr};
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
@@ -37,7 +37,7 @@ use crate::{
     ui::confirm,
 };
 
-pub fn install_crates(
+pub(crate) fn install_crates(
     args: Args,
     jobserver_client: LazyJobserverClient,
 ) -> Result<Option<impl Future<Output = Result<()>>>> {

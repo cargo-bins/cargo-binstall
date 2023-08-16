@@ -1,4 +1,5 @@
 pub mod jobserver_client;
+pub mod logging;
 pub mod remote;
 pub(crate) mod target_triple;
 pub mod tasks;

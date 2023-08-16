@@ -12,7 +12,7 @@ use tracing::{error, info};
 
 use crate::signal::cancel_on_user_sig_term;
 
-pub enum MainExit {
+pub(crate) enum MainExit {
     Success(Option<Duration>),
     Error(BinstallError),
     Report(miette::Report),
@@ -37,7 +37,7 @@ impl Termination for MainExit {
 }
 
 impl MainExit {
-    pub fn new(res: Result<()>, done: Duration) -> Self {
+    pub(crate) fn new(res: Result<()>, done: Duration) -> Self {
         res.map(|()| MainExit::Success(Some(done)))
             .unwrap_or_else(|err| {
                 err.downcast::<BinstallError>()
@@ -52,7 +52,7 @@ impl MainExit {
 ///
 /// It will cancel the future if user requested cancellation
 /// via signal.
-pub fn run_tokio_main<Func, Fut>(f: Func) -> Result<()>
+pub(crate) fn run_tokio_main<Func, Fut>(f: Func) -> Result<()>
 where
     Func: FnOnce() -> Result<Option<Fut>>,
     Fut: Future<Output = Result<()>> + Send + 'static,
