@@ -4,41 +4,9 @@ use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
-use tokio::{
-    sync::Mutex,
-    time::{interval, Duration, Interval, MissedTickBehavior},
-};
 use tracing::debug;
 
 use crate::{parse_manifest, MatchedVersion, RegistryError};
-
-#[derive(Debug)]
-pub struct CratesIoRateLimit(Mutex<Interval>);
-
-impl Default for CratesIoRateLimit {
-    fn default() -> Self {
-        let mut interval = interval(Duration::from_secs(1));
-        // If somehow one tick is delayed, then next tick should be at least
-        // 1s later than the current tick.
-        //
-        // Other MissedTickBehavior including Burst (default), which will
-        // tick as fast as possible to catch up, and Skip, which will
-        // skip the current tick for the next one.
-        //
-        // Both Burst and Skip is not the expected behavior for rate limit:
-        // ticking as fast as possible would violate crates.io crawler
-        // policy, and skipping the current one will slow down the resolution
-        // process.
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        Self(Mutex::new(interval))
-    }
-}
-
-impl CratesIoRateLimit {
-    pub(super) async fn tick(&self) {
-        self.0.lock().await.tick().await;
-    }
-}
 
 /// Return `Some(checksum)` if the version is not yanked, otherwise `None`.
 async fn is_crate_yanked(client: &Client, url: Url) -> Result<Option<String>, RemoteError> {
@@ -141,11 +109,7 @@ pub async fn fetch_crate_cratesio(
     client: Client,
     name: &str,
     version_req: &VersionReq,
-    crates_io_rate_limit: &CratesIoRateLimit,
 ) -> Result<Manifest<Meta>, RegistryError> {
-    // Wait until we can make another request to crates.io
-    crates_io_rate_limit.tick().await;
-
     let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))?;
 
     let (version, cksum) = match version_req.comparators.as_slice() {

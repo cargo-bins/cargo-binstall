@@ -34,7 +34,7 @@ mod git_registry;
 pub use git_registry::GitRegistry;
 
 mod crates_io_registry;
-pub use crates_io_registry::{fetch_crate_cratesio, CratesIoRateLimit};
+pub use crates_io_registry::fetch_crate_cratesio;
 
 mod sparse_registry;
 pub use sparse_registry::SparseRegistry;
@@ -100,21 +100,16 @@ impl From<CargoTomlError> for RegistryError {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 #[non_exhaustive]
 pub enum Registry {
-    CratesIo(Arc<CratesIoRateLimit>),
+    #[default]
+    CratesIo,
 
     Sparse(Arc<SparseRegistry>),
 
     #[cfg(feature = "git")]
     Git(GitRegistry),
-}
-
-impl Default for Registry {
-    fn default() -> Self {
-        Self::CratesIo(Default::default())
-    }
 }
 
 #[derive(Debug, ThisError)]
@@ -175,9 +170,7 @@ impl Registry {
         version_req: &VersionReq,
     ) -> Result<Manifest<Meta>, RegistryError> {
         match self {
-            Self::CratesIo(rate_limit) => {
-                fetch_crate_cratesio(client, crate_name, version_req, rate_limit).await
-            }
+            Self::CratesIo => fetch_crate_cratesio(client, crate_name, version_req).await,
             Self::Sparse(sparse_registry) => {
                 sparse_registry
                     .fetch_crate_matched(client, crate_name, version_req)
