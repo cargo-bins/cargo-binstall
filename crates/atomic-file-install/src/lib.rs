@@ -214,6 +214,5 @@ mod win {
                 None,                           // lpreserved, unused
             )
         }
-        .ok()
     }
 }
