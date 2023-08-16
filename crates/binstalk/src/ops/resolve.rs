@@ -14,7 +14,7 @@ use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     bins,
@@ -267,17 +267,22 @@ async fn download_extract_and_verify(
                 // This binary is optional
                 Err(err) => {
                     let required_features = &bin.required_features;
+                    let bin_name = bin.name.as_str();
 
                     if required_features.is_empty() {
+                        error!(
+                            "When resolving {name} bin {bin_name} is not found.\
+This binary is not optional so it must be included in the achieve, please contact with\
+upstream to fix this issue."
+                        );
                         // This bin is not optional, error
                         Some(Err(err))
                     } else {
                         // Optional, print a warning and continue.
-                        let bin_name = bin.name.as_str();
                         let features = required_features.iter().format(",");
                         warn!(
                             "When resolving {name} bin {bin_name} is not found. \
-                                But since it requies features {features}, this bin is ignored."
+But since it requies features {features}, this bin is ignored."
                         );
                         None
                     }
