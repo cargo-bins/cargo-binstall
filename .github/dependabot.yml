@@ -15,11 +15,27 @@ updates:
   # from dependabot since compatible updates is covered by
   # `update-transitive-deps.yml`
   - package-ecosystem: "cargo"
+    directory: "/crates/atomic-file-install"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
     directory: "/crates/bin"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
     directory: "/crates/binstalk"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/binstalk-bins"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/binstalk-fetchers"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/binstalk-registry"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
@@ -32,6 +48,10 @@ updates:
       interval: "daily"
   - package-ecosystem: "cargo"
     directory: "/crates/binstalk-types"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "cargo"
+    directory: "/crates/cargo-toml-workspace"
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
