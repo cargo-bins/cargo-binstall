@@ -7,11 +7,16 @@ on:
         required: true
         type: choice
         options:
+          - atomic-file-install
           - bin
           - binstalk
+          - binstalk-bins
+          - binstalk-fetchers
+          - binstalk-registry
           - binstalk-manifests
           - binstalk-types
           - binstalk-downloader
+          - cargo-toml-workspace
           - detect-targets
           - detect-wasi
           - fs-lock
