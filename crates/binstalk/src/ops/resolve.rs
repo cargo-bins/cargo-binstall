@@ -272,7 +272,7 @@ async fn download_extract_and_verify(
                     if required_features.is_empty() {
                         error!(
                             "When resolving {name} bin {bin_name} is not found.\
-This binary is not optional so it must be included in the achieve, please contact with\
+This binary is not optional so it must be included in the archive, please contact with\
 upstream to fix this issue."
                         );
                         // This bin is not optional, error
