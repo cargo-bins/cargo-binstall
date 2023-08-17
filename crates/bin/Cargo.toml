@@ -28,7 +28,6 @@ clap = { version = "4.3.0", features = ["derive", "env"] }
 compact_str = "0.7.0"
 dirs = "5.0.1"
 file-format = { version = "0.18.0", default-features = false }
-fs-lock = { version = "0.1.0", path = "../fs-lock" }
 gh-token = "0.1.2"
 home = "0.5.5"
 log = { version = "0.4.18", features = ["std"] }
