@@ -13,6 +13,8 @@ mod helpers;
 pub mod binstall_crates_v1;
 pub mod cargo_config;
 pub mod cargo_crates_v1;
+/// Contains both [`binstall_crates_v1`] and [`cargo_crates_v1`].
+pub mod crates_manifests;
 
 pub use binstalk_types::{cargo_toml_binstall, crate_info};
 pub use compact_str::CompactString;

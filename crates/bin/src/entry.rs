@@ -21,8 +21,9 @@ use binstalk::{
         CargoTomlFetchOverride, Options, Resolver,
     },
 };
-use binstalk_manifests::cargo_config::Config;
-use binstalk_manifests::cargo_toml_binstall::PkgOverride;
+use binstalk_manifests::{
+    cargo_config::Config, cargo_toml_binstall::PkgOverride, crates_manifests::Manifests,
+};
 use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
@@ -33,7 +34,6 @@ use tracing::{debug, error, info, warn};
 use crate::{
     args::{Args, Strategy},
     install_path,
-    manifests::Manifests,
     ui::confirm,
 };
 

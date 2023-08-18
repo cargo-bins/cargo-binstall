@@ -530,7 +530,6 @@ dependencies = [
  "dirs",
  "embed-resource",
  "file-format",
- "fs-lock",
  "gh-token",
  "home",
  "log",
