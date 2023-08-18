@@ -12,7 +12,4 @@ pub mod gh_api_client;
 
 pub mod remote;
 
-#[cfg(feature = "git")]
-pub mod git;
-
 mod utils;

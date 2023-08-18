@@ -1,0 +1,29 @@
+[package]
+name = "simple-git"
+version = "0.0.0"
+edition = "2021"
+
+description = "The simple git interface for gix suitable for async context (with tokio)"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/simple-git"
+rust-version = "1.65.0"
+authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+compact_str = "0.7.0"
+derive_destructure2 = "0.1"
+gix = { version = "0.51.0", features = ["blocking-http-transport-reqwest"] }
+thiserror = "1.0.40"
+tokio = { version = "1.30.0", features = ["rt", "time"], default-features = false }
+tracing = "0.1.37"
+
+[features]
+rustls = [
+    "gix/blocking-http-transport-reqwest-rust-tls",
+]
+native-tls = [
+    "gix/blocking-http-transport-reqwest-native-tls",
+]
+
+git-max-perf = ["gix/max-performance"]

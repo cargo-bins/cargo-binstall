@@ -26,6 +26,7 @@ leon = { version = "2.0.1", path = "../leon" }
 maybe-owned = "0.3.4"
 miette = "5.9.0"
 semver = { version = "1.0.17", features = ["serde"] }
+simple-git = { version = "0.0.0", path = "../simple-git", optional = true }
 strum = "0.25.0"
 target-lexicon = { version = "0.12.11", features = ["std"] }
 tempfile = "3.5.0"
@@ -37,8 +38,8 @@ url = { version = "2.3.1", features = ["serde"] }
 [features]
 default = ["static", "rustls", "git"]
 
-git = ["binstalk-registry/git"]
-git-max-perf = ["git", "binstalk-downloader/git-max-perf"]
+git = ["binstalk-registry/git", "simple-git"]
+git-max-perf = ["git", "simple-git/git-max-perf"]
 
 static = ["binstalk-downloader/static"]
 pkg-config = ["binstalk-downloader/pkg-config"]

@@ -1,15 +1,13 @@
 use std::{io, path::PathBuf, sync::Arc};
 
-use binstalk_downloader::{
-    git::{GitCancellationToken, GitUrl, Repository},
-    remote::Client,
-};
+use binstalk_downloader::remote::Client;
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
 use serde_json::{from_slice as json_from_slice, Deserializer as JsonDeserializer};
+use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use url::Url;
