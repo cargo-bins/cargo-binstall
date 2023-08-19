@@ -19,7 +19,7 @@ use tokio::task;
 use url::{ParseError as UrlParseError, Url};
 
 #[cfg(feature = "git")]
-pub use binstalk_downloader::git::{GitError, GitUrl, GitUrlParseError};
+pub use simple_git::{GitError, GitUrl, GitUrlParseError};
 
 mod vfs;
 

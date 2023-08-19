@@ -23,6 +23,7 @@ on:
           - normalize-path
           - leon
           - leon-macros
+          - simple-git
       version:
         description: Version to release
         required: true

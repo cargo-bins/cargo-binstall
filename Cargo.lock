@@ -260,6 +260,7 @@ dependencies = [
  "maybe-owned",
  "miette",
  "semver",
+ "simple-git",
  "strum",
  "target-lexicon",
  "tempfile",
@@ -295,11 +296,9 @@ dependencies = [
  "bytes",
  "bzip2",
  "compact_str",
- "derive_destructure2",
  "flate2",
  "futures-util",
  "generic-array",
- "gix",
  "httpdate",
  "percent-encoding",
  "quinn 0.10.2",
@@ -379,6 +378,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "simple-git",
  "tempfile",
  "thiserror",
  "tokio",
@@ -3390,6 +3390,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8229b473baa5980ac72ef434c4415e70c4b5e71b423043adb4ba059f89c99a1"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "simple-git"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "derive_destructure2",
+ "gix",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
