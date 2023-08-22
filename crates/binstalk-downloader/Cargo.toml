@@ -21,11 +21,8 @@ flate2 = { version = "1.0.26", default-features = false }
 futures-util = "0.3.28"
 generic-array = "0.14.7"
 httpdate = "1.0.2"
-reqwest = { version = "0.11.18", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
+reqwest = { version = "0.11.19", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
 percent-encoding = "2.2.0"
-# Pull in due to https://github.com/seanmonstar/reqwest/pull/1846 , please
-# remove this once new reqwest release is out.
-quinn = { version = "0.10", default-features = false, features = ["runtime-tokio"], optional = true }
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 serde-tuple-vec-map = "1.0.1"
 serde_json = { version = "1.0.96", optional = true }
@@ -86,7 +83,7 @@ trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]
 
 # Experimental HTTP/3 client, this would require `--cfg reqwest_unstable`
 # to be passed to `rustc`.
-http3 = ["reqwest/http3", "dep:quinn"]
+http3 = ["reqwest/http3"]
 
 zstd-thin = ["zstd/thin"]
 
