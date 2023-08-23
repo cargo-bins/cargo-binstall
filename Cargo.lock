@@ -298,7 +298,6 @@ dependencies = [
  "compact_str",
  "flate2",
  "futures-util",
- "generic-array",
  "httpdate",
  "percent-encoding",
  "reqwest",
