@@ -33,8 +33,10 @@ mod git_registry;
 #[cfg(feature = "git")]
 pub use git_registry::GitRegistry;
 
+#[cfg(any(feature = "crates_io_api", test))]
 mod crates_io_registry;
-pub use crates_io_registry::fetch_crate_cratesio;
+#[cfg(any(feature = "crates_io_api", test))]
+pub use crates_io_registry::fetch_crate_cratesio_api;
 
 mod sparse_registry;
 pub use sparse_registry::SparseRegistry;
@@ -100,16 +102,19 @@ impl From<CargoTomlError> for RegistryError {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum Registry {
-    #[default]
-    CratesIo,
-
     Sparse(Arc<SparseRegistry>),
 
     #[cfg(feature = "git")]
     Git(GitRegistry),
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self::crates_io_sparse_registry()
+    }
 }
 
 #[derive(Debug, ThisError)]
@@ -138,6 +143,13 @@ enum InvalidRegistryErrorInner {
 }
 
 impl Registry {
+    /// Return a crates.io sparse registry
+    pub fn crates_io_sparse_registry() -> Self {
+        Self::Sparse(Arc::new(SparseRegistry::new(
+            Url::parse("https://index.crates.io/").unwrap(),
+        )))
+    }
+
     fn from_str_inner(s: &str) -> Result<Self, InvalidRegistryErrorInner> {
         if let Some(s) = s.strip_prefix("sparse+") {
             let url = Url::parse(s)?;
@@ -170,7 +182,6 @@ impl Registry {
         version_req: &VersionReq,
     ) -> Result<Manifest<Meta>, RegistryError> {
         match self {
-            Self::CratesIo => fetch_crate_cratesio(client, crate_name, version_req).await,
             Self::Sparse(sparse_registry) => {
                 sparse_registry
                     .fetch_crate_matched(client, crate_name, version_req)
@@ -222,7 +233,7 @@ mod test {
     async fn test_crates_io_sparse_registry() {
         let client = create_client().await;
 
-        let sparse_registry: Registry = "sparse+https://index.crates.io/".parse().unwrap();
+        let sparse_registry: Registry = Registry::crates_io_sparse_registry();
         assert!(
             matches!(sparse_registry, Registry::Sparse(_)),
             "{:?}",
@@ -236,8 +247,7 @@ mod test {
             .await
             .unwrap();
 
-        let manifest_from_cratesio_api = Registry::default()
-            .fetch_crate_matched(client, crate_name, version_req)
+        let manifest_from_cratesio_api = fetch_crate_cratesio_api(client, crate_name, version_req)
             .await
             .unwrap();
 
