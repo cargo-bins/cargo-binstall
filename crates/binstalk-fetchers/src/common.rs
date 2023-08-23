@@ -7,7 +7,7 @@ use binstalk_downloader::gh_api_client::{GhReleaseArtifact, HasReleaseArtifact};
 pub(super) use binstalk_downloader::{
     download::{Download, ExtractedFiles},
     gh_api_client::GhApiClient,
-    remote::{Client, Method, Url},
+    remote::{Client, Url},
 };
 pub(super) use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 pub(super) use compact_str::CompactString;

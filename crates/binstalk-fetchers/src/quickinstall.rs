@@ -1,5 +1,6 @@
 use std::{path::Path, sync::Arc};
 
+use binstalk_downloader::remote::Method;
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 use tokio::sync::OnceCell;
 use url::Url;

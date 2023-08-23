@@ -41,3 +41,4 @@ git = ["simple-git"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
+all-features = true
