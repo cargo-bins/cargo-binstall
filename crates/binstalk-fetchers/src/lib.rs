@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
 use std::{path::Path, sync::Arc};
 
 use binstalk_downloader::{
@@ -10,7 +12,9 @@ pub use url::ParseError as UrlParseError;
 mod gh_crate_meta;
 pub use gh_crate_meta::*;
 
+#[cfg(feature = "quickinstall")]
 mod quickinstall;
+#[cfg(feature = "quickinstall")]
 pub use quickinstall::*;
 
 mod common;
