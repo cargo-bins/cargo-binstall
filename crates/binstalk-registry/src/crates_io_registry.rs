@@ -105,7 +105,7 @@ async fn fetch_crate_cratesio_version_matched(
 
 /// Find the crate by name, get its latest stable version matches `version_req`,
 /// retrieve its Cargo.toml and infer all its bins.
-pub async fn fetch_crate_cratesio(
+pub async fn fetch_crate_cratesio_api(
     client: Client,
     name: &str,
     version_req: &VersionReq,

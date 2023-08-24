@@ -35,9 +35,12 @@ url = "2.3.1"
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 toml_edit = { version = "0.19.11", features = ["serde"] }
+binstalk-downloader = { version = "0.7.0", path = "../binstalk-downloader", default-features = false, features = ["rustls"] }
 
 [features]
 git = ["simple-git"]
+
+crates_io_api = []
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
