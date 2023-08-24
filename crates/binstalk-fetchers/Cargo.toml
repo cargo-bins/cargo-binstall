@@ -1,6 +1,6 @@
 [package]
 name = "binstalk-fetchers"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 
 description = "The binstall fetchers"
