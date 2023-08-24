@@ -12,7 +12,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 async-trait = "0.1.68"
-binstalk-downloader = { version = "0.7.0", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
+binstalk-downloader = { version = "0.7.1", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
 binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
 compact_str = { version = "0.7.0" }
 either = "1.8.1"
@@ -28,7 +28,7 @@ tracing = "0.1.37"
 url = "2.3.1"
 
 [dev-dependencies]
-binstalk-downloader = { version = "0.7.0", path = "../binstalk-downloader" }
+binstalk-downloader = { version = "0.7.1", path = "../binstalk-downloader" }
 
 [features]
 quickinstall = []
