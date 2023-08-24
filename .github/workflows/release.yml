@@ -26,6 +26,8 @@ jobs:
     if: needs.info.outputs.is-release == 'true'
     needs: info
     uses: ./.github/workflows/ci.yml
+    with:
+      additional_key: ${{ github.run_id }}
 
   tag:
     if: needs.info.outputs.is-release == 'true'

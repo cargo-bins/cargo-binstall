@@ -3,6 +3,11 @@ name: CI
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      additional_key:
+        required: true
+        type: string
+        default: ""
   merge_group:
   pull_request:
     types:
@@ -17,7 +22,7 @@ on:
       - SUPPORT.md
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}-${{ inputs.additional_key }}
   cancel-in-progress: true
 
 env:
