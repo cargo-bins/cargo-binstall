@@ -22,18 +22,9 @@ jobs:
         event-data: ${{ toJSON(github.event) }}
         extract-notes-under: '### Release notes'
 
-  test:
-    if: needs.info.outputs.is-release == 'true'
-    needs: info
-    uses: ./.github/workflows/ci.yml
-    with:
-      additional_key: ${{ github.run_id }}
-
   tag:
     if: needs.info.outputs.is-release == 'true'
-    needs:
-    - info
-    - test
+    needs: info
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
