@@ -71,13 +71,16 @@ async fn resolve_inner(
 
     let version_req_str = version_req.to_compact_string();
 
-    let Some(package_info) = PackageInfo::resolve(&opts,
+    let Some(package_info) = PackageInfo::resolve(
+        &opts,
         crate_name.name,
         curr_version,
         &version_req,
-        opts.client.clone()).await?
+        opts.client.clone(),
+    )
+    .await?
     else {
-        return Ok(Resolution::AlreadyUpToDate)
+        return Ok(Resolution::AlreadyUpToDate);
     };
 
     let desired_targets = opts

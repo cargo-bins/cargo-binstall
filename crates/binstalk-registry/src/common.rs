@@ -163,7 +163,9 @@ impl MatchedVersion {
             let num = entry.vers;
 
             // Parse out version
-            let Ok(ver) = Version::parse(&num) else { continue };
+            let Ok(ver) = Version::parse(&num) else {
+                continue;
+            };
 
             // Filter by version match
             if !version_req.matches(&ver) {

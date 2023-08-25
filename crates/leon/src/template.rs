@@ -196,7 +196,7 @@ impl<'s, 'rhs: 's> ops::AddAssign<Template<'rhs>> for Template<'s> {
     fn add_assign(&mut self, rhs: Template<'rhs>) {
         match rhs.items {
             Cow::Borrowed(items) => self.items.to_mut().extend(items.iter().cloned()),
-            Cow::Owned(items) => self.items.to_mut().extend(items.into_iter()),
+            Cow::Owned(items) => self.items.to_mut().extend(items),
         }
 
         if let Some(default) = rhs.default {
