@@ -92,5 +92,5 @@ gh-api-client = ["json"]
 json = ["serde", "serde_json"]
 
 [package.metadata.docs.rs]
-features = ["gh-api-client", "git"]
+features = ["gh-api-client"]
 rustdoc-args = ["--cfg", "docsrs"]
