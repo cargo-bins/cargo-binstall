@@ -14,17 +14,14 @@ fn get_inner() -> io::Result<CompactString> {
     if !status.success() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("Failed to execute `gh auth token`, exit status `{status}`"),
+            format!("process exited with `{status}`"),
         ));
     }
 
     // Use String here instead of CompactString here since
     // `CompactString::from_utf8` allocates if it's longer than 24B.
     let s = String::from_utf8(stdout).map_err(|_err| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid output from `gh auth token`: expected ASCII",
-        )
+        io::Error::new(io::ErrorKind::InvalidData, "Invalid output, expected utf8")
     })?;
 
     Ok(s.trim().into())
@@ -34,7 +31,7 @@ pub(super) fn get() -> Option<CompactString> {
     match get_inner() {
         Ok(token) => Some(token),
         Err(err) => {
-            warn!(?err);
+            warn!(?err, "Failed to retrieve token from `gh auth token`");
             None
         }
     }
