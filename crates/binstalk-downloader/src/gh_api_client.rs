@@ -134,7 +134,7 @@ pub struct GhApiClient(Arc<Inner>);
 
 fn is_ascii_alphanumeric(s: Option<&str>) -> bool {
     if let Some(s) = s {
-        s.as_bytes().all(|byte| byte.is_ascii_alphanumeric())
+        s.as_bytes().iter().all(|byte| byte.is_ascii_alphanumeric())
     } else {
         true
     }
@@ -146,7 +146,7 @@ fn is_valid_gh_token(token: &str) -> bool {
             && is_ascii_alphanumeric(token.get(2..3))
             && token.get(3..4) == Some("_")
             && is_ascii_alphanumeric(token.get(4..)))
-            || (token.starts_with("github_") && is_valid_gh_(token.get(7..))))
+            || (token.starts_with("github_") && is_ascii_alphanumeric(token.get(7..))))
 }
 
 impl GhApiClient {
