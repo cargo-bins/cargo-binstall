@@ -132,21 +132,19 @@ struct Inner {
 #[derive(Clone, Debug)]
 pub struct GhApiClient(Arc<Inner>);
 
-fn is_ascii_alphanumeric(s: Option<&str>) -> bool {
-    if let Some(s) = s {
-        s.as_bytes().iter().all(|byte| byte.is_ascii_alphanumeric())
-    } else {
-        true
-    }
+fn is_ascii_alphanumeric(s: &[u8]) -> bool {
+    s.iter().all(|byte| byte.is_ascii_alphanumeric())
 }
 
 fn is_valid_gh_token(token: &str) -> bool {
+    let token = token.as_bytes();
+
     token.len() >= 40
-        && ((token.get(0..2) == Some("gh")
-            && is_ascii_alphanumeric(token.get(2..3))
-            && token.get(3..4) == Some("_")
-            && is_ascii_alphanumeric(token.get(4..)))
-            || (token.starts_with("github_") && is_ascii_alphanumeric(token.get(7..))))
+        && ((&token[0..2] == b"gh"
+            && token[2].is_ascii_alphanumeric()
+            && token[3] == b'_'
+            && is_ascii_alphanumeric(&token[4..]))
+            || (token.starts_with(b"github_") && is_ascii_alphanumeric(&token[7..])))
 }
 
 impl GhApiClient {
