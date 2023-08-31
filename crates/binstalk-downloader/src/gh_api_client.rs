@@ -132,19 +132,31 @@ struct Inner {
 #[derive(Clone, Debug)]
 pub struct GhApiClient(Arc<Inner>);
 
-fn gh_prefixed(token: &str) -> bool {
-    matches!((token.get(0..2), token.get(3..4)), (Some("gh"), Some("_")))
-        || token.starts_with("github_")
+fn is_ascii_alphanumeric(s: Option<&str>) -> bool {
+    if let Some(s) = s {
+        s.as_bytes().all(|byte| byte.is_ascii_alphanumeric())
+    } else {
+        true
+    }
+}
+
+fn is_valid_gh_token(token: &str) -> bool {
+    token.len() >= 40
+        && ((token.get(0..2) == Some("gh")
+            && is_ascii_alphanumeric(token.get(2..3))
+            && token.get(3..4) == Some("_")
+            && is_ascii_alphanumeric(token.get(4..)))
+            || (token.starts_with("github_") && is_valid_gh_(token.get(7..))))
 }
 
 impl GhApiClient {
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
         let auth_token = auth_token.and_then(|auth_token| {
-            if gh_prefixed(&auth_token) {
+            if is_valid_gh_token(&auth_token) {
                 debug!("Using gh api token");
                 Some(auth_token)
             } else {
-                warn!("Invalid auth_token, expected 'gh*_' or `github_*`, fallback to unauthorized mode");
+                warn!("Invalid auth_token, expected 'gh*_' or `github_*` with [A-Za-z0-9], fallback to unauthorized mode");
                 None
             }
         });
