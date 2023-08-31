@@ -21,7 +21,10 @@ fn get_inner() -> io::Result<CompactString> {
     // Use String here instead of CompactString here since
     // `CompactString::from_utf8` allocates if it's longer than 24B.
     let s = String::from_utf8(stdout).map_err(|_err| {
-        io::Error::new(io::ErrorKind::InvalidData, "Invalid token: expected ASCII")
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Invalid output from `gh auth token`: expected ASCII",
+        )
     })?;
 
     Ok(s.trim().into())
