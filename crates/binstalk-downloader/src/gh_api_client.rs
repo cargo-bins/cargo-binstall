@@ -494,7 +494,7 @@ mod test {
             "cargo-audit-x86_64-apple-darwin-v0.17.6.tgz",
             "cargo-audit-x86_64-pc-windows-msvc-v0.17.6.zip",
             "cargo-audit-x86_64-unknown-linux-gnu-v0.17.6.tgz",
-            "cargo-audit-x86_64-unknown-linux-gnu-v0.17.6.tgz",
+            "cargo-audit-x86_64-unknown-linux-musl-v0.17.6.tgz",
         ];
 
         #[test]
