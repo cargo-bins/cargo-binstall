@@ -33,7 +33,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     args::{Args, Strategy},
-    install_path,
+    gh_token, git_credentials, install_path,
     ui::confirm,
 };
 
@@ -107,7 +107,16 @@ pub fn install_crates(
     )
     .map_err(BinstallError::from)?;
 
-    let gh_api_client = GhApiClient::new(client.clone(), args.github_token);
+    let gh_api_client = GhApiClient::new(
+        client.clone(),
+        args.github_token.or_else(|| {
+            if args.no_discover_github_token {
+                None
+            } else {
+                git_credentials::try_from_home().or_else(gh_token::get)
+            }
+        }),
+    );
 
     // Create binstall_opts
     let binstall_opts = Arc::new(Options {
