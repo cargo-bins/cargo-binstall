@@ -14,7 +14,7 @@ use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::Error as JsonError;
 use sha2::{Digest, Sha256};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{visitor::ManifestVisitor, RegistryError};
 
@@ -37,6 +37,7 @@ impl DataVerifier for Sha256Digest {
     }
 }
 
+#[instrument]
 pub(super) async fn parse_manifest(
     client: Client,
     crate_name: &str,

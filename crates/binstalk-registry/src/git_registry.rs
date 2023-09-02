@@ -10,6 +10,7 @@ use serde_json::{from_slice as json_from_slice, Deserializer as JsonDeserializer
 use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
+use tracing::instrument;
 use url::Url;
 
 use crate::{
@@ -96,6 +97,7 @@ impl GitRegistry {
         )
     }
 
+    #[instrument]
     pub async fn fetch_crate_matched(
         &self,
         client: Client,
