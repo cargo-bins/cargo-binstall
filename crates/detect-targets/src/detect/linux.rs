@@ -1,5 +1,6 @@
 use std::{
     fs,
+    future::Future,
     path::Path,
     process::{Output, Stdio},
 };
@@ -34,25 +35,17 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
         //
         // As such, we need to launch the test ourselves.
         Libc::Gnu => {
-            let has_glibc = task::spawn({
-                let glibc_path = format!("/lib/ld-linux-{cpu_arch}.so.1");
-                async move { is_gnu_ld(&glibc_path).await }
-            });
+            let has_glibc = spawn_has_glibc_task(cpu_arch);
 
-            let distro_if_has_non_std_glibc = task::spawn(async {
-                if is_gnu_ld("/usr/bin/ldd").await {
-                    get_distro_name().await
-                } else {
-                    None
-                }
-            });
+            let distro_if_has_non_std_glibc = if is_gnu_ld("/usr/bin/ldd").await {
+                get_distro_name().await
+            } else {
+                None
+            };
 
             [
-                has_glibc.await.unwrap_or(false).then(|| target.to_string()),
+                has_glibc.await.then(|| target.to_string()),
                 distro_if_has_non_std_glibc
-                    .await
-                    .ok()
-                    .flatten()
                     .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-gnu{abi}")),
                 Some(musl_fallback_target()),
             ]
@@ -61,21 +54,44 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
             [Some(target.to_string()), Some(musl_fallback_target()), None]
         }
 
-        Libc::Musl => [
-            // Fallback for Linux flavors like Alpine, which has a musl dyn libc
-            if get_ld_flavor(&format!("/lib/ld-musl-{cpu_arch}.so.1")).await == Some(Libc::Musl) {
-                get_distro_name()
-                    .await
-                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-musl{abi}"))
+        Libc::Musl => {
+            let has_glibc = spawn_has_glibc_task(cpu_arch);
+
+            let distro_if_has_musl_dynlib = if get_ld_flavor(&format!(
+                "/lib/ld-musl-{cpu_arch}.so.1"
+            ))
+            .await
+                == Some(Libc::Musl)
+            {
+                get_distro_name().await
             } else {
                 None
-            },
-            Some(musl_fallback_target()),
-            None,
-        ],
+            };
+
+            [
+                // On Alpine, you can use `apk add gcompat` to install glibc
+                // and run glibc programs.
+                has_glibc
+                    .await
+                    .then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
+                // Fallback for Linux flavors like Alpine, which has a musl dyn libc
+                distro_if_has_musl_dynlib
+                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-musl{abi}")),
+                Some(musl_fallback_target()),
+            ]
+        }
     }
     .into_iter()
     .flatten()
+}
+
+fn spawn_has_glibc_task(cpu_arch: &str) -> impl Future<Output = bool> + Send + Sync + 'static {
+    let glibc_path = format!("/lib/ld-linux-{cpu_arch}.so.1");
+    async move {
+        task::spawn(async move { is_gnu_ld(&glibc_path).await })
+            .await
+            .unwrap_or(false)
+    }
 }
 
 async fn is_gnu_ld(cmd: &str) -> bool {
