@@ -32,43 +32,25 @@ cfg_if! {
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
 pub async fn detect_targets() -> Vec<String> {
-    #[cfg(target_os = "linux")]
-    {
-        if let Some(target) = get_target_from_rustc().await {
-            let mut targets = vec![target];
+    let target = get_target_from_rustc().await.unwrap_or_else(|| {
+        guess_host_triple::guess_host_triple()
+            .unwrap_or(crate::TARGET)
+            .to_string()
+    });
 
-            if targets[0].contains("gnu") {
-                targets.push(targets[0].replace("gnu", "musl"));
-            } else if targets[0].contains("android") {
-                targets.push(targets[0].replace("android", "musl"));
-            }
+    let mut targets = vec![target];
 
-            targets
-        } else {
-            linux::detect_targets_linux().await
+    cfg_if! {
+        if #[cfg(target_os = "macos")] {
+            targets.extend(macos::detect_alternative_targets(&targets[0]).await);
+        } else if #[cfg(target_os = "windows")] {
+            targets.extend(windows::detect_alternative_targets(&targets[0]));
+        } else if #[cfg(target_os = "linux")] {
+            targets.extend(linux::detect_alternative_targets(&targets[0]).await);
         }
     }
 
-    #[cfg(not(target_os = "linux"))]
-    {
-        let target = get_target_from_rustc().await.unwrap_or_else(|| {
-            guess_host_triple::guess_host_triple()
-                .unwrap_or(crate::TARGET)
-                .to_string()
-        });
-
-        let mut targets = vec![target];
-
-        cfg_if! {
-            if #[cfg(target_os = "macos")] {
-                targets.extend(macos::detect_alternative_targets(&targets[0]).await);
-            } else if #[cfg(target_os = "windows")] {
-                targets.extend(windows::detect_alternative_targets(&targets[0]));
-            }
-        }
-
-        targets
-    }
+    targets
 }
 
 /// Figure out what the host target is using `rustc`.
