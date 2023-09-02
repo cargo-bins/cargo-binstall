@@ -13,7 +13,7 @@ use reqwest::{
     Request,
 };
 use thiserror::Error as ThisError;
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
@@ -155,6 +155,7 @@ impl Client {
     ///
     /// Return `Ok(ControlFlow::Break(response))` when succeeds and no need
     /// to retry.
+    #[instrument]
     async fn do_send_request(
         &self,
         request: Request,
@@ -177,7 +178,7 @@ impl Client {
         let status = response.status();
 
         let add_delay_and_continue = |response: reqwest::Response, duration| {
-            info!("Receiver status code {status}, will wait for {duration:#?} and retry");
+            info!("Received status code {status}, will wait for {duration:#?} and retry");
 
             self.0
                 .service
@@ -237,6 +238,8 @@ impl Client {
         request: Request,
         error_for_status: bool,
     ) -> Result<reqwest::Response, Error> {
+        debug!("Downloading from: '{}'", request.url());
+
         self.send_request_inner(&request)
             .await
             .and_then(|response| {
@@ -313,8 +316,6 @@ impl Client {
         &self,
         url: Url,
     ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
-        debug!("Downloading from: '{url}'");
-
         Ok(self.get(url).send(true).await?.bytes_stream())
     }
 

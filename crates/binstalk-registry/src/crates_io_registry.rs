@@ -4,7 +4,7 @@ use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{parse_manifest, MatchedVersion, RegistryError};
 
@@ -105,6 +105,7 @@ async fn fetch_crate_cratesio_version_matched(
 
 /// Find the crate by name, get its latest stable version matches `version_req`,
 /// retrieve its Cargo.toml and infer all its bins.
+#[instrument]
 pub async fn fetch_crate_cratesio_api(
     client: Client,
     name: &str,

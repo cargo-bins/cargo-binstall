@@ -5,6 +5,7 @@ use compact_str::CompactString;
 use semver::VersionReq;
 use serde_json::Deserializer as JsonDeserializer;
 use tokio::sync::OnceCell;
+use tracing::instrument;
 use url::Url;
 
 use crate::{
@@ -77,6 +78,7 @@ impl SparseRegistry {
         )
     }
 
+    #[instrument]
     pub async fn fetch_crate_matched(
         &self,
         client: Client,
