@@ -318,14 +318,15 @@ pub struct Args {
     #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
     pub log_level: Option<LevelFilter>,
 
-    /// Used with `--version` to print out verbose information.
-    #[clap(help_heading = "Meta", short, long, default_value_t = false)]
+    /// Implies `--log-level debug` and it can also be used with `--version`
+    /// to print out verbose information,
+    #[clap(help_heading = "Meta", short, long)]
     pub verbose: bool,
 
     /// Equivalent to setting `log_level` to `off`.
     ///
     /// This would override the `log_level`.
-    #[clap(help_heading = "Meta", short, long)]
+    #[clap(help_heading = "Meta", short, long, conflicts_with("verbose"))]
     pub(crate) quiet: bool,
 }
 
@@ -421,15 +422,17 @@ pub fn parse() -> Args {
     // Load options
     let mut opts = Args::parse_from(args);
 
-    if let (true, Some(log)) = (
-        opts.log_level.is_none(),
-        env::var("BINSTALL_LOG_LEVEL")
+    if opts.log_level.is_none() {
+        if let Some(log) = env::var("BINSTALL_LOG_LEVEL")
             .ok()
-            .and_then(|s| s.parse().ok()),
-    ) {
-        opts.log_level = Some(log);
-    } else if opts.quiet {
-        opts.log_level = Some(LevelFilter::Off);
+            .and_then(|s| s.parse().ok())
+        {
+            opts.log_level = Some(log);
+        } else if opts.quiet {
+            opts.log_level = Some(LevelFilter::Off);
+        } else if opts.verbose {
+            opts.log_level = Some(LevelFilter::Debug);
+        }
     }
 
     // Ensure no conflict

@@ -93,15 +93,15 @@ impl ResolutionFetch {
         let bin_files = &self.bin_files;
         let name = &self.name;
         let new_version = &self.new_version;
+        let target = fetcher.target();
 
         debug!(
-            "Found a binary install source: {} ({})",
+            "Found a binary install source: {} ({target})",
             fetcher.source_name(),
-            fetcher.target()
         );
 
         warn!(
-            "The package {name} v{new_version} will be downloaded from {}{}",
+            "The package {name} v{new_version} ({target}) has been downloaded from {}{}",
             if fetcher.is_third_party() {
                 "third-party source "
             } else {
