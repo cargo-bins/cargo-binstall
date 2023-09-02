@@ -1,6 +1,5 @@
 use std::{
     fs,
-    future::Future,
     path::Path,
     process::{Output, Stdio},
 };
@@ -11,11 +10,6 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
     let (prefix, postfix) = target
         .rsplit_once('-')
         .expect("unwrap: target always has a -");
-
-    let cpu_arch = target
-        .split_once('-')
-        .expect("unwrap: target always has a - for cpu_arch")
-        .0;
 
     let (abi, libc) = if let Some(abi) = postfix.strip_prefix("musl") {
         (abi, Libc::Musl)
@@ -33,29 +27,28 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
         // guess_host_triple cannot detect whether the system is using glibc,
         // musl libc or other libc.
         //
+        // On Alpine, you can use `apk add gcompat` to install glibc
+        // and run glibc programs.
+        //
         // As such, we need to launch the test ourselves.
-        Libc::Gnu => {
-            let has_glibc = spawn_has_glibc_task(cpu_arch);
+        Libc::Gnu | Libc::Musl => {
+            let cpu_arch = target
+                .split_once('-')
+                .expect("unwrap: target always has a - for cpu_arch")
+                .0;
 
-            let distro_if_has_non_std_glibc = if is_gnu_ld("/usr/bin/ldd").await {
-                get_distro_name().await
-            } else {
-                None
-            };
+            let has_glibc = task::spawn({
+                let glibc_path = format!("/lib/ld-linux-{cpu_arch}.so.1");
+                async move { is_gnu_ld(&glibc_path).await }
+            });
 
-            [
-                has_glibc.await.then(|| target.to_string()),
-                distro_if_has_non_std_glibc
-                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-gnu{abi}")),
-                Some(musl_fallback_target()),
-            ]
-        }
-        Libc::Android | Libc::Unknown => {
-            [Some(target.to_string()), Some(musl_fallback_target()), None]
-        }
-
-        Libc::Musl => {
-            let has_glibc = spawn_has_glibc_task(cpu_arch);
+            let distro_if_has_non_std_glibc = task::spawn(async {
+                if is_gnu_ld("/usr/bin/ldd").await {
+                    get_distro_name().await
+                } else {
+                    None
+                }
+            });
 
             let distro_if_has_musl_dynlib = if get_ld_flavor(&format!(
                 "/lib/ld-musl-{cpu_arch}.so.1"
@@ -69,29 +62,30 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
             };
 
             [
-                // On Alpine, you can use `apk add gcompat` to install glibc
-                // and run glibc programs.
                 has_glibc
                     .await
+                    .unwrap_or(false)
                     .then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
+                distro_if_has_non_std_glibc
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-gnu{abi}")),
                 // Fallback for Linux flavors like Alpine, which has a musl dyn libc
                 distro_if_has_musl_dynlib
                     .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-musl{abi}")),
                 Some(musl_fallback_target()),
             ]
         }
+        Libc::Android | Libc::Unknown => [
+            Some(target.to_string()),
+            Some(musl_fallback_target()),
+            None,
+            None,
+        ],
     }
     .into_iter()
     .flatten()
-}
-
-fn spawn_has_glibc_task(cpu_arch: &str) -> impl Future<Output = bool> + Send + Sync + 'static {
-    let glibc_path = format!("/lib/ld-linux-{cpu_arch}.so.1");
-    async move {
-        task::spawn(async move { is_gnu_ld(&glibc_path).await })
-            .await
-            .unwrap_or(false)
-    }
 }
 
 async fn is_gnu_ld(cmd: &str) -> bool {
