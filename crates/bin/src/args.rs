@@ -422,15 +422,17 @@ pub fn parse() -> Args {
     // Load options
     let mut opts = Args::parse_from(args);
 
-    if let (true, Some(log)) = (
-        opts.log_level.is_none(),
-        env::var("BINSTALL_LOG_LEVEL")
+    if opts.log_level.is_none() {
+        if let Some(log) = env::var("BINSTALL_LOG_LEVEL")
             .ok()
-            .and_then(|s| s.parse().ok()),
-    ) {
-        opts.log_level = Some(log);
-    } else if opts.quiet {
-        opts.log_level = Some(LevelFilter::Off);
+            .and_then(|s| s.parse().ok())
+        {
+            opts.log_level = Some(log);
+        } else if opts.quiet {
+            opts.log_level = Some(LevelFilter::Off);
+        } else if opts.verbose {
+            opts.log_level = Some(LevelFilter::Debug);
+        }
     }
 
     // Ensure no conflict
