@@ -105,8 +105,14 @@ async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
         .await
         .ok()?;
 
+    const ALPINE_GCOMPAT: &str = r#"This is the gcompat ELF interpreter stub.
+You are not meant to run this directly.
+"#;
+
     if status.success() {
         Libc::parse(&stdout).or_else(|| Libc::parse(&stderr))
+    } else if String::from_utf8(stdout).ok().as_deref() == Some(ALPINE_GCOMPAT) {
+        Some(Libc::Gnu)
     } else {
         None
     }
