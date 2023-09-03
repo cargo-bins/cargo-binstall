@@ -131,7 +131,7 @@ jobs:
       CARGO_PROFILE_RELEASE_LTO: no
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 4
 
-  detect-targets-test:
+  detect-targets-alpine-test:
     runs-on: ubuntu-latest
     env:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
@@ -139,8 +139,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - uses: ./.github/actions/just-setup
-      with:
-        tools: cargo-hack
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
@@ -150,11 +148,28 @@ jobs:
         pip3 install -r zigbuild-requirements.txt
         cargo zigbuild --bin detect-targets --target $TARGET
     - name: Run test in alpine
+      shell: bash -exuo pipefail
       run: |
         docker run --rm \
           --mount src="$PWD/target/$TARGET/debug/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
           --mount src="$PWD/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
-          alpine test.sh $TARGET
+          alpine test.sh "$TARGET"
+
+  detect-targets-ubuntu-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      env:
+        # just-setup use binstall to install sccache,
+        # which works better when we provide it with GITHUB_TOKEN.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build detect-targets
+      run: cargo build --bin detect-targets
+    - name: Run test in ubuntu
+      shell: bash -exuo pipefail
+      run: |
+        [ "$(detect-targets)" = "$(printf '%s\n%s\n%s' x86_64-ubuntu-linux-gnu x86_64-unknown-linux-gnu aarch64-unknown-linux-musl)" ]
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
@@ -164,6 +179,8 @@ jobs:
     - cross-check
     - lint
     - release-builds
+    - detect-targets-alpine-test
+    - detect-targets-ubuntu-test
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
