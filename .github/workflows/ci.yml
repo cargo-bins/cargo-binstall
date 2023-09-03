@@ -131,6 +131,31 @@ jobs:
       CARGO_PROFILE_RELEASE_LTO: no
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 4
 
+  detect-targets-test:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
+      TARGET: x86_64-unknown-linux-musl
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ./.github/actions/just-setup
+      with:
+        tools: cargo-hack
+      env:
+        # just-setup use binstall to install sccache,
+        # which works better when we provide it with GITHUB_TOKEN.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build detect-targets
+      run: |
+        pip3 install -r zigbuild-requirements.txt
+        cargo zigbuild --bin detect-targets --target $TARGET
+    - name: Run test in alpine
+      run: |
+        docker run --rm \
+          --mount src="$PWD/target/$TARGET/debug/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+          --mount src="$PWD/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
+          alpine test.sh $TARGET
+
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Tests pass
