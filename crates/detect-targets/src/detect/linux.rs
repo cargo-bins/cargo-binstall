@@ -6,7 +6,7 @@ use std::{
 
 use tokio::{process::Command, task};
 
-pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
+pub(super) async fn detect_targets(target: String) -> Vec<String> {
     let (prefix, postfix) = target
         .rsplit_once('-')
         .expect("unwrap: target always has a -");
@@ -78,7 +78,7 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
             ]
         }
         Libc::Android | Libc::Unknown => [
-            Some(target.to_string()),
+            Some(target.clone()),
             Some(musl_fallback_target()),
             None,
             None,
@@ -86,6 +86,7 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
     }
     .into_iter()
     .flatten()
+    .collect()
 }
 
 async fn is_gnu_ld(cmd: &str) -> bool {
@@ -93,15 +94,22 @@ async fn is_gnu_ld(cmd: &str) -> bool {
 }
 
 async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
-    Command::new(cmd)
+    let Output {
+        status,
+        stdout,
+        stderr,
+    } = Command::new(cmd)
         .arg("--version")
         .stdin(Stdio::null())
         .output()
         .await
-        .ok()
-        .and_then(|Output { stdout, stderr, .. }| {
-            Libc::parse(&stdout).or_else(|| Libc::parse(&stderr))
-        })
+        .ok()?;
+
+    if status.success() {
+        Libc::parse(&stdout).or_else(|| Libc::parse(&stderr))
+    } else {
+        None
+    }
 }
 
 #[derive(Eq, PartialEq)]
