@@ -110,9 +110,19 @@ You are not meant to run this directly.
 "#;
 
     if status.success() {
-        Libc::parse(&stdout).or_else(|| Libc::parse(&stderr))
-    } else if String::from_utf8(stdout).ok().as_deref() == Some(ALPINE_GCOMPAT) {
-        Some(Libc::Gnu)
+        // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
+        // succeeds.
+        Libc::parse(&stdout)
+    } else if status.code() == Some(1) {
+        // On Alpine, executing both the gcompat glibc and the ldd and
+        // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
+        if String::from_utf8(stdout).ok().as_deref() == Some(ALPINE_GCOMPAT) {
+            // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
+            Some(Libc::Gnu)
+        } else {
+            // Alpine/s ldd and musl dynlib will output to stderr
+            Libc::parse(&stderr)
+        }
     } else {
         None
     }
@@ -150,7 +160,15 @@ fn get_distro_name_blocking() -> Option<String> {
     match fs::read_to_string("/etc/os-release") {
         Ok(os_release) => os_release
             .lines()
-            .find_map(|line| line.strip_prefix("ID=\"")?.strip_suffix('"'))
+            .find_map(|line| {
+                let var = line.strip_prefix("ID=")?;
+                let var = if let Some(var_with_suffix_quote) = var.strip_prefix('"') {
+                    var_with_suffix_quote.strip_suffix('"')?
+                } else {
+                    var
+                };
+                (!var.contains('"')).then_some(var)
+            })
             .map(ToString::to_string),
         Err(_) => (Path::new("/etc/nix/nix.conf").is_file()
             && ["/nix/store", "/nix/var/profiles"]
