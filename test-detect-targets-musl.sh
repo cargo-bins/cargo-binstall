@@ -1,5 +1,7 @@
 #!/bin/ash
 
+# shellcheck shell=dash
+
 set -exuo pipefail
 
 TARGET=${1?}
