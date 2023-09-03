@@ -297,6 +297,9 @@ package-prepare: build package-dir
     just get-output detect-wasi{{output-ext}} packages/prep
     -just get-output detect-wasi.dSYM packages/prep
 
+    just get-output detect-target{{output-ext}} packages/prep
+    -just get-output detect-target.dSYM packages/prep
+
 # when https://github.com/rust-lang/cargo/pull/11384 lands, we can use
 # -just get-output cargo_binstall.dwp packages/prep
 # underscored dwp name needs to remain for debuggers to find the file properly
@@ -308,6 +311,9 @@ package-prepare: build package-dir
     just get-output detect-wasi packages/prep
     -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect_wasi.dwp
 
+    just get-output detect-target packages/prep
+    -cp {{output-folder}}/deps/detect_target-*.dwp packages/prep/detect_target.dwp
+
 # underscored pdb name needs to remain for debuggers to find the file properly
 # read from deps because sometimes cargo doesn't copy the pdb to the output folder
 [windows]
@@ -317,6 +323,9 @@ package-prepare: build package-dir
 
     just get-output detect-wasi.exe packages/prep
     -just get-output deps/detect_wasi.pdb packages/prep
+
+    just get-output detect-target.exe packages/prep
+    -just get-output deps/detect_target.pdb packages/prep
 
 # we don't get dSYM bundles for universal binaries; unsure if it's even a thing
 [macos]
@@ -334,6 +343,11 @@ lipo-prepare: package-dir
     just target=x86_64-apple-darwin get-output detect-wasi{{output-ext}} packages/prep/x64
     just target=x86_64h-apple-darwin get-output detect-wasi{{output-ext}} packages/prep/x64h
     lipo -create -output packages/prep/detect-wasi{{output-ext}} packages/prep/{arm64,x64,x64h}/detect-wasi{{output-ext}}
+
+    just target=aarch64-apple-darwin get-output detect-target{{output-ext}} packages/prep/arm64
+    just target=x86_64-apple-darwin get-output detect-target{{output-ext}} packages/prep/x64
+    just target=x86_64h-apple-darwin get-output detect-target{{output-ext}} packages/prep/x64h
+    lipo -create -output packages/prep/detect-target{{output-ext}} packages/prep/{arm64,x64,x64h}/detect-target{{output-ext}}
 
     rm -rf packages/prep/{arm64,x64,x64h}
 
@@ -370,6 +384,7 @@ repackage-lipo: package-dir
 
     lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64,x64h}/{{output-filename}}
     lipo -create -output packages/prep/detect-wasi packages/prep/{arm64,x64,x64h}/detect-wasi
+    lipo -create -output packages/prep/detect-target packages/prep/{arm64,x64,x64h}/detect-target
 
     ./packages/prep/{{output-filename}} -vV
 
