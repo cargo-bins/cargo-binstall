@@ -2,6 +2,7 @@ use std::{
     fs,
     path::Path,
     process::{Output, Stdio},
+    str::from_utf8 as str_from_utf8,
 };
 
 use tokio::{process::Command, task};
@@ -109,19 +110,24 @@ async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
 You are not meant to run this directly.
 "#;
 
+    let stdout = str_from_utf8(&stdout).ok()?;
+    let stderr = str_from_utf8(&stderr).ok()?;
+
     if status.success() {
         // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
         // succeeds.
-        Libc::parse(&stdout)
+        stdout.contains("GLIBC").then_some(Libc::Gnu)
     } else if status.code() == Some(1) {
         // On Alpine, executing both the gcompat glibc and the ldd and
         // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
-        if String::from_utf8(stdout).ok().as_deref() == Some(ALPINE_GCOMPAT) {
+        if stdout == ALPINE_GCOMPAT {
             // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
             Some(Libc::Gnu)
-        } else {
+        } else if stderr.contains("musl libc") {
             // Alpine/s ldd and musl dynlib will output to stderr
-            Libc::parse(&stderr)
+            Some(Libc::Musl)
+        } else {
+            None
         }
     } else {
         None
@@ -134,19 +140,6 @@ enum Libc {
     Musl,
     Android,
     Unknown,
-}
-
-impl Libc {
-    fn parse(output: &[u8]) -> Option<Self> {
-        let s = String::from_utf8_lossy(output);
-        if s.contains("musl libc") {
-            Some(Self::Musl)
-        } else if s.contains("GLIBC") {
-            Some(Self::Gnu)
-        } else {
-            None
-        }
-    }
 }
 
 async fn get_distro_name() -> Option<String> {
