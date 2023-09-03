@@ -169,7 +169,13 @@ jobs:
     - name: Run test in ubuntu
       shell: bash -exuo pipefail
       run: |
-        [ "$(detect-targets)" = "$(printf '%s\n%s\n%s' x86_64-ubuntu-linux-gnu x86_64-unknown-linux-gnu aarch64-unknown-linux-musl)" ]
+        [ "$(detect-targets)" = "$(printf '%s\n%s\n%s' x86_64-ubuntu-linux-gnu x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
+    - name: Install musl on ubuntu
+      run: apt update && apt install musl
+    - name: Run test in ubuntu with musl
+      shell: bash -exuo pipefail
+      run: |
+        [ "$(detect-targets)" = "$(printf '%s\n%s\n%s\n%s' x86_64-ubuntu-linux-gnu x86_64-unknown-linux-gnu x86_64-ubuntu-linux-musl x86_64-unknown-linux-musl)" ]
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
