@@ -8,15 +8,15 @@ use crate::FetchError;
 
 pub enum SignatureVerifier {
     Noop,
-    Minisign(MinisignVerifier),
+    Minisign(Box<MinisignVerifier>),
 }
 
 impl SignatureVerifier {
     pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self, FetchError> {
         match config.algorithm {
-            SigningAlgorithm::Minisign => {
-                MinisignVerifier::new(config, &signature).map(Self::Minisign)
-            }
+            SigningAlgorithm::Minisign => MinisignVerifier::new(config, signature)
+                .map(Box::new)
+                .map(Self::Minisign),
             algorithm => Err(FetchError::UnsupportedSigningAlgorithm(algorithm)),
         }
     }
@@ -66,7 +66,7 @@ pub struct MinisignDataVerifier<'a>(StreamVerifier<'a>);
 
 impl<'a> DataVerifier for MinisignDataVerifier<'a> {
     fn update(&mut self, data: &Bytes) {
-        self.0.update(&data);
+        self.0.update(data);
     }
 
     fn validate(&mut self) -> bool {
