@@ -105,6 +105,11 @@ impl super::Fetcher for QuickInstall {
 
     fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
         tokio::spawn(async move {
+            // until quickinstall supports signatures, blanket deny:
+            if self.signature_policy == SignaturePolicy::Require {
+                return Err(FetchError::MissingSignature);
+            }
+
             if !self.is_supported().await? {
                 return Ok(false);
             }

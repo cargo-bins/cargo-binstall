@@ -57,6 +57,12 @@ pub enum FetchError {
 
     #[error("Failed to parse url: {0}")]
     UrlParse(#[from] UrlParseError),
+
+    #[error("No signature present")]
+    MissingSignature,
+
+    #[error("Failed to verify signature")]
+    InvalidSignature,
 }
 
 impl From<RemoteError> for FetchError {

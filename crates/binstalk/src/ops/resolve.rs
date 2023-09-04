@@ -19,13 +19,13 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, TargetData},
+    fetchers::{Data, Fetcher, TargetData, SignaturePolicy},
     helpers::{
         self, cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
         tasks::AutoAbortJoinHandle,
     },
-    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
+    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride, PkgSigning},
     ops::{CargoTomlFetchOverride, Options},
 };
 
@@ -82,6 +82,10 @@ async fn resolve_inner(
     else {
         return Ok(Resolution::AlreadyUpToDate);
     };
+
+    if opts.signature_policy == SignaturePolicy::Require && package_info.signing.is_none() {
+        return Err(BinstallError::MissingSignature(package_info.name));
+    }
 
     let desired_targets = opts
         .desired_targets
@@ -217,35 +221,10 @@ async fn download_extract_and_verify(
     // Download and extract it.
     // If that fails, then ignore this fetcher.
     let extracted_files = fetcher.fetch_and_extract(bin_path).await?;
-
     debug!("extracted_files = {extracted_files:#?}");
 
     // Build final metadata
     let meta = fetcher.target_meta();
-
-    #[cfg(incomplete)]
-    {
-        // Fetch and check package signature if available
-        if let Some(pub_key) = meta.as_ref().map(|m| m.pub_key.clone()).flatten() {
-            debug!("Found public key: {pub_key}");
-
-            // Generate signature file URL
-            let mut sig_ctx = ctx.clone();
-            sig_ctx.format = "sig".to_string();
-            let sig_url = sig_ctx.render(&pkg_url)?;
-
-            debug!("Fetching signature file: {sig_url}");
-
-            // Download signature file
-            let sig_path = temp_dir.join(format!("{pkg_name}.sig"));
-            download(&sig_url, &sig_path).await?;
-
-            // TODO: do the signature check
-            unimplemented!()
-        } else {
-            warn!("No public key found, package signature could not be validated");
-        }
-    }
 
     // Verify that all non-optional bin_files exist
     let bin_files = collect_bin_files(
@@ -358,6 +337,7 @@ struct PackageInfo {
     version: Version,
     repo: Option<String>,
     overrides: BTreeMap<String, PkgOverride>,
+    signing: Option<PkgSigning>,
 }
 
 struct Bin {
@@ -466,6 +446,7 @@ impl PackageInfo {
         } else {
             Ok(Some(Self {
                 overrides: mem::take(&mut meta.overrides),
+                signing: mem::take(&mut meta.signing),
                 meta,
                 binaries,
                 name,
