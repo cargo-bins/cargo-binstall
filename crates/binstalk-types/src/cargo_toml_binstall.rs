@@ -130,6 +130,7 @@ pub struct PkgSigning {
     pub pubkey: String,
 
     /// Signature file override template (url to download)
+    #[serde(default)]
     pub file: Option<String>,
 }
 
