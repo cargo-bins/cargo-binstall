@@ -1,16 +1,16 @@
-use std::{borrow::Cow, fmt, iter, marker::PhantomData, path::Path, sync::Arc};
+use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use leon::Template;
 use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use url::Url;
 
 use crate::{
     common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
-    SignaturePolicy, TargetDataErased,
+    SignaturePolicy, SignatureVerifier, TargetDataErased,
 };
 
 pub(crate) mod hosting;
@@ -42,7 +42,7 @@ impl GhCrateMeta {
                 repo,
                 subcrate,
             );
-            match ctx.render_url_with_compiled_tt(pkg_url) {
+            match ctx.render_url_with(pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
                     warn!("Failed to render url for {ctx:#?}: {err}");
@@ -228,13 +228,62 @@ impl super::Fetcher for GhCrateMeta {
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
         let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
+        trace!(?url, ?pkg_fmt, "preparing to fetch");
+
+        let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
+            (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
+                SignatureVerifier::Noop
+            }
+            (SignaturePolicy::Require, None) => {
+                debug_assert!(false, "missing signing section should be caught earlier");
+                return Err(FetchError::MissingSignature);
+            }
+            (_, Some(config)) => {
+                let template = Template::parse(config.file.as_deref().unwrap_or("{ url }.sig"))?;
+                trace!(?template, "parsed signature file template");
+
+                let sign_url = Context::from_data_with_repo(
+                    &self.data,
+                    &self.target_data.target,
+                    &self.target_data.target_related_info,
+                    // FIXME: get those somehow
+                    None,
+                    None,
+                    None,
+                )
+                .with_url(url)
+                .render_url_with(&template)?;
+
+                debug!(?sign_url, "Downloading signature");
+                let signature = Download::new(self.client.clone(), sign_url)
+                    .into_vec()
+                    .await?;
+                trace!(?signature, "got signature contents");
+
+                SignatureVerifier::new(config, &signature)?
+            }
+        };
+
         debug!(
-            "Downloading package from: '{url}' dst:{} fmt:{pkg_fmt:?}",
-            dst.display()
+            %url,
+            dst=%dst.display(),
+            fmt=?pkg_fmt,
+            "Downloading package",
         );
-        Ok(Download::new(self.client.clone(), url.clone())
-            .and_extract(*pkg_fmt, dst)
-            .await?)
+        let mut data_verifier = verifier.data_verifier()?;
+        let files = Download::new_with_data_verifier(
+            self.client.clone(),
+            url.clone(),
+            data_verifier.as_mut(),
+        )
+        .and_extract(*pkg_fmt, dst)
+        .await?;
+        trace!("validating signature (if any)");
+        if data_verifier.validate() {
+            Ok(files)
+        } else {
+            Err(FetchError::InvalidSignature)
+        }
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
@@ -298,49 +347,24 @@ struct Context<'c> {
     /// Workspace of the crate inside the repository.
     subcrate: Option<&'c str>,
 
+    /// Url of the file being downloaded (only for signing.file)
+    url: Option<&'c Url>,
+
     target_related_info: &'c dyn leon::Values,
 }
 
 impl fmt::Debug for Context<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[allow(dead_code)]
-        #[derive(Debug)]
-        struct Context<'c> {
-            name: &'c str,
-            repo: Option<&'c str>,
-            target: &'c str,
-            version: &'c str,
-
-            archive_format: Option<&'c str>,
-
-            archive_suffix: Option<&'c str>,
-
-            binary_ext: &'c str,
-
-            subcrate: Option<&'c str>,
-
-            target_related_info: PhantomData<&'c dyn leon::Values>,
-        }
-
-        fmt::Debug::fmt(
-            &Context {
-                name: self.name,
-                repo: self.repo,
-                target: self.target,
-                version: self.version,
-
-                archive_format: self.archive_format,
-
-                archive_suffix: self.archive_suffix,
-
-                binary_ext: self.binary_ext,
-
-                subcrate: self.subcrate,
-
-                target_related_info: PhantomData,
-            },
-            f,
-        )
+        f.debug_struct("Context")
+            .field("name", &self.name)
+            .field("repo", &self.repo)
+            .field("target", &self.target)
+            .field("version", &self.version)
+            .field("archive_format", &self.archive_format)
+            .field("binary_ext", &self.binary_ext)
+            .field("subcrate", &self.subcrate)
+            .field("url", &self.url)
+            .finish_non_exhaustive()
     }
 }
 
@@ -362,6 +386,8 @@ impl leon::Values for Context<'_> {
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
 
             "subcrate" => self.subcrate.map(Cow::Borrowed),
+
+            "url" => self.url.map(|url| Cow::Owned(url.to_string())),
 
             key => self.target_related_info.get_value(key),
         }
@@ -402,24 +428,25 @@ impl<'c> Context<'c> {
                 ""
             },
             subcrate,
+            url: None,
 
             target_related_info,
         }
     }
 
-    /// * `tt` - must have added a template named "pkg_url".
-    fn render_url_with_compiled_tt(&self, tt: &Template<'_>) -> Result<Url, FetchError> {
-        debug!("Render {tt:#?} using context: {self:?}");
+    fn with_url(&mut self, url: &'c Url) -> &mut Self {
+        self.url = Some(url);
+        self
+    }
 
-        Ok(Url::parse(&tt.render(self)?)?)
+    fn render_url_with(&self, template: &Template<'_>) -> Result<Url, FetchError> {
+        debug!(?template, context=?self, "render url template");
+        Ok(Url::parse(&template.render(self)?)?)
     }
 
     #[cfg(test)]
     fn render_url(&self, template: &str) -> Result<Url, FetchError> {
-        debug!("Render {template} using context in render_url: {self:?}");
-
-        let tt = Template::parse(template)?;
-        self.render_url_with_compiled_tt(&tt)
+        self.render_url_with(&Template::parse(template)?)
     }
 }
 

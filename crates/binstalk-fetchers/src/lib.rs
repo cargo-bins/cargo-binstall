@@ -5,6 +5,7 @@ use std::{path::Path, sync::Arc};
 use binstalk_downloader::{
     download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
 };
+use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
 use tokio::sync::OnceCell;
 pub use url::ParseError as UrlParseError;
@@ -19,6 +20,9 @@ pub use quickinstall::*;
 
 mod common;
 use common::*;
+
+mod signing;
+use signing::*;
 
 mod futures_resolver;
 
@@ -57,6 +61,9 @@ pub enum FetchError {
 
     #[error("Failed to parse url: {0}")]
     UrlParse(#[from] UrlParseError),
+
+    #[error("Signing algorithm not supported: {0:?}")]
+    UnsupportedSigningAlgorithm(SigningAlgorithm),
 
     #[error("No signature present")]
     MissingSignature,

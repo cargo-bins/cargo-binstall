@@ -19,7 +19,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, TargetData, SignaturePolicy},
+    fetchers::{Data, Fetcher, SignaturePolicy, TargetData},
     helpers::{
         self, cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
