@@ -80,6 +80,7 @@ pub trait Fetcher: Send + Sync {
         gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
+        signature_policy: SignaturePolicy,
     ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
@@ -131,6 +132,19 @@ struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
     subcrate: Option<CompactString>,
+}
+
+/// What to do about package signatures
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SignaturePolicy {
+    /// Don't process any signing information at all
+    Ignore,
+
+    /// Verify and fail if a signature is found, but pass a signature-less package
+    IfPresent,
+
+    /// Require signatures to be present (and valid)
+    Require,
 }
 
 /// Data required to fetch a package

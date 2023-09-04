@@ -10,7 +10,7 @@ use url::Url;
 
 use crate::{
     common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
-    TargetDataErased,
+    SignaturePolicy, TargetDataErased,
 };
 
 pub(crate) mod hosting;
@@ -20,6 +20,7 @@ pub struct GhCrateMeta {
     gh_api_client: GhApiClient,
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
+    signature_policy: SignaturePolicy,
     resolution: OnceCell<(Url, PkgFmt)>,
 }
 
@@ -85,12 +86,14 @@ impl super::Fetcher for GhCrateMeta {
         gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
+        signature_policy: SignaturePolicy,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
             gh_api_client,
             data,
             target_data,
+            signature_policy,
             resolution: OnceCell::new(),
         })
     }
@@ -131,7 +134,8 @@ impl super::Fetcher for GhCrateMeta {
                             pkg_url: pkg_url.into(),
                             reason:
                                 &"pkg-fmt is not specified, yet pkg-url does not contain format, \
-archive-format or archive-suffix which is required for automatically deducing pkg-fmt",
+                                archive-format or archive-suffix which is required for automatically \
+                                deducing pkg-fmt",
                         }
                         .into());
                     }

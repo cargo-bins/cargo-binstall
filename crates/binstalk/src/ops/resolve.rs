@@ -126,6 +126,7 @@ async fn resolve_inner(
                     opts.gh_api_client.clone(),
                     data.clone(),
                     target_data,
+                    opts.signature_policy,
                 );
                 (fetcher.clone(), AutoAbortJoinHandle::new(fetcher.find()))
             }),

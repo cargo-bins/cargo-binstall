@@ -5,7 +5,7 @@ use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 use tokio::sync::OnceCell;
 use url::Url;
 
-use crate::{common::*, Data, FetchError, TargetDataErased};
+use crate::{common::*, Data, FetchError, SignaturePolicy, TargetDataErased};
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
@@ -51,6 +51,7 @@ pub struct QuickInstall {
     package: String,
     package_url: Url,
     stats_url: Url,
+    signature_policy: SignaturePolicy,
 
     target_data: Arc<TargetDataErased>,
 }
@@ -76,6 +77,7 @@ impl super::Fetcher for QuickInstall {
         gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
+        signature_policy: SignaturePolicy,
     ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
@@ -95,6 +97,7 @@ impl super::Fetcher for QuickInstall {
             stats_url: Url::parse(&format!("{STATS_URL}/{package}.tar.gz",))
                 .expect("stats_url is pre-generated and should never be invalid url"),
             package,
+            signature_policy,
 
             target_data,
         })

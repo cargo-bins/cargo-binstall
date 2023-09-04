@@ -7,7 +7,7 @@ use std::{
 
 use binstalk::{
     errors::BinstallError,
-    fetchers::{Fetcher, GhCrateMeta, QuickInstall},
+    fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
     get_desired_targets,
     helpers::{
         gh_api_client::GhApiClient,
@@ -183,6 +183,14 @@ pub fn install_crates(
             .map_err(BinstallError::from)?
         } else {
             Default::default()
+        },
+
+        signature_policy: if args.only_signed {
+            SignaturePolicy::Require
+        } else if args.skip_signatures {
+            SignaturePolicy::Ignore
+        } else {
+            SignaturePolicy::IfPresent
         },
     });
 
