@@ -1,6 +1,4 @@
 use std::{
-    fs,
-    path::Path,
     process::{Output, Stdio},
     str::from_utf8 as str_from_utf8,
 };
@@ -43,47 +41,15 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                 async move { is_gnu_ld(&glibc_path).await }
             });
 
-            let distro_if_has_non_std_glibc = task::spawn(async {
-                if is_gnu_ld("/usr/bin/ldd").await {
-                    get_distro_name().await
-                } else {
-                    None
-                }
-            });
-
-            let distro_if_has_musl_dynlib = if get_ld_flavor(&format!(
-                "/lib/ld-musl-{cpu_arch}.so.1"
-            ))
-            .await
-                == Some(Libc::Musl)
-            {
-                get_distro_name().await
-            } else {
-                None
-            };
-
             [
                 has_glibc
                     .await
                     .unwrap_or(false)
                     .then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
-                distro_if_has_non_std_glibc
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-gnu{abi}")),
-                // Fallback for Linux flavors like Alpine, which has a musl dyn libc
-                distro_if_has_musl_dynlib
-                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-musl{abi}")),
                 Some(musl_fallback_target()),
             ]
         }
-        Libc::Android | Libc::Unknown => [
-            Some(target.clone()),
-            Some(musl_fallback_target()),
-            None,
-            None,
-        ],
+        Libc::Android | Libc::Unknown => [Some(target.clone()), Some(musl_fallback_target())],
     }
     .into_iter()
     .flatten()
@@ -140,34 +106,4 @@ enum Libc {
     Musl,
     Android,
     Unknown,
-}
-
-async fn get_distro_name() -> Option<String> {
-    task::spawn_blocking(get_distro_name_blocking)
-        .await
-        .ok()
-        .flatten()
-}
-
-fn get_distro_name_blocking() -> Option<String> {
-    match fs::read_to_string("/etc/os-release") {
-        Ok(os_release) => os_release
-            .lines()
-            .find_map(|line| {
-                let var = line.strip_prefix("ID=")?;
-                let var = if let Some(var_with_suffix_quote) = var.strip_prefix('"') {
-                    var_with_suffix_quote.strip_suffix('"')?
-                } else {
-                    var
-                };
-                (!var.contains('"')).then_some(var)
-            })
-            .map(ToString::to_string),
-        Err(_) => (Path::new("/etc/nix/nix.conf").is_file()
-            && ["/nix/store", "/nix/var/profiles"]
-                .into_iter()
-                .map(Path::new)
-                .all(Path::is_dir))
-        .then_some("nixos".to_string()),
-    }
 }
