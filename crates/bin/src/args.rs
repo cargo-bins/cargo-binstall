@@ -286,11 +286,28 @@ pub struct Args {
     /// specified (which is also shown by clap's auto generated doc below), or
     /// try environment variable `GH_TOKEN`, which is also used by `gh` cli.
     ///
-    /// If none of them is present, then binstal will try to extract github
+    /// If none of them is present, then binstall will try to extract github
     /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
     /// unless `--no-discover-github-token` is specified.
     #[clap(help_heading = "Options", long, env = "GITHUB_TOKEN")]
     pub(crate) github_token: Option<CompactString>,
+
+    /// Only install packages that are signed
+    ///
+    /// The default is to verify signatures if they are available, but to allow
+    /// unsigned packages as well.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) only_signed: bool,
+
+    /// Don't check any signatures
+    ///
+    /// The default is to verify signatures if they are available. This option
+    /// disables that behaviour entirely, which will also stop downloading
+    /// signature files in the first place.
+    ///
+    /// Note that this is insecure and not recommended outside of testing.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) skip_signatures: bool,
 
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
