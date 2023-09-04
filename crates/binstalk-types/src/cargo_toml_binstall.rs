@@ -39,6 +39,9 @@ pub struct PkgMeta {
 
     /// Target specific overrides
     pub overrides: BTreeMap<String, PkgOverride>,
+
+    /// Package signing configuration
+    pub signing: Option<PkgSigning>,
 }
 
 impl PkgMeta {
@@ -82,6 +85,7 @@ impl PkgMeta {
 
             pub_key: self.pub_key.clone(),
             overrides: Default::default(),
+            signing: Default::default(),
         }
     }
 }
@@ -107,6 +111,28 @@ pub struct PkgOverride {
 pub struct BinMeta {
     /// Binary name
     pub name: String,
-    /// Binary template path (within package)
+
+    /// Binary template (path within package)
     pub path: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PkgSigning {
+    /// Signing algorithm supported by Binstall.
+    pub algorithm: SigningAlgorithm,
+
+    /// Signing public key
+    pub pubkey: String,
+
+    /// Signature file override template (url to download)
+    pub file: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum SigningAlgorithm {
+    /// [minisign](https://jedisct1.github.io/minisign/)
+    Minisign,
 }
