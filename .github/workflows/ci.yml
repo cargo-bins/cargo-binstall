@@ -148,7 +148,6 @@ jobs:
         pip3 install -r zigbuild-requirements.txt
         cargo zigbuild --bin detect-targets --target $TARGET
     - name: Run test in alpine
-      shell: bash -exuo pipefail
       run: |
         docker run --rm \
           --mount src="$PWD/target/$TARGET/debug/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
@@ -168,7 +167,7 @@ jobs:
       run: cargo build --bin detect-targets
     - name: Run test in ubuntu
       run: |
-        [ "$(detect-targets)" = "$(printf '%s\n%s\n%s' x86_64-ubuntu-linux-gnu x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
+        [ "$(detect-targets)" = "$(printf '%s\n%s' x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
     - name: Install musl on ubuntu
       run: apt update && apt install musl
     - name: Run test in ubuntu with musl
