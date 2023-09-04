@@ -10,7 +10,7 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 python server.py 2>/dev/null &
 server_pid=$!
-trap "kill $server_pid" ERR INT TERM
+trap 'kill $server_pid' ERR INT TERM
 sleep 5 # for server to come up
 
 export BINSTALL_HTTPS_ROOT_CERTS=$PWD/ca.pem
