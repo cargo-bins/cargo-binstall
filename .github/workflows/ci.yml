@@ -167,12 +167,12 @@ jobs:
       run: cargo build --bin detect-targets
     - name: Run test in ubuntu
       run: |
-        [ "$(detect-targets)" = "$(printf '%s\n%s' x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
+        [ "$(./target/debug/detect-targets)" = "$(printf '%s\n%s' x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
     - name: Install musl on ubuntu
       run: apt update && apt install musl
     - name: Run test in ubuntu with musl
       run: |
-        [ "$(detect-targets)" = "$(printf '%s\n%s' x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
+        [ "$(./target/debug/detect-targets)" = "$(printf '%s\n%s' x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
