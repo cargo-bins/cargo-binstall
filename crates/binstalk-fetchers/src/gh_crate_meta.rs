@@ -5,7 +5,7 @@ use either::Either;
 use leon::Template;
 use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
-use tracing::{debug, trace, warn};
+use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
@@ -280,6 +280,9 @@ impl super::Fetcher for GhCrateMeta {
         .await?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
+            if let Some(info) = verifier.info() {
+                info!("Verified signature for package '{}': {info}", self.data.name);
+            }
             Ok(files)
         } else {
             Err(FetchError::InvalidSignature)

@@ -27,6 +27,13 @@ impl SignatureVerifier {
             Self::Minisign(v) => v.data_verifier(),
         }
     }
+
+    pub fn info(&self) -> Option<String> {
+        match self {
+            Self::Noop => None,
+            Self::Minisign(v) => Some(v.signature.trusted_comment().into()),
+        }
+    }
 }
 
 pub struct MinisignVerifier {

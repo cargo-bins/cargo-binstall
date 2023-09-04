@@ -1,0 +1,19 @@
+[package]
+name = "signing-test"
+description = "Rust binary package installer for CI integration"
+version = "0.1.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2021"
+license = "GPL-3.0"
+
+[[bin]]
+name = "signing-test"
+path = "src/main.rs"
+
+[package.metadata.binstall]
+pkg-url = "https://localhost:4443/signing-test.tar"
+pkg-fmt = "tar"
+
+[package.metadata.binstall.signing]
+algorithm = "minisign"
+pubkey = "RWRnmBcLmQbXVcEPWo2OOKMI36kki4GiI7gcBgIaPLwvxe14Wtxm9acX"

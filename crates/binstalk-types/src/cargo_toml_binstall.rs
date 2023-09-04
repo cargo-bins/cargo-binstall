@@ -34,14 +34,11 @@ pub struct PkgMeta {
     /// Path template for binary files in packages
     pub bin_dir: Option<String>,
 
-    /// Public key for package verification (base64 encoded)
-    pub pub_key: Option<String>,
+    /// Package signing configuration
+    pub signing: Option<PkgSigning>,
 
     /// Target specific overrides
     pub overrides: BTreeMap<String, PkgOverride>,
-
-    /// Package signing configuration
-    pub signing: Option<PkgSigning>,
 }
 
 impl PkgMeta {
@@ -79,13 +76,17 @@ impl PkgMeta {
                 .or(self.pkg_fmt),
 
             bin_dir: pkg_overrides
+                .clone()
                 .into_iter()
                 .find_map(|pkg_override| pkg_override.bin_dir.clone())
                 .or_else(|| self.bin_dir.clone()),
 
-            pub_key: self.pub_key.clone(),
+            signing: pkg_overrides
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.signing.clone())
+                .or_else(|| self.signing.clone()),
+
             overrides: Default::default(),
-            signing: Default::default(),
         }
     }
 }
@@ -104,6 +105,9 @@ pub struct PkgOverride {
 
     /// Path template override for binary files in packages
     pub bin_dir: Option<String>,
+
+    /// Package signing configuration
+    pub signing: Option<PkgSigning>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
