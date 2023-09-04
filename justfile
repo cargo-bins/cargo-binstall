@@ -211,7 +211,7 @@ print-rustflags:
     @echo "$RUSTFLAGS"
 
 build: print-env
-    {{cargo-bin}} build {{cargo-build-args}}
+    {{cargo-bin}} build --bins {{cargo-build-args}}
 
 check: print-env
     {{cargo-bin}} check {{cargo-build-args}} --profile check-only
