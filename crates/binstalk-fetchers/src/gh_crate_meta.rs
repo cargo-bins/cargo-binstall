@@ -281,7 +281,10 @@ impl super::Fetcher for GhCrateMeta {
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {
-                info!("Verified signature for package '{}': {info}", self.data.name);
+                info!(
+                    "Verified signature for package '{}': {info}",
+                    self.data.name
+                );
             }
             Ok(files)
         } else {
