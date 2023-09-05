@@ -45,7 +45,7 @@ impl MinisignVerifier {
     pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self, FetchError> {
         trace!(key=?config.pubkey, "parsing public key");
         let pubkey = PublicKey::from_base64(&config.pubkey).map_err(|err| {
-            debug!("Package public key is invalid: {err}");
+            error!("Package public key is invalid: {err}");
             FetchError::InvalidSignature
         })?;
 
