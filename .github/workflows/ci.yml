@@ -138,11 +138,7 @@ jobs:
       TARGET: x86_64-unknown-linux-musl
     steps:
     - uses: actions/checkout@v3
-    - uses: ./.github/actions/just-setup
-      env:
-        # just-setup use binstall to install sccache,
-        # which works better when we provide it with GITHUB_TOKEN.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - uses: Swatinem/rust-cache@v2
     - name: Build detect-targets
       run: |
         pip3 install -r zigbuild-requirements.txt
@@ -158,11 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - uses: ./.github/actions/just-setup
-      env:
-        # just-setup use binstall to install sccache,
-        # which works better when we provide it with GITHUB_TOKEN.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - uses: Swatinem/rust-cache@v2
     - name: Build detect-targets
       run: cargo build --bin detect-targets
     - name: Run test in ubuntu
