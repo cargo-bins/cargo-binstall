@@ -239,7 +239,10 @@ impl super::Fetcher for GhCrateMeta {
                 return Err(FetchError::MissingSignature);
             }
             (_, Some(config)) => {
-                let template = Template::parse(config.file.as_deref().unwrap_or("{ url }.sig"))?;
+                let template = match config.file.as_deref() {
+                    Some(file) => Template::parse(file)?,
+                    None => leon_macros::template!("{ url }.sig"),
+                };
                 trace!(?template, "parsed signature file template");
 
                 let sign_url = Context::from_data_with_repo(
