@@ -63,7 +63,7 @@ impl MinisignVerifier {
             .verify_stream(&self.signature)
             .map(|vs| Box::new(MinisignDataVerifier(vs)) as _)
             .map_err(|err| {
-                debug!("Failed to setup stream verifier: {err}");
+                error!("Failed to setup stream verifier: {err}");
                 FetchError::InvalidSignature
             })
     }
