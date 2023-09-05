@@ -138,11 +138,13 @@ jobs:
       TARGET: x86_64-unknown-linux-musl
     steps:
     - uses: actions/checkout@v3
+    - name: Install x86_64-unknown-linux-musl target
+      run: rustup target add $TARGET
     - uses: Swatinem/rust-cache@v2
     - name: Build detect-targets
       run: |
         pip3 install -r zigbuild-requirements.txt
-        cargo zigbuild --bin detect-targets --target $TARGET
+        cd crates/detect-targets && cargo zigbuild --target $TARGET
     - name: Run test in alpine
       run: |
         docker run --rm \
