@@ -51,7 +51,7 @@ impl MinisignVerifier {
 
         trace!(?signature, "parsing signature");
         let signature = Signature::decode(&String::from_utf8_lossy(signature)).map_err(|err| {
-            debug!("Signature file is invalid: {err}");
+            error!("Signature file is invalid: {err}");
             FetchError::InvalidSignature
         })?;
 
