@@ -78,7 +78,7 @@ impl<'a> DataVerifier for MinisignDataVerifier<'a> {
 
     fn validate(&mut self) -> bool {
         if let Err(err) = self.0.finalize() {
-            debug!("Failed to finalize signature verify: {err}");
+            error!("Failed to finalize signature verify: {err}");
             false
         } else {
             true
