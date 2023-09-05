@@ -306,7 +306,7 @@ pub struct Args {
     /// signature files in the first place.
     ///
     /// Note that this is insecure and not recommended outside of testing.
-    #[clap(help_heading = "Options", long)]
+    #[clap(help_heading = "Options", long, conflict_with = "only-signed")]
     pub(crate) skip_signatures: bool,
 
     /// Print version information
