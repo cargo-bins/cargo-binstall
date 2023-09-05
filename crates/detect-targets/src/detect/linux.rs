@@ -1,6 +1,6 @@
 use std::{
     process::{Output, Stdio},
-    str::from_utf8 as str_from_utf8,
+    str,
 };
 
 use tokio::{process::Command, task};
@@ -76,20 +76,19 @@ async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
 You are not meant to run this directly.
 "#;
 
-    let stdout = str_from_utf8(&stdout).ok()?;
-    let stderr = str_from_utf8(&stderr).ok()?;
-
     if status.success() {
         // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
         // succeeds.
-        stdout.contains("GLIBC").then_some(Libc::Gnu)
+        String::from_utf8_lossy(&stdout)
+            .contains("GLIBC")
+            .then_some(Libc::Gnu)
     } else if status.code() == Some(1) {
         // On Alpine, executing both the gcompat glibc and the ldd and
         // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
-        if stdout == ALPINE_GCOMPAT {
+        if str::from_utf8(&stdout).as_deref() == Ok(ALPINE_GCOMPAT) {
             // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
             Some(Libc::Gnu)
-        } else if stderr.contains("musl libc") {
+        } else if String::from_utf8_lossy(&stderr).contains("musl libc") {
             // Alpine/s ldd and musl dynlib will output to stderr
             Some(Libc::Musl)
         } else {
