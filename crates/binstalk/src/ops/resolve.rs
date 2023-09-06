@@ -446,7 +446,7 @@ impl PackageInfo {
         } else {
             Ok(Some(Self {
                 overrides: mem::take(&mut meta.overrides),
-                signing: mem::take(&mut meta.signing),
+                signing: meta.signing.clone(),
                 meta,
                 binaries,
                 name,

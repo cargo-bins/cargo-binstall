@@ -2,7 +2,7 @@ use binstalk_downloader::download::DataVerifier;
 use binstalk_types::cargo_toml_binstall::{PkgSigning, SigningAlgorithm};
 use bytes::Bytes;
 use minisign_verify::{PublicKey, Signature, StreamVerifier};
-use tracing::{debug, trace};
+use tracing::{error, trace};
 
 use crate::FetchError;
 
