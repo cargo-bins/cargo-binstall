@@ -25,7 +25,7 @@ use crate::{
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
         tasks::AutoAbortJoinHandle,
     },
-    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride, PkgSigning},
+    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
     ops::{CargoTomlFetchOverride, Options},
 };
 
@@ -83,7 +83,7 @@ async fn resolve_inner(
         return Ok(Resolution::AlreadyUpToDate);
     };
 
-    if opts.signature_policy == SignaturePolicy::Require && package_info.signing.is_none() {
+    if opts.signature_policy == SignaturePolicy::Require && package_info.signing {
         return Err(BinstallError::MissingSignature(package_info.name));
     }
 
@@ -337,7 +337,7 @@ struct PackageInfo {
     version: Version,
     repo: Option<String>,
     overrides: BTreeMap<String, PkgOverride>,
-    signing: Option<PkgSigning>,
+    signing: bool,
 }
 
 struct Bin {
@@ -446,7 +446,7 @@ impl PackageInfo {
         } else {
             Ok(Some(Self {
                 overrides: mem::take(&mut meta.overrides),
-                signing: meta.signing.clone(),
+                signing: meta.signing.is_some(),
                 meta,
                 binaries,
                 name,

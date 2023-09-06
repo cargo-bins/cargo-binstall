@@ -79,9 +79,9 @@ impl GhCrateMeta {
             let client = self.client.clone();
             let gh_api_client = self.gh_api_client.clone();
 
-            let repo = repo.map(|s| s.to_string());
-            let subcrate = subcrate.map(|s| s.to_string());
-            let archive_suffix = ext.map(|s| s.to_string());
+            let repo = repo.map(ToString::to_string);
+            let subcrate = subcrate.map(ToString::to_string);
+            let archive_suffix = ext.map(ToString::to_string);
             async move {
                 Ok(does_url_exist(client, gh_api_client, &url)
                     .await?
@@ -413,7 +413,7 @@ impl leon::Values for Context<'_> {
 
             "subcrate" => self.subcrate.map(Cow::Borrowed),
 
-            "url" => self.url.map(|url| Cow::Owned(url.to_string())),
+            "url" => self.url.map(|url| Cow::Borrowed(url.as_str())),
 
             key => self.target_related_info.get_value(key),
         }
