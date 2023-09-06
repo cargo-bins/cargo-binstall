@@ -83,7 +83,7 @@ async fn resolve_inner(
         return Ok(Resolution::AlreadyUpToDate);
     };
 
-    if opts.signature_policy == SignaturePolicy::Require && package_info.signing {
+    if opts.signature_policy == SignaturePolicy::Require && !package_info.signing {
         return Err(BinstallError::MissingSignature(package_info.name));
     }
 
