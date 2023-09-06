@@ -36,16 +36,30 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                 .expect("unwrap: target always has a - for cpu_arch")
                 .0;
 
-            let has_glibc = task::spawn({
-                let glibc_path = format!("/lib/ld-linux-{cpu_arch}.so.1");
-                async move { is_gnu_ld(&glibc_path).await }
-            });
+            let cpu_arch_suffix = cpu_arch.replace('_', "-");
+
+            let handles: Vec<_> = [
+                format!("/lib/ld-linux-{cpu_arch_suffix}.so.1"),
+                format!("/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.1"),
+                format!("/usr/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.1"),
+            ]
+            .into_iter()
+            .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
+            .collect();
+
+            let has_glibc = async move {
+                for mut handle in handles {
+                    if let Ok(true) = (&mut handle.0).await {
+                        return true;
+                    }
+                }
+
+                false
+            }
+            .await;
 
             [
-                has_glibc
-                    .await
-                    .unwrap_or(false)
-                    .then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
+                has_glibc.then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
                 Some(musl_fallback_target()),
             ]
         }
@@ -56,8 +70,8 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
     .collect()
 }
 
-async fn is_gnu_ld(cmd: &str) -> bool {
-    get_ld_flavor(cmd).await == Some(Libc::Gnu)
+async fn is_gnu_ld(cmd: String) -> bool {
+    get_ld_flavor(&cmd).await == Some(Libc::Gnu)
 }
 
 async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
@@ -105,4 +119,12 @@ enum Libc {
     Musl,
     Android,
     Unknown,
+}
+
+struct AutoAbortHandle<T>(task::JoinHandle<T>);
+
+impl<T> Drop for AutoAbortHandle<T> {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
