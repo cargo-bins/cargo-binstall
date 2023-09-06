@@ -21,13 +21,22 @@ pub struct GhCrateMeta {
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
     signature_policy: SignaturePolicy,
-    resolution: OnceCell<(Url, PkgFmt)>,
+    resolution: OnceCell<Resolved>,
+}
+
+#[derive(Debug)]
+struct Resolved {
+    url: Url,
+    pkg_fmt: PkgFmt,
+    archive_suffix: Option<String>,
+    repo: Option<String>,
+    subcrate: Option<String>,
 }
 
 impl GhCrateMeta {
     fn launch_baseline_find_tasks(
         &self,
-        futures_resolver: &FuturesResolver<(Url, PkgFmt), FetchError>,
+        futures_resolver: &FuturesResolver<Resolved, FetchError>,
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
         repo: Option<&str>,
@@ -59,21 +68,30 @@ impl GhCrateMeta {
                 pkg_fmt
                     .extensions(is_windows)
                     .iter()
-                    .filter_map(|ext| render_url(Some(ext))),
+                    .filter_map(|ext| render_url(Some(ext)).map(|url| (url, Some(ext)))),
             )
         } else {
-            Either::Right(render_url(None).into_iter())
+            Either::Right(render_url(None).map(|url| (url, None)).into_iter())
         };
 
         // go check all potential URLs at once
-        futures_resolver.extend(urls.map(move |url| {
+        futures_resolver.extend(urls.map(move |(url, ext)| {
             let client = self.client.clone();
             let gh_api_client = self.gh_api_client.clone();
 
+            let repo = repo.map(|s| s.to_string());
+            let subcrate = subcrate.map(|s| s.to_string());
+            let archive_suffix = ext.map(|s| s.to_string());
             async move {
                 Ok(does_url_exist(client, gh_api_client, &url)
                     .await?
-                    .then_some((url, pkg_fmt)))
+                    .then_some(Resolved {
+                        url,
+                        pkg_fmt,
+                        repo,
+                        subcrate,
+                        archive_suffix,
+                    }))
             }
         }));
     }
@@ -216,9 +234,9 @@ impl super::Fetcher for GhCrateMeta {
                 }
             }
 
-            if let Some((url, pkg_fmt)) = resolver.resolve().await? {
-                debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
-                self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
+            if let Some(resolved) = resolver.resolve().await? {
+                debug!(?resolved, "Winning URL found!");
+                self.resolution.set(resolved).unwrap(); // find() is called first
                 Ok(true)
             } else {
                 Ok(false)
@@ -227,8 +245,8 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
-        trace!(?url, ?pkg_fmt, "preparing to fetch");
+        let resolved = self.resolution.get().unwrap(); // find() is called first
+        trace!(?resolved, "preparing to fetch");
 
         let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
             (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
@@ -249,12 +267,11 @@ impl super::Fetcher for GhCrateMeta {
                     &self.data,
                     &self.target_data.target,
                     &self.target_data.target_related_info,
-                    // FIXME: get those somehow
-                    None,
-                    None,
-                    None,
+                    resolved.archive_suffix.as_deref(),
+                    resolved.repo.as_deref(),
+                    resolved.subcrate.as_deref(),
                 )
-                .with_url(url)
+                .with_url(&resolved.url)
                 .render_url_with(&template)?;
 
                 debug!(?sign_url, "Downloading signature");
@@ -268,18 +285,18 @@ impl super::Fetcher for GhCrateMeta {
         };
 
         debug!(
-            %url,
+            url=%resolved.url,
             dst=%dst.display(),
-            fmt=?pkg_fmt,
+            fmt=?resolved.pkg_fmt,
             "Downloading package",
         );
         let mut data_verifier = verifier.data_verifier()?;
         let files = Download::new_with_data_verifier(
             self.client.clone(),
-            url.clone(),
+            resolved.url.clone(),
             data_verifier.as_mut(),
         )
-        .and_extract(*pkg_fmt, dst)
+        .and_extract(resolved.pkg_fmt, dst)
         .await?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
@@ -296,7 +313,7 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
-        self.resolution.get().unwrap().1
+        self.resolution.get().unwrap().pkg_fmt
     }
 
     fn target_meta(&self) -> PkgMeta {
@@ -308,13 +325,13 @@ impl super::Fetcher for GhCrateMeta {
     fn source_name(&self) -> CompactString {
         self.resolution
             .get()
-            .map(|(url, _pkg_fmt)| {
-                if let Some(domain) = url.domain() {
+            .map(|resolved| {
+                if let Some(domain) = resolved.url.domain() {
                     domain.to_compact_string()
-                } else if let Some(host) = url.host_str() {
+                } else if let Some(host) = resolved.url.host_str() {
                     host.to_compact_string()
                 } else {
-                    url.to_compact_string()
+                    resolved.url.to_compact_string()
                 }
             })
             .unwrap_or_else(|| "invalid url".into())
