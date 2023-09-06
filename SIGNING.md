@@ -11,6 +11,9 @@ Generate a [minisign](https://jedisct1.github.io/minisign/) keypair:
 
 ```console
 minisign -G -p signing.pub -s signing.key
+
+# or with rsign2:
+rsign generate -p signing.pub -s signing.key
 ```
 
 In your Cargo.toml, put:
@@ -28,12 +31,16 @@ Save the `signing.key` as a secret in your CI, then use it when building package
 ```console
 tar cvf package-name.tar.zst your-files # or however
 
-minisign -S -x package-name.tar.zst.sig -s signing.key -m package-name.tar.zst
+minisign -S -s signing.key -x package-name.tar.zst.sig -m package-name.tar.zst
+
+# or with rsign2:
+rsign sign -s signing.key -x package-name.tar.zst.sig package-name.tar.zst
 ```
 
 Upload both your package and the matching `.sig`.
 
 Now when binstall downloads your packages, it will also download the `.sig` file and use the `pubkey` in the Cargo.toml to verify the signature.
+If the signature has a trusted comment, it will print it at install time.
 
 ## Reference
 
