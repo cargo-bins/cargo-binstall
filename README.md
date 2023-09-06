@@ -91,28 +91,50 @@ The most ergonomic way to upgrade the installed crates is with [`cargo-update`](
 
 Supported crates such as `cargo-binstall` itself can also be updated with `cargo-binstall` as in the example in [Installation](#installation) above.
 
+## Signatures
+
+We have initial, limited [support](./SIGNING.md) for maintainers to specify a signing public key and where to find package signatures.
+With this enabled, Binstall will download and verify signatures for that package.
+
+You can use `--only-signed` to refuse to install packages if they're not signed.
+
+If you like to live dangerously (please don't use this outside testing), you can use `--skip-signatures` to disable checking or even downloading signatures at all.
+
 ## FAQ
 
-- Why use this?
-  - Because `wget`-ing releases is frustrating, `cargo install` takes a not inconsequential portion of forever on constrained devices,
-    and often putting together actual _packages_ is overkill.
-- Why use the cargo manifest?
-  - Crates already have these, and they already contain a significant portion of the required information.
-    Also, there's this great and woefully underused (IMO) `[package.metadata]` field.
-- Is this secure?
-  - Yes and also no? We're not (yet? [#1](https://github.com/cargo-bins/cargo-binstall/issues/1)) doing anything to verify the CI binaries are produced by the right person/organization.
-    However, we're pulling data from crates.io and the cargo manifest, both of which are _already_ trusted entities, and this is
-    functionally a replacement for `curl ... | bash` or `wget`-ing the same files, so, things can be improved but it's also fairly moot
-- What do the error codes mean?
-  - You can find a full description of errors including exit codes here: <https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
-- Can I use it in CI?
-  - Yes! For GitHub Actions, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has explicit support for selected tools and uses `cargo-binstall` for everything else.
-  - Additionally, we provide a minimal GitHub Action that installs `cargo-binstall`:
-    ```yml
-      - uses: cargo-bins/cargo-binstall@main
-    ``` 
-- Are debug symbols available?
-  - Yes! Extra pre-built packages with a `.full` suffix are available and contain split debuginfo, documentation files, and extra binaries like the `detect-wasi` utility.
+### Why use this?
+Because `wget`-ing releases is frustrating, `cargo install` takes a not inconsequential portion of forever on constrained devices, and often putting together actual _packages_ is overkill.
+
+### Why use the cargo manifest?
+Crates already have these, and they already contain a significant portion of the required information.
+Also, there's this great and woefully underused (IMO) `[package.metadata]` field.
+
+### Is this secure?
+Yes and also no?
+
+We have [initial support](./SIGNING.md) for verifying signatures, but not a lot of the ecosystem produces signatures at the moment.
+See [#1](https://github.com/cargo-bins/cargo-binstall/issues/1) to discuss more on this.
+
+We always pull the metadata from crates.io over HTTPS, and verify the checksum of the crate tar.
+We also enforce using HTTPS with TLS >= 1.2 for the actual download of the package files.
+
+Compared to something like a `curl ... | sh` script, we're not running arbitrary code, but of course the crate you're downloading a package for might itself be malicious!
+
+### What do the error codes mean?
+You can find a full description of errors including exit codes here: <https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
+
+### Can I use it in CI?
+Yes! We have two options, both for GitHub Actions:
+
+1. For full featured use, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has explicit support for selected tools and uses `cargo-binstall` for everything else.
+2. We provide a first-party, minimal action that _only_ installs the tool:
+```yml
+  - uses: cargo-bins/cargo-binstall@main
+```
+
+### Are debug symbols available?
+Yes!
+Extra pre-built packages with a `.full` suffix are available and contain split debuginfo, documentation files, and extra binaries like the `detect-wasi` utility.
 
 ---
 
