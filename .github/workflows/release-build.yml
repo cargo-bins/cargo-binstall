@@ -85,6 +85,18 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - if: inputs.publish
+      uses: actions/download-artifact@v3
+      with:
+        name: signing-key
+        path: minisign.key.enc
+    - if: inputs.publish
+      env:
+        SIGNING_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
+      run: |
+        apt-get install -y expect
+        .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
+
+    - if: inputs.publish
       name: Upload to release
       uses: svenstaro/upload-release-action@v2
       with:
@@ -139,6 +151,19 @@ jobs:
     - run: ls -shalr packages/
     - run: just repackage-lipo
     - run: ls -shal packages/
+
+    - if: inputs.publish
+      uses: actions/download-artifact@v3
+      with:
+        name: signing-key
+        path: minisign.key
+    - if: inputs.publish
+      env:
+        SIGNING_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
+      shell: bash
+      run: |
+        apt-get install -y expect
+        .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
     - if: inputs.publish
       name: Upload to release
