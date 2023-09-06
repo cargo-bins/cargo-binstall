@@ -39,9 +39,9 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
             let cpu_arch_suffix = cpu_arch.replace('_', "-");
 
             let handles: Vec<_> = [
-                format!("/lib/ld-linux-{cpu_arch_suffix}.so.1"),
-                format!("/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.1"),
-                format!("/usr/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.1"),
+                format!("/lib/ld-linux-{cpu_arch_suffix}.so.2"),
+                format!("/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.2"),
+                format!("/usr/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.2"),
             ]
             .into_iter()
             .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
