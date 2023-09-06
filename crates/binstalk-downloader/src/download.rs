@@ -260,8 +260,12 @@ impl Download<'_> {
     }
 
     #[instrument]
-    pub async fn into_vec(self) -> Result<Vec<u8>, DownloadError> {
-        todo!()
+    pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
+        let bytes = self.client.get(self.url).send(true).await?.bytes().await?;
+        if let Some(verifier) = self.data_verifier {
+            verifier.update(&bytes);
+        }
+        Ok(bytes)
     }
 }
 

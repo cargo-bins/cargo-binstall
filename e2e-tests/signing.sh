@@ -15,7 +15,7 @@ sleep 5 # for server to come up
 
 export BINSTALL_HTTPS_ROOT_CERTS=$PWD/ca.pem
 
-"./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --verbose signing-test
+"./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm signing-test
 "./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --only-signed signing-test
 "./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --skip-signatures signing-test
 

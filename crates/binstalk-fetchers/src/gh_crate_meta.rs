@@ -259,7 +259,7 @@ impl super::Fetcher for GhCrateMeta {
 
                 debug!(?sign_url, "Downloading signature");
                 let signature = Download::new(self.client.clone(), sign_url)
-                    .into_vec()
+                    .into_bytes()
                     .await?;
                 trace!(?signature, "got signature contents");
 
