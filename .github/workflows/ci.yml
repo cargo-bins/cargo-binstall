@@ -131,6 +131,39 @@ jobs:
       CARGO_PROFILE_RELEASE_LTO: no
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 4
 
+  detect-targets-alpine-test:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
+      TARGET: x86_64-unknown-linux-musl
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install x86_64-unknown-linux-musl target
+      run: rustup target add $TARGET
+    - uses: Swatinem/rust-cache@v2
+    - name: Build detect-targets
+      run: |
+        pip3 install -r zigbuild-requirements.txt
+        cd crates/detect-targets && cargo zigbuild --target $TARGET
+    - name: Run test in alpine
+      run: |
+        docker run --rm \
+          --mount src="$PWD/target/$TARGET/debug/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+          --mount src="$PWD/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
+          alpine test.sh "$TARGET"
+
+  detect-targets-ubuntu-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
+    - name: Build detect-targets
+      run: cargo build --bin detect-targets
+    - name: Run test in ubuntu
+      run: |
+        set -exuo pipefail
+        [ "$(./target/debug/detect-targets)" = "$(printf '%s\n%s' x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
+
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Tests pass
@@ -139,6 +172,8 @@ jobs:
     - cross-check
     - lint
     - release-builds
+    - detect-targets-alpine-test
+    - detect-targets-ubuntu-test
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
