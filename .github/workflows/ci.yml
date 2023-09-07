@@ -137,7 +137,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
       TARGET: x86_64-unknown-linux-musl
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Install x86_64-unknown-linux-musl target
       run: rustup target add $TARGET
     - uses: Swatinem/rust-cache@v2
@@ -155,7 +155,7 @@ jobs:
   detect-targets-ubuntu-test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: Swatinem/rust-cache@v2
     - name: Build detect-targets
       run: cargo build --bin detect-targets
