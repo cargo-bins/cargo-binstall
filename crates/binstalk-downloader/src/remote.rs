@@ -18,6 +18,9 @@ use tracing::{debug, info, instrument};
 pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
 
+#[cfg(feature = "trust-dns")]
+use crate::resolver::DefaultResolver;
+
 mod delay_request;
 use delay_request::DelayRequest;
 
@@ -106,6 +109,11 @@ impl Client {
                 .user_agent(user_agent)
                 .https_only(true)
                 .tcp_nodelay(false);
+
+            #[cfg(feature = "trust-dns")]
+            {
+                builder = builder.dns_resolver(Arc::new(DefaultResolver::default()));
+            }
 
             #[cfg(feature = "__tls")]
             {
