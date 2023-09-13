@@ -23,6 +23,7 @@ default-features = false
 features = [
     "worktree-mutation",
     "blocking-http-transport-reqwest",
+    "max-performance-safe",
 ]
 
 [features]
