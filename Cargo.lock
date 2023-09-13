@@ -1210,6 +1210,7 @@ dependencies = [
  "gix-worktree-state",
  "once_cell",
  "parking_lot",
+ "prodash",
  "reqwest",
  "smallvec",
  "thiserror",
@@ -2741,6 +2742,7 @@ checksum = "794b5bf8e2d19b53dcdcec3e4bba628e20f5b6062503ba89281fa7037dd7bbcf"
 dependencies = [
  "bytesize",
  "human_format",
+ "parking_lot",
 ]
 
 [[package]]

@@ -22,6 +22,7 @@ version = "0.53.1"
 default-features = false
 features = [
     "comfort",
+    "progress-tree",
     "blocking-http-transport-reqwest",
     "max-performance-safe",
     "worktree-mutation",
