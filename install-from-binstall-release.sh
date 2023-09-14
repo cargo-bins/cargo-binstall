@@ -21,7 +21,7 @@ elif [ "$os" == "Linux" ]; then
     url="${base_url}${target}.tgz"
     curl -L --proto '=https' --tlsv1.2 -sSf "$url" | tar -xvzf -
 else
-    echo "Unupporteed OS ${os}"
+    echo "Unsupported OS ${os}"
     exit 1
 fi
 
