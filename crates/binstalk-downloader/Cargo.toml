@@ -80,7 +80,7 @@ native-tls = [
 ]
 
 # Enable trust-dns-resolver so that features on it will also be enabled.
-trust-dns = ["trust-dns-resolver", "reqwest/trust-dns", "default-net", "ipconfig"]
+trust-dns = ["trust-dns-resolver", "default-net", "ipconfig"]
 
 # Experimental HTTP/3 client, this would require `--cfg reqwest_unstable`
 # to be passed to `rustc`.
