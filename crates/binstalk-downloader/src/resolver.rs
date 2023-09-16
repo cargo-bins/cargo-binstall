@@ -45,25 +45,18 @@ fn new_resolver() -> Result<TokioAsyncResolver, Box<dyn std::error::Error + Send
             })
             .flatten()
             .for_each(|addr| {
-                const DNS_PORT: u16 = 53;
-                config.add_name_server(NameServerConfig {
-                    socket_addr: SocketAddr::new(*addr, DNS_PORT),
-                    protocol: Protocol::Tcp,
-                    tls_dns_name: None,
-                    trust_nx_responses: false,
-                    #[cfg(feature = "rustls")]
-                    tls_config: None,
-                    bind_addr: None,
-                });
-                config.add_name_server(NameServerConfig {
-                    socket_addr: SocketAddr::new(*addr, DNS_PORT),
-                    protocol: Protocol::Udp,
-                    tls_dns_name: None,
-                    trust_nx_responses: false,
-                    #[cfg(feature = "rustls")]
-                    tls_config: None,
-                    bind_addr: None,
-                })
+                let socket_addr = SocketAddr::new(*addr, 53);
+                for protocol in [Protocol::Udp, Protocol::Tcp] {
+                    config.add_name_server(NameServerConfig {
+                        socket_addr,
+                        protocol,
+                        tls_dns_name: None,
+                        trust_nx_responses: false,
+                        #[cfg(feature = "rustls")]
+                        tls_config: None,
+                        bind_addr: None,
+                    })
+                }
             });
 
         Ok(TokioAsyncResolver::tokio(config, opts)?)
