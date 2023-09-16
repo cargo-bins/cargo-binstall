@@ -26,7 +26,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, Box<dyn std::error::Error + Send
     #[cfg(unix)]
     {
         let (config, opts) = trust_dns_resolver::system_conf::read_system_conf()?;
-        Ok(TokioAsyncResolver::tokio(config, opts))
+        Ok(TokioAsyncResolver::tokio(config, opts)?)
     }
     #[cfg(windows)]
     {
@@ -50,7 +50,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, Box<dyn std::error::Error + Send
                     socket_addr: SocketAddr::new(*addr, DNS_PORT),
                     protocol: Protocol::Tcp,
                     tls_dns_name: None,
-                    trust_negative_responses: false,
+                    trust_nx_responses: false,
                     #[cfg(feature = "rustls")]
                     tls_config: None,
                     bind_addr: None,
@@ -59,13 +59,13 @@ fn new_resolver() -> Result<TokioAsyncResolver, Box<dyn std::error::Error + Send
                     socket_addr: SocketAddr::new(*addr, DNS_PORT),
                     protocol: Protocol::Udp,
                     tls_dns_name: None,
-                    trust_negative_responses: false,
+                    trust_nx_responses: false,
                     #[cfg(feature = "rustls")]
                     tls_config: None,
                     bind_addr: None,
                 })
             });
 
-        Ok(TokioAsyncResolver::tokio(config, opts))
+        Ok(TokioAsyncResolver::tokio(config, opts)?)
     }
 }
