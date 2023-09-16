@@ -12,7 +12,7 @@ pub mod gh_api_client;
 
 pub mod remote;
 
-#[cfg(feature= "trust-dns")]
+#[cfg(feature = "trust-dns")]
 mod resolver;
 
 mod utils;
