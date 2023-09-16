@@ -19,7 +19,7 @@ pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
 
 #[cfg(feature = "trust-dns")]
-use crate::resolver::DefaultResolver;
+use crate::resolver::TrustDnsResolver;
 
 mod delay_request;
 use delay_request::DelayRequest;
@@ -112,7 +112,7 @@ impl Client {
 
             #[cfg(feature = "trust-dns")]
             {
-                builder = builder.dns_resolver(Arc::new(DefaultResolver::default()));
+                builder = builder.dns_resolver(Arc::new(TrustDnsResolver::default()));
             }
 
             #[cfg(feature = "__tls")]
