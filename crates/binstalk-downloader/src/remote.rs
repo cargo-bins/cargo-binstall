@@ -18,9 +18,6 @@ use tracing::{debug, info, instrument};
 pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
 
-#[cfg(feature = "trust-dns")]
-use crate::resolver::TrustDnsResolver;
-
 mod delay_request;
 use delay_request::DelayRequest;
 
@@ -32,6 +29,11 @@ pub use request_builder::{Body, RequestBuilder, Response};
 
 mod tls_version;
 pub use tls_version::TLSVersion;
+
+#[cfg(feature = "trust-dns")]
+mod resolver;
+#[cfg(feature = "trust-dns")]
+use resolver::TrustDnsResolver;
 
 #[cfg(feature = "json")]
 pub use request_builder::JsonError;
