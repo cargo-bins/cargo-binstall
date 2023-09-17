@@ -826,7 +826,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
