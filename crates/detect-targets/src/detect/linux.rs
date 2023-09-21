@@ -4,6 +4,7 @@ use std::{
 };
 
 use tokio::{process::Command, task};
+use tracing::debug;
 
 pub(super) async fn detect_targets(target: String) -> Vec<String> {
     let (prefix, postfix) = target
@@ -79,12 +80,18 @@ async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
         status,
         stdout,
         stderr,
-    } = Command::new(cmd)
+    } = match Command::new(cmd)
         .arg("--version")
         .stdin(Stdio::null())
         .output()
         .await
-        .ok()?;
+    {
+        Ok(output) => output,
+        Err(err) => {
+            debug!("{cmd}: err={err:?}");
+            return None;
+        }
+    };
 
     const ALPINE_GCOMPAT: &str = r#"This is the gcompat ELF interpreter stub.
 You are not meant to run this directly.
@@ -93,20 +100,26 @@ You are not meant to run this directly.
     if status.success() {
         // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
         // succeeds.
-        String::from_utf8_lossy(&stdout)
-            .contains("GLIBC")
-            .then_some(Libc::Gnu)
+        let stdout = String::from_utf8_lossy(&stdout);
+        debug!("{cmd}: stdout={stdout}");
+        stdout.contains("GLIBC").then_some(Libc::Gnu)
     } else if status.code() == Some(1) {
         // On Alpine, executing both the gcompat glibc and the ldd and
         // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
-        if str::from_utf8(&stdout).as_deref() == Ok(ALPINE_GCOMPAT) {
+        let stdout = str::from_utf8(&stdout);
+        debug!("{cmd}: stdout={stdout:?}");
+        if stdout == Ok(ALPINE_GCOMPAT) {
             // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
             Some(Libc::Gnu)
-        } else if String::from_utf8_lossy(&stderr).contains("musl libc") {
-            // Alpine/s ldd and musl dynlib will output to stderr
-            Some(Libc::Musl)
         } else {
-            None
+            let stderr = String::from_utf8_lossy(&stderr);
+            debug!("{cmd}: stderr={stderr:?}");
+            if stderr.contains("musl libc") {
+                // Alpine/s ldd and musl dynlib will output to stderr
+                Some(Libc::Musl)
+            } else {
+                None
+            }
         }
     } else if status.code() == Some(127) {
         // On Ubuntu 20.04 (glibc 2.31), the `--version` flag is not supported
@@ -122,6 +135,10 @@ You are not meant to run this directly.
 
         status.success().then_some(Libc::Gnu)
     } else {
+        let code = status.code();
+        let stdout = str::from_utf8(&stdout);
+        let stderr = str::from_utf8(&stderr);
+        debug!("{cmd}: code={code:?} stdout={stdout:?} stderr={stderr:?}");
         None
     }
 }

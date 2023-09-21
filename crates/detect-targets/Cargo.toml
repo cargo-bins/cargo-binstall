@@ -11,6 +11,8 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 tokio = { version = "1.28.2", features = ["rt", "process", "sync"], default-features = false }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", features = ["fmt"], default-features = false }
 cfg-if = "1.0.0"
 guess_host_triple = "0.1.3"
 
