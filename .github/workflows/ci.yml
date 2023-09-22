@@ -153,10 +153,18 @@ jobs:
           alpine test.sh "$TARGET"
 
   detect-targets-ubuntu-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-20.04
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
     - uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ matrix.os }}
     - name: Build detect-targets
       run: cargo build --bin detect-targets
     - name: Run test in ubuntu

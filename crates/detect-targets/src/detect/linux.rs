@@ -108,6 +108,19 @@ You are not meant to run this directly.
         } else {
             None
         }
+    } else if status.code() == Some(127) {
+        // On Ubuntu 20.04 (glibc 2.31), the `--version` flag is not supported
+        // and it will exit with status 127.
+        let status = Command::new(cmd)
+            .arg("/bin/true")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .ok()?;
+
+        status.success().then_some(Libc::Gnu)
     } else {
         None
     }
