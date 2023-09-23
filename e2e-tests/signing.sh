@@ -13,8 +13,8 @@ echo Generate tls cert
 CERT_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'cert-dir')
 export CERT_DIR
 
-MSYS_NO_PATHCONV=1 openssl req -newkey rsa:4096 -x509 -sha256 -days 1 -nodes -out "$CERT_DIR/"ca.pem -keyout "$CERT_DIR/"ca.key -subj '/C=UT/CN=ca.localhost'
-MSYS_NO_PATHCONV=1 openssl req -new -newkey rsa:4096 -sha256 -nodes -out "$CERT_DIR/"server.csr -keyout "$CERT_DIR/"server.key -subj '/C=UT/CN=localhost'
+openssl req -newkey rsa:4096 -x509 -sha256 -days 1 -nodes -out "$CERT_DIR/"ca.pem -keyout "$CERT_DIR/"ca.key -subj '//C=UT/CN=ca.localhost'
+openssl req -new -newkey rsa:4096 -sha256 -nodes -out "$CERT_DIR/"server.csr -keyout "$CERT_DIR/"server.key -subj '//C=UT/CN=localhost'
 openssl x509 -req -in "$CERT_DIR/"server.csr -CA "$CERT_DIR/"ca.pem -CAkey "$CERT_DIR/"ca.key -CAcreateserial -out "$CERT_DIR/"server.pem -days 1 -sha256 -extfile signing/server.ext
 
 python signing/server.py 2>/dev/null &
