@@ -833,6 +833,8 @@ dependencies = [
  "cfg-if",
  "guess_host_triple",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "windows-dll",
  "windows-sys",
 ]

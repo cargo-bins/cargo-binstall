@@ -4,6 +4,8 @@ use std::{
 };
 
 use tokio::{process::Command, task};
+#[cfg(feature = "tracing")]
+use tracing::debug;
 
 pub(super) async fn detect_targets(target: String) -> Vec<String> {
     let (prefix, postfix) = target
@@ -79,12 +81,25 @@ async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
         status,
         stdout,
         stderr,
-    } = Command::new(cmd)
+    } = match Command::new(cmd)
         .arg("--version")
         .stdin(Stdio::null())
         .output()
         .await
-        .ok()?;
+    {
+        Ok(output) => output,
+        Err(_err) => {
+            #[cfg(feature = "tracing")]
+            debug!("Running `{cmd} --version`: err={_err:?}");
+            return None;
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&stdout);
+    let stderr = String::from_utf8_lossy(&stderr);
+
+    #[cfg(feature = "tracing")]
+    debug!("`{cmd} --version`: status={status}, stdout='{stdout}', stderr='{stderr}'");
 
     const ALPINE_GCOMPAT: &str = r#"This is the gcompat ELF interpreter stub.
 You are not meant to run this directly.
@@ -93,16 +108,14 @@ You are not meant to run this directly.
     if status.success() {
         // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
         // succeeds.
-        String::from_utf8_lossy(&stdout)
-            .contains("GLIBC")
-            .then_some(Libc::Gnu)
+        stdout.contains("GLIBC").then_some(Libc::Gnu)
     } else if status.code() == Some(1) {
         // On Alpine, executing both the gcompat glibc and the ldd and
         // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
-        if str::from_utf8(&stdout).as_deref() == Ok(ALPINE_GCOMPAT) {
+        if stdout == ALPINE_GCOMPAT {
             // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
             Some(Libc::Gnu)
-        } else if String::from_utf8_lossy(&stderr).contains("musl libc") {
+        } else if stderr.contains("musl libc") {
             // Alpine/s ldd and musl dynlib will output to stderr
             Some(Libc::Musl)
         } else {
@@ -119,6 +132,9 @@ You are not meant to run this directly.
             .status()
             .await
             .ok()?;
+
+        #[cfg(feature = "tracing")]
+        debug!("`{cmd} --version`: status={status}");
 
         status.success().then_some(Libc::Gnu)
     } else {

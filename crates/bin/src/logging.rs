@@ -202,6 +202,7 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
         "binstalk_registry",
         "cargo_binstall",
         "cargo_toml_workspace",
+        "detect_targets",
         "simple_git",
     ]);
 
