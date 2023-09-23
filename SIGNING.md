@@ -59,7 +59,7 @@ It may or may not include the untrusted comment; it's ignored by Binstall so we 
 
 ## Just-in-time signing
 
-To reduce the risk of a key being stolen, this scheme supports just-in-time signing.
+To reduce the risk of a key being stolen, this scheme supports just-in-time or "keyless" signing.
 The idea is to generate a keypair when releasing, use it for signing the packages, save the key in the Cargo.toml before publishing to a registry, and then discard the private key when it's done.
 That way, there's no key to steal nor to store securely, and every release is signed by a different key.
 And because crates.io is immutable, it's impossible to overwrite the key.
@@ -73,7 +73,7 @@ There is one caveat to keep in mind: with the scheme as described above, Binstal
 The solution here is either:
 
 - Commit the Cargo.toml with the ephemeral public key to the repo when publishing.
-- Omit the `[...signing]` section in the source, and write the entire section on publish instead of just filling in the `pubkey`; signatures won't be checked for `--git` installs.
+- Omit the `[...signing]` section in the source, and write the entire section on publish instead of just filling in the `pubkey`; signatures won't be checked for `--git` installs. Binstall uses this approach.
 - Instruct your users to use `--skip-signatures` if they want to install with `--git`.
 
 ## Why not X? (Sigstore, GPG, signify, with SSH keys, ...)
@@ -84,10 +84,10 @@ We chose minisign as the first supported algorithm as it's lightweight, fairly p
 
 ## There's a competing project that does package signature verification differently!
 
-[Tell use about it](https://github.com/cargo-bins/cargo-binstall/issues/1)!
+[Tell us about it](https://github.com/cargo-bins/cargo-binstall/issues/1)!
 We're not looking to fracture the ecosystem here, and will gladly implement support if something exists already.
 
-We'll also work with others in the space to eventually formalise this beyond Binstall, for example around the `cargo-dist.json` metadata format.
+We'll also work with others in the space to eventually formalise this beyond Binstall, for example around the [`dist-manifest.json`](https://crates.io/crates/cargo-dist-schema) metadata format.
 
 ## What's the relationship to crate/registry signing?
 

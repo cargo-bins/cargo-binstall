@@ -16,6 +16,10 @@ on:
         description: "Set to override default release profile codegen-units settings"
         required: false
         type: string
+    secrets:
+      signingkey:
+        description: "Minisign private key. Required when publishing"
+        required: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -85,6 +89,14 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - if: inputs.publish
+      uses: cargo-bins/cargo-binstall@main
+
+    - if: inputs.publish
+      env:
+        SIGNING_KEY: ${{ secrets.signingkey }}
+      run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
+
+    - if: inputs.publish
       name: Upload to release
       uses: svenstaro/upload-release-action@v2
       with:
@@ -139,6 +151,14 @@ jobs:
     - run: ls -shalr packages/
     - run: just repackage-lipo
     - run: ls -shal packages/
+
+    - if: inputs.publish
+      uses: cargo-bins/cargo-binstall@main
+
+    - if: inputs.publish
+      env:
+        SIGNING_KEY: ${{ secrets.signingkey }}
+      run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
     - if: inputs.publish
       name: Upload to release

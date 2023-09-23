@@ -22,8 +22,8 @@ jobs:
         event-data: ${{ toJSON(github.event) }}
         extract-notes-under: '### Release notes'
 
-  tag:
-    if: needs.info.outputs.is-release == 'true'
+  libtag:
+    if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate != 'cargo-binstall'
     needs: info
     runs-on: ubuntu-latest
     steps:
@@ -35,24 +35,43 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ needs.info.outputs.version }}
         tag_prefix: ${{ needs.info.outputs.crate }}-v
-    - name: Push cli release tag
-      if: needs.info.outputs.crate == 'cargo-binstall'
-      uses: mathieudutour/github-tag-action@v6.1
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        custom_tag: ${{ needs.info.outputs.version }}
-        tag_prefix: v
     - name: Publish to crates.io
       run: |
         cargo publish -p '${{ needs.info.outputs.crate }}'
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
+  clitag:
+    if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
+    needs: info
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Push cli release tag
+      uses: mathieudutour/github-tag-action@v6.1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        custom_tag: ${{ needs.info.outputs.version }}
+        tag_prefix: v
+    - uses: cargo-bins/cargo-binstall@main
+    - name: Create ephemeral keypair
+      id: keypair
+      run: .github/scripts/ephemeral-gen.sh
+    - name: Publish to crates.io
+      env:
+        crate: ${{ needs.info.outputs.crate }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: cargo publish -p "$crate"
+    outputs:
+      signingkey: ${{ steps.keypair.outputs.private }}
+
   package:
     if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
     needs:
     - info
-    - tag
+    - clitag
     uses: ./.github/workflows/release-build.yml
     with:
       publish: ${{ toJSON(needs.info.outputs) }}
+    secrets:
+      signingkey: ${{ needs.clitag.signingkey }}
