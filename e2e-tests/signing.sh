@@ -23,7 +23,7 @@ trap 'kill $server_pid' ERR INT TERM
 
 export BINSTALL_HTTPS_ROOT_CERTS="$CERT_DIR/ca.pem"
 
-timeout 2m signing/wait-for-server.sh
+signing/wait-for-server.sh
 
 "./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm signing-test
 "./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --only-signed signing-test
