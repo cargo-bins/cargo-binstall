@@ -20,15 +20,14 @@ openssl x509 -req -in "$CERT_DIR/"server.csr -CA "$CERT_DIR/"ca.pem -CAkey "$CER
 python signing/server.py 2>/dev/null &
 server_pid=$!
 trap 'kill $server_pid' ERR INT TERM
-sleep 10 # for server to come up
 
 export BINSTALL_HTTPS_ROOT_CERTS="$CERT_DIR/ca.pem"
 
-curl --cacert "$BINSTALL_HTTPS_ROOT_CERTS" -L https://localhost:4443/signing-test.tar | file -
+timeout 2m signing/wait-for-server.sh
 
-"./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm signing-test --log-level debug
-"./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --only-signed signing-test
-"./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --skip-signatures signing-test
+"./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm signing-test
+"./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --only-signed signing-test
+"./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --skip-signatures signing-test
 
 
 kill $server_pid || true
