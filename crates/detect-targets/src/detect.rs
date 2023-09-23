@@ -7,6 +7,7 @@ use std::{
 
 use cfg_if::cfg_if;
 use tokio::process::Command;
+#[cfg(feature = "tracing")]
 use tracing::debug;
 
 cfg_if! {
@@ -34,9 +35,11 @@ cfg_if! {
 /// for more information.
 pub async fn detect_targets() -> Vec<String> {
     let target = get_target_from_rustc().await;
+    #[cfg(feature = "tracing")]
     debug!("get_target_from_rustc()={target:?}");
     let target = target.unwrap_or_else(|| {
         let target = guess_host_triple::guess_host_triple();
+        #[cfg(feature = "tracing")]
         debug!("guess_host_triple::guess_host_triple()={target:?}");
         target.unwrap_or(crate::TARGET).to_string()
     });

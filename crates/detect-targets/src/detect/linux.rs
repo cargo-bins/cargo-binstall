@@ -4,6 +4,7 @@ use std::{
 };
 
 use tokio::{process::Command, task};
+#[cfg(feature = "tracing")]
 use tracing::debug;
 
 pub(super) async fn detect_targets(target: String) -> Vec<String> {
@@ -87,11 +88,18 @@ async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
         .await
     {
         Ok(output) => output,
-        Err(err) => {
-            debug!("{cmd}: err={err:?}");
+        Err(_err) => {
+            #[cfg(feature = "tracing")]
+            debug!("Running `{cmd} --version`: err={_err:?}");
             return None;
         }
     };
+
+    let stdout = String::from_utf8_lossy(&stdout);
+    let stderr = String::from_utf8_lossy(&stderr);
+
+    #[cfg(feature = "tracing")]
+    debug!("`{cmd} --version`: status={status}, stdout='{stdout}', stderr='{stderr}'");
 
     const ALPINE_GCOMPAT: &str = r#"This is the gcompat ELF interpreter stub.
 You are not meant to run this directly.
@@ -100,20 +108,14 @@ You are not meant to run this directly.
     if status.success() {
         // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
         // succeeds.
-        let stdout = String::from_utf8_lossy(&stdout);
-        debug!("{cmd}: stdout={stdout}");
         stdout.contains("GLIBC").then_some(Libc::Gnu)
     } else if status.code() == Some(1) {
         // On Alpine, executing both the gcompat glibc and the ldd and
         // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
-        let stdout = str::from_utf8(&stdout);
-        debug!("{cmd}: stdout={stdout:?}");
-        if stdout == Ok(ALPINE_GCOMPAT) {
+        if stdout == ALPINE_GCOMPAT {
             // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
             Some(Libc::Gnu)
         } else {
-            let stderr = String::from_utf8_lossy(&stderr);
-            debug!("{cmd}: stderr={stderr:?}");
             if stderr.contains("musl libc") {
                 // Alpine/s ldd and musl dynlib will output to stderr
                 Some(Libc::Musl)
@@ -133,12 +135,11 @@ You are not meant to run this directly.
             .await
             .ok()?;
 
+        #[cfg(feature = "tracing")]
+        debug!("`{cmd} --version`: status={status}");
+
         status.success().then_some(Libc::Gnu)
     } else {
-        let code = status.code();
-        let stdout = str::from_utf8(&stdout);
-        let stderr = str::from_utf8(&stderr);
-        debug!("{cmd}: code={code:?} stdout={stdout:?} stderr={stderr:?}");
         None
     }
 }
