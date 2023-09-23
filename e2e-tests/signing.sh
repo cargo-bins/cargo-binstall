@@ -19,6 +19,5 @@ export BINSTALL_HTTPS_ROOT_CERTS=$PWD/ca.pem
 "./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --only-signed signing-test
 "./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --skip-signatures signing-test
 
-signing-test >/dev/null
 
 kill $server_pid || true
