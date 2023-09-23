@@ -76,14 +76,17 @@ pub trait DataVerifier: Send + Sync {
     /// This method can be called repeatedly for use with streaming messages,
     /// it will be called in the order of the message received.
     fn update(&mut self, data: &Bytes);
+
+    /// Finalise the data verification.
+    ///
+    /// Return false if the data is invalid.
+    fn validate(&mut self) -> bool;
 }
 
-impl<T> DataVerifier for T
-where
-    T: FnMut(&Bytes) + Send + Sync,
-{
-    fn update(&mut self, data: &Bytes) {
-        (*self)(data)
+impl DataVerifier for () {
+    fn update(&mut self, _: &Bytes) {}
+    fn validate(&mut self) -> bool {
+        true
     }
 }
 
@@ -136,9 +139,7 @@ impl<'a> Download<'a> {
             data_verifier: Some(data_verifier),
         }
     }
-}
 
-impl<'a> Download<'a> {
     async fn get_stream(
         self,
     ) -> Result<
@@ -182,7 +183,7 @@ where
 }
 
 impl Download<'_> {
-    /// Download a file from the provided URL and process them in memory.
+    /// Download a file from the provided URL and process it in memory.
     ///
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
@@ -216,7 +217,7 @@ impl Download<'_> {
 
     /// Download a file from the provided URL and extract it to the provided path.
     ///
-    /// NOTE that this would only extract directory and regular files.
+    /// NOTE that this will only extract directory and regular files.
     #[instrument(skip(path))]
     pub async fn and_extract(
         self,
@@ -256,6 +257,15 @@ impl Download<'_> {
         }
 
         inner(self, fmt, path.as_ref()).await
+    }
+
+    #[instrument]
+    pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
+        let bytes = self.client.get(self.url).send(true).await?.bytes().await?;
+        if let Some(verifier) = self.data_verifier {
+            verifier.update(&bytes);
+        }
+        Ok(bytes)
     }
 }
 

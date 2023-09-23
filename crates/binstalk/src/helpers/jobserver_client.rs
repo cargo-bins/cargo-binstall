@@ -5,6 +5,7 @@ use tokio::sync::OnceCell;
 
 use crate::errors::BinstallError;
 
+#[derive(Debug)]
 pub struct LazyJobserverClient(OnceCell<Client>);
 
 impl LazyJobserverClient {

@@ -314,12 +314,14 @@ dependencies = [
  "async-trait",
  "binstalk-downloader",
  "binstalk-types",
+ "bytes",
  "compact_str",
  "either",
  "itertools",
  "leon",
  "leon-macros",
  "miette",
+ "minisign-verify",
  "once_cell",
  "strum",
  "thiserror",
@@ -2510,6 +2512,12 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
+
+[[package]]
+name = "minisign-verify"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "933dca44d65cdd53b355d0b73d380a2ff5da71f87f036053188bf1eab6a19881"
 
 [[package]]
 name = "miniz_oxide"

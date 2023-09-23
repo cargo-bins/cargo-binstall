@@ -23,17 +23,35 @@ pub(super) struct RegistryConfig {
     pub(super) dl: CompactString,
 }
 
-struct Sha256Digest(Sha256);
+struct Sha256Digest {
+    expected: Vec<u8>,
+    actual: Option<Vec<u8>>,
+    state: Option<Sha256>,
+}
 
-impl Default for Sha256Digest {
-    fn default() -> Self {
-        Sha256Digest(Sha256::new())
+impl Sha256Digest {
+    fn new(checksum: Vec<u8>) -> Self {
+        Self {
+            expected: checksum,
+            actual: None,
+            state: Some(Sha256::new()),
+        }
     }
 }
 
 impl DataVerifier for Sha256Digest {
     fn update(&mut self, data: &Bytes) {
-        self.0.update(data);
+        if let Some(ref mut state) = &mut self.state {
+            state.update(data);
+        }
+    }
+
+    fn validate(&mut self) -> bool {
+        if let Some(state) = self.state.take() {
+            self.actual = Some(state.finalize().to_vec());
+        }
+
+        self.actual.as_ref().unwrap() == &self.expected
     }
 }
 
@@ -49,18 +67,16 @@ pub(super) async fn parse_manifest(
     let mut manifest_visitor = ManifestVisitor::new(format!("{crate_name}-{version}").into());
 
     let checksum = decode_base16(cksum.as_bytes()).map_err(RegistryError::from)?;
-    let mut sha256_digest = Sha256Digest::default();
+    let mut digest = Sha256Digest::new(checksum);
 
-    Download::new_with_data_verifier(client, crate_url, &mut sha256_digest)
+    Download::new_with_data_verifier(client, crate_url, &mut digest)
         .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
         .await?;
 
-    let digest_checksum = sha256_digest.0.finalize();
-
-    if digest_checksum.as_slice() != checksum.as_slice() {
+    if !digest.validate() {
         Err(RegistryError::UnmatchedChecksum {
-            expected: cksum.into(),
-            actual: encode_base16(digest_checksum.as_slice()).into(),
+            expected: encode_base16(digest.expected.as_slice()).into(),
+            actual: encode_base16(digest.actual.unwrap().as_slice()).into(),
         })
     } else {
         manifest_visitor.load_manifest()

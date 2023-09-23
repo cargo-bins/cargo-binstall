@@ -5,6 +5,7 @@ use std::{path::Path, sync::Arc};
 use binstalk_downloader::{
     download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
 };
+use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
 use tokio::sync::OnceCell;
 pub use url::ParseError as UrlParseError;
@@ -19,6 +20,9 @@ pub use quickinstall::*;
 
 mod common;
 use common::*;
+
+mod signing;
+use signing::*;
 
 mod futures_resolver;
 
@@ -57,6 +61,15 @@ pub enum FetchError {
 
     #[error("Failed to parse url: {0}")]
     UrlParse(#[from] UrlParseError),
+
+    #[error("Signing algorithm not supported: {0:?}")]
+    UnsupportedSigningAlgorithm(SigningAlgorithm),
+
+    #[error("No signature present")]
+    MissingSignature,
+
+    #[error("Failed to verify signature")]
+    InvalidSignature,
 }
 
 impl From<RemoteError> for FetchError {
@@ -80,6 +93,7 @@ pub trait Fetcher: Send + Sync {
         gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
+        signature_policy: SignaturePolicy,
     ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
@@ -131,6 +145,19 @@ struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
     subcrate: Option<CompactString>,
+}
+
+/// What to do about package signatures
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SignaturePolicy {
+    /// Don't process any signing information at all
+    Ignore,
+
+    /// Verify and fail if a signature is found, but pass a signature-less package
+    IfPresent,
+
+    /// Require signatures to be present (and valid)
+    Require,
 }
 
 /// Data required to fetch a package

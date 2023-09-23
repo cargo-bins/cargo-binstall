@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 use semver::VersionReq;
 
 use crate::{
-    fetchers::{Data, Fetcher, TargetDataErased},
+    fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
     helpers::{
         self, gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client,
     },
@@ -16,8 +16,10 @@ use crate::{
 
 pub mod resolve;
 
-pub type Resolver = fn(Client, GhApiClient, Arc<Data>, Arc<TargetDataErased>) -> Arc<dyn Fetcher>;
+pub type Resolver =
+    fn(Client, GhApiClient, Arc<Data>, Arc<TargetDataErased>, SignaturePolicy) -> Arc<dyn Fetcher>;
 
+#[derive(Debug)]
 #[non_exhaustive]
 pub enum CargoTomlFetchOverride {
     #[cfg(feature = "git")]
@@ -25,6 +27,7 @@ pub enum CargoTomlFetchOverride {
     Path(PathBuf),
 }
 
+#[derive(Debug)]
 pub struct Options {
     pub no_symlinks: bool,
     pub dry_run: bool,
@@ -49,4 +52,6 @@ pub struct Options {
     pub gh_api_client: GhApiClient,
     pub jobserver_client: LazyJobserverClient,
     pub registry: Registry,
+
+    pub signature_policy: SignaturePolicy,
 }

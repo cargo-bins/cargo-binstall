@@ -34,8 +34,8 @@ pub struct PkgMeta {
     /// Path template for binary files in packages
     pub bin_dir: Option<String>,
 
-    /// Public key for package verification (base64 encoded)
-    pub pub_key: Option<String>,
+    /// Package signing configuration
+    pub signing: Option<PkgSigning>,
 
     /// Target specific overrides
     pub overrides: BTreeMap<String, PkgOverride>,
@@ -76,11 +76,16 @@ impl PkgMeta {
                 .or(self.pkg_fmt),
 
             bin_dir: pkg_overrides
+                .clone()
                 .into_iter()
                 .find_map(|pkg_override| pkg_override.bin_dir.clone())
                 .or_else(|| self.bin_dir.clone()),
 
-            pub_key: self.pub_key.clone(),
+            signing: pkg_overrides
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.signing.clone())
+                .or_else(|| self.signing.clone()),
+
             overrides: Default::default(),
         }
     }
@@ -100,6 +105,9 @@ pub struct PkgOverride {
 
     /// Path template override for binary files in packages
     pub bin_dir: Option<String>,
+
+    /// Package signing configuration
+    pub signing: Option<PkgSigning>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -107,6 +115,29 @@ pub struct PkgOverride {
 pub struct BinMeta {
     /// Binary name
     pub name: String,
-    /// Binary template path (within package)
+
+    /// Binary template (path within package)
     pub path: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PkgSigning {
+    /// Signing algorithm supported by Binstall.
+    pub algorithm: SigningAlgorithm,
+
+    /// Signing public key
+    pub pubkey: String,
+
+    /// Signature file override template (url to download)
+    #[serde(default)]
+    pub file: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum SigningAlgorithm {
+    /// [minisign](https://jedisct1.github.io/minisign/)
+    Minisign,
 }

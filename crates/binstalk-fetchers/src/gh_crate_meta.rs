@@ -1,16 +1,16 @@
-use std::{borrow::Cow, fmt, iter, marker::PhantomData, path::Path, sync::Arc};
+use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use leon::Template;
 use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
-use tracing::{debug, warn};
+use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
     common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
-    TargetDataErased,
+    SignaturePolicy, SignatureVerifier, TargetDataErased,
 };
 
 pub(crate) mod hosting;
@@ -20,13 +20,23 @@ pub struct GhCrateMeta {
     gh_api_client: GhApiClient,
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
-    resolution: OnceCell<(Url, PkgFmt)>,
+    signature_policy: SignaturePolicy,
+    resolution: OnceCell<Resolved>,
+}
+
+#[derive(Debug)]
+struct Resolved {
+    url: Url,
+    pkg_fmt: PkgFmt,
+    archive_suffix: Option<String>,
+    repo: Option<String>,
+    subcrate: Option<String>,
 }
 
 impl GhCrateMeta {
     fn launch_baseline_find_tasks(
         &self,
-        futures_resolver: &FuturesResolver<(Url, PkgFmt), FetchError>,
+        futures_resolver: &FuturesResolver<Resolved, FetchError>,
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
         repo: Option<&str>,
@@ -41,7 +51,7 @@ impl GhCrateMeta {
                 repo,
                 subcrate,
             );
-            match ctx.render_url_with_compiled_tt(pkg_url) {
+            match ctx.render_url_with(pkg_url) {
                 Ok(url) => Some(url),
                 Err(err) => {
                     warn!("Failed to render url for {ctx:#?}: {err}");
@@ -58,21 +68,30 @@ impl GhCrateMeta {
                 pkg_fmt
                     .extensions(is_windows)
                     .iter()
-                    .filter_map(|ext| render_url(Some(ext))),
+                    .filter_map(|ext| render_url(Some(ext)).map(|url| (url, Some(ext)))),
             )
         } else {
-            Either::Right(render_url(None).into_iter())
+            Either::Right(render_url(None).map(|url| (url, None)).into_iter())
         };
 
         // go check all potential URLs at once
-        futures_resolver.extend(urls.map(move |url| {
+        futures_resolver.extend(urls.map(move |(url, ext)| {
             let client = self.client.clone();
             let gh_api_client = self.gh_api_client.clone();
 
+            let repo = repo.map(ToString::to_string);
+            let subcrate = subcrate.map(ToString::to_string);
+            let archive_suffix = ext.map(ToString::to_string);
             async move {
                 Ok(does_url_exist(client, gh_api_client, &url)
                     .await?
-                    .then_some((url, pkg_fmt)))
+                    .then_some(Resolved {
+                        url,
+                        pkg_fmt,
+                        repo,
+                        subcrate,
+                        archive_suffix,
+                    }))
             }
         }));
     }
@@ -85,12 +104,14 @@ impl super::Fetcher for GhCrateMeta {
         gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
+        signature_policy: SignaturePolicy,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
             gh_api_client,
             data,
             target_data,
+            signature_policy,
             resolution: OnceCell::new(),
         })
     }
@@ -131,7 +152,8 @@ impl super::Fetcher for GhCrateMeta {
                             pkg_url: pkg_url.into(),
                             reason:
                                 &"pkg-fmt is not specified, yet pkg-url does not contain format, \
-archive-format or archive-suffix which is required for automatically deducing pkg-fmt",
+                                archive-format or archive-suffix which is required for automatically \
+                                deducing pkg-fmt",
                         }
                         .into());
                     }
@@ -212,9 +234,9 @@ archive-format or archive-suffix which is required for automatically deducing pk
                 }
             }
 
-            if let Some((url, pkg_fmt)) = resolver.resolve().await? {
-                debug!("Winning URL is {url}, with pkg_fmt {pkg_fmt}");
-                self.resolution.set((url, pkg_fmt)).unwrap(); // find() is called first
+            if let Some(resolved) = resolver.resolve().await? {
+                debug!(?resolved, "Winning URL found!");
+                self.resolution.set(resolved).unwrap(); // find() is called first
                 Ok(true)
             } else {
                 Ok(false)
@@ -223,18 +245,75 @@ archive-format or archive-suffix which is required for automatically deducing pk
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let (url, pkg_fmt) = self.resolution.get().unwrap(); // find() is called first
+        let resolved = self.resolution.get().unwrap(); // find() is called first
+        trace!(?resolved, "preparing to fetch");
+
+        let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
+            (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
+                SignatureVerifier::Noop
+            }
+            (SignaturePolicy::Require, None) => {
+                debug_assert!(false, "missing signing section should be caught earlier");
+                return Err(FetchError::MissingSignature);
+            }
+            (_, Some(config)) => {
+                let template = match config.file.as_deref() {
+                    Some(file) => Template::parse(file)?,
+                    None => leon_macros::template!("{ url }.sig"),
+                };
+                trace!(?template, "parsed signature file template");
+
+                let sign_url = Context::from_data_with_repo(
+                    &self.data,
+                    &self.target_data.target,
+                    &self.target_data.target_related_info,
+                    resolved.archive_suffix.as_deref(),
+                    resolved.repo.as_deref(),
+                    resolved.subcrate.as_deref(),
+                )
+                .with_url(&resolved.url)
+                .render_url_with(&template)?;
+
+                debug!(?sign_url, "Downloading signature");
+                let signature = Download::new(self.client.clone(), sign_url)
+                    .into_bytes()
+                    .await?;
+                trace!(?signature, "got signature contents");
+
+                SignatureVerifier::new(config, &signature)?
+            }
+        };
+
         debug!(
-            "Downloading package from: '{url}' dst:{} fmt:{pkg_fmt:?}",
-            dst.display()
+            url=%resolved.url,
+            dst=%dst.display(),
+            fmt=?resolved.pkg_fmt,
+            "Downloading package",
         );
-        Ok(Download::new(self.client.clone(), url.clone())
-            .and_extract(*pkg_fmt, dst)
-            .await?)
+        let mut data_verifier = verifier.data_verifier()?;
+        let files = Download::new_with_data_verifier(
+            self.client.clone(),
+            resolved.url.clone(),
+            data_verifier.as_mut(),
+        )
+        .and_extract(resolved.pkg_fmt, dst)
+        .await?;
+        trace!("validating signature (if any)");
+        if data_verifier.validate() {
+            if let Some(info) = verifier.info() {
+                info!(
+                    "Verified signature for package '{}': {info}",
+                    self.data.name
+                );
+            }
+            Ok(files)
+        } else {
+            Err(FetchError::InvalidSignature)
+        }
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
-        self.resolution.get().unwrap().1
+        self.resolution.get().unwrap().pkg_fmt
     }
 
     fn target_meta(&self) -> PkgMeta {
@@ -246,13 +325,13 @@ archive-format or archive-suffix which is required for automatically deducing pk
     fn source_name(&self) -> CompactString {
         self.resolution
             .get()
-            .map(|(url, _pkg_fmt)| {
-                if let Some(domain) = url.domain() {
+            .map(|resolved| {
+                if let Some(domain) = resolved.url.domain() {
                     domain.to_compact_string()
-                } else if let Some(host) = url.host_str() {
+                } else if let Some(host) = resolved.url.host_str() {
                     host.to_compact_string()
                 } else {
-                    url.to_compact_string()
+                    resolved.url.to_compact_string()
                 }
             })
             .unwrap_or_else(|| "invalid url".into())
@@ -294,49 +373,24 @@ struct Context<'c> {
     /// Workspace of the crate inside the repository.
     subcrate: Option<&'c str>,
 
+    /// Url of the file being downloaded (only for signing.file)
+    url: Option<&'c Url>,
+
     target_related_info: &'c dyn leon::Values,
 }
 
 impl fmt::Debug for Context<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[allow(dead_code)]
-        #[derive(Debug)]
-        struct Context<'c> {
-            name: &'c str,
-            repo: Option<&'c str>,
-            target: &'c str,
-            version: &'c str,
-
-            archive_format: Option<&'c str>,
-
-            archive_suffix: Option<&'c str>,
-
-            binary_ext: &'c str,
-
-            subcrate: Option<&'c str>,
-
-            target_related_info: PhantomData<&'c dyn leon::Values>,
-        }
-
-        fmt::Debug::fmt(
-            &Context {
-                name: self.name,
-                repo: self.repo,
-                target: self.target,
-                version: self.version,
-
-                archive_format: self.archive_format,
-
-                archive_suffix: self.archive_suffix,
-
-                binary_ext: self.binary_ext,
-
-                subcrate: self.subcrate,
-
-                target_related_info: PhantomData,
-            },
-            f,
-        )
+        f.debug_struct("Context")
+            .field("name", &self.name)
+            .field("repo", &self.repo)
+            .field("target", &self.target)
+            .field("version", &self.version)
+            .field("archive_format", &self.archive_format)
+            .field("binary_ext", &self.binary_ext)
+            .field("subcrate", &self.subcrate)
+            .field("url", &self.url)
+            .finish_non_exhaustive()
     }
 }
 
@@ -358,6 +412,8 @@ impl leon::Values for Context<'_> {
             "binary-ext" => Some(Cow::Borrowed(self.binary_ext)),
 
             "subcrate" => self.subcrate.map(Cow::Borrowed),
+
+            "url" => self.url.map(|url| Cow::Borrowed(url.as_str())),
 
             key => self.target_related_info.get_value(key),
         }
@@ -398,24 +454,25 @@ impl<'c> Context<'c> {
                 ""
             },
             subcrate,
+            url: None,
 
             target_related_info,
         }
     }
 
-    /// * `tt` - must have added a template named "pkg_url".
-    fn render_url_with_compiled_tt(&self, tt: &Template<'_>) -> Result<Url, FetchError> {
-        debug!("Render {tt:#?} using context: {self:?}");
+    fn with_url(&mut self, url: &'c Url) -> &mut Self {
+        self.url = Some(url);
+        self
+    }
 
-        Ok(Url::parse(&tt.render(self)?)?)
+    fn render_url_with(&self, template: &Template<'_>) -> Result<Url, FetchError> {
+        debug!(?template, context=?self, "render url template");
+        Ok(Url::parse(&template.render(self)?)?)
     }
 
     #[cfg(test)]
     fn render_url(&self, template: &str) -> Result<Url, FetchError> {
-        debug!("Render {template} using context in render_url: {self:?}");
-
-        let tt = Template::parse(template)?;
-        self.render_url_with_compiled_tt(&tt)
+        self.render_url_with(&Template::parse(template)?)
     }
 }
 

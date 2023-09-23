@@ -72,6 +72,25 @@ pub enum BinstallError {
     #[diagnostic(severity(info), code(binstall::user_abort))]
     UserAbort,
 
+    /// Package is not signed and policy requires it.
+    ///
+    /// - Code: `binstall::signature::invalid`
+    /// - Exit: 40
+    #[error("Crate {crate_name} is signed and package {package_name} failed verification")]
+    #[diagnostic(severity(error), code(binstall::signature::invalid))]
+    InvalidSignature {
+        crate_name: CompactString,
+        package_name: CompactString,
+    },
+
+    /// Package is not signed and policy requires it.
+    ///
+    /// - Code: `binstall::signature::missing`
+    /// - Exit: 41
+    #[error("Crate {0} does not have signing information")]
+    #[diagnostic(severity(error), code(binstall::signature::missing))]
+    MissingSignature(CompactString),
+
     /// A URL is invalid.
     ///
     /// This may be the result of a template in a Cargo manifest.
@@ -333,6 +352,8 @@ impl BinstallError {
         let code: u8 = match self {
             TaskJoinError(_) => 17,
             UserAbort => 32,
+            InvalidSignature { .. } => 40,
+            MissingSignature(_) => 41,
             UrlParse(_) => 65,
             TemplateParseError(..) => 67,
             FetchError(..) => 68,
