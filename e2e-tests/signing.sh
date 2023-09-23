@@ -17,7 +17,7 @@ openssl req -newkey rsa:4096 -x509 -sha256 -days 1 -nodes -out "$CERT_DIR/"ca.pe
 openssl req -new -newkey rsa:4096 -sha256 -nodes -out "$CERT_DIR/"server.csr -keyout "$CERT_DIR/"server.key -subj '//C=UT/CN=localhost'
 openssl x509 -req -in "$CERT_DIR/"server.csr -CA "$CERT_DIR/"ca.pem -CAkey "$CERT_DIR/"ca.key -CAcreateserial -out "$CERT_DIR/"server.pem -days 1 -sha256 -extfile signing/server.ext
 
-python signing/server.py 2>/dev/null &
+python signing/server.py &
 server_pid=$!
 trap 'kill $server_pid' ERR INT TERM
 
