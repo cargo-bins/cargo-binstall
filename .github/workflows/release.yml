@@ -55,23 +55,15 @@ jobs:
         tag_prefix: v
     - uses: cargo-bins/cargo-binstall@main
     - name: Create ephemeral keypair
-      env:
-        SIGNING_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
-      run: |
-        apt-get install -y expect
-        .github/scripts/ephemeral-gen.sh
-    - name: Upload secret key to artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: signing-key
-        path: minisign.key
-        if-no-files-found: error
-        retention-days: 1
+      id: keypair
+      run: .github/scripts/ephemeral-gen.sh
     - name: Publish to crates.io
       env:
         crate: ${{ needs.info.outputs.crate }}
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       run: cargo publish -p "$crate"
+    outputs:
+      signingkey: ${{ steps.keypair.outputs.private }}
 
   package:
     if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
@@ -81,3 +73,5 @@ jobs:
     uses: ./.github/workflows/release-build.yml
     with:
       publish: ${{ toJSON(needs.info.outputs) }}
+    secrets:
+      signingkey: ${{ needs.clitag.signingkey }}

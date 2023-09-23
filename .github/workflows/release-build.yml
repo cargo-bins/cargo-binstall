@@ -16,6 +16,10 @@ on:
         description: "Set to override default release profile codegen-units settings"
         required: false
         type: string
+    secrets:
+      signingkey:
+        description: "Minisign private key"
+        required: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -84,17 +88,10 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - if: inputs.publish
-      uses: actions/download-artifact@v3
-      with:
-        name: signing-key
-        path: minisign.key.enc
-    - if: inputs.publish
+    - if: inputs.publish && secrets.signingkey
       env:
-        SIGNING_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
-      run: |
-        apt-get install -y expect
-        .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
+        SIGNING_KEY: ${{ secrets.signingkey }}
+      run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
 
     - if: inputs.publish
       name: Upload to release
