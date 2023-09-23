@@ -1,15 +1,21 @@
-use std::{path::Path, sync::Arc};
+use std::{borrow::Cow, path::Path, sync::Arc};
 
 use binstalk_downloader::remote::Method;
-use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
+use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning};
 use tokio::sync::OnceCell;
+use tracing::{error, info, trace};
 use url::Url;
 
-use crate::{common::*, Data, FetchError, SignaturePolicy, TargetDataErased};
+use crate::{
+    common::*, Data, FetchError, SignaturePolicy, SignatureVerifier, SigningAlgorithm,
+    TargetDataErased,
+};
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
 const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 
+const QUICKINSTALL_SIGN_KEY: Cow<'static, str> =
+    Cow::Borrowed("RWTdnnab2pAka9OdwgCMYyOE66M/BlQoFWaJ/JjwcPV+f3n24IRTj97t");
 const QUICKINSTALL_SUPPORTED_TARGETS_URL: &str =
     "https://raw.githubusercontent.com/cargo-bins/cargo-quickinstall/main/supported-targets";
 
@@ -50,6 +56,7 @@ pub struct QuickInstall {
 
     package: String,
     package_url: Url,
+    signature_url: Url,
     stats_url: Url,
     signature_policy: SignaturePolicy,
 
@@ -85,15 +92,17 @@ impl super::Fetcher for QuickInstall {
 
         let package = format!("{crate_name}-{version}-{target}");
 
+        let url = format!("{BASE_URL}/{crate_name}-{version}/{package}.tar.gz");
+
         Arc::new(Self {
             client,
             gh_api_client,
             is_supported_v: OnceCell::new(),
 
-            package_url: Url::parse(&format!(
-                "{BASE_URL}/{crate_name}-{version}/{package}.tar.gz",
-            ))
-            .expect("package_url is pre-generated and should never be invalid url"),
+            package_url: Url::parse(&url)
+                .expect("package_url is pre-generated and should never be invalid url"),
+            signature_url: Url::parse(&format!("{url}.sig"))
+                .expect("signature_url is pre-generated and should never be invalid url"),
             stats_url: Url::parse(&format!("{STATS_URL}/{package}.tar.gz",))
                 .expect("stats_url is pre-generated and should never be invalid url"),
             package,
@@ -105,13 +114,18 @@ impl super::Fetcher for QuickInstall {
 
     fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
         tokio::spawn(async move {
-            // until quickinstall supports signatures, blanket deny:
-            if self.signature_policy == SignaturePolicy::Require {
-                return Err(FetchError::MissingSignature);
-            }
-
             if !self.is_supported().await? {
                 return Ok(false);
+            }
+
+            if self.signature_policy == SignaturePolicy::Require {
+                does_url_exist(
+                    self.client.clone(),
+                    self.gh_api_client.clone(),
+                    &self.signature_url,
+                )
+                .await
+                .map_err(|_| FetchError::MissingSignature)?;
             }
 
             does_url_exist(
@@ -146,11 +160,53 @@ by rust officially."#,
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let url = &self.package_url;
-        debug!("Downloading package from: '{url}'");
-        Ok(Download::new(self.client.clone(), url.clone())
-            .and_extract(self.pkg_fmt(), dst)
-            .await?)
+        let verifier = if self.signature_policy == SignaturePolicy::Ignore {
+            SignatureVerifier::Noop
+        } else {
+            debug!(url=%self.signature_url, "Downloading signature");
+            match Download::new(self.client.clone(), self.signature_url.clone())
+                .into_bytes()
+                .await
+            {
+                Ok(signature) => {
+                    trace!(?signature, "got signature contents");
+                    let config = PkgSigning {
+                        algorithm: SigningAlgorithm::Minisign,
+                        pubkey: QUICKINSTALL_SIGN_KEY,
+                        file: None,
+                    };
+                    SignatureVerifier::new(&config, &signature)?
+                }
+                Err(err) => {
+                    if self.signature_policy == SignaturePolicy::Require {
+                        error!("Failed to download signature: {err}");
+                        return Err(FetchError::MissingSignature);
+                    }
+
+                    debug!("Failed to download signature, skipping verification: {err}");
+                    SignatureVerifier::Noop
+                }
+            }
+        };
+
+        debug!(url=%self.package_url, "Downloading package");
+        let mut data_verifier = verifier.data_verifier()?;
+        let files = Download::new_with_data_verifier(
+            self.client.clone(),
+            self.package_url.clone(),
+            data_verifier.as_mut(),
+        )
+        .and_extract(self.pkg_fmt(), dst)
+        .await?;
+        trace!("validating signature (if any)");
+        if data_verifier.validate() {
+            if let Some(info) = verifier.info() {
+                info!("Verified signature for package '{}': {info}", self.package);
+            }
+            Ok(files)
+        } else {
+            Err(FetchError::InvalidSignature)
+        }
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

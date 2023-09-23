@@ -19,7 +19,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, SignaturePolicy, TargetData},
+    fetchers::{Data, Fetcher, TargetData},
     helpers::{
         self, cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -82,10 +82,6 @@ async fn resolve_inner(
     else {
         return Ok(Resolution::AlreadyUpToDate);
     };
-
-    if opts.signature_policy == SignaturePolicy::Require && !package_info.signing {
-        return Err(BinstallError::MissingSignature(package_info.name));
-    }
 
     let desired_targets = opts
         .desired_targets
@@ -337,7 +333,6 @@ struct PackageInfo {
     version: Version,
     repo: Option<String>,
     overrides: BTreeMap<String, PkgOverride>,
-    signing: bool,
 }
 
 struct Bin {
@@ -446,7 +441,6 @@ impl PackageInfo {
         } else {
             Ok(Some(Self {
                 overrides: mem::take(&mut meta.overrides),
-                signing: meta.signing.is_some(),
                 meta,
                 binaries,
                 name,

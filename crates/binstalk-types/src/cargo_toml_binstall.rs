@@ -2,7 +2,7 @@
 //!
 //! This manifest defines how a particular binary crate may be installed by Binstall.
 
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -127,7 +127,7 @@ pub struct PkgSigning {
     pub algorithm: SigningAlgorithm,
 
     /// Signing public key
-    pub pubkey: String,
+    pub pubkey: Cow<'static, str>,
 
     /// Signature file override template (url to download)
     #[serde(default)]

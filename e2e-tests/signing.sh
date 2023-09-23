@@ -29,5 +29,7 @@ signing/wait-for-server.sh
 "./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --only-signed signing-test
 "./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --skip-signatures signing-test
 
+# from quick-install
+"./$1" binstall --force --strategies quick-install --no-confirm --only-signed --target x86_64-unknown-linux-musl zellij@0.38.2
 
 kill $server_pid || true
