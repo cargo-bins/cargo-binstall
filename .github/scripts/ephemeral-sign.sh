@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-cat > minisign.key <<< "$SIGNING_KEY"
+echo "untrusted comment: rsign encrypted secret key" > minisign.key
+cat >> minisign.key <<< "$SIGNING_KEY"
 
 set -x
 
