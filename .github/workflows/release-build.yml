@@ -89,6 +89,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - if: inputs.publish
+      uses: cargo-bins/cargo-binstall@main
+
+    - if: inputs.publish
       env:
         SIGNING_KEY: ${{ secrets.signingkey }}
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
@@ -148,6 +151,9 @@ jobs:
     - run: ls -shalr packages/
     - run: just repackage-lipo
     - run: ls -shal packages/
+
+    - if: inputs.publish
+      uses: cargo-bins/cargo-binstall@main
 
     - if: inputs.publish
       env:
