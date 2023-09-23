@@ -42,10 +42,9 @@ Upload both your package and the matching `.sig`.
 Now when binstall downloads your packages, it will also download the `.sig` file and use the `pubkey` in the Cargo.toml to verify the signature.
 If the signature has a trusted comment, it will print it at install time.
 
-NOTE that `minisign` and `rsign2` uses a password to encrypt the secret key, which makes it harder to
-automate.
+`minisign` and `rsign2` by default prompt for a password when generating a keypair and signing, which can hinder automation.
 
-There are a few solutions for this problem:
+You can:
  - Pass `-W` to `minisign` or `rsign2` to generate a password-less private key.
    NOTE that you also need to pass this when signing.
  - When signing using `minisign`, it reads from stdin for password so you could use
@@ -72,8 +71,8 @@ There are a few solutions for this problem:
    EXP
    ```
 
-Another common problem is how to generate an ephermeral key and pass it to other workflows.
-`cargo-binstall` has an implementation of [`release.yml`] that you can take note of.
+For just-in-time or "keyless" schemes, securely generating and passing the ephemeral key to other jobs or workflows presents subtle issues.
+`cargo-binstall` has an implementation in [its own release process][`release.yml`] that you can use as example.
 
 [`expect`]: https://linux.die.net/man/1/expect
 [`release.yml`]: https://github.com/cargo-bins/cargo-binstall/blob/main/.github/workflows/release.yml
