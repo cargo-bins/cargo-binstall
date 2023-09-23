@@ -115,13 +115,11 @@ You are not meant to run this directly.
         if stdout == ALPINE_GCOMPAT {
             // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
             Some(Libc::Gnu)
+        } else if stderr.contains("musl libc") {
+            // Alpine/s ldd and musl dynlib will output to stderr
+            Some(Libc::Musl)
         } else {
-            if stderr.contains("musl libc") {
-                // Alpine/s ldd and musl dynlib will output to stderr
-                Some(Libc::Musl)
-            } else {
-                None
-            }
+            None
         }
     } else if status.code() == Some(127) {
         // On Ubuntu 20.04 (glibc 2.31), the `--version` flag is not supported
