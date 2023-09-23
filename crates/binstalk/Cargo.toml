@@ -3,7 +3,7 @@ name = "binstalk"
 description = "The binstall toolkit (library interface)"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk"
-version = "0.16.0"
+version = "0.16.1"
 rust-version = "1.65.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -11,14 +11,14 @@ license = "GPL-3.0-only"
 
 [dependencies]
 binstalk-bins = { version = "0.1.0", path = "../binstalk-bins" }
-binstalk-downloader = { version = "0.7.1", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
-binstalk-fetchers = { version = "0.1.0", path = "../binstalk-fetchers", features = ["quickinstall"] }
-binstalk-registry = { version = "0.1.0", path = "../binstalk-registry" }
+binstalk-downloader = { version = "0.8.0", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
+binstalk-fetchers = { version = "0.1.1", path = "../binstalk-fetchers", features = ["quickinstall"] }
+binstalk-registry = { version = "0.1.1", path = "../binstalk-registry" }
 binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "1.0.0", path = "../cargo-toml-workspace" }
 command-group = { version = "2.1.0", features = ["with-tokio"] }
 compact_str = { version = "0.7.0", features = ["serde"] }
-detect-targets = { version = "0.1.10", path = "../detect-targets" }
+detect-targets = { version = "0.1.11", path = "../detect-targets" }
 either = "1.8.1"
 itertools = "0.11.0"
 jobslot = { version = "0.2.11", features = ["tokio"] }

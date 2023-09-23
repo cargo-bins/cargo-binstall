@@ -8,7 +8,8 @@ use std::{
 
 use compact_str::{format_compact, CompactString};
 use gix::progress::{
-    prodash::messages::MessageLevel, Id, Progress, Step, StepShared, Unit, UNKNOWN,
+    prodash::messages::MessageLevel, Count, Id, NestedProgress, Progress, Step, StepShared, Unit,
+    UNKNOWN,
 };
 use tokio::time;
 use tracing::{error, info};
@@ -18,7 +19,7 @@ pub(super) struct TracingProgress {
     id: Id,
     max: Option<usize>,
     unit: Option<Unit>,
-    step: usize,
+    step: StepShared,
     trigger: Arc<AtomicBool>,
 }
 
@@ -46,38 +47,13 @@ impl TracingProgress {
             name: CompactString::new(name),
             id: UNKNOWN,
             max: None,
-            step: 0,
+            step: Default::default(),
             unit: None,
             trigger,
         }
     }
-}
 
-impl Progress for TracingProgress {
-    type SubProgress = TracingProgress;
-
-    fn add_child(&mut self, name: impl Into<String>) -> Self::SubProgress {
-        self.add_child_with_id(name, UNKNOWN)
-    }
-
-    fn add_child_with_id(&mut self, name: impl Into<String>, id: Id) -> Self::SubProgress {
-        Self {
-            name: format_compact!("{}{}{}", self.name, SEP, Into::<String>::into(name)),
-            id,
-            step: 0,
-            max: None,
-            unit: None,
-            trigger: Arc::clone(&self.trigger),
-        }
-    }
-
-    fn init(&mut self, max: Option<usize>, unit: Option<Unit>) {
-        self.max = max;
-        self.unit = unit;
-    }
-
-    fn set(&mut self, step: usize) {
-        self.step = step;
+    fn log_progress(&self, step: Step) {
         if self.trigger.swap(false, Ordering::Relaxed) {
             match (self.max, &self.unit) {
                 (max, Some(unit)) => {
@@ -87,6 +63,36 @@ impl Progress for TracingProgress {
                 (None, None) => info!("{} → {}", self.name, step),
             }
         }
+    }
+}
+
+impl Count for TracingProgress {
+    fn set(&self, step: Step) {
+        self.step.store(step, Ordering::Relaxed);
+        self.log_progress(step);
+    }
+
+    fn step(&self) -> Step {
+        self.step.load(Ordering::Relaxed)
+    }
+
+    fn inc_by(&self, step_to_inc: Step) {
+        self.log_progress(
+            self.step
+                .fetch_add(step_to_inc, Ordering::Relaxed)
+                .wrapping_add(step_to_inc),
+        );
+    }
+
+    fn counter(&self) -> StepShared {
+        Arc::clone(&self.step)
+    }
+}
+
+impl Progress for TracingProgress {
+    fn init(&mut self, max: Option<Step>, unit: Option<Unit>) {
+        self.max = max;
+        self.unit = unit;
     }
 
     fn unit(&self) -> Option<Unit> {
@@ -103,21 +109,12 @@ impl Progress for TracingProgress {
         prev
     }
 
-    fn step(&self) -> usize {
-        self.step
-    }
-
-    fn inc_by(&mut self, step: usize) {
-        self.set(self.step + step)
-    }
-
-    fn set_name(&mut self, name: impl Into<String>) {
-        let name = name.into();
+    fn set_name(&mut self, name: String) {
         self.name = self
             .name
             .split("::")
             .next()
-            .map(|parent| format_compact!("{}{}{}", parent.to_owned(), SEP, name))
+            .map(|parent| format_compact!("{parent}{SEP}{name}"))
             .unwrap_or_else(|| name.into());
     }
 
@@ -129,16 +126,31 @@ impl Progress for TracingProgress {
         self.id
     }
 
-    fn message(&self, level: MessageLevel, message: impl Into<String>) {
-        let message: String = message.into();
+    fn message(&self, level: MessageLevel, message: String) {
+        let name = &self.name;
         match level {
-            MessageLevel::Info => info!("ℹ{} → {}", self.name, message),
-            MessageLevel::Failure => error!("𐄂{} → {}", self.name, message),
-            MessageLevel::Success => info!("✓{} → {}", self.name, message),
+            MessageLevel::Info => info!("ℹ{name} → {message}"),
+            MessageLevel::Failure => error!("𐄂{name} → {message}"),
+            MessageLevel::Success => info!("✓{name} → {message}"),
         }
     }
+}
 
-    fn counter(&self) -> Option<StepShared> {
-        None
+impl NestedProgress for TracingProgress {
+    type SubProgress = TracingProgress;
+
+    fn add_child(&mut self, name: impl Into<String>) -> Self::SubProgress {
+        self.add_child_with_id(name, UNKNOWN)
+    }
+
+    fn add_child_with_id(&mut self, name: impl Into<String>, id: Id) -> Self::SubProgress {
+        Self {
+            name: format_compact!("{}{}{}", self.name, SEP, Into::<String>::into(name)),
+            id,
+            step: Arc::default(),
+            max: None,
+            unit: None,
+            trigger: Arc::clone(&self.trigger),
+        }
     }
 }

@@ -13,10 +13,19 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 compact_str = "0.7.0"
 derive_destructure2 = "0.1"
-gix = { version = "0.52.0", features = ["blocking-http-transport-reqwest"] }
 thiserror = "1.0.40"
 tokio = { version = "1.30.0", features = ["rt", "time"], default-features = false }
 tracing = "0.1.37"
+
+[dependencies.gix]
+version = "0.53.1"
+default-features = false
+features = [
+    "comfort",
+    "blocking-http-transport-reqwest",
+    "max-performance-safe",
+    "worktree-mutation",
+]
 
 [features]
 rustls = [

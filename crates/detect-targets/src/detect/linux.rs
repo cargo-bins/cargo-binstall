@@ -1,12 +1,11 @@
 use std::{
-    fs,
-    path::Path,
     process::{Output, Stdio},
+    str,
 };
 
 use tokio::{process::Command, task};
 
-pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
+pub(super) async fn detect_targets(target: String) -> Vec<String> {
     let (prefix, postfix) = target
         .rsplit_once('-')
         .expect("unwrap: target always has a -");
@@ -37,71 +36,94 @@ pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<It
                 .expect("unwrap: target always has a - for cpu_arch")
                 .0;
 
-            let has_glibc = task::spawn({
-                let glibc_path = format!("/lib/ld-linux-{cpu_arch}.so.1");
-                async move { is_gnu_ld(&glibc_path).await }
-            });
+            let cpu_arch_suffix = cpu_arch.replace('_', "-");
 
-            let distro_if_has_non_std_glibc = task::spawn(async {
-                if is_gnu_ld("/usr/bin/ldd").await {
-                    get_distro_name().await
-                } else {
-                    None
+            let handles: Vec<_> = [
+                format!("/lib/ld-linux-{cpu_arch_suffix}.so.2"),
+                format!("/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.2"),
+                format!("/usr/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.2"),
+            ]
+            .into_iter()
+            .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
+            .collect();
+
+            let has_glibc = async move {
+                for mut handle in handles {
+                    if let Ok(true) = (&mut handle.0).await {
+                        return true;
+                    }
                 }
-            });
 
-            let distro_if_has_musl_dynlib = if get_ld_flavor(&format!(
-                "/lib/ld-musl-{cpu_arch}.so.1"
-            ))
-            .await
-                == Some(Libc::Musl)
-            {
-                get_distro_name().await
-            } else {
-                None
-            };
+                false
+            }
+            .await;
 
             [
-                has_glibc
-                    .await
-                    .unwrap_or(false)
-                    .then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
-                distro_if_has_non_std_glibc
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-gnu{abi}")),
-                // Fallback for Linux flavors like Alpine, which has a musl dyn libc
-                distro_if_has_musl_dynlib
-                    .map(|distro_name| format!("{cpu_arch}-{distro_name}-linux-musl{abi}")),
+                has_glibc.then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
                 Some(musl_fallback_target()),
             ]
         }
-        Libc::Android | Libc::Unknown => [
-            Some(target.to_string()),
-            Some(musl_fallback_target()),
-            None,
-            None,
-        ],
+        Libc::Android | Libc::Unknown => [Some(target.clone()), Some(musl_fallback_target())],
     }
     .into_iter()
     .flatten()
+    .collect()
 }
 
-async fn is_gnu_ld(cmd: &str) -> bool {
-    get_ld_flavor(cmd).await == Some(Libc::Gnu)
+async fn is_gnu_ld(cmd: String) -> bool {
+    get_ld_flavor(&cmd).await == Some(Libc::Gnu)
 }
 
 async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
-    Command::new(cmd)
+    let Output {
+        status,
+        stdout,
+        stderr,
+    } = Command::new(cmd)
         .arg("--version")
         .stdin(Stdio::null())
         .output()
         .await
-        .ok()
-        .and_then(|Output { stdout, stderr, .. }| {
-            Libc::parse(&stdout).or_else(|| Libc::parse(&stderr))
-        })
+        .ok()?;
+
+    const ALPINE_GCOMPAT: &str = r#"This is the gcompat ELF interpreter stub.
+You are not meant to run this directly.
+"#;
+
+    if status.success() {
+        // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
+        // succeeds.
+        String::from_utf8_lossy(&stdout)
+            .contains("GLIBC")
+            .then_some(Libc::Gnu)
+    } else if status.code() == Some(1) {
+        // On Alpine, executing both the gcompat glibc and the ldd and
+        // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
+        if str::from_utf8(&stdout).as_deref() == Ok(ALPINE_GCOMPAT) {
+            // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
+            Some(Libc::Gnu)
+        } else if String::from_utf8_lossy(&stderr).contains("musl libc") {
+            // Alpine/s ldd and musl dynlib will output to stderr
+            Some(Libc::Musl)
+        } else {
+            None
+        }
+    } else if status.code() == Some(127) {
+        // On Ubuntu 20.04 (glibc 2.31), the `--version` flag is not supported
+        // and it will exit with status 127.
+        let status = Command::new(cmd)
+            .arg("/bin/true")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .ok()?;
+
+        status.success().then_some(Libc::Gnu)
+    } else {
+        None
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -112,37 +134,10 @@ enum Libc {
     Unknown,
 }
 
-impl Libc {
-    fn parse(output: &[u8]) -> Option<Self> {
-        let s = String::from_utf8_lossy(output);
-        if s.contains("musl libc") {
-            Some(Self::Musl)
-        } else if s.contains("GLIBC") {
-            Some(Self::Gnu)
-        } else {
-            None
-        }
-    }
-}
+struct AutoAbortHandle<T>(task::JoinHandle<T>);
 
-async fn get_distro_name() -> Option<String> {
-    task::spawn_blocking(get_distro_name_blocking)
-        .await
-        .ok()
-        .flatten()
-}
-
-fn get_distro_name_blocking() -> Option<String> {
-    match fs::read_to_string("/etc/os-release") {
-        Ok(os_release) => os_release
-            .lines()
-            .find_map(|line| line.strip_prefix("ID=\"")?.strip_suffix('"'))
-            .map(ToString::to_string),
-        Err(_) => (Path::new("/etc/nix/nix.conf").is_file()
-            && ["/nix/store", "/nix/var/profiles"]
-                .into_iter()
-                .map(Path::new)
-                .all(Path::is_dir))
-        .then_some("nixos".to_string()),
+impl<T> Drop for AutoAbortHandle<T> {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }

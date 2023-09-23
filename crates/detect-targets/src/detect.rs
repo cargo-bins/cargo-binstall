@@ -38,19 +38,21 @@ pub async fn detect_targets() -> Vec<String> {
             .to_string()
     });
 
-    let mut targets = vec![target];
-
     cfg_if! {
         if #[cfg(target_os = "macos")] {
+            let mut targets = vec![target];
             targets.extend(macos::detect_alternative_targets(&targets[0]).await);
+            targets
         } else if #[cfg(target_os = "windows")] {
+            let mut targets = vec![target];
             targets.extend(windows::detect_alternative_targets(&targets[0]));
+            targets
         } else if #[cfg(target_os = "linux")] {
-            targets.extend(linux::detect_alternative_targets(&targets[0]).await);
+            // Linux is a bit special, since the result from `guess_host_triple`
+            // might be wrong about whether glibc or musl is used.
+            linux::detect_targets(target).await
         }
     }
-
-    targets
 }
 
 /// Figure out what the host target is using `rustc`.

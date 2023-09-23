@@ -30,6 +30,11 @@ pub use request_builder::{Body, RequestBuilder, Response};
 mod tls_version;
 pub use tls_version::TLSVersion;
 
+#[cfg(feature = "trust-dns")]
+mod resolver;
+#[cfg(feature = "trust-dns")]
+use resolver::TrustDnsResolver;
+
 #[cfg(feature = "json")]
 pub use request_builder::JsonError;
 
@@ -106,6 +111,11 @@ impl Client {
                 .user_agent(user_agent)
                 .https_only(true)
                 .tcp_nodelay(false);
+
+            #[cfg(feature = "trust-dns")]
+            {
+                builder = builder.dns_resolver(Arc::new(TrustDnsResolver::default()));
+            }
 
             #[cfg(feature = "__tls")]
             {

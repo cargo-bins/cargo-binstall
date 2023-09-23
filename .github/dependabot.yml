@@ -8,77 +8,14 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-  # If we include `/`, then dependabot would also create PR
-  # for every compatible updates.
-  #
-  # We only want incompatible updates for direct dependencies
-  # from dependabot since compatible updates is covered by
-  # `update-transitive-deps.yml`
   - package-ecosystem: "cargo"
-    directory: "/crates/atomic-file-install"
+    directory: "/"
     schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/bin"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-bins"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-fetchers"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-registry"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-downloader"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-manifests"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/binstalk-types"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/cargo-toml-workspace"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/detect-targets"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/detect-wasi"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/fs-lock"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/leon"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/leon-macros"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/normalize-path"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "cargo"
-    directory: "/crates/simple-git"
-    schedule:
-      interval: "daily"
+      # Only run dependabot after all compatible upgrades and transitive deps
+      # are done to reduce amount of PRs opened.
+      interval: "weekly"
+      day: "saturday"
+    groups:
+      deps:
+        patterns:
+          - "*"

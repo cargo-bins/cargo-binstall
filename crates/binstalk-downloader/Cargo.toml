@@ -3,7 +3,7 @@ name = "binstalk-downloader"
 description = "The binstall toolkit for downloading and extracting file"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-downloader"
-version = "0.7.1"
+version = "0.8.0"
 rust-version = "1.65.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -11,7 +11,7 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 async-trait = "0.1.68"
-async-compression = { version = "0.4.0", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
+async-compression = { version = "0.4.3", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
 async_zip = { version = "0.0.15", features = ["deflate", "bzip2", "lzma", "zstd", "xz", "tokio"] }
 binstalk-types = { version = "0.5.0", path = "../binstalk-types" }
 bytes = "1.4.0"
@@ -24,7 +24,7 @@ reqwest = { version = "0.11.19", features = ["stream", "gzip", "brotli", "deflat
 percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 serde-tuple-vec-map = "1.0.1"
-serde_json = { version = "1.0.96", optional = true }
+serde_json = { version = "1.0.107", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
 #
@@ -37,7 +37,9 @@ tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.8", features = ["io"] }
 tracing = "0.1.37"
 # trust-dns-resolver must be kept in sync with the version reqwest uses
-trust-dns-resolver = { version = "0.22.0", optional = true, default-features = false, features = ["dnssec-ring"] }
+trust-dns-resolver = { version = "0.22.0", optional = true, features = ["dnssec-ring"] }
+hyper = { version = "0.14.27", optional = true }
+once_cell = { version = "1.18.0", optional = true }
 url = "2.3.1"
 
 xz2 = "0.1.7"
@@ -78,7 +80,7 @@ native-tls = [
 ]
 
 # Enable trust-dns-resolver so that features on it will also be enabled.
-trust-dns = ["trust-dns-resolver", "reqwest/trust-dns"]
+trust-dns = ["trust-dns-resolver", "default-net", "ipconfig", "hyper", "once_cell"]
 
 # Experimental HTTP/3 client, this would require `--cfg reqwest_unstable`
 # to be passed to `rustc`.
@@ -90,6 +92,10 @@ cross-lang-fat-lto = ["zstd/fat-lto"]
 
 gh-api-client = ["json"]
 json = ["serde", "serde_json"]
+
+[target."cfg(windows)".dependencies]
+default-net = { version = "0.17.0", optional = true }
+ipconfig = { version = "0.3.2", optional = true, default-features = false }
 
 [package.metadata.docs.rs]
 features = ["gh-api-client"]
