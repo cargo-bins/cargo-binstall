@@ -149,18 +149,10 @@ jobs:
     - run: just repackage-lipo
     - run: ls -shal packages/
 
-    - if: inputs.publish
-      uses: actions/download-artifact@v3
-      with:
-        name: signing-key
-        path: minisign.key
-    - if: inputs.publish
+    - if: inputs.publish && secrets.signingkey
       env:
-        SIGNING_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
-      shell: bash
-      run: |
-        apt-get install -y expect
-        .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
+        SIGNING_KEY: ${{ secrets.signingkey }}
+      run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
     - if: inputs.publish
       name: Upload to release
