@@ -253,7 +253,6 @@ impl super::Fetcher for GhCrateMeta {
                 SignatureVerifier::Noop
             }
             (SignaturePolicy::Require, None) => {
-                debug_assert!(false, "missing signing section should be caught earlier");
                 return Err(FetchError::MissingSignature);
             }
             (_, Some(config)) => {

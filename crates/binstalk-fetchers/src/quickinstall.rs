@@ -172,7 +172,7 @@ by rust officially."#,
                     trace!(?signature, "got signature contents");
                     let config = PkgSigning {
                         algorithm: SigningAlgorithm::Minisign,
-                        pubkey: QUICKINSTALL_SIGN_KEY.into(),
+                        pubkey: QUICKINSTALL_SIGN_KEY,
                         file: None,
                     };
                     SignatureVerifier::new(&config, &signature)?
