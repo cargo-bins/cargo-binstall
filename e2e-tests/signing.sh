@@ -10,20 +10,23 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 echo Generate tls cert
 
-rm -f ca.pem ca.srl ca.key server.csr server.pem server.key
+CERT_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'cert-dir')
+export CERT_DIR
 
-openssl req -newkey rsa:4096 -x509 -sha256 -days 1 -nodes -out ca.pem -keyout ca.key -subj "/C=UT/CN=ca.localhost"
-openssl req -new -newkey rsa:4096 -sha256 -nodes -out server.csr -keyout server.key -subj "/C=UT/CN=localhost"
-openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out server.pem -days 1 -sha256 -extfile server.ext
+openssl req -newkey rsa:4096 -x509 -sha256 -days 1 -nodes -out "$CERT_DIR/"ca.pem -keyout "$CERT_DIR/"ca.key -subj "/C=UT/CN=ca.localhost"
+openssl req -new -newkey rsa:4096 -sha256 -nodes -out "$CERT_DIR/"server.csr -keyout "$CERT_DIR/"server.key -subj "/C=UT/CN=localhost"
+openssl x509 -req -in "$CERT_DIR/"server.csr -CA "$CERT_DIR/"ca.pem -CAkey "$CERT_DIR/"ca.key -CAcreateserial -out "$CERT_DIR/"server.pem -days 1 -sha256 -extfile signing/server.ext
 
-python server.py 2>/dev/null &
+python signing/server.py 2>/dev/null &
 server_pid=$!
 trap 'kill $server_pid' ERR INT TERM
 sleep 10 # for server to come up
 
-export BINSTALL_HTTPS_ROOT_CERTS=$PWD/ca.pem
+export BINSTALL_HTTPS_ROOT_CERTS="$CERT_DIR/ca.pem"
 
-"./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm signing-test
+curl --cacert "$BINSTALL_HTTPS_ROOT_CERTS" -L https://localhost:4443/signing-test.tar | file -
+
+"./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm signing-test --log-level debug
 "./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --only-signed signing-test
 "./$1" binstall --force --manifest-path "manifests/signing-Cargo.toml" --no-confirm --skip-signatures signing-test
 
