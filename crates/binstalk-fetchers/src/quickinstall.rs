@@ -178,10 +178,12 @@ by rust officially."#,
                     SignatureVerifier::new(&config, &signature)?
                 }
                 Err(err) => {
-                    error!("Failed to download signature: {err}");
                     if self.signature_policy == SignaturePolicy::Require {
+                        error!("Failed to download signature: {err}");
                         return Err(FetchError::MissingSignature);
                     }
+
+                    debug!("Failed to download signature, skipping verification: {err}");
                     SignatureVerifier::Noop
                 }
             }
