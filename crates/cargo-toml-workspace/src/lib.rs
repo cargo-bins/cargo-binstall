@@ -3,11 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
 use glob::PatternError;
 use normalize_path::NormalizePath;
+use serde::de::DeserializeOwned;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument, warn};
 
@@ -19,11 +19,14 @@ pub use cargo_toml;
 ///
 ///  * `workspace_path` - can be a directory (path to workspace) or
 ///    a file (path to `Cargo.toml`).
-pub fn load_manifest_from_workspace(
+pub fn load_manifest_from_workspace<Metadata: DeserializeOwned>(
     workspace_path: impl AsRef<Path>,
     crate_name: impl AsRef<str>,
-) -> Result<Manifest<Meta>, Error> {
-    fn inner(workspace_path: &Path, crate_name: &str) -> Result<Manifest<Meta>, Error> {
+) -> Result<Manifest<Metadata>, Error> {
+    fn inner<Metadata: DeserializeOwned>(
+        workspace_path: &Path,
+        crate_name: &str,
+    ) -> Result<Manifest<Metadata>, Error> {
         load_manifest_from_workspace_inner(workspace_path, crate_name).map_err(|inner| Error {
             workspace_path: workspace_path.into(),
             crate_name: crate_name.into(),
@@ -62,10 +65,10 @@ enum ErrorInner {
 }
 
 #[instrument]
-fn load_manifest_from_workspace_inner(
+fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     workspace_path: &Path,
     crate_name: &str,
-) -> Result<Manifest<Meta>, ErrorInner> {
+) -> Result<Manifest<Metadata>, ErrorInner> {
     debug!(
         "Loading manifest of crate {crate_name} from workspace: {}",
         workspace_path.display()
@@ -80,7 +83,7 @@ fn load_manifest_from_workspace_inner(
     let mut manifest_paths = vec![manifest_path];
 
     while let Some(manifest_path) = manifest_paths.pop() {
-        let manifest = Manifest::<Meta>::from_path_with_metadata(&manifest_path)?;
+        let manifest = Manifest::<Metadata>::from_path_with_metadata(&manifest_path)?;
 
         let name = manifest.package.as_ref().map(|p| &*p.name);
         debug!(
@@ -244,7 +247,8 @@ mod test {
             .unwrap()
             .join("e2e-tests/manifests/workspace");
 
-        let manifest = load_manifest_from_workspace(&p, "cargo-binstall").unwrap();
+        let manifest =
+            load_manifest_from_workspace::<cargo_toml::Value>(&p, "cargo-binstall").unwrap();
         let package = manifest.package.unwrap();
         assert_eq!(package.name, "cargo-binstall");
         assert_eq!(package.version.as_ref().unwrap(), "0.12.0");
@@ -252,10 +256,12 @@ mod test {
         assert_eq!(manifest.bin[0].name.as_deref().unwrap(), "cargo-binstall");
         assert_eq!(manifest.bin[0].path.as_deref().unwrap(), "src/main.rs");
 
-        let err = load_manifest_from_workspace_inner(&p, "cargo-binstall2").unwrap_err();
+        let err = load_manifest_from_workspace_inner::<cargo_toml::Value>(&p, "cargo-binstall2")
+            .unwrap_err();
         assert!(matches!(err, ErrorInner::NotFound), "{:#?}", err);
 
-        let manifest = load_manifest_from_workspace(&p, "cargo-watch").unwrap();
+        let manifest =
+            load_manifest_from_workspace::<cargo_toml::Value>(&p, "cargo-watch").unwrap();
         let package = manifest.package.unwrap();
         assert_eq!(package.name, "cargo-watch");
         assert_eq!(package.version.as_ref().unwrap(), "8.4.0");
