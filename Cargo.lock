@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "beef",
  "binstalk-types",
