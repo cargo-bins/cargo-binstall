@@ -15,7 +15,7 @@ async-trait = "0.1.68"
 base16 = "0.2.1"
 binstalk-downloader = { version = "0.9.0", path = "../binstalk-downloader", default-features = false, features = ["json"] }
 binstalk-types = { version = "0.6.0", path = "../binstalk-types" }
-cargo-toml-workspace = { version = "1.0.0", path = "../cargo-toml-workspace" }
+cargo-toml-workspace = { version = "2.0.0", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.7.0", features = ["serde"] }
 leon = { version = "2.0.1", path = "../leon" }
 miette = "5.9.0"
