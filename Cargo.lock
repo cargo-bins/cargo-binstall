@@ -543,11 +543,11 @@ dependencies = [
 name = "cargo-toml-workspace"
 version = "1.0.0"
 dependencies = [
- "binstalk-types",
  "cargo_toml",
  "compact_str",
  "glob",
  "normalize-path",
+ "serde",
  "tempfile",
  "thiserror",
  "tracing",
