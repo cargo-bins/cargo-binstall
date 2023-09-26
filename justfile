@@ -289,6 +289,7 @@ package-dir:
     mkdir -p packages/prep
     cp crates/bin/LICENSE packages/prep
     cp README.md packages/prep
+    -cp minisign.pub packages/prep
 
 [macos]
 package-prepare: build package-dir
