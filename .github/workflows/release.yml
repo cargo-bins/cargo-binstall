@@ -75,7 +75,7 @@ jobs:
       run: cargo publish -p "$crate" --allow-dirty
 
   package:
-    if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
+    if: needs.info.outputs.crate == 'cargo-binstall'
     needs:
     - info
     - clitag
@@ -84,7 +84,7 @@ jobs:
       publish: ${{ toJSON(needs.info.outputs) }}
 
   publish:
-    if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
+    if: needs.info.outputs.crate == 'cargo-binstall'
     needs:
     - info
     - package
@@ -94,12 +94,23 @@ jobs:
       with:
         name: minisign.pub
     - run: .github/scripts/ephemeral-crate.sh
-    - name: Publish to crates.io
+
+    - if: needs.info.outputs.is-release != 'true'
+      name: DRY-RUN Publish to crates.io
+      env:
+        crate: ${{ needs.info.outputs.crate }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: cargo publish -p "$crate" --allow-dirty --dry-run
+
+    - if: needs.info.outputs.is-release == 'true'
+      name: Publish to crates.io
       env:
         crate: ${{ needs.info.outputs.crate }}
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       run: cargo publish -p "$crate" --allow-dirty
-    - name: Make release latest
+
+    - if: needs.info.outputs.is-release == 'true'
+      name: Make release latest
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}

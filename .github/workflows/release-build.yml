@@ -5,12 +5,9 @@ on:
   workflow_call:
     inputs:
       publish:
-        description: "Set to the release metadata JSON to publish the release"
-        required: false
+        description: "The release metadata JSON"
+        required: true
         type: string
-      signingkey:
-        description: "Minisign private key, shielded. Required when publishing"
-        required: false
       CARGO_PROFILE_RELEASE_LTO:
         description: "Set to override default release profile lto settings"
         required: false
@@ -64,6 +61,7 @@ jobs:
       if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
       run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
 
+    - uses: cargo-bins/cargo-binstall@main
     - uses: ./.github/actions/just-setup
       with:
         tools: cargo-auditable
@@ -90,19 +88,16 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - if: inputs.publish
-      uses: cargo-bins/cargo-binstall@main
-    - if: inputs.publish
-      uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v3
       with:
         name: minisign.key.age
-    - if: inputs.publish
+    - name: Sign package
       env:
         AGE_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
       shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
 
-    - if: inputs.publish
+    - if: fromJSON(inputs.publish).is-release == 'true'
       name: Upload to release
       uses: svenstaro/upload-release-action@v2
       with:
@@ -113,7 +108,7 @@ jobs:
         file: packages/cargo-binstall-*
         file_glob: true
         prerelease: true
-    - if: "! inputs.publish || runner.os == 'macOS'"
+    - if: "fromJSON(inputs.publish).is-release != 'true' || runner.os == 'macOS'"
       name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
@@ -137,7 +132,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
+    - uses: cargo-bins/cargo-binstall@main
     - uses: taiki-e/install-action@v2
       with:
         tool: just
@@ -162,19 +157,15 @@ jobs:
     - run: just repackage-lipo
     - run: ls -shal packages/
 
-    - if: inputs.publish
-      uses: cargo-bins/cargo-binstall@main
-    - if: inputs.publish
-      uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v3
       with:
         name: minisign.key.age
-    - if: inputs.publish
-      env:
+    - env:
         AGE_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
       shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
-    - if: inputs.publish
+    - if: fromJSON(inputs.publish).is-release == 'true'
       name: Upload to release
       uses: svenstaro/upload-release-action@v2
       with:
@@ -186,7 +177,7 @@ jobs:
         file_glob: true
         overwrite: true
         prerelease: true
-    - if: "! inputs.publish"
+    - if: fromJSON(inputs.publish).is-release != 'true'
       name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
