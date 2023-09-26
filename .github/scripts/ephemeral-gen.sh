@@ -14,3 +14,6 @@ EOF
 set +x
 echo "::add-mask::$(tail -n1 minisign.key)"
 echo "private=$(tail -n1 minisign.key)" >> "$GITHUB_OUTPUT"
+set -x
+
+rm minisign.key
