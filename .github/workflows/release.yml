@@ -25,6 +25,8 @@ jobs:
   release-lib:
     if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate != 'cargo-binstall'
     needs: info
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
