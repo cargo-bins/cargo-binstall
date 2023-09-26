@@ -47,6 +47,11 @@ jobs:
         name: minisign.key.age
         path: minisign.key.age
         retention-days: 1
+    - name: Check that key can be decrypted
+      env:
+        AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
+      shell: bash
+      run: .github/scripts/ephemeral-sign.sh minisign.pub
 
   package:
     needs:

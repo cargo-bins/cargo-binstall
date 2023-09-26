@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+[[ -z "$AGE_KEY_SECRET" ]] && { echo "!!! Empty age key secret !!!"; exit 1; }
 cat >> age.key <<< "$AGE_KEY_SECRET"
 
 set -x
