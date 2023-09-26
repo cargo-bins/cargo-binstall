@@ -99,3 +99,10 @@ jobs:
         promote: true
         file: minisign.pub
 
+    - if: fromJSON(inputs.info).is-release == 'true'
+      name: Delete signing key artifact
+      uses: geekyeggo/delete-artifact@v2
+      with:
+          name: minisign.key.age
+          failOnError: false
+
