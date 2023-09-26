@@ -127,6 +127,7 @@ jobs:
 
   release-dry-run:
     uses: ./.github/workflows/release-cli.yml
+    secrets: inherit
     with:
       info: |
         {

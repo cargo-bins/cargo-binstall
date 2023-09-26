@@ -58,6 +58,7 @@ jobs:
     - tag
     - keygen
     uses: ./.github/workflows/release-packages.yml
+    secrets: inherit
     with:
       publish: ${{ inputs.info }}
       CARGO_PROFILE_RELEASE_LTO: ${{ inputs.CARGO_PROFILE_RELEASE_LTO }}

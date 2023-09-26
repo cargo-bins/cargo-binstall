@@ -45,6 +45,7 @@ jobs:
     if: needs.info.outputs.crate == 'cargo-binstall'
     needs: info
     uses: ./.github/workflows/release-cli.yml
+    secrets: inherit
     with:
       info: ${{ toJSON(needs.info.outputs) }}
 
