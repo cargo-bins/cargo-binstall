@@ -125,9 +125,17 @@ jobs:
     - run: just avoid-dev-deps
     - run: just lint
 
-  release-builds:
-    uses: ./.github/workflows/release-build.yml
+  release-dry-run:
+    uses: ./.github/workflows/release-cli.yml
+    secrets: inherit
     with:
+      info: |
+        {
+          "is-release": false,
+          "crate": "cargo-binstall",
+          "version": "0.0.0",
+          "notes": ""
+        }
       CARGO_PROFILE_RELEASE_LTO: no
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 4
 
@@ -179,7 +187,7 @@ jobs:
     - test
     - cross-check
     - lint
-    - release-builds
+    - release-dry-run
     - detect-targets-alpine-test
     - detect-targets-ubuntu-test
     if: always() # always run even if dependencies fail
