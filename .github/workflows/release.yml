@@ -63,6 +63,7 @@ jobs:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       run: cargo publish -p "$crate" --allow-dirty
     outputs:
+      publickey: ${{ steps.keypair.outputs.public }}
       signingkey: ${{ steps.keypair.outputs.private }}
 
   package:
@@ -73,5 +74,6 @@ jobs:
     uses: ./.github/workflows/release-build.yml
     with:
       publish: ${{ toJSON(needs.info.outputs) }}
+      publickey: ${{ needs.clitag.publickey }}
     secrets:
       signingkey: ${{ needs.clitag.signingkey }}

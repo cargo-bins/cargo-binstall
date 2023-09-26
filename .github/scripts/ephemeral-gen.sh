@@ -11,6 +11,9 @@ algorithm = "minisign"
 pubkey = "$(tail -n1 minisign.pub)"
 EOF
 
+echo "public=$(tail -n1 minisign.pub)" >> "$GITHUB_OUTPUT"
+cp minisign.pub crates/bin/minisign.pub
+
 set +x
 echo "::add-mask::$(tail -n1 minisign.key)"
 echo "private=$(tail -n1 minisign.key)" >> "$GITHUB_OUTPUT"
