@@ -10,7 +10,7 @@ set -x
 cargo binstall -y rsign2 rage
 rage --decrypt --identity age.key --output minisign.key minisign.key.age
 
-ts=$(date --utc --iso-8601=seconds)
+ts=$(node -e 'console.log((new Date).toISOString())')
 git=$(git rev-parse HEAD)
 comment="gh=$GITHUB_REPOSITORY git=$git ts=$ts run=$GITHUB_RUN_ID"
 
