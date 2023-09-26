@@ -61,7 +61,7 @@ jobs:
       env:
         crate: ${{ needs.info.outputs.crate }}
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      run: cargo publish -p "$crate"
+      run: cargo publish -p "$crate" --allow-dirty
     outputs:
       signingkey: ${{ steps.keypair.outputs.private }}
 
