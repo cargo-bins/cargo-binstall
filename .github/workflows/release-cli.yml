@@ -1,0 +1,95 @@
+name: Release CLI
+on:
+  workflow_call:
+    inputs:
+      info:
+        description: "The release metadata JSON"
+        required: true
+        type: string
+      CARGO_PROFILE_RELEASE_LTO:
+        description: "Used to speed up CI"
+        required: false
+        type: string
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS:
+        description: "Used to speed up CI"
+        required: false
+        type: string
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - if: fromJSON(inputs.info).is-release == 'true'
+      name: Push cli release tag
+      uses: mathieudutour/github-tag-action@v6.1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        custom_tag: ${{ fromJSON(inputs.info).version }}
+        tag_prefix: v
+
+  keygen:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cargo-bins/cargo-binstall@main
+    - name: Create ephemeral keypair
+      id: keypair
+      env:
+        AGE_KEY_PUBLIC: ${{ vars.AGE_KEY_PUBLIC }}
+      run: .github/scripts/ephemeral-gen.sh
+    - uses: actions/upload-artifact@v3
+      with:
+        name: minisign.pub
+        path: minisign.pub
+    - uses: actions/upload-artifact@v3
+      with:
+        name: minisign.key.age
+        path: minisign.key.age
+        retention-days: 1
+
+  package:
+    needs:
+    - tag
+    - keygen
+    uses: ./.github/workflows/release-packages.yml
+    with:
+      publish: ${{ inputs.info }}
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.CARGO_PROFILE_RELEASE_LTO }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/download-artifact@v3
+      with:
+        name: minisign.pub
+    - run: .github/scripts/ephemeral-crate.sh
+
+    - if: fromJSON(inputs.info).is-release != 'true'
+      name: DRY-RUN Publish to crates.io
+      env:
+        crate: ${{ needs.info.outputs.crate }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: cargo publish -p "$crate" --allow-dirty --dry-run
+
+    - if: fromJSON(inputs.info).is-release == 'true'
+      name: Publish to crates.io
+      env:
+        crate: ${{ needs.info.outputs.crate }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: cargo publish -p "$crate" --allow-dirty
+
+    - if: fromJSON(inputs.info).is-release == 'true'
+      name: Make release latest
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        release_name: v${{ needs.info.outputs.version }}
+        tag: v${{ needs.info.outputs.version }}
+        body: ${{ needs.info.outputs.notes }}
+        promote: true
+        file: minisign.pub
+

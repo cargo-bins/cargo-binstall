@@ -1,7 +1,6 @@
-name: Build for release
+name: Build packages for release
 
 on:
-  workflow_dispatch: # can't publish from dispatch
   workflow_call:
     inputs:
       publish:
@@ -9,11 +8,11 @@ on:
         required: true
         type: string
       CARGO_PROFILE_RELEASE_LTO:
-        description: "Set to override default release profile lto settings"
+        description: "Used to speed up CI"
         required: false
         type: string
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS:
-        description: "Set to override default release profile codegen-units settings"
+        description: "Used to speed up CI"
         required: false
         type: string
 
