@@ -41,6 +41,8 @@ jobs:
 
     name: ${{ matrix.t }}
     runs-on: ${{ matrix.o }}
+    permissions:
+      contents: write
     env:
       CARGO_BUILD_TARGET: ${{ matrix.t }}
       GLIBC_VERSION: ${{ matrix.g }}
@@ -125,6 +127,8 @@ jobs:
   lipo:
     needs: build
     name: universal-apple-darwin
+    permissions:
+      contents: write
     runs-on: macos-latest
     env:
       JUST_FOR_RELEASE: true
