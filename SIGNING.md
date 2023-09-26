@@ -10,10 +10,10 @@ This feature requires adding to the Cargo.toml metadata: no autodiscovery here!
 Generate a [minisign](https://jedisct1.github.io/minisign/) keypair:
 
 ```console
-minisign -G -p signing.pub -s signing.key
+minisign -G -W -p signing.pub -s signing.key
 
 # or with rsign2:
-rsign generate -p signing.pub -s signing.key
+rsign generate -W -p signing.pub -s signing.key
 ```
 
 In your Cargo.toml, put:
@@ -31,10 +31,10 @@ Save the `signing.key` as a secret in your CI, then use it when building package
 ```console
 tar cvf package-name.tar.zst your-files # or however
 
-minisign -S -s signing.key -x package-name.tar.zst.sig -m package-name.tar.zst
+minisign -S -W -s signing.key -x package-name.tar.zst.sig -m package-name.tar.zst
 
 # or with rsign2:
-rsign sign -s signing.key -x package-name.tar.zst.sig package-name.tar.zst
+rsign sign -W -s signing.key -x package-name.tar.zst.sig package-name.tar.zst
 ```
 
 Upload both your package and the matching `.sig`.
@@ -42,34 +42,16 @@ Upload both your package and the matching `.sig`.
 Now when binstall downloads your packages, it will also download the `.sig` file and use the `pubkey` in the Cargo.toml to verify the signature.
 If the signature has a trusted comment, it will print it at install time.
 
-`minisign` and `rsign2` by default prompt for a password when generating a keypair and signing, which can hinder automation.
+By default, `minisign` and `rsign2` prompt for a password; above we disable this with `-W`.
+While you _can_ set a password, we recommend instead using [age](https://github.com/FiloSottile/age) (or the Rust version [rage](https://github.com/str4d/rage)) to separately encrypt the key, which we find is much better for automation.
 
-You can:
- - Pass `-W` to `minisign` or `rsign2` to generate a password-less private key.
-   NOTE that you also need to pass this when signing.
- - When signing using `minisign`, it reads from stdin for password so you could use
-   shell redirect to pass the password.
- - Use [`expect`] to pass password to `rsign2` (since it reads `/dev/tty` for password):
-   For generating private key:
-   ```bash
-   expect <<EXP
-   spawn rsign generate -f -p minisign.pub -s minisign.key
-   expect "Password:"
-   send -- "$SIGNING_KEY_SECRET\r"
-   expect "Password (one more time):"
-   send -- "$SIGNING_KEY_SECRET\r"
-   expect eof
-   EXP
-   ```
-   For signing:
-   ```bash
-   expect <<EXP
-   spawn rsign sign -s minisign.key -x "$file.sig" -t "$comment" "$file"
-   expect "Password:"
-   send -- "$SIGNING_KEY_SECRET\r"
-   expect eof
-   EXP
-   ```
+```console
+rage-keygen -o age.key
+Public key: age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+
+rage -r age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p -o signing.key.age signing.key
+rage -d -i age.key -o signing.key signing.key.age
+```
 
 For just-in-time or "keyless" schemes, securely generating and passing the ephemeral key to other jobs or workflows presents subtle issues.
 `cargo-binstall` has an implementation in [its own release process][`release.yml`] that you can use as example.
