@@ -92,7 +92,7 @@ jobs:
         name: minisign.key.age
     - name: Sign package
       env:
-        AGE_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
+        AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
       shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
 
@@ -160,7 +160,7 @@ jobs:
       with:
         name: minisign.key.age
     - env:
-        AGE_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
+        AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
       shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
