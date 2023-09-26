@@ -56,23 +56,23 @@ jobs:
     - uses: cargo-bins/cargo-binstall@main
     - name: Create ephemeral keypair
       id: keypair
+      env:
+        AGE_KEY_PUBLIC: ${{ vars.AGE_KEY_PUBLIC }}
       run: .github/scripts/ephemeral-gen.sh
+    - uses: actions/upload-artifact@v3
+      with:
+        name: minisign.pub
+        path: minisign.pub
+    - uses: actions/upload-artifact@v3
+      with:
+        name: minisign.key.age
+        path: minisign.key.age
+        retention-days: 1
     - name: Publish to crates.io
       env:
         crate: ${{ needs.info.outputs.crate }}
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       run: cargo publish -p "$crate" --allow-dirty
-    - name: Upload public key to release
-      uses: svenstaro/upload-release-action@v2
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        release_name: v${{ needs.info.outputs.version }}
-        tag: v${{ needs.info.outputs.version }}
-        body: ${{ needs.info.outputs.notes }}
-        file: minisign.pub
-    outputs:
-      publickey: ${{ steps.keypair.outputs.public }}
-      signingkey: ${{ steps.keypair.outputs.private }}
 
   package:
     if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
@@ -82,6 +82,30 @@ jobs:
     uses: ./.github/workflows/release-build.yml
     with:
       publish: ${{ toJSON(needs.info.outputs) }}
-      publickey: ${{ needs.clitag.publickey }}
-    secrets:
-      signingkey: ${{ needs.clitag.signingkey }}
+
+  publish:
+    if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate == 'cargo-binstall'
+    needs:
+    - info
+    - package
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v3
+      with:
+        name: minisign.pub
+    - run: .github/scripts/ephemeral-crate.sh
+    - name: Publish to crates.io
+      env:
+        crate: ${{ needs.info.outputs.crate }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: cargo publish -p "$crate" --allow-dirty
+    - name: Make release latest
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        release_name: v${{ needs.info.outputs.version }}
+        tag: v${{ needs.info.outputs.version }}
+        body: ${{ needs.info.outputs.notes }}
+        promote: true
+        file: minisign.pub
+

@@ -8,10 +8,9 @@ on:
         description: "Set to the release metadata JSON to publish the release"
         required: false
         type: string
-      publickey:
-        description: "Minisign public key. Required when publishing"
+      signingkey:
+        description: "Minisign private key, shielded. Required when publishing"
         required: false
-        type: string
       CARGO_PROFILE_RELEASE_LTO:
         description: "Set to override default release profile lto settings"
         required: false
@@ -20,10 +19,6 @@ on:
         description: "Set to override default release profile codegen-units settings"
         required: false
         type: string
-    secrets:
-      signingkey:
-        description: "Minisign private key. Required when publishing"
-        required: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -69,15 +64,6 @@ jobs:
       if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
       run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
 
-    - name: Include public key in package
-      if: inputs.publickey
-      env:
-        PUBLIC_KEY: ${{ inputs.publickey }}
-      shell: bash
-      run: |
-        echo "untrusted comment: minisign public key" > minisign.pub
-        cat >> minisign.pub <<< "$PUBLIC_KEY"
-
     - uses: ./.github/actions/just-setup
       with:
         tools: cargo-auditable
@@ -89,6 +75,9 @@ jobs:
     - run: just toolchain rust-src
     - run: just ci-install-deps
 
+    - uses: actions/download-artifact@v3
+      with:
+        name: minisign.pub
     - run: just package
     - if: runner.os == 'Windows'
       run: Get-ChildItem packages/
@@ -103,10 +92,13 @@ jobs:
 
     - if: inputs.publish
       uses: cargo-bins/cargo-binstall@main
-
+    - if: inputs.publish
+      uses: actions/download-artifact@v3
+      with:
+        name: minisign.key.age
     - if: inputs.publish
       env:
-        SIGNING_KEY: ${{ secrets.signingkey }}
+        AGE_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
       shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
 
@@ -120,6 +112,7 @@ jobs:
         body: ${{ fromJSON(inputs.publish).notes }}
         file: packages/cargo-binstall-*
         file_glob: true
+        prerelease: true
     - if: "! inputs.publish || runner.os == 'macOS'"
       name: Upload artifact
       uses: actions/upload-artifact@v3
@@ -145,15 +138,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Include public key in package
-      if: inputs.publickey
-      env:
-        PUBLIC_KEY: ${{ inputs.publickey }}
-      shell: bash
-      run: |
-        echo "untrusted comment: minisign public key" > minisign.pub
-        cat >> minisign.pub <<< "$PUBLIC_KEY"
-
     - uses: taiki-e/install-action@v2
       with:
         tool: just
@@ -171,16 +155,23 @@ jobs:
         name: aarch64-apple-darwin
         path: packages/
 
+    - uses: actions/download-artifact@v3
+      with:
+        name: minisign.pub
     - run: ls -shalr packages/
     - run: just repackage-lipo
     - run: ls -shal packages/
 
     - if: inputs.publish
       uses: cargo-bins/cargo-binstall@main
-
+    - if: inputs.publish
+      uses: actions/download-artifact@v3
+      with:
+        name: minisign.key.age
     - if: inputs.publish
       env:
-        SIGNING_KEY: ${{ secrets.signingkey }}
+        AGE_KEY_SECRET: ${{ secrets.SIGNING_KEY_SECRET }}
+      shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
     - if: inputs.publish
@@ -194,6 +185,7 @@ jobs:
         file: packages/cargo-binstall-universal-*
         file_glob: true
         overwrite: true
+        prerelease: true
     - if: "! inputs.publish"
       name: Upload artifact
       uses: actions/upload-artifact@v3

@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-echo "untrusted comment: rsign encrypted secret key" > minisign.key
-cat >> minisign.key <<< "$SIGNING_KEY"
+cat >> age.key <<< "$AGE_KEY_SECRET"
 
 set -x
 
-cargo binstall -y rsign2
+cargo binstall -y rsign2 rage
+rage --decrypt --identity age.key --output minisign.key minisign.key.age
 
 ts=$(date --utc --iso-8601=seconds)
 git=$(git rev-parse HEAD)
@@ -17,3 +17,4 @@ for file in "$@"; do
     rsign sign -W -s minisign.key -x "$file.sig" -t "$comment" "$file"
 done
 
+rm age.key minisign.key
