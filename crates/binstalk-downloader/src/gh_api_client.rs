@@ -13,7 +13,6 @@ use percent_encoding::{
     percent_decode_str, utf8_percent_encode, AsciiSet, PercentEncode, CONTROLS,
 };
 use tokio::sync::OnceCell;
-use tracing::{debug, warn};
 
 use crate::remote;
 
@@ -132,33 +131,8 @@ struct Inner {
 #[derive(Clone, Debug)]
 pub struct GhApiClient(Arc<Inner>);
 
-fn is_ascii_alphanumeric(s: &[u8]) -> bool {
-    s.iter().all(|byte| byte.is_ascii_alphanumeric())
-}
-
-fn is_valid_gh_token(token: &str) -> bool {
-    let token = token.as_bytes();
-
-    token.len() >= 40
-        && ((&token[0..2] == b"gh"
-            && token[2].is_ascii_alphanumeric()
-            && token[3] == b'_'
-            && is_ascii_alphanumeric(&token[4..]))
-            || (token.starts_with(b"github_") && is_ascii_alphanumeric(&token[7..])))
-}
-
 impl GhApiClient {
     pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
-        let auth_token = auth_token.and_then(|auth_token| {
-            if is_valid_gh_token(&auth_token) {
-                debug!("Using gh api token");
-                Some(auth_token)
-            } else {
-                warn!("Invalid auth_token, expected 'gh*_' or `github_*` with [A-Za-z0-9], fallback to unauthorized mode");
-                None
-            }
-        });
-
         Self(Arc::new(Inner {
             client,
             release_artifacts: Default::default(),
