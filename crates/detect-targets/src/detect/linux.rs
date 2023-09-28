@@ -108,7 +108,7 @@ You are not meant to run this directly.
     if status.success() {
         // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
         // succeeds.
-        stdout.contains("GLIBC").then_some(Libc::Gnu)
+        (stdout.contains("GLIBC") || stdout.contains("GNU libc")).then_some(Libc::Gnu)
     } else if status.code() == Some(1) {
         // On Alpine, executing both the gcompat glibc and the ldd and
         // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
