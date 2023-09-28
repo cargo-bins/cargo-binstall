@@ -152,7 +152,7 @@ jobs:
     - name: Build detect-targets
       run: |
         pip3 install -r zigbuild-requirements.txt
-        cd crates/detect-targets && cargo zigbuild --target $TARGET
+        cargo zigbuild --bin detect-targets --features cli-logging --target $TARGET
     - name: Run test in alpine
       run: |
         docker run --rm \
@@ -174,7 +174,7 @@ jobs:
       with:
         key: ${{ matrix.os }}
     - name: Build detect-targets
-      run: cargo build --bin detect-targets
+      run: cargo build --bin detect-targets --features cli-logging
     - name: Run test in ubuntu
       run: |
         set -exuo pipefail
