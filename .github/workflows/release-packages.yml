@@ -63,6 +63,11 @@ jobs:
       run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
 
     - uses: cargo-bins/cargo-binstall@main
+    - name: Install binaries required
+      run: cargo binstall -y --force rsign2 rage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - uses: ./.github/actions/just-setup
       with:
         tools: cargo-auditable
@@ -135,7 +140,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
     - uses: cargo-bins/cargo-binstall@main
+    - name: Install binaries required
+      run: cargo binstall -y --force rsign2 rage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - uses: taiki-e/install-action@v2
       with:
         tool: just

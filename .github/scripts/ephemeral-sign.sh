@@ -7,7 +7,6 @@ cat >> age.key <<< "$AGE_KEY_SECRET"
 
 set -x
 
-cargo binstall -y rsign2 rage
 rage --decrypt --identity age.key --output minisign.key minisign.key.age
 
 ts=$(node -e 'console.log((new Date).toISOString())')
