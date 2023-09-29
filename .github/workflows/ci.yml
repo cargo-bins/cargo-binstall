@@ -176,6 +176,7 @@ jobs:
           alpine test.sh "$TARGET"
 
   detect-targets-ubuntu-test:
+    needs: detect-targets-build
     strategy:
       fail-fast: false
       matrix:
