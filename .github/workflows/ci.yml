@@ -155,7 +155,7 @@ jobs:
         cargo zigbuild --features cli-logging --target $CARGO_BUILD_TARGET
       # Set working directory here, otherwise `cargo-zigbuild` would download
       # and build quite a few unused dependencies.
-      working-dirctory: crates/detect-targets
+      working-directory: crates/detect-targets
     - uses: actions/upload-artifact@v3
       with:
         name: detect-targets
