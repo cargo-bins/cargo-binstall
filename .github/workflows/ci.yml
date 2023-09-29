@@ -153,8 +153,8 @@ jobs:
     - name: Build detect-targets
       run: |
         cargo zigbuild --features cli-logging --target $CARGO_BUILD_TARGET
-      # Set working directory here, otherwise `cargo-zigbuild` would build
-      # the entire workspace
+      # Set working directory here, otherwise `cargo-zigbuild` would download
+      # and build quite a few unused dependencies.
       working-dirctory: crates/detect-targets
     - uses: actions/upload-artifact@v3
       with:
@@ -170,13 +170,14 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: detect-targets
+    - run: chmod +x detect-targets
 
     - name: Run test in alpine
       run: |
         docker run --rm \
           --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
           --mount src="$PWD/.github/scripts/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
-          alpine test.sh "$TARGET"
+          alpine /bin/ash -c "apk update && apk add bash && test.sh x86_64-unknown-linux-musl"
 
   detect-targets-ubuntu-test:
     needs: detect-targets-build
@@ -191,6 +192,7 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: detect-targets
+    - run: chmod +x detect-targets
 
     - name: Run test in ubuntu
       run: |
