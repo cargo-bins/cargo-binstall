@@ -139,25 +139,39 @@ jobs:
       CARGO_PROFILE_RELEASE_LTO: no
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 4
 
-  detect-targets-alpine-test:
+  detect-targets-build:
     runs-on: ubuntu-latest
     env:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
-      TARGET: x86_64-unknown-linux-musl
     steps:
     - uses: actions/checkout@v4
-    - name: Install x86_64-unknown-linux-musl target
+    - name: Install ${{ env.CARGO_BUILD_TARGET }} target
       run: |
-        rustup target add $TARGET
+        rustup target add $CARGO_BUILD_TARGET
         pip3 install -r zigbuild-requirements.txt
     - uses: Swatinem/rust-cache@v2
     - name: Build detect-targets
       run: |
-        cargo zigbuild --bin detect-targets --features cli-logging --target $TARGET
+        cargo zigbuild --bin detect-targets --features cli-logging --target $CARGO_BUILD_TARGET
+    - uses: actions/upload-artifact@v3
+      with:
+        name: detect-targets
+        path: target/${{ env.CARGO_BUILD_TARGET }}/debug/detect-targets
+
+  detect-targets-alpine-test:
+    runs-on: ubuntu-latest
+    needs: detect-targets-build
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/download-artifact@v3
+      with:
+        name: detect-targets
+
     - name: Run test in alpine
       run: |
         docker run --rm \
-          --mount src="$PWD/target/$TARGET/debug/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+          --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
           --mount src="$PWD/.github/scripts/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
           alpine test.sh "$TARGET"
 
@@ -170,16 +184,14 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: Swatinem/rust-cache@v2
+    - uses: actions/download-artifact@v3
       with:
-        key: ${{ matrix.os }}
-    - name: Build detect-targets
-      run: cargo build --bin detect-targets --features cli-logging
+        name: detect-targets
+
     - name: Run test in ubuntu
       run: |
         set -exuo pipefail
-        [ "$(./target/debug/detect-targets)" = "$(printf '%s\n%s' x86_64-unknown-linux-gnu x86_64-unknown-linux-musl)" ]
+        [ "$(./detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
