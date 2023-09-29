@@ -2,7 +2,6 @@
 
 set -euxo pipefail
 
-cargo binstall -y rsign2 rage
 rsign generate -f -W -p minisign.pub -s minisign.key
 
 set +x

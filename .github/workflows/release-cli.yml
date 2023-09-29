@@ -34,7 +34,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
     - uses: cargo-bins/cargo-binstall@main
+    - name: Install binaries required
+      run: cargo binstall -y --force rsign2 rage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Create ephemeral keypair
       id: keypair
       env:

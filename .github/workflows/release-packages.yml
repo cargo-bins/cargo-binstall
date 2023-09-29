@@ -62,13 +62,10 @@ jobs:
       if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
       run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
 
-    - uses: cargo-bins/cargo-binstall@main
     - uses: ./.github/actions/just-setup
       with:
-        tools: cargo-auditable
+        tools: cargo-auditable,rsign2,rage
       env:
-        # just-setup use binstall to install sccache and cargo-auditable,
-        # which works better when we provide it with GITHUB_TOKEN.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just toolchain rust-src
@@ -135,10 +132,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - uses: cargo-bins/cargo-binstall@main
+
     - uses: taiki-e/install-action@v2
       with:
-        tool: just
+        tool: just,rsign2,rage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - uses: actions/download-artifact@v3
       with:
