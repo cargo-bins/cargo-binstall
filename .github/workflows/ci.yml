@@ -150,6 +150,8 @@ jobs:
         rustup target add $CARGO_BUILD_TARGET
         pip3 install -r zigbuild-requirements.txt
     - uses: Swatinem/rust-cache@v2
+      with:
+        cache-all-crates: true
     - name: Build detect-targets
       run: |
         cargo zigbuild --features cli-logging --target $CARGO_BUILD_TARGET
