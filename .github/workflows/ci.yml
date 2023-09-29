@@ -221,15 +221,26 @@ jobs:
 
     - name: Run test
       run: |
-        docker run --rm \
+        set -exuo pipefail
+        [ "$(docker run --rm \
           --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-          ${{ matrix.container }} \
-          /bin/bash -c ' \
-            set -exuo pipefail
-            apk update
-            apk add bash
-            [ "$(detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]'
+          ${{ matrix.container }} detect-targets )" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
+  detect-targets-nix-test:
+    needs: detect-targets-build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v3
+      with:
+        name: detect-targets
+    - run: chmod +x detect-targets
+
+    - name: Run test
+      run: |
+        set -exuo pipefail
+        [ "$(docker run --rm \
+          --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+          nixos/nix detect-targets )" = x86_64-unknown-linux-musl ]
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
