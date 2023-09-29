@@ -201,6 +201,36 @@ jobs:
         set -exuo pipefail
         [ "$(./detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
+  detect-targets-more-glibc-test:
+    needs: detect-targets-build
+    strategy:
+      fail-fast: false
+      matrix:
+        container:
+          - archlinux
+          - fedora:37
+          - fedora:38
+          - fedora:39
+          - fedora
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v3
+      with:
+        name: detect-targets
+    - run: chmod +x detect-targets
+
+    - name: Run test
+      run: |
+        docker run --rm \
+          --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+          ${{ matrix.container }} \
+          /bin/bash -c ' \
+            set -exuo pipefail
+            apk update
+            apk add bash
+            [ "$(detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]'
+
+
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Tests pass
@@ -211,6 +241,7 @@ jobs:
     - release-dry-run
     - detect-targets-alpine-test
     - detect-targets-ubuntu-test
+    - detect-targets-more-glibc-test
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
