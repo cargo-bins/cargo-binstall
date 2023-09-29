@@ -147,11 +147,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install x86_64-unknown-linux-musl target
-      run: rustup target add $TARGET
+      run: |
+        rustup target add $TARGET
+        pip3 install -r zigbuild-requirements.txt
     - uses: Swatinem/rust-cache@v2
     - name: Build detect-targets
       run: |
-        pip3 install -r zigbuild-requirements.txt
         cargo zigbuild --bin detect-targets --features cli-logging --target $TARGET
     - name: Run test in alpine
       run: |
