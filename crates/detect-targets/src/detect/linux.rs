@@ -38,16 +38,23 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                 .expect("unwrap: target always has a - for cpu_arch")
                 .0;
 
-            let cpu_arch_suffix = cpu_arch.replace('_', "-");
+            let handles: Vec<_> = {
+                let cpu_arch_suffix = cpu_arch.replace('_', "-");
+                let filename = format!("ld-linux-{cpu_arch_suffix}.so.2");
+                let dirname = format!("{cpu_arch}-linux-gnu");
 
-            let handles: Vec<_> = [
-                format!("/lib/ld-linux-{cpu_arch_suffix}.so.2"),
-                format!("/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.2"),
-                format!("/usr/lib/{cpu_arch}-linux-gnu/ld-linux-{cpu_arch_suffix}.so.2"),
-            ]
-            .into_iter()
-            .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
-            .collect();
+                [
+                    format!("/lib/{filename}"),
+                    format!("/lib64/{filename}"),
+                    format!("/lib/{dirname}/{filename}"),
+                    format!("/lib64/{dirname}/{filename}"),
+                    format!("/usr/lib/{dirname}/{filename}"),
+                    format!("/usr/lib64/{dirname}/{filename}"),
+                ]
+                .into_iter()
+                .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
+                .collect()
+            };
 
             let has_glibc = async move {
                 for mut handle in handles {
