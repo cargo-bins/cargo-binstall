@@ -239,8 +239,8 @@ jobs:
       run: |
         set -exuo pipefail
         [ "$(docker run --rm \
-          --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-          nixos/nix detect-targets )" = x86_64-unknown-linux-musl ]
+          --mount src="$PWD/detect-targets",dst=/detect-targets,type=bind \
+          nixos/nix /detect-targets )" = x86_64-unknown-linux-musl ]
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
