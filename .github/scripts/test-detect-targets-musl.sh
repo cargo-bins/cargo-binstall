@@ -1,6 +1,4 @@
-#!/bin/ash
-
-# shellcheck shell=dash
+#!/bin/bash
 
 set -exuo pipefail
 
@@ -13,7 +11,7 @@ apk add gcompat
 
 ls -lsha /lib
 
-GNU_TARGET=$(echo "$TARGET" | sed 's/musl/gnu/')
+GNU_TARGET=${TARGET//musl/gnu}
 
 [ "$(detect-targets)" = "$(printf '%s\n%s' "$GNU_TARGET" "$TARGET")" ]
 
