@@ -152,7 +152,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Build detect-targets
       run: |
-        cargo zigbuild --bin detect-targets --features cli-logging --target $CARGO_BUILD_TARGET
+        cargo zigbuild --features cli-logging --target $CARGO_BUILD_TARGET
+      # Set working directory here, otherwise `cargo-zigbuild` would build
+      # the entire workspace
+      working-dirctory: crates/detect-targets
     - uses: actions/upload-artifact@v3
       with:
         name: detect-targets
