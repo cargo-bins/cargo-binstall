@@ -158,7 +158,7 @@ jobs:
       run: |
         docker run --rm \
           --mount src="$PWD/target/$TARGET/debug/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-          --mount src="$PWD/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
+          --mount src="$PWD/.github/scripts/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
           alpine test.sh "$TARGET"
 
   detect-targets-ubuntu-test:
