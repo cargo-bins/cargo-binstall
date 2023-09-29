@@ -41,6 +41,17 @@ impl DesiredTargets {
             AutoDetect(once_cell) => once_cell.get_or_init(detect_targets).await,
         }
     }
+
+    /// If `DesiredTargets` is provided with a list of desired targets instead
+    /// of detecting the targets, then this function would return `Some`.
+    pub fn get_initialized(&self) -> Option<&[String]> {
+        use DesiredTargetsInner::*;
+
+        match &self.0 {
+            Initialized(targets) => Some(targets),
+            AutoDetect(..) => None,
+        }
+    }
 }
 
 /// If opts_targets is `Some`, then it will be used.
