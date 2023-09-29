@@ -250,9 +250,11 @@ jobs:
     - cross-check
     - lint
     - release-dry-run
+    - detect-targets-build
     - detect-targets-alpine-test
     - detect-targets-ubuntu-test
     - detect-targets-more-glibc-test
+    - detect-targets-nix-test
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
