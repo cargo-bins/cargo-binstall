@@ -76,8 +76,8 @@ jobs:
     - run: just toolchain rust-src
     - run: just ci-install-deps
 
-    - uses: actions/download-artifact@v3
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      uses: actions/download-artifact@v3
       with:
         name: minisign.pub
     - run: just package
@@ -92,12 +92,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - uses: actions/download-artifact@v3
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      uses: actions/download-artifact@v3
       with:
         name: minisign.key.age
-    - name: Sign package
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      name: Sign package
       env:
         AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
       shell: bash
@@ -160,20 +160,20 @@ jobs:
         name: aarch64-apple-darwin
         path: packages/
 
-    - uses: actions/download-artifact@v3
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      uses: actions/download-artifact@v3
       with:
         name: minisign.pub
     - run: ls -shalr packages/
     - run: just repackage-lipo
     - run: ls -shal packages/
 
-    - uses: actions/download-artifact@v3
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      uses: actions/download-artifact@v3
       with:
         name: minisign.key.age
-    - env:
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      env:
         AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
       shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*

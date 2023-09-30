@@ -94,12 +94,12 @@ jobs:
     - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
       run: exit 1
     - uses: actions/checkout@v4
-    - uses: actions/download-artifact@v3
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      uses: actions/download-artifact@v3
       with:
         name: minisign.pub
-    - run: .github/scripts/ephemeral-crate.sh
-      if: "! inputs.SKIP_SIGNING"
+    - if: "! inputs.SKIP_SIGNING"
+      run: .github/scripts/ephemeral-crate.sh
 
     - if: fromJSON(inputs.info).is-release != 'true'
       name: DRY-RUN Publish to crates.io
