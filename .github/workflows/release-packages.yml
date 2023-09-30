@@ -15,6 +15,10 @@ on:
         description: "Used to speed up CI"
         required: false
         type: string
+      SKIP_SIGNING:
+        description: "Used to skip signing"
+        required: false
+        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
@@ -72,6 +76,7 @@ jobs:
     - run: just ci-install-deps
 
     - uses: actions/download-artifact@v3
+      if: "! inputs.SKIP_SIGNING"
       with:
         name: minisign.pub
     - run: just package
@@ -87,9 +92,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - uses: actions/download-artifact@v3
+      if: "! inputs.SKIP_SIGNING"
       with:
         name: minisign.key.age
     - name: Sign package
+      if: "! inputs.SKIP_SIGNING"
       env:
         AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
       shell: bash
@@ -153,6 +160,7 @@ jobs:
         path: packages/
 
     - uses: actions/download-artifact@v3
+      if: "! inputs.SKIP_SIGNING"
       with:
         name: minisign.pub
     - run: ls -shalr packages/
@@ -160,9 +168,11 @@ jobs:
     - run: ls -shal packages/
 
     - uses: actions/download-artifact@v3
+      if: "! inputs.SKIP_SIGNING"
       with:
         name: minisign.key.age
     - env:
+      if: "! inputs.SKIP_SIGNING"
         AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
       shell: bash
       run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*

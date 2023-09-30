@@ -138,6 +138,7 @@ jobs:
         }
       CARGO_PROFILE_RELEASE_LTO: no
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 4
+      SKIP_SIGNING: ${{ github.event_name == 'pull_request' }}
 
   detect-targets-build:
     runs-on: ubuntu-latest

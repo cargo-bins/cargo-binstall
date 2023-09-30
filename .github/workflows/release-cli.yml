@@ -14,6 +14,10 @@ on:
         description: "Used to speed up CI"
         required: false
         type: string
+      SKIP_SIGNING:
+        description: "Used to skip signing"
+        required: false
+        type: boolean
 
 jobs:
   tag:
@@ -32,6 +36,7 @@ jobs:
 
   keygen:
     runs-on: ubuntu-latest
+    if: "! inputs.SKIP_SIGNING"
     steps:
     - uses: actions/checkout@v4
 
@@ -67,22 +72,33 @@ jobs:
     - keygen
     uses: ./.github/workflows/release-packages.yml
     secrets: inherit
+    if: always()
     with:
       publish: ${{ inputs.info }}
       CARGO_PROFILE_RELEASE_LTO: ${{ inputs.CARGO_PROFILE_RELEASE_LTO }}
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}
+      SKIP_SIGNING: ${{ inputs.SKIP_SIGNING }}
 
   publish:
-    needs: package
+    needs:
+    - tag
+    - keygen
+    - package
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    if: always()
     steps:
+    # fail if ANY dependency has failed or or cancelled
+    - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
+      run: exit 1
     - uses: actions/checkout@v4
     - uses: actions/download-artifact@v3
+      if: "! inputs.SKIP_SIGNING"
       with:
         name: minisign.pub
     - run: .github/scripts/ephemeral-crate.sh
+      if: "! inputs.SKIP_SIGNING"
 
     - if: fromJSON(inputs.info).is-release != 'true'
       name: DRY-RUN Publish to crates.io
