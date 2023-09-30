@@ -18,6 +18,7 @@ on:
         description: "Used to skip signing"
         required: false
         type: boolean
+        default: false
 
 jobs:
   tag:
