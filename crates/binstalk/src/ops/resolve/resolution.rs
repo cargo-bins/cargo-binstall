@@ -126,10 +126,11 @@ impl ResolutionFetch {
 
 impl ResolutionSource {
     pub async fn install(self, opts: Arc<Options>) -> Result<(), BinstallError> {
-        let desired_targets = opts.desired_targets.get().await;
-        let target = desired_targets
-            .first()
-            .ok_or(BinstallError::NoViableTargets)?;
+        let target = if let Some(targets) = opts.desired_targets.get_initialized() {
+            Some(targets.first().ok_or(BinstallError::NoViableTargets)?)
+        } else {
+            None
+        };
 
         let name = &self.name;
         let version = &self.version;
@@ -138,20 +139,17 @@ impl ResolutionSource {
             .map(Cow::Owned)
             .unwrap_or_else(|| Cow::Borrowed(OsStr::new("cargo")));
 
-        debug!(
-            "Running `{} install {name} --version {version} --target {target}`",
-            Path::new(&cargo).display(),
-        );
-
         let mut cmd = Command::new(cargo);
 
         cmd.arg("install")
             .arg(name)
             .arg("--version")
             .arg(version)
-            .arg("--target")
-            .arg(target)
             .kill_on_drop(true);
+
+        if let Some(target) = target {
+            cmd.arg("--target").arg(target);
+        }
 
         if opts.quiet {
             cmd.arg("--quiet");
@@ -172,6 +170,8 @@ impl ResolutionSource {
         if opts.no_track {
             cmd.arg("--no-track");
         }
+
+        debug!("Running `{}`", format_cmd(&cmd),);
 
         if !opts.dry_run {
             let mut child = opts
