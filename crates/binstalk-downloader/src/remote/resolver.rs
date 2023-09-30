@@ -26,8 +26,7 @@ impl Resolve for TrustDnsResolver {
 fn new_resolver() -> Result<TokioAsyncResolver, Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(unix)]
     {
-        let (config, opts) = trust_dns_resolver::system_conf::read_system_conf()?;
-        Ok(TokioAsyncResolver::tokio(config, opts)?)
+        Ok(TokioAsyncResolver::tokio_from_system_conf()?)
     }
     #[cfg(windows)]
     {
@@ -52,7 +51,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, Box<dyn std::error::Error + Send
                         socket_addr,
                         protocol,
                         tls_dns_name: None,
-                        trust_nx_responses: false,
+                        trust_negative_responses: false,
                         #[cfg(feature = "rustls")]
                         tls_config: None,
                         bind_addr: None,
@@ -60,6 +59,6 @@ fn new_resolver() -> Result<TokioAsyncResolver, Box<dyn std::error::Error + Send
                 }
             });
 
-        Ok(TokioAsyncResolver::tokio(config, opts)?)
+        Ok(TokioAsyncResolver::tokio(config, opts))
     }
 }
