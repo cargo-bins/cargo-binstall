@@ -18,6 +18,11 @@ mod quickinstall;
 #[cfg(feature = "quickinstall")]
 pub use quickinstall::*;
 
+#[cfg(feature = "dist-manifest")]
+mod dist_manifest_fetcher;
+#[cfg(feature = "dist-manifest")]
+pub use dist_manifest_fetcher::GhDistManifest;
+
 mod common;
 use common::*;
 

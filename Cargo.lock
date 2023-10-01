@@ -303,6 +303,7 @@ dependencies = [
  "miette",
  "minisign-verify",
  "once_cell",
+ "serde",
  "strum",
  "thiserror",
  "tokio",
