@@ -66,13 +66,17 @@ impl Map {
 pub struct HTTPCacher(Arc<RwLock<Map>>);
 
 impl HTTPCacher {
+    fn try_get_entry(&self, url: &Url, type_id: TypeId) -> Option<ErasedCachedEntry> {
+        self.0.read().unwrap().get(url, type_id)
+    }
+
     fn get_entry_inner(
         &self,
         url: &Url,
         type_id: TypeId,
         f: fn() -> ErasedCachedEntry,
     ) -> ErasedCachedEntry {
-        if let Some(entry) = self.0.read().unwrap().get(url, type_id) {
+        if let Some(entry) = self.try_get_entry(url, type_id) {
             entry
         } else {
             // Clone the url first to reduce critical section
@@ -100,5 +104,77 @@ impl<T> HTTPCachedEntry<T> {
         Fut: Future<Output = Result<T, E>>,
     {
         self.0.get_or_try_init(f).await
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[derive(Debug, Eq, PartialEq, Copy, Clone)]
+    struct T1(u32);
+
+    #[derive(Debug, Eq, PartialEq, Copy, Clone)]
+    struct T2(u32);
+
+    #[tokio::test]
+    async fn test() {
+        let cacher = HTTPCacher::default();
+        let url1 = Url::parse("https://example.com").unwrap();
+        let url2 = Url::parse("https://example2.com").unwrap();
+
+        // Get but don't initialize
+        cacher.get_entry::<T1>(&url1);
+
+        // Get but initialization failure.
+        cacher
+            .get_entry::<T1>(&url1)
+            .get_or_try_init(|| async { Err(()) })
+            .await
+            .unwrap_err();
+
+        // Initialize it
+        assert_eq!(
+            cacher
+                .get_entry::<T1>(&url1)
+                .get_or_try_init(|| async { Ok::<_, ()>(T1(232)) })
+                .await
+                .copied()
+                .unwrap(),
+            T1(232)
+        );
+
+        // Make sure it stay initialized
+        assert_eq!(
+            cacher
+                .get_entry::<T1>(&url1)
+                .get_or_try_init(|| async { Ok::<_, ()>(T1(2322)) })
+                .await
+                .copied()
+                .unwrap(),
+            T1(232)
+        );
+
+        // Try a different type and make sure it is a different entry
+        assert_eq!(
+            cacher
+                .get_entry::<T2>(&url1)
+                .get_or_try_init(|| async { Ok::<_, ()>(T2(9012)) })
+                .await
+                .copied()
+                .unwrap(),
+            T2(9012)
+        );
+
+        // Try a different url
+        assert_eq!(
+            cacher
+                .get_entry::<T2>(&url2)
+                .get_or_try_init(|| async { Ok::<_, ()>(T2(239012)) })
+                .await
+                .copied()
+                .unwrap(),
+            T2(239012)
+        );
     }
 }
