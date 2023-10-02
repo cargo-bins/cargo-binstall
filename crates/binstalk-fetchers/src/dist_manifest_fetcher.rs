@@ -26,7 +26,7 @@ struct Artifact {
 }
 
 #[derive(Clone, Debug)]
-pub(super) enum DistManifest {
+enum DistManifest {
     NotSupported(Format),
     /// Key: name of the binary
     Binaries(BTreeMap<CompactString, Binary>),

@@ -96,6 +96,7 @@ pub trait Fetcher: Send + Sync {
     fn new(
         client: Client,
         gh_api_client: GhApiClient,
+        cacher: HTTPCacher,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,

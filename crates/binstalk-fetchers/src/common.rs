@@ -5,6 +5,7 @@ use std::sync::{
 
 use binstalk_downloader::gh_api_client::{GhReleaseArtifact, HasReleaseArtifact};
 pub(super) use binstalk_downloader::{
+    cacher::HTTPCacher,
     download::{Download, ExtractedFiles},
     gh_api_client::GhApiClient,
     remote::{Client, Url},
