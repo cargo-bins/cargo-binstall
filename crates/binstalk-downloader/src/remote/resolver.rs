@@ -39,7 +39,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
         let mut config = ResolverConfig::new();
         let opts = ResolverOpts::default();
 
-        get_dns_servers()?.for_each(|addr| {
+        get_dns_servers()?.into_iter().for_each(|addr| {
             trace!("Adding DNS server: {}", addr);
             let socket_addr = SocketAddr::new(addr, 53);
             for protocol in [Protocol::Udp, Protocol::Tcp] {
@@ -62,7 +62,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
 
 #[cfg(windows)]
 #[instrument(level = "trace")]
-fn get_dns_servers() -> Result<impl Iterator<Item = std::net::IpAddr>, BoxError> {
+fn get_dns_servers() -> Result<Vec<std::net::IpAddr>, BoxError> {
     debug!("Retrieving local IP address");
     let local_ip = match default_net::interface::get_local_ipaddr() {
         Some(ip) => ip,
@@ -79,7 +79,7 @@ fn get_dns_servers() -> Result<impl Iterator<Item = std::net::IpAddr>, BoxError>
         adapter.friendly_name(),
         adapter.dns_servers().len()
     );
-    Ok(adapter.dns_servers().iter().copied())
+    Ok(adapter.dns_servers().to_vec())
 }
 
 #[cfg(windows)]
