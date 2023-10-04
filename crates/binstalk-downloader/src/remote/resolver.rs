@@ -79,7 +79,7 @@ fn get_dns_servers() -> Result<impl Iterator<Item = std::net::IpAddr>, BoxError>
         adapter.friendly_name(),
         adapter.dns_servers().len()
     );
-    Ok(adapter.dns_servers().to_vec().into_iter())
+    Ok(adapter.dns_servers().iter().copied())
 }
 
 #[cfg(windows)]
