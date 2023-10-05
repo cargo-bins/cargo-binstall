@@ -39,9 +39,9 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
         let mut config = ResolverConfig::new();
         let opts = ResolverOpts::default();
 
-        get_dns_servers()?.into_iter().for_each(|addr| {
+        get_adapter()?.dns_servers().iter().for_each(|addr| {
             trace!("Adding DNS server: {}", addr);
-            let socket_addr = SocketAddr::new(addr, 53);
+            let socket_addr = SocketAddr::new(*addr, 53);
             for protocol in [Protocol::Udp, Protocol::Tcp] {
                 config.add_name_server(NameServerConfig {
                     socket_addr,
@@ -62,39 +62,23 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
 
 #[cfg(windows)]
 #[instrument(level = "trace")]
-fn get_dns_servers() -> Result<Vec<std::net::IpAddr>, BoxError> {
+fn get_adapter() -> Result<ipconfig::Adapter, BoxError> {
     debug!("Retrieving local IP address");
-    let local_ip = match default_net::interface::get_local_ipaddr() {
-        Some(ip) => ip,
-        None => return Err("Local IP address not found".into()),
-    };
+    let local_ip =
+        default_net::interface::get_local_ipaddr().ok_or("Local IP address not found")?;
     debug!("Local IP address: {local_ip}");
     debug!("Retrieving network adapters");
     let adapters = ipconfig::get_adapters()?;
     debug!("Found {} network adapters", adapters.len());
     debug!("Searching for adapter with IP address {local_ip}");
-    let adapter = find_adapter(local_ip, adapters)?;
+    let adapter = adapters
+        .into_iter()
+        .find(|adapter| adapter.ip_addresses().contains(&local_ip))
+        .ok_or("Adapter not found")?;
     debug!(
         "Using adapter {} with {} DNS servers",
         adapter.friendly_name(),
         adapter.dns_servers().len()
     );
-    Ok(adapter.dns_servers().to_vec())
-}
-
-#[cfg(windows)]
-fn find_adapter(
-    local_ip: std::net::IpAddr,
-    adapters: Vec<ipconfig::Adapter>,
-) -> Result<ipconfig::Adapter, BoxError> {
-    let mut found: Option<ipconfig::Adapter> = None;
-    for adapter in adapters {
-        if adapter.ip_addresses().contains(&local_ip) {
-            debug!("Found adapter candidate: {}", adapter.friendly_name());
-            if found.is_none() {
-                found = Some(adapter);
-            }
-        }
-    }
-    found.ok_or_else(|| "Adapter not found".into())
+    Ok(adapter)
 }
