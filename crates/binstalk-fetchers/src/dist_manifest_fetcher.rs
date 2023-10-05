@@ -1,8 +1,13 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use binstalk_downloader::remote::{Client, Response};
 use cargo_dist_schema::Format;
 use compact_str::CompactString;
+use normalize_path::NormalizePath;
 
 use crate::FetchError;
 
@@ -13,7 +18,7 @@ struct BinaryArtifact {
     /// need to infer the format.
     filename: CompactString,
     /// Path to the executable within the tarbal/zip.
-    path_to_exe: CompactString,
+    path_to_exe: PathBuf,
 
     /// Filename of the checksum file.
     checksum_filename: Option<CompactString>,
@@ -46,14 +51,19 @@ impl BinaryArtifact {
         let path_to_exe = binary_artifact
             .assets
             .iter()
-            .find_map(|asset| match (&asset.kind, asset.path.as_deref()) {
-                (&cargo_dist_schema::AssetKind::Executable(_), Some(path))
-                    if path.ends_with(app_name) =>
-                {
-                    Some(path)
-                }
+            .find_map(|asset| {
+                match (
+                    &asset.kind,
+                    asset.path.as_deref().map(|p| Path::new(p).normalize()),
+                ) {
+                    (&cargo_dist_schema::AssetKind::Executable(_), Some(path))
+                        if path.file_name() == Some(OsStr::new(app_name)) =>
+                    {
+                        Some(path)
+                    }
 
-                _ => None,
+                    _ => None,
+                }
             })
             .ok_or_else(|| {
                 FetchError::InvalidDistManifest(
@@ -94,7 +104,7 @@ impl BinaryArtifact {
         Ok(Some((
             Self {
                 filename: filename.into(),
-                path_to_exe: path_to_exe.into(),
+                path_to_exe,
                 checksum_filename,
             },
             binary_artifact.target_triples.iter(),
