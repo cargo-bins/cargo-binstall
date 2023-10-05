@@ -302,6 +302,7 @@ dependencies = [
  "leon-macros",
  "miette",
  "minisign-verify",
+ "normalize-path",
  "once_cell",
  "serde",
  "strum",

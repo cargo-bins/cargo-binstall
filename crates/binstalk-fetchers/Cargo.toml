@@ -23,6 +23,7 @@ leon = { version = "2.0.1", path = "../leon" }
 leon-macros = { version = "1.0.0", path = "../leon-macros" }
 miette = "5.9.0"
 minisign-verify = "0.2.1"
+normalize-path = { version = "0.2.1", path = "../normalize-path" }
 once_cell = "1.18.0"
 serde = { version = "1.0.163", optional = true }
 strum = "0.25.0"
