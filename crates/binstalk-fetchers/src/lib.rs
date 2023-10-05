@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{path::Path, sync::Arc};
+use std::{borrow::Cow, path::Path, sync::Arc};
 
 use binstalk_downloader::{
     download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
@@ -75,6 +75,10 @@ pub enum FetchError {
 
     #[error("Failed to verify signature")]
     InvalidSignature,
+
+    #[cfg(feature = "dist-manifest")]
+    #[error("Invalid dist manifest: {0}")]
+    InvalidDistManifest(Cow<'static, str>),
 }
 
 impl From<RemoteError> for FetchError {
