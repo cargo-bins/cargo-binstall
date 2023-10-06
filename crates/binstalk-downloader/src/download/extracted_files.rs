@@ -16,7 +16,7 @@ impl ExtractedFilesEntry {
         ExtractedFilesEntry::Dir(Box::new(
             file_name
                 .map(|file_name| HashSet::from([file_name.into()]))
-                .unwrap_or_else(HashSet::default),
+                .unwrap_or_default(),
         ))
     }
 }
