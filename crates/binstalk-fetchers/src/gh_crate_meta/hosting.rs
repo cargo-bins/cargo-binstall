@@ -63,8 +63,8 @@ impl RepositoryHost {
         match repo.domain() {
             Some(domain) if domain.starts_with("github") => GitHub,
             Some(domain) if domain.starts_with("gitlab") => GitLab,
-            Some(domain) if domain == "bitbucket.org" => BitBucket,
-            Some(domain) if domain == "sourceforge.net" => SourceForge,
+            Some("bitbucket.org") => BitBucket,
+            Some("sourceforge.net") => SourceForge,
             _ => Unknown,
         }
     }

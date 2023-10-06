@@ -201,13 +201,13 @@ fn check_filename_and_normalize(filename: &ZipString) -> Result<(PathBuf, bool),
         .unwrap_or_else(|_| String::from_utf8_lossy(filename.as_bytes()));
 
     let bail = |filename: Cow<'_, str>| {
-        Err(ZipError(ZipErrorInner::InvalidFilePath(
-            filename.into_owned().into(),
+        Err(DownloadError::from(ZipError(
+            ZipErrorInner::InvalidFilePath(filename.into_owned().into()),
         )))
     };
 
     if filename.contains('\0') {
-        return bail(filename)?;
+        return bail(filename);
     }
 
     let mut path = PathBuf::new();
@@ -216,13 +216,13 @@ fn check_filename_and_normalize(filename: &ZipString) -> Result<(PathBuf, bool),
     // `normalize_path::NormalizePath::normalize`.
     for component in Path::new(&*filename).components() {
         match component {
-            Component::Prefix(_) | Component::RootDir => return bail(filename)?,
+            Component::Prefix(_) | Component::RootDir => return bail(filename),
             Component::CurDir => (),
             Component::ParentDir => {
                 if !path.pop() {
                     // `PathBuf::pop` returns false if there is no parent.
                     // which means the path is invalid.
-                    return bail(filename)?;
+                    return bail(filename);
                 }
             }
             Component::Normal(c) => path.push(c),
