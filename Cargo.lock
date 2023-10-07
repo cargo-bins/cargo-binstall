@@ -3306,7 +3306,7 @@ dependencies = [
 
 [[package]]
 name = "simple-git"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "compact_str",
  "derive_destructure2",
