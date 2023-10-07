@@ -25,5 +25,5 @@ toml_edit = { version = "0.20.0", features = ["serde"] }
 url = { version = "2.3.1", features = ["serde"] }
 
 [dev-dependencies]
-detect-targets = { version = "0.1.12", path = "../detect-targets" }
+detect-targets = { version = "0.1.13", path = "../detect-targets" }
 tempfile = "3.5.0"
