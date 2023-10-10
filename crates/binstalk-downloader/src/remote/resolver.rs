@@ -3,11 +3,9 @@ use std::{net::SocketAddr, sync::Arc};
 use hyper::client::connect::dns::Name;
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Resolve};
-use tracing::{info, instrument, warn};
+use tracing::{debug, instrument, warn};
 use trust_dns_resolver::TokioAsyncResolver;
 
-#[cfg(windows)]
-use tracing::{debug, trace};
 #[cfg(windows)]
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
 
@@ -33,17 +31,17 @@ impl Resolve for TrustDnsResolver {
 fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
     #[cfg(unix)]
     {
-        info!("Using system DNS resolver configuration");
+        debug!("Using system DNS resolver configuration");
         Ok(TokioAsyncResolver::tokio_from_system_conf()?)
     }
     #[cfg(windows)]
     {
-        info!("Using custom DNS resolver configuration");
+        debug!("Using custom DNS resolver configuration");
         let mut config = ResolverConfig::new();
         let opts = ResolverOpts::default();
 
         get_adapter()?.dns_servers().iter().for_each(|addr| {
-            trace!("Adding DNS server: {}", addr);
+            tracing::trace!("Adding DNS server: {}", addr);
             let socket_addr = SocketAddr::new(*addr, 53);
             for protocol in [Protocol::Udp, Protocol::Tcp] {
                 config.add_name_server(NameServerConfig {
