@@ -2,10 +2,10 @@ $ErrorActionPreference = "Stop"
 Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
 $base_url = "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
-$type = (Get-ComputerInfo).CsSystemType.ToLower()
-if ($type.StartsWith("x64")) {
+$proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
+if ($proc_arch -eq "AMD64") {
 	$arch = "x86_64"
-} elseif ($type.StartsWith("arm64")) {
+} elseif ($proc_arch -eq "ARM64") {
 	$arch = "aarch64"
 } else {
 	Write-Host "Unsupported Architecture: $type" -ForegroundColor Red
