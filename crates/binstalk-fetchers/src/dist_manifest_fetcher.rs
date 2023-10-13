@@ -8,6 +8,7 @@ use binstalk_downloader::remote::{Client, Response};
 use cargo_dist_schema::Format;
 use compact_str::CompactString;
 use normalize_path::NormalizePath;
+use tracing::warn;
 
 use crate::FetchError;
 
@@ -24,131 +25,34 @@ struct BinaryArtifact {
     checksum_filename: Option<CompactString>,
 }
 
-impl BinaryArtifact {
-    /// Return `Self` and target if the artifact contains binary, or `None`.
-    fn new<'artifacts>(
-        artifact_id: &str,
-        artifacts: &'artifacts BTreeMap<String, cargo_dist_schema::Artifact>,
-        app_name: &str,
-    ) -> Result<Option<(Self, impl Iterator<Item = &'artifacts String>)>, FetchError> {
-        let get_artifact = |artifact_id| {
-            artifacts.get(artifact_id).ok_or_else(|| {
-                FetchError::InvalidDistManifest(format!("Missing artifact_id {artifact_id}").into())
-            })
-        };
-        let binary_artifact = get_artifact(artifact_id)?;
-
-        if !matches!(
-            binary_artifact.kind,
-            cargo_dist_schema::ArtifactKind::ExecutableZip
-        ) {
-            return Ok(None);
-        }
-        let Some(filename) = binary_artifact.name.as_deref() else {
-            return Ok(None);
-        };
-
-        let path_to_exe = binary_artifact
-            .assets
-            .iter()
-            .find_map(|asset| {
-                match (
-                    &asset.kind,
-                    asset.path.as_deref().map(|p| Path::new(p).normalize()),
-                ) {
-                    (&cargo_dist_schema::AssetKind::Executable(_), Some(path))
-                        if path.file_name() == Some(OsStr::new(app_name)) =>
-                    {
-                        Some(path)
-                    }
-
-                    _ => None,
-                }
-            })
-            .ok_or_else(|| {
-                FetchError::InvalidDistManifest(
-                    format!(
-                        "Cannot find `{app_name}` in artifact `{filename}` with id `{artifact_id}`"
-                    )
-                    .into(),
-                )
-            })?;
-
-        let checksum_filename = if let Some(checksum_artifact_id) = &binary_artifact.checksum {
-            let checksum_artifact = get_artifact(checksum_artifact_id)?;
-
-            let Some(checksum_filename) = checksum_artifact.name.as_deref() else {
-                return Err(FetchError::InvalidDistManifest(
-                    format!("Checksum artifact id {checksum_artifact_id} does not have a filename")
-                        .into(),
-                ));
-            };
-
-            if !matches!(
-                binary_artifact.kind,
-                cargo_dist_schema::ArtifactKind::Checksum
-            ) {
-                return Err(FetchError::InvalidDistManifest(
-                    format!(
-                        "Checksum artifact {checksum_filename} with id {checksum_artifact_id} does not have kind Checksum"
-                    )
-                    .into(),
-                ));
-            }
-
-            Some(checksum_filename.into())
-        } else {
-            None
-        };
-
-        Ok(Some((
-            Self {
-                filename: filename.into(),
-                path_to_exe,
-                checksum_filename,
-            },
-            binary_artifact.target_triples.iter(),
-        )))
-    }
-}
-
 #[derive(Clone, Debug)]
 struct Binary {
     /// Key: target, value: artifact
     binary_artifacts: BTreeMap<CompactString, BinaryArtifact>,
 }
 
-impl Binary {
-    fn new(
-        artifact_ids: Vec<String>,
-        artifacts: &BTreeMap<String, cargo_dist_schema::Artifact>,
-        app_name: &str,
-    ) -> Result<Self, FetchError> {
-        let mut binary_artifacts = BTreeMap::new();
-
-        for artifact_id in artifact_ids {
-            if let Some((binary_artifact, targets)) =
-                BinaryArtifact::new(&artifact_id, artifacts, app_name)?
-            {
-                for target in targets {
-                    binary_artifacts.insert(target.into(), binary_artifact.clone());
-                }
-            }
-        }
-        Ok(Self { binary_artifacts })
-    }
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+struct BinaryKey {
+    binary_name: CompactString,
+    binary_version: CompactString,
+    binary_target: CompactString,
 }
 
 #[derive(Clone, Debug)]
 enum DistManifest {
     NotSupported(Format),
     /// Key: name and version of the binary
-    Binaries(BTreeMap<(CompactString, CompactString), Binary>),
+    Binaries(BTreeMap<BinaryKey, BinaryArtifact>),
 }
 
 impl DistManifest {
     async fn parse(response: Response) -> Result<Self, FetchError> {
-        let manifest: cargo_dist_schema::DistManifest = response.json().await?;
+        Self::new(response.json().await?)
+    }
+
+    fn new(manifest: cargo_dist_schema::DistManifest) -> Result<Self, FetchError> {
+        use cargo_dist_schema::{ArtifactKind, Asset};
+
         let format = manifest.format();
 
         if format < cargo_dist_schema::Format::Epoch3 {
@@ -161,18 +65,110 @@ impl DistManifest {
             ..
         } = manifest;
 
-        Ok(Self::Binaries(
-            releases
-                .into_iter()
-                .map(|release| {
-                    let binary = Binary::new(release.artifacts, &artifacts, &release.app_name)?;
-                    Ok::<_, FetchError>((
-                        (release.app_name.into(), release.app_version.into()),
-                        binary,
-                    ))
-                })
-                .collect::<Result<_, _>>()?,
-        ))
+        let checksum_artifacts = artifacts
+            .iter()
+            .filter_map(|(artifact_id, artifact)| {
+                match (&artifact.kind, artifact.name.as_deref()) {
+                    (&ArtifactKind::Checksum, Some(name)) => {
+                        Some((artifact_id.into(), name.into()))
+                    }
+                    _ => None,
+                }
+            })
+            .collect::<BTreeMap<CompactString, CompactString>>();
+
+        let binary_artifacts = artifacts
+            .into_iter()
+            .filter_map(|(artifact_id, artifact)| {
+                let (ArtifactKind::ExecutableZip, Some(filename)) =
+                    (artifact.kind, artifact.name.map(CompactString::from))
+                else {
+                    return None;
+                };
+
+                let checksum_filename = if let Some(checksum_artifact_id) = &artifact.checksum {
+                    let checksum_filename = checksum_artifacts.get(&**checksum_artifact_id);
+
+                    if checksum_filename.is_none() {
+                        warn!("Missing checksum with artifact_id {artifact_id}");
+                    }
+
+                    checksum_filename.cloned()
+                } else {
+                    None
+                };
+
+                Some((
+                    CompactString::from(artifact_id),
+                    (
+                        filename,
+                        checksum_filename,
+                        artifact.assets,
+                        artifact.target_triples,
+                    ),
+                ))
+            })
+            .collect::<BTreeMap<
+                CompactString,
+                (
+                    CompactString,
+                    Option<CompactString>,
+                    Vec<Asset>,
+                    Vec<String>,
+                ),
+            >>();
+
+        let mut binaries = BTreeMap::new();
+
+        for release in releases {
+            let app_name = CompactString::from(release.app_name);
+            let app_version = CompactString::from(release.app_version);
+
+            for artifact_id in release.artifacts {
+                let Some((filename, checksum_filename, assets, targets)) =
+                    binary_artifacts.get(&*artifact_id)
+                else {
+                    continue;
+                };
+
+                let Some(path_to_exe) = assets.iter().find_map(|asset| {
+                    match (
+                        &asset.kind,
+                        asset.path.as_deref().map(|p| Path::new(p).normalize()),
+                    ) {
+                        (&cargo_dist_schema::AssetKind::Executable(_), Some(path))
+                            if path.file_name() == Some(OsStr::new(&app_name)) =>
+                        {
+                            Some(path)
+                        }
+
+                        _ => None,
+                    }
+                }) else {
+                    warn!(
+                        "Cannot find `{app_name}` in asseets of artifact `{filename}` with id `{artifact_id}`"
+                    );
+                    continue;
+                };
+
+                for target in targets {
+                    binaries.insert(
+                        BinaryKey {
+                            binary_name: app_name.clone(),
+                            binary_version: app_version.clone(),
+                            binary_target: target.into(),
+                        },
+                        BinaryArtifact {
+                            filename: filename.clone(),
+                            checksum_filename: checksum_filename.clone(),
+                            path_to_exe: path_to_exe.clone(),
+                        },
+                    );
+                }
+            }
+        }
+
+        Ok(Self::Binaries(binaries))
     }
 }
 
@@ -180,3 +176,6 @@ impl DistManifest {
 // Also cache the artifacts downloaded and extracted
 
 pub struct GhDistManifest {}
+
+#[cfg(test)]
+mod test {}
