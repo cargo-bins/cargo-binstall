@@ -17,7 +17,7 @@ binstalk-types = { version = "0.6.1", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
 compact_str = "0.7.0"
-flate2 = { version = "1.0.26", default-features = false }
+flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.28"
 httpdate = "1.0.2"
 reqwest = { version = "0.11.19", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
@@ -48,7 +48,7 @@ xz2 = "0.1.7"
 # Since zip 0.6.3 depends on zstd 0.11, we can use 0.12.0 here
 # because it uses the same zstd-sys version.
 # Otherwise there will be a link conflict.
-zstd = { version = "0.12.3", default-features = false }
+zstd = { version = "0.13.0", default-features = false }
 
 [features]
 default = ["static", "rustls"]
