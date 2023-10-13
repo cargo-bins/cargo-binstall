@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{borrow::Cow, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use binstalk_downloader::{
     download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
