@@ -11,13 +11,13 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 async-trait = "0.1.68"
-async-compression = { version = "0.4.3", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
+async-compression = { version = "0.4.4", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
 async_zip = { version = "0.0.15", features = ["deflate", "bzip2", "lzma", "zstd", "xz", "tokio"] }
 binstalk-types = { version = "0.6.1", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
 compact_str = "0.7.0"
-flate2 = { version = "1.0.26", default-features = false }
+flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.28"
 httpdate = "1.0.2"
 reqwest = { version = "0.11.19", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
@@ -35,7 +35,7 @@ thiserror = "1.0.40"
 tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
 tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.8", features = ["io"] }
-tracing = "0.1.37"
+tracing = "0.1.39"
 # trust-dns-resolver must be kept in sync with the version reqwest uses
 trust-dns-resolver = { version = "0.23.0", optional = true, features = ["dnssec-ring"] }
 hyper = { version = "0.14.27", optional = true }
@@ -48,7 +48,7 @@ xz2 = "0.1.7"
 # Since zip 0.6.3 depends on zstd 0.11, we can use 0.12.0 here
 # because it uses the same zstd-sys version.
 # Otherwise there will be a link conflict.
-zstd = { version = "0.12.3", default-features = false }
+zstd = { version = "0.13.0", default-features = false }
 
 [features]
 default = ["static", "rustls"]
@@ -94,7 +94,7 @@ gh-api-client = ["json"]
 json = ["serde", "serde_json"]
 
 [target."cfg(windows)".dependencies]
-default-net = { version = "0.17.0", optional = true }
+default-net = { version = "0.18.0", optional = true }
 ipconfig = { version = "0.3.2", optional = true, default-features = false }
 
 [package.metadata.docs.rs]
