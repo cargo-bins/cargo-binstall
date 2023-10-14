@@ -794,9 +794,9 @@ checksum = "c2e66c9d817f1720209181c316d28635c050fa304f9c79e47a520882661b7308"
 
 [[package]]
 name = "default-net"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5d1b93f7700c45c26856522aed3982b685edb0532e4dbdd3a4ec84bb4185526"
+checksum = "267ee644f45fd960bc570bfe62a43485a5378eb44364ab423b8edbf874955038"
 dependencies = [
  "dlopen2",
  "libc",
