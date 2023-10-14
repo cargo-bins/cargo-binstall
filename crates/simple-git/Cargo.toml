@@ -15,10 +15,10 @@ compact_str = "0.7.0"
 derive_destructure2 = "0.1"
 thiserror = "1.0.40"
 tokio = { version = "1.30.0", features = ["rt", "time"], default-features = false }
-tracing = "0.1.37"
+tracing = "0.1.39"
 
 [dependencies.gix]
-version = "0.54.1"
+version = "0.55.2"
 default-features = false
 features = [
     "comfort",
