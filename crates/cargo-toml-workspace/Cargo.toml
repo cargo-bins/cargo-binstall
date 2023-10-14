@@ -16,7 +16,7 @@ glob = "0.3.1"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
 serde = "1.0.163"
 thiserror = "1.0.40"
-tracing = "0.1.37"
+tracing = "0.1.39"
 
 [dev-dependencies]
 tempfile = "3.5.0"
