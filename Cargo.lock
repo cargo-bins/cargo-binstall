@@ -280,6 +280,7 @@ dependencies = [
  "default-net",
  "flate2",
  "futures-util",
+ "hickory-resolver",
  "httpdate",
  "hyper",
  "ipconfig",
@@ -295,7 +296,6 @@ dependencies = [
  "tokio-tar",
  "tokio-util",
  "tracing",
- "trust-dns-resolver",
  "url",
  "xz2",
  "zstd 0.13.0",
@@ -2012,6 +2012,66 @@ name = "hermit-abi"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
+
+[[package]]
+name = "hickory-proto"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "091a6fbccf4860009355e3efc52ff4acf37a63489aad7435372d44ceeb6fbbcf"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "cfg-if",
+ "data-encoding",
+ "enum-as-inner",
+ "futures-channel",
+ "futures-io",
+ "futures-util",
+ "h2",
+ "h3",
+ "h3-quinn",
+ "http",
+ "idna",
+ "ipnet",
+ "native-tls",
+ "once_cell",
+ "quinn",
+ "rand",
+ "ring",
+ "rustls",
+ "rustls-pemfile",
+ "thiserror",
+ "tinyvec",
+ "tokio",
+ "tokio-native-tls",
+ "tokio-rustls",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "hickory-resolver"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35b8f021164e6a984c9030023544c57789c51760065cd510572fedcfb04164e8"
+dependencies = [
+ "cfg-if",
+ "futures-util",
+ "hickory-proto",
+ "ipconfig",
+ "lru-cache",
+ "once_cell",
+ "parking_lot",
+ "rand",
+ "resolv-conf",
+ "rustls",
+ "smallvec",
+ "thiserror",
+ "tokio",
+ "tokio-native-tls",
+ "tokio-rustls",
+ "tracing",
+]
 
 [[package]]
 name = "home"
@@ -3799,34 +3859,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dc775440033cb114085f6f2437682b194fa7546466024b1037e82a48a052a69"
 dependencies = [
  "async-trait",
- "bytes",
  "cfg-if",
  "data-encoding",
  "enum-as-inner",
  "futures-channel",
  "futures-io",
  "futures-util",
- "h2",
- "http",
  "idna",
  "ipnet",
- "native-tls",
  "once_cell",
- "quinn",
  "rand",
- "ring",
- "rustls",
- "rustls-pemfile",
- "rustls-webpki",
  "smallvec",
  "thiserror",
  "tinyvec",
  "tokio",
- "tokio-native-tls",
- "tokio-rustls",
  "tracing",
  "url",
- "webpki-roots",
 ]
 
 [[package]]
@@ -3843,15 +3891,11 @@ dependencies = [
  "parking_lot",
  "rand",
  "resolv-conf",
- "rustls",
  "smallvec",
  "thiserror",
  "tokio",
- "tokio-native-tls",
- "tokio-rustls",
  "tracing",
  "trust-dns-proto",
- "webpki-roots",
 ]
 
 [[package]]

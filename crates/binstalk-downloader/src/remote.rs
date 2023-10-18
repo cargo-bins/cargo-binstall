@@ -30,9 +30,9 @@ pub use request_builder::{Body, RequestBuilder, Response};
 mod tls_version;
 pub use tls_version::TLSVersion;
 
-#[cfg(feature = "trust-dns")]
+#[cfg(feature = "hickory-dns")]
 mod resolver;
-#[cfg(feature = "trust-dns")]
+#[cfg(feature = "hickory-dns")]
 use resolver::TrustDnsResolver;
 
 #[cfg(feature = "json")]
@@ -112,7 +112,7 @@ impl Client {
                 .https_only(true)
                 .tcp_nodelay(false);
 
-            #[cfg(feature = "trust-dns")]
+            #[cfg(feature = "hickory-dns")]
             {
                 builder = builder.dns_resolver(Arc::new(TrustDnsResolver::default()));
             }

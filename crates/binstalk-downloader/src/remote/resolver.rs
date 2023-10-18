@@ -1,13 +1,13 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use hickory_resolver::TokioAsyncResolver;
 use hyper::client::connect::dns::Name;
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Resolve};
 use tracing::{debug, instrument, warn};
-use trust_dns_resolver::TokioAsyncResolver;
 
 #[cfg(windows)]
-use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
+use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 

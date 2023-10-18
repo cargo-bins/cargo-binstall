@@ -36,8 +36,7 @@ tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread", "sync", "
 tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.8", features = ["io"] }
 tracing = "0.1.39"
-# trust-dns-resolver must be kept in sync with the version reqwest uses
-trust-dns-resolver = { version = "0.23.0", optional = true, features = ["dnssec-ring"] }
+hickory-resolver = { version = "0.24.0", optional = true, features = ["dnssec-ring"] }
 hyper = { version = "0.14.27", optional = true }
 once_cell = { version = "1.18.0", optional = true }
 url = "2.3.1"
@@ -67,20 +66,24 @@ rustls = [
 
     "reqwest/rustls-tls",
 
-    # Enable the following features only if trust-dns-resolver is enabled.
-    "trust-dns-resolver?/dns-over-rustls",
-    # trust-dns-resolver currently supports https with rustls
-    "trust-dns-resolver?/dns-over-https-rustls",
-    "trust-dns-resolver?/dns-over-quic",
+    # Enable the following features only if hickory-resolver is enabled.
+    "hickory-resolver?/dns-over-rustls",
+    # hickory-resolver currently supports https with rustls
+    "hickory-resolver?/dns-over-https-rustls",
+    "hickory-resolver?/dns-over-quic",
+    "hickory-resolver?/dns-over-h3",
 ]
 native-tls = [
     "__tls",
     "reqwest/native-tls",
-    "trust-dns-resolver?/dns-over-native-tls",
+    "hickory-resolver?/dns-over-native-tls",
 ]
 
-# Enable trust-dns-resolver so that features on it will also be enabled.
-trust-dns = ["trust-dns-resolver", "default-net", "ipconfig", "hyper", "once_cell"]
+# Enable hickory-resolver so that features on it will also be enabled.
+hickory-dns = ["hickory-resolver", "default-net", "ipconfig", "hyper", "once_cell"]
+
+# Deprecated alias for hickory-dns, since trust-dns is renamed to hickory-dns
+trust-dns = ["hickory-dns"]
 
 # Experimental HTTP/3 client, this would require `--cfg reqwest_unstable`
 # to be passed to `rustc`.
