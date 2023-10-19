@@ -54,6 +54,7 @@ runs:
     shell: bash
 
   - run: just ci-install-deps
+    shell: bash
 
   - if: inputs.indexcache || inputs.buildcache
     uses: Swatinem/rust-cache@v2
