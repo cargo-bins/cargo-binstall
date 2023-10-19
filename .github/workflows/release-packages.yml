@@ -69,7 +69,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - run: just toolchain rust-src
-    - run: just ci-install-deps
 
     - uses: actions/download-artifact@v3
       with:
