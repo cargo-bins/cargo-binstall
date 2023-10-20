@@ -58,7 +58,6 @@ jobs:
         # which works better when we provide it with GITHUB_TOKEN.
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - run: just ci-install-deps
     - run: just test
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -87,19 +86,19 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
     - uses: actions/checkout@v4
-    - uses: ./.github/actions/just-setup
-      with:
-        tools: cargo-hack
-      env:
-        # just-setup use binstall to install sccache,
-        # which works better when we provide it with GITHUB_TOKEN.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Enable cargo-zigbuild
       if: matrix.os == 'ubuntu-latest'
       run: echo JUST_USE_CARGO_ZIGBUILD=true >> "$GITHUB_ENV"
 
-    - run: just ci-install-deps
+    - uses: ./.github/actions/just-setup
+      with:
+        tools: cargo-hack@0.6.10
+      env:
+        # just-setup use binstall to install sccache,
+        # which works better when we provide it with GITHUB_TOKEN.
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - run: just avoid-dev-deps
     - run: just check
 
@@ -121,7 +120,6 @@ jobs:
     - uses: ./.github/actions/just-setup
 
     - run: just toolchain rustfmt,clippy
-    - run: just ci-install-deps
     - run: just avoid-dev-deps
     - run: just lint
 
