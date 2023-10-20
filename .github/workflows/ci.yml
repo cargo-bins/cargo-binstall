@@ -93,7 +93,7 @@ jobs:
 
     - uses: ./.github/actions/just-setup
       with:
-        tools: cargo-hack
+        tools: cargo-hack@0.6.10
       env:
         # just-setup use binstall to install sccache,
         # which works better when we provide it with GITHUB_TOKEN.
