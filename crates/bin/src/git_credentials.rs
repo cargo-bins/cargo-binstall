@@ -24,7 +24,7 @@ pub fn try_from_home() -> Option<CompactString> {
 }
 
 fn from_file(path: PathBuf) -> Option<CompactString> {
-    fs::read_to_string(&path)
+    fs::read_to_string(path)
         .ok()?
         .lines()
         .find_map(from_line)
