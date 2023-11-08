@@ -1,9 +1,8 @@
 use std::{io, process};
 
 use compact_str::CompactString;
-use tracing::warn;
 
-fn get_inner() -> io::Result<CompactString> {
+pub(super) fn get() -> io::Result<CompactString> {
     let process::Output { status, stdout, .. } = process::Command::new("gh")
         .args(["auth", "token"])
         .stdin(process::Stdio::null())
@@ -25,14 +24,4 @@ fn get_inner() -> io::Result<CompactString> {
     })?;
 
     Ok(s.trim().into())
-}
-
-pub(super) fn get() -> Option<CompactString> {
-    match get_inner() {
-        Ok(token) => Some(token),
-        Err(err) => {
-            warn!(?err, "Failed to retrieve token from `gh auth token`");
-            None
-        }
-    }
 }

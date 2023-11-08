@@ -2,7 +2,6 @@ use std::{env, fs, path::PathBuf};
 
 use compact_str::CompactString;
 use dirs::home_dir;
-use tracing::warn;
 
 pub fn try_from_home() -> Option<CompactString> {
     if let Some(mut home) = home_dir() {
@@ -25,7 +24,8 @@ pub fn try_from_home() -> Option<CompactString> {
 }
 
 fn from_file(path: PathBuf) -> Option<CompactString> {
-    read_cred_file(path)?
+    fs::read_to_string(path)
+        .ok()?
         .lines()
         .find_map(from_line)
         .map(CompactString::from)
@@ -38,20 +38,6 @@ fn from_line(line: &str) -> Option<&str> {
         .strip_suffix("@github.com")?;
 
     Some(cred.split_once(':')?.1)
-}
-
-fn read_cred_file(path: PathBuf) -> Option<String> {
-    match fs::read_to_string(&path) {
-        Ok(s) => Some(s),
-        Err(err) => {
-            warn!(
-                ?err,
-                "Failed to read git credential file {}",
-                path.display()
-            );
-            None
-        }
-    }
 }
 
 #[cfg(test)]
