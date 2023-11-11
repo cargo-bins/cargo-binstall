@@ -90,9 +90,7 @@ jobs:
         crate: ${{ fromJSON(inputs.info).crate }}
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       run: |
-        set -ex
-        cargo publish -p "$crate" --allow-dirty --dry-run
-        cargo package --no-verify -p "$crate" --allow-dirty
+        cargo package -p "$crate" --allow-dirty
     - if: fromJSON(inputs.info).is-release != 'true'
       name: Upload crate package as artifact
       uses: actions/upload-artifact@v3
