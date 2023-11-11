@@ -19,14 +19,14 @@ runs:
   using: composite
   steps:
   - name: Add just to tools to install
-    run: echo "tools=just" >>$GITHUB_ENV
+    run: echo "tools=just" >>"$GITHUB_ENV"
     shell: bash
 
   - name: Add inputs.tools to tools to install
     if: inputs.tools != ''
     env:
       inputs_tools: ${{ inputs.tools }}
-    run: echo "tools=$tools,$inputs_tools" >>$GITHUB_ENV
+    run: echo "tools=$tools,$inputs_tools" >>"$GITHUB_ENV"
     shell: bash
 
   - name: Install tools
@@ -62,3 +62,29 @@ runs:
       env-vars: "CARGO CC CFLAGS CXX CMAKE RUST JUST"
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
+
+  - name: Calculate zig cache key
+    if: env.JUST_USE_CARGO_ZIGBUILD
+    run: |
+      ZIG_VERSION=$(zig version)
+      SYS_CRATE_HASHSUM=$(cargo tree --all-features --prefix none --no-dedupe --target "$CARGO_BUILD_TARGET" | grep -e '-sys' -e '^ring' | sort -u | sha1sum | sed 's/[ -]*//g')
+      echo "ZIG_CACHE_KEY=zig-${ZIG_VERSION}-${CARGO_BUILD_TARGET}-${SYS_CRATE_HASHSUM}" >> "$GITHUB_ENV"
+      echo -e "ZIG_CACHE_RESTORE_KEY=zig-${ZIG_VERSION}-${CARGO_BUILD_TARGET}-" >> "$GITHUB_ENV"
+    shell: bash
+    env:
+      RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
+
+  - name: Get zig global cache dir
+    if: env.JUST_USE_CARGO_ZIGBUILD
+    id: zig_global_cache_dir_path
+    run: zig env | jq -r '.global_cache_dir'
+
+  - name: Cache zig compilation
+    if: env.JUST_USE_CARGO_ZIGBUILD
+    uses: actions/cache@v3
+    with:
+      path: ${{ steps.zig_global_cache_dir_path.outputs }}
+      key: ${{ env.ZIG_CACHE_KEY }}
+      restore-keys: |
+        ${{ env.ZIG_CACHE_KEY }}
+        ${{ env.ZIG_CACHE_RESTORE_KEY }}
