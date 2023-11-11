@@ -75,11 +75,13 @@ runs:
     run: |
       ZIG_VERSION=$(zig version)
       SYS_CRATE_HASHSUM=$(cargo tree --all-features --prefix none --no-dedupe --target "$CARGO_BUILD_TARGET" | grep -e '-sys' -e '^ring' | sort -u | sha1sum | sed 's/[ -]*//g')
-      echo "ZIG_CACHE_KEY=zig-${ZIG_VERSION}-${CARGO_BUILD_TARGET}-${SYS_CRATE_HASHSUM}" >> "$GITHUB_ENV"
-      echo -e "ZIG_CACHE_RESTORE_KEY=zig-${ZIG_VERSION}-${CARGO_BUILD_TARGET}-" >> "$GITHUB_ENV"
+      PREFIX=v0-${JOB_ID}-zig-${ZIG_VERSION}-${CARGO_BUILD_TARGET}-
+      echo "ZIG_CACHE_KEY=${PREFIX}${SYS_CRATE_HASHSUM}" >> "$GITHUB_ENV"
+      echo -e "ZIG_CACHE_RESTORE_KEY=$PREFIX" >> "$GITHUB_ENV"
     shell: bash
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
+      JOB_ID: ${{ github.job }}
 
   - name: Get zig global cache dir
     if: env.JUST_USE_CARGO_ZIGBUILD
@@ -96,5 +98,4 @@ runs:
       path: ${{ steps.zig_global_cache_dir_path.outputs.cache_dir }}
       key: ${{ env.ZIG_CACHE_KEY }}
       restore-keys: |
-        ${{ env.ZIG_CACHE_KEY }}
         ${{ env.ZIG_CACHE_RESTORE_KEY }}
