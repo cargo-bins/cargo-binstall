@@ -341,7 +341,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
- "toml_edit 0.20.7",
+ "toml_edit 0.21.0",
  "url",
 ]
 
@@ -367,7 +367,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "toml_edit 0.20.7",
+ "toml_edit 0.21.0",
  "tracing",
  "url",
 ]
@@ -584,9 +584,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "clap"
-version = "4.4.7"
+version = "4.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac495e00dcec98c83465d5ad66c5c4fabd652fd6686e7c6269b117e729a6f17b"
+checksum = "2275f18819641850fa26c89acc84d465c1bf91ce57bc2748b28c420473352f64"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -594,9 +594,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.4.7"
+version = "4.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c77ed9a32a62e6ca27175d00d29d05ca32e396ea1eb5fb01d8256b669cec7663"
+checksum = "07cdf1b148b25c1e1f7a42225e30a0d99a615cd4637eae7365548dd4529b95bc"
 dependencies = [
  "anstream",
  "anstyle",
@@ -645,9 +645,9 @@ checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
 name = "command-group"
-version = "3.0.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38f0a774e568e1cce33f12d03f442e87d9e0bc519f877317aa6e536d845d0a24"
+checksum = "e389ace313e22a2ac5a0e54f5805616a783077943b001edabbdb8640d52c490e"
 dependencies = [
  "async-trait",
  "nix",
@@ -788,9 +788,9 @@ checksum = "c2e66c9d817f1720209181c316d28635c050fa304f9c79e47a520882661b7308"
 
 [[package]]
 name = "default-net"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "407d4a2744e934ce48e7788c73c2dd0f43abaa2e45d1e1b5e71f273edfdfb8e2"
+checksum = "7ba429d84a27fa854c66fd2e29eb1cdf6d38bbfd4495bd9f522f12a7f21e05bf"
 dependencies = [
  "dlopen2",
  "libc",
@@ -994,9 +994,9 @@ checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
 
 [[package]]
 name = "file-format"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "888c5782fda56d3bfa40339d7fc4e2d57191d42fd2708557d9963f5e5e3e9ca0"
+checksum = "7fcb859e047d667f798f913a2cd0d5c214b85944d1191efa8146c98888fc557b"
 
 [[package]]
 name = "filetime"
@@ -3795,19 +3795,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
  "indexmap 2.1.0",
- "toml_datetime",
- "winnow",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.20.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70f427fce4d84c72b5b732388bf4a9f4531b53f74e2887e3ecb2481f68f66d81"
-dependencies = [
- "indexmap 2.1.0",
- "serde",
- "serde_spanned",
  "toml_datetime",
  "winnow",
 ]

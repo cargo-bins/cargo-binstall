@@ -16,7 +16,7 @@ binstalk-fetchers = { version = "0.2.1", path = "../binstalk-fetchers", features
 binstalk-registry = { version = "0.2.0", path = "../binstalk-registry" }
 binstalk-types = { version = "0.6.1", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "2.0.0", path = "../cargo-toml-workspace" }
-command-group = { version = "3.0.0", features = ["with-tokio"] }
+command-group = { version = "4.1.0", features = ["with-tokio"] }
 compact_str = { version = "0.7.0", features = ["serde"] }
 detect-targets = { version = "0.1.13", path = "../detect-targets", features = ["tracing"] }
 either = "1.8.1"
