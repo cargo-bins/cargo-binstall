@@ -84,14 +84,16 @@ runs:
   - name: Get zig global cache dir
     if: env.JUST_USE_CARGO_ZIGBUILD
     id: zig_global_cache_dir_path
-    run: zig env | jq -r '.global_cache_dir'
+    run: |
+      cache_dir=$(zig env | jq -r '.global_cache_dir')
+      echo "cache_dir=$cache_dir" >> "$GITHUB_OUTPUT"
     shell: bash
 
   - name: Cache zig compilation
     if: env.JUST_USE_CARGO_ZIGBUILD
     uses: actions/cache@v3
     with:
-      path: ${{ steps.zig_global_cache_dir_path.outputs }}
+      path: ${{ steps.zig_global_cache_dir_path.outputs.cache_dir }}
       key: ${{ env.ZIG_CACHE_KEY }}
       restore-keys: |
         ${{ env.ZIG_CACHE_KEY }}
