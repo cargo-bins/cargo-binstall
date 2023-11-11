@@ -83,8 +83,6 @@ jobs:
       with:
         name: minisign.pub
 
-    - uses: ./.github/actions/just-setup
-
     - run: .github/scripts/ephemeral-crate.sh
 
     - if: fromJSON(inputs.info).is-release != 'true' && fromJSON(inputs.info).crate != ''
