@@ -82,9 +82,10 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: minisign.pub
-    - run: .github/scripts/ephemeral-crate.sh
 
     - uses: ./.github/actions/just-setup
+
+    - run: .github/scripts/ephemeral-crate.sh
 
     - if: fromJSON(inputs.info).is-release != 'true'
       name: DRY-RUN Publish to crates.io
