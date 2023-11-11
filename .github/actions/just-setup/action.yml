@@ -63,6 +63,13 @@ runs:
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
 
+  - name: Find zig location and create symlink to it in ~/.local/bin
+    if: env.JUST_USE_CARGO_ZIGBUILD
+    run: |
+      python_package_path=$(python3 -m site --user-site)
+      ln -s "${python_package_path}/ziglang/zig" "$HOME/.local/bin/zig"
+    shell: bash
+
   - name: Calculate zig cache key
     if: env.JUST_USE_CARGO_ZIGBUILD
     run: |
