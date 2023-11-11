@@ -140,7 +140,7 @@ jobs:
   release-dry-run:
     needs: pr-info
     uses: ./.github/workflows/release-cli.yml
-    if: github.event_name != 'pull_request' || needs.pr-info.outputs.is-release
+    if: github.event_name != 'pull_request' || needs.pr-info.outputs.is-release == 'true'
     secrets: inherit
     with:
       info: |
