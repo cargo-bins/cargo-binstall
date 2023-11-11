@@ -78,6 +78,7 @@ runs:
     if: env.JUST_USE_CARGO_ZIGBUILD
     id: zig_global_cache_dir_path
     run: zig env | jq -r '.global_cache_dir'
+    shell: bash
 
   - name: Cache zig compilation
     if: env.JUST_USE_CARGO_ZIGBUILD
