@@ -146,7 +146,7 @@ jobs:
       info: |
         {
           "is-release": false,
-          "crate": ${{ needs.pr-info.outputs.crate }},
+          "crate": "${{ needs.pr-info.outputs.crate }}",
           "version": "0.0.0",
           "notes": ""
         }
