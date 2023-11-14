@@ -7,7 +7,7 @@ To support `binstall` maintainers must add configuration values to `Cargo.toml` 
 
 ## Status
 
-![Build](https://github.com/cargo-bins/cargo-binstall/workflows/Rust/badge.svg)
+[![CI build](https://github.com/cargo-bins/cargo-binstall/actions/workflows/ci.yml/badge.svg)](https://github.com/cargo-bins/cargo-binstall/actions)
 [![GitHub tag](https://img.shields.io/github/tag/cargo-bins/cargo-binstall.svg)](https://github.com/cargo-bins/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
 
