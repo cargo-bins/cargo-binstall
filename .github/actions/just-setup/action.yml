@@ -112,7 +112,7 @@ runs:
 
   - name: Create symlink to sccache for C/C++ compiler
     if: "! env.JUST_USE_CARGO_ZIGBUILD"
-    run: ./github/scripts/install-sccache-symlinks.sh
+    run: .github/scripts/install-sccache-symlinks.sh
     shell: bash
 
   - name: Configure sccache caching behavior
