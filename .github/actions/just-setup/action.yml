@@ -70,7 +70,7 @@ runs:
 
   - name: Calculate sys crate hashsum
     run: |
-      HASHSUM=$(cargo tree --all-features --prefix none --no-dedupe --target "$CARGO_BUILD_TARGET" | grep -e '-sys' -e '^ring' | sort -u | sha1sum | sed 's/[ -]*//g')
+      HASHSUM=$(cargo tree --all-features --prefix none --no-dedupe --target "$CARGO_BUILD_TARGET" | grep -e '-sys' -e '^ring' | sort -u | .github/scripts/sha1sum.sh | sed 's/[ -]*//g')
       echo "SYS_CRATE_HASHSUM=$HASHSUM" >> "$GITHUB_ENV"
     shell: bash
 
