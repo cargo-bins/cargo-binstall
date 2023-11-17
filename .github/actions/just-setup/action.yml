@@ -23,7 +23,7 @@ runs:
     shell: bash
 
   - name: Add scccahe to list of tools to install
-    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    if: "! env.JUST_USE_CARGO_ZIGBUILD"
     run: echo "tools=$tools,sccache" >>"$GITHUB_ENV"
     shell: bash
 
@@ -111,19 +111,19 @@ runs:
         ${{ env.ZIG_CACHE_RESTORE_KEY }}
 
   - name: Create symlink to sccache for C/C++ compiler
-    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    if: "! env.JUST_USE_CARGO_ZIGBUILD"
     run: ./github/scripts/install-sccache-symlinks.sh
     shell: bash
 
   - name: Configure sccache caching behavior
-    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    if: "! env.JUST_USE_CARGO_ZIGBUILD"
     run: |
       echo "SCCACHE_CACHE_SIZE=300M" >> "$GITHUB_ENV"
       echo "SCCACHE_DIRECT=true" >> "$GITHUB_ENV"
     shell: bash
 
   - name: Cache sccache C/C++ cache
-    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    if: "! env.JUST_USE_CARGO_ZIGBUILD"
     uses: actions/cache@v3
     with:
       path: ~/.cache/sccache
