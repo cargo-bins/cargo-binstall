@@ -22,6 +22,11 @@ runs:
     run: echo "tools=just" >>"$GITHUB_ENV"
     shell: bash
 
+  - name: Add scccahe to list of tools to install
+    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    run: echo "tools=$tools,sccache" >>"$GITHUB_ENV"
+    shell: bash
+
   - name: Add inputs.tools to tools to install
     if: inputs.tools != ''
     env:
@@ -63,6 +68,12 @@ runs:
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
 
+  - name: Calculate sys crate hashsum
+    run: |
+      HASHSUM=$(cargo tree --all-features --prefix none --no-dedupe --target "$CARGO_BUILD_TARGET" | grep -e '-sys' -e '^ring' | sort -u | sha1sum | sed 's/[ -]*//g')
+      echo "SYS_CRATE_HASHSUM=$HASHSUM" >> "$GITHUB_ENV"
+    shell: bash
+
   - name: Find zig location and create symlink to it in ~/.local/bin
     if: env.JUST_USE_CARGO_ZIGBUILD
     run: |
@@ -74,7 +85,6 @@ runs:
     if: env.JUST_USE_CARGO_ZIGBUILD
     run: |
       ZIG_VERSION=$(zig version)
-      SYS_CRATE_HASHSUM=$(cargo tree --all-features --prefix none --no-dedupe --target "$CARGO_BUILD_TARGET" | grep -e '-sys' -e '^ring' | sort -u | sha1sum | sed 's/[ -]*//g')
       PREFIX=v0-${JOB_ID}-zig-${ZIG_VERSION}-${CARGO_BUILD_TARGET}-
       echo "ZIG_CACHE_KEY=${PREFIX}${SYS_CRATE_HASHSUM}" >> "$GITHUB_ENV"
       echo -e "ZIG_CACHE_RESTORE_KEY=$PREFIX" >> "$GITHUB_ENV"
@@ -99,3 +109,24 @@ runs:
       key: ${{ env.ZIG_CACHE_KEY }}
       restore-keys: |
         ${{ env.ZIG_CACHE_RESTORE_KEY }}
+
+  - name: Create symlink to sccache for C/C++ compiler
+    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    run: ./github/scripts/install-sccache-symlinks.sh
+    shell: bash
+
+  - name: Configure sccache caching behavior
+    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    run: |
+      echo "SCCACHE_CACHE_SIZE=300M" >> "$GITHUB_ENV"
+      echo "SCCACHE_DIRECT=true" >> "$GITHUB_ENV"
+    shell: bash
+
+  - name: Cache sccache C/C++ cache
+    if: ! env.JUST_USE_CARGO_ZIGBUILD
+    uses: actions/cache@v3
+    with:
+      path: ~/.cache/sccache
+      key: v0-${{ github.job }}-sccache-${{ env.CARGO_BUILD_TARGET }}-${{ env.SYS_CRATE_HASHSUM }}
+      restore-keys: |
+        v0-${{ github.job }}-sccache-${{ env.CARGO_BUILD_TARGET }}-
