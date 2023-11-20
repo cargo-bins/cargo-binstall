@@ -18,8 +18,9 @@ Write-Host ""
 Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall"
 Remove-Item -Force $tmpdir\cargo-binstall.zip
 Remove-Item -Recurse -Force $tmpdir\cargo-binstall
-if ($Env:Path -split ";" -notcontains "$HOME\.cargo\bin") {
+$cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
+if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
 	Write-Host ""
-	Write-Host "Your path is missing $HOME\.cargo\bin, you might want to add it." -ForegroundColor Red
+	Write-Host "Your path is missing $cargo_home\bin, you might want to add it." -ForegroundColor Red
 	Write-Host ""
 }
