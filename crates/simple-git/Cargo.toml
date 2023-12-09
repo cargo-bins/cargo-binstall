@@ -14,11 +14,11 @@ license = "Apache-2.0 OR MIT"
 compact_str = "0.7.0"
 derive_destructure2 = "0.1"
 thiserror = "1.0.40"
-tokio = { version = "1.30.0", features = ["rt", "time"], default-features = false }
+tokio = { version = "1.35.0", features = ["rt", "time"], default-features = false }
 tracing = "0.1.39"
 
 [dependencies.gix]
-version = "0.55.2"
+version = "0.56.0"
 default-features = false
 features = [
     "comfort",
