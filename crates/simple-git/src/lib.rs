@@ -1,7 +1,6 @@
 use std::{fmt, mem, num::NonZeroU32, path::Path, str::FromStr, sync::atomic::AtomicBool};
 
 use gix::{clone, create, open, remote, Url};
-use thiserror::Error as ThisError;
 use tracing::debug;
 
 mod progress_tracing;
@@ -10,65 +9,9 @@ use progress_tracing::TracingProgress;
 mod cancellation_token;
 pub use cancellation_token::{GitCancelOnDrop, GitCancellationToken};
 
-pub use gix::url::parse::Error as GitUrlParseError;
-
-#[derive(Debug, ThisError)]
-#[non_exhaustive]
-pub enum GitError {
-    #[error("Failed to prepare for fetch: {0}")]
-    PrepareFetchError(#[source] Box<clone::Error>),
-
-    #[error("Failed to fetch: {0}")]
-    FetchError(#[source] Box<clone::fetch::Error>),
-
-    #[error("Failed to checkout: {0}")]
-    CheckOutError(#[source] Box<clone::checkout::main_worktree::Error>),
-
-    #[error("HEAD ref was corrupt in crates-io index repository clone")]
-    HeadCommit(#[source] Box<gix::reference::head_commit::Error>),
-
-    #[error("tree of head commit wasn't present in crates-io index repository clone")]
-    GetTreeOfCommit(#[source] Box<gix::object::commit::Error>),
-
-    #[error("An object was missing in the crates-io index repository clone")]
-    ObjectLookup(#[source] Box<gix::object::find::existing::Error>),
-}
-
-impl From<clone::Error> for GitError {
-    fn from(e: clone::Error) -> Self {
-        Self::PrepareFetchError(Box::new(e))
-    }
-}
-
-impl From<clone::fetch::Error> for GitError {
-    fn from(e: clone::fetch::Error) -> Self {
-        Self::FetchError(Box::new(e))
-    }
-}
-
-impl From<clone::checkout::main_worktree::Error> for GitError {
-    fn from(e: clone::checkout::main_worktree::Error) -> Self {
-        Self::CheckOutError(Box::new(e))
-    }
-}
-
-impl From<gix::reference::head_commit::Error> for GitError {
-    fn from(e: gix::reference::head_commit::Error) -> Self {
-        Self::HeadCommit(Box::new(e))
-    }
-}
-
-impl From<gix::object::commit::Error> for GitError {
-    fn from(e: gix::object::commit::Error) -> Self {
-        Self::GetTreeOfCommit(Box::new(e))
-    }
-}
-
-impl From<gix::object::find::existing::Error> for GitError {
-    fn from(e: gix::object::find::existing::Error) -> Self {
-        Self::ObjectLookup(Box::new(e))
-    }
-}
+mod error;
+use error::GitErrorInner;
+pub use error::{GitError, GitUrlParseError};
 
 #[derive(Clone, Debug)]
 pub struct GitUrl(Url);
@@ -86,7 +29,7 @@ impl FromStr for GitUrl {
     type Err = GitUrlParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Url::try_from(s).map(Self)
+        Url::try_from(s).map(Self).map_err(GitUrlParseError)
     }
 }
 
@@ -98,7 +41,7 @@ impl Repository {
         url: GitUrl,
         path: &Path,
         kind: create::Kind,
-    ) -> Result<clone::PrepareFetch, GitError> {
+    ) -> Result<clone::PrepareFetch, GitErrorInner> {
         Ok(clone::PrepareFetch::new(
             url.0,
             path,
@@ -133,7 +76,8 @@ impl Repository {
                         .as_ref()
                         .map(GitCancellationToken::get_atomic)
                         .unwrap_or(&AtomicBool::new(false)),
-                )?
+                )
+                .map_err(GitErrorInner::from)?
                 .0
                 .into(),
         ))
@@ -154,7 +98,8 @@ impl Repository {
 
         Ok(Self(
             Self::prepare_fetch(url, path, create::Kind::WithWorktree)?
-                .fetch_then_checkout(&mut progress, &AtomicBool::new(false))?
+                .fetch_then_checkout(&mut progress, &AtomicBool::new(false))
+                .map_err(GitErrorInner::from)?
                 .0
                 .main_worktree(
                     &mut progress,
@@ -162,7 +107,8 @@ impl Repository {
                         .as_ref()
                         .map(GitCancellationToken::get_atomic)
                         .unwrap_or(&AtomicBool::new(false)),
-                )?
+                )
+                .map_err(GitErrorInner::from)?
                 .0
                 .into(),
         ))
@@ -173,7 +119,7 @@ impl Repository {
         &self,
         path: impl AsRef<Path>,
     ) -> Result<Option<Vec<u8>>, GitError> {
-        fn inner(this: &Repository, path: &Path) -> Result<Option<Vec<u8>>, GitError> {
+        fn inner(this: &Repository, path: &Path) -> Result<Option<Vec<u8>>, GitErrorInner> {
             Ok(
                 if let Some(entry) = this
                     .0
@@ -189,6 +135,6 @@ impl Repository {
             )
         }
 
-        inner(self, path.as_ref())
+        Ok(inner(self, path.as_ref())?)
     }
 }
