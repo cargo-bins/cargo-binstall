@@ -1,95 +1,119 @@
 # Cargo B(inary)Install
 
-`cargo binstall` provides a low-complexity mechanism for installing rust binaries as an alternative to building from source (via `cargo install`) or manually downloading packages. This is intended to work with existing CI artifacts and infrastructure, and with minimal overhead for package maintainers.
+Binstall provides a low-complexity mechanism for installing Rust binaries as an alternative to building from source (via `cargo install`) or manually downloading packages.
+This is intended to work with existing CI artifacts and infrastructure, and with minimal overhead for package maintainers.
 
-`binstall` works by fetching the crate information from `crates.io`, then searching the linked `repository` for matching releases and artifacts, with fallbacks to [quickinstall](https://github.com/alsuren/cargo-quickinstall) and finally `cargo install` if these are not found.
-To support `binstall` maintainers must add configuration values to `Cargo.toml` to allow the tool to locate the appropriate binary package for a given version and target. See [SUPPORT.md](./SUPPORT.md) for more detail.
-
-## Status
+Binstall works by fetching the crate information from `crates.io` and searching the linked `repository` for matching releases and artifacts, falling back to the [quickinstall](https://github.com/alsuren/cargo-quickinstall) third-party artifact host, to alternate targets as supported, and finally to `cargo install` as a last resort.
 
 [![CI build](https://github.com/cargo-bins/cargo-binstall/actions/workflows/ci.yml/badge.svg)](https://github.com/cargo-bins/cargo-binstall/actions)
 [![GitHub tag](https://img.shields.io/github/tag/cargo-bins/cargo-binstall.svg)](https://github.com/cargo-bins/cargo-binstall)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
 
-You probably want to **[see this page as it was when the latest version was published](https://crates.io/crates/cargo-binstall)** for accurate documentation.
+_You may want to [see this page as it was when the latest version was published](https://crates.io/crates/cargo-binstall)._
+
+## Usage
+
+```console
+$ cargo binstall radio-sx128x@0.14.1-alpha.5
+ INFO resolve: Resolving package: 'radio-sx128x@=0.14.1-alpha.5'
+ WARN The package radio-sx128x v0.14.1-alpha.5 (x86_64-unknown-linux-gnu) has been downloaded from github.com
+ INFO This will install the following binaries:
+ INFO   - sx128x-util (sx128x-util-x86_64-unknown-linux-gnu -> /home/.cargo/bin/sx128x-util)
+Do you wish to continue? yes/[no]
+? yes
+ INFO Installing binaries...
+ INFO Done in 2.838798298s
+```
+
+Binstall aims to be a drop-in replacement for `cargo install` in many cases, and supports similar options.
+
+For unattended use (e.g. in CI), use the `--no-confirm` flag.
+For additional options please see `cargo binstall --help`.
 
 ## Installation
 
-Here are the one-liners for installing pre-compiled `cargo-binstall` binary from release on Linux and macOS:
+### If you already have it
+
+To upgrade cargo-binstall, use `cargo binstall cargo-binstall`!
+
+### Quickly
+
+Here are one-liners for downloading and installing a pre-compiled `cargo-binstall` binary.
+
+#### Linux and macOS
 
 ```
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 ```
 
-And the one-liner for installing a pre-compiled `cargo-binstall` binary from release on Windows (x86_64 and aarch64):
+#### Windows
 
 ```
 Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
 ```
 
-To get started _using_ `cargo-binstall` first install the binary (either via `cargo install cargo-binstall` or by downloading a pre-compiled [release](https://github.com/cargo-bins/cargo-binstall/releases)), then extract it using `tar` or `unzip` and move it into `$HOME/.cargo/bin`.
-We recommend using the pre-compiled ones because we optimize those more than a standard source build does.
+### Manually
+
+Download the relevant package for your system below, unpack it, and move the `cargo-binstall` executable into `$HOME/.cargo/bin`:
 
 | OS      | Arch    | URL                                                          |
 | ------- | ------- | ------------------------------------------------------------ |
-| linux   | x86\_64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz |
-| linux   | armv7   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz |
-| linux   | arm64   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz |
-| macos   | x86\_64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip |
-| macos   | m1      | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip |
-| macos   | universal | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-universal-apple-darwin.zip |
-| windows | x86\_64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip |
-| windows | arm64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-pc-windows-msvc.zip |
+| Linux   | x86\_64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz |
+| Linux   | armv7   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz |
+| Linux   | arm64   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz |
+| Mac     | Intel   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip |
+| Mac     | Apple Silicon | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip |
+| Mac     | Universal<br>(both archs) | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-universal-apple-darwin.zip |
+| Windows | Intel/AMD | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip |
+| Windows | ARM 64 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-pc-windows-msvc.zip |
 
-We also provide pre-built artifacts with debuginfo for Linux and Mac.
-These artifacts are suffixed with `.full.tgz` on Linux and `.full.zip` on Mac and Windows.
+### From source
 
-To upgrade cargo-binstall, use `cargo binstall cargo-binstall`!
-
-## Usage
-
-Supported packages can be installed using `cargo binstall NAME` where `NAME` is the crates.io package name.
-
-Package versions and targets may be specified using the `--version` and `--target` arguments respectively, and will be installed into `$HOME/.cargo/bin` by default. For additional options please see `cargo binstall --help`.
+With a recent [Rust](https://rustup.rs) installed:
 
 ```
-[garry] ➜  ~ cargo binstall radio-sx128x --version 0.14.1-alpha.5
-21:14:15 [INFO] Resolving package: 'radio-sx128x'
-21:14:18 [INFO] This will install the following binaries:
-21:14:18 [INFO]   - sx128x-util (sx128x-util-x86_64-apple-darwin -> /Users/ryankurte/.cargo/bin/sx128x-util-v0.14.1-alpha.5)
-21:14:18 [INFO] And create (or update) the following symlinks:
-21:14:18 [INFO]   - sx128x-util (/Users/ryankurte/.cargo/bin/sx128x-util-v0.14.1-alpha.5 -> /Users/ryankurte/.cargo/bin/sx128x-util)
-21:14:18 [INFO] Do you wish to continue? yes/[no]
-? yes
-21:14:20 [INFO] Installing binaries...
-21:14:21 [INFO] Done in 6.212736s
+cargo install cargo-binstall
 ```
+
+### In GitHub Actions
+
+We provide a first-party, minimal action that installs the latest version of Binstall:
+
+```yml
+  - uses: cargo-bins/cargo-binstall@main
+```
+
+For more features, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has dedicated support for selected tools and uses Binstall for everything else.
+
+## Companion tools
+
+These are useful *third-party* tools which work well with Binstall.
+
+### [`cargo-update`](https://github.com/nabijaczleweli/cargo-update)
+
+While you can upgrade crates explicitly by running `cargo binstall` again, `cargo-update` takes care of updating all tools as needed.
+It automatically uses Binstall to install the updates if it is present.
+
+### [`cargo-run-bin`](https://github.com/dustinblackman/cargo-run-bin)
+
+Binstall and `cargo install` both install tools globally by default, which is fine for system-wide tools.
+When installing tooling for a project, however, you may prefer to both scope the tools to that project and control their versions in code.
+That's where `cargo-run-bin` comes in, with a dedicated section in your Cargo.toml and a short cargo subcommand.
+When Binstall is available, it installs from binary whenever possible... and you can even manage Binstall itself with `cargo-run-bin`!
 
 ## Unsupported crates
 
-Nowadays, `cargo-binstall` is smart enough. All you need just passing the crate name.
+Binstall is generally smart enough to auto-detect artifacts in most situations.
+However, if a package fails to install, you can manually specify the `pkg-url`, `bin-dir`, and `pkg-fmt` as needed at the command line, with values as documented in [SUPPORT.md](./SUPPORT.md).
 
-```shell
-cargo binstall --no-confirm --no-symlinks cargo-edit cargo-watch cargo-tarpaulin \
-    watchexec-cli cargo-outdated just fnm broot stylua
-```
-
-If your favorite package fails to install, you can instead specify the `pkg-url`, `bin-dir`, and `pkg-fmt` at the command line, with values as documented in [SUPPORT.md](./SUPPORT.md).
-
-For example:
-
-```shell
+```console
 $ cargo-binstall \
   --pkg-url="{ repo }/releases/download/{ version }/{ name }-{ version }-{ target }.{ archive-format }" \
   --pkg-fmt="txz" \
   crate_name
 ```
 
-## Upgrade installed crates
-
-The most ergonomic way to upgrade the installed crates is with [`cargo-update`](https://github.com/nabijaczleweli/cargo-update). `cargo-update` automatically uses `cargo-binstall` to install the updates if `cargo-binstall` is present.
-
-Supported crates such as `cargo-binstall` itself can also be updated with `cargo-binstall` as in the example in [Installation](#installation) above.
+Maintainers wanting to make their users' life easier can add [explicit Binstall metadata](./SUPPORT.md) to `Cargo.toml` to locate the appropriate binary package for a given version and target.
 
 ## Signatures
 
@@ -122,15 +146,6 @@ Compared to something like a `curl ... | sh` script, we're not running arbitrary
 
 ### What do the error codes mean?
 You can find a full description of errors including exit codes here: <https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
-
-### Can I use it in CI?
-Yes! We have two options, both for GitHub Actions:
-
-1. For full featured use, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has explicit support for selected tools and uses `cargo-binstall` for everything else.
-2. We provide a first-party, minimal action that _only_ installs the tool:
-```yml
-  - uses: cargo-bins/cargo-binstall@main
-```
 
 ### Are debug symbols available?
 Yes!
