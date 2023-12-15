@@ -152,7 +152,7 @@ impl Registry {
 
     fn from_str_inner(s: &str) -> Result<Self, InvalidRegistryErrorInner> {
         if let Some(s) = s.strip_prefix("sparse+") {
-            let url = Url::parse(s)?;
+            let url = Url::parse(s.trim_end_matches('/'))?;
 
             let scheme = url.scheme();
             if scheme != "http" && scheme != "https" {
