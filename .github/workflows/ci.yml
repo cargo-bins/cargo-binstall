@@ -183,7 +183,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: detect-targets
     - run: chmod +x detect-targets
@@ -205,7 +205,7 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: detect-targets
     - run: chmod +x detect-targets
@@ -228,7 +228,7 @@ jobs:
           - fedora
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: detect-targets
     - run: chmod +x detect-targets
@@ -244,7 +244,7 @@ jobs:
     needs: detect-targets-build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: detect-targets
     - run: chmod +x detect-targets
