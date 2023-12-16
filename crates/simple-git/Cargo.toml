@@ -13,7 +13,7 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 compact_str = "0.7.0"
 derive_destructure2 = "0.1"
-thiserror = "1.0.40"
+thiserror = "1.0.51"
 tokio = { version = "1.35.0", features = ["rt", "time"], default-features = false }
 tracing = "0.1.39"
 

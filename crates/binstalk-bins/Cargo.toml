@@ -17,5 +17,5 @@ compact_str = { version = "0.7.0", features = ["serde"] }
 leon = { version = "2.0.1", path = "../leon" }
 miette = "5.9.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
-thiserror = "1.0.40"
+thiserror = "1.0.51"
 tracing = "0.1.39"
