@@ -70,7 +70,7 @@ jobs:
 
     - run: just toolchain rust-src
 
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: minisign.pub
     - run: just package
@@ -85,7 +85,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: minisign.key.age
     - name: Sign package
@@ -138,27 +138,27 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: x86_64h-apple-darwin
         path: packages/
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: x86_64-apple-darwin
         path: packages/
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: aarch64-apple-darwin
         path: packages/
 
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: minisign.pub
     - run: ls -shalr packages/
     - run: just repackage-lipo
     - run: ls -shal packages/
 
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v4
       with:
         name: minisign.key.age
     - env:
