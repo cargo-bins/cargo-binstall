@@ -12,7 +12,7 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 async-trait = "0.1.68"
 async-compression = { version = "0.4.4", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
-async_zip = { version = "0.0.15", features = ["deflate", "bzip2", "lzma", "zstd", "xz", "tokio"] }
+async_zip = { version = "0.0.16", features = ["deflate", "bzip2", "lzma", "zstd", "xz", "tokio"] }
 binstalk-types = { version = "0.6.1", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
@@ -37,7 +37,7 @@ tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.8", features = ["io"] }
 tracing = "0.1.39"
 hickory-resolver = { version = "0.24.0", optional = true, features = ["dnssec-ring"] }
-hyper = { version = "0.14.27", optional = true }
+hyper = { version = "1.1.0", optional = true }
 once_cell = { version = "1.18.0", optional = true }
 url = "2.3.1"
 
