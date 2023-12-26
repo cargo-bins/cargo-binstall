@@ -12,7 +12,7 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 async-trait = "0.1.68"
 async-compression = { version = "0.4.4", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
-async_zip = { version = "0.0.16", features = ["deflate", "bzip2", "lzma", "zstd", "xz", "tokio"] }
+async_zip = { version = "0.0.16", features = ["deflate", "deflate64", "bzip2", "lzma", "zstd", "xz", "tokio"] }
 binstalk-types = { version = "0.6.1", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"

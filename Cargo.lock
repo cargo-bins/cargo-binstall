@@ -106,6 +106,7 @@ checksum = "bc2d0cfb2a7388d34f590e76686704c494ed7aaceed62ee1ba35cbf363abc2a5"
 dependencies = [
  "brotli",
  "bzip2",
+ "deflate64",
  "flate2",
  "futures-core",
  "futures-io",
@@ -785,6 +786,12 @@ dependencies = [
  "system-configuration",
  "windows 0.48.0",
 ]
+
+[[package]]
+name = "deflate64"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30dc5bb425a582de72bb57130320aac133893ea85f6151f79bd9aa9067114f60"
 
 [[package]]
 name = "deranged"
