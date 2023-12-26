@@ -10,13 +10,12 @@ use async_zip::{
 };
 use bytes::{Bytes, BytesMut};
 use futures_util::future::try_join;
-use futures_util::io::Take;
 use thiserror::Error as ThisError;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     sync::mpsc,
 };
-use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 use super::{DownloadError, ExtractedFiles};
 use crate::utils::asyncify;
@@ -41,13 +40,13 @@ impl ZipError {
 }
 
 pub(super) async fn extract_zip_entry<R>(
-    zip_reader: &mut ZipEntryReader<'_, Take<Compat<R>>, WithEntry<'_>>,
+    zip_reader: &mut ZipEntryReader<'_, R, WithEntry<'_>>,
     path: &Path,
     buf: &mut BytesMut,
     extracted_files: &mut ExtractedFiles,
 ) -> Result<(), DownloadError>
 where
-    R: AsyncRead + Unpin + Send + Sync,
+    R: futures_io::AsyncRead + Unpin + Send + Sync,
 {
     // Sanitize filename
     let raw_filename = zip_reader.entry().filename();

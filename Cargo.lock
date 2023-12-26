@@ -262,6 +262,7 @@ dependencies = [
  "compact_str",
  "default-net",
  "flate2",
+ "futures-io",
  "futures-util",
  "hickory-resolver",
  "httpdate",
