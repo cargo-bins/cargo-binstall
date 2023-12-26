@@ -12,13 +12,14 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 async-trait = "0.1.68"
 async-compression = { version = "0.4.4", features = ["gzip", "zstd", "xz", "bzip2", "tokio"] }
-async_zip = { version = "0.0.15", features = ["deflate", "bzip2", "lzma", "zstd", "xz", "tokio"] }
+async_zip = { version = "0.0.16", features = ["deflate", "deflate64", "bzip2", "lzma", "zstd", "xz", "tokio"] }
 binstalk-types = { version = "0.6.1", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
 compact_str = "0.7.0"
 flate2 = { version = "1.0.28", default-features = false }
-futures-util = "0.3.28"
+futures-util = "0.3.30"
+futures-io = "0.3.30"
 httpdate = "1.0.2"
 reqwest = { version = "0.11.19", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
 percent-encoding = "2.2.0"
@@ -31,7 +32,7 @@ serde_json = { version = "1.0.107", optional = true }
 #tar = "0.4.38"
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.5.0"
-thiserror = "1.0.51"
+thiserror = "1.0.52"
 tokio = { version = "1.35.0", features = ["macros", "rt-multi-thread", "sync", "time", "fs"], default-features = false }
 tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.8", features = ["io"] }
