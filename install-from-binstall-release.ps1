@@ -1,5 +1,4 @@
 $ErrorActionPreference = "Stop"
-Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
 $base_url = "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
 $proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
