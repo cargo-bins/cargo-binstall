@@ -45,7 +45,7 @@ tracing-log = { version = "0.2.0", default-features = false }
 tracing-subscriber = { version = "0.3.17", features = ["fmt", "json", "ansi"], default-features = false }
 
 [build-dependencies]
-embed-resource = "2.1.1"
+embed-resource = "2.4.1"
 vergen = { version = "8.2.5", features = ["build", "cargo", "git", "gitcl", "rustc"] }
 
 [features]
