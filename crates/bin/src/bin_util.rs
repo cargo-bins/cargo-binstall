@@ -1,5 +1,4 @@
 use std::{
-    future::Future,
     process::{ExitCode, Termination},
     time::Duration,
 };
@@ -48,20 +47,17 @@ impl MainExit {
 }
 
 /// This function would start a tokio multithreading runtime,
-/// spawn a new task on it that runs `f()`, then `block_on` it.
+/// then `block_on` the task it returns.
 ///
 /// It will cancel the future if user requested cancellation
 /// via signal.
-pub fn run_tokio_main<Func, Fut>(f: Func) -> Result<()>
-where
-    Func: FnOnce() -> Result<Option<Fut>>,
-    Fut: Future<Output = Result<()>> + Send + 'static,
-{
+pub fn run_tokio_main(
+    f: impl FnOnce() -> Result<Option<AutoAbortJoinHandle<Result<()>>>>,
+) -> Result<()> {
     let rt = Runtime::new().map_err(BinstallError::from)?;
     let _guard = rt.enter();
 
-    if let Some(fut) = f()? {
-        let handle = AutoAbortJoinHandle::new(rt.spawn(fut));
+    if let Some(handle) = f()? {
         rt.block_on(cancel_on_user_sig_term(handle))?
     } else {
         Ok(())

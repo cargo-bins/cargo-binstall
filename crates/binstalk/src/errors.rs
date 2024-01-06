@@ -1,5 +1,5 @@
 use std::{
-    io,
+    fmt, io, ops,
     path::PathBuf,
     process::{ExitCode, ExitStatus, Termination},
 };
@@ -9,6 +9,7 @@ use binstalk_downloader::{
 };
 use binstalk_fetchers::FetchError;
 use compact_str::CompactString;
+use itertools::Itertools;
 use miette::{Diagnostic, Report};
 use target_lexicon::ParseError as TargetTripleParseError;
 use thiserror::Error;
@@ -38,6 +39,90 @@ pub struct CrateContextError {
     #[source]
     #[diagnostic(transparent)]
     err: BinstallError,
+}
+
+#[derive(Debug)]
+pub struct CrateErrors(Box<[Box<CrateContextError>]>);
+
+impl CrateErrors {
+    fn iter(&self) -> impl Iterator<Item = &CrateContextError> + Clone {
+        self.0.iter().map(ops::Deref::deref)
+    }
+
+    fn get_iter_for<'a, T: 'a>(
+        &'a self,
+        f: fn(&'a CrateContextError) -> Option<T>,
+    ) -> Option<impl Iterator<Item = T> + 'a> {
+        let iter = self.iter().filter_map(f);
+
+        if iter.clone().next().is_none() {
+            None
+        } else {
+            Some(iter)
+        }
+    }
+}
+
+impl fmt::Display for CrateErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0.iter().format(", "), f)
+    }
+}
+
+impl std::error::Error for CrateErrors {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.first().map(|e| e as _)
+    }
+}
+
+impl miette::Diagnostic for CrateErrors {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new("binstall::many_failure"))
+    }
+
+    fn severity(&self) -> Option<miette::Severity> {
+        self.iter().filter_map(miette::Diagnostic::severity).max()
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(
+            self.get_iter_for(miette::Diagnostic::help)?.format("\n"),
+        ))
+    }
+
+    fn url<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(
+            self.get_iter_for(miette::Diagnostic::url)?.format("\n"),
+        ))
+    }
+
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        self.iter().find_map(miette::Diagnostic::source_code)
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        let get_iter = || self.iter().filter_map(miette::Diagnostic::labels).flatten();
+
+        if get_iter().next().is_none() {
+            None
+        } else {
+            Some(Box::new(get_iter()))
+        }
+    }
+
+    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
+        Some(Box::new(
+            self.iter().map(|e| e as _).chain(
+                self.iter()
+                    .filter_map(miette::Diagnostic::related)
+                    .flatten(),
+            ),
+        ))
+    }
+
+    fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {
+        self.0.first().map(|err| &**err as _)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -344,6 +429,11 @@ pub enum BinstallError {
     #[error(transparent)]
     #[diagnostic(transparent)]
     CrateContext(Box<CrateContextError>),
+
+    /// A wrapped error for failures of multiple crates when `--continue-on-failure` is specified.
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Errors(CrateErrors),
 }
 
 impl BinstallError {
@@ -380,6 +470,7 @@ impl BinstallError {
             GitError(_) => 98,
             LoadManifestFromWSError(_) => 99,
             CrateContext(context) => context.err.exit_number(),
+            Errors(errors) => (errors.0)[0].err.exit_number(),
         };
 
         // reserved codes
@@ -401,10 +492,25 @@ impl BinstallError {
 
     /// Add crate context to the error
     pub fn crate_context(self, crate_name: impl Into<CompactString>) -> Self {
-        Self::CrateContext(Box::new(CrateContextError {
-            err: self,
-            crate_name: crate_name.into(),
-        }))
+        self.crate_context_inner(crate_name.into())
+    }
+
+    fn crate_context_inner(self, crate_name: CompactString) -> Self {
+        match self {
+            Self::CrateContext(mut crate_context_error) => {
+                crate_context_error.crate_name = crate_name;
+                Self::CrateContext(crate_context_error)
+            }
+            err => Self::CrateContext(Box::new(CrateContextError { err, crate_name })),
+        }
+    }
+
+    pub fn crate_errors(errors: Vec<Box<CrateContextError>>) -> Option<Self> {
+        if errors.is_empty() {
+            None
+        } else {
+            Some(Self::Errors(CrateErrors(errors.into_boxed_slice())))
+        }
     }
 }
 

@@ -1,12 +1,11 @@
 use std::{
     env, fs,
-    future::Future,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use binstalk::{
-    errors::BinstallError,
+    errors::{BinstallError, CrateContextError},
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
     get_desired_targets,
     helpers::{
@@ -27,7 +26,7 @@ use binstalk_manifests::{
 use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
-use miette::{miette, Result, WrapErr};
+use miette::{miette, Report, Result, WrapErr};
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
@@ -40,7 +39,7 @@ use crate::{
 pub fn install_crates(
     args: Args,
     jobserver_client: LazyJobserverClient,
-) -> Result<Option<impl Future<Output = Result<()>>>> {
+) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     // Compute Resolvers
     let mut cargo_install_fallback = false;
 
@@ -217,54 +216,125 @@ pub fn install_crates(
         })
         .collect();
 
-    Ok(Some(async move {
-        // Collect results
-        let mut resolution_fetchs = Vec::new();
-        let mut resolution_sources = Vec::new();
+    Ok(Some(if args.continue_on_failure {
+        AutoAbortJoinHandle::spawn(async move {
+            // Collect results
+            let mut resolution_fetchs = Vec::new();
+            let mut resolution_sources = Vec::new();
+            let mut errors = Vec::new();
 
-        for task in tasks {
-            match task.await?? {
-                Resolution::AlreadyUpToDate => {}
-                Resolution::Fetch(fetch) => {
-                    fetch.print(&binstall_opts);
-                    resolution_fetchs.push(fetch)
-                }
-                Resolution::InstallFromSource(source) => {
-                    source.print();
-                    resolution_sources.push(source)
+            for task in tasks {
+                match task.flattened_join().await {
+                    Ok(Resolution::AlreadyUpToDate) => {}
+                    Ok(Resolution::Fetch(fetch)) => {
+                        fetch.print(&binstall_opts);
+                        resolution_fetchs.push(fetch)
+                    }
+                    Ok(Resolution::InstallFromSource(source)) => {
+                        source.print();
+                        resolution_sources.push(source)
+                    }
+                    Err(BinstallError::CrateContext(err)) => errors.push(err),
+                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {}", e),
                 }
             }
-        }
 
-        if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
-            debug!("Nothing to do");
-            return Ok(());
-        }
+            if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
+                return if let Some(err) = BinstallError::crate_errors(errors) {
+                    Err(err.into())
+                } else {
+                    debug!("Nothing to do");
+                    Ok(())
+                };
+            }
 
-        // Confirm
-        if !dry_run && !no_confirm {
-            confirm().await?;
-        }
+            // Confirm
+            if !dry_run && !no_confirm {
+                confirm().await?;
+            }
 
-        do_install_fetches(
-            resolution_fetchs,
-            manifests,
-            &binstall_opts,
-            dry_run,
-            temp_dir,
-            no_cleanup,
-        )?;
+            let manifest_update_res = do_install_fetches_continue_on_failure(
+                resolution_fetchs,
+                manifests,
+                &binstall_opts,
+                dry_run,
+                temp_dir,
+                no_cleanup,
+                &mut errors,
+            );
 
-        let tasks: Vec<_> = resolution_sources
-            .into_iter()
-            .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
-            .collect();
+            let tasks: Vec<_> = resolution_sources
+                .into_iter()
+                .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
+                .collect();
 
-        for task in tasks {
-            task.await??;
-        }
+            for task in tasks {
+                match task.flattened_join().await {
+                    Ok(_) => (),
+                    Err(BinstallError::CrateContext(err)) => errors.push(err),
+                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {}", e),
+                }
+            }
 
-        Ok(())
+            match (BinstallError::crate_errors(errors), manifest_update_res) {
+                (None, Ok(())) => Ok(()),
+                (None, Err(err)) => Err(err),
+                (Some(err), Ok(())) => Err(err.into()),
+                (Some(err), Err(manifest_update_err)) => {
+                    Err(Report::new(err).wrap_err(manifest_update_err))
+                }
+            }
+        })
+    } else {
+        AutoAbortJoinHandle::spawn(async move {
+            // Collect results
+            let mut resolution_fetchs = Vec::new();
+            let mut resolution_sources = Vec::new();
+
+            for task in tasks {
+                match task.await?? {
+                    Resolution::AlreadyUpToDate => {}
+                    Resolution::Fetch(fetch) => {
+                        fetch.print(&binstall_opts);
+                        resolution_fetchs.push(fetch)
+                    }
+                    Resolution::InstallFromSource(source) => {
+                        source.print();
+                        resolution_sources.push(source)
+                    }
+                }
+            }
+
+            if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
+                debug!("Nothing to do");
+                return Ok(());
+            }
+
+            // Confirm
+            if !dry_run && !no_confirm {
+                confirm().await?;
+            }
+
+            do_install_fetches(
+                resolution_fetchs,
+                manifests,
+                &binstall_opts,
+                dry_run,
+                temp_dir,
+                no_cleanup,
+            )?;
+
+            let tasks: Vec<_> = resolution_sources
+                .into_iter()
+                .map(|source| AutoAbortJoinHandle::spawn(source.install(binstall_opts.clone())))
+                .collect();
+
+            for task in tasks {
+                task.await??;
+            }
+
+            Ok(())
+        })
     }))
 }
 
@@ -432,6 +502,56 @@ fn do_install_fetches(
             .into_iter()
             .map(|fetch| fetch.install(binstall_opts))
             .collect::<Result<Vec<_>, BinstallError>>()?;
+
+        if let Some(manifests) = manifests {
+            manifests.update(metadata_vec)?;
+        }
+
+        if no_cleanup {
+            // Consume temp_dir without removing it from fs.
+            let _ = temp_dir.into_path();
+        } else {
+            temp_dir.close().unwrap_or_else(|err| {
+                warn!("Failed to clean up some resources: {err}");
+            });
+        }
+
+        Ok(())
+    })
+}
+
+#[allow(clippy::vec_box)]
+fn do_install_fetches_continue_on_failure(
+    resolution_fetchs: Vec<Box<ResolutionFetch>>,
+    // Take manifests by value to drop the `FileLock`.
+    manifests: Option<Manifests>,
+    binstall_opts: &Options,
+    dry_run: bool,
+    temp_dir: tempfile::TempDir,
+    no_cleanup: bool,
+    errors: &mut Vec<Box<CrateContextError>>,
+) -> Result<()> {
+    if resolution_fetchs.is_empty() {
+        return Ok(());
+    }
+
+    if dry_run {
+        info!("Dry-run: Not proceeding to install fetched binaries");
+        return Ok(());
+    }
+
+    block_in_place(|| {
+        let metadata_vec = resolution_fetchs
+            .into_iter()
+            .filter_map(|fetch| match fetch.install(binstall_opts) {
+                Ok(crate_info) => Some(crate_info),
+                Err(BinstallError::CrateContext(err)) => {
+                    errors.push(err);
+                    None
+                }
+                Err(e) => panic!("Expected BinstallError::CrateContext(_), got {}", e),
+            })
+            .collect::<Vec<_>>();
 
         if let Some(manifests) = manifests {
             manifests.update(metadata_vec)?;
