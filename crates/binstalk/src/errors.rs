@@ -505,9 +505,11 @@ impl BinstallError {
         }
     }
 
-    pub fn crate_errors(errors: Vec<Box<CrateContextError>>) -> Option<Self> {
+    pub fn crate_errors(mut errors: Vec<Box<CrateContextError>>) -> Option<Self> {
         if errors.is_empty() {
             None
+        } else if errors.len() == 1 {
+            Some(Self::CrateContext(errors.pop().unwrap()))
         } else {
             Some(Self::Errors(CrateErrors(errors.into_boxed_slice())))
         }
