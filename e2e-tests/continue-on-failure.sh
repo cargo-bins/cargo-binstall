@@ -4,12 +4,6 @@ set -euxo pipefail
 
 unset CARGO_INSTALL_ROOT
 
-#  - `b3sum@<=1.3.3` would test `fetch_crate_cratesio_version_matched` ability
-#    to find versions matching <= 1.3.3
-#  - `cargo-quickinstall` would test `fetch_crate_cratesio_version_matched` ability
-#    to find latest stable version.
-crates="b3sum@<=1.3.3 cargo-release@0.24.9 cargo-binstall@0.20.1 cargo-watch@8.4.0 miniserve@0.23.0 sccache@0.3.3 cargo-quickinstall"
-
 CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
 export CARGO_HOME
 othertmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-test')
