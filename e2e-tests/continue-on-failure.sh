@@ -31,3 +31,17 @@ cargo_watch_version="$(cargo watch -V)"
 echo "$cargo_watch_version"
 
 [ "$cargo_watch_version" = "cargo-watch 8.4.0" ]
+
+
+## Test that it is no-op when only one crate is passed
+set +e
+cargo binstall --no-confirm --continue-on-failure non-existent-clippy
+exit_code="$?"
+
+set -e
+
+if [ "$exit_code" != 76 ]; then
+    echo "Expected exit code 94, but actual exit code $exit_code"
+    exit 1
+fi
+
