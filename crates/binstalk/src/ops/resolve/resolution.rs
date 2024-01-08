@@ -51,6 +51,12 @@ impl Resolution {
 
 impl ResolutionFetch {
     pub fn install(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
+        let crate_name = self.name.clone();
+        self.install_inner(opts)
+            .map_err(|err| err.crate_context(crate_name))
+    }
+
+    fn install_inner(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
         type InstallFp = fn(&bins::BinFile) -> Result<(), bins::Error>;
 
         let (install_bin, install_link): (InstallFp, InstallFp) = match (opts.no_track, opts.force)
@@ -126,6 +132,13 @@ impl ResolutionFetch {
 
 impl ResolutionSource {
     pub async fn install(self, opts: Arc<Options>) -> Result<(), BinstallError> {
+        let crate_name = self.name.clone();
+        self.install_inner(opts)
+            .await
+            .map_err(|err| err.crate_context(crate_name))
+    }
+
+    async fn install_inner(self, opts: Arc<Options>) -> Result<(), BinstallError> {
         let target = if let Some(targets) = opts.desired_targets.get_initialized() {
             Some(targets.first().ok_or(BinstallError::NoViableTargets)?)
         } else {
@@ -171,7 +184,7 @@ impl ResolutionSource {
             cmd.arg("--no-track");
         }
 
-        debug!("Running `{}`", format_cmd(&cmd),);
+        debug!("Running `{}`", format_cmd(&cmd));
 
         if !opts.dry_run {
             let mut child = opts

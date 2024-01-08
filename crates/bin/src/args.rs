@@ -191,6 +191,10 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub(crate) no_cleanup: bool,
 
+    /// Continue installing other crates even if one of the crate failed to install.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) continue_on_failure: bool,
+
     /// By default, binstall keeps track of the installed packages with metadata files
     /// stored in the installation root directory.
     ///

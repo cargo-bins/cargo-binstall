@@ -36,7 +36,6 @@ echo "$cargo_release_version"
 
 [ "$cargo_release_version" = "cargo-release 0.24.9" ]
 
-cargo-binstall --help >/dev/null
 cargo binstall --help >/dev/null
 
 cargo_binstall_version="$(cargo-binstall -V)"
