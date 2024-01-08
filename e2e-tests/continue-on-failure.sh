@@ -22,7 +22,7 @@ exit_code="$?"
 set -e
 
 if [ "$exit_code" != 76 ]; then
-    echo "Expected exit code 94, but actual exit code $exit_code"
+    echo "Expected exit code 76, but actual exit code $exit_code"
     exit 1
 fi
 
@@ -41,8 +41,18 @@ exit_code="$?"
 set -e
 
 if [ "$exit_code" != 76 ]; then
-    echo "Expected exit code 94, but actual exit code $exit_code"
+    echo "Expected exit code 76, but actual exit code $exit_code"
     exit 1
 fi
 
 # Test if both crates are invalid
+set +e
+cargo binstall --no-confirm --continue-on-failure non-existent-clippy non-existent-clippy2
+exit_code="$?"
+
+set -e
+
+if [ "$exit_code" != 76 ]; then
+    echo "Expected exit code 76, but actual exit code $exit_code"
+    exit 1
+fi
