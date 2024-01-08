@@ -45,3 +45,4 @@ if [ "$exit_code" != 76 ]; then
     exit 1
 fi
 
+# Test if both crates are invalid
