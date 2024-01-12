@@ -4,6 +4,7 @@ set -euxo pipefail
 
 if [ "$OS" = "Windows_NT" ]; then
     # https://github.com/cargo-bins/cargo-binstall/blob/main/install-from-binstall-release.ps1
+    # shellcheck disable=SC2016
     powershell -c '$ErrorActionPreference = "Stop"
 Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
