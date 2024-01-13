@@ -46,7 +46,7 @@ tracing-subscriber = { version = "0.3.17", features = ["fmt", "json", "ansi"], d
 
 [build-dependencies]
 embed-resource = "2.4.1"
-vergen = { version = "8.2.5", features = ["build", "cargo", "git", "gitcl", "rustc"] }
+vergen = { version = "8.2.7", features = ["build", "cargo", "git", "gitcl", "rustc"] }
 
 [features]
 default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin", "git"]
