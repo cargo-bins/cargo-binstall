@@ -372,6 +372,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "binstalk-utils"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "dirs",
+ "log",
+ "once_cell",
+ "supports-color",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "binstall-tar"
 version = "0.4.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -495,6 +510,7 @@ version = "1.6.0"
 dependencies = [
  "binstalk",
  "binstalk-manifests",
+ "binstalk-utils",
  "clap",
  "compact_str",
  "dirs",
@@ -504,7 +520,6 @@ dependencies = [
  "log",
  "miette",
  "mimalloc",
- "once_cell",
  "semver",
  "strum",
  "strum_macros",
@@ -512,9 +527,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
- "tracing-core",
- "tracing-log",
- "tracing-subscriber",
  "vergen",
 ]
 

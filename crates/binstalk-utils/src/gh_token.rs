@@ -2,7 +2,7 @@ use std::{io, process};
 
 use compact_str::CompactString;
 
-pub(super) fn get() -> io::Result<CompactString> {
+pub fn get() -> io::Result<CompactString> {
     let process::Output { status, stdout, .. } = process::Command::new("gh")
         .args(["auth", "token"])
         .stdin(process::Stdio::null())

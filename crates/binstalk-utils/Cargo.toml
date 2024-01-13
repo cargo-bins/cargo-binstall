@@ -1,0 +1,22 @@
+[package]
+name = "binstalk-utils"
+version = "0.0.0"
+edition = "2021"
+description = "utils package for cargo-binstall"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+documentation = "https://docs.rs/binstalk-utils"
+rust-version = "1.65.0"
+authors = ["ryan <ryan@kurte.nz>"]
+license = "GPL-3.0-only"
+readme = "../../README.md"
+
+[dependencies]
+compact_str = "0.7.0"
+dirs = "5.0.1"
+log = { version = "0.4.18", features = ["std"] }
+once_cell = "1.18.0"
+supports-color = "2.0.0"
+tracing = { version = "0.1.39", default-features = false }
+tracing-core = "0.1.32"
+tracing-log = { version = "0.2.0", default-features = false }
+tracing-subscriber = { version = "0.3.17", features = ["fmt", "json", "ansi"], default-features = false }

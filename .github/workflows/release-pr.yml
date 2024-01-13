@@ -16,6 +16,7 @@ on:
           - binstalk-manifests
           - binstalk-types
           - binstalk-downloader
+          - binstalk-utils
           - cargo-toml-workspace
           - detect-targets
           - detect-wasi

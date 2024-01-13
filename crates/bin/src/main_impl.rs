@@ -1,6 +1,7 @@
 use std::{process::Termination, time::Instant};
 
 use binstalk::{helpers::jobserver_client::LazyJobserverClient, TARGET};
+use binstalk_utils::logging;
 use log::LevelFilter;
 use tracing::debug;
 
@@ -8,7 +9,6 @@ use crate::{
     args,
     bin_util::{run_tokio_main, MainExit},
     entry,
-    logging::logging,
 };
 
 pub fn do_main() -> impl Termination {

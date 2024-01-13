@@ -23,6 +23,7 @@ use binstalk::{
 use binstalk_manifests::{
     cargo_config::Config, cargo_toml_binstall::PkgOverride, crates_manifests::Manifests,
 };
+use binstalk_utils::{gh_token, git_credentials};
 use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
@@ -32,7 +33,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     args::{Args, Strategy},
-    gh_token, git_credentials, install_path,
+    install_path,
     ui::confirm,
 };
 
