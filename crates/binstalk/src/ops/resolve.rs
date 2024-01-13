@@ -124,6 +124,7 @@ async fn resolve_inner(
                 let fetcher = f(
                     opts.client.clone(),
                     opts.gh_api_client.clone(),
+                    opts.cacher.clone(),
                     data.clone(),
                     target_data,
                     opts.signature_policy,

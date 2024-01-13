@@ -102,6 +102,7 @@ impl super::Fetcher for GhCrateMeta {
     fn new(
         client: Client,
         gh_api_client: GhApiClient,
+        _cacher: HTTPCacher,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,

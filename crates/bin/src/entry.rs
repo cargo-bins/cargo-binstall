@@ -9,6 +9,7 @@ use binstalk::{
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
     get_desired_targets,
     helpers::{
+        cacher::HTTPCacher,
         gh_api_client::GhApiClient,
         jobserver_client::LazyJobserverClient,
         remote::{Certificate, Client},
@@ -157,6 +158,7 @@ pub fn install_crates(
 
         client,
         gh_api_client,
+        cacher: HTTPCacher::default(),
         jobserver_client,
         registry: if let Some(index) = args.index {
             index

@@ -18,6 +18,11 @@ mod quickinstall;
 #[cfg(feature = "quickinstall")]
 pub use quickinstall::*;
 
+#[cfg(feature = "dist-manifest")]
+mod dist_manifest_fetcher;
+#[cfg(feature = "dist-manifest")]
+pub use dist_manifest_fetcher::GhDistManifest;
+
 mod common;
 use common::*;
 
@@ -70,6 +75,10 @@ pub enum FetchError {
 
     #[error("Failed to verify signature")]
     InvalidSignature,
+
+    #[cfg(feature = "dist-manifest")]
+    #[error("Invalid dist manifest: {0}")]
+    InvalidDistManifest(Cow<'static, str>),
 }
 
 impl From<RemoteError> for FetchError {
@@ -91,6 +100,7 @@ pub trait Fetcher: Send + Sync {
     fn new(
         client: Client,
         gh_api_client: GhApiClient,
+        cacher: HTTPCacher,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,

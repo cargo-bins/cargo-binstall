@@ -12,4 +12,6 @@ pub mod gh_api_client;
 
 pub mod remote;
 
+pub mod cacher;
+
 mod utils;

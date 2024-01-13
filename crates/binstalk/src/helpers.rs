@@ -4,7 +4,7 @@ pub(crate) mod target_triple;
 pub mod tasks;
 
 pub(crate) use binstalk_downloader::download;
-pub use binstalk_downloader::gh_api_client;
+pub use binstalk_downloader::{cacher, gh_api_client};
 
 pub(crate) use cargo_toml_workspace::{self, cargo_toml};
 #[cfg(feature = "git")]

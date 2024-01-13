@@ -7,7 +7,8 @@ use semver::VersionReq;
 use crate::{
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
     helpers::{
-        self, gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client,
+        self, cacher::HTTPCacher, gh_api_client::GhApiClient,
+        jobserver_client::LazyJobserverClient, remote::Client,
     },
     manifests::cargo_toml_binstall::PkgOverride,
     registry::Registry,
@@ -16,8 +17,14 @@ use crate::{
 
 pub mod resolve;
 
-pub type Resolver =
-    fn(Client, GhApiClient, Arc<Data>, Arc<TargetDataErased>, SignaturePolicy) -> Arc<dyn Fetcher>;
+pub type Resolver = fn(
+    Client,
+    GhApiClient,
+    HTTPCacher,
+    Arc<Data>,
+    Arc<TargetDataErased>,
+    SignaturePolicy,
+) -> Arc<dyn Fetcher>;
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -50,6 +57,7 @@ pub struct Options {
 
     pub client: Client,
     pub gh_api_client: GhApiClient,
+    pub cacher: HTTPCacher,
     pub jobserver_client: LazyJobserverClient,
     pub registry: Registry,
 
