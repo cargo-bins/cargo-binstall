@@ -10,11 +10,11 @@ authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-cargo_toml = "0.17.0"
+cargo_toml = "0.18.0"
 compact_str = { version = "0.7.0", features = ["serde"] }
 glob = "0.3.1"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
-serde = "1.0.163"
+serde = "1.0.195"
 thiserror = "1.0.52"
 tracing = "0.1.39"
 

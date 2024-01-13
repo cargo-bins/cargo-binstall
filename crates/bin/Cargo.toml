@@ -24,7 +24,7 @@ pkg-fmt = "zip"
 [dependencies]
 binstalk = { path = "../binstalk", version = "0.19.0", default-features = false }
 binstalk-manifests = { path = "../binstalk-manifests", version = "0.11.0" }
-clap = { version = "4.4.8", features = ["derive", "env"] }
+clap = { version = "4.4.16", features = ["derive", "env"] }
 compact_str = "0.7.0"
 dirs = "5.0.1"
 file-format = { version = "0.23.0", default-features = false }
@@ -46,7 +46,7 @@ tracing-subscriber = { version = "0.3.17", features = ["fmt", "json", "ansi"], d
 
 [build-dependencies]
 embed-resource = "2.4.1"
-vergen = { version = "8.2.5", features = ["build", "cargo", "git", "gitcl", "rustc"] }
+vergen = { version = "8.2.7", features = ["build", "cargo", "git", "gitcl", "rustc"] }
 
 [features]
 default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin", "git"]
