@@ -110,4 +110,5 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Verify `cargo-binstall` installation
+      shell: bash
       run: cargo binstall -vV
