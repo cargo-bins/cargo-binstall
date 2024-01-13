@@ -82,3 +82,33 @@ jobs:
 
     - name: Verify `cargo-binstall` installation
       run: cargo binstall -vV
+
+  windows-bash:
+    strategy:
+      fail-fast: false
+      matrix:
+        set_cargo_home: [t, f]
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set `CARGO_HOME`
+      if: matrix.set_cargo_home == 't'
+      shell: bash
+      run: |
+        CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
+        mkdir -p "${CARGO_HOME}/bin"
+        echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+        echo "${CARGO_HOME}/bin" >> $GITHUB_PATH
+
+    - name: Install `cargo-binstall` using scripts
+      shell: bash
+      run: ./install-from-binstall-release.sh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Verify `cargo-binstall` installation
+      shell: bash
+      run: cargo binstall -vV

@@ -20,6 +20,12 @@ elif [ "$os" == "Linux" ]; then
 
     url="${base_url}${target}.tgz"
     curl -L --proto '=https' --tlsv1.2 -sSf "$url" | tar -xvzf -
+elif [ "${OS-}" = "Windows_NT" ]; then
+    machine="$(uname -m)"
+    target="${machine}-pc-windows-msvc"
+    url="${base_url}${target}.zip"
+    curl -LO --proto '=https' --tlsv1.2 -sSf "$url"
+    unzip "cargo-binstall-${target}.zip"
 else
     echo "Unsupported OS ${os}"
     exit 1
