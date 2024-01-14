@@ -57,6 +57,8 @@ pub async fn detect_targets() -> Vec<String> {
             // Linux is a bit special, since the result from `guess_host_triple`
             // might be wrong about whether glibc or musl is used.
             linux::detect_targets(target).await
+        } else {
+            vec![target]
         }
     }
 }
