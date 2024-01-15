@@ -11,7 +11,7 @@ use tokio::process::Command;
 use tracing::debug;
 
 cfg_if! {
-    if #[cfg(target_os = "linux")] {
+    if #[cfg(any(target_os = "linux",  target_os = "android"))] {
         mod linux;
     } else if #[cfg(target_os = "macos")] {
         mod macos;
@@ -53,7 +53,7 @@ pub async fn detect_targets() -> Vec<String> {
             let mut targets = vec![target];
             targets.extend(windows::detect_alternative_targets(&targets[0]));
             targets
-        } else if #[cfg(target_os = "linux")] {
+        } else if #[cfg(any(target_os = "linux", target_os = "android"))] {
             // Linux is a bit special, since the result from `guess_host_triple`
             // might be wrong about whether glibc or musl is used.
             linux::detect_targets(target).await
