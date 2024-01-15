@@ -297,6 +297,7 @@ jobs:
     - detect-targets-ubuntu-test
     - detect-targets-more-glibc-test
     - detect-targets-nix-test
+    - detect-targets-android-check
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
