@@ -256,6 +256,34 @@ jobs:
           --mount src="$PWD/detect-targets",dst=/detect-targets,type=bind \
           nixos/nix /detect-targets )" = x86_64-unknown-linux-musl ]
 
+  detect-targets-android-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Add ${{ matrix.target }}
+      run: rustup target add ${{ matrix.target }}
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        cache-all-crates: true
+    - name: Build detect-targets
+      run: |
+        cargo check --target ${{ matrix.target }}
+      # Set working directory here, otherwise `cargo-check` would download
+      # and build quite a few unused dependencies.
+      working-directory: crates/detect-targets
+
+
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Tests pass
