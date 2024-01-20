@@ -18,10 +18,7 @@ pub struct GitUrl(Url);
 
 impl fmt::Display for GitUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let url_bstr = self.0.to_bstring();
-        let url_str = String::from_utf8_lossy(&url_bstr);
-
-        f.write_str(&url_str)
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
