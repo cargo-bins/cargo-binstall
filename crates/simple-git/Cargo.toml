@@ -1,6 +1,6 @@
 [package]
 name = "simple-git"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 
 description = "The simple git interface for gix suitable for async context (with tokio)"

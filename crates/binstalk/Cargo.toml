@@ -26,7 +26,7 @@ leon = { version = "2.0.1", path = "../leon" }
 maybe-owned = "0.3.4"
 miette = "5.9.0"
 semver = { version = "1.0.17", features = ["serde"] }
-simple-git = { version = "0.2.1", path = "../simple-git", optional = true }
+simple-git = { version = "0.2.2", path = "../simple-git", optional = true }
 strum = "0.25.0"
 target-lexicon = { version = "0.12.11", features = ["std"] }
 tempfile = "3.5.0"
