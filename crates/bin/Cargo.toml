@@ -1,6 +1,6 @@
 [package]
 name = "cargo-binstall"
-description = "Rust binary package installer for CI integration"
+description = "Binary installation for rust projects"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/cargo-binstall"
 version = "1.6.0"
