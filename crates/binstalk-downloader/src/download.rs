@@ -201,18 +201,17 @@ impl Download<'_> {
 
         debug!("Downloading and extracting then in-memory processing");
 
-        match extract_tar_based_stream_and_visit(&mut stream, fmt, visitor).await {
-            Ok(()) => {
-                debug!("Download, extraction and in-memory procession OK");
-                Ok(())
-            }
-            Err(err) => {
-                if has_data_verifier {
-                    consume_stream(&mut stream).await;
-                }
-                Err(err)
-            }
+        let res = extract_tar_based_stream_and_visit(&mut stream, fmt, visitor).await;
+
+        if has_data_verifier {
+            consume_stream(&mut stream).await;
         }
+
+        if res.is_ok() {
+            debug!("Download, extraction and in-memory procession OK");
+        }
+
+        res
     }
 
     /// Download a file from the provided URL and extract it to the provided path.
@@ -242,18 +241,15 @@ impl Download<'_> {
                 PkgFmtDecomposed::Zip => extract_zip(&mut stream, path).await,
             };
 
-            match res {
-                Ok(extracted_files) => {
-                    debug!("Download OK, extracted to: '{}'", path.display());
-                    Ok(extracted_files)
-                }
-                Err(err) => {
-                    if has_data_verifier {
-                        consume_stream(&mut stream).await;
-                    }
-                    Err(err)
-                }
+            if has_data_verifier {
+                consume_stream(&mut stream).await;
             }
+
+            if res.is_ok() {
+                debug!("Download OK, extracted to: '{}'", path.display());
+            }
+
+            res
         }
 
         inner(self, fmt, path.as_ref()).await
