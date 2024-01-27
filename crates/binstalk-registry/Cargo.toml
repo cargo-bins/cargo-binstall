@@ -22,8 +22,8 @@ miette = "5.9.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
 once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }
-serde = { version = "1.0.163", features = ["derive"] }
-serde_json = "1.0.107"
+serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0.112"
 sha2 = "0.10.7"
 simple-git = { version = "0.2.2", path = "../simple-git", optional = true }
 tempfile = "3.5.0"
