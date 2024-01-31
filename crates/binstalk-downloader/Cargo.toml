@@ -66,6 +66,8 @@ rustls = [
     "__tls",
 
     "reqwest/rustls-tls",
+    "reqwest/rustls-tls-webpki-roots",
+    "reqwest/rustls-tls-native-roots",
 
     # Enable the following features only if hickory-resolver is enabled.
     "hickory-resolver?/dns-over-rustls",
