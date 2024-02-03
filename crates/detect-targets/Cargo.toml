@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-tokio = { version = "1.35.0", features = ["rt", "process", "sync"], default-features = false }
+tokio = { version = "1.36.0", features = ["rt", "process", "sync"], default-features = false }
 tracing = { version = "0.1.39", optional = true }
 tracing-subscriber = { version = "0.3.17", features = ["fmt"], default-features = false, optional = true }
 cfg-if = "1.0.0"
@@ -25,7 +25,7 @@ windows-sys = { version = "0.52.0", features = ["Win32_System_Threading", "Win32
 windows-dll = { version = "0.4.1", features = ["windows"], default-features = false }
 
 [dev-dependencies]
-tokio = { version = "1.35.0", features = ["macros"], default-features = false }
+tokio = { version = "1.36.0", features = ["macros"], default-features = false }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/cargo-binstall-{ target }.full.{ archive-format }"
