@@ -14,7 +14,6 @@ members = [
     "crates/detect-wasi",
     "crates/fs-lock",
     "crates/normalize-path",
-    "crates/simple-git",
     "crates/detect-targets",
     "crates/leon",
     "crates/leon-macros",
