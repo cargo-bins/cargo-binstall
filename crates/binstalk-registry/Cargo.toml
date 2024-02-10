@@ -18,7 +18,7 @@ binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "5.0.0", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.7.0", features = ["serde"] }
 leon = { version = "2.0.1", path = "../leon" }
-miette = "5.9.0"
+miette = "7.0.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
 once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }
@@ -34,7 +34,7 @@ url = "2.3.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-toml_edit = { version = "0.21.0", features = ["serde"] }
+toml_edit = { version = "0.22.4", features = ["serde"] }
 binstalk-downloader = { version = "0.10.0", path = "../binstalk-downloader", default-features = false, features = ["rustls"] }
 
 [features]

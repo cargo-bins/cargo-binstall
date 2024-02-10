@@ -12,7 +12,7 @@ exclude = ["fuzz", "benches"]
 
 [dependencies]
 clap = { version = "4.4.8", features = ["derive"], optional = true }
-miette = { version = "5.9.0", default-features = false, optional = true }
+miette = { version = "7.0.0", default-features = false, optional = true }
 thiserror = "1.0.52"
 
 [features]
