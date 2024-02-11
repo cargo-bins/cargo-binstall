@@ -24,7 +24,7 @@ itertools = "0.12.0"
 jobslot = { version = "0.2.11", features = ["tokio"] }
 leon = { version = "2.0.1", path = "../leon" }
 maybe-owned = "0.3.4"
-miette = "5.9.0"
+miette = "7.0.0"
 semver = { version = "1.0.17", features = ["serde"] }
 simple-git = { version = "0.2.2", optional = true }
 strum = "0.26.1"
