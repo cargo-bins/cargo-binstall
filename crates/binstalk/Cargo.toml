@@ -10,7 +10,7 @@ edition = "2021"
 license = "GPL-3.0-only"
 
 [dependencies]
-binstalk-bins = { version = "0.3.0", path = "../binstalk-bins" }
+binstalk-bins = { version = "0.4.0", path = "../binstalk-bins" }
 binstalk-downloader = { version = "0.10.0", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
 binstalk-fetchers = { version = "0.3.0", path = "../binstalk-fetchers", features = ["quickinstall"] }
 binstalk-registry = { version = "0.6.0", path = "../binstalk-registry" }
