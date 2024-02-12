@@ -27,7 +27,7 @@ serde_json = "1.0.107"
 sha2 = "0.10.7"
 simple-git = { version = "0.2.2", optional = true }
 tempfile = "3.5.0"
-thiserror = "1.0.52"
+thiserror = "1.0.57"
 tokio = { version = "1.35.0", features = ["rt", "sync"], default-features = false }
 tracing = "0.1.39"
 url = "2.3.1"
