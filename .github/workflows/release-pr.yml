@@ -56,7 +56,7 @@ jobs:
           pr-label: release
           pr-release-notes: ${{ inputs.crate == 'bin' }}
           pr-template-file: .github/scripts/release-pr-template.ejs
-          check-semver: ${{ inputs.crate != 'bin' }}
+          check-semver: ${{ inputs.crate != 'bin' && inputs.crate != 'leon-macros' }}
           check-package: true
         env:
           RUSTFLAGS: --cfg reqwest_unstable
