@@ -14,7 +14,7 @@ license = "GPL-3.0-only"
 atomic-file-install = { version = "1.0.1", path = "../atomic-file-install" }
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 compact_str = { version = "0.7.0", features = ["serde"] }
-leon = { version = "2.0.1", path = "../leon" }
+leon = { version = "3.0.0", path = "../leon" }
 miette = "7.0.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
 thiserror = "1.0.52"
