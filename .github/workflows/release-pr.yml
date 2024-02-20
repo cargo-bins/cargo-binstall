@@ -21,8 +21,6 @@ on:
           - detect-wasi
           - fs-lock
           - normalize-path
-          - leon
-          - leon-macros
       version:
         description: Version to release
         required: true
