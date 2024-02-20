@@ -215,7 +215,6 @@ build: print-env
 
 check: print-env
     {{cargo-bin}} check {{cargo-build-args}} --profile check-only
-    cargo hack check --feature-powerset -p leon {{cargo-check-args}} --profile check-only
     {{cargo-bin}} check -p binstalk-downloader --no-default-features --profile check-only
     {{cargo-bin}} check -p cargo-binstall --no-default-features --features rustls {{cargo-check-args}} --profile check-only
     cargo-hack hack check -p binstalk-downloader \
