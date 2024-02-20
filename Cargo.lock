@@ -2409,16 +2409,19 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "leon"
-version = "3.0.0"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d82a8693bd856b8b0596b6abed75d494ba6ca04b8e1b12be3a2ab947c305d8b1"
 dependencies = [
- "clap",
  "miette",
  "thiserror",
 ]
 
 [[package]]
 name = "leon-macros"
-version = "1.0.1"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acf3621546e1f1fedade073ad01f1c1bf561584a9b4c83c37728a28da69544aa"
 dependencies = [
  "leon",
  "proc-macro2",
