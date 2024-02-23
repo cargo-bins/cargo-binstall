@@ -99,3 +99,23 @@ runs:
       key: ${{ env.ZIG_CACHE_KEY }}
       restore-keys: |
         ${{ env.ZIG_CACHE_RESTORE_KEY }}
+
+  - name: Cache make compiled
+    if: runner.os == 'macOS'
+    id: cache-make
+    uses: actions/cache@v4
+    with:
+      path: /usr/local/bin/make
+      key: ${{ runner.os }}-make-4.4.1
+
+  - name: Build and use make 4.4.1 on macOS, since cc requires make >=4.3
+    if: runner.os == 'macOS' && steps.cache-make.outputs.cache-hit != 'true'
+    run: |
+      curl "https://ftp.gnu.org/gnu/make/make-${MAKE_VERSION}.tar.gz" | tar xz
+      pushd "make-${MAKE_VERSION}"
+      ./configure
+      make
+      popd
+      cp -p "make-${MAKE_VERSION}/make" /usr/local/bin
+
+  - run: make -v
