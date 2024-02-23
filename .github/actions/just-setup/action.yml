@@ -119,5 +119,7 @@ runs:
       cp -p "make-${MAKE_VERSION}/make" /usr/local/bin
     env:
       MAKE_VERSION: 4.4.1
+    shell: bash
 
   - run: make -v
+    shell: bash
