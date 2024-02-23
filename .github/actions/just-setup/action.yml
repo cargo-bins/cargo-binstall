@@ -93,7 +93,7 @@ runs:
 
   - name: Cache zig compilation
     if: env.JUST_USE_CARGO_ZIGBUILD
-    uses: actions/cache@v3
+    uses: actions/cache@v4
     with:
       path: ${{ steps.zig_global_cache_dir_path.outputs.cache_dir }}
       key: ${{ env.ZIG_CACHE_KEY }}
