@@ -261,7 +261,7 @@ upstream to fix this issue."
                         let features = required_features.iter().format(",");
                         warn!(
                             "When resolving {name} bin {bin_name} is not found. \
-But since it requies features {features}, this bin is ignored."
+But since it requires features {features}, this bin is ignored."
                         );
                         None
                     }
