@@ -111,7 +111,7 @@ runs:
   - name: Build and use make 4.4.1 on macOS, since cc requires make >=4.3
     if: runner.os == 'macOS' && steps.cache-make.outputs.cache-hit != 'true'
     run: |
-      curl "https://ftp.gnu.org/gnu/make/make-${MAKE_VERSION}.tar.gz" | tar xz
+      curl "https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz" | tar xz
       pushd "make-${MAKE_VERSION}"
       ./configure
       make
