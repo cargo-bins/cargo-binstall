@@ -21,7 +21,7 @@ flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
-reqwest = { version = "0.11.19", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
+reqwest = { version = "0.11.25", features = ["stream", "gzip", "brotli", "deflate"], default-features = false }
 percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 serde-tuple-vec-map = "1.0.1"
