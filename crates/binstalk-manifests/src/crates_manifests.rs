@@ -51,6 +51,7 @@ impl Manifests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(manifest_path)
             .and_then(FileLock::new_exclusive)?;
 

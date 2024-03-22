@@ -38,6 +38,6 @@ impl AbstractFilesystem for Vfs {
     fn file_names_in(&self, rel_path: &str) -> io::Result<HashSet<Box<str>>> {
         let rel_path = Path::new(rel_path).normalize();
 
-        Ok(self.0.get(&*rel_path).map(Clone::clone).unwrap_or_default())
+        Ok(self.0.get(&*rel_path).cloned().unwrap_or_default())
     }
 }
