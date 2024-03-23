@@ -14,7 +14,7 @@ license = "GPL-3.0-only"
 async-trait = "0.1.68"
 binstalk-downloader = { version = "0.10.1", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
-bytes = "1.4.0"
+bytes = "1.6.0"
 compact_str = { version = "0.7.0" }
 either = "1.8.1"
 itertools = "0.12.0"
