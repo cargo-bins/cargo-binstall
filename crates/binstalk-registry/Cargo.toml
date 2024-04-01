@@ -13,7 +13,9 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 async-trait = "0.1.68"
 base16 = "0.2.1"
-binstalk-downloader = { version = "0.10.1", path = "../binstalk-downloader", default-features = false, features = ["json"] }
+binstalk-downloader = { version = "0.10.1", path = "../binstalk-downloader", default-features = false, features = [
+    "json",
+] }
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "5.0.0", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.7.0", features = ["serde"] }
@@ -28,17 +30,25 @@ sha2 = "0.10.7"
 simple-git = { version = "0.2.4", optional = true }
 tempfile = "3.5.0"
 thiserror = "1.0.52"
-tokio = { version = "1.35.0", features = ["rt", "sync"], default-features = false }
+tokio = { version = "1.35.0", features = [
+    "rt",
+    "sync",
+], default-features = false }
 tracing = "0.1.39"
 url = "2.3.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 toml_edit = { version = "0.22.4", features = ["serde"] }
-binstalk-downloader = { version = "0.10.1", path = "../binstalk-downloader", default-features = false, features = ["rustls"] }
+binstalk-downloader = { version = "0.10.1", path = "../binstalk-downloader", default-features = false, features = [
+    "rustls",
+] }
 
 [features]
 git = ["simple-git"]
+
+rustls = ["simple-git?/rustls"]
+native-tls = ["simple-git?/native-tls"]
 
 crates_io_api = []
 
