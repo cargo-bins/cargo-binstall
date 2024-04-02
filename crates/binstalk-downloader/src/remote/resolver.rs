@@ -1,9 +1,8 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use hickory_resolver::TokioAsyncResolver;
-use hyper::client::connect::dns::Name;
 use once_cell::sync::OnceCell;
-use reqwest::dns::{Addrs, Resolve};
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
@@ -15,7 +14,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 pub struct TrustDnsResolver(Arc<OnceCell<TokioAsyncResolver>>);
 
 impl Resolve for TrustDnsResolver {
-    fn resolve(&self, name: Name) -> reqwest::dns::Resolving {
+    fn resolve(&self, name: Name) -> Resolving {
         let resolver = self.clone();
         Box::pin(async move {
             let resolver = resolver.0.get_or_try_init(new_resolver)?;
