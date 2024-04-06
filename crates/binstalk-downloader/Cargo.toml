@@ -11,14 +11,14 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 async-trait = "0.1.68"
-async-compression = { version = "0.4.4", features = [
+async-compression = { version = "0.4.8", features = [
     "gzip",
     "zstd",
     "xz",
     "bzip2",
     "tokio",
 ] }
-async_zip = { version = "0.0.16", features = [
+async_zip = { version = "0.0.17", features = [
     "deflate",
     "deflate64",
     "bzip2",
@@ -35,7 +35,7 @@ flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
-reqwest = { version = "0.12.0", features = [
+reqwest = { version = "0.12.3", features = [
     "stream",
     "gzip",
     "brotli",
