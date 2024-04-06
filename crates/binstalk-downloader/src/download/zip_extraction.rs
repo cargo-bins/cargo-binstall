@@ -46,7 +46,7 @@ pub(super) async fn extract_zip_entry<R>(
     extracted_files: &mut ExtractedFiles,
 ) -> Result<(), DownloadError>
 where
-    R: futures_io::AsyncRead + Unpin + Send + Sync,
+    R: futures_io::AsyncBufRead + Unpin + Send + Sync,
 {
     // Sanitize filename
     let raw_filename = zip_reader.entry().filename();
