@@ -1,44 +1,72 @@
 use std::mem;
-use windows_dll::dll;
-use windows_sys::{
-    core::HRESULT,
-    Win32::System::{
+use windows_sys::Win32::{
+    Foundation::{FreeLibrary, HMODULE, S_OK},
+    System::{
+        LibraryLoader::{GetProcAddress, LoadLibraryA},
         SystemInformation::{
             IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM,
             IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
         },
-        Threading::{UserEnabled, Wow64Container, MACHINE_ATTRIBUTES},
+        Threading::{GetMachineTypeAttributes, UserEnabled, Wow64Container, MACHINE_ATTRIBUTES},
     },
 };
 
-#[dll("Kernel32")]
-extern "system" {
-    #[allow(non_snake_case)]
-    #[fallible]
-    fn GetMachineTypeAttributes(
-        machine: IMAGE_FILE_MACHINE,
-        machine_attributes: *mut MACHINE_ATTRIBUTES,
-    ) -> HRESULT;
+struct LibraryHandle(HMODULE);
+
+impl LibraryHandle {
+    fn new(name: &[u8]) -> Option<Self> {
+        let handle = unsafe { LoadLibraryA(name.as_ptr() as _) };
+        (handle != 0).then(|| Self(handle))
+    }
+
+    /// Get a function pointer to a function in the library.
+    /// # SAFETY
+    ///
+    /// The caller must ensure that the function signature matches the actual function.
+    /// The easiest way to do this is to add an entry to windows_sys_no_link.list and use the
+    /// generated function for `func_signature`.
+    ///
+    /// The function returned cannot be used after the handle is dropped.
+    unsafe fn get_proc_address<F>(&self, name: &[u8]) -> Option<F> {
+        let symbol = unsafe { GetProcAddress(self.0, name.as_ptr() as _) };
+        symbol.map(|symbol| unsafe { mem::transmute_copy(&symbol) })
+    }
+}
+
+impl Drop for LibraryHandle {
+    fn drop(&mut self) {
+        unsafe { FreeLibrary(self.0) };
+    }
+}
+
+type GetMachineTypeAttributesFuncType =
+    unsafe extern "system" fn(u16, *mut MACHINE_ATTRIBUTES) -> i32;
+const _: () = {
+    // Ensure that our hand-written signature matches the actual function signature.
+    // We can't use `GetMachineTypeAttributes` outside of a const scope otherwise we'll end up statically linking to
+    // it, which will fail to load on older versions of Windows.
+    let _: GetMachineTypeAttributesFuncType = GetMachineTypeAttributes;
+};
+
+fn is_arch_supported_inner(arch: IMAGE_FILE_MACHINE) -> Option<bool> {
+    // GetMachineTypeAttributes is only available on Win11 22000+, so dynamically load it.
+    let kernel32 = LibraryHandle::new(b"kernel32.dll\0")?;
+    // SAFETY: GetMachineTypeAttributesFuncType is checked to match the real function signature.
+    let get_machine_type_attributes = unsafe {
+        kernel32.get_proc_address::<GetMachineTypeAttributesFuncType>(b"GetMachineTypeAttributes\0")
+    }?;
+
+    let mut machine_attributes = mem::MaybeUninit::uninit();
+    if unsafe { get_machine_type_attributes(arch, machine_attributes.as_mut_ptr()) } == S_OK {
+        let machine_attributes = unsafe { machine_attributes.assume_init() };
+        Some((machine_attributes & (Wow64Container | UserEnabled)) != 0)
+    } else {
+        Some(false)
+    }
 }
 
 fn is_arch_supported(arch: IMAGE_FILE_MACHINE) -> bool {
-    let mut machine_attributes = mem::MaybeUninit::uninit();
-
-    // SAFETY: GetMachineTypeAttributes takes type IMAGE_FILE_MACHINE
-    // plus it takes a pointer to machine_attributes which is only
-    // written to.
-    match unsafe { GetMachineTypeAttributes(arch, machine_attributes.as_mut_ptr()) } {
-        Ok(0) => {
-            // SAFETY: Symbol GetMachineTypeAttributes exists and calls to it
-            // succceeds.
-            //
-            // Thus, machine_attributes is initialized.
-            let machine_attributes = unsafe { machine_attributes.assume_init() };
-
-            (machine_attributes & (Wow64Container | UserEnabled)) != 0
-        }
-        _ => false,
-    }
+    is_arch_supported_inner(arch).unwrap_or(false)
 }
 
 pub(super) fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
