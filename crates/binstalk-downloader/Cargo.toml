@@ -18,7 +18,7 @@ async-compression = { version = "0.4.4", features = [
     "bzip2",
     "tokio",
 ] }
-async_zip = { version = "0.0.16", features = [
+async_zip = { version = "0.0.17", features = [
     "deflate",
     "deflate64",
     "bzip2",
