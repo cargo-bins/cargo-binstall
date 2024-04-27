@@ -31,7 +31,7 @@ binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
 compact_str = "0.7.0"
-flate2 = { version = "1.0.28", default-features = false }
+flate2 = { version = "1.0.29", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
