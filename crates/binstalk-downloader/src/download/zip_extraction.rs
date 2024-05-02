@@ -142,7 +142,7 @@ where
     Ok(())
 }
 
-async fn copy_file_to_mpsc<R: AsyncRead>(
+async fn copy_file_to_mpsc<R>(
     mut entry_reader: R,
     tx: mpsc::Sender<Bytes>,
     buf: &mut BytesMut,

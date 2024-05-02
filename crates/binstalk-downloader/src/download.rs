@@ -143,7 +143,7 @@ impl<'a> Download<'a> {
     async fn get_stream(
         self,
     ) -> Result<
-        impl Stream<Item = Result<Bytes, DownloadError>> + FusedStream + Send + Sync + Unpin + 'a,
+        impl FusedStream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'a,
         DownloadError,
     > {
         let mut data_verifier = self.data_verifier;
