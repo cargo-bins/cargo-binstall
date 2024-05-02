@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
