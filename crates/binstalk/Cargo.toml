@@ -11,7 +11,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 binstalk-bins = { version = "0.4.0", path = "../binstalk-bins" }
-binstalk-downloader = { version = "0.10.1", path = "../binstalk-downloader", default-features = false, features = [
+binstalk-downloader = { version = "0.10.2", path = "../binstalk-downloader", default-features = false, features = [
     "gh-api-client",
 ] }
 binstalk-fetchers = { version = "0.4.0", path = "../binstalk-fetchers", features = [
