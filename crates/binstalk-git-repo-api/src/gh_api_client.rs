@@ -8,13 +8,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+use binstalk_downloader::remote;
 use compact_str::CompactString;
 use percent_encoding::{
     percent_decode_str, utf8_percent_encode, AsciiSet, PercentEncode, CONTROLS,
 };
 use tokio::sync::OnceCell;
-
-use crate::remote;
 
 mod request;
 pub use request::{GhApiContextError, GhApiError, GhGraphQLErrors};

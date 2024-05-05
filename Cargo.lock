@@ -246,6 +246,7 @@ dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
  "binstalk-fetchers",
+ "binstalk-git-repo-api",
  "binstalk-registry",
  "binstalk-types",
  "cargo-toml-workspace",
@@ -303,10 +304,8 @@ dependencies = [
  "httpdate",
  "ipconfig",
  "once_cell",
- "percent-encoding",
  "reqwest",
  "serde",
- "serde-tuple-vec-map",
  "serde_json",
  "tempfile",
  "thiserror",
@@ -325,6 +324,7 @@ version = "0.4.0"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
+ "binstalk-git-repo-api",
  "binstalk-types",
  "bytes",
  "compact_str",
@@ -336,6 +336,22 @@ dependencies = [
  "minisign-verify",
  "once_cell",
  "strum",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "binstalk-git-repo-api"
+version = "0.1.0"
+dependencies = [
+ "binstalk-downloader",
+ "compact_str",
+ "percent-encoding",
+ "serde",
+ "serde-tuple-vec-map",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

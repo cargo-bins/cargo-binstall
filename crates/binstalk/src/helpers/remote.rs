@@ -1,13 +1,13 @@
 pub use binstalk_downloader::remote::*;
 pub use url::ParseError as UrlParseError;
 
-use binstalk_downloader::gh_api_client::{GhApiClient, GhReleaseArtifact, HasReleaseArtifact};
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Once,
 };
 use tracing::{debug, warn};
 
+use super::gh_api_client::{GhApiClient, GhReleaseArtifact, HasReleaseArtifact};
 use crate::errors::BinstallError;
 
 /// This function returns a future where its size should be at most size of

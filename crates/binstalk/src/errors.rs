@@ -4,9 +4,7 @@ use std::{
     process::{ExitCode, ExitStatus, Termination},
 };
 
-use binstalk_downloader::{
-    download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
-};
+use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_fetchers::FetchError;
 use compact_str::CompactString;
 use itertools::Itertools;
@@ -19,7 +17,8 @@ use tracing::{error, warn};
 use crate::{
     bins,
     helpers::{
-        cargo_toml::Error as CargoTomlError, cargo_toml_workspace::Error as LoadManifestFromWSError,
+        cargo_toml::Error as CargoTomlError,
+        cargo_toml_workspace::Error as LoadManifestFromWSError, gh_api_client::GhApiError,
     },
     registry::{InvalidRegistryError, RegistryError},
 };

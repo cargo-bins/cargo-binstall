@@ -2,9 +2,8 @@
 
 use std::{path::Path, sync::Arc};
 
-use binstalk_downloader::{
-    download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
-};
+use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
+use binstalk_git_repo_api::gh_api_client::GhApiError;
 use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
 use tokio::sync::OnceCell;

@@ -8,13 +8,12 @@ use std::{
     time::Duration,
 };
 
+use binstalk_downloader::remote::{header::HeaderMap, StatusCode, Url};
 use compact_str::{CompactString, ToCompactString};
-use reqwest::{header::HeaderMap, StatusCode};
 use serde::{de::Deserializer, Deserialize, Serialize};
 use serde_json::to_string as to_json_string;
 use thiserror::Error as ThisError;
 use tracing::debug;
-use url::Url;
 
 use super::{percent_encode_http_url_path, remote, GhRelease};
 
