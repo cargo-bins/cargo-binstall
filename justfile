@@ -219,7 +219,7 @@ check: print-env
     {{cargo-bin}} check -p cargo-binstall --no-default-features --features rustls {{cargo-check-args}} --profile check-only
     cargo-hack hack check -p binstalk-downloader \
         --feature-powerset \
-        --include-features default,json,gh-api-client \
+        --include-features default,json \
         --profile check-only \
         {{cargo-check-args}}
 
