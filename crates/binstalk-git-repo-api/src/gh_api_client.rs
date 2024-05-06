@@ -16,7 +16,9 @@ use percent_encoding::{
 use tokio::sync::OnceCell;
 
 mod request;
-pub use request::{GhApiContextError, GhApiError, GhGraphQLErrors};
+
+mod error;
+pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
