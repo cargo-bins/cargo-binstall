@@ -223,14 +223,10 @@ impl GhApiClient {
             .await;
 
         match res {
-            Ok(Some(artifacts)) => {
-                let has_artifact = artifacts.contains(&artifact_name);
-                Ok(if has_artifact {
-                    HasReleaseArtifact::Yes
-                } else {
-                    HasReleaseArtifact::No
-                })
-            }
+            Ok(Some(artifacts)) => Ok(artifacts
+                .get_artifact_url(&artifact_name)
+                .map(|url| HasReleaseArtifact::Yes { url })
+                .unwrap_or(HasReleaseArtifact::No)),
             Ok(None) => Ok(HasReleaseArtifact::NoSuchRelease),
             Err(Error::Unauthorized) => Ok(HasReleaseArtifact::Unauthorized),
             Err(Error::RateLimit { retry_after }) => {
@@ -243,9 +239,12 @@ impl GhApiClient {
     }
 }
 
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub enum HasReleaseArtifact {
-    Yes,
+    Yes {
+        /// get url for downloading the artifact using GitHub API (for private repository).
+        url: CompactString,
+    },
     No,
     NoSuchRelease,
     /// GitHub returns 401 requiring a token.
@@ -399,7 +398,7 @@ mod test {
                 assert!(
                     matches!(
                         ret,
-                        HasReleaseArtifact::Yes | HasReleaseArtifact::RateLimit { .. }
+                        HasReleaseArtifact::Yes { .. } | HasReleaseArtifact::RateLimit { .. }
                     ),
                     "for '{artifact_name}': answer is {:#?}",
                     ret

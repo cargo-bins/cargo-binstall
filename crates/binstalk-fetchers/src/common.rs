@@ -35,7 +35,7 @@ pub(super) async fn does_url_exist(
 
             // The future returned has the same size as a pointer
             match gh_api_client.has_release_artifact(artifact).await? {
-                HasReleaseArtifact::Yes => return Ok(true),
+                HasReleaseArtifact::Yes { .. } => return Ok(true),
                 HasReleaseArtifact::No | HasReleaseArtifact::NoSuchRelease => return Ok(false),
 
                 HasReleaseArtifact::RateLimit { retry_after } => {

@@ -20,6 +20,7 @@ use super::{percent_encode_http_url_path, remote, GhApiError, GhGraphQLErrors, G
 #[derive(Eq, Deserialize, Debug)]
 struct Artifact {
     name: CompactString,
+    url: CompactString,
 }
 
 // Manually implement PartialEq and Hash to ensure it will always produce the
@@ -57,8 +58,11 @@ pub(super) struct Artifacts {
 }
 
 impl Artifacts {
-    pub(super) fn contains(&self, artifact_name: &str) -> bool {
-        self.assets.contains(artifact_name)
+    /// get url for downloading the artifact using GitHub API (for private repository).
+    pub(super) fn get_artifact_url(&self, artifact_name: &str) -> Option<CompactString> {
+        self.assets
+            .get(artifact_name)
+            .map(|artifact| artifact.url.clone())
     }
 }
 
@@ -201,7 +205,10 @@ query {{
   repository(owner:"{owner}",name:"{repo}") {{
     release(tagName:"{tag}") {{
       releaseAssets({cond}) {{
-        nodes {{ name }}
+        nodes {{
+          name
+          url
+        }}
         pageInfo {{ endCursor hasNextPage }}
       }}
     }}
