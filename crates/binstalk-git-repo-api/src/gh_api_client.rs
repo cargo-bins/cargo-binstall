@@ -15,7 +15,7 @@ use percent_encoding::{
 };
 use tokio::sync::OnceCell;
 
-mod request;
+mod release_artifacts;
 
 mod error;
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
@@ -120,7 +120,7 @@ where
 #[derive(Debug)]
 struct Inner {
     client: remote::Client,
-    release_artifacts: Map<GhRelease, OnceCell<Option<request::Artifacts>>>,
+    release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
     retry_after: Mutex<Option<Instant>>,
 
     auth_token: Option<CompactString>,
@@ -156,11 +156,12 @@ impl GhApiClient {
         &self,
         release: &GhRelease,
         auth_token: Option<&str>,
-    ) -> Result<Option<request::Artifacts>, FetchReleaseArtifactError> {
-        use request::FetchReleaseRet::*;
+    ) -> Result<Option<release_artifacts::Artifacts>, FetchReleaseArtifactError> {
+        use release_artifacts::FetchReleaseRet::*;
         use FetchReleaseArtifactError as Error;
 
-        match request::fetch_release_artifacts(&self.0.client, release, auth_token).await {
+        match release_artifacts::fetch_release_artifacts(&self.0.client, release, auth_token).await
+        {
             Ok(ReleaseNotFound) => Ok(None),
             Ok(Artifacts(artifacts)) => Ok(Some(artifacts)),
             Ok(ReachedRateLimit { retry_after }) => {
