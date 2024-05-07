@@ -139,7 +139,6 @@ struct GraphQLLocation {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::gh_api_client::error::GraphQLErrorType;
     use serde::de::value::{BorrowedStrDeserializer, Error};
 
     macro_rules! assert_matches {
