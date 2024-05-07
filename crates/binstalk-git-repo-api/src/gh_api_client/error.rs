@@ -135,3 +135,37 @@ struct GraphQLLocation {
     line: u64,
     column: u64,
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::gh_api_client::error::GraphQLErrorType;
+    use serde::de::value::{BorrowedStrDeserializer, Error};
+
+    macro_rules! assert_matches {
+        ($expression:expr, $pattern:pat $(if $guard:expr)? $(,)?) => {
+            match $expression {
+                $pattern $(if $guard)? => true,
+                expr => {
+                    panic!(
+                        "assertion failed: `{expr:?}` does not match `{}`",
+                        stringify!($pattern $(if $guard)?)
+                    )
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_graph_ql_error_type() {
+        let deserialize = |input: &str| {
+            GraphQLErrorType::deserialize(BorrowedStrDeserializer::<'_, Error>::new(input)).unwrap()
+        };
+
+        assert_matches!(deserialize("RATE_LIMITED"), GraphQLErrorType::RateLimited);
+        assert_matches!(
+            deserialize("rATE_LIMITED"),
+            GraphQLErrorType::Other(val) if val == CompactString::new("rATE_LIMITED")
+        );
+    }
+}
