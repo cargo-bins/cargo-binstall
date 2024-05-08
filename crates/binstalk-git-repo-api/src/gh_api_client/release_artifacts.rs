@@ -3,17 +3,16 @@ use std::{
     collections::HashSet,
     fmt,
     hash::{Hash, Hasher},
-    sync::OnceLock,
-    time::Duration,
 };
 
-use binstalk_downloader::remote::{header::HeaderMap, StatusCode, Url};
+use binstalk_downloader::remote::{self, header::HeaderMap, StatusCode, Url};
 use compact_str::CompactString;
-use serde::{Deserialize, Serialize};
-use serde_json::to_string as to_json_string;
-use tracing::debug;
+use serde::Deserialize;
 
-use super::{percent_encode_http_url_path, remote, GhApiError, GhGraphQLErrors, GhRelease};
+use super::{
+    common::{self, issue_graphql_query, percent_encode_http_url_path, GraphQLResult},
+    GhApiError, GhRelease,
+};
 
 // Only include fields we do care about
 
@@ -66,34 +65,10 @@ impl Artifacts {
     }
 }
 
-pub(super) enum FetchReleaseRet {
-    ReachedRateLimit { retry_after: Option<Duration> },
-    ReleaseNotFound,
-    Artifacts(Artifacts),
-    Unauthorized,
-}
+pub(super) type FetchReleaseRet = common::GhApiRet<Artifacts>;
 
 fn check_for_status(status: StatusCode, headers: &HeaderMap) -> Option<FetchReleaseRet> {
-    match status {
-        remote::StatusCode::FORBIDDEN
-            if headers
-                .get("x-ratelimit-remaining")
-                .map(|val| val == "0")
-                .unwrap_or(false) =>
-        {
-            Some(FetchReleaseRet::ReachedRateLimit {
-                retry_after: headers.get("x-ratelimit-reset").and_then(|value| {
-                    let secs = value.to_str().ok()?.parse().ok()?;
-                    Some(Duration::from_secs(secs))
-                }),
-            })
-        }
-
-        remote::StatusCode::UNAUTHORIZED => Some(FetchReleaseRet::Unauthorized),
-        remote::StatusCode::NOT_FOUND => Some(FetchReleaseRet::ReleaseNotFound),
-
-        _ => None,
-    }
+    common::check_for_status(status, headers)
 }
 
 async fn fetch_release_artifacts_restful_api(
@@ -120,17 +95,8 @@ async fn fetch_release_artifacts_restful_api(
     if let Some(ret) = check_for_status(response.status(), response.headers()) {
         Ok(ret)
     } else {
-        Ok(FetchReleaseRet::Artifacts(response.json().await?))
+        Ok(FetchReleaseRet::Success(response.json().await?))
     }
-}
-
-#[derive(Deserialize)]
-enum GraphQLResponse {
-    #[serde(rename = "data")]
-    Data(GraphQLData),
-
-    #[serde(rename = "errors")]
-    Errors(GhGraphQLErrors),
 }
 
 #[derive(Deserialize)]
@@ -179,22 +145,11 @@ impl fmt::Display for FilterCondition {
     }
 }
 
-#[derive(Serialize)]
-struct GraphQLQuery {
-    query: String,
-}
-
 async fn fetch_release_artifacts_graphql_api(
     client: &remote::Client,
     GhRelease { owner, repo, tag }: &GhRelease,
     auth_token: &str,
 ) -> Result<FetchReleaseRet, GhApiError> {
-    static GRAPHQL_ENDPOINT: OnceLock<Url> = OnceLock::new();
-
-    let graphql_endpoint = GRAPHQL_ENDPOINT.get_or_init(|| {
-        Url::parse("https://api.github.com/graphql").expect("Literal provided must be a valid url")
-    });
-
     let mut artifacts = Artifacts::default();
     let mut cond = FilterCondition::Init;
 
@@ -216,29 +171,9 @@ query {{
 }}"#
         );
 
-        let graphql_query = to_json_string(&GraphQLQuery { query }).map_err(remote::Error::from)?;
-
-        debug!("Sending graphql query to https://api.github.com/graphql: '{graphql_query}'");
-
-        let request_builder = client
-            .post(graphql_endpoint.clone(), graphql_query)
-            .header("Accept", "application/vnd.github+json")
-            .bearer_auth(&auth_token);
-
-        let response = request_builder.send(false).await?;
-
-        if let Some(ret) = check_for_status(response.status(), response.headers()) {
-            return Ok(ret);
-        }
-
-        let response: GraphQLResponse = response.json().await?;
-
-        let data = match response {
-            GraphQLResponse::Data(data) => data,
-            GraphQLResponse::Errors(errors) if errors.is_rate_limited() => {
-                return Ok(FetchReleaseRet::ReachedRateLimit { retry_after: None })
-            }
-            GraphQLResponse::Errors(errors) => return Err(errors.into()),
+        let data: GraphQLData = match issue_graphql_query(client, query, auth_token).await? {
+            GraphQLResult::Data(data) => data,
+            GraphQLResult::Else(ret) => return Ok(ret),
         };
 
         let assets = data
@@ -256,10 +191,10 @@ query {{
                 } => {
                     cond = FilterCondition::After(end_cursor);
                 }
-                _ => break Ok(FetchReleaseRet::Artifacts(artifacts)),
+                _ => break Ok(FetchReleaseRet::Success(artifacts)),
             }
         } else {
-            break Ok(FetchReleaseRet::ReleaseNotFound);
+            break Ok(FetchReleaseRet::NotFound);
         }
     }
 }

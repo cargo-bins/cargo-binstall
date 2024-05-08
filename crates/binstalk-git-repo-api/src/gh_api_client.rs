@@ -9,44 +9,29 @@ use std::{
 };
 
 use binstalk_downloader::remote;
-use compact_str::CompactString;
-use percent_encoding::{
-    percent_decode_str, utf8_percent_encode, AsciiSet, PercentEncode, CONTROLS,
-};
+use compact_str::{format_compact, CompactString};
 use tokio::sync::OnceCell;
 
-mod release_artifacts;
-
+mod common;
 mod error;
+mod release_artifacts;
+mod repo_info;
+
+use common::percent_decode_http_url_path;
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
+pub use repo_info::RepoInfo;
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
 
-fn percent_encode_http_url_path(path: &str) -> PercentEncode<'_> {
-    /// https://url.spec.whatwg.org/#fragment-percent-encode-set
-    const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
-
-    /// https://url.spec.whatwg.org/#path-percent-encode-set
-    const PATH: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
-
-    const PATH_SEGMENT: &AsciiSet = &PATH.add(b'/').add(b'%');
-
-    // The backslash (\) character is treated as a path separator in special URLs
-    // so it needs to be additionally escaped in that case.
-    //
-    // http is considered to have special path.
-    const SPECIAL_PATH_SEGMENT: &AsciiSet = &PATH_SEGMENT.add(b'\\');
-
-    utf8_percent_encode(path, SPECIAL_PATH_SEGMENT)
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct GhRepo {
+    pub owner: CompactString,
+    pub repo: CompactString,
 }
-
-fn percent_decode_http_url_path(input: &str) -> CompactString {
-    if input.contains('%') {
-        percent_decode_str(input).decode_utf8_lossy().into()
-    } else {
-        // No '%', no need to decode.
-        CompactString::new(input)
+impl GhRepo {
+    pub fn repo_url(&self) -> CompactString {
+        format_compact!("https://github.com/{}/{}", self.owner, self.repo)
     }
 }
 
@@ -157,13 +142,13 @@ impl GhApiClient {
         release: &GhRelease,
         auth_token: Option<&str>,
     ) -> Result<Option<release_artifacts::Artifacts>, FetchReleaseArtifactError> {
-        use release_artifacts::FetchReleaseRet::*;
+        use common::GhApiRet::*;
         use FetchReleaseArtifactError as Error;
 
         match release_artifacts::fetch_release_artifacts(&self.0.client, release, auth_token).await
         {
-            Ok(ReleaseNotFound) => Ok(None),
-            Ok(Artifacts(artifacts)) => Ok(Some(artifacts)),
+            Ok(NotFound) => Ok(None),
+            Ok(Success(artifacts)) => Ok(Some(artifacts)),
             Ok(ReachedRateLimit { retry_after }) => {
                 let retry_after = retry_after.unwrap_or(DEFAULT_RETRY_DURATION);
 
