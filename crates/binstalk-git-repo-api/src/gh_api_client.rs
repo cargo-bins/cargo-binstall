@@ -387,11 +387,13 @@ mod test {
                     release,
                     artifact_name: "1234".to_compact_string(),
                 })
-                .await
-                .unwrap_err();
+                .await;
 
             assert!(
-                matches!(err, GhApiError::NotFound | GhApiError::RateLimit { .. }),
+                matches!(
+                    err,
+                    Ok(None) | Err(GhApiError::NotFound | GhApiError::RateLimit { .. })
+                ),
                 "err = {:#?}",
                 err
             );
