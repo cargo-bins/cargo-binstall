@@ -38,8 +38,7 @@ impl GhRepo {
 /// The keys required to identify a github release.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct GhRelease {
-    pub owner: CompactString,
-    pub repo: CompactString,
+    pub repo: GhRepo,
     pub tag: CompactString,
 }
 
@@ -72,8 +71,10 @@ impl GhReleaseArtifact {
         (path_segments.next().is_none() && url.fragment().is_none() && url.query().is_none()).then(
             || Self {
                 release: GhRelease {
-                    owner: percent_decode_http_url_path(owner),
-                    repo: percent_decode_http_url_path(repo),
+                    repo: GhRepo {
+                        owner: percent_decode_http_url_path(owner),
+                        repo: percent_decode_http_url_path(repo),
+                    },
                     tag: percent_decode_http_url_path(tag),
                 },
                 artifact_name: percent_decode_http_url_path(artifact_name),
@@ -211,11 +212,13 @@ mod test {
     use std::{env, num::NonZeroU16};
 
     mod cargo_binstall_v0_20_1 {
-        use super::{CompactString, GhRelease};
+        use super::{CompactString, GhRelease, GhRepo};
 
         pub(super) const RELEASE: GhRelease = GhRelease {
-            owner: CompactString::new_inline("cargo-bins"),
-            repo: CompactString::new_inline("cargo-binstall"),
+            repo: GhRepo {
+                owner: CompactString::new_inline("cargo-bins"),
+                repo: CompactString::new_inline("cargo-binstall"),
+            },
             tag: CompactString::new_inline("v0.20.1"),
         };
 
@@ -259,7 +262,10 @@ mod test {
     fn extract_gh_release_artifacts_failure() {
         use cargo_binstall_v0_20_1::*;
 
-        let GhRelease { owner, repo, tag } = RELEASE;
+        let GhRelease {
+            repo: GhRepo { owner, repo },
+            tag,
+        } = RELEASE;
 
         assert_extract_gh_release_artifacts_failures(&[
             "https://examle.com",
@@ -280,7 +286,10 @@ mod test {
     fn extract_gh_release_artifacts_success() {
         use cargo_binstall_v0_20_1::*;
 
-        let GhRelease { owner, repo, tag } = RELEASE;
+        let GhRelease {
+            repo: GhRepo { owner, repo },
+            tag,
+        } = RELEASE;
 
         for artifact in ARTIFACTS {
             let GhReleaseArtifact {
@@ -364,8 +373,10 @@ mod test {
     async fn test_gh_api_client_cargo_binstall_no_such_release() {
         for client in create_client().await {
             let release = GhRelease {
-                owner: "cargo-bins".to_compact_string(),
-                repo: "cargo-binstall".to_compact_string(),
+                repo: GhRepo {
+                    owner: "cargo-bins".to_compact_string(),
+                    repo: "cargo-binstall".to_compact_string(),
+                },
                 // We are currently at v0.20.1 and we would never release
                 // anything older than v0.20.1
                 tag: "v0.18.2".to_compact_string(),
@@ -391,8 +402,10 @@ mod test {
         use super::*;
 
         const RELEASE: GhRelease = GhRelease {
-            owner: CompactString::new_inline("rustsec"),
-            repo: CompactString::new_inline("rustsec"),
+            repo: GhRepo {
+                owner: CompactString::new_inline("rustsec"),
+                repo: CompactString::new_inline("rustsec"),
+            },
             tag: CompactString::new_inline("cargo-audit/v0.17.6"),
         };
 

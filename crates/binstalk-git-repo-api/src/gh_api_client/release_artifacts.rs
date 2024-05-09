@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use super::{
     common::{issue_graphql_query, issue_restful_api, percent_encode_http_url_path},
-    GhApiError, GhRelease,
+    GhApiError, GhRelease, GhRepo,
 };
 
 // Only include fields we do care about
@@ -67,7 +67,10 @@ impl Artifacts {
 
 async fn fetch_release_artifacts_restful_api(
     client: &remote::Client,
-    GhRelease { owner, repo, tag }: &GhRelease,
+    GhRelease {
+        repo: GhRepo { owner, repo },
+        tag,
+    }: &GhRelease,
     auth_token: Option<&str>,
 ) -> Result<Artifacts, GhApiError> {
     issue_restful_api(
@@ -131,7 +134,10 @@ impl fmt::Display for FilterCondition {
 
 async fn fetch_release_artifacts_graphql_api(
     client: &remote::Client,
-    GhRelease { owner, repo, tag }: &GhRelease,
+    GhRelease {
+        repo: GhRepo { owner, repo },
+        tag,
+    }: &GhRelease,
     auth_token: &str,
 ) -> Result<Artifacts, GhApiError> {
     let mut artifacts = Artifacts::default();
