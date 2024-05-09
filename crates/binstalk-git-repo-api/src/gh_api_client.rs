@@ -130,40 +130,22 @@ impl GhApiClient {
     }
 }
 
-enum FetchReleaseArtifactError {
-    Error(GhApiError),
-    RateLimit { retry_after: Instant },
-    Unauthorized,
-}
-
 impl GhApiClient {
     async fn do_fetch_release_artifacts(
         &self,
         release: &GhRelease,
         auth_token: Option<&str>,
-    ) -> Result<Option<release_artifacts::Artifacts>, FetchReleaseArtifactError> {
-        use common::GhApiRet::*;
-        use FetchReleaseArtifactError as Error;
-
+    ) -> Result<Option<release_artifacts::Artifacts>, GhApiError> {
         match release_artifacts::fetch_release_artifacts(&self.0.client, release, auth_token).await
         {
-            Ok(NotFound) => Ok(None),
-            Ok(Success(artifacts)) => Ok(Some(artifacts)),
-            Ok(ReachedRateLimit { retry_after }) => {
-                let retry_after = retry_after.unwrap_or(DEFAULT_RETRY_DURATION);
-
-                let now = Instant::now();
-                let retry_after = now
-                    .checked_add(retry_after)
-                    .unwrap_or_else(|| now + DEFAULT_RETRY_DURATION);
-
-                Err(Error::RateLimit { retry_after })
-            }
-            Ok(Unauthorized) => Err(Error::Unauthorized),
-            Err(err) => Err(Error::Error(err)),
+            Ok(artifacts) => Ok(Some(artifacts)),
+            Err(GhApiError::NotFound) => Ok(None),
+            Err(err) => Err(err),
         }
     }
 
+    /// Return `Ok(Some(api_artifact_url))` if exists.
+    ///
     /// The returned future is guaranteed to be pointer size.
     pub async fn has_release_artifact(
         &self,
@@ -171,9 +153,7 @@ impl GhApiClient {
             release,
             artifact_name,
         }: GhReleaseArtifact,
-    ) -> Result<HasReleaseArtifact, GhApiError> {
-        use FetchReleaseArtifactError as Error;
-
+    ) -> Result<Option<CompactString>, GhApiError> {
         let once_cell = self.0.release_artifacts.get(release.clone());
         let res = once_cell
             .get_or_try_init(|| {
@@ -183,7 +163,9 @@ impl GhApiClient {
 
                         if let Some(retry_after) = *guard {
                             if retry_after.elapsed().is_zero() {
-                                return Err(Error::RateLimit { retry_after });
+                                return Err(GhApiError::RateLimit {
+                                    retry_after: Some(retry_after - Instant::now()),
+                                });
                             } else {
                                 // Instant retry_after is already reached.
                                 *guard = None;
@@ -196,7 +178,7 @@ impl GhApiClient {
                             .do_fetch_release_artifacts(&release, self.0.auth_token.as_deref())
                             .await
                         {
-                            Err(Error::Unauthorized) => {
+                            Err(GhApiError::Unauthorized) => {
                                 self.0.is_auth_token_valid.store(false, Relaxed);
                             }
                             res => return res,
@@ -209,50 +191,17 @@ impl GhApiClient {
             .await;
 
         match res {
-            Ok(Some(artifacts)) => Ok(artifacts
-                .get_artifact_url(&artifact_name)
-                .map(|url| HasReleaseArtifact::Yes { url })
-                .unwrap_or(HasReleaseArtifact::No)),
-            Ok(None) => Ok(HasReleaseArtifact::NoSuchRelease),
-            Err(Error::Unauthorized) => Ok(HasReleaseArtifact::Unauthorized),
-            Err(Error::RateLimit { retry_after }) => {
-                *self.0.retry_after.lock().unwrap() = Some(retry_after);
+            Ok(Some(artifacts)) => Ok(artifacts.get_artifact_url(&artifact_name)),
+            Ok(None) => Ok(None),
+            Err(GhApiError::RateLimit { retry_after }) => {
+                *self.0.retry_after.lock().unwrap() =
+                    Some(Instant::now() + retry_after.unwrap_or(DEFAULT_RETRY_DURATION));
 
-                Ok(HasReleaseArtifact::RateLimit { retry_after })
+                Err(GhApiError::RateLimit { retry_after })
             }
-            Err(Error::Error(err)) => Err(err),
+            Err(err) => Err(err),
         }
     }
-}
-
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub enum HasReleaseArtifact {
-    Yes {
-        /// get url for downloading the artifact using GitHub API (for private repository).
-        url: CompactString,
-    },
-    No,
-    NoSuchRelease,
-    /// GitHub returns 401 requiring a token.
-    /// In this case, it makes sense to fallback to HEAD/GET.
-    Unauthorized,
-
-    /// GitHub rate limit is applied per hour, so in case of reaching the rate
-    /// limit, [`GhApiClient`] will return this variant and let the user decide
-    /// what to do.
-    ///
-    /// Usually it is more sensible to fallback to directly HEAD/GET the
-    /// artifact url than waiting until `retry_after`.
-    ///
-    /// If you encounter this frequently, then you should consider getting an
-    /// authentication token (can be personal access or oath access token),
-    /// which should give you 5000 requests per hour per user.
-    ///
-    /// Rate limit for unauthorized user is 60 requests per hour per originating
-    /// IP address, so it is very easy to be rate limited.
-    RateLimit {
-        retry_after: Instant,
-    },
 }
 
 #[cfg(test)]
@@ -373,39 +322,31 @@ mod test {
             eprintln!("In client {client:?}");
 
             for artifact_name in artifacts {
-                let ret = client
+                let res = client
                     .has_release_artifact(GhReleaseArtifact {
                         release: release.clone(),
                         artifact_name: artifact_name.to_compact_string(),
                     })
-                    .await
-                    .unwrap();
+                    .await;
 
                 assert!(
-                    matches!(
-                        ret,
-                        HasReleaseArtifact::Yes { .. } | HasReleaseArtifact::RateLimit { .. }
-                    ),
+                    matches!(res, Ok(Some(_)) | Err(GhApiError::RateLimit { .. })),
                     "for '{artifact_name}': answer is {:#?}",
-                    ret
+                    res
                 );
             }
 
-            let ret = client
+            let res = client
                 .has_release_artifact(GhReleaseArtifact {
                     release: release.clone(),
                     artifact_name: "123z".to_compact_string(),
                 })
-                .await
-                .unwrap();
+                .await;
 
             assert!(
-                matches!(
-                    ret,
-                    HasReleaseArtifact::No | HasReleaseArtifact::RateLimit { .. }
-                ),
-                "ret = {:#?}",
-                ret
+                matches!(res, Ok(None) | Err(GhApiError::RateLimit { .. })),
+                "res = {:#?}",
+                res
             );
         }
     }
@@ -430,21 +371,18 @@ mod test {
                 tag: "v0.18.2".to_compact_string(),
             };
 
-            let ret = client
+            let err = client
                 .has_release_artifact(GhReleaseArtifact {
                     release,
                     artifact_name: "1234".to_compact_string(),
                 })
                 .await
-                .unwrap();
+                .unwrap_err();
 
             assert!(
-                matches!(
-                    ret,
-                    HasReleaseArtifact::NoSuchRelease | HasReleaseArtifact::RateLimit { .. }
-                ),
-                "ret = {:#?}",
-                ret
+                matches!(err, GhApiError::NotFound | GhApiError::RateLimit { .. }),
+                "err = {:#?}",
+                err
             );
         }
     }

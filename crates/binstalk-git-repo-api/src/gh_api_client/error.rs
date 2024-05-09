@@ -1,4 +1,4 @@
-use std::{error, fmt, io};
+use std::{error, fmt, io, time::Duration};
 
 use binstalk_downloader::remote;
 use compact_str::{CompactString, ToCompactString};
@@ -31,15 +31,30 @@ pub enum GhApiError {
 
     #[error("Remote failed to process GraphQL query: {0}")]
     GraphQLErrors(#[from] GhGraphQLErrors),
+
+    #[error("Hit rate-limit, retry after {retry_after:?}")]
+    RateLimit { retry_after: Option<Duration> },
+
+    #[error("Corresponding resource is not found")]
+    NotFound,
+
+    #[error("Does not have permission to access the API")]
+    Unauthorized,
 }
 
 impl GhApiError {
     /// Attach context to [`GhApiError`]
     pub fn context(self, context: impl fmt::Display) -> Self {
-        Self::Context(Box::new(GhApiContextError {
-            context: context.to_compact_string(),
-            err: self,
-        }))
+        use GhApiError::*;
+
+        if matches!(self, RateLimit { .. } | NotFound | Unauthorized) {
+            self
+        } else {
+            Self::Context(Box::new(GhApiContextError {
+                context: context.to_compact_string(),
+                err: self,
+            }))
+        }
     }
 }
 

@@ -5,12 +5,12 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use binstalk_downloader::remote::{self, header::HeaderMap, StatusCode, Url};
+use binstalk_downloader::remote::{self};
 use compact_str::CompactString;
 use serde::Deserialize;
 
 use super::{
-    common::{self, issue_graphql_query, percent_encode_http_url_path, GraphQLResult},
+    common::{issue_graphql_query, issue_restful_api, percent_encode_http_url_path},
     GhApiError, GhRelease,
 };
 
@@ -65,38 +65,22 @@ impl Artifacts {
     }
 }
 
-pub(super) type FetchReleaseRet = common::GhApiRet<Artifacts>;
-
-fn check_for_status(status: StatusCode, headers: &HeaderMap) -> Option<FetchReleaseRet> {
-    common::check_for_status(status, headers)
-}
-
 async fn fetch_release_artifacts_restful_api(
     client: &remote::Client,
     GhRelease { owner, repo, tag }: &GhRelease,
     auth_token: Option<&str>,
-) -> Result<FetchReleaseRet, GhApiError> {
-    let mut request_builder = client
-        .get(Url::parse(&format!(
-            "https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag}",
+) -> Result<Artifacts, GhApiError> {
+    issue_restful_api(
+        client,
+        format!(
+            "repos/{owner}/{repo}/releases/tags/{tag}",
             owner = percent_encode_http_url_path(owner),
             repo = percent_encode_http_url_path(repo),
             tag = percent_encode_http_url_path(tag),
-        ))?)
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28");
-
-    if let Some(auth_token) = auth_token {
-        request_builder = request_builder.bearer_auth(&auth_token);
-    }
-
-    let response = request_builder.send(false).await?;
-
-    if let Some(ret) = check_for_status(response.status(), response.headers()) {
-        Ok(ret)
-    } else {
-        Ok(FetchReleaseRet::Success(response.json().await?))
-    }
+        ),
+        auth_token,
+    )
+    .await
 }
 
 #[derive(Deserialize)]
@@ -149,7 +133,7 @@ async fn fetch_release_artifacts_graphql_api(
     client: &remote::Client,
     GhRelease { owner, repo, tag }: &GhRelease,
     auth_token: &str,
-) -> Result<FetchReleaseRet, GhApiError> {
+) -> Result<Artifacts, GhApiError> {
     let mut artifacts = Artifacts::default();
     let mut cond = FilterCondition::Init;
 
@@ -171,10 +155,7 @@ query {{
 }}"#
         );
 
-        let data: GraphQLData = match issue_graphql_query(client, query, auth_token).await? {
-            GraphQLResult::Data(data) => data,
-            GraphQLResult::Else(ret) => return Ok(ret),
-        };
+        let data: GraphQLData = issue_graphql_query(client, query, auth_token).await?;
 
         let assets = data
             .repository
@@ -191,10 +172,10 @@ query {{
                 } => {
                     cond = FilterCondition::After(end_cursor);
                 }
-                _ => break Ok(FetchReleaseRet::Success(artifacts)),
+                _ => break Ok(artifacts),
             }
         } else {
-            break Ok(FetchReleaseRet::NotFound);
+            break Err(GhApiError::NotFound);
         }
     }
 }
@@ -203,7 +184,7 @@ pub(super) async fn fetch_release_artifacts(
     client: &remote::Client,
     release: &GhRelease,
     auth_token: Option<&str>,
-) -> Result<FetchReleaseRet, GhApiError> {
+) -> Result<Artifacts, GhApiError> {
     if let Some(auth_token) = auth_token {
         let res = fetch_release_artifacts_graphql_api(client, release, auth_token)
             .await
@@ -211,7 +192,7 @@ pub(super) async fn fetch_release_artifacts(
 
         match res {
             // Fallback to Restful API
-            Ok(FetchReleaseRet::Unauthorized) => (),
+            Err(GhApiError::Unauthorized) => (),
             res => return res,
         }
     }

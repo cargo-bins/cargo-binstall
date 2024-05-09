@@ -38,14 +38,7 @@ pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
     }
 }
 
-pub(super) enum GhApiRet<T> {
-    ReachedRateLimit { retry_after: Option<Duration> },
-    NotFound,
-    Success(T),
-    Unauthorized,
-}
-
-pub(super) fn check_for_status<T>(status: StatusCode, headers: &HeaderMap) -> Option<GhApiRet<T>> {
+fn check_http_status_and_header(status: StatusCode, headers: &HeaderMap) -> Result<(), GhApiError> {
     match status {
         remote::StatusCode::FORBIDDEN
             if headers
@@ -53,7 +46,7 @@ pub(super) fn check_for_status<T>(status: StatusCode, headers: &HeaderMap) -> Op
                 .map(|val| val == "0")
                 .unwrap_or(false) =>
         {
-            Some(GhApiRet::ReachedRateLimit {
+            Err(GhApiError::RateLimit {
                 retry_after: headers.get("x-ratelimit-reset").and_then(|value| {
                     let secs = value.to_str().ok()?.parse().ok()?;
                     Some(Duration::from_secs(secs))
@@ -61,11 +54,35 @@ pub(super) fn check_for_status<T>(status: StatusCode, headers: &HeaderMap) -> Op
             })
         }
 
-        remote::StatusCode::UNAUTHORIZED => Some(GhApiRet::Unauthorized),
-        remote::StatusCode::NOT_FOUND => Some(GhApiRet::NotFound),
+        remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized),
+        remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound),
 
-        _ => None,
+        _ => Ok(()),
     }
+}
+
+pub(super) async fn issue_restful_api<T>(
+    client: &remote::Client,
+    path: String,
+    auth_token: Option<&str>,
+) -> Result<T, GhApiError>
+where
+    T: DeserializeOwned,
+{
+    let mut request_builder = client
+        .get(Url::parse(&format!("https://api.github.com/{path}"))?)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28");
+
+    if let Some(auth_token) = auth_token {
+        request_builder = request_builder.bearer_auth(&auth_token);
+    }
+
+    let response = request_builder.send(false).await?;
+
+    check_http_status_and_header(response.status(), response.headers())?;
+
+    Ok(response.json().await?)
 }
 
 #[derive(Deserialize)]
@@ -90,16 +107,11 @@ fn get_graphql_endpoint() -> &'static Url {
     })
 }
 
-pub(super) enum GraphQLResult<T, U> {
-    Data(T),
-    Else(GhApiRet<U>),
-}
-
-pub(super) async fn issue_graphql_query<T, U>(
+pub(super) async fn issue_graphql_query<T>(
     client: &remote::Client,
     query: String,
     auth_token: &str,
-) -> Result<GraphQLResult<T, U>, GhApiError>
+) -> Result<T, GhApiError>
 where
     T: DeserializeOwned,
 {
@@ -115,19 +127,14 @@ where
         .bearer_auth(&auth_token);
 
     let response = request_builder.send(false).await?;
-
-    if let Some(ret) = check_for_status(response.status(), response.headers()) {
-        return Ok(GraphQLResult::Else(ret));
-    }
+    check_http_status_and_header(response.status(), response.headers())?;
 
     let response: GraphQLResponse<T> = response.json().await?;
 
     match response {
-        GraphQLResponse::Data(data) => Ok(GraphQLResult::Data(data)),
+        GraphQLResponse::Data(data) => Ok(data),
         GraphQLResponse::Errors(errors) if errors.is_rate_limited() => {
-            Ok(GraphQLResult::Else(GhApiRet::ReachedRateLimit {
-                retry_after: None,
-            }))
+            Err(GhApiError::RateLimit { retry_after: None })
         }
         GraphQLResponse::Errors(errors) => Err(errors.into()),
     }

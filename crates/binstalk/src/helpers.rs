@@ -1,5 +1,8 @@
 pub mod jobserver_client;
-pub mod remote;
+pub mod remote {
+    pub use binstalk_downloader::remote::*;
+    pub use url::ParseError as UrlParseError;
+}
 pub(crate) mod target_triple;
 pub mod tasks;
 
