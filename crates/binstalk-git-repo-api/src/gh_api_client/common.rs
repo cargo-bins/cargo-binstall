@@ -1,4 +1,4 @@
-use std::{sync::OnceLock, time::Duration};
+use std::{future::Future, sync::OnceLock, time::Duration};
 
 use binstalk_downloader::remote::{self, header::HeaderMap, StatusCode, Url};
 use compact_str::CompactString;
@@ -61,28 +61,34 @@ fn check_http_status_and_header(status: StatusCode, headers: &HeaderMap) -> Resu
     }
 }
 
-pub(super) async fn issue_restful_api<T>(
+pub(super) fn issue_restful_api<T>(
     client: &remote::Client,
     path: String,
     auth_token: Option<&str>,
-) -> Result<T, GhApiError>
+) -> impl Future<Output = Result<T, GhApiError>> + Send + Sync + 'static
 where
     T: DeserializeOwned,
 {
-    let mut request_builder = client
-        .get(Url::parse(&format!("https://api.github.com/{path}"))?)
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28");
+    let res = Url::parse(&format!("https://api.github.com/{path}")).map(|url| {
+        let mut request_builder = client
+            .get(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28");
 
-    if let Some(auth_token) = auth_token {
-        request_builder = request_builder.bearer_auth(&auth_token);
+        if let Some(auth_token) = auth_token {
+            request_builder = request_builder.bearer_auth(&auth_token);
+        }
+
+        request_builder.send(false)
+    });
+
+    async move {
+        let response = res?.await?;
+
+        check_http_status_and_header(response.status(), response.headers())?;
+
+        Ok(response.json().await?)
     }
-
-    let response = request_builder.send(false).await?;
-
-    check_http_status_and_header(response.status(), response.headers())?;
-
-    Ok(response.json().await?)
 }
 
 #[derive(Deserialize)]
@@ -107,35 +113,41 @@ fn get_graphql_endpoint() -> &'static Url {
     })
 }
 
-pub(super) async fn issue_graphql_query<T>(
+pub(super) fn issue_graphql_query<T>(
     client: &remote::Client,
     query: String,
     auth_token: &str,
-) -> Result<T, GhApiError>
+) -> impl Future<Output = Result<T, GhApiError>> + Send + Sync + 'static
 where
     T: DeserializeOwned,
 {
     let graphql_endpoint = get_graphql_endpoint();
 
-    let graphql_query = to_json_string(&GraphQLQuery { query }).map_err(remote::Error::from)?;
+    let res = to_json_string(&GraphQLQuery { query })
+        .map_err(remote::Error::from)
+        .map(|graphql_query| {
+            debug!("Sending graphql query to {graphql_endpoint}: '{graphql_query}'");
 
-    debug!("Sending graphql query to {graphql_endpoint}: '{graphql_query}'");
+            let request_builder = client
+                .post(graphql_endpoint.clone(), graphql_query)
+                .header("Accept", "application/vnd.github+json")
+                .bearer_auth(&auth_token);
 
-    let request_builder = client
-        .post(graphql_endpoint.clone(), graphql_query)
-        .header("Accept", "application/vnd.github+json")
-        .bearer_auth(&auth_token);
+            request_builder.send(false)
+        });
 
-    let response = request_builder.send(false).await?;
-    check_http_status_and_header(response.status(), response.headers())?;
+    async move {
+        let response = res?.await?;
+        check_http_status_and_header(response.status(), response.headers())?;
 
-    let response: GraphQLResponse<T> = response.json().await?;
+        let response: GraphQLResponse<T> = response.json().await?;
 
-    match response {
-        GraphQLResponse::Data(data) => Ok(data),
-        GraphQLResponse::Errors(errors) if errors.is_rate_limited() => {
-            Err(GhApiError::RateLimit { retry_after: None })
+        match response {
+            GraphQLResponse::Data(data) => Ok(data),
+            GraphQLResponse::Errors(errors) if errors.is_rate_limited() => {
+                Err(GhApiError::RateLimit { retry_after: None })
+            }
+            GraphQLResponse::Errors(errors) => Err(errors.into()),
         }
-        GraphQLResponse::Errors(errors) => Err(errors.into()),
     }
 }

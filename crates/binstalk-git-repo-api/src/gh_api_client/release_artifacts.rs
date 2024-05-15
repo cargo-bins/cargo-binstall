@@ -2,11 +2,12 @@ use std::{
     borrow::Borrow,
     collections::HashSet,
     fmt,
+    future::Future,
     hash::{Hash, Hasher},
 };
 
 use binstalk_downloader::remote::{self};
-use compact_str::CompactString;
+use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
 
 use super::{
@@ -65,14 +66,14 @@ impl Artifacts {
     }
 }
 
-async fn fetch_release_artifacts_restful_api(
+fn fetch_release_artifacts_restful_api(
     client: &remote::Client,
     GhRelease {
         repo: GhRepo { owner, repo },
         tag,
     }: &GhRelease,
     auth_token: Option<&str>,
-) -> Result<Artifacts, GhApiError> {
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + Sync + 'static {
     issue_restful_api(
         client,
         format!(
@@ -83,7 +84,6 @@ async fn fetch_release_artifacts_restful_api(
         ),
         auth_token,
     )
-    .await
 }
 
 #[derive(Deserialize)]
@@ -132,56 +132,65 @@ impl fmt::Display for FilterCondition {
     }
 }
 
-async fn fetch_release_artifacts_graphql_api(
+fn fetch_release_artifacts_graphql_api(
     client: &remote::Client,
     GhRelease {
         repo: GhRepo { owner, repo },
         tag,
     }: &GhRelease,
     auth_token: &str,
-) -> Result<Artifacts, GhApiError> {
-    let mut artifacts = Artifacts::default();
-    let mut cond = FilterCondition::Init;
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + Sync + 'static {
+    let client = client.clone();
+    let auth_token = auth_token.to_compact_string();
 
-    loop {
-        let query = format!(
-            r#"
+    let base_query_prefix = format!(
+        r#"
 query {{
   repository(owner:"{owner}",name:"{repo}") {{
-    release(tagName:"{tag}") {{
-      releaseAssets({cond}) {{
-        nodes {{
-          name
-          url
-        }}
-        pageInfo {{ endCursor hasNextPage }}
-      }}
-    }}
-  }}
-}}"#
-        );
+    release(tagName:"{tag}") {{"#
+    );
 
-        let data: GraphQLData = issue_graphql_query(client, query, auth_token).await?;
+    let base_query_suffix = r#"
+  nodes { name url }
+  pageInfo { endCursor hasNextPage }
+}}}}"#
+        .trim();
 
-        let assets = data
-            .repository
-            .and_then(|repository| repository.release)
-            .map(|release| release.assets);
+    async move {
+        let mut artifacts = Artifacts::default();
+        let mut cond = FilterCondition::Init;
+        let base_query_prefix = base_query_prefix.trim();
 
-        if let Some(assets) = assets {
-            artifacts.assets.extend(assets.nodes);
+        loop {
+            let query = format!(
+                r#"
+{base_query_prefix}
+releaseAssets({cond}) {{
+{base_query_suffix}"#
+            );
 
-            match assets.page_info {
-                GraphQLPageInfo {
-                    end_cursor: Some(end_cursor),
-                    has_next_page: true,
-                } => {
-                    cond = FilterCondition::After(end_cursor);
+            let data: GraphQLData = issue_graphql_query(&client, query, &auth_token).await?;
+
+            let assets = data
+                .repository
+                .and_then(|repository| repository.release)
+                .map(|release| release.assets);
+
+            if let Some(assets) = assets {
+                artifacts.assets.extend(assets.nodes);
+
+                match assets.page_info {
+                    GraphQLPageInfo {
+                        end_cursor: Some(end_cursor),
+                        has_next_page: true,
+                    } => {
+                        cond = FilterCondition::After(end_cursor);
+                    }
+                    _ => break Ok(artifacts),
                 }
-                _ => break Ok(artifacts),
+            } else {
+                break Err(GhApiError::NotFound);
             }
-        } else {
-            break Err(GhApiError::NotFound);
         }
     }
 }
