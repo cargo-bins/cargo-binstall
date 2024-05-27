@@ -36,16 +36,7 @@ async fn fetch_repo_info_restful_api(
     GhRepo { owner, repo }: &GhRepo,
     auth_token: Option<&str>,
 ) -> Result<RepoInfo, GhApiError> {
-    issue_restful_api(
-        client,
-        &[
-            "repos",
-            &percent_encode_http_url_path(owner).to_compact_string(),
-            &percent_encode_http_url_path(repo).to_compact_string(),
-        ],
-        auth_token,
-    )
-    .await
+    issue_restful_api(client, &["repos", owner, repo], auth_token).await
 }
 
 #[derive(Deserialize)]

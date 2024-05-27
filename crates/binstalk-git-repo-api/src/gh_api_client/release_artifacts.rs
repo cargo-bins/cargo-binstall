@@ -77,12 +77,8 @@ fn fetch_release_artifacts_restful_api(
     issue_restful_api(
         client,
         &[
-            "repos",
-            &percent_encode_http_url_path(owner).to_compact_string(),
-            &percent_encode_http_url_path(repo).to_compact_string(),
-            "releases",
-            "tags",
-            &percent_encode_http_url_path(tag).to_compact_string(),
+            "repos", owner, repo, "releases", "tags",
+            tag, //&percent_encode_http_url_path(tag).to_compact_string(),
         ],
         auth_token,
     )
