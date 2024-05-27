@@ -1,4 +1,4 @@
-use compact_str::CompactString;
+use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
 
 use super::{
@@ -38,11 +38,11 @@ async fn fetch_repo_info_restful_api(
 ) -> Result<RepoInfo, GhApiError> {
     issue_restful_api(
         client,
-        format!(
-            "repos/{owner}/{repo}",
-            owner = percent_encode_http_url_path(owner),
-            repo = percent_encode_http_url_path(repo),
-        ),
+        &[
+            "repos",
+            &percent_encode_http_url_path(owner).to_compact_string(),
+            &percent_encode_http_url_path(repo).to_compact_string(),
+        ],
         auth_token,
     )
     .await

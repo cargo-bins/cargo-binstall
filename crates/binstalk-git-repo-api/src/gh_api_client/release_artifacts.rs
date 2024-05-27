@@ -76,12 +76,14 @@ fn fetch_release_artifacts_restful_api(
 ) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + Sync + 'static {
     issue_restful_api(
         client,
-        format!(
-            "repos/{owner}/{repo}/releases/tags/{tag}",
-            owner = percent_encode_http_url_path(owner),
-            repo = percent_encode_http_url_path(repo),
-            tag = percent_encode_http_url_path(tag),
-        ),
+        &[
+            "repos",
+            &percent_encode_http_url_path(owner).to_compact_string(),
+            &percent_encode_http_url_path(repo).to_compact_string(),
+            "releases",
+            "tags",
+            &percent_encode_http_url_path(tag).to_compact_string(),
+        ],
         auth_token,
     )
 }

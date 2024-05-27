@@ -61,29 +61,43 @@ fn check_http_status_and_header(status: StatusCode, headers: &HeaderMap) -> Resu
     }
 }
 
+fn get_api_endpoint() -> &'static Url {
+    static API_ENDPOINT: OnceLock<Url> = OnceLock::new();
+
+    API_ENDPOINT.get_or_init(|| {
+        Url::parse("https://api.github.com/").expect("Literal provided must be a valid url")
+    })
+}
+
 pub(super) fn issue_restful_api<T>(
     client: &remote::Client,
-    path: String,
+    path: &[&str],
     auth_token: Option<&str>,
 ) -> impl Future<Output = Result<T, GhApiError>> + Send + Sync + 'static
 where
     T: DeserializeOwned,
 {
-    let res = Url::parse(&format!("https://api.github.com/{path}")).map(|url| {
-        let mut request_builder = client
-            .get(url)
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28");
+    let mut url = get_api_endpoint().clone();
 
-        if let Some(auth_token) = auth_token {
-            request_builder = request_builder.bearer_auth(&auth_token);
-        }
+    url.path_segments_mut()
+        .expect("get_api_endpoint() should return a https url")
+        .extend(path);
 
-        request_builder.send(false)
-    });
+    debug!("Getting restful API: {url}");
+
+    let mut request_builder = client
+        .get(url)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28");
+
+    if let Some(auth_token) = auth_token {
+        request_builder = request_builder.bearer_auth(&auth_token);
+    }
+
+    let future = request_builder.send(false);
 
     async move {
-        let response = res?.await?;
+        let response = future.await?;
 
         check_http_status_and_header(response.status(), response.headers())?;
 
@@ -105,12 +119,15 @@ struct GraphQLQuery {
     query: String,
 }
 
-fn get_graphql_endpoint() -> &'static Url {
-    static GRAPHQL_ENDPOINT: OnceLock<Url> = OnceLock::new();
+fn get_graphql_endpoint() -> Url {
+    let mut graphql_endpoint = get_api_endpoint().clone();
 
-    GRAPHQL_ENDPOINT.get_or_init(|| {
-        Url::parse("https://api.github.com/graphql").expect("Literal provided must be a valid url")
-    })
+    graphql_endpoint
+        .path_segments_mut()
+        .expect("get_api_endpoint() should return a https url")
+        .push("graphql");
+
+    graphql_endpoint
 }
 
 pub(super) fn issue_graphql_query<T>(
@@ -121,15 +138,15 @@ pub(super) fn issue_graphql_query<T>(
 where
     T: DeserializeOwned,
 {
-    let graphql_endpoint = get_graphql_endpoint();
-
     let res = to_json_string(&GraphQLQuery { query })
         .map_err(remote::Error::from)
         .map(|graphql_query| {
+            let graphql_endpoint = get_graphql_endpoint();
+
             debug!("Sending graphql query to {graphql_endpoint}: '{graphql_query}'");
 
             let request_builder = client
-                .post(graphql_endpoint.clone(), graphql_query)
+                .post(graphql_endpoint, graphql_query)
                 .header("Accept", "application/vnd.github+json")
                 .bearer_auth(&auth_token);
 
