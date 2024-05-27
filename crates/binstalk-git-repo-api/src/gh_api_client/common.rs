@@ -2,32 +2,12 @@ use std::{future::Future, sync::OnceLock, time::Duration};
 
 use binstalk_downloader::remote::{self, header::HeaderMap, StatusCode, Url};
 use compact_str::CompactString;
-use percent_encoding::{
-    percent_decode_str, utf8_percent_encode, AsciiSet, PercentEncode, CONTROLS,
-};
+use percent_encoding::percent_decode_str;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::to_string as to_json_string;
 use tracing::debug;
 
 use super::{GhApiError, GhGraphQLErrors};
-
-pub(super) fn percent_encode_http_url_path(path: &str) -> PercentEncode<'_> {
-    /// https://url.spec.whatwg.org/#fragment-percent-encode-set
-    const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
-
-    /// https://url.spec.whatwg.org/#path-percent-encode-set
-    const PATH: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
-
-    const PATH_SEGMENT: &AsciiSet = &PATH.add(b'/').add(b'%');
-
-    // The backslash (\) character is treated as a path separator in special URLs
-    // so it needs to be additionally escaped in that case.
-    //
-    // http is considered to have special path.
-    const SPECIAL_PATH_SEGMENT: &AsciiSet = &PATH_SEGMENT.add(b'\\');
-
-    utf8_percent_encode(path, SPECIAL_PATH_SEGMENT)
-}
 
 pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
     if input.contains('%') {
