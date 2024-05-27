@@ -11,7 +11,7 @@ use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
 
 use super::{
-    common::{issue_graphql_query, issue_restful_api, percent_encode_http_url_path},
+    common::{issue_graphql_query, issue_restful_api},
     GhApiError, GhRelease, GhRepo,
 };
 
@@ -66,7 +66,7 @@ impl Artifacts {
     }
 }
 
-fn fetch_release_artifacts_restful_api(
+pub(super) fn fetch_release_artifacts_restful_api(
     client: &remote::Client,
     GhRelease {
         repo: GhRepo { owner, repo },
@@ -130,7 +130,7 @@ impl fmt::Display for FilterCondition {
     }
 }
 
-fn fetch_release_artifacts_graphql_api(
+pub(super) fn fetch_release_artifacts_graphql_api(
     client: &remote::Client,
     GhRelease {
         repo: GhRepo { owner, repo },
@@ -191,26 +191,4 @@ releaseAssets({cond}) {{
             }
         }
     }
-}
-
-pub(super) async fn fetch_release_artifacts(
-    client: &remote::Client,
-    release: &GhRelease,
-    auth_token: Option<&str>,
-) -> Result<Artifacts, GhApiError> {
-    if let Some(auth_token) = auth_token {
-        let res = fetch_release_artifacts_graphql_api(client, release, auth_token)
-            .await
-            .map_err(|err| err.context("GraphQL API"));
-
-        match res {
-            // Fallback to Restful API
-            Err(GhApiError::Unauthorized) => (),
-            res => return res,
-        }
-    }
-
-    fetch_release_artifacts_restful_api(client, release, auth_token)
-        .await
-        .map_err(|err| err.context("Restful API"))
 }

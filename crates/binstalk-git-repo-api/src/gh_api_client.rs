@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    future::Future,
     ops::Deref,
     sync::{
         atomic::{AtomicBool, Ordering::Relaxed},
@@ -132,17 +133,55 @@ impl GhApiClient {
 }
 
 impl GhApiClient {
-    async fn do_fetch_release_artifacts(
-        &self,
-        release: &GhRelease,
-        auth_token: Option<&str>,
-    ) -> Result<Option<release_artifacts::Artifacts>, GhApiError> {
-        match release_artifacts::fetch_release_artifacts(&self.0.client, release, auth_token).await
-        {
-            Ok(artifacts) => Ok(Some(artifacts)),
-            Err(GhApiError::NotFound) => Ok(None),
-            Err(err) => Err(err),
+    fn check_retry_after(&self) -> Result<(), GhApiError> {
+        let mut guard = self.0.retry_after.lock().unwrap();
+
+        if let Some(retry_after) = *guard {
+            if retry_after.elapsed().is_zero() {
+                return Err(GhApiError::RateLimit {
+                    retry_after: Some(retry_after - Instant::now()),
+                });
+            } else {
+                // Instant retry_after is already reached.
+                *guard = None;
+            }
         }
+
+        Ok(())
+    }
+    async fn do_fetch<T, U, GraphQLFn, RestfulFn, GraphQLFut, RestfulFut>(
+        &self,
+        graphql_func: GraphQLFn,
+        restful_func: RestfulFn,
+        data: &T,
+    ) -> Result<U, GhApiError>
+    where
+        GraphQLFn: Fn(&remote::Client, &T, &str) -> GraphQLFut,
+        RestfulFn: Fn(&remote::Client, &T, Option<&str>) -> RestfulFut,
+        GraphQLFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
+        RestfulFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
+    {
+        self.check_retry_after()?;
+
+        if self.0.is_auth_token_valid.load(Relaxed) {
+            if let Some(auth_token) = self.0.auth_token.as_deref() {
+                match graphql_func(&self.0.client, data, auth_token).await {
+                    Err(GhApiError::Unauthorized) => {
+                        self.0.is_auth_token_valid.store(false, Relaxed);
+                    }
+                    res => return res.map_err(|err| err.context("GraphQL API")),
+                }
+            }
+        }
+
+        match restful_func(&self.0.client, data, self.0.auth_token.as_deref()).await {
+            Err(GhApiError::Unauthorized) => {
+                self.0.is_auth_token_valid.store(false, Relaxed);
+                restful_func(&self.0.client, data, None).await
+            }
+            res => res,
+        }
+        .map_err(|err| err.context("Restful API"))
     }
 
     /// Return `Ok(Some(api_artifact_url))` if exists.
@@ -159,34 +198,18 @@ impl GhApiClient {
         let res = once_cell
             .get_or_try_init(|| {
                 Box::pin(async {
+                    match self
+                        .do_fetch(
+                            release_artifacts::fetch_release_artifacts_graphql_api,
+                            release_artifacts::fetch_release_artifacts_restful_api,
+                            &release,
+                        )
+                        .await
                     {
-                        let mut guard = self.0.retry_after.lock().unwrap();
-
-                        if let Some(retry_after) = *guard {
-                            if retry_after.elapsed().is_zero() {
-                                return Err(GhApiError::RateLimit {
-                                    retry_after: Some(retry_after - Instant::now()),
-                                });
-                            } else {
-                                // Instant retry_after is already reached.
-                                *guard = None;
-                            }
-                        };
+                        Ok(artifacts) => Ok(Some(artifacts)),
+                        Err(GhApiError::NotFound) => Ok(None),
+                        Err(err) => Err(err),
                     }
-
-                    if self.0.is_auth_token_valid.load(Relaxed) {
-                        match self
-                            .do_fetch_release_artifacts(&release, self.0.auth_token.as_deref())
-                            .await
-                        {
-                            Err(GhApiError::Unauthorized) => {
-                                self.0.is_auth_token_valid.store(false, Relaxed);
-                            }
-                            res => return res,
-                        }
-                    }
-
-                    self.do_fetch_release_artifacts(&release, None).await
                 })
             })
             .await;

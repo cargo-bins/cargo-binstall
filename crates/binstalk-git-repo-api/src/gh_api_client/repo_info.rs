@@ -1,8 +1,8 @@
-use compact_str::{CompactString, ToCompactString};
+use compact_str::CompactString;
 use serde::Deserialize;
 
 use super::{
-    common::{issue_graphql_query, issue_restful_api, percent_encode_http_url_path},
+    common::{issue_graphql_query, issue_restful_api},
     remote, GhApiError, GhRepo,
 };
 
@@ -31,7 +31,7 @@ impl RepoInfo {
     }
 }
 
-async fn fetch_repo_info_restful_api(
+pub(super) async fn fetch_repo_info_restful_api(
     client: &remote::Client,
     GhRepo { owner, repo }: &GhRepo,
     auth_token: Option<&str>,
@@ -44,7 +44,7 @@ struct GraphQLData {
     repository: Option<RepoInfo>,
 }
 
-async fn fetch_repo_info_graphql_api(
+pub(super) async fn fetch_repo_info_graphql_api(
     client: &remote::Client,
     GhRepo { owner, repo }: &GhRepo,
     auth_token: &str,
@@ -63,26 +63,4 @@ query {{
     );
 
     issue_graphql_query(client, query, auth_token).await
-}
-
-pub(super) async fn fetch_repo_info(
-    client: &remote::Client,
-    repo: &GhRepo,
-    auth_token: Option<&str>,
-) -> Result<RepoInfo, GhApiError> {
-    if let Some(auth_token) = auth_token {
-        let res = fetch_repo_info_graphql_api(client, repo, auth_token)
-            .await
-            .map_err(|err| err.context("GraphQL API"));
-
-        match res {
-            // Fallback to Restful API
-            Err(GhApiError::Unauthorized) => (),
-            res => return res,
-        }
-    }
-
-    fetch_repo_info_restful_api(client, repo, auth_token)
-        .await
-        .map_err(|err| err.context("Restful API"))
 }
