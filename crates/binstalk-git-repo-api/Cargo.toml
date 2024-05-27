@@ -25,3 +25,4 @@ url = "2.3.1"
 
 [dev-dependencies]
 binstalk-downloader = { version = "0.10.3", path = "../binstalk-downloader" }
+tracing-subscriber = "0.3"

@@ -210,6 +210,8 @@ mod test {
     use super::*;
     use compact_str::{CompactString, ToCompactString};
     use std::{env, num::NonZeroU16};
+    use tracing::subscriber::set_global_default;
+    use tracing_subscriber::{filter::LevelFilter, fmt::fmt};
 
     mod cargo_binstall_v0_20_1 {
         use super::{CompactString, GhRelease, GhRepo};
@@ -305,6 +307,24 @@ mod test {
         }
     }
 
+    fn init_logger() {
+        // Disable time, target, file, line_num, thread name/ids to make the
+        // output more readable
+        let subscriber = fmt()
+            .without_time()
+            .with_target(false)
+            .with_file(false)
+            .with_line_number(false)
+            .with_thread_names(false)
+            .with_thread_ids(false)
+            .with_test_writer()
+            .with_max_level(LevelFilter::DEBUG)
+            .finish();
+
+        // Setup global subscriber
+        set_global_default(subscriber).unwrap();
+    }
+
     /// Mark this as an async fn so that you won't accidentally use it in
     /// sync context.
     async fn create_client() -> Vec<GhApiClient> {
@@ -327,6 +347,8 @@ mod test {
     }
 
     async fn test_specific_release(release: &GhRelease, artifacts: &[&str]) {
+        init_logger();
+
         for client in create_client().await {
             eprintln!("In client {client:?}");
 
@@ -371,6 +393,8 @@ mod test {
 
     #[tokio::test]
     async fn test_gh_api_client_cargo_binstall_no_such_release() {
+        init_logger();
+
         for client in create_client().await {
             let release = GhRelease {
                 repo: GhRepo {
