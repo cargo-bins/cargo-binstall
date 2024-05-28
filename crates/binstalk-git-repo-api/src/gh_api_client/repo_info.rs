@@ -34,9 +34,8 @@ impl RepoInfo {
 pub(super) async fn fetch_repo_info_restful_api(
     client: &remote::Client,
     GhRepo { owner, repo }: &GhRepo,
-    auth_token: Option<&str>,
 ) -> Result<RepoInfo, GhApiError> {
-    issue_restful_api(client, &["repos", owner, repo], auth_token).await
+    issue_restful_api(client, &["repos", owner, repo]).await
 }
 
 #[derive(Deserialize)]

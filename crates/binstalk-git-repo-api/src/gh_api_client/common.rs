@@ -52,7 +52,6 @@ fn get_api_endpoint() -> &'static Url {
 pub(super) fn issue_restful_api<T>(
     client: &remote::Client,
     path: &[&str],
-    auth_token: Option<&str>,
 ) -> impl Future<Output = Result<T, GhApiError>> + Send + Sync + 'static
 where
     T: DeserializeOwned,
@@ -65,16 +64,11 @@ where
 
     debug!("Getting restful API: {url}");
 
-    let mut request_builder = client
+    let future = client
         .get(url)
         .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28");
-
-    if let Some(auth_token) = auth_token {
-        request_builder = request_builder.bearer_auth(&auth_token);
-    }
-
-    let future = request_builder.send(false);
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send(false);
 
     async move {
         let response = future.await?;

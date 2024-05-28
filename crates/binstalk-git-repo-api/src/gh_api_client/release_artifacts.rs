@@ -72,7 +72,6 @@ pub(super) fn fetch_release_artifacts_restful_api(
         repo: GhRepo { owner, repo },
         tag,
     }: &GhRelease,
-    auth_token: Option<&str>,
 ) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + Sync + 'static {
     issue_restful_api(
         client,
@@ -80,7 +79,6 @@ pub(super) fn fetch_release_artifacts_restful_api(
             "repos", owner, repo, "releases", "tags",
             tag, //&percent_encode_http_url_path(tag).to_compact_string(),
         ],
-        auth_token,
     )
 }
 

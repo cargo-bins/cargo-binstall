@@ -166,7 +166,7 @@ impl GhApiClient {
     ) -> Result<U, GhApiError>
     where
         GraphQLFn: Fn(&remote::Client, &T, &str) -> GraphQLFut,
-        RestfulFn: Fn(&remote::Client, &T, Option<&str>) -> RestfulFut,
+        RestfulFn: Fn(&remote::Client, &T) -> RestfulFut,
         GraphQLFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
         RestfulFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
     {
@@ -181,7 +181,7 @@ impl GhApiClient {
             }
         }
 
-        restful_func(&self.0.client, data, None)
+        restful_func(&self.0.client, data)
             .await
             .map_err(|err| err.context("Restful API"))
     }
