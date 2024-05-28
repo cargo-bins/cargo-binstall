@@ -186,6 +186,21 @@ impl GhApiClient {
             .map_err(|err| err.context("Restful API"))
     }
 
+    pub async fn get_repo_info(&self, repo: &GhRepo) -> Result<Option<RepoInfo>, GhApiError> {
+        match self
+            .do_fetch(
+                repo_info::fetch_repo_info_graphql_api,
+                repo_info::fetch_repo_info_restful_api,
+                repo,
+            )
+            .await
+        {
+            Ok(repo_info) => Ok(repo_info),
+            Err(GhApiError::NotFound) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Return `Ok(Some(api_artifact_url))` if exists.
     ///
     /// The returned future is guaranteed to be pointer size.
@@ -350,17 +365,21 @@ mod test {
         let _ = set_global_default(subscriber);
     }
 
-    /// Mark this as an async fn so that you won't accidentally use it in
-    /// sync context.
-    async fn create_client() -> Vec<GhApiClient> {
-        let client = remote::Client::new(
+    fn create_remote_client() -> remote::Client {
+        remote::Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
             NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    /// Mark this as an async fn so that you won't accidentally use it in
+    /// sync context.
+    async fn create_client() -> Vec<GhApiClient> {
+        let client = create_remote_client();
 
         let mut gh_clients = vec![GhApiClient::new(client.clone(), None)];
 
@@ -369,6 +388,42 @@ mod test {
         }
 
         gh_clients
+    }
+
+    async fn test_repo_info_public(repo: GhRepo, repo_info: Option<RepoInfo>) {
+        init_logger();
+
+        for client in create_client().await {
+            eprintln!("In client {client:?}");
+
+            let res = client.get_repo_info(&repo).await;
+
+            if matches!(res, Err(GhApiError::RateLimit { .. })) {
+                continue;
+            }
+
+            assert_eq!(res.unwrap(), repo_info);
+        }
+    }
+
+    async fn test_repo_info_private(repo: GhRepo) {
+        init_logger();
+
+        let Ok(token) = env::var("GITHUB_TOKEN") else {
+            return;
+        };
+
+        let client = GhApiClient::new(create_remote_client(), Some(token.into()));
+
+        eprintln!("In client {client:?}");
+
+        let res = client.get_repo_info(&repo).await;
+
+        if matches!(res, Err(GhApiError::RateLimit { .. })) {
+            return;
+        }
+
+        assert_eq!(res.unwrap(), Some(RepoInfo::new(repo, true)));
     }
 
     async fn test_specific_release(release: &GhRelease, artifacts: &[&str]) {
@@ -405,6 +460,33 @@ mod test {
                 res
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_gh_api_client_cargo_binstall() {
+        let repo = GhRepo {
+            owner: "cargo-bins".to_compact_string(),
+            repo: "cargo-binstall".to_compact_string(),
+        };
+        test_repo_info_public(repo.clone(), Some(RepoInfo::new(repo, false))).await
+    }
+
+    #[tokio::test]
+    async fn test_gh_api_client_non_existent_repo() {
+        let repo = GhRepo {
+            owner: "cargo-bins".to_compact_string(),
+            repo: "ttt".to_compact_string(),
+        };
+        test_repo_info_public(repo.clone(), None).await
+    }
+
+    #[tokio::test]
+    async fn test_gh_api_client_private_repo() {
+        let repo = GhRepo {
+            owner: "cargo-bins".to_compact_string(),
+            repo: "private-repo-for-testing".to_compact_string(),
+        };
+        test_repo_info_private(repo.clone()).await
     }
 
     #[tokio::test]
