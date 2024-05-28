@@ -150,6 +150,14 @@ impl GhApiClient {
         Ok(())
     }
 
+    fn get_auth_token(&self) -> Option<&str> {
+        if self.0.is_auth_token_valid.load(Relaxed) {
+            self.0.auth_token.as_deref()
+        } else {
+            None
+        }
+    }
+
     async fn do_fetch<T, U, GraphQLFn, RestfulFn, GraphQLFut, RestfulFut>(
         &self,
         graphql_func: GraphQLFn,
@@ -164,25 +172,18 @@ impl GhApiClient {
     {
         self.check_retry_after()?;
 
-        if self.0.is_auth_token_valid.load(Relaxed) {
-            if let Some(auth_token) = self.0.auth_token.as_deref() {
-                match graphql_func(&self.0.client, data, auth_token).await {
-                    Err(GhApiError::Unauthorized) => {
-                        self.0.is_auth_token_valid.store(false, Relaxed);
-                    }
-                    res => return res.map_err(|err| err.context("GraphQL API")),
+        if let Some(auth_token) = self.get_auth_token() {
+            match graphql_func(&self.0.client, data, auth_token).await {
+                Err(GhApiError::Unauthorized) => {
+                    self.0.is_auth_token_valid.store(false, Relaxed);
                 }
+                res => return res.map_err(|err| err.context("GraphQL API")),
             }
         }
 
-        match restful_func(&self.0.client, data, self.0.auth_token.as_deref()).await {
-            Err(GhApiError::Unauthorized) => {
-                self.0.is_auth_token_valid.store(false, Relaxed);
-                restful_func(&self.0.client, data, None).await
-            }
-            res => res,
-        }
-        .map_err(|err| err.context("Restful API"))
+        restful_func(&self.0.client, data, None)
+            .await
+            .map_err(|err| err.context("Restful API"))
     }
 
     /// Return `Ok(Some(api_artifact_url))` if exists.
