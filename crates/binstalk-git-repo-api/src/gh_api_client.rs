@@ -149,6 +149,7 @@ impl GhApiClient {
 
         Ok(())
     }
+
     async fn do_fetch<T, U, GraphQLFn, RestfulFn, GraphQLFut, RestfulFut>(
         &self,
         graphql_func: GraphQLFn,
@@ -345,7 +346,7 @@ mod test {
             .finish();
 
         // Setup global subscriber
-        set_global_default(subscriber).unwrap();
+        let _ = set_global_default(subscriber);
     }
 
     /// Mark this as an async fn so that you won't accidentally use it in
