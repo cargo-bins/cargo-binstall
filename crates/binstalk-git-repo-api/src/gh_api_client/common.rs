@@ -80,12 +80,9 @@ where
 }
 
 #[derive(Deserialize)]
-enum GraphQLResponse<T> {
-    #[serde(rename = "data")]
-    Data(T),
-
-    #[serde(rename = "errors")]
-    Errors(GhGraphQLErrors),
+struct GraphQLResponse<T> {
+    data: T,
+    errors: Option<GhGraphQLErrors>,
 }
 
 #[derive(Serialize)]
@@ -131,14 +128,12 @@ where
         let response = res?.await?;
         check_http_status_and_header(response.status(), response.headers())?;
 
-        let response: GraphQLResponse<T> = response.json().await?;
+        let mut response: GraphQLResponse<T> = response.json().await?;
 
-        match response {
-            GraphQLResponse::Data(data) => Ok(data),
-            GraphQLResponse::Errors(errors) if errors.is_rate_limited() => {
-                Err(GhApiError::RateLimit { retry_after: None })
-            }
-            GraphQLResponse::Errors(errors) => Err(errors.into()),
+        if let Some(error) = response.errors.take() {
+            Err(error.into())
+        } else {
+            Ok(response.data)
         }
     }
 }

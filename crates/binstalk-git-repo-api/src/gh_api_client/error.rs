@@ -30,7 +30,7 @@ pub enum GhApiError {
     Context(Box<GhApiContextError>),
 
     #[error("Remote failed to process GraphQL query: {0}")]
-    GraphQLErrors(#[from] GhGraphQLErrors),
+    GraphQLErrors(GhGraphQLErrors),
 
     #[error("Hit rate-limit, retry after {retry_after:?}")]
     RateLimit { retry_after: Option<Duration> },
@@ -58,14 +58,32 @@ impl GhApiError {
     }
 }
 
+impl From<GhGraphQLErrors> for GhApiError {
+    fn from(e: GhGraphQLErrors) -> Self {
+        if e.is_rate_limited() {
+            Self::RateLimit { retry_after: None }
+        } else if e.is_not_found_error() {
+            Self::NotFound
+        } else {
+            Self::GraphQLErrors(e)
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct GhGraphQLErrors(Box<[GraphQLError]>);
 
 impl GhGraphQLErrors {
-    pub(super) fn is_rate_limited(&self) -> bool {
+    fn is_rate_limited(&self) -> bool {
         self.0
             .iter()
             .any(|error| matches!(error.error_type, GraphQLErrorType::RateLimited))
+    }
+
+    fn is_not_found_error(&self) -> bool {
+        self.0
+            .iter()
+            .any(|error| matches!(&error.error_type, GraphQLErrorType::Other(error_type) if *error_type == "NOT_FOUND"))
     }
 }
 
