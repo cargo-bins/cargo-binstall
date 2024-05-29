@@ -290,6 +290,49 @@ mod test {
         ];
     }
 
+    mod cargo_audit_v_0_17_6 {
+        use super::*;
+
+        pub(super) const RELEASE: GhRelease = GhRelease {
+            repo: GhRepo {
+                owner: CompactString::new_inline("rustsec"),
+                repo: CompactString::new_inline("rustsec"),
+            },
+            tag: CompactString::new_inline("cargo-audit/v0.17.6"),
+        };
+
+        pub(super) const ARTIFACTS: &[&str] = &[
+            "cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz",
+            "cargo-audit-armv7-unknown-linux-gnueabihf-v0.17.6.tgz",
+            "cargo-audit-x86_64-apple-darwin-v0.17.6.tgz",
+            "cargo-audit-x86_64-pc-windows-msvc-v0.17.6.zip",
+            "cargo-audit-x86_64-unknown-linux-gnu-v0.17.6.tgz",
+            "cargo-audit-x86_64-unknown-linux-musl-v0.17.6.tgz",
+        ];
+
+        #[test]
+        fn extract_with_escaped_characters() {
+            let release_artifact = try_extract_artifact_from_str(
+"https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz"
+                ).unwrap();
+
+            assert_eq!(
+                release_artifact,
+                GhReleaseArtifact {
+                    release: RELEASE,
+                    artifact_name: CompactString::from(
+                        "cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz",
+                    )
+                }
+            );
+        }
+
+        #[tokio::test]
+        async fn test_gh_api_client_cargo_audit_v_0_17_6() {
+            test_specific_release(&RELEASE, ARTIFACTS).await
+        }
+    }
+
     fn try_extract_artifact_from_str(s: &str) -> Option<GhReleaseArtifact> {
         GhReleaseArtifact::try_extract_from_url(&url::Url::parse(s).unwrap())
     }
@@ -390,40 +433,58 @@ mod test {
         gh_clients
     }
 
-    async fn test_repo_info_public(repo: GhRepo, repo_info: Option<RepoInfo>) {
+    #[tokio::test]
+    async fn test_get_repo_info() {
+        const PUBLIC_REPOS: [GhRepo; 1] = [GhRepo {
+            owner: CompactString::new_inline("cargo-bins"),
+            repo: CompactString::new_inline("cargo-binstall"),
+        }];
+        const PRIVATE_REPOS: [GhRepo; 1] = [GhRepo {
+            owner: CompactString::new_inline("cargo-bins"),
+            repo: CompactString::new_inline("private-repo-for-testing"),
+        }];
+        const NON_EXISTENT_REPOS: [GhRepo; 1] = [GhRepo {
+            owner: CompactString::new_inline("cargo-bins"),
+            repo: CompactString::new_inline("ttt"),
+        }];
+
         init_logger();
 
         for client in create_client().await {
             eprintln!("In client {client:?}");
 
-            let res = client.get_repo_info(&repo).await;
+            for repo in PUBLIC_REPOS {
+                let res = client.get_repo_info(&repo).await;
 
-            if matches!(res, Err(GhApiError::RateLimit { .. })) {
-                continue;
+                if matches!(res, Err(GhApiError::RateLimit { .. })) {
+                    continue;
+                }
+
+                assert_eq!(res.unwrap(), Some(RepoInfo::new(repo, false)));
             }
 
-            assert_eq!(res.unwrap(), repo_info);
+            for repo in NON_EXISTENT_REPOS {
+                let res = client.get_repo_info(&repo).await;
+
+                if matches!(res, Err(GhApiError::RateLimit { .. })) {
+                    continue;
+                }
+
+                assert_eq!(res.unwrap(), None);
+            }
+
+            if client.get_auth_token().is_some() {
+                for repo in PRIVATE_REPOS {
+                    let res = client.get_repo_info(&repo).await;
+
+                    if matches!(res, Err(GhApiError::RateLimit { .. })) {
+                        continue;
+                    }
+
+                    assert_eq!(res.unwrap(), Some(RepoInfo::new(repo, true)));
+                }
+            }
         }
-    }
-
-    async fn test_repo_info_private(repo: GhRepo) {
-        init_logger();
-
-        let Ok(token) = env::var("GITHUB_TOKEN") else {
-            return;
-        };
-
-        let client = GhApiClient::new(create_remote_client(), Some(token.into()));
-
-        eprintln!("In client {client:?}");
-
-        let res = client.get_repo_info(&repo).await;
-
-        if matches!(res, Err(GhApiError::RateLimit { .. })) {
-            return;
-        }
-
-        assert_eq!(res.unwrap(), Some(RepoInfo::new(repo, true)));
     }
 
     async fn test_specific_release(release: &GhRelease, artifacts: &[&str]) {
@@ -460,33 +521,6 @@ mod test {
                 res
             );
         }
-    }
-
-    #[tokio::test]
-    async fn test_gh_api_client_cargo_binstall() {
-        let repo = GhRepo {
-            owner: "cargo-bins".to_compact_string(),
-            repo: "cargo-binstall".to_compact_string(),
-        };
-        test_repo_info_public(repo.clone(), Some(RepoInfo::new(repo, false))).await
-    }
-
-    #[tokio::test]
-    async fn test_gh_api_client_non_existent_repo() {
-        let repo = GhRepo {
-            owner: "cargo-bins".to_compact_string(),
-            repo: "ttt".to_compact_string(),
-        };
-        test_repo_info_public(repo.clone(), None).await
-    }
-
-    #[tokio::test]
-    async fn test_gh_api_client_private_repo() {
-        let repo = GhRepo {
-            owner: "cargo-bins".to_compact_string(),
-            repo: "private-repo-for-testing".to_compact_string(),
-        };
-        test_repo_info_private(repo.clone()).await
     }
 
     #[tokio::test]
@@ -528,49 +562,6 @@ mod test {
                 "err = {:#?}",
                 err
             );
-        }
-    }
-
-    mod cargo_audit_v_0_17_6 {
-        use super::*;
-
-        const RELEASE: GhRelease = GhRelease {
-            repo: GhRepo {
-                owner: CompactString::new_inline("rustsec"),
-                repo: CompactString::new_inline("rustsec"),
-            },
-            tag: CompactString::new_inline("cargo-audit/v0.17.6"),
-        };
-
-        const ARTIFACTS: &[&str] = &[
-            "cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz",
-            "cargo-audit-armv7-unknown-linux-gnueabihf-v0.17.6.tgz",
-            "cargo-audit-x86_64-apple-darwin-v0.17.6.tgz",
-            "cargo-audit-x86_64-pc-windows-msvc-v0.17.6.zip",
-            "cargo-audit-x86_64-unknown-linux-gnu-v0.17.6.tgz",
-            "cargo-audit-x86_64-unknown-linux-musl-v0.17.6.tgz",
-        ];
-
-        #[test]
-        fn extract_with_escaped_characters() {
-            let release_artifact = try_extract_artifact_from_str(
-"https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz"
-                ).unwrap();
-
-            assert_eq!(
-                release_artifact,
-                GhReleaseArtifact {
-                    release: RELEASE,
-                    artifact_name: CompactString::from(
-                        "cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz",
-                    )
-                }
-            );
-        }
-
-        #[tokio::test]
-        async fn test_gh_api_client_cargo_audit_v_0_17_6() {
-            test_specific_release(&RELEASE, ARTIFACTS).await
         }
     }
 }
