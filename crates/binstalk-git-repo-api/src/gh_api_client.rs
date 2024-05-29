@@ -326,11 +326,6 @@ mod test {
                 }
             );
         }
-
-        #[tokio::test]
-        async fn test_gh_api_client_cargo_audit_v_0_17_6() {
-            test_specific_release(&RELEASE, ARTIFACTS).await
-        }
     }
 
     fn try_extract_artifact_from_str(s: &str) -> Option<GhReleaseArtifact> {
@@ -490,81 +485,69 @@ mod test {
         }
     }
 
-    async fn test_specific_release(release: &GhRelease, artifacts: &[&str]) {
+    #[tokio::test]
+    async fn test_has_release_artifact() {
+        const RELEASES: [(GhRelease, &[&str]); 2] = [
+            (
+                cargo_audit_v_0_17_6::RELEASE,
+                cargo_audit_v_0_17_6::ARTIFACTS,
+            ),
+            (
+                cargo_audit_v_0_17_6::RELEASE,
+                cargo_audit_v_0_17_6::ARTIFACTS,
+            ),
+        ];
+        const NON_EXISTENT_RELEASES: [GhRelease; 1] = [GhRelease {
+            repo: GhRepo {
+                owner: CompactString::new_inline("cargo-bins"),
+                repo: CompactString::new_inline("cargo-binstall"),
+            },
+            // We are currently at v0.20.1 and we would never release
+            // anything older than v0.20.1
+            tag: CompactString::new_inline("v0.18.2"),
+        }];
+
         init_logger();
 
         for client in create_client().await {
             eprintln!("In client {client:?}");
 
-            for artifact_name in artifacts {
-                let res = client
-                    .has_release_artifact(GhReleaseArtifact {
-                        release: release.clone(),
-                        artifact_name: artifact_name.to_compact_string(),
-                    })
-                    .await;
+            for (release, artifacts) in RELEASES {
+                for artifact_name in artifacts {
+                    client
+                        .has_release_artifact(GhReleaseArtifact {
+                            release: release.clone(),
+                            artifact_name: artifact_name.to_compact_string(),
+                        })
+                        .await
+                        .unwrap()
+                        .unwrap();
+                }
 
-                assert!(
-                    matches!(res, Ok(Some(_)) | Err(GhApiError::RateLimit { .. })),
-                    "for '{artifact_name}': answer is {:#?}",
-                    res
+                assert_eq!(
+                    client
+                        .has_release_artifact(GhReleaseArtifact {
+                            release: release.clone(),
+                            artifact_name: "123z".to_compact_string(),
+                        })
+                        .await
+                        .unwrap(),
+                    None
                 );
             }
 
-            let res = client
-                .has_release_artifact(GhReleaseArtifact {
-                    release: release.clone(),
-                    artifact_name: "123z".to_compact_string(),
-                })
-                .await;
-
-            assert!(
-                matches!(res, Ok(None) | Err(GhApiError::RateLimit { .. })),
-                "res = {:#?}",
-                res
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn test_gh_api_client_cargo_binstall_v0_20_1() {
-        test_specific_release(
-            &cargo_binstall_v0_20_1::RELEASE,
-            cargo_binstall_v0_20_1::ARTIFACTS,
-        )
-        .await
-    }
-
-    #[tokio::test]
-    async fn test_gh_api_client_cargo_binstall_no_such_release() {
-        init_logger();
-
-        for client in create_client().await {
-            let release = GhRelease {
-                repo: GhRepo {
-                    owner: "cargo-bins".to_compact_string(),
-                    repo: "cargo-binstall".to_compact_string(),
-                },
-                // We are currently at v0.20.1 and we would never release
-                // anything older than v0.20.1
-                tag: "v0.18.2".to_compact_string(),
-            };
-
-            let err = client
-                .has_release_artifact(GhReleaseArtifact {
-                    release,
-                    artifact_name: "1234".to_compact_string(),
-                })
-                .await;
-
-            assert!(
-                matches!(
-                    err,
-                    Ok(None) | Err(GhApiError::NotFound | GhApiError::RateLimit { .. })
-                ),
-                "err = {:#?}",
-                err
-            );
+            for release in NON_EXISTENT_RELEASES {
+                assert_eq!(
+                    client
+                        .has_release_artifact(GhReleaseArtifact {
+                            release,
+                            artifact_name: "1234".to_compact_string(),
+                        })
+                        .await
+                        .unwrap(),
+                    None
+                );
+            }
         }
     }
 }
