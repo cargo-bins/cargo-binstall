@@ -450,40 +450,43 @@ mod test {
 
         init_logger();
 
+        let mut tests: Vec<(_, _)> = Vec::new();
+
         for client in create_client().await {
             eprintln!("In client {client:?}");
 
             for repo in PUBLIC_REPOS {
-                let res = client.get_repo_info(&repo).await;
+                let client = client.clone();
 
-                if matches!(res, Err(GhApiError::RateLimit { .. })) {
-                    continue;
-                }
-
-                assert_eq!(res.unwrap(), Some(RepoInfo::new(repo, false)));
+                tests.push((
+                    Some(RepoInfo::new(repo.clone(), false)),
+                    tokio::spawn(async move { client.get_repo_info(&repo).await }),
+                ));
             }
 
             for repo in NON_EXISTENT_REPOS {
-                let res = client.get_repo_info(&repo).await;
+                let client = client.clone();
 
-                if matches!(res, Err(GhApiError::RateLimit { .. })) {
-                    continue;
-                }
-
-                assert_eq!(res.unwrap(), None);
+                tests.push((
+                    None,
+                    tokio::spawn(async move { client.get_repo_info(&repo).await }),
+                ));
             }
 
             if client.get_auth_token().is_some() {
                 for repo in PRIVATE_REPOS {
-                    let res = client.get_repo_info(&repo).await;
+                    let client = client.clone();
 
-                    if matches!(res, Err(GhApiError::RateLimit { .. })) {
-                        continue;
-                    }
-
-                    assert_eq!(res.unwrap(), Some(RepoInfo::new(repo, true)));
+                    tests.push((
+                        Some(RepoInfo::new(repo.clone(), true)),
+                        tokio::spawn(async move { client.get_repo_info(&repo).await }),
+                    ));
                 }
             }
+        }
+
+        for (expected, task) in tests {
+            assert_eq!(task.await.unwrap().unwrap(), expected);
         }
     }
 
