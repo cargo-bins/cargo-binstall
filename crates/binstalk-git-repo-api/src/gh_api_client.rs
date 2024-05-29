@@ -448,8 +448,6 @@ mod test {
         let mut tests: Vec<(_, _)> = Vec::new();
 
         for client in create_client().await {
-            eprintln!("In client {client:?}");
-
             for repo in PUBLIC_REPOS {
                 let client = client.clone();
 
@@ -509,45 +507,60 @@ mod test {
 
         init_logger();
 
-        for client in create_client().await {
-            eprintln!("In client {client:?}");
+        let mut tasks = Vec::new();
 
+        for client in create_client().await {
             for (release, artifacts) in RELEASES {
                 for artifact_name in artifacts {
-                    client
-                        .has_release_artifact(GhReleaseArtifact {
-                            release: release.clone(),
-                            artifact_name: artifact_name.to_compact_string(),
-                        })
-                        .await
-                        .unwrap()
-                        .unwrap();
+                    let client = client.clone();
+                    let release = release.clone();
+                    tasks.push(tokio::spawn(async move {
+                        client
+                            .has_release_artifact(GhReleaseArtifact {
+                                release,
+                                artifact_name: artifact_name.to_compact_string(),
+                            })
+                            .await
+                            .unwrap()
+                            .unwrap();
+                    }));
                 }
 
-                assert_eq!(
-                    client
-                        .has_release_artifact(GhReleaseArtifact {
-                            release: release.clone(),
-                            artifact_name: "123z".to_compact_string(),
-                        })
-                        .await
-                        .unwrap(),
-                    None
-                );
+                let client = client.clone();
+                tasks.push(tokio::spawn(async move {
+                    assert_eq!(
+                        client
+                            .has_release_artifact(GhReleaseArtifact {
+                                release,
+                                artifact_name: "123z".to_compact_string(),
+                            })
+                            .await
+                            .unwrap(),
+                        None
+                    );
+                }));
             }
 
             for release in NON_EXISTENT_RELEASES {
-                assert_eq!(
-                    client
-                        .has_release_artifact(GhReleaseArtifact {
-                            release,
-                            artifact_name: "1234".to_compact_string(),
-                        })
-                        .await
-                        .unwrap(),
-                    None
-                );
+                let client = client.clone();
+
+                tasks.push(tokio::spawn(async move {
+                    assert_eq!(
+                        client
+                            .has_release_artifact(GhReleaseArtifact {
+                                release,
+                                artifact_name: "1234".to_compact_string(),
+                            })
+                            .await
+                            .unwrap(),
+                        None
+                    );
+                }));
             }
+        }
+
+        for task in tasks {
+            task.await.unwrap();
         }
     }
 }
