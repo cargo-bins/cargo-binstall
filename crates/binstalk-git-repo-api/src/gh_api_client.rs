@@ -416,7 +416,7 @@ mod test {
 
     /// Mark this as an async fn so that you won't accidentally use it in
     /// sync context.
-    async fn create_client() -> Vec<GhApiClient> {
+    fn create_client() -> Vec<GhApiClient> {
         let client = create_remote_client();
 
         let mut gh_clients = vec![GhApiClient::new(client.clone(), None)];
@@ -447,7 +447,7 @@ mod test {
 
         let mut tests: Vec<(_, _)> = Vec::new();
 
-        for client in create_client().await {
+        for client in create_client() {
             for repo in PUBLIC_REPOS {
                 let client = client.clone();
 
@@ -509,7 +509,7 @@ mod test {
 
         let mut tasks = Vec::new();
 
-        for client in create_client().await {
+        for client in create_client() {
             for (release, artifacts) in RELEASES {
                 for artifact_name in artifacts {
                     let client = client.clone();
