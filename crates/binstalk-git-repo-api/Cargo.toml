@@ -14,7 +14,6 @@ binstalk-downloader = { version = "0.10.3", path = "../binstalk-downloader", def
     "json",
 ] }
 compact_str = "0.7.0"
-futures-core = "0.3.30"
 percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"

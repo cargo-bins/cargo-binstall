@@ -354,7 +354,6 @@ version = "0.1.0"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
- "futures-core",
  "percent-encoding",
  "serde",
  "serde-tuple-vec-map",
