@@ -1,6 +1,6 @@
 use std::{future::Future, sync::OnceLock, time::Duration};
 
-use binstalk_downloader::remote::{self, header::HeaderMap, StatusCode, Url};
+use binstalk_downloader::remote::{self, Response, Url};
 use compact_str::CompactString;
 use percent_encoding::percent_decode_str;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -18,8 +18,10 @@ pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
     }
 }
 
-fn check_http_status_and_header(status: StatusCode, headers: &HeaderMap) -> Result<(), GhApiError> {
-    match status {
+pub(super) fn check_http_status_and_header(response: &Response) -> Result<(), GhApiError> {
+    let headers = response.headers();
+
+    match response.status() {
         remote::StatusCode::FORBIDDEN
             if headers
                 .get("x-ratelimit-remaining")
@@ -73,7 +75,7 @@ where
     async move {
         let response = future.await?;
 
-        check_http_status_and_header(response.status(), response.headers())?;
+        check_http_status_and_header(&response)?;
 
         Ok(response.json().await?)
     }
@@ -126,7 +128,7 @@ where
 
     async move {
         let response = res?.await?;
-        check_http_status_and_header(response.status(), response.headers())?;
+        check_http_status_and_header(&response)?;
 
         let mut response: GraphQLResponse<T> = response.json().await?;
 
