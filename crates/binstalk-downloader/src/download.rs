@@ -97,7 +97,7 @@ enum DownloadContent {
 }
 
 impl DownloadContent {
-    async fn to_response(self) -> Result<Response, DownloadError> {
+    async fn into_response(self) -> Result<Response, DownloadError> {
         Ok(match self {
             DownloadContent::ToIssue { client, url } => client.get(url).send(true).await?,
             DownloadContent::Response(response) => response,
@@ -163,7 +163,7 @@ impl<'a> Download<'a> {
         let mut data_verifier = self.data_verifier;
         Ok(self
             .content
-            .to_response()
+            .into_response()
             .await?
             .bytes_stream()
             .map(move |res| {
@@ -272,7 +272,7 @@ impl Download<'_> {
 
     #[instrument]
     pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
-        let bytes = self.content.to_response().await?.bytes().await?;
+        let bytes = self.content.into_response().await?.bytes().await?;
         if let Some(verifier) = self.data_verifier {
             verifier.update(&bytes);
         }
