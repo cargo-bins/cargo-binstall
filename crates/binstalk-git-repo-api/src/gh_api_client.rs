@@ -12,6 +12,7 @@ use std::{
 use binstalk_downloader::remote;
 use compact_str::{format_compact, CompactString};
 use tokio::sync::OnceCell;
+use url::Url;
 
 mod common;
 mod error;
@@ -210,7 +211,7 @@ impl GhApiClient {
             release,
             artifact_name,
         }: GhReleaseArtifact,
-    ) -> Result<Option<CompactString>, GhApiError> {
+    ) -> Result<Option<Url>, GhApiError> {
         let once_cell = self.0.release_artifacts.get(release.clone());
         let res = once_cell
             .get_or_try_init(|| {

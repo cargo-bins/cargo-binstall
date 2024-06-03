@@ -9,6 +9,7 @@ use std::{
 use binstalk_downloader::remote::{self};
 use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
+use url::Url;
 
 use super::{
     common::{issue_graphql_query, issue_restful_api},
@@ -20,7 +21,7 @@ use super::{
 #[derive(Eq, Deserialize, Debug)]
 struct Artifact {
     name: CompactString,
-    url: CompactString,
+    url: Url,
 }
 
 // Manually implement PartialEq and Hash to ensure it will always produce the
@@ -59,7 +60,7 @@ pub(super) struct Artifacts {
 
 impl Artifacts {
     /// get url for downloading the artifact using GitHub API (for private repository).
-    pub(super) fn get_artifact_url(&self, artifact_name: &str) -> Option<CompactString> {
+    pub(super) fn get_artifact_url(&self, artifact_name: &str) -> Option<Url> {
         self.assets
             .get(artifact_name)
             .map(|artifact| artifact.url.clone())
