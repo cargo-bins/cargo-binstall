@@ -10,7 +10,7 @@ use std::{
 };
 
 use binstalk_downloader::{download::Download, remote};
-use compact_str::{format_compact, CompactString};
+use compact_str::{format_compact, CompactString, ToCompactString};
 use tokio::sync::OnceCell;
 use url::Url;
 
@@ -32,8 +32,25 @@ pub struct GhRepo {
     pub repo: CompactString,
 }
 impl GhRepo {
-    pub fn repo_url(&self) -> CompactString {
-        format_compact!("https://github.com/{}/{}", self.owner, self.repo)
+    pub fn repo_url(&self) -> Result<Url, url::ParseError> {
+        Url::parse(&format_compact!(
+            "https://github.com/{}/{}",
+            self.owner,
+            self.repo
+        ))
+    }
+
+    pub fn try_extract_from_url(url: &Url) -> Option<Self> {
+        if url.domain() != Some("github.com") {
+            return None;
+        }
+
+        let mut path_segments = url.path_segments()?;
+
+        Some(Self {
+            owner: path_segments.next()?.to_compact_string(),
+            repo: path_segments.next()?.to_compact_string(),
+        })
     }
 }
 
@@ -371,6 +388,25 @@ mod test {
                 }
             );
         }
+    }
+
+    #[test]
+    fn gh_repo_extract_from_and_to_url() {
+        [
+            "https://github.com/cargo-bins/cargo-binstall",
+            "https://github.com/rustsec/rustsec",
+        ]
+        .into_iter()
+        .for_each(|url| {
+            let url = Url::parse(&url).unwrap();
+            assert_eq!(
+                GhRepo::try_extract_from_url(&url)
+                    .unwrap()
+                    .repo_url()
+                    .unwrap(),
+                url
+            );
+        })
     }
 
     fn try_extract_artifact_from_str(s: &str) -> Option<GhReleaseArtifact> {
