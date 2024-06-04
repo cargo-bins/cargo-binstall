@@ -229,7 +229,7 @@ impl GhApiClient {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ReleaseArtifactUrl(Url);
+pub struct GhReleaseArtifactUrl(Url);
 
 impl GhApiClient {
     /// Return `Ok(Some(api_artifact_url))` if exists.
@@ -241,7 +241,7 @@ impl GhApiClient {
             release,
             artifact_name,
         }: GhReleaseArtifact,
-    ) -> Result<Option<ReleaseArtifactUrl>, GhApiError> {
+    ) -> Result<Option<GhReleaseArtifactUrl>, GhApiError> {
         let once_cell = self.0.release_artifacts.get(release.clone());
         let res = once_cell
             .get_or_try_init(|| {
@@ -265,7 +265,7 @@ impl GhApiClient {
         match res {
             Ok(Some(artifacts)) => Ok(artifacts
                 .get_artifact_url(&artifact_name)
-                .map(ReleaseArtifactUrl)),
+                .map(GhReleaseArtifactUrl)),
             Ok(None) => Ok(None),
             Err(GhApiError::RateLimit { retry_after }) => {
                 *self.0.retry_after.lock().unwrap() =
@@ -279,7 +279,7 @@ impl GhApiClient {
 
     pub async fn download_artifact(
         &self,
-        artifact_url: ReleaseArtifactUrl,
+        artifact_url: GhReleaseArtifactUrl,
     ) -> Result<Download<'static>, GhApiError> {
         self.check_retry_after()?;
 
