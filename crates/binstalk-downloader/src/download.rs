@@ -154,6 +154,13 @@ impl<'a> Download<'a> {
         }
     }
 
+    pub fn with_data_verifier<'d>(self, data_verifier: &'d mut dyn DataVerifier) -> Download<'d> {
+        Download {
+            content: self.content,
+            data_verifier: Some(data_verifier),
+        }
+    }
+
     async fn get_stream(
         self,
     ) -> Result<
