@@ -1,5 +1,6 @@
 use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use leon::Template;
@@ -31,6 +32,8 @@ struct Resolved {
     archive_suffix: Option<String>,
     repo: Option<String>,
     subcrate: Option<String>,
+    gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
+    is_repo_private: bool,
 }
 
 impl GhCrateMeta {
@@ -41,6 +44,7 @@ impl GhCrateMeta {
         pkg_url: &Template<'_>,
         repo: Option<&str>,
         subcrate: Option<&str>,
+        is_repo_private: bool,
     ) {
         let render_url = |ext| {
             let ctx = Context::from_data_with_repo(
@@ -82,16 +86,39 @@ impl GhCrateMeta {
             let repo = repo.map(ToString::to_string);
             let subcrate = subcrate.map(ToString::to_string);
             let archive_suffix = ext.map(ToString::to_string);
+            let gh_release_artifact = GhReleaseArtifact::try_extract_from_url(&url);
+
             async move {
-                Ok(does_url_exist(client, gh_api_client, &url)
+                debug!("Checking for package at: '{url}'");
+
+                let mut resolved = Resolved {
+                    url: url.clone(),
+                    pkg_fmt,
+                    repo,
+                    subcrate,
+                    archive_suffix,
+                    is_repo_private,
+                    gh_release_artifact_url: None,
+                };
+
+                if let Some(artifact) = gh_release_artifact {
+                    match get_gh_release_artifact_url(gh_api_client, artifact).await {
+                        Ok(Some(artifact_url)) => {
+                            resolved.gh_release_artifact_url = Some(artifact_url);
+                            return Ok(Some(resolved));
+                        }
+                        Ok(None) => return Ok(None),
+
+                        Err(GhApiError::RateLimit { .. }) => (),
+                        Err(GhApiError::Unauthorized) if !is_repo_private => (),
+
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+
+                Ok(Box::pin(client.remote_gettable(url))
                     .await?
-                    .then_some(Resolved {
-                        url,
-                        pkg_fmt,
-                        repo,
-                        subcrate,
-                        archive_suffix,
-                    }))
+                    .then_some(resolved))
             }
         }));
     }
@@ -118,10 +145,11 @@ impl super::Fetcher for GhCrateMeta {
 
     fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
         tokio::spawn(async move {
-            let info = self.data.get_repo_info(&self.client).await?.as_ref();
+            let info = self.data.get_repo_info(&self.gh_api_client).await?;
 
             let repo = info.map(|info| &info.repo);
             let subcrate = info.and_then(|info| info.subcrate.as_deref());
+            let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -230,13 +258,22 @@ impl super::Fetcher for GhCrateMeta {
                 //             basically cartesian product.
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
-                    this.launch_baseline_find_tasks(&resolver, pkg_fmt, &pkg_url, repo, subcrate);
+                    this.launch_baseline_find_tasks(
+                        &resolver,
+                        pkg_fmt,
+                        &pkg_url,
+                        repo,
+                        subcrate,
+                        is_repo_private,
+                    );
                 }
             }
 
             if let Some(resolved) = resolver.resolve().await? {
                 debug!(?resolved, "Winning URL found!");
-                self.resolution.set(resolved).unwrap(); // find() is called first
+                self.resolution
+                    .set(resolved)
+                    .expect("find() should be only called once");
                 Ok(true)
             } else {
                 Ok(false)
@@ -245,7 +282,10 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let resolved = self.resolution.get().unwrap(); // find() is called first
+        let resolved = self
+            .resolution
+            .get()
+            .expect("find() should be called once before fetch_and_extract()");
         trace!(?resolved, "preparing to fetch");
 
         let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
@@ -290,11 +330,18 @@ impl super::Fetcher for GhCrateMeta {
             "Downloading package",
         );
         let mut data_verifier = verifier.data_verifier()?;
-        let files = Download::new_with_data_verifier(
-            self.client.clone(),
-            resolved.url.clone(),
-            data_verifier.as_mut(),
-        )
+        let files = match resolved.gh_release_artifact_url.as_ref() {
+            Some(artifact_url) if resolved.is_repo_private => self
+                .gh_api_client
+                .download_artifact(artifact_url.clone())
+                .await?
+                .with_data_verifier(data_verifier.as_mut()),
+            _ => Download::new_with_data_verifier(
+                self.client.clone(),
+                resolved.url.clone(),
+                data_verifier.as_mut(),
+            ),
+        }
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
         trace!("validating signature (if any)");

@@ -3,7 +3,7 @@
 use std::{path::Path, sync::Arc};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::gh_api_client::GhApiError;
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo};
 use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
 use tokio::sync::OnceCell;
@@ -144,6 +144,7 @@ struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
     subcrate: Option<CompactString>,
+    is_private: bool,
 }
 
 /// What to do about package signatures
@@ -179,29 +180,52 @@ impl Data {
     }
 
     #[instrument(level = "debug")]
-    async fn get_repo_info(&self, client: &Client) -> Result<&Option<RepoInfo>, FetchError> {
+    async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
         self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
-                    if let Some(repo) = self.repo.as_deref() {
-                        let mut repo = client.get_redirected_final_url(Url::parse(repo)?).await?;
-                        let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+                    let Some(repo) = self.repo.as_deref() else {
+                        return Ok(None);
+                    };
 
-                        let repo_info = RepoInfo {
-                            subcrate: RepoInfo::detect_subcrate(&mut repo, repository_host),
-                            repo,
-                            repository_host,
-                        };
+                    let mut repo = Url::parse(&repo)?;
+                    let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
-                        debug!("Resolved repo_info = {repo_info:#?}");
-
-                        Ok(Some(repo_info))
-                    } else {
-                        Ok(None)
+                    if repository_host == RepositoryHost::Unknown {
+                        repo = client
+                            .remote_client()
+                            .get_redirected_final_url(repo)
+                            .await?;
+                        repository_host = RepositoryHost::guess_git_hosting_services(&repo);
                     }
+
+                    let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
+
+                    let mut is_private = false;
+                    if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
+                        if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
+                            let Some(gh_repo_info) = client.get_repo_info(&gh_repo).await? else {
+                                return Err(GhApiError::NotFound.into());
+                            };
+
+                            is_private = gh_repo_info.is_private();
+                        }
+                    }
+
+                    let repo_info = RepoInfo {
+                        subcrate,
+                        repo,
+                        repository_host,
+                        is_private,
+                    };
+
+                    debug!("Resolved repo_info = {repo_info:#?}");
+
+                    Ok(Some(repo_info))
                 })
             })
             .await
+            .map(Option::as_ref)
     }
 }
 
