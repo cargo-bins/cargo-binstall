@@ -131,6 +131,10 @@ impl GhApiClient {
             is_auth_token_valid: AtomicBool::new(true),
         }))
     }
+
+    pub fn remote_client(&self) -> &remote::Client {
+        &self.0.client
+    }
 }
 
 impl GhApiClient {
@@ -560,7 +564,7 @@ mod test {
                         let browser_download_task = client.get_auth_token().map(|_| {
                             tokio::spawn(
                                 Download::new(
-                                    client.0.client.clone(),
+                                    client.remote_client().clone(),
                                     Url::parse(&format!(
                                         "https://github.com/{}/{}/releases/download/{}/{}",
                                         artifact.release.repo.owner,
