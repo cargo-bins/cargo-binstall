@@ -163,6 +163,10 @@ impl GhApiClient {
         }
     }
 
+    pub fn has_gh_token(&self) -> bool {
+        self.get_auth_token().is_some()
+    }
+
     async fn do_fetch<T, U, GraphQLFn, RestfulFn, GraphQLFut, RestfulFut>(
         &self,
         graphql_func: GraphQLFn,
