@@ -188,7 +188,7 @@ impl Data {
                         return Ok(None);
                     };
 
-                    let mut repo = Url::parse(&repo)?;
+                    let mut repo = Url::parse(repo)?;
                     let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
                     if repository_host == RepositoryHost::Unknown {
