@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
+use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc, time::Duration};
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
 use compact_str::{CompactString, ToCompactString};
@@ -6,6 +6,7 @@ use either::Either;
 use leon::Template;
 use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
+use tokio::time::sleep;
 use tracing::{debug, info, trace, warn};
 use url::Url;
 
@@ -13,6 +14,8 @@ use crate::{
     common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
     SignaturePolicy, SignatureVerifier, TargetDataErased,
 };
+
+static DEFAULT_GH_API_RETRY_DURATION: Duration = Duration::from_secs(1);
 
 pub(crate) mod hosting;
 
@@ -102,17 +105,23 @@ impl GhCrateMeta {
                 };
 
                 if let Some(artifact) = gh_release_artifact {
-                    match get_gh_release_artifact_url(gh_api_client, artifact).await {
-                        Ok(Some(artifact_url)) => {
-                            resolved.gh_release_artifact_url = Some(artifact_url);
-                            return Ok(Some(resolved));
+                    loop {
+                        match get_gh_release_artifact_url(gh_api_client.clone(), artifact.clone())
+                            .await
+                        {
+                            Ok(Some(artifact_url)) => {
+                                resolved.gh_release_artifact_url = Some(artifact_url);
+                                return Ok(Some(resolved));
+                            }
+                            Ok(None) => return Ok(None),
+
+                            Err(GhApiError::RateLimit { retry_after }) => {
+                                sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await;
+                            }
+                            Err(GhApiError::Unauthorized) if !is_repo_private => break,
+
+                            Err(err) => return Err(err.into()),
                         }
-                        Ok(None) => return Ok(None),
-
-                        Err(GhApiError::RateLimit { .. }) => (),
-                        Err(GhApiError::Unauthorized) if !is_repo_private => (),
-
-                        Err(err) => return Err(err.into()),
                     }
                 }
 
