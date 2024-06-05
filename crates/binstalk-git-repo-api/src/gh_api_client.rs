@@ -311,9 +311,12 @@ impl GhApiClient {
 mod test {
     use super::*;
     use compact_str::{CompactString, ToCompactString};
-    use std::{env, num::NonZeroU16};
+    use std::{env, num::NonZeroU16, time::Duration};
+    use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
     use tracing_subscriber::{filter::LevelFilter, fmt::fmt};
+
+    static DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(1);
 
     mod cargo_binstall_v0_20_1 {
         use super::{CompactString, GhRelease, GhRepo};
@@ -553,7 +556,16 @@ mod test {
 
                     tests.push((
                         Some(RepoInfo::new(repo.clone(), true)),
-                        tokio::spawn(async move { client.get_repo_info(&repo).await }),
+                        tokio::spawn(async move {
+                            loop {
+                                match client.get_repo_info(&repo).await {
+                                    Err(GhApiError::RateLimit { retry_after }) => {
+                                        sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
+                                    }
+                                    res => break res,
+                                }
+                            }
+                        }),
                     ));
                 }
             }
@@ -618,20 +630,27 @@ mod test {
                             )
                         });
 
-                        let artifact_url = client
-                            .has_release_artifact(artifact)
-                            .await
-                            .unwrap()
-                            .unwrap();
+                        let artifact_url = loop {
+                            match client.has_release_artifact(artifact.clone()).await {
+                                Err(GhApiError::RateLimit { retry_after }) => {
+                                    sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
+                                }
+                                res => break res.unwrap().unwrap(),
+                            }
+                        };
 
                         if let Some(browser_download_task) = browser_download_task {
-                            let artifact_download_data = client
-                                .download_artifact(artifact_url)
-                                .await
-                                .unwrap()
-                                .into_bytes()
-                                .await
-                                .unwrap();
+                            let artifact_download_data = loop {
+                                match client.download_artifact(artifact_url.clone()).await {
+                                    Err(GhApiError::RateLimit { retry_after }) => {
+                                        sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
+                                    }
+                                    res => break res.unwrap(),
+                                }
+                            }
+                            .into_bytes()
+                            .await
+                            .unwrap();
 
                             let browser_download_data =
                                 browser_download_task.await.unwrap().unwrap();
