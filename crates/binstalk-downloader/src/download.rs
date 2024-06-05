@@ -154,7 +154,7 @@ impl<'a> Download<'a> {
         }
     }
 
-    pub fn with_data_verifier<'d>(self, data_verifier: &'d mut dyn DataVerifier) -> Download<'d> {
+    pub fn with_data_verifier(self, data_verifier: &mut dyn DataVerifier) -> Download<'_> {
         Download {
             content: self.content,
             data_verifier: Some(data_verifier),
