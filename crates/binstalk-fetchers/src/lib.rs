@@ -1,12 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo};
 use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
-use tokio::sync::OnceCell;
+use tokio::{sync::OnceCell, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -26,6 +26,8 @@ use signing::*;
 mod futures_resolver;
 
 use gh_crate_meta::hosting::RepositoryHost;
+
+static DEFAULT_GH_API_RETRY_DURATION: Duration = Duration::from_secs(1);
 
 #[derive(Debug, ThisError)]
 #[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
@@ -204,11 +206,20 @@ impl Data {
                     let mut is_private = false;
                     if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
                         if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
-                            let Some(gh_repo_info) = client.get_repo_info(&gh_repo).await? else {
-                                return Err(GhApiError::NotFound.into());
-                            };
-
-                            is_private = gh_repo_info.is_private();
+                            loop {
+                                match client.get_repo_info(&gh_repo).await {
+                                    Ok(Some(gh_repo_info)) => {
+                                        is_private = gh_repo_info.is_private();
+                                        break;
+                                    }
+                                    Ok(None) => return Err(GhApiError::NotFound.into()),
+                                    Err(GhApiError::RateLimit { retry_after }) => {
+                                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION))
+                                            .await
+                                    }
+                                    Err(err) => return Err(err.into()),
+                                }
+                            }
                         }
                     }
 

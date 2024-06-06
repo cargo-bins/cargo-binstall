@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
 use compact_str::{CompactString, ToCompactString};
@@ -12,10 +12,8 @@ use url::Url;
 
 use crate::{
     common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
-    SignaturePolicy, SignatureVerifier, TargetDataErased,
+    SignaturePolicy, SignatureVerifier, TargetDataErased, DEFAULT_GH_API_RETRY_DURATION,
 };
-
-static DEFAULT_GH_API_RETRY_DURATION: Duration = Duration::from_secs(1);
 
 pub(crate) mod hosting;
 
