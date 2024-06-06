@@ -12,7 +12,7 @@ use std::{
 use binstalk_downloader::{download::Download, remote};
 use compact_str::{format_compact, CompactString, ToCompactString};
 use tokio::sync::OnceCell;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
 mod common;
@@ -257,7 +257,10 @@ impl GhApiClient {
                         )
                         .await
                     {
-                        Ok(artifacts) => Ok(Some(artifacts)),
+                        Ok(artifacts) => {
+                            debug!("artifacts = {artifacts:?}");
+                            Ok(Some(artifacts))
+                        }
                         Err(GhApiError::NotFound) => Ok(None),
                         Err(err) => Err(err),
                     }
