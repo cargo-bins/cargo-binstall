@@ -12,7 +12,7 @@ use std::{
 use binstalk_downloader::{download::Download, remote};
 use compact_str::{format_compact, CompactString, ToCompactString};
 use tokio::sync::OnceCell;
-use tracing::debug;
+use tracing::instrument;
 use url::Url;
 
 mod common;
@@ -213,9 +213,8 @@ impl GhApiClient {
             .map_err(|err| err.context("Restful API"))
     }
 
+    #[instrument(level = "debug", skip(self), ret)]
     pub async fn get_repo_info(&self, repo: &GhRepo) -> Result<Option<RepoInfo>, GhApiError> {
-        debug!("get_repo_info is called on {repo:?}");
-
         match self
             .do_fetch(
                 repo_info::fetch_repo_info_graphql_api,
@@ -238,6 +237,7 @@ impl GhApiClient {
     /// Return `Ok(Some(api_artifact_url))` if exists.
     ///
     /// The returned future is guaranteed to be pointer size.
+    #[instrument(level = "debug", skip(self), ret)]
     pub async fn has_release_artifact(
         &self,
         GhReleaseArtifact {
@@ -249,8 +249,6 @@ impl GhApiClient {
         let res = once_cell
             .get_or_try_init(|| {
                 Box::pin(async {
-                    debug!("has_release_artifact is called on {release:?}, {artifact_name}");
-
                     match self
                         .do_fetch(
                             release_artifacts::fetch_release_artifacts_graphql_api,
