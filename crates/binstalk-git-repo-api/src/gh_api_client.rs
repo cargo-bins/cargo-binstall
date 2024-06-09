@@ -258,7 +258,6 @@ impl GhApiClient {
                         .await
                     {
                         Ok(artifacts) => {
-                            debug!("artifacts = {artifacts:?}");
                             Ok(Some(artifacts))
                         }
                         Err(GhApiError::NotFound) => Ok(None),
@@ -556,7 +555,7 @@ mod test {
                 ));
             }
 
-            if client.get_auth_token().is_some() {
+            if client.has_auth_token() {
                 for repo in PRIVATE_REPOS {
                     let client = client.clone();
 
