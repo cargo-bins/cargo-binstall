@@ -12,7 +12,7 @@ use std::{
 use binstalk_downloader::{download::Download, remote};
 use compact_str::{format_compact, CompactString, ToCompactString};
 use tokio::sync::OnceCell;
-use tracing::{debug, instrument};
+use tracing::instrument;
 use url::Url;
 
 mod common;
@@ -257,9 +257,7 @@ impl GhApiClient {
                         )
                         .await
                     {
-                        Ok(artifacts) => {
-                            Ok(Some(artifacts))
-                        }
+                        Ok(artifacts) => Ok(Some(artifacts)),
                         Err(GhApiError::NotFound) => Ok(None),
                         Err(err) => Err(err),
                     }
@@ -555,7 +553,7 @@ mod test {
                 ));
             }
 
-            if client.has_auth_token() {
+            if client.has_gh_token() {
                 for repo in PRIVATE_REPOS {
                     let client = client.clone();
 
