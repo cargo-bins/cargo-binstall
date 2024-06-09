@@ -74,13 +74,7 @@ pub(super) fn fetch_release_artifacts_restful_api(
         tag,
     }: &GhRelease,
 ) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + Sync + 'static {
-    issue_restful_api(
-        client,
-        &[
-            "repos", owner, repo, "releases", "tags",
-            tag,
-        ],
-    )
+    issue_restful_api(client, &["repos", owner, repo, "releases", "tags", tag])
 }
 
 #[derive(Debug, Deserialize)]
