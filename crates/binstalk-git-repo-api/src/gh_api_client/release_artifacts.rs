@@ -83,30 +83,30 @@ pub(super) fn fetch_release_artifacts_restful_api(
     )
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GraphQLData {
     repository: Option<GraphQLRepo>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GraphQLRepo {
     release: Option<GraphQLRelease>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GraphQLRelease {
     #[serde(rename = "releaseAssets")]
     assets: GraphQLReleaseAssets,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GraphQLReleaseAssets {
     nodes: Vec<Artifact>,
     #[serde(rename = "pageInfo")]
     page_info: GraphQLPageInfo,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GraphQLPageInfo {
     #[serde(rename = "endCursor")]
     end_cursor: Option<CompactString>,

@@ -48,7 +48,7 @@ pub(super) fn fetch_repo_info_restful_api(
     issue_restful_api(client, &["repos", owner, repo])
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GraphQLData {
     repository: Option<RepoInfo>,
 }

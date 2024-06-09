@@ -1,4 +1,4 @@
-use std::{future::Future, sync::OnceLock, time::Duration};
+use std::{fmt::Debug, future::Future, sync::OnceLock, time::Duration};
 
 use binstalk_downloader::remote::{self, Response, Url};
 use compact_str::CompactString;
@@ -81,7 +81,7 @@ where
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GraphQLResponse<T> {
     data: T,
     errors: Option<GhGraphQLErrors>,
@@ -109,7 +109,7 @@ pub(super) fn issue_graphql_query<T>(
     auth_token: &str,
 ) -> impl Future<Output = Result<T, GhApiError>> + Send + Sync + 'static
 where
-    T: DeserializeOwned,
+    T: DeserializeOwned + Debug,
 {
     let res = to_json_string(&GraphQLQuery { query })
         .map_err(remote::Error::from)
@@ -131,6 +131,8 @@ where
         check_http_status_and_header(&response)?;
 
         let mut response: GraphQLResponse<T> = response.json().await?;
+
+        debug!("response = {response:?}");
 
         if let Some(error) = response.errors.take() {
             Err(error.into())
