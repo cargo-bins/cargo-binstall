@@ -551,7 +551,16 @@ mod test {
 
                 tests.push((
                     None,
-                    tokio::spawn(async move { client.get_repo_info(&repo).await }),
+                    tokio::spawn(async move {
+                        loop {
+                            match client.get_repo_info(&repo).await {
+                                Err(GhApiError::RateLimit { retry_after }) => {
+                                    sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
+                                }
+                                res => break res,
+                            }
+                        }
+                    }),
                 ));
             }
 
