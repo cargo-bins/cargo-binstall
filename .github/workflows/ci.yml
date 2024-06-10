@@ -57,6 +57,8 @@ jobs:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tools: cargo-nextest
 
       - run: just test
         env:
