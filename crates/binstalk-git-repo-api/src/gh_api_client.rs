@@ -508,9 +508,7 @@ mod test {
 
         let mut gh_clients = vec![GhApiClient::new(client.clone(), None)];
 
-        if let Ok(token) =
-            env::var("CI_UNIT_TEST_GITHUB_TOKEN").or_else(|_| env::var("GITHUB_TOKEN"))
-        {
+        if let Ok(token) = env::var("CI_UNIT_TEST_GITHUB_TOKEN") {
             gh_clients.push(GhApiClient::new(client, Some(token.into())));
         }
 
