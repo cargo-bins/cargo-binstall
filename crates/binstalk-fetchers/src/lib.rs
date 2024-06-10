@@ -41,7 +41,6 @@ pub struct InvalidPkgFmtError {
 
 #[derive(Debug, ThisError, miette::Diagnostic)]
 #[non_exhaustive]
-#[cfg_attr(feature = "miette", derive(miette::Diagnostic))]
 pub enum FetchError {
     #[error(transparent)]
     Download(#[from] DownloadError),
