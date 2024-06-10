@@ -602,6 +602,20 @@ mod test {
         let mut tasks = Vec::new();
 
         for client in create_client() {
+            async fn has_release_artifact(
+                client: &GhApiClient,
+                artifact: &GhReleaseArtifact,
+            ) -> Result<Option<GhReleaseArtifactUrl>, GhApiError> {
+                loop {
+                    match client.has_release_artifact(artifact.clone()).await {
+                        Err(GhApiError::RateLimit { retry_after }) => {
+                            sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
+                        }
+                        res => break res,
+                    }
+                }
+            }
+
             for (release, artifacts) in RELEASES {
                 for artifact_name in artifacts {
                     let client = client.clone();
@@ -628,15 +642,10 @@ mod test {
                                 .into_bytes(),
                             )
                         });
-
-                        let artifact_url = loop {
-                            match client.has_release_artifact(artifact.clone()).await {
-                                Err(GhApiError::RateLimit { retry_after }) => {
-                                    sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
-                                }
-                                res => break res.unwrap().unwrap(),
-                            }
-                        };
+                        let artifact_url = has_release_artifact(&client, &artifact)
+                            .await
+                            .unwrap()
+                            .unwrap();
 
                         if let Some(browser_download_task) = browser_download_task {
                             let artifact_download_data = loop {
@@ -662,13 +671,15 @@ mod test {
                 let client = client.clone();
                 tasks.push(tokio::spawn(async move {
                     assert_eq!(
-                        client
-                            .has_release_artifact(GhReleaseArtifact {
+                        has_release_artifact(
+                            &client,
+                            &GhReleaseArtifact {
                                 release,
                                 artifact_name: "123z".to_compact_string(),
-                            })
-                            .await
-                            .unwrap(),
+                            }
+                        )
+                        .await
+                        .unwrap(),
                         None
                     );
                 }));
@@ -679,13 +690,15 @@ mod test {
 
                 tasks.push(tokio::spawn(async move {
                     assert_eq!(
-                        client
-                            .has_release_artifact(GhReleaseArtifact {
+                        has_release_artifact(
+                            &client,
+                            &GhReleaseArtifact {
                                 release,
                                 artifact_name: "1234".to_compact_string(),
-                            })
-                            .await
-                            .unwrap(),
+                            }
+                        )
+                        .await
+                        .unwrap(),
                         None
                     );
                 }));
