@@ -43,9 +43,7 @@ reqwest = { version = "0.12.4", features = [
     "brotli",
     "deflate",
 ], default-features = false }
-percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"], optional = true }
-serde-tuple-vec-map = "1.0.1"
 serde_json = { version = "1.0.107", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
@@ -127,7 +125,6 @@ zstd-thin = ["zstd/thin"]
 
 cross-lang-fat-lto = ["zstd/fat-lto"]
 
-gh-api-client = ["json"]
 json = ["serde", "serde_json"]
 
 [target."cfg(windows)".dependencies]

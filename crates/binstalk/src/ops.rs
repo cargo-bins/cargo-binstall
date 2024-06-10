@@ -6,9 +6,7 @@ use semver::VersionReq;
 
 use crate::{
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
-    helpers::{
-        self, gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client,
-    },
+    helpers::{gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client},
     manifests::cargo_toml_binstall::PkgOverride,
     registry::Registry,
     DesiredTargets,
@@ -23,7 +21,7 @@ pub type Resolver =
 #[non_exhaustive]
 pub enum CargoTomlFetchOverride {
     #[cfg(feature = "git")]
-    Git(helpers::git::GitUrl),
+    Git(crate::helpers::git::GitUrl),
     Path(PathBuf),
 }
 

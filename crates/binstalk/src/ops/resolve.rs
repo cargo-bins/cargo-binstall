@@ -12,7 +12,6 @@ use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
-use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, info, instrument, warn};
 
@@ -21,7 +20,7 @@ use crate::{
     errors::{BinstallError, VersionParseError},
     fetchers::{Data, Fetcher, TargetData},
     helpers::{
-        self, cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
+        cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
         tasks::AutoAbortJoinHandle,
     },
@@ -361,7 +360,7 @@ impl PackageInfo {
             }
             #[cfg(feature = "git")]
             Some(Git(git_url)) => {
-                use helpers::git::{GitCancellationToken, Repository as GitRepository};
+                use crate::helpers::git::{GitCancellationToken, Repository as GitRepository};
 
                 let git_url = git_url.clone();
                 let name = name.clone();
@@ -370,7 +369,7 @@ impl PackageInfo {
                 let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
                 let ret = spawn_blocking(move || {
-                    let dir = TempDir::new()?;
+                    let dir = tempfile::TempDir::new()?;
                     GitRepository::shallow_clone(git_url, dir.as_ref(), Some(cancellation_token))?;
 
                     load_manifest_from_workspace(dir.as_ref(), &name).map_err(BinstallError::from)

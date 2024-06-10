@@ -1,4 +1,4 @@
-use std::{fmt, io, marker::PhantomData, path::Path};
+use std::{fmt, io, path::Path};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use bytes::Bytes;
@@ -8,7 +8,7 @@ use tracing::{debug, error, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::{PkgFmt, TarBasedFmt};
 
-use crate::remote::{Client, Error as RemoteError, Url};
+use crate::remote::{Client, Error as RemoteError, Response, Url};
 
 mod async_extracter;
 use async_extracter::*;
@@ -90,38 +90,43 @@ impl DataVerifier for () {
     }
 }
 
+#[derive(Debug)]
+enum DownloadContent {
+    ToIssue { client: Client, url: Url },
+    Response(Response),
+}
+
+impl DownloadContent {
+    async fn into_response(self) -> Result<Response, DownloadError> {
+        Ok(match self {
+            DownloadContent::ToIssue { client, url } => client.get(url).send(true).await?,
+            DownloadContent::Response(response) => response,
+        })
+    }
+}
+
 pub struct Download<'a> {
-    client: Client,
-    url: Url,
+    content: DownloadContent,
     data_verifier: Option<&'a mut dyn DataVerifier>,
 }
 
 impl fmt::Debug for Download<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[allow(dead_code, clippy::type_complexity)]
-        #[derive(Debug)]
-        struct Download<'a> {
-            client: &'a Client,
-            url: &'a Url,
-            data_verifier: Option<PhantomData<&'a mut dyn DataVerifier>>,
-        }
-
-        fmt::Debug::fmt(
-            &Download {
-                client: &self.client,
-                url: &self.url,
-                data_verifier: self.data_verifier.as_ref().map(|_| PhantomData),
-            },
-            f,
-        )
+        fmt::Debug::fmt(&self.content, f)
     }
 }
 
 impl Download<'static> {
     pub fn new(client: Client, url: Url) -> Self {
         Self {
-            client,
-            url,
+            content: DownloadContent::ToIssue { client, url },
+            data_verifier: None,
+        }
+    }
+
+    pub fn from_response(response: Response) -> Self {
+        Self {
+            content: DownloadContent::Response(response),
             data_verifier: None,
         }
     }
@@ -134,8 +139,24 @@ impl<'a> Download<'a> {
         data_verifier: &'a mut dyn DataVerifier,
     ) -> Self {
         Self {
-            client,
-            url,
+            content: DownloadContent::ToIssue { client, url },
+            data_verifier: Some(data_verifier),
+        }
+    }
+
+    pub fn from_response_with_data_verifier(
+        response: Response,
+        data_verifier: &'a mut dyn DataVerifier,
+    ) -> Self {
+        Self {
+            content: DownloadContent::Response(response),
+            data_verifier: Some(data_verifier),
+        }
+    }
+
+    pub fn with_data_verifier(self, data_verifier: &mut dyn DataVerifier) -> Download<'_> {
+        Download {
+            content: self.content,
             data_verifier: Some(data_verifier),
         }
     }
@@ -148,9 +169,10 @@ impl<'a> Download<'a> {
     > {
         let mut data_verifier = self.data_verifier;
         Ok(self
-            .client
-            .get_stream(self.url)
+            .content
+            .into_response()
             .await?
+            .bytes_stream()
             .map(move |res| {
                 let bytes = res?;
 
@@ -257,7 +279,7 @@ impl Download<'_> {
 
     #[instrument]
     pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
-        let bytes = self.client.get(self.url).send(true).await?.bytes().await?;
+        let bytes = self.content.into_response().await?.bytes().await?;
         if let Some(verifier) = self.data_verifier {
             verifier.update(&bytes);
         }

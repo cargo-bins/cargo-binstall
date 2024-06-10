@@ -12,7 +12,8 @@ license = "GPL-3.0-only"
 
 [dependencies]
 async-trait = "0.1.68"
-binstalk-downloader = { version = "0.10.3", path = "../binstalk-downloader", default-features = false, features = ["gh-api-client"] }
+binstalk-downloader = { version = "0.10.3", path = "../binstalk-downloader", default-features = false }
+binstalk-git-repo-api = { version = "0.0.0", path = "../binstalk-git-repo-api" }
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 bytes = "1.4.0"
 compact_str = { version = "0.7.0" }
@@ -25,7 +26,10 @@ minisign-verify = "0.2.1"
 once_cell = "1.18.0"
 strum = "0.26.1"
 thiserror = "1.0.61"
-tokio = { version = "1.35.0", features = ["rt", "sync"], default-features = false }
+tokio = { version = "1.35.0", features = [
+    "rt",
+    "sync",
+], default-features = false }
 tracing = "0.1.39"
 url = "2.3.1"
 

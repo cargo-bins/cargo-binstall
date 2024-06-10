@@ -1,13 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
-use binstalk_downloader::{
-    download::DownloadError, gh_api_client::GhApiError, remote::Error as RemoteError,
-};
+use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo};
 use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
-use tokio::sync::OnceCell;
+use tokio::{sync::OnceCell, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -27,6 +26,8 @@ use signing::*;
 mod futures_resolver;
 
 use gh_crate_meta::hosting::RepositoryHost;
+
+static DEFAULT_GH_API_RETRY_DURATION: Duration = Duration::from_secs(1);
 
 #[derive(Debug, ThisError)]
 #[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
@@ -145,6 +146,7 @@ struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
     subcrate: Option<CompactString>,
+    is_private: bool,
 }
 
 /// What to do about package signatures
@@ -180,29 +182,61 @@ impl Data {
     }
 
     #[instrument(level = "debug")]
-    async fn get_repo_info(&self, client: &Client) -> Result<&Option<RepoInfo>, FetchError> {
+    async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
         self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
-                    if let Some(repo) = self.repo.as_deref() {
-                        let mut repo = client.get_redirected_final_url(Url::parse(repo)?).await?;
-                        let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+                    let Some(repo) = self.repo.as_deref() else {
+                        return Ok(None);
+                    };
 
-                        let repo_info = RepoInfo {
-                            subcrate: RepoInfo::detect_subcrate(&mut repo, repository_host),
-                            repo,
-                            repository_host,
-                        };
+                    let mut repo = Url::parse(repo)?;
+                    let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
-                        debug!("Resolved repo_info = {repo_info:#?}");
-
-                        Ok(Some(repo_info))
-                    } else {
-                        Ok(None)
+                    if repository_host == RepositoryHost::Unknown {
+                        repo = client
+                            .remote_client()
+                            .get_redirected_final_url(repo)
+                            .await?;
+                        repository_host = RepositoryHost::guess_git_hosting_services(&repo);
                     }
+
+                    let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
+
+                    let mut is_private = false;
+                    if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
+                        if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
+                            loop {
+                                match client.get_repo_info(&gh_repo).await {
+                                    Ok(Some(gh_repo_info)) => {
+                                        is_private = gh_repo_info.is_private();
+                                        break;
+                                    }
+                                    Ok(None) => return Err(GhApiError::NotFound.into()),
+                                    Err(GhApiError::RateLimit { retry_after }) => {
+                                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION))
+                                            .await
+                                    }
+                                    Err(err) => return Err(err.into()),
+                                }
+                            }
+                        }
+                    }
+
+                    let repo_info = RepoInfo {
+                        subcrate,
+                        repo,
+                        repository_host,
+                        is_private,
+                    };
+
+                    debug!("Resolved repo_info = {repo_info:#?}");
+
+                    Ok(Some(repo_info))
                 })
             })
             .await
+            .map(Option::as_ref)
     }
 }
 

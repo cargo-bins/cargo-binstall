@@ -12,6 +12,7 @@ on:
           - binstalk
           - binstalk-bins
           - binstalk-fetchers
+          - binstalk-git-repo-api
           - binstalk-registry
           - binstalk-manifests
           - binstalk-types
