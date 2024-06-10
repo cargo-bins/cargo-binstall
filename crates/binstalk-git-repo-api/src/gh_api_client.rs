@@ -535,49 +535,36 @@ mod test {
         let mut tests: Vec<(_, _)> = Vec::new();
 
         for client in create_client() {
-            for repo in PUBLIC_REPOS {
+            let spawn_get_repo_info_task = |repo| {
                 let client = client.clone();
+                tokio::spawn(async move {
+                    loop {
+                        match client.get_repo_info(&repo).await {
+                            Err(GhApiError::RateLimit { retry_after }) => {
+                                sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
+                            }
+                            res => break res,
+                        }
+                    }
+                })
+            };
 
+            for repo in PUBLIC_REPOS {
                 tests.push((
                     Some(RepoInfo::new(repo.clone(), false)),
-                    tokio::spawn(async move { client.get_repo_info(&repo).await }),
+                    spawn_get_repo_info_task(repo),
                 ));
             }
 
             for repo in NON_EXISTENT_REPOS {
-                let client = client.clone();
-
-                tests.push((
-                    None,
-                    tokio::spawn(async move {
-                        loop {
-                            match client.get_repo_info(&repo).await {
-                                Err(GhApiError::RateLimit { retry_after }) => {
-                                    sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
-                                }
-                                res => break res,
-                            }
-                        }
-                    }),
-                ));
+                tests.push((None, spawn_get_repo_info_task(repo)));
             }
 
             if client.has_gh_token() {
                 for repo in PRIVATE_REPOS {
-                    let client = client.clone();
-
                     tests.push((
                         Some(RepoInfo::new(repo.clone(), true)),
-                        tokio::spawn(async move {
-                            loop {
-                                match client.get_repo_info(&repo).await {
-                                    Err(GhApiError::RateLimit { retry_after }) => {
-                                        sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
-                                    }
-                                    res => break res,
-                                }
-                            }
-                        }),
+                        spawn_get_repo_info_task(repo),
                     ));
                 }
             }
