@@ -218,7 +218,7 @@ mod test {
 
     /// Mark this as an async fn so that you won't accidentally use it in
     /// sync context.
-    async fn create_client() -> Client {
+    fn create_client() -> Client {
         Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
@@ -231,31 +231,40 @@ mod test {
 
     #[tokio::test]
     async fn test_crates_io_sparse_registry() {
-        let client = create_client().await;
-
-        let sparse_registry: Registry = Registry::crates_io_sparse_registry();
-        assert!(
-            matches!(sparse_registry, Registry::Sparse(_)),
-            "{:?}",
-            sparse_registry
-        );
+        let client = create_client();
 
         let crate_name = "cargo-binstall";
         let version_req = &VersionReq::parse("=1.0.0").unwrap();
-        let manifest_from_sparse = sparse_registry
-            .fetch_crate_matched(client.clone(), crate_name, version_req)
-            .await
-            .unwrap();
+
+        let serialized_manifest_from_sparse_task = tokio::spawn({
+            let client = client.clone();
+            let version_req = version_req.clone();
+
+            async move {
+                let sparse_registry: Registry = Registry::crates_io_sparse_registry();
+                assert!(
+                    matches!(sparse_registry, Registry::Sparse(_)),
+                    "{:?}",
+                    sparse_registry
+                );
+
+                let manifest_from_sparse = sparse_registry
+                    .fetch_crate_matched(client, crate_name, &version_req)
+                    .await
+                    .unwrap();
+
+                to_string(&manifest_from_sparse).unwrap()
+            }
+        });
 
         let manifest_from_cratesio_api = fetch_crate_cratesio_api(client, crate_name, version_req)
             .await
             .unwrap();
 
-        let serialized_manifest_from_sparse = to_string(&manifest_from_sparse).unwrap();
         let serialized_manifest_from_cratesio_api = to_string(&manifest_from_cratesio_api).unwrap();
 
         assert_eq!(
-            serialized_manifest_from_sparse,
+            serialized_manifest_from_sparse_task.await.unwrap(),
             serialized_manifest_from_cratesio_api
         );
     }
@@ -263,34 +272,42 @@ mod test {
     #[cfg(feature = "git")]
     #[tokio::test]
     async fn test_crates_io_git_registry() {
-        let client = create_client().await;
-
-        let git_registry: Registry = "https://github.com/rust-lang/crates.io-index"
-            .parse()
-            .unwrap();
-        assert!(
-            matches!(git_registry, Registry::Git(_)),
-            "{:?}",
-            git_registry
-        );
+        let client = create_client();
 
         let crate_name = "cargo-binstall";
         let version_req = &VersionReq::parse("=1.0.0").unwrap();
-        let manifest_from_git = git_registry
-            .fetch_crate_matched(client.clone(), crate_name, version_req)
-            .await
-            .unwrap();
+
+        let serialized_manifest_from_git_task = tokio::spawn({
+            let version_req = version_req.clone();
+            let client = client.clone();
+
+            async move {
+                let git_registry: Registry = "https://github.com/rust-lang/crates.io-index"
+                    .parse()
+                    .unwrap();
+                assert!(
+                    matches!(git_registry, Registry::Git(_)),
+                    "{:?}",
+                    git_registry
+                );
+
+                let manifest_from_git = git_registry
+                    .fetch_crate_matched(client, crate_name, &version_req)
+                    .await
+                    .unwrap();
+                to_string(&manifest_from_git).unwrap()
+            }
+        });
 
         let manifest_from_cratesio_api = Registry::default()
             .fetch_crate_matched(client, crate_name, version_req)
             .await
             .unwrap();
 
-        let serialized_manifest_from_git = to_string(&manifest_from_git).unwrap();
         let serialized_manifest_from_cratesio_api = to_string(&manifest_from_cratesio_api).unwrap();
 
         assert_eq!(
-            serialized_manifest_from_git,
+            serialized_manifest_from_git_task.await.unwrap(),
             serialized_manifest_from_cratesio_api
         );
     }
