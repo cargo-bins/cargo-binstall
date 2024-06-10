@@ -27,17 +27,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { o: macos-14,   t: x86_64-apple-darwin,                    r: true          }
-          - { o: macos-14,   t: x86_64h-apple-darwin,                                    }
-          - { o: macos-14,   t: aarch64-apple-darwin                                     }
-          - { o: ubuntu-latest,  t: x86_64-unknown-linux-gnu,      g: 2.17, r: true, c: true }
-          - { o: ubuntu-latest,  t: armv7-unknown-linux-gnueabihf, g: 2.17,          c: true }
-          - { o: ubuntu-latest,  t: aarch64-unknown-linux-gnu,     g: 2.17,          c: true }
-          - { o: ubuntu-latest,  t: x86_64-unknown-linux-musl,              r: true, c: true }
-          - { o: ubuntu-latest,  t: armv7-unknown-linux-musleabihf,                  c: true }
-          - { o: ubuntu-latest,  t: aarch64-unknown-linux-musl,                      c: true }
-          - { o: windows-latest, t: x86_64-pc-windows-msvc,                 r: true          }
-          - { o: windows-latest, t: aarch64-pc-windows-msvc                                  }
+          - { o: macos-14, t: x86_64-apple-darwin, r: true }
+          - { o: macos-14, t: x86_64h-apple-darwin }
+          - { o: macos-14, t: aarch64-apple-darwin }
+          - {
+              o: ubuntu-latest,
+              t: x86_64-unknown-linux-gnu,
+              g: 2.17,
+              r: true,
+              c: true,
+            }
+          - {
+              o: ubuntu-latest,
+              t: armv7-unknown-linux-gnueabihf,
+              g: 2.17,
+              c: true,
+            }
+          - { o: ubuntu-latest, t: aarch64-unknown-linux-gnu, g: 2.17, c: true }
+          - { o: ubuntu-latest, t: x86_64-unknown-linux-musl, r: true, c: true }
+          - { o: ubuntu-latest, t: armv7-unknown-linux-musleabihf, c: true }
+          - { o: ubuntu-latest, t: aarch64-unknown-linux-musl, c: true }
+          - { o: windows-latest, t: x86_64-pc-windows-msvc, r: true }
+          - { o: windows-latest, t: aarch64-pc-windows-msvc }
 
     name: ${{ matrix.t }}
     runs-on: ${{ matrix.o }}
@@ -52,73 +63,75 @@ jobs:
       JUST_ENABLE_H3: true
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Override release profile lto settings
-      if: inputs.CARGO_PROFILE_RELEASE_LTO
-      run: echo "CARGO_PROFILE_RELEASE_LTO=${{ inputs.CARGO_PROFILE_RELEASE_LTO }}" >> "$GITHUB_ENV"
+      - name: Override release profile lto settings
+        if: inputs.CARGO_PROFILE_RELEASE_LTO
+        run: echo "CARGO_PROFILE_RELEASE_LTO=${{ inputs.CARGO_PROFILE_RELEASE_LTO }}" >> "$GITHUB_ENV"
+        shell: bash
 
-    - name: Override release profile codegen-units settings
-      if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
-      run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
+      - name: Override release profile codegen-units settings
+        if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
+        run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
+        shell: bash
 
-    - uses: ./.github/actions/just-setup
-      with:
-        tools: cargo-auditable,rsign2,rage
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/just-setup
+        with:
+          tools: cargo-auditable,rsign2,rage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - run: just toolchain rust-src
+      - run: just toolchain rust-src
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: minisign.pub
-    - run: just package
-    - if: runner.os == 'Windows'
-      run: Get-ChildItem packages/
-    - if: runner.os != 'Windows'
-      run: ls -shal packages/
+      - uses: actions/download-artifact@v4
+        with:
+          name: minisign.pub
+      - run: just package
+      - if: runner.os == 'Windows'
+        run: Get-ChildItem packages/
+      - if: runner.os != 'Windows'
+        run: ls -shal packages/
 
-    - name: Ensure release binary is runnable
-      if: "matrix.r"
-      run: just e2e-tests
-      env:
-        GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
+      - name: Ensure release binary is runnable
+        if: "matrix.r"
+        run: just e2e-tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: minisign.key.age
-    - name: Sign package
-      env:
-        AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
-      shell: bash
-      run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
+      - uses: actions/download-artifact@v4
+        with:
+          name: minisign.key.age
+      - name: Sign package
+        env:
+          AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
+        shell: bash
+        run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
 
-    - if: fromJSON(inputs.publish).is-release == 'true'
-      name: Upload to release
-      uses: svenstaro/upload-release-action@v2
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        release_name: v${{ fromJSON(inputs.publish).version }}
-        tag: v${{ fromJSON(inputs.publish).version }}
-        body: ${{ fromJSON(inputs.publish).notes }}
-        file: packages/cargo-binstall-*
-        file_glob: true
-        prerelease: true
-    - if: "fromJSON(inputs.publish).is-release != 'true' || runner.os == 'macOS'"
-      name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.t }}
-        path: packages/cargo-binstall-*
-        retention-days: 1
+      - if: fromJSON(inputs.publish).is-release == 'true'
+        name: Upload to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          release_name: v${{ fromJSON(inputs.publish).version }}
+          tag: v${{ fromJSON(inputs.publish).version }}
+          body: ${{ fromJSON(inputs.publish).notes }}
+          file: packages/cargo-binstall-*
+          file_glob: true
+          prerelease: true
+      - if: "fromJSON(inputs.publish).is-release != 'true' || runner.os == 'macOS'"
+        name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.t }}
+          path: packages/cargo-binstall-*
+          retention-days: 1
 
-    - name: Upload timings
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.t }}-cargo-timings
-        path: target/cargo-timings
-        retention-days: 1
+      - name: Upload timings
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.t }}-cargo-timings
+          path: target/cargo-timings
+          retention-days: 1
 
   lipo:
     needs: build
@@ -130,58 +143,58 @@ jobs:
       JUST_FOR_RELEASE: true
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: taiki-e/install-action@v2
-      with:
-        tool: just,rsign2,rage
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,rsign2,rage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: x86_64h-apple-darwin
-        path: packages/
-    - uses: actions/download-artifact@v4
-      with:
-        name: x86_64-apple-darwin
-        path: packages/
-    - uses: actions/download-artifact@v4
-      with:
-        name: aarch64-apple-darwin
-        path: packages/
+      - uses: actions/download-artifact@v4
+        with:
+          name: x86_64h-apple-darwin
+          path: packages/
+      - uses: actions/download-artifact@v4
+        with:
+          name: x86_64-apple-darwin
+          path: packages/
+      - uses: actions/download-artifact@v4
+        with:
+          name: aarch64-apple-darwin
+          path: packages/
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: minisign.pub
-    - run: ls -shalr packages/
-    - run: just repackage-lipo
-    - run: ls -shal packages/
+      - uses: actions/download-artifact@v4
+        with:
+          name: minisign.pub
+      - run: ls -shalr packages/
+      - run: just repackage-lipo
+      - run: ls -shal packages/
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: minisign.key.age
-    - env:
-        AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
-      shell: bash
-      run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
+      - uses: actions/download-artifact@v4
+        with:
+          name: minisign.key.age
+      - env:
+          AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
+        shell: bash
+        run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
-    - if: fromJSON(inputs.publish).is-release == 'true'
-      name: Upload to release
-      uses: svenstaro/upload-release-action@v2
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        tag: v${{ fromJSON(inputs.publish).version }}
-        release_name: v${{ fromJSON(inputs.publish).version }}
-        body: ${{ fromJSON(inputs.publish).notes }}
-        file: packages/cargo-binstall-universal-*
-        file_glob: true
-        overwrite: true
-        prerelease: true
-    - if: fromJSON(inputs.publish).is-release != 'true'
-      name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: universal-apple-darwin
-        path: packages/cargo-binstall-universal-*
-        retention-days: 1
+      - if: fromJSON(inputs.publish).is-release == 'true'
+        name: Upload to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: v${{ fromJSON(inputs.publish).version }}
+          release_name: v${{ fromJSON(inputs.publish).version }}
+          body: ${{ fromJSON(inputs.publish).notes }}
+          file: packages/cargo-binstall-universal-*
+          file_glob: true
+          overwrite: true
+          prerelease: true
+      - if: fromJSON(inputs.publish).is-release != 'true'
+        name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-apple-darwin
+          path: packages/cargo-binstall-universal-*
+          retention-days: 1
