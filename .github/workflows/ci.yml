@@ -51,16 +51,17 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/just-setup
-      env:
-        # just-setup use binstall to install sccache,
-        # which works better when we provide it with GITHUB_TOKEN.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/just-setup
+        env:
+          # just-setup use binstall to install sccache,
+          # which works better when we provide it with GITHUB_TOKEN.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - run: just test
-      env:
-        GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
+      - run: just test
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
+          CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
 
   cross-check:
     strategy:
@@ -85,22 +86,22 @@ jobs:
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Enable cargo-zigbuild
-      if: matrix.os == 'ubuntu-latest'
-      run: echo JUST_USE_CARGO_ZIGBUILD=true >> "$GITHUB_ENV"
+      - name: Enable cargo-zigbuild
+        if: matrix.os == 'ubuntu-latest'
+        run: echo JUST_USE_CARGO_ZIGBUILD=true >> "$GITHUB_ENV"
 
-    - uses: ./.github/actions/just-setup
-      with:
-        tools: cargo-hack@0.6.10
-      env:
-        # just-setup use binstall to install sccache,
-        # which works better when we provide it with GITHUB_TOKEN.
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/just-setup
+        with:
+          tools: cargo-hack@0.6.10
+        env:
+          # just-setup use binstall to install sccache,
+          # which works better when we provide it with GITHUB_TOKEN.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - run: just avoid-dev-deps
-    - run: just check
+      - run: just avoid-dev-deps
+      - run: just check
 
   lint:
     strategy:
@@ -116,12 +117,12 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/just-setup
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/just-setup
 
-    - run: just toolchain rustfmt,clippy
-    - run: just avoid-dev-deps
-    - run: just lint
+      - run: just toolchain rustfmt,clippy
+      - run: just avoid-dev-deps
+      - run: just lint
 
   pr-info:
     outputs:
@@ -130,12 +131,12 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-    - id: meta
-      if: github.event_name == 'pull_request'
-      uses: cargo-bins/release-meta@v1
-      with:
-        event-data: ${{ toJSON(github.event) }}
-        extract-notes-under: '### Release notes'
+      - id: meta
+        if: github.event_name == 'pull_request'
+        uses: cargo-bins/release-meta@v1
+        with:
+          event-data: ${{ toJSON(github.event) }}
+          extract-notes-under: "### Release notes"
 
   release-dry-run:
     needs: pr-info
@@ -158,42 +159,42 @@ jobs:
     env:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
     steps:
-    - uses: actions/checkout@v4
-    - name: Install ${{ env.CARGO_BUILD_TARGET }} target
-      run: |
-        rustup target add $CARGO_BUILD_TARGET
-        pip3 install -r zigbuild-requirements.txt
-    - uses: Swatinem/rust-cache@v2
-      with:
-        cache-all-crates: true
-    - name: Build detect-targets
-      run: |
-        cargo zigbuild --features cli-logging --target $CARGO_BUILD_TARGET
-      # Set working directory here, otherwise `cargo-zigbuild` would download
-      # and build quite a few unused dependencies.
-      working-directory: crates/detect-targets
-    - uses: actions/upload-artifact@v4
-      with:
-        name: detect-targets
-        path: target/${{ env.CARGO_BUILD_TARGET }}/debug/detect-targets
+      - uses: actions/checkout@v4
+      - name: Install ${{ env.CARGO_BUILD_TARGET }} target
+        run: |
+          rustup target add $CARGO_BUILD_TARGET
+          pip3 install -r zigbuild-requirements.txt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+      - name: Build detect-targets
+        run: |
+          cargo zigbuild --features cli-logging --target $CARGO_BUILD_TARGET
+        # Set working directory here, otherwise `cargo-zigbuild` would download
+        # and build quite a few unused dependencies.
+        working-directory: crates/detect-targets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: detect-targets
+          path: target/${{ env.CARGO_BUILD_TARGET }}/debug/detect-targets
 
   detect-targets-alpine-test:
     runs-on: ubuntu-latest
     needs: detect-targets-build
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: actions/download-artifact@v4
-      with:
-        name: detect-targets
-    - run: chmod +x detect-targets
+      - uses: actions/download-artifact@v4
+        with:
+          name: detect-targets
+      - run: chmod +x detect-targets
 
-    - name: Run test in alpine
-      run: |
-        docker run --rm \
-          --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-          --mount src="$PWD/.github/scripts/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
-          alpine /bin/ash -c "apk update && apk add bash && test.sh x86_64-unknown-linux-musl"
+      - name: Run test in alpine
+        run: |
+          docker run --rm \
+            --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+            --mount src="$PWD/.github/scripts/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
+            alpine /bin/ash -c "apk update && apk add bash && test.sh x86_64-unknown-linux-musl"
 
   detect-targets-ubuntu-test:
     needs: detect-targets-build
@@ -205,15 +206,15 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: detect-targets
-    - run: chmod +x detect-targets
+      - uses: actions/download-artifact@v4
+        with:
+          name: detect-targets
+      - run: chmod +x detect-targets
 
-    - name: Run test in ubuntu
-      run: |
-        set -exuo pipefail
-        [ "$(./detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
+      - name: Run test in ubuntu
+        run: |
+          set -exuo pipefail
+          [ "$(./detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
   detect-targets-more-glibc-test:
     needs: detect-targets-build
@@ -228,33 +229,33 @@ jobs:
           - fedora
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: detect-targets
-    - run: chmod +x detect-targets
+      - uses: actions/download-artifact@v4
+        with:
+          name: detect-targets
+      - run: chmod +x detect-targets
 
-    - name: Run test
-      run: |
-        set -exuo pipefail
-        [ "$(docker run --rm \
-          --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-          ${{ matrix.container }} detect-targets )" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
+      - name: Run test
+        run: |
+          set -exuo pipefail
+          [ "$(docker run --rm \
+            --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+            ${{ matrix.container }} detect-targets )" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
   detect-targets-nix-test:
     needs: detect-targets-build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: detect-targets
-    - run: chmod +x detect-targets
+      - uses: actions/download-artifact@v4
+        with:
+          name: detect-targets
+      - run: chmod +x detect-targets
 
-    - name: Run test
-      run: |
-        set -exuo pipefail
-        [ "$(docker run --rm \
-          --mount src="$PWD/detect-targets",dst=/detect-targets,type=bind \
-          nixos/nix /detect-targets )" = x86_64-unknown-linux-musl ]
+      - name: Run test
+        run: |
+          set -exuo pipefail
+          [ "$(docker run --rm \
+            --mount src="$PWD/detect-targets",dst=/detect-targets,type=bind \
+            nixos/nix /detect-targets )" = x86_64-unknown-linux-musl ]
 
   detect-targets-android-check:
     strategy:
@@ -268,40 +269,39 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Add ${{ matrix.target }}
-      run: rustup target add ${{ matrix.target }}
+      - name: Add ${{ matrix.target }}
+        run: rustup target add ${{ matrix.target }}
 
-    - uses: Swatinem/rust-cache@v2
-      with:
-        cache-all-crates: true
-    - name: Build detect-targets
-      run: |
-        cargo check --target ${{ matrix.target }}
-      # Set working directory here, otherwise `cargo-check` would download
-      # and build quite a few unused dependencies.
-      working-directory: crates/detect-targets
-
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+      - name: Build detect-targets
+        run: |
+          cargo check --target ${{ matrix.target }}
+        # Set working directory here, otherwise `cargo-check` would download
+        # and build quite a few unused dependencies.
+        working-directory: crates/detect-targets
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Tests pass
     needs:
-    - test
-    - cross-check
-    - lint
-    - release-dry-run
-    - detect-targets-build
-    - detect-targets-alpine-test
-    - detect-targets-ubuntu-test
-    - detect-targets-more-glibc-test
-    - detect-targets-nix-test
-    - detect-targets-android-check
+      - test
+      - cross-check
+      - lint
+      - release-dry-run
+      - detect-targets-build
+      - detect-targets-alpine-test
+      - detect-targets-ubuntu-test
+      - detect-targets-more-glibc-test
+      - detect-targets-nix-test
+      - detect-targets-android-check
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
-    # fail if ANY dependency has failed or cancelled
-    - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
-      run: exit 1
-    - run: exit 0
+      # fail if ANY dependency has failed or cancelled
+      - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
+        run: exit 1
+      - run: exit 0
