@@ -56,7 +56,7 @@ jobs:
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
         with:
           tools: cargo-nextest
 
@@ -100,7 +100,7 @@ jobs:
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
 
       - run: just avoid-dev-deps
       - run: just check
@@ -121,6 +121,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/just-setup
+        env:
+          # just-setup use binstall to install sccache,
+          # which works better when we provide it with GITHUB_TOKEN.
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
 
       - run: just toolchain rustfmt,clippy
       - run: just avoid-dev-deps
