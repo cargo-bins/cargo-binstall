@@ -97,6 +97,7 @@ jobs:
           tools: cargo-nextest
 
       - name: Decide crates to test
+        shell: bash
         env:
           CRATES_CHANGED: ${{ needs.changed-files.outputs.crates_changed }}
         run: |
