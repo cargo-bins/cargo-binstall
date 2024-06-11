@@ -172,7 +172,7 @@ impl Client {
         url: &Url,
     ) -> Result<ControlFlow<reqwest::Response, Result<reqwest::Response, ReqwestError>>, ReqwestError>
     {
-        const HEADER_VALUE_0: HeaderValue = HeaderValue::from_static("0");
+        static HEADER_VALUE_0: HeaderValue = HeaderValue::from_static("0");
 
         let response = match self.0.service.call(request).await {
             Err(err) if err.is_timeout() || err.is_connect() => {
