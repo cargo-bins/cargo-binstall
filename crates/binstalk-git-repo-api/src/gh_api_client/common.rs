@@ -1,4 +1,4 @@
-use std::{fmt::Debug, future::Future, sync::OnceLock, time::Duration};
+use std::{fmt::Debug, future::Future, sync::OnceLock};
 
 use binstalk_downloader::remote::{self, Response, Url};
 use compact_str::CompactString;
@@ -18,28 +18,12 @@ pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
     }
 }
 
-pub(super) fn check_http_status_and_header(response: &Response) -> Result<(), GhApiError> {
-    let headers = response.headers();
-
+pub(super) fn check_http_status_and_header(response: Response) -> Result<Response, GhApiError> {
     match response.status() {
-        remote::StatusCode::FORBIDDEN
-            if headers
-                .get("x-ratelimit-remaining")
-                .map(|val| val == "0")
-                .unwrap_or(false) =>
-        {
-            Err(GhApiError::RateLimit {
-                retry_after: headers.get("x-ratelimit-reset").and_then(|value| {
-                    let secs = value.to_str().ok()?.parse().ok()?;
-                    Some(Duration::from_secs(secs))
-                }),
-            })
-        }
-
         remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized),
         remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound),
 
-        _ => Ok(()),
+        _ => Ok(response.error_for_status()?),
     }
 }
 
@@ -73,9 +57,7 @@ where
         .send(false);
 
     async move {
-        let response = future.await?;
-
-        check_http_status_and_header(&response)?;
+        let response = check_http_status_and_header(future.await?)?;
 
         Ok(response.json().await?)
     }
@@ -127,8 +109,7 @@ where
         });
 
     async move {
-        let response = res?.await?;
-        check_http_status_and_header(&response)?;
+        let response = check_http_status_and_header(res?.await?)?;
 
         let mut response: GraphQLResponse<T> = response.json().await?;
 

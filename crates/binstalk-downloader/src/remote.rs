@@ -9,7 +9,7 @@ use bytes::Bytes;
 use futures_util::Stream;
 use httpdate::parse_http_date;
 use reqwest::{
-    header::{HeaderMap, RETRY_AFTER},
+    header::{HeaderMap, HeaderValue, RETRY_AFTER},
     Request,
 };
 use thiserror::Error as ThisError;
@@ -172,6 +172,8 @@ impl Client {
         url: &Url,
     ) -> Result<ControlFlow<reqwest::Response, Result<reqwest::Response, ReqwestError>>, ReqwestError>
     {
+        static HEADER_VALUE_0: HeaderValue = HeaderValue::from_static("0");
+
         let response = match self.0.service.call(request).await {
             Err(err) if err.is_timeout() || err.is_connect() => {
                 let duration = RETRY_DURATION_FOR_TIMEOUT;
@@ -197,22 +199,37 @@ impl Client {
             Ok(ControlFlow::Continue(Ok(response)))
         };
 
-        match status {
-            // Delay further request on rate limit
-            StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
-                let duration = parse_header_retry_after(response.headers())
-                    .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT)
-                    .min(MAX_RETRY_DURATION);
+        let headers = response.headers();
 
-                add_delay_and_continue(response, duration)
+        // Some server (looking at you, github GraphQL API) may returns a rate limit
+        // even when OK is returned or on other status code (e.g. 453 forbidden).
+        if let Some(duration) = parse_header_retry_after(headers) {
+            add_delay_and_continue(response, duration.min(MAX_RETRY_DURATION))
+        } else if headers.get("x-ratelimit-remaining") == Some(&HEADER_VALUE_0) {
+            let duration = headers
+                .get("x-ratelimit-reset")
+                .and_then(|value| {
+                    let secs = value.to_str().ok()?.parse().ok()?;
+                    Some(Duration::from_secs(secs))
+                })
+                .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT)
+                .min(MAX_RETRY_DURATION);
+
+            add_delay_and_continue(response, duration)
+        } else {
+            match status {
+                // Delay further request on rate limit
+                StatusCode::SERVICE_UNAVAILABLE | StatusCode::TOO_MANY_REQUESTS => {
+                    add_delay_and_continue(response, DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT)
+                }
+
+                // Delay further request on timeout
+                StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => {
+                    add_delay_and_continue(response, RETRY_DURATION_FOR_TIMEOUT)
+                }
+
+                _ => Ok(ControlFlow::Break(response)),
             }
-
-            // Delay further request on timeout
-            StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => {
-                add_delay_and_continue(response, RETRY_DURATION_FOR_TIMEOUT)
-            }
-
-            _ => Ok(ControlFlow::Break(response)),
         }
     }
 
