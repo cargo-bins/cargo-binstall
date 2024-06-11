@@ -56,6 +56,7 @@ jobs:
           dir_names: true
           dir_names_exclude_current_dir: true
           dir_names_max_depth: 2
+          separator: "\n"
 
       - name: List all changed files
         id: list-changed-files
