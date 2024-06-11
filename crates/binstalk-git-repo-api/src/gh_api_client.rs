@@ -299,14 +299,13 @@ impl GhApiClient {
             .send(false)
             .await?;
 
-        match check_http_status_and_header(&response) {
+        match check_http_status_and_header(response) {
             Err(GhApiError::Unauthorized) => {
                 self.0.is_auth_token_valid.store(false, Relaxed);
+                Err(GhApiError::Unauthorized)
             }
-            res => res?,
+            res => res.map(Download::from_response),
         }
-
-        Ok(Download::from_response(response))
     }
 }
 
