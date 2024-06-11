@@ -69,7 +69,7 @@ jobs:
           echo "crates_changed=$crates_changed" | tee -a "$GITHUB_OUTPUT"
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
 
-  test:
+  unit-tests:
     needs: changed-files
     strategy:
       fail-fast: false
@@ -107,10 +107,40 @@ jobs:
           done
           echo "CARGO_NEXTEST_ADDITIONAL_ARGS=$ARGS" | tee -a "$GITHUB_ENV"
 
-      - run: just test
+      - run: just unit-tests
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
+
+  e2e-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-14
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/just-setup
+        env:
+          # just-setup use binstall to install sccache,
+          # which works better when we provide it with GITHUB_TOKEN.
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
+
+      - run: |
+          just build
+          just e2e-tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
 
   cross-check:
     strategy:
@@ -357,7 +387,8 @@ jobs:
   tests-pass:
     name: Tests pass
     needs:
-      - test
+      - unit-tests
+      - e2e-tests
       - cross-check
       - lint
       - release-dry-run
