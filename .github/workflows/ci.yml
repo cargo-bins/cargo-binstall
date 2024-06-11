@@ -70,6 +70,7 @@ jobs:
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
 
   test:
+    needs: changed-files
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +95,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
         with:
           tools: cargo-nextest
+
+      - name: Decide crates to test
+        env:
+          CRATES_CHANGED: ${{ needs.changed-files.outputs.crates_changed }}
+        run: |
+          ARGS=""
+          for crate in $CRATES_CHANGED; do
+              ARGS="$ARGS -p $crate"
+          done
+          echo "$ARGS" | tee -a "$GITHUB_ENV"
 
       - run: just test
         env:
