@@ -104,7 +104,7 @@ jobs:
           for crate in $CRATES_CHANGED; do
               ARGS="$ARGS -p $crate"
           done
-          echo "$ARGS" | tee -a "$GITHUB_ENV"
+          echo "CARGO_NEXTEST_ADDITIONAL_ARGS=$ARGS" | tee -a "$GITHUB_ENV"
 
       - run: just test
         env:
