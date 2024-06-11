@@ -62,9 +62,8 @@ jobs:
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
-          echo $ALL_CHANGED_FILES
-          crates_changed="$(echo $ALL_CHANGED_FILES | grep crates | cut -d / -f 2)"
-          has_detect_target_changed="$(echo $crates_changed | grep -q detect-targets && echo true)"
+          crates_changed="$(echo "$ALL_CHANGED_FILES" | grep crates | cut -d / -f 2)"
+          has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true)"
           echo "crates_changed=$crates_changed" | tee -a "$GITHUB_OUTPUT"
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
 
