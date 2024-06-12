@@ -131,6 +131,8 @@ struct Inner {
 
     auth_token: Option<CompactString>,
     is_auth_token_valid: AtomicBool,
+
+    only_use_restful_api: AtomicBool,
 }
 
 /// Github API client for querying whether a release artifact exitsts.
@@ -147,7 +149,14 @@ impl GhApiClient {
 
             auth_token,
             is_auth_token_valid: AtomicBool::new(true),
+
+            only_use_restful_api: AtomicBool::new(false),
         }))
+    }
+
+    /// If you don't want to use GitHub GraphQL API for whatever reason, call this.
+    pub fn set_only_use_restful_api(&self) {
+        self.0.only_use_restful_api.store(true, Relaxed);
     }
 
     pub fn remote_client(&self) -> &remote::Client {
@@ -193,22 +202,24 @@ impl GhApiClient {
     ) -> Result<U, GhApiError>
     where
         GraphQLFn: Fn(&remote::Client, &T, &str) -> GraphQLFut,
-        RestfulFn: Fn(&remote::Client, &T) -> RestfulFut,
+        RestfulFn: Fn(&remote::Client, &T, Option<&str>) -> RestfulFut,
         GraphQLFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
         RestfulFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
     {
         self.check_retry_after()?;
 
-        if let Some(auth_token) = self.get_auth_token() {
-            match graphql_func(&self.0.client, data, auth_token).await {
-                Err(GhApiError::Unauthorized) => {
-                    self.0.is_auth_token_valid.store(false, Relaxed);
+        if !self.0.only_use_restful_api.load(Relaxed) {
+            if let Some(auth_token) = self.get_auth_token() {
+                match graphql_func(&self.0.client, data, auth_token).await {
+                    Err(GhApiError::Unauthorized) => {
+                        self.0.is_auth_token_valid.store(false, Relaxed);
+                    }
+                    res => return res.map_err(|err| err.context("GraphQL API")),
                 }
-                res => return res.map_err(|err| err.context("GraphQL API")),
             }
         }
 
-        restful_func(&self.0.client, data)
+        restful_func(&self.0.client, data, self.get_auth_token())
             .await
             .map_err(|err| err.context("Restful API"))
     }
@@ -313,6 +324,7 @@ impl GhApiClient {
 mod test {
     use super::*;
     use compact_str::{CompactString, ToCompactString};
+    use once_cell::sync::OnceCell;
     use std::{env, num::NonZeroU16, time::Duration};
     use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
@@ -368,6 +380,7 @@ mod test {
             tag: CompactString::new_inline("cargo-audit/v0.17.6"),
         };
 
+        #[allow(unused)]
         pub(super) const ARTIFACTS: &[&str] = &[
             "cargo-audit-aarch64-unknown-linux-gnu-v0.17.6.tgz",
             "cargo-audit-armv7-unknown-linux-gnueabihf-v0.17.6.tgz",
@@ -490,14 +503,20 @@ mod test {
     }
 
     fn create_remote_client() -> remote::Client {
-        remote::Client::new(
-            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
-            None,
-            NonZeroU16::new(200).unwrap(),
-            1.try_into().unwrap(),
-            [],
-        )
-        .unwrap()
+        static CLIENT: OnceCell<remote::Client> = OnceCell::new();
+
+        CLIENT
+            .get_or_init(|| {
+                remote::Client::new(
+                    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+                    None,
+                    NonZeroU16::new(300).unwrap(),
+                    1.try_into().unwrap(),
+                    [],
+                )
+                .unwrap()
+            })
+            .clone()
     }
 
     /// Mark this as an async fn so that you won't accidentally use it in
@@ -505,17 +524,24 @@ mod test {
     fn create_client() -> Vec<GhApiClient> {
         let client = create_remote_client();
 
-        let mut gh_clients = vec![GhApiClient::new(client.clone(), None)];
+        let auth_token = env::var("CI_UNIT_TEST_GITHUB_TOKEN")
+            .ok()
+            .map(CompactString::from);
 
-        if let Ok(token) = env::var("CI_UNIT_TEST_GITHUB_TOKEN") {
-            gh_clients.push(GhApiClient::new(client, Some(token.into())));
+        let gh_client = GhApiClient::new(client.clone(), auth_token.clone());
+        gh_client.set_only_use_restful_api();
+
+        let mut gh_clients = vec![gh_client];
+
+        if auth_token.is_some() {
+            gh_clients.push(GhApiClient::new(client, auth_token));
         }
 
         gh_clients
     }
 
     #[tokio::test]
-    async fn test_get_repo_info() {
+    async fn rate_limited_test_get_repo_info() {
         const PUBLIC_REPOS: [GhRepo; 1] = [GhRepo {
             owner: CompactString::new_inline("cargo-bins"),
             repo: CompactString::new_inline("cargo-binstall"),
@@ -575,17 +601,11 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_has_release_artifact_and_download_artifacts() {
-        const RELEASES: [(GhRelease, &[&str]); 2] = [
-            (
-                cargo_binstall_v0_20_1::RELEASE,
-                cargo_binstall_v0_20_1::ARTIFACTS,
-            ),
-            (
-                cargo_audit_v_0_17_6::RELEASE,
-                cargo_audit_v_0_17_6::ARTIFACTS,
-            ),
-        ];
+    async fn rate_limited_test_has_release_artifact_and_download_artifacts() {
+        const RELEASES: [(GhRelease, &[&str]); 1] = [(
+            cargo_binstall_v0_20_1::RELEASE,
+            cargo_binstall_v0_20_1::ARTIFACTS,
+        )];
         const NON_EXISTENT_RELEASES: [GhRelease; 1] = [GhRelease {
             repo: GhRepo {
                 owner: CompactString::new_inline("cargo-bins"),

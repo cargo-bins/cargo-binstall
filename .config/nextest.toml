@@ -1,0 +1,6 @@
+[test-groups]
+rate-limited = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(rate_limited::)'
+test-group = 'rate-limited'
