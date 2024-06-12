@@ -165,7 +165,12 @@ impl Client {
     ///
     /// Return `Ok(ControlFlow::Break(response))` when succeeds and no need
     /// to retry.
-    #[instrument]
+    #[instrument(
+        skip(self, url),
+        fields(
+            url = format_args!("{url}"),
+        ),
+    )]
     async fn do_send_request(
         &self,
         request: Request,

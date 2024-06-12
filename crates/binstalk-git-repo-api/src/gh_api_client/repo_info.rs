@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{fmt, future::Future};
 
 use compact_str::CompactString;
 use serde::Deserialize;
@@ -18,6 +18,16 @@ pub struct RepoInfo {
     owner: Owner,
     name: CompactString,
     private: bool,
+}
+
+impl fmt::Display for RepoInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "RepoInfo {{ owner: {}, name: {}, is_private: {} }}",
+            self.owner.login, self.name, self.private
+        )
+    }
 }
 
 impl RepoInfo {

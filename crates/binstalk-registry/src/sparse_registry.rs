@@ -78,7 +78,13 @@ impl SparseRegistry {
         )
     }
 
-    #[instrument]
+    #[instrument(
+        skip(self, client, version_req),
+        fields(
+            registry_url = format_args!("{}", self.url),
+            version_req = format_args!("{version_req}"),
+        )
+    )]
     pub async fn fetch_crate_matched(
         &self,
         client: Client,

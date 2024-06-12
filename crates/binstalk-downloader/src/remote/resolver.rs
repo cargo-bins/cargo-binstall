@@ -26,7 +26,7 @@ impl Resolve for TrustDnsResolver {
     }
 }
 
-#[instrument(level = "trace")]
+#[instrument]
 fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
     #[cfg(unix)]
     {
@@ -61,7 +61,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
 }
 
 #[cfg(windows)]
-#[instrument(level = "trace")]
+#[instrument]
 fn get_adapter() -> Result<ipconfig::Adapter, BoxError> {
     debug!("Retrieving local IP address");
     let local_ip =
