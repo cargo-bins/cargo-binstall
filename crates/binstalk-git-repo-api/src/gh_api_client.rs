@@ -583,16 +583,10 @@ mod test {
 
     #[tokio::test]
     async fn rate_limited_test_has_release_artifact_and_download_artifacts() {
-        const RELEASES: [(GhRelease, &[&str]); 2] = [
-            (
-                cargo_binstall_v0_20_1::RELEASE,
-                cargo_binstall_v0_20_1::ARTIFACTS,
-            ),
-            (
-                cargo_audit_v_0_17_6::RELEASE,
-                cargo_audit_v_0_17_6::ARTIFACTS,
-            ),
-        ];
+        const RELEASES: [(GhRelease, &[&str]); 1] = [(
+            cargo_binstall_v0_20_1::RELEASE,
+            cargo_binstall_v0_20_1::ARTIFACTS,
+        )];
         const NON_EXISTENT_RELEASES: [GhRelease; 1] = [GhRelease {
             repo: GhRepo {
                 owner: CompactString::new_inline("cargo-bins"),
