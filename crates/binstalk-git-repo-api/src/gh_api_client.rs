@@ -313,6 +313,7 @@ impl GhApiClient {
 mod test {
     use super::*;
     use compact_str::{CompactString, ToCompactString};
+    use once_cell::sync::OnceCell;
     use std::{env, num::NonZeroU16, time::Duration};
     use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
@@ -490,14 +491,20 @@ mod test {
     }
 
     fn create_remote_client() -> remote::Client {
-        remote::Client::new(
-            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
-            None,
-            NonZeroU16::new(200).unwrap(),
-            1.try_into().unwrap(),
-            [],
-        )
-        .unwrap()
+        static CLIENT: OnceCell<remote::Client> = OnceCell::new();
+
+        CLIENT
+            .get_or_init(|| {
+                remote::Client::new(
+                    concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+                    None,
+                    NonZeroU16::new(200).unwrap(),
+                    1.try_into().unwrap(),
+                    [],
+                )
+                .unwrap()
+            })
+            .clone()
     }
 
     /// Mark this as an async fn so that you won't accidentally use it in
