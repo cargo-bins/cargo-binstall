@@ -56,7 +56,6 @@ jobs:
           dir_names: true
           dir_names_exclude_current_dir: true
           dir_names_max_depth: 2
-          separator: "\n"
 
       - name: List all changed files
         id: list-changed-files
@@ -64,7 +63,7 @@ jobs:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           set -euxo pipefail
-          crates_changed="$(echo "$ALL_CHANGED_FILES" | grep crates | cut -d / -f 2 || echo)"
+          crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 || echo)"
           has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true || echo false)"
           echo "crates_changed=${crates_changed//$'\n'/ }" | tee -a "$GITHUB_OUTPUT"
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
