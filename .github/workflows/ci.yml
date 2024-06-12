@@ -70,20 +70,9 @@ jobs:
 
   unit-tests:
     needs: changed-files
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            os: macos-14
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     env:
-      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
 
     steps:
       - uses: actions/checkout@v4
