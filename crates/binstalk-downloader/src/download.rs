@@ -212,7 +212,7 @@ impl Download<'_> {
     ///
     /// NOTE that this API does not support gnu extension sparse file unlike
     /// [`Download::and_extract`].
-    #[instrument(skip(visitor))]
+    #[instrument(skip(self, visitor))]
     pub async fn and_visit_tar(
         self,
         fmt: TarBasedFmt,
@@ -239,7 +239,10 @@ impl Download<'_> {
     /// Download a file from the provided URL and extract it to the provided path.
     ///
     /// NOTE that this will only extract directory and regular files.
-    #[instrument(skip(path))]
+    #[instrument(
+        skip(self, path),
+        fields(path = format_args!("{}", path.as_ref().display()))
+    )]
     pub async fn and_extract(
         self,
         fmt: PkgFmt,
@@ -277,7 +280,7 @@ impl Download<'_> {
         inner(self, fmt, path.as_ref()).await
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
         let bytes = self.content.into_response().await?.bytes().await?;
         if let Some(verifier) = self.data_verifier {

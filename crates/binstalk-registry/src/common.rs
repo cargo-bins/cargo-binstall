@@ -55,7 +55,12 @@ impl DataVerifier for Sha256Digest {
     }
 }
 
-#[instrument]
+#[instrument(
+    skip(client, crate_url),
+    fields(
+        crate_url = format_args!("{crate_url}"),
+    ),
+)]
 pub(super) async fn parse_manifest(
     client: Client,
     crate_name: &str,

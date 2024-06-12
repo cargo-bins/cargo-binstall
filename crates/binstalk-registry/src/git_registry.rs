@@ -97,7 +97,12 @@ impl GitRegistry {
         )
     }
 
-    #[instrument]
+    #[instrument(
+        skip(self, client, version_req),
+        fields(
+            version_req = format_args!("{version_req}"),
+        ),
+    )]
     pub async fn fetch_crate_matched(
         &self,
         client: Client,

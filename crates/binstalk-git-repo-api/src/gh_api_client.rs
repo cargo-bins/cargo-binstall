@@ -12,7 +12,7 @@ use std::{
 use binstalk_downloader::{download::Download, remote};
 use compact_str::{format_compact, CompactString, ToCompactString};
 use tokio::sync::OnceCell;
-use tracing::instrument;
+use tracing::{instrument, Level};
 use url::Url;
 
 mod common;
@@ -224,7 +224,7 @@ impl GhApiClient {
             .map_err(|err| err.context("Restful API"))
     }
 
-    #[instrument(level = "debug", skip(self), ret)]
+    #[instrument(skip(self), ret(level = Level::DEBUG))]
     pub async fn get_repo_info(&self, repo: &GhRepo) -> Result<Option<RepoInfo>, GhApiError> {
         match self
             .do_fetch(
@@ -248,7 +248,7 @@ impl GhApiClient {
     /// Return `Ok(Some(api_artifact_url))` if exists.
     ///
     /// The returned future is guaranteed to be pointer size.
-    #[instrument(level = "debug", skip(self), ret)]
+    #[instrument(skip(self), ret)]
     pub async fn has_release_artifact(
         &self,
         GhReleaseArtifact {

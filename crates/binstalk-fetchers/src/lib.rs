@@ -180,7 +180,7 @@ impl Data {
         }
     }
 
-    #[instrument(level = "debug")]
+    #[instrument(skip(client))]
     async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
         self.repo_info
             .get_or_try_init(move || {
