@@ -3,7 +3,7 @@ name: Upgrade transitive dependencies
 on:
   workflow_dispatch: # Allow running on-demand
   schedule:
-    - cron: '0 3 * * 5'
+    - cron: "0 3 * * 5"
 
 jobs:
   upgrade:
@@ -45,4 +45,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create --base main --fill --label 'PR: dependencies'
+          gh pr create --base main --fill --label 'PR: dependencies' --body 'Update dependencies
