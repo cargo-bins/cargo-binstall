@@ -248,7 +248,7 @@ impl GhApiClient {
     /// Return `Ok(Some(api_artifact_url))` if exists.
     ///
     /// The returned future is guaranteed to be pointer size.
-    #[instrument(skip(self), ret)]
+    #[instrument(skip(self), ret(level = Level::DEBUG))]
     pub async fn has_release_artifact(
         &self,
         GhReleaseArtifact {
