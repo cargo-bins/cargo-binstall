@@ -522,7 +522,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_repo_info() {
+    async fn rate_limited_test_get_repo_info() {
         const PUBLIC_REPOS: [GhRepo; 1] = [GhRepo {
             owner: CompactString::new_inline("cargo-bins"),
             repo: CompactString::new_inline("cargo-binstall"),
@@ -582,7 +582,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_has_release_artifact_and_download_artifacts() {
+    async fn rate_limited_test_has_release_artifact_and_download_artifacts() {
         const RELEASES: [(GhRelease, &[&str]); 2] = [
             (
                 cargo_binstall_v0_20_1::RELEASE,
