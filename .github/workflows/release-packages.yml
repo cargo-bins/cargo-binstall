@@ -28,7 +28,7 @@ jobs:
       matrix:
         include:
           - { o: macos-14, t: x86_64-apple-darwin }
-          - { o: macos-14, t: x86_64h-apple-darwin, r: true }
+          - { o: macos-14, t: x86_64h-apple-darwin }
           - { o: macos-14, t: aarch64-apple-darwin, r: true }
           - {
               o: ubuntu-latest,
