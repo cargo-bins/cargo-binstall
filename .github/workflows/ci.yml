@@ -64,9 +64,9 @@ jobs:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           set -euxo pipefail
-          crates_changed="$(echo "$ALL_CHANGED_FILES" | grep crates | cut -d / -f 2)"
+          crates_changed="$(echo "$ALL_CHANGED_FILES" | grep crates | cut -d / -f 2 || echo)"
           has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true || echo false)"
-          echo "crates_changed=$crates_changed" | tee -a "$GITHUB_OUTPUT"
+          echo "crates_changed=${crates_changed//$'\n'/ }" | tee -a "$GITHUB_OUTPUT"
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
 
   unit-tests:
@@ -108,6 +108,7 @@ jobs:
           echo "CARGO_NEXTEST_ADDITIONAL_ARGS=$ARGS" | tee -a "$GITHUB_ENV"
 
       - run: just unit-tests
+        if: env.CARGO_NEXTEST_ADDITIONAL_ARGS != ''
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
