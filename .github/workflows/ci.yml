@@ -108,7 +108,7 @@ jobs:
           echo "CARGO_NEXTEST_ADDITIONAL_ARGS=$ARGS" | tee -a "$GITHUB_ENV"
 
       - run: just unit-tests
-        if: env.CARGO_NEXTEST_ADDITIONAL_ARGS != ""
+        if: env.CARGO_NEXTEST_ADDITIONAL_ARGS != ''
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
