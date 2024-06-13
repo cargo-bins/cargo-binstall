@@ -27,7 +27,7 @@ use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
-use tokio::{task::block_in_place, runtime::Handle};
+use tokio::{runtime::Handle, task::block_in_place};
 use tracing::{debug, error, info, warn};
 
 use crate::{
