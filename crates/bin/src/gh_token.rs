@@ -1,14 +1,14 @@
-use std::io;
+use std::{io, process::{Stdio, Output}};
 
 use compact_str::CompactString;
-use tokio::process;
+use tokio::process::Command;
 
 pub(super) async fn get() -> io::Result<CompactString> {
-    let process::Output { status, stdout, .. } = process::Command::new("gh")
+    let Output { status, stdout, .. } = Command::new("gh")
         .args(["auth", "token"])
-        .stdin(process::Stdio::null())
-        .stdout(process::Stdio::piped())
-        .stderr(process::Stdio::null())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .output()
         .await?;
 
@@ -22,7 +22,7 @@ pub(super) async fn get() -> io::Result<CompactString> {
     // Use String here instead of CompactString here since
     // `CompactString::from_utf8` allocates if it's longer than 24B.
     let s = String::from_utf8(stdout).map_err(|err| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("Invalid output, expected utf8: {e}"))
+        io::Error::new(io::ErrorKind::InvalidData, format!("Invalid output, expected utf8: {err}"))
     })?;
 
     Ok(s.trim().into())
