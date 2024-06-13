@@ -91,13 +91,10 @@ async fn resolve_inner(
         .collect::<Result<Vec<_>, _>>()?;
     let resolvers = &opts.resolvers;
 
-    let mut binary_name = None;
-    if package_info.binaries.len() == 1 {
-        let name = package_info.binaries.first().unwrap().name.as_str();
-        if name != package_info.name {
-            binary_name = Some(CompactString::from(name))
-        }
-    }
+    let binary_name = match package_info.binaries.as_slice() {
+        [bin] if bin.name != package_info.name => Some(CompactString::from(bin.name.as_str())),
+        _ => None,
+    };
 
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(
         desired_targets.len() * resolvers.len() * if binary_name.is_some() { 2 } else { 1 },
