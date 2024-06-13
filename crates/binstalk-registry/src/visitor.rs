@@ -71,7 +71,7 @@ impl ManifestVisitor {
 
         // Load and parse manifest
         let mut manifest = Manifest::from_slice_with_metadata(&self.cargo_toml_content)?;
-
+        debug!("Manifest: {manifest:?}");
         // Checks vfs for binary output names
         manifest.complete_from_abstract_filesystem::<Value, _>(&self.vfs, None)?;
 

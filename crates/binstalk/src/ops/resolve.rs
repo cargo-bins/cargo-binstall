@@ -91,44 +91,63 @@ async fn resolve_inner(
         .collect::<Result<Vec<_>, _>>()?;
     let resolvers = &opts.resolvers;
 
-    let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
-        Vec::with_capacity(desired_targets.len() * resolvers.len());
+    let mut binary_name = None;
+    if package_info.binaries.len() == 1 {
+        let name = package_info.binaries.first().unwrap().name.as_str();
+        if name != package_info.name {
+            binary_name = Some(CompactString::from(name))
+        }
+    }
 
-    let data = Arc::new(Data::new(
+    let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(
+        desired_targets.len() * resolvers.len() * if binary_name.is_some() { 2 } else { 1 },
+    );
+
+    let mut handles_fn = |data: Arc<Data>| {
+        handles.extend(
+            resolvers
+                .iter()
+                .cartesian_product(desired_targets.clone().into_iter().map(|(triple, target)| {
+                    debug!("Building metadata for target: {target}");
+
+                    let target_meta = package_info.meta.merge_overrides(
+                        iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
+                    );
+
+                    debug!("Found metadata: {target_meta:?}");
+
+                    Arc::new(TargetData {
+                        target: target.clone(),
+                        meta: target_meta,
+                        target_related_info: triple,
+                    })
+                }))
+                .map(|(f, target_data)| {
+                    let fetcher = f(
+                        opts.client.clone(),
+                        opts.gh_api_client.clone(),
+                        data.clone(),
+                        target_data,
+                        opts.signature_policy,
+                    );
+                    (fetcher.clone(), AutoAbortJoinHandle::new(fetcher.find()))
+                }),
+        )
+    };
+
+    handles_fn(Arc::new(Data::new(
         package_info.name.clone(),
         package_info.version_str.clone(),
         package_info.repo.clone(),
-    ));
+    )));
 
-    handles.extend(
-        resolvers
-            .iter()
-            .cartesian_product(desired_targets.into_iter().map(|(triple, target)| {
-                debug!("Building metadata for target: {target}");
-
-                let target_meta = package_info.meta.merge_overrides(
-                    iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
-                );
-
-                debug!("Found metadata: {target_meta:?}");
-
-                Arc::new(TargetData {
-                    target: target.clone(),
-                    meta: target_meta,
-                    target_related_info: triple,
-                })
-            }))
-            .map(|(f, target_data)| {
-                let fetcher = f(
-                    opts.client.clone(),
-                    opts.gh_api_client.clone(),
-                    data.clone(),
-                    target_data,
-                    opts.signature_policy,
-                );
-                (fetcher.clone(), AutoAbortJoinHandle::new(fetcher.find()))
-            }),
-    );
+    if let Some(binary_name) = binary_name {
+        handles_fn(Arc::new(Data::new(
+            binary_name,
+            package_info.version_str.clone(),
+            package_info.repo.clone(),
+        )));
+    }
 
     for (fetcher, handle) in handles {
         fetcher.clone().report_to_upstream();
