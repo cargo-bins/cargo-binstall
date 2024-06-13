@@ -43,7 +43,6 @@ jobs:
         CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
         mkdir -p "${CARGO_HOME}/bin"
         echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
-        echo "${CARGO_HOME}/bin" >> $GITHUB_PATH
 
     - name: Install `cargo-binstall` using scripts
       run: ./install-from-binstall-release.sh
@@ -73,7 +72,6 @@ jobs:
         CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
         mkdir -p "${CARGO_HOME}/bin"
         echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
-        echo "${CARGO_HOME}/bin" >> $GITHUB_PATH
 
     - name: Install `cargo-binstall` using scripts
       run: ./install-from-binstall-release.ps1
@@ -101,7 +99,6 @@ jobs:
         CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
         mkdir -p "${CARGO_HOME}/bin"
         echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
-        echo "${CARGO_HOME}/bin" >> $GITHUB_PATH
 
     - name: Install `cargo-binstall` using scripts
       shell: bash
