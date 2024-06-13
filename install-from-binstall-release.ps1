@@ -21,7 +21,7 @@ Remove-Item -Recurse -Force $tmpdir\cargo-binstall
 $cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
     if (($Env:CI -ne $null) -and ($Env:GITHUB_PATH -ne $null)) {
-        Add-Content -Path "$GITHUB_PATH" -Value "$cargo_home\bin"
+        Add-Content -Path "$Env:GITHUB_PATH" -Value "$cargo_home\bin"
     } else {
 	    Write-Host ""
     	Write-Host "Your path is missing $cargo_home\bin, you might want to add it." -ForegroundColor Red
