@@ -27,7 +27,7 @@ use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
-use tokio::task::block_in_place;
+use tokio::{runtime::Handle, task::block_in_place};
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -82,6 +82,28 @@ pub fn install_crates(
     // Launch target detection
     let desired_targets = get_desired_targets(args.targets);
 
+    // Launch scraping of gh token
+    let no_discover_github_token = args.no_discover_github_token;
+    let github_token = args.github_token.or_else(|| {
+        if args.no_discover_github_token {
+            None
+        } else {
+            git_credentials::try_from_home()
+        }
+    });
+    let get_gh_token_task = (github_token.is_none() && !no_discover_github_token).then(|| {
+        AutoAbortJoinHandle::spawn(async move {
+            match gh_token::get().await {
+                Ok(token) => Some(token),
+                Err(err) => {
+                    debug!(?err, "Failed to retrieve token from `gh auth token`");
+                    debug!("Failed to read git credential file");
+                    None
+                }
+            }
+        })
+    });
+
     // Computer cli_overrides
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url,
@@ -109,20 +131,11 @@ pub fn install_crates(
 
     let gh_api_client = GhApiClient::new(
         client.clone(),
-        args.github_token.or_else(|| {
-            if args.no_discover_github_token {
-                None
-            } else {
-                git_credentials::try_from_home().or_else(|| match gh_token::get() {
-                    Ok(token) => Some(token),
-                    Err(err) => {
-                        warn!(?err, "Failed to retrieve token from `gh auth token`");
-                        warn!("Failed to read git credential file");
-                        None
-                    }
-                })
-            }
-        }),
+        if let Some(task) = get_gh_token_task {
+            Handle::current().block_on(task)?
+        } else {
+            github_token
+        },
     );
 
     // Create binstall_opts
