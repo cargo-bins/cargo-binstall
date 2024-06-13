@@ -63,7 +63,7 @@ jobs:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           set -euxo pipefail
-          crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 || echo)"
+          crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 | sed 's/bin/cargo-binstall/' || echo)"
           has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true || echo false)"
           echo "crates_changed=${crates_changed//$'\n'/ }" | tee -a "$GITHUB_OUTPUT"
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
@@ -80,7 +80,7 @@ jobs:
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         with:
           tools: cargo-nextest
 
@@ -98,10 +98,11 @@ jobs:
       - run: just unit-tests
         if: env.CARGO_NEXTEST_ADDITIONAL_ARGS != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
-          CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
   e2e-tests:
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -165,7 +166,7 @@ jobs:
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - run: just avoid-dev-deps
       - run: just check
@@ -189,7 +190,7 @@ jobs:
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - run: just toolchain rustfmt,clippy
       - run: just avoid-dev-deps
