@@ -91,8 +91,8 @@ pub fn install_crates(
             git_credentials::try_from_home()
         }
     });
-    let get_gh_token_task = (github_token.is_none() && !no_discover_github_token)
-        .then(|| AutoAbortJoinHandle::spawn(async move {
+    let get_gh_token_task = (github_token.is_none() && !no_discover_github_token).then(|| {
+        AutoAbortJoinHandle::spawn(async move {
             match gh_token::get().await {
                 Ok(token) => Some(token),
                 Err(err) => {
@@ -101,7 +101,8 @@ pub fn install_crates(
                     None
                 }
             }
-        }));
+        })
+    });
 
     // Computer cli_overrides
     let cli_overrides = PkgOverride {
@@ -133,7 +134,7 @@ pub fn install_crates(
         if let Some(task) = get_gh_token_task {
             Handle::current().block_on(task)?
         } else {
-           github_token
+            github_token
         },
     );
 
