@@ -36,7 +36,11 @@ fi
 CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 
 if ! [[ ":$PATH:" == *":$CARGO_HOME/bin:"* ]]; then
-    echo
-    printf "\033[0;31mYour path is missing %s, you might want to add it.\033[0m\n" "$CARGO_HOME/bin"
-    echo
+    if [ -n "$CI" ] && [ -n "$GITHUB_PATH" ]; then
+        echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+    else
+        echo
+        printf "\033[0;31mYour path is missing %s, you might want to add it.\033[0m\n" "$CARGO_HOME/bin"
+        echo
+    fi
 fi
