@@ -116,8 +116,8 @@ pub fn install_crates(
                 git_credentials::try_from_home().or_else(|| match gh_token::get() {
                     Ok(token) => Some(token),
                     Err(err) => {
-                        warn!(?err, "Failed to retrieve token from `gh auth token`");
-                        warn!("Failed to read git credential file");
+                        debug!(?err, "Failed to retrieve token from `gh auth token`");
+                        debug!("Failed to read git credential file");
                         None
                     }
                 })
