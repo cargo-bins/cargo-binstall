@@ -1,6 +1,6 @@
 use std::{
     io,
-    process::{Stdio, Output}
+    process::{Stdio, Output},
 };
 
 use compact_str::CompactString;
@@ -27,7 +27,7 @@ pub(super) async fn get() -> io::Result<CompactString> {
     let s = String::from_utf8(stdout).map_err(|err| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Invalid output, expected utf8: {err}")
+            format!("Invalid output, expected utf8: {err}"),
         )
     })?;
 
