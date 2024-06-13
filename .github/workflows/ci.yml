@@ -102,6 +102,7 @@ jobs:
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
 
   e2e-tests:
+    if: github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
