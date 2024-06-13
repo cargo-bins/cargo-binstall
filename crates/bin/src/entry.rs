@@ -101,7 +101,7 @@ pub fn install_crates(
                     None
                 }
             }
-        });
+        }));
 
     // Computer cli_overrides
     let cli_overrides = PkgOverride {
