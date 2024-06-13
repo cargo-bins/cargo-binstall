@@ -101,9 +101,9 @@ async fn resolve_inner(
     ));
 
     handles.extend(
-        desired_targets
-            .into_iter()
-            .map(|(triple, target)| {
+        resolvers
+            .iter()
+            .cartesian_product(desired_targets.into_iter().map(|(triple, target)| {
                 debug!("Building metadata for target: {target}");
 
                 let target_meta = package_info.meta.merge_overrides(
@@ -117,9 +117,8 @@ async fn resolve_inner(
                     meta: target_meta,
                     target_related_info: triple,
                 })
-            })
-            .cartesian_product(resolvers)
-            .map(|(target_data, f)| {
+            }))
+            .map(|(f, target_data)| {
                 let fetcher = f(
                     opts.client.clone(),
                     opts.gh_api_client.clone(),
