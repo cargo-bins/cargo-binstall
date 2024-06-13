@@ -1,6 +1,6 @@
 use std::{
     io,
-    process::{Stdio, Output},
+    process::{Output, Stdio},
 };
 
 use compact_str::CompactString;
