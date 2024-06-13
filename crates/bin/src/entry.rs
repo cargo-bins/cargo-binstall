@@ -27,7 +27,7 @@ use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
-use tokio::task::block_in_place;
+use tokio::{task::block_in_place, runtime::Handle};
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -130,8 +130,8 @@ pub fn install_crates(
 
     let gh_api_client = GhApiClient::new(
         client.clone(),
-        if Some(task) = get_gh_token_task {
-            task.await?
+        if let Some(task) = get_gh_token_task {
+            Handle::current().block_on(task)?
         } else {
            github_token
         },
