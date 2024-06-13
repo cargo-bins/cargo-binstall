@@ -1,14 +1,16 @@
-use std::{io, process};
+use std::io;
 
 use compact_str::CompactString;
+use tokio::process;
 
-pub(super) fn get() -> io::Result<CompactString> {
+pub(super) async fn get() -> io::Result<CompactString> {
     let process::Output { status, stdout, .. } = process::Command::new("gh")
         .args(["auth", "token"])
         .stdin(process::Stdio::null())
         .stdout(process::Stdio::piped())
         .stderr(process::Stdio::null())
-        .output()?;
+        .output()
+        .await?;
 
     if !status.success() {
         return Err(io::Error::new(
