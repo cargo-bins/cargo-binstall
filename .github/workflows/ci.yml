@@ -63,7 +63,7 @@ jobs:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           set -euxo pipefail
-          crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 | sed 's/bin/cargo-binstall' || echo)"
+          crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 | sed 's/bin/cargo-binstall/' || echo)"
           has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true || echo false)"
           echo "crates_changed=${crates_changed//$'\n'/ }" | tee -a "$GITHUB_OUTPUT"
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
