@@ -125,9 +125,8 @@ jobs:
           # which works better when we provide it with GITHUB_TOKEN.
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
 
-      - run: |
-          just build
-          just e2e-tests
+      - run: just build
+      - run: just e2e-tests
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
 
