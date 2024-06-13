@@ -21,8 +21,8 @@ pub(super) async fn get() -> io::Result<CompactString> {
 
     // Use String here instead of CompactString here since
     // `CompactString::from_utf8` allocates if it's longer than 24B.
-    let s = String::from_utf8(stdout).map_err(|_err| {
-        io::Error::new(io::ErrorKind::InvalidData, "Invalid output, expected utf8")
+    let s = String::from_utf8(stdout).map_err(|err| {
+        io::Error::new(io::ErrorKind::InvalidData, format!("Invalid output, expected utf8: {e}")
     })?;
 
     Ok(s.trim().into())
