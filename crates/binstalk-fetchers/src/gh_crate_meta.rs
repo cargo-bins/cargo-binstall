@@ -15,6 +15,8 @@ use crate::{
     SignaturePolicy, SignatureVerifier, TargetDataErased, DEFAULT_GH_API_RETRY_DURATION,
 };
 
+pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
+
 pub(crate) mod hosting;
 
 pub struct GhCrateMeta {
@@ -391,7 +393,7 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     fn fetcher_name(&self) -> &'static str {
-        "GhCrateMeta"
+        FETCHER_GH_CRATE_META
     }
 
     fn is_third_party(&self) -> bool {

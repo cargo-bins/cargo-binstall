@@ -7,6 +7,7 @@ use std::{
     sync::Arc,
 };
 
+use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
@@ -91,44 +92,76 @@ async fn resolve_inner(
         .collect::<Result<Vec<_>, _>>()?;
     let resolvers = &opts.resolvers;
 
-    let mut handles: Vec<(Arc<dyn Fetcher>, _)> =
-        Vec::with_capacity(desired_targets.len() * resolvers.len());
+    let binary_name = match package_info.binaries.as_slice() {
+        [bin] if bin.name != package_info.name => Some(CompactString::from(bin.name.as_str())),
+        _ => None,
+    };
 
-    let data = Arc::new(Data::new(
-        package_info.name.clone(),
-        package_info.version_str.clone(),
-        package_info.repo.clone(),
-    ));
-
-    handles.extend(
-        resolvers
-            .iter()
-            .cartesian_product(desired_targets.into_iter().map(|(triple, target)| {
-                debug!("Building metadata for target: {target}");
-
-                let target_meta = package_info.meta.merge_overrides(
-                    iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
-                );
-
-                debug!("Found metadata: {target_meta:?}");
-
-                Arc::new(TargetData {
-                    target: target.clone(),
-                    meta: target_meta,
-                    target_related_info: triple,
-                })
-            }))
-            .map(|(f, target_data)| {
-                let fetcher = f(
-                    opts.client.clone(),
-                    opts.gh_api_client.clone(),
-                    data.clone(),
-                    target_data,
-                    opts.signature_policy,
-                );
-                (fetcher.clone(), AutoAbortJoinHandle::new(fetcher.find()))
-            }),
+    let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(
+        desired_targets.len() * resolvers.len()
+            + if binary_name.is_some() {
+                desired_targets.len()
+            } else {
+                0
+            },
     );
+
+    let mut handles_fn =
+        |data: Arc<Data>, filter_fetcher_by_name_predicate: fn(&'static str) -> bool| {
+            handles.extend(
+                resolvers
+                    .iter()
+                    .cartesian_product(desired_targets.clone().into_iter().map(
+                        |(triple, target)| {
+                            debug!("Building metadata for target: {target}");
+
+                            let target_meta = package_info.meta.merge_overrides(
+                                iter::once(&opts.cli_overrides)
+                                    .chain(package_info.overrides.get(target)),
+                            );
+
+                            debug!("Found metadata: {target_meta:?}");
+
+                            Arc::new(TargetData {
+                                target: target.clone(),
+                                meta: target_meta,
+                                target_related_info: triple,
+                            })
+                        },
+                    ))
+                    .filter_map(|(f, target_data)| {
+                        let fetcher = f(
+                            opts.client.clone(),
+                            opts.gh_api_client.clone(),
+                            data.clone(),
+                            target_data,
+                            opts.signature_policy,
+                        );
+                        filter_fetcher_by_name_predicate(fetcher.fetcher_name())
+                            .then_some((fetcher.clone(), AutoAbortJoinHandle::new(fetcher.find())))
+                    }),
+            )
+        };
+
+    handles_fn(
+        Arc::new(Data::new(
+            package_info.name.clone(),
+            package_info.version_str.clone(),
+            package_info.repo.clone(),
+        )),
+        |_| true,
+    );
+
+    if let Some(binary_name) = binary_name {
+        handles_fn(
+            Arc::new(Data::new(
+                binary_name,
+                package_info.version_str.clone(),
+                package_info.repo.clone(),
+            )),
+            |name| name == FETCHER_GH_CRATE_META,
+        );
+    }
 
     for (fetcher, handle) in handles {
         fetcher.clone().report_to_upstream();
