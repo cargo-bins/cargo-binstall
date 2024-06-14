@@ -47,6 +47,7 @@ jobs:
         with:
           tool: cargo-release,cargo-semver-checks
 
+      - run: rustup toolchain install stable --no-self-update --profile minimal
       - uses: cargo-bins/release-pr@v2.1.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
