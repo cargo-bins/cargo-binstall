@@ -30,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - run: rustup toolchain install stable --no-self-update --profile minimal
     - name: Push lib release tag
       if: needs.info.outputs.crate != 'cargo-binstall'
       uses: mathieudutour/github-tag-action@v6.2

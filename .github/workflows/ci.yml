@@ -190,24 +190,9 @@ jobs:
       - run: just avoid-dev-deps
       - run: just lint
 
-  pr-info:
-    outputs:
-      is-release: ${{ steps.meta.outputs.is-release }}
-      crate: ${{ steps.meta.outputs.crates-names }}
-
-    runs-on: ubuntu-latest
-    steps:
-      - id: meta
-        if: github.event_name == 'pull_request'
-        uses: cargo-bins/release-meta@v1
-        with:
-          event-data: ${{ toJSON(github.event) }}
-          extract-notes-under: "### Release notes"
-
   release-dry-run:
-    needs: pr-info
     uses: ./.github/workflows/release-cli.yml
-    if: github.event_name != 'pull_request' || needs.pr-info.outputs.is-release == 'true'
+    if: github.event_name != 'pull_request'
     secrets: inherit
     with:
       info: |
