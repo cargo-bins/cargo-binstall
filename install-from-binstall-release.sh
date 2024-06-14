@@ -36,7 +36,7 @@ fi
 CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 
 if ! [[ ":$PATH:" == *":$CARGO_HOME/bin:"* ]]; then
-    if [ -n "$CI" ] && [ -n "$GITHUB_PATH" ]; then
+    if [ -n "${CI:-}" ] && [ -n "${GITHUB_PATH:-}" ]; then
         echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
     else
         echo
