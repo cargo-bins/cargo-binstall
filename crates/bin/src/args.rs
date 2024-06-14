@@ -175,7 +175,11 @@ pub struct Args {
     /// `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml` by default.
     ///
     /// This option can be used to disable that behavior.
-    #[clap(help_heading = "Overrides", long, env = "BINSTALL_NO_DISCOVER_GITHUB_TOKEN")]
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        env = "BINSTALL_NO_DISCOVER_GITHUB_TOKEN"
+    )]
     pub(crate) no_discover_github_token: bool,
 
     /// This flag is now enabled by default thus a no-op.
