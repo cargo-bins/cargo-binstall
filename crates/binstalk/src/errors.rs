@@ -531,7 +531,7 @@ impl Termination for BinstallError {
 impl From<io::Error> for BinstallError {
     fn from(err: io::Error) -> Self {
         err.downcast::<BinstallError>()
-            .unwrap_or_else(BinstallError::Io)  
+            .unwrap_or_else(BinstallError::Io)
     }
 }
 
