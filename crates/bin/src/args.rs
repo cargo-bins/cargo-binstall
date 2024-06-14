@@ -144,7 +144,12 @@ pub struct Args {
     ///    allows 2 requests per 6ms.
     ///
     /// Both duration and request count must not be 0.
-    #[clap(help_heading = "Overrides", long, default_value_t = RateLimit::default(), env = "BINSTALL_RATE_LIMIT")]
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        default_value_t = RateLimit::default(),
+        env = "BINSTALL_RATE_LIMIT"
+    )]
     pub(crate) rate_limit: RateLimit,
 
     /// Specify the strategies to be used,
@@ -170,7 +175,11 @@ pub struct Args {
     /// `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml` by default.
     ///
     /// This option can be used to disable that behavior.
-    #[clap(help_heading = "Overrides", long)]
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        env = "BINSTALL_NO_DISCOVER_GITHUB_TOKEN"
+    )]
     pub(crate) no_discover_github_token: bool,
 
     /// This flag is now enabled by default thus a no-op.
