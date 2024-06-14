@@ -98,7 +98,12 @@ async fn resolve_inner(
     };
 
     let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(
-        desired_targets.len() * resolvers.len() + if binary_name.is_some() { desired_targets.len() } else { 0 },
+        desired_targets.len() * resolvers.len()
+            + if binary_name.is_some() {
+                desired_targets.len()
+            } else {
+                0
+            },
     );
 
     let mut handles_fn =
