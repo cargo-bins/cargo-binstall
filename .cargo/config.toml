@@ -1,0 +1,9 @@
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+[target.aarch64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
