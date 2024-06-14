@@ -14,12 +14,6 @@ on:
       - opened
       - reopened
       - synchronize
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - README.md
-      - SUPPORT.md
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}-${{ inputs.additional_key }}
