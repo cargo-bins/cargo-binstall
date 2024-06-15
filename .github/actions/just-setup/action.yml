@@ -123,3 +123,11 @@ runs:
 
   - run: make -v
     shell: bash
+
+  - name: Enable transparent huge page
+    if: runner.os == 'Linux'
+    run: echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+
+  - name: Configure jemalloc (used by rustc) to use transparent huge page
+    if: runner.os == 'Linux'
+    run: echo "MALLOC_CONF=thp:always,metadata_thp:always" >> "$GITHUB_ENV"
