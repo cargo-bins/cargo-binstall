@@ -106,6 +106,8 @@ async fn resolve_inner(
             },
     );
 
+    let gh_api_client = opts.gh_api_client.get().await?;
+
     let mut handles_fn =
         |data: Arc<Data>, filter_fetcher_by_name_predicate: fn(&'static str) -> bool| {
             handles.extend(
@@ -132,7 +134,7 @@ async fn resolve_inner(
                     .filter_map(|(f, target_data)| {
                         let fetcher = f(
                             opts.client.clone(),
-                            opts.gh_api_client.clone(),
+                            gh_api_client.clone(),
                             data.clone(),
                             target_data,
                             opts.signature_policy,

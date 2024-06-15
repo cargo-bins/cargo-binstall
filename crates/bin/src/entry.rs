@@ -9,8 +9,8 @@ use binstalk::{
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
     get_desired_targets,
     helpers::{
-        gh_api_client::GhApiClient,
         jobserver_client::LazyJobserverClient,
+        lazy_gh_api_client::LazyGhApiClient,
         remote::{Certificate, Client},
         tasks::AutoAbortJoinHandle,
     },
@@ -27,7 +27,7 @@ use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
-use tokio::{runtime::Handle, task::block_in_place};
+use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -82,28 +82,6 @@ pub fn install_crates(
     // Launch target detection
     let desired_targets = get_desired_targets(args.targets);
 
-    // Launch scraping of gh token
-    let no_discover_github_token = args.no_discover_github_token;
-    let github_token = args.github_token.or_else(|| {
-        if args.no_discover_github_token {
-            None
-        } else {
-            git_credentials::try_from_home()
-        }
-    });
-    let get_gh_token_task = (github_token.is_none() && !no_discover_github_token).then(|| {
-        AutoAbortJoinHandle::spawn(async move {
-            match gh_token::get().await {
-                Ok(token) => Some(token),
-                Err(err) => {
-                    debug!(?err, "Failed to retrieve token from `gh auth token`");
-                    debug!("Failed to read git credential file");
-                    None
-                }
-            }
-        })
-    });
-
     // Computer cli_overrides
     let cli_overrides = PkgOverride {
         pkg_url: args.pkg_url,
@@ -129,14 +107,33 @@ pub fn install_crates(
     )
     .map_err(BinstallError::from)?;
 
-    let gh_api_client = GhApiClient::new(
-        client.clone(),
-        if let Some(task) = get_gh_token_task {
-            Handle::current().block_on(task)?
-        } else {
-            github_token
-        },
-    );
+    let gh_api_client = args
+        .github_token
+        .map(|token| token.0)
+        .or_else(|| {
+            if args.no_discover_github_token {
+                None
+            } else {
+                git_credentials::try_from_home()
+            }
+        })
+        .map(|token| LazyGhApiClient::new(client.clone(), Some(token)))
+        .unwrap_or_else(|| {
+            if args.no_discover_github_token {
+                LazyGhApiClient::new(client.clone(), None)
+            } else {
+                LazyGhApiClient::with_get_gh_token_future(client.clone(), async {
+                    match gh_token::get().await {
+                        Ok(token) => Some(token),
+                        Err(err) => {
+                            debug!(?err, "Failed to retrieve token from `gh auth token`");
+                            debug!("Failed to read git credential file");
+                            None
+                        }
+                    }
+                })
+            }
+        });
 
     // Create binstall_opts
     let binstall_opts = Arc::new(Options {

@@ -14,6 +14,7 @@ use compact_str::{format_compact, CompactString, ToCompactString};
 use tokio::sync::OnceCell;
 use tracing::{instrument, Level};
 use url::Url;
+use zeroize::Zeroizing;
 
 mod common;
 mod error;
@@ -129,7 +130,7 @@ struct Inner {
     release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
     retry_after: Mutex<Option<Instant>>,
 
-    auth_token: Option<CompactString>,
+    auth_token: Option<Zeroizing<Box<str>>>,
     is_auth_token_valid: AtomicBool,
 
     only_use_restful_api: AtomicBool,
@@ -141,7 +142,7 @@ struct Inner {
 pub struct GhApiClient(Arc<Inner>);
 
 impl GhApiClient {
-    pub fn new(client: remote::Client, auth_token: Option<CompactString>) -> Self {
+    pub fn new(client: remote::Client, auth_token: Option<Zeroizing<Box<str>>>) -> Self {
         Self(Arc::new(Inner {
             client,
             release_artifacts: Default::default(),
@@ -184,7 +185,7 @@ impl GhApiClient {
 
     fn get_auth_token(&self) -> Option<&str> {
         if self.0.is_auth_token_valid.load(Relaxed) {
-            self.0.auth_token.as_deref()
+            self.0.auth_token.as_deref().map(|s| &**s)
         } else {
             None
         }
@@ -526,7 +527,8 @@ mod test {
 
         let auth_token = env::var("CI_UNIT_TEST_GITHUB_TOKEN")
             .ok()
-            .map(CompactString::from);
+            .map(Box::<str>::from)
+            .map(zeroize::Zeroizing::new);
 
         let gh_client = GhApiClient::new(client.clone(), auth_token.clone());
         gh_client.set_only_use_restful_api();

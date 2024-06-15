@@ -6,7 +6,10 @@ use semver::VersionReq;
 
 use crate::{
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
-    helpers::{gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient, remote::Client},
+    helpers::{
+        gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient,
+        lazy_gh_api_client::LazyGhApiClient, remote::Client,
+    },
     manifests::cargo_toml_binstall::PkgOverride,
     registry::Registry,
     DesiredTargets,
@@ -47,7 +50,7 @@ pub struct Options {
     pub cargo_root: Option<PathBuf>,
 
     pub client: Client,
-    pub gh_api_client: GhApiClient,
+    pub gh_api_client: LazyGhApiClient,
     pub jobserver_client: LazyJobserverClient,
     pub registry: Registry,
 

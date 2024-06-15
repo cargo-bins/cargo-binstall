@@ -3,6 +3,7 @@ pub mod remote {
     pub use binstalk_downloader::remote::*;
     pub use url::ParseError as UrlParseError;
 }
+pub mod lazy_gh_api_client;
 pub(crate) mod target_triple;
 pub mod tasks;
 
