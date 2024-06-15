@@ -84,7 +84,7 @@ pub fn install_crates(
 
     // Launch scraping of gh token
     let no_discover_github_token = args.no_discover_github_token;
-    let github_token = args.github_token.or_else(|| {
+    let github_token = args.github_token.map(|token| token.0).or_else(|| {
         if args.no_discover_github_token {
             None
         } else {

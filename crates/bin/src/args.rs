@@ -15,11 +15,11 @@ use binstalk::{
 };
 use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use compact_str::CompactString;
-
 use log::LevelFilter;
 use semver::VersionReq;
 use strum::EnumCount;
 use strum_macros::EnumCount;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -308,7 +308,7 @@ pub struct Args {
     /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
     /// unless `--no-discover-github-token` is specified.
     #[clap(help_heading = "Options", long, env = "GITHUB_TOKEN")]
-    pub(crate) github_token: Option<CompactString>,
+    pub(crate) github_token: Option<GithubToken>,
 
     /// Only install packages that are signed
     ///
@@ -363,6 +363,15 @@ pub struct Args {
     /// This would override the `log_level`.
     #[clap(help_heading = "Meta", short, long, conflicts_with("verbose"))]
     pub(crate) quiet: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GithubToken(pub(crate) Zeroizing<Box<str>>);
+
+impl From<&str> for GithubToken {
+    fn from(s: &str) -> Self {
+        Self(Zeroizing::new(s.into()))
+    }
 }
 
 #[derive(Debug, Copy, Clone, ValueEnum)]
@@ -575,7 +584,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
 
     if opts.github_token.is_none() {
         if let Ok(github_token) = env::var("GH_TOKEN") {
-            opts.github_token = Some(github_token.into());
+            opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
         }
     }
 

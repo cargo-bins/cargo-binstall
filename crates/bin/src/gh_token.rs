@@ -1,12 +1,13 @@
 use std::{
     io,
     process::{Output, Stdio},
+    str,
 };
 
-use compact_str::CompactString;
 use tokio::process::Command;
+use zeroize::Zeroizing;
 
-pub(super) async fn get() -> io::Result<CompactString> {
+pub(super) async fn get() -> io::Result<Zeroizing<Box<str>>> {
     let Output { status, stdout, .. } = Command::new("gh")
         .args(["auth", "token"])
         .stdin(Stdio::null())
@@ -15,6 +16,8 @@ pub(super) async fn get() -> io::Result<CompactString> {
         .output()
         .await?;
 
+    let stdout = Zeroizing::new(stdout);
+
     if !status.success() {
         return Err(io::Error::new(
             io::ErrorKind::Other,
@@ -22,14 +25,12 @@ pub(super) async fn get() -> io::Result<CompactString> {
         ));
     }
 
-    // Use String here instead of CompactString here since
-    // `CompactString::from_utf8` allocates if it's longer than 24B.
-    let s = String::from_utf8(stdout).map_err(|err| {
+    let s = str::from_utf8(&stdout).map_err(|err| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Invalid output, expected utf8: {err}"),
         )
     })?;
 
-    Ok(s.trim().into())
+    Ok(Zeroizing::new(s.trim().into()))
 }
