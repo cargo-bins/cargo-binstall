@@ -527,7 +527,8 @@ mod test {
 
         let auth_token = env::var("CI_UNIT_TEST_GITHUB_TOKEN")
             .ok()
-            .map(CompactString::from);
+            .map(Box::<str>::from)
+            .map(zeroize::Zeroizing::new);
 
         let gh_client = GhApiClient::new(client.clone(), auth_token.clone());
         gh_client.set_only_use_restful_api();
