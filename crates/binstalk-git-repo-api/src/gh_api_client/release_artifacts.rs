@@ -74,7 +74,7 @@ pub(super) fn fetch_release_artifacts_restful_api(
         tag,
     }: &GhRelease,
     auth_token: Option<&str>,
-) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + Sync + 'static {
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static {
     issue_restful_api(
         client,
         &["repos", owner, repo, "releases", "tags", tag],
@@ -135,7 +135,7 @@ pub(super) fn fetch_release_artifacts_graphql_api(
         tag,
     }: &GhRelease,
     auth_token: &str,
-) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + Sync + 'static {
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static {
     let client = client.clone();
     let auth_token = auth_token.to_compact_string();
 

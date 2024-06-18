@@ -204,8 +204,8 @@ impl GhApiClient {
     where
         GraphQLFn: Fn(&remote::Client, &T, &str) -> GraphQLFut,
         RestfulFn: Fn(&remote::Client, &T, Option<&str>) -> RestfulFut,
-        GraphQLFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
-        RestfulFut: Future<Output = Result<U, GhApiError>> + Send + Sync + 'static,
+        GraphQLFut: Future<Output = Result<U, GhApiError>> + Send + 'static,
+        RestfulFut: Future<Output = Result<U, GhApiError>> + Send + 'static,
     {
         self.check_retry_after()?;
 

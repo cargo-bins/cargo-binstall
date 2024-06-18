@@ -35,7 +35,7 @@ flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
-reqwest = { version = "0.12.4", features = [
+reqwest = { version = "0.12.5", features = [
     "http2",
     "stream",
     "zstd",
@@ -118,8 +118,7 @@ trust-dns = ["hickory-dns"]
 #
 # Experimental HTTP/3 client, this would require `--cfg reqwest_unstable`
 # to be passed to `rustc`.
-#http3 = ["reqwest/http3"]
-http3 = []
+http3 = ["reqwest/http3"]
 
 zstd-thin = ["zstd/thin"]
 
