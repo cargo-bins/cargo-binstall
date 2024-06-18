@@ -39,7 +39,7 @@ pub(super) fn issue_restful_api<T>(
     client: &remote::Client,
     path: &[&str],
     auth_token: Option<&str>,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + Sync + 'static
+) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
 where
     T: DeserializeOwned,
 {
@@ -95,7 +95,7 @@ pub(super) fn issue_graphql_query<T>(
     client: &remote::Client,
     query: String,
     auth_token: &str,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + Sync + 'static
+) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
 where
     T: DeserializeOwned + Debug,
 {
