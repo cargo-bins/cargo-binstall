@@ -131,13 +131,13 @@ rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 #
 # If cargo-zigbuild is used, then it will provide the lld linker.
 # This option is disabled on windows since it not supported.
-rust-lld := "" #if use-cargo-zigbuild != "" {
-#""
-#} else if target-os != "windows" {
-#" -Z gcc-ld=lld"
-#} else {
-#""
-#}
+rust-lld := if use-cargo-zigbuild != "" {
+    ""
+} else if target-os != "windows" {
+    " -C link-arg=-fuse-ld=lld"
+} else {
+    ""
+}
 
 # ICF: link-time identical code folding
 #
