@@ -2105,6 +2105,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "h3"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5069de1c2ac82d9e361b07f2b8a2c582ec071750e063530fc7f3b5197e24805"
+dependencies = [
+ "bytes",
+ "fastrand 2.1.0",
+ "futures-util",
+ "http 1.1.0",
+ "pin-project-lite",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "h3-quinn"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2112,9 +2127,23 @@ checksum = "2d4a1a1763e4f3e82ee9f1ecf2cf862b22cc7316ebe14684e42f94532b5ec64d"
 dependencies = [
  "bytes",
  "futures",
- "h3",
+ "h3 0.0.2",
  "quinn 0.10.2",
  "quinn-proto 0.10.6",
+ "tokio-util",
+]
+
+[[package]]
+name = "h3-quinn"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c01d99d7cf812fd34ddf135e6c940df9e24f2e759dbc7179fb0e54d4bd6551"
+dependencies = [
+ "bytes",
+ "futures",
+ "h3 0.0.5",
+ "quinn 0.11.2",
+ "tokio",
  "tokio-util",
 ]
 
@@ -2161,8 +2190,8 @@ dependencies = [
  "futures-io",
  "futures-util",
  "h2 0.3.26",
- "h3",
- "h3-quinn",
+ "h3 0.0.2",
+ "h3-quinn 0.0.3",
  "http 0.2.12",
  "idna 0.4.0",
  "ipnet",
@@ -3199,6 +3228,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4ceeeeabace7857413798eb1ffa1e9c905a9946a57d81fb69b4b71c4d8eb3ad"
 dependencies = [
  "bytes",
+ "futures-io",
  "pin-project-lite",
  "quinn-proto 0.11.3",
  "quinn-udp 0.5.2",
@@ -3420,6 +3450,8 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2 0.4.5",
+ "h3 0.0.5",
+ "h3-quinn 0.0.6",
  "http 1.1.0",
  "http-body",
  "http-body-util",
@@ -3443,6 +3475,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "slab",
  "sync_wrapper",
  "system-configuration",
  "tokio",
