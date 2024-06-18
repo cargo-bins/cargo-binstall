@@ -133,10 +133,8 @@ rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
 # This option is disabled on windows since it not supported.
 rust-lld := "" #if use-cargo-zigbuild != "" {
 #""
-#} else if target-os != "windows" {
-#" -Z gcc-ld=lld"
 #} else {
-#""
+#" -C link-arg=-fuse-ld=lld"
 #}
 
 # ICF: link-time identical code folding
