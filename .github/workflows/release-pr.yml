@@ -27,6 +27,11 @@ on:
         required: true
         type: string
         default: patch
+      no-check-semver:
+        description: Whether to check semver
+        required: true
+        type: string
+        default: "false"
 
 jobs:
   make-release-pr:
@@ -56,7 +61,7 @@ jobs:
           pr-label: release
           pr-release-notes: ${{ inputs.crate == 'bin' }}
           pr-template-file: .github/scripts/release-pr-template.ejs
-          check-semver: ${{ inputs.crate != 'bin' && inputs.crate != 'leon-macros' }}
+          check-semver: ${{ inputs.crate != 'bin' && inputs.no-check-semver != 'true'  }}
           check-package: true
         env:
           RUSTFLAGS: --cfg reqwest_unstable
