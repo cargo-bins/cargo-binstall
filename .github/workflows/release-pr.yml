@@ -28,7 +28,7 @@ on:
         type: string
         default: patch
       no-check-semver:
-        description: Whether to check semver
+        description: To disable check semver
         required: true
         type: string
         default: "false"
