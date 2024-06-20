@@ -46,6 +46,12 @@ Here are one-liners for downloading and installing a pre-compiled `cargo-binstal
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 ```
 
+or if you have [homebrew](https://brew.sh/) installed:
+
+```
+brew install cargo-binstall
+```
+
 #### Windows
 
 ```
