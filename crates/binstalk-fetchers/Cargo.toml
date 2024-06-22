@@ -6,7 +6,7 @@ edition = "2021"
 description = "The binstall fetchers"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-fetchers"
-rust-version = "1.65.0"
+rust-version = "1.70.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "GPL-3.0-only"
 
