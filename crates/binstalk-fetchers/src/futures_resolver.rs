@@ -74,13 +74,13 @@ impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
         drop(self.tx);
 
         async move {
-            while let Some(res) = rx.recv().await {
-                match res {
-                    Ok(ret) => return Some(ret),
-                    Err(err) => warn!(?err, "Fail to resolve the future"),
-                }
+            loop {
+	            match rx.recv().await {
+	                Some(Ok(ret)) => return Some(ret),
+	                Some(Err(err)) => warn!(?err, "Fail to resolve the future"),
+	                None => return None,
+	            }
             }
-            None
         }
     }
 }
