@@ -77,7 +77,7 @@ impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
             while let Some(res) = rx.recv().await {
                 match res {
                     Ok(ret) => return Some(ret),
-                    Err(err) => warn!(?err, "Faile to resolve the future"),
+                    Err(err) => warn!(?err, "Fail to resolve the future"),
                 }
             }
             None
