@@ -97,7 +97,7 @@ async fn resolve_inner(
         _ => None,
     };
 
-    let mut handles: Vec<(Arc<dyn Fetcher>, _)> = Vec::with_capacity(
+    let mut handles: Vec<Arc<dyn Fetcher>> = Vec::with_capacity(
         desired_targets.len() * resolvers.len()
             + if binary_name.is_some() {
                 desired_targets.len()
@@ -140,7 +140,7 @@ async fn resolve_inner(
                             opts.signature_policy,
                         );
                         filter_fetcher_by_name_predicate(fetcher.fetcher_name())
-                            .then_some((fetcher.clone(), AutoAbortJoinHandle::new(fetcher.find())))
+                            .then_some(fetcher)
                     }),
             )
         };
@@ -165,9 +165,9 @@ async fn resolve_inner(
         );
     }
 
-    for (fetcher, handle) in handles {
+    for fetcher in handles {
         fetcher.clone().report_to_upstream();
-        match handle.flattened_join().await {
+        match AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join().await {
             Ok(true) => {
                 // Generate temporary binary path
                 let bin_path = opts.temp_dir.join(format!(
