@@ -139,8 +139,7 @@ async fn resolve_inner(
                             target_data,
                             opts.signature_policy,
                         );
-                        filter_fetcher_by_name_predicate(fetcher.fetcher_name())
-                            .then_some(fetcher)
+                        filter_fetcher_by_name_predicate(fetcher.fetcher_name()).then_some(fetcher)
                     }),
             )
         };
@@ -167,7 +166,10 @@ async fn resolve_inner(
 
     for fetcher in handles {
         fetcher.clone().report_to_upstream();
-        match AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join().await {
+        match AutoAbortJoinHandle::new(fetcher.clone().find())
+            .flattened_join()
+            .await
+        {
             Ok(true) => {
                 // Generate temporary binary path
                 let bin_path = opts.temp_dir.join(format!(

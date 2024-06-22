@@ -1,7 +1,7 @@
-use std::{future::Future, pin::Pin, fmt::Debug};
+use std::{fmt::Debug, future::Future, pin::Pin};
 
-use tracing::warn;
 use tokio::sync::mpsc;
+use tracing::warn;
 
 /// Given multiple futures with output = `Result<Option<T>, E>`,
 /// returns the the first one that returns either `Err(_)` or
@@ -73,7 +73,7 @@ impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
         let mut rx = self.rx;
         drop(self.tx);
 
-        async move { 
+        async move {
             while let Some(res) = rx.recv().await {
                 match res {
                     Ok(ret) => return Some(ret),
