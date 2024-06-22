@@ -118,22 +118,35 @@ impl super::Fetcher for QuickInstall {
                 return Ok(false);
             }
 
-            if self.signature_policy == SignaturePolicy::Require {
+            let check_signature_policy_task = (self.signature_policy == SignaturePolicy::Require)
+                .then(|| {
+                    let client = self.client.clone();
+                    let gh_api_client = self.gh_api_client.clone();
+                    let signature_url = self.signature_url.clone();
+
+                    AutoAbortJoinHandle::spawn(async move {
+                        match does_url_exist(client, gh_api_client, &signature_url).await {
+                            Ok(true) => Ok(()),
+                            _ => Err(FetchError::MissingSignature),
+                        }
+                    })
+                });
+
+            tokio::try_join!(
+                async {
+                    if let Some(task) = check_signature_policy_task {
+                        task.flattened_join().await
+                    } else {
+                        Ok(())
+                    }
+                },
                 does_url_exist(
                     self.client.clone(),
                     self.gh_api_client.clone(),
-                    &self.signature_url,
-                )
-                .await
-                .map_err(|_| FetchError::MissingSignature)?;
-            }
-
-            does_url_exist(
-                self.client.clone(),
-                self.gh_api_client.clone(),
-                &self.package_url,
+                    &self.package_url,
+                ),
             )
-            .await
+            .map(|(_, res)| res)
         })
     }
 

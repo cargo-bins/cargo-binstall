@@ -6,7 +6,7 @@ use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError}
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo};
 use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
-use tokio::{sync::OnceCell, time::sleep};
+use tokio::{sync::OnceCell, task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -70,6 +70,9 @@ pub enum FetchError {
 
     #[error("Failed to verify signature")]
     InvalidSignature,
+
+    #[error("Failed to wait for task: {0}")]
+    TaskJoinError(#[from] JoinError),
 }
 
 impl From<RemoteError> for FetchError {
