@@ -1,6 +1,11 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    Once,
+#![allow(unused)]
+
+use std::{
+    future::Future,
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Once,
+    },
 };
 
 pub(super) use binstalk_downloader::{
@@ -75,4 +80,34 @@ pub(super) async fn does_url_exist(
     }
 
     Ok(Box::pin(client.remote_gettable(url.clone())).await?)
+}
+
+#[derive(Debug)]
+pub(super) struct AutoAbortJoinHandle<T>(JoinHandle<T>);
+
+impl<T> AutoAbortJoinHandle<T>
+where
+    T: Send + 'static,
+{
+    pub(super) fn spawn<F>(future: F) -> Self
+    where
+        F: Future<Output = T> + Send + 'static,
+    {
+        Self(tokio::spawn(future))
+    }
+}
+
+impl<T> Drop for AutoAbortJoinHandle<T> {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+impl<T, E> AutoAbortJoinHandle<Result<T, E>>
+where
+    E: Into<FetchError>,
+{
+    pub(super) async fn flattened_join(mut self) -> Result<T, FetchError> {
+        (&mut self.0).await?.map_err(Into::into)
+    }
 }

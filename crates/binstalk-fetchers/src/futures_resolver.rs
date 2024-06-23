@@ -1,5 +1,7 @@
-use std::{future::Future, pin::Pin};
+use std::{fmt::Debug, future::Future, pin::Pin};
+
 use tokio::sync::mpsc;
+use tracing::warn;
 
 /// Given multiple futures with output = `Result<Option<T>, E>`,
 /// returns the the first one that returns either `Err(_)` or
@@ -17,7 +19,7 @@ impl<T, E> Default for FuturesResolver<T, E> {
     }
 }
 
-impl<T: Send + 'static, E: Send + 'static> FuturesResolver<T, E> {
+impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
     /// Insert new future into this resolver, they will start running
     /// right away.
     pub fn push<Fut>(&self, fut: Fut)
@@ -67,10 +69,18 @@ impl<T: Send + 'static, E: Send + 'static> FuturesResolver<T, E> {
     }
 
     /// Return the resolution.
-    pub fn resolve(self) -> impl Future<Output = Result<Option<T>, E>> {
+    pub fn resolve(self) -> impl Future<Output = Option<T>> {
         let mut rx = self.rx;
         drop(self.tx);
 
-        async move { rx.recv().await.transpose() }
+        async move {
+            loop {
+                match rx.recv().await {
+                    Some(Ok(ret)) => return Some(ret),
+                    Some(Err(err)) => warn!(?err, "Fail to resolve the future"),
+                    None => return None,
+                }
+            }
+        }
     }
 }

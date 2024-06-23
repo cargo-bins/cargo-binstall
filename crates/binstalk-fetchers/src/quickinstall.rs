@@ -1,4 +1,8 @@
-use std::{borrow::Cow, path::Path, sync::Arc};
+use std::{
+    borrow::Cow,
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 
 use binstalk_downloader::remote::Method;
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning};
@@ -61,6 +65,8 @@ pub struct QuickInstall {
     signature_policy: SignaturePolicy,
 
     target_data: Arc<TargetDataErased>,
+
+    signature_verifier: OnceLock<SignatureVerifier>,
 }
 
 impl QuickInstall {
@@ -74,6 +80,41 @@ impl QuickInstall {
             })
             .await
             .copied()
+    }
+
+    fn download_signature(
+        self: Arc<Self>,
+    ) -> AutoAbortJoinHandle<Result<SignatureVerifier, FetchError>> {
+        AutoAbortJoinHandle::spawn(async move {
+            if self.signature_policy == SignaturePolicy::Ignore {
+                Ok(SignatureVerifier::Noop)
+            } else {
+                debug!(url=%self.signature_url, "Downloading signature");
+                match Download::new(self.client.clone(), self.signature_url.clone())
+                    .into_bytes()
+                    .await
+                {
+                    Ok(signature) => {
+                        trace!(?signature, "got signature contents");
+                        let config = PkgSigning {
+                            algorithm: SigningAlgorithm::Minisign,
+                            pubkey: QUICKINSTALL_SIGN_KEY,
+                            file: None,
+                        };
+                        SignatureVerifier::new(&config, &signature)
+                    }
+                    Err(err) => {
+                        if self.signature_policy == SignaturePolicy::Require {
+                            error!("Failed to download signature: {err}");
+                            Err(FetchError::MissingSignature)
+                        } else {
+                            debug!("Failed to download signature, skipping verification: {err}");
+                            Ok(SignatureVerifier::Noop)
+                        }
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -109,6 +150,8 @@ impl super::Fetcher for QuickInstall {
             signature_policy,
 
             target_data,
+
+            signature_verifier: OnceLock::new(),
         })
     }
 
@@ -118,22 +161,28 @@ impl super::Fetcher for QuickInstall {
                 return Ok(false);
             }
 
-            if self.signature_policy == SignaturePolicy::Require {
-                does_url_exist(
-                    self.client.clone(),
-                    self.gh_api_client.clone(),
-                    &self.signature_url,
-                )
-                .await
-                .map_err(|_| FetchError::MissingSignature)?;
-            }
+            let download_signature_task = self.clone().download_signature();
 
-            does_url_exist(
+            let is_found = does_url_exist(
                 self.client.clone(),
                 self.gh_api_client.clone(),
                 &self.package_url,
             )
-            .await
+            .await?;
+
+            if !is_found {
+                return Ok(false);
+            }
+
+            if self
+                .signature_verifier
+                .set(download_signature_task.flattened_join().await?)
+                .is_err()
+            {
+                panic!("<QuickInstall as Fetcher>::find is run twice");
+            }
+
+            Ok(true)
         })
     }
 
@@ -160,33 +209,8 @@ by rust officially."#,
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let verifier = if self.signature_policy == SignaturePolicy::Ignore {
-            SignatureVerifier::Noop
-        } else {
-            debug!(url=%self.signature_url, "Downloading signature");
-            match Download::new(self.client.clone(), self.signature_url.clone())
-                .into_bytes()
-                .await
-            {
-                Ok(signature) => {
-                    trace!(?signature, "got signature contents");
-                    let config = PkgSigning {
-                        algorithm: SigningAlgorithm::Minisign,
-                        pubkey: QUICKINSTALL_SIGN_KEY,
-                        file: None,
-                    };
-                    SignatureVerifier::new(&config, &signature)?
-                }
-                Err(err) => {
-                    if self.signature_policy == SignaturePolicy::Require {
-                        error!("Failed to download signature: {err}");
-                        return Err(FetchError::MissingSignature);
-                    }
-
-                    debug!("Failed to download signature, skipping verification: {err}");
-                    SignatureVerifier::Noop
-                }
-            }
+        let Some(verifier) = self.signature_verifier.get() else {
+            panic!("<QuickInstall as Fetcher>::find has not been called yet!")
         };
 
         debug!(url=%self.package_url, "Downloading package");
