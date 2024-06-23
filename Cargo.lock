@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-fetchers"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
