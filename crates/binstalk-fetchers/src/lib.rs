@@ -206,20 +206,41 @@ impl Data {
                     let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
 
                     let mut is_private = false;
-                    if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
-                        if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
-                            loop {
-                                match client.get_repo_info(&gh_repo).await {
-                                    Ok(Some(gh_repo_info)) => {
-                                        is_private = gh_repo_info.is_private();
-                                        break;
-                                    }
-                                    Ok(None) => return Err(GhApiError::NotFound.into()),
-                                    Err(GhApiError::RateLimit { retry_after }) => {
-                                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION))
+                    if repository_host == RepositoryHost::GitHub {
+                        // ensure the URL does not end with .git
+                        if repo.as_str().ends_with(".git") {
+                            let repo_name_segment = repo
+                                .path_segments()
+                                .expect("GitHub URLs always have a base")
+                                .last()
+                                .expect("path_segments() always returns at least 1 element");
+
+                            let repo_name = repo_name_segment.trim_end_matches(".git").to_owned();
+
+                            repo.path_segments_mut()
+                                .expect("GitHub URLs always have a base")
+                                .pop()
+                                .push(&repo_name);
+                        }
+
+                        if client.has_gh_token() {
+                            if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
+                                loop {
+                                    match client.get_repo_info(&gh_repo).await {
+                                        Ok(Some(gh_repo_info)) => {
+                                            is_private = gh_repo_info.is_private();
+                                            break;
+                                        }
+                                        Ok(None) => return Err(GhApiError::NotFound.into()),
+                                        Err(GhApiError::RateLimit { retry_after }) => {
+                                            sleep(
+                                                retry_after
+                                                    .unwrap_or(DEFAULT_GH_API_RETRY_DURATION),
+                                            )
                                             .await
+                                        }
+                                        Err(err) => return Err(err.into()),
                                     }
-                                    Err(err) => return Err(err.into()),
                                 }
                             }
                         }
@@ -322,6 +343,8 @@ pub type TargetDataErased = TargetData<dyn leon::Values + Send + Sync + 'static>
 
 #[cfg(test)]
 mod test {
+    use std::num::{NonZeroU16, NonZeroU64};
+
     use super::*;
 
     #[test]
@@ -387,5 +410,29 @@ mod test {
                 Url::parse("https://gitlab.kitware.com/NobodyXu/hello").unwrap()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_ignore_dot_git_for_github_repos() {
+        let url_without_git = "https://github.com/cargo-bins/cargo-binstall";
+        let url_with_git = format!("{}.git", url_without_git);
+
+        let data = Data::new("cargo-binstall".into(), "v1.2.3".into(), Some(url_with_git));
+
+        let gh_client = GhApiClient::new(
+            Client::new(
+                "user-agent",
+                None,
+                NonZeroU16::new(1000).unwrap(),
+                NonZeroU64::new(1000).unwrap(),
+                [],
+            )
+            .unwrap(),
+            None,
+        );
+
+        let repo_info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
+
+        assert_eq!(url_without_git, repo_info.repo.as_str());
     }
 }
