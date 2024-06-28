@@ -195,7 +195,11 @@ impl Data {
                     let mut repo = Url::parse(repo)?;
                     let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
-                    if repository_host == RepositoryHost::Unknown {
+                    // gettting the redirected final url for GitHub URLs removes any trailing .git,
+                    // this is needed for the GitHub API which doesn't consider the .git version the same
+                    if repository_host == RepositoryHost::Unknown
+                        || repository_host == RepositoryHost::GitHub
+                    {
                         repo = client
                             .remote_client()
                             .get_redirected_final_url(repo)
