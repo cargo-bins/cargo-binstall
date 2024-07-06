@@ -25,12 +25,16 @@ jobs:
 
       - name: Install cargo-binstall
         uses: ./ # uses action.yml from root of the repo
-
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Verify successful installation - display cargo-binstall's help
         run: cargo binstall --help
 
       - name: Verify successful installation - install example binary using cargo-binstall
         run: cargo binstall -y ripgrep
-
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Verify successful installation - display help of installed binary
         run: rg --help
