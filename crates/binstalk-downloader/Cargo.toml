@@ -74,7 +74,7 @@ xz2 = "0.1.7"
 # Since zip 0.6.3 depends on zstd 0.11, we can use 0.12.0 here
 # because it uses the same zstd-sys version.
 # Otherwise there will be a link conflict.
-zstd = { version = "0.13.0", default-features = false }
+zstd = { version = "0.13.2", default-features = false }
 
 [features]
 default = ["static", "rustls"]
