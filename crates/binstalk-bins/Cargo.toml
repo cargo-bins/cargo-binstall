@@ -11,7 +11,7 @@ authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "GPL-3.0-only"
 
 [dependencies]
-atomic-file-install = { version = "1.0.4", path = "../atomic-file-install" }
+atomic-file-install = { version = "1.0.5", path = "../atomic-file-install" }
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 compact_str = { version = "0.7.0", features = ["serde"] }
 leon = "3.0.0"
