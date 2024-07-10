@@ -13,7 +13,6 @@ if [ "$os" == "Darwin" ]; then
     unzip cargo-binstall-universal-apple-darwin.zip
 elif [ "$os" == "Linux" ]; then
     machine="$(uname -m)"
-    # `uname -m` retuns 'armv7l' on raspberry pi, but 'armv7' works just fine
     if [ "$machine" == "armv7l" ]; then
         machine="armv7"
     fi
