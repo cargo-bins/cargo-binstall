@@ -13,6 +13,9 @@ if [ "$os" == "Darwin" ]; then
     unzip cargo-binstall-universal-apple-darwin.zip
 elif [ "$os" == "Linux" ]; then
     machine="$(uname -m)"
+    if [ "$machine" == "armv7l" ]; then
+        machine="armv7"
+    fi
     target="${machine}-unknown-linux-musl"
     if [ "$machine" == "armv7" ]; then
         target="${target}eabihf"
