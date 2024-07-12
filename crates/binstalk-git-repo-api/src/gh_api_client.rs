@@ -338,10 +338,10 @@ mod test {
 
         pub(super) const RELEASE: GhRelease = GhRelease {
             repo: GhRepo {
-                owner: CompactString::new_inline("cargo-bins"),
-                repo: CompactString::new_inline("cargo-binstall"),
+                owner: CompactString::const_new("cargo-bins"),
+                repo: CompactString::const_new("cargo-binstall"),
             },
-            tag: CompactString::new_inline("v0.20.1"),
+            tag: CompactString::const_new("v0.20.1"),
         };
 
         pub(super) const ARTIFACTS: &[&str] = &[
@@ -375,10 +375,10 @@ mod test {
 
         pub(super) const RELEASE: GhRelease = GhRelease {
             repo: GhRepo {
-                owner: CompactString::new_inline("rustsec"),
-                repo: CompactString::new_inline("rustsec"),
+                owner: CompactString::const_new("rustsec"),
+                repo: CompactString::const_new("rustsec"),
             },
-            tag: CompactString::new_inline("cargo-audit/v0.17.6"),
+            tag: CompactString::const_new("cargo-audit/v0.17.6"),
         };
 
         #[allow(unused)]
@@ -417,7 +417,7 @@ mod test {
         ]
         .into_iter()
         .for_each(|url| {
-            let url = Url::parse(&url).unwrap();
+            let url = Url::parse(url).unwrap();
             assert_eq!(
                 GhRepo::try_extract_from_url(&url)
                     .unwrap()
@@ -545,16 +545,16 @@ mod test {
     #[tokio::test]
     async fn rate_limited_test_get_repo_info() {
         const PUBLIC_REPOS: [GhRepo; 1] = [GhRepo {
-            owner: CompactString::new_inline("cargo-bins"),
-            repo: CompactString::new_inline("cargo-binstall"),
+            owner: CompactString::const_new("cargo-bins"),
+            repo: CompactString::const_new("cargo-binstall"),
         }];
         const PRIVATE_REPOS: [GhRepo; 1] = [GhRepo {
-            owner: CompactString::new_inline("cargo-bins"),
-            repo: CompactString::new_inline("private-repo-for-testing"),
+            owner: CompactString::const_new("cargo-bins"),
+            repo: CompactString::const_new("private-repo-for-testing"),
         }];
         const NON_EXISTENT_REPOS: [GhRepo; 1] = [GhRepo {
-            owner: CompactString::new_inline("cargo-bins"),
-            repo: CompactString::new_inline("ttt"),
+            owner: CompactString::const_new("cargo-bins"),
+            repo: CompactString::const_new("ttt"),
         }];
 
         init_logger();
@@ -610,12 +610,12 @@ mod test {
         )];
         const NON_EXISTENT_RELEASES: [GhRelease; 1] = [GhRelease {
             repo: GhRepo {
-                owner: CompactString::new_inline("cargo-bins"),
-                repo: CompactString::new_inline("cargo-binstall"),
+                owner: CompactString::const_new("cargo-bins"),
+                repo: CompactString::const_new("cargo-binstall"),
             },
             // We are currently at v0.20.1 and we would never release
             // anything older than v0.20.1
-            tag: CompactString::new_inline("v0.18.2"),
+            tag: CompactString::const_new("v0.18.2"),
         }];
 
         init_logger();

@@ -127,7 +127,7 @@ pub(super) fn render_dl_template(
         struct Context<'a> {
             crate_name: &'a str,
             crate_prefix: CompactString,
-            crate_lowerprefix: String,
+            crate_lowerprefix: CompactString,
             version: &'a str,
             cksum: &'a str,
         }
