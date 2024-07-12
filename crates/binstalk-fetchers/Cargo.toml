@@ -16,7 +16,7 @@ binstalk-downloader = { version = "0.11.5", path = "../binstalk-downloader", def
 binstalk-git-repo-api = { version = "0.3.0", path = "../binstalk-git-repo-api" }
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 bytes = "1.4.0"
-compact_str = { version = "0.7.0" }
+compact_str = { version = "0.8.0" }
 either = "1.11.0"
 itertools = "0.13.0"
 leon = "3.0.0"

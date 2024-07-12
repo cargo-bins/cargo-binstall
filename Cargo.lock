@@ -257,7 +257,7 @@ dependencies = [
  "binstalk-types",
  "cargo-toml-workspace",
  "command-group",
- "compact_str 0.7.1",
+ "compact_str",
  "detect-targets",
  "either",
  "itertools",
@@ -283,7 +283,7 @@ version = "0.4.0"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
- "compact_str 0.7.1",
+ "compact_str",
  "leon",
  "miette",
  "normalize-path",
@@ -302,7 +302,7 @@ dependencies = [
  "binstall-tar",
  "bytes",
  "bzip2",
- "compact_str 0.7.1",
+ "compact_str",
  "default-net",
  "flate2",
  "futures-io",
@@ -334,7 +334,7 @@ dependencies = [
  "binstalk-git-repo-api",
  "binstalk-types",
  "bytes",
- "compact_str 0.7.1",
+ "compact_str",
  "either",
  "itertools",
  "leon",
@@ -354,7 +354,7 @@ name = "binstalk-git-repo-api"
 version = "0.3.0"
 dependencies = [
  "binstalk-downloader",
- "compact_str 0.7.1",
+ "compact_str",
  "once_cell",
  "percent-encoding",
  "serde",
@@ -374,7 +374,7 @@ version = "0.13.0"
 dependencies = [
  "beef",
  "binstalk-types",
- "compact_str 0.7.1",
+ "compact_str",
  "detect-targets",
  "fs-lock",
  "home",
@@ -398,7 +398,7 @@ dependencies = [
  "binstalk-downloader",
  "binstalk-types",
  "cargo-toml-workspace",
- "compact_str 0.7.1",
+ "compact_str",
  "leon",
  "miette",
  "normalize-path",
@@ -420,7 +420,7 @@ dependencies = [
 name = "binstalk-types"
 version = "0.7.0"
 dependencies = [
- "compact_str 0.7.1",
+ "compact_str",
  "maybe-owned",
  "once_cell",
  "semver",
@@ -555,7 +555,7 @@ dependencies = [
  "binstalk",
  "binstalk-manifests",
  "clap",
- "compact_str 0.7.1",
+ "compact_str",
  "dirs",
  "embed-resource",
  "file-format",
@@ -592,7 +592,7 @@ name = "cargo-toml-workspace"
 version = "6.0.0"
 dependencies = [
  "cargo_toml",
- "compact_str 0.7.1",
+ "compact_str",
  "glob",
  "normalize-path",
  "serde",
@@ -726,20 +726,6 @@ dependencies = [
 
 [[package]]
 name = "compact_str"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f86b9c4c00838774a6d902ef931eff7470720c51d90c2e32cfe15dc304737b3f"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "ryu",
- "serde",
- "static_assertions",
-]
-
-[[package]]
-name = "compact_str"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6050c3a16ddab2e412160b31f2c871015704239bca62f72f6e5f0be631d3f644"
@@ -749,6 +735,7 @@ dependencies = [
  "itoa",
  "rustversion",
  "ryu",
+ "serde",
  "static_assertions",
 ]
 
@@ -3735,7 +3722,7 @@ version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48955a621e2b4a92fdb9fcbf8a5bf0e56b15a56bfe09e6defc01cb25ca59f31c"
 dependencies = [
- "compact_str 0.8.0",
+ "compact_str",
  "derive_destructure2",
  "gix",
  "thiserror",
