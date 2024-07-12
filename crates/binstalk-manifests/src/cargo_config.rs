@@ -218,7 +218,7 @@ root = "/some/path"         # `cargo install` destination directory
         assert_eq!(env.len(), 3);
         assert_eq!(
             env.get("ENV_VAR_NAME").unwrap(),
-            &Env::Value(CompactString::new("value"))
+            &Env::Value(CompactString::const_new("value"))
         );
         assert_eq!(
             env.get("ENV_VAR_NAME_2").unwrap(),
