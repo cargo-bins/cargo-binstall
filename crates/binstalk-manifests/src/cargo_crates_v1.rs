@@ -68,7 +68,7 @@ impl CratesToml<'_> {
 
     /// Only use it when you know that the crate is not in the manifest.
     /// Otherwise, you need to call [`CratesToml::remove`] first.
-    pub fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<CompactString>) {
+    fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<CompactString>) {
         self.v1.push((cvs.to_string(), Cow::owned(bins)));
     }
 
