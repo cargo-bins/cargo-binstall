@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-compact_str = { version = "0.7.0", features = ["serde"] }
+compact_str = { version = "0.8.0", features = ["serde"] }
 maybe-owned = { version = "0.3.4", features = ["serde"] }
 once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }

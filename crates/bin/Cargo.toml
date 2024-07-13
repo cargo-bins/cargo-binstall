@@ -25,7 +25,7 @@ pkg-fmt = "zip"
 binstalk = { path = "../binstalk", version = "0.26.1", default-features = false }
 binstalk-manifests = { path = "../binstalk-manifests", version = "0.13.0" }
 clap = { version = "4.5.3", features = ["derive", "env"] }
-compact_str = "0.7.0"
+compact_str = "0.8.0"
 dirs = "5.0.1"
 file-format = { version = "0.25.0", default-features = false }
 home = "0.5.9"

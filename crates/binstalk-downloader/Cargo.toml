@@ -30,7 +30,7 @@ async_zip = { version = "0.0.17", features = [
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
-compact_str = "0.7.0"
+compact_str = "0.8.0"
 flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"

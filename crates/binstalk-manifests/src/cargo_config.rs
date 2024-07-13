@@ -210,7 +210,7 @@ root = "/some/path"         # `cargo install` destination directory
         );
 
         let http = config.http.unwrap();
-        assert_eq!(http.proxy.unwrap(), CompactString::new_inline("host:port"));
+        assert_eq!(http.proxy.unwrap(), CompactString::const_new("host:port"));
         assert_eq!(http.timeout.unwrap(), 30);
         assert_eq!(http.cainfo.unwrap(), Path::new("root").join("cert.pem"));
 
@@ -218,7 +218,7 @@ root = "/some/path"         # `cargo install` destination directory
         assert_eq!(env.len(), 3);
         assert_eq!(
             env.get("ENV_VAR_NAME").unwrap(),
-            &Env::Value(CompactString::new("value"))
+            &Env::Value(CompactString::const_new("value"))
         );
         assert_eq!(
             env.get("ENV_VAR_NAME_2").unwrap(),

@@ -197,7 +197,7 @@ mod test {
         assert_matches!(deserialize("RATE_LIMITED"), GraphQLErrorType::RateLimited);
         assert_matches!(
             deserialize("rATE_LIMITED"),
-            GraphQLErrorType::Other(val) if val == CompactString::new("rATE_LIMITED")
+            GraphQLErrorType::Other(val) if val == CompactString::const_new("rATE_LIMITED")
         );
     }
 }

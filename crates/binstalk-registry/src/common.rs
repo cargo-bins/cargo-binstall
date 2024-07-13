@@ -96,10 +96,10 @@ pub(super) fn crate_prefix_components(
 
     match (chars.next(), chars.next(), chars.next(), chars.next()) {
         (None, None, None, None) => Err(RegistryError::NotFound(crate_name.into())),
-        (Some(_), None, None, None) => Ok((CompactString::new("1"), None)),
-        (Some(_), Some(_), None, None) => Ok((CompactString::new("2"), None)),
+        (Some(_), None, None, None) => Ok((CompactString::const_new("1"), None)),
+        (Some(_), Some(_), None, None) => Ok((CompactString::const_new("2"), None)),
         (Some(ch), Some(_), Some(_), None) => Ok((
-            CompactString::new("3"),
+            CompactString::const_new("3"),
             Some(ch.to_lowercase().to_compact_string()),
         )),
         (Some(a), Some(b), Some(c), Some(d)) => Ok((
@@ -127,7 +127,7 @@ pub(super) fn render_dl_template(
         struct Context<'a> {
             crate_name: &'a str,
             crate_prefix: CompactString,
-            crate_lowerprefix: String,
+            crate_lowerprefix: CompactString,
             version: &'a str,
             cksum: &'a str,
         }
