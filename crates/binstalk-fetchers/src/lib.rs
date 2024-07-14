@@ -221,8 +221,8 @@ impl Data {
                 .and_then(|s| Url::parse(s).ok())
             {
                 let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-                if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
-                    if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
+                match GhRepo::try_extract_from_url(&repo) {
+                    Some(gh_repo) if client.has_gh_token() => {
                         if let Ok(gh_repo_info) = gh_get_repo_info(client, &gh_repo).await {
                             return Ok(RepoInfo {
                                 subcrate,
@@ -232,20 +232,23 @@ impl Data {
                             });
                         }
                     }
-                }
-
-                if let Ok(repo) = client.remote_client().get_redirected_final_url(repo).await {
-                    return Ok(RepoInfo {
-                        subcrate,
-                        repository_host: RepositoryHost::guess_git_hosting_services(&repo),
-                        repo,
-                        is_private: false,
-                    });
+                    _ => {
+                        if let Ok(repo) =
+                            client.remote_client().get_redirected_final_url(repo).await
+                        {
+                            return Ok(RepoInfo {
+                                subcrate,
+                                repository_host: RepositoryHost::guess_git_hosting_services(&repo),
+                                repo,
+                                is_private: false,
+                            });
+                        }
+                    }
                 }
             }
 
             let mut is_private = false;
-            if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
+            if client.has_gh_token() {
                 if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
                     is_private = gh_get_repo_info(client, &gh_repo).await?.is_private();
                 }
