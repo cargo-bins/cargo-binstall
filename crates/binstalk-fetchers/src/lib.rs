@@ -3,7 +3,7 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo};
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
 use tokio::{sync::OnceCell, task::JoinError, time::sleep};
@@ -185,6 +185,81 @@ impl Data {
 
     #[instrument(skip(client))]
     async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
+        async fn gh_get_repo_info(
+            client: &GhApiClient,
+            gh_repo: &GhRepo,
+        ) -> Result<GhRepoInfo, GhApiError> {
+            loop {
+                match client.get_repo_info(gh_repo).await {
+                    Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
+                    Ok(None) => break Err(GhApiError::NotFound),
+                    Err(GhApiError::RateLimit { retry_after }) => {
+                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await
+                    }
+                    Err(err) => break Err(err),
+                }
+            }
+        }
+
+        async fn get_repo_info_inner(
+            repo: &str,
+            client: &GhApiClient,
+        ) -> Result<RepoInfo, FetchError> {
+            let repo = Url::parse(repo)?;
+            let mut repo = client
+                .remote_client()
+                .get_redirected_final_url(repo.clone())
+                .await
+                .unwrap_or(repo);
+            let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+
+            let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
+
+            if let Some(repo) = repo
+                .as_str()
+                .strip_suffix(".git")
+                .and_then(|s| Url::parse(s).ok())
+            {
+                let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+                match GhRepo::try_extract_from_url(&repo) {
+                    Some(gh_repo) if client.has_gh_token() => {
+                        if let Ok(gh_repo_info) = gh_get_repo_info(client, &gh_repo).await {
+                            return Ok(RepoInfo {
+                                subcrate,
+                                repository_host,
+                                repo,
+                                is_private: gh_repo_info.is_private(),
+                            });
+                        }
+                    }
+                    _ => {
+                        if let Ok(repo) =
+                            client.remote_client().get_redirected_final_url(repo).await
+                        {
+                            return Ok(RepoInfo {
+                                subcrate,
+                                repository_host: RepositoryHost::guess_git_hosting_services(&repo),
+                                repo,
+                                is_private: false,
+                            });
+                        }
+                    }
+                }
+            }
+
+            Ok(RepoInfo {
+                is_private: match GhRepo::try_extract_from_url(&repo) {
+                    Some(gh_repo) if client.has_gh_token() => {
+                        gh_get_repo_info(client, &gh_repo).await?.is_private()
+                    }
+                    _ => false,
+                },
+                subcrate,
+                repo,
+                repository_host,
+            })
+        }
+
         self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
@@ -192,45 +267,7 @@ impl Data {
                         return Ok(None);
                     };
 
-                    let mut repo = Url::parse(repo)?;
-                    let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-
-                    if repository_host == RepositoryHost::Unknown {
-                        repo = client
-                            .remote_client()
-                            .get_redirected_final_url(repo)
-                            .await?;
-                        repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-                    }
-
-                    let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
-
-                    let mut is_private = false;
-                    if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
-                        if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
-                            loop {
-                                match client.get_repo_info(&gh_repo).await {
-                                    Ok(Some(gh_repo_info)) => {
-                                        is_private = gh_repo_info.is_private();
-                                        break;
-                                    }
-                                    Ok(None) => return Err(GhApiError::NotFound.into()),
-                                    Err(GhApiError::RateLimit { retry_after }) => {
-                                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION))
-                                            .await
-                                    }
-                                    Err(err) => return Err(err.into()),
-                                }
-                            }
-                        }
-                    }
-
-                    let repo_info = RepoInfo {
-                        subcrate,
-                        repo,
-                        repository_host,
-                        is_private,
-                    };
+                    let repo_info = get_repo_info_inner(repo, client).await?;
 
                     debug!("Resolved repo_info = {repo_info:#?}");
 
@@ -322,6 +359,8 @@ pub type TargetDataErased = TargetData<dyn leon::Values + Send + Sync + 'static>
 
 #[cfg(test)]
 mod test {
+    use std::num::{NonZeroU16, NonZeroU64};
+
     use super::*;
 
     #[test]
@@ -387,5 +426,29 @@ mod test {
                 Url::parse("https://gitlab.kitware.com/NobodyXu/hello").unwrap()
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_ignore_dot_git_for_github_repos() {
+        let url_without_git = "https://github.com/cargo-bins/cargo-binstall";
+        let url_with_git = format!("{}.git", url_without_git);
+
+        let data = Data::new("cargo-binstall".into(), "v1.2.3".into(), Some(url_with_git));
+
+        let gh_client = GhApiClient::new(
+            Client::new(
+                "user-agent",
+                None,
+                NonZeroU16::new(1000).unwrap(),
+                NonZeroU64::new(1000).unwrap(),
+                [],
+            )
+            .unwrap(),
+            None,
+        );
+
+        let repo_info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
+
+        assert_eq!(url_without_git, repo_info.repo.as_str());
     }
 }
