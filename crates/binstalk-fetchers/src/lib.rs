@@ -185,6 +185,69 @@ impl Data {
 
     #[instrument(skip(client))]
     async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
+        async fn get_repo_info_inner(
+            repo: &str,
+            client: &GhApiClient,
+        ) -> Result<RepoInfo, FetchError> {
+            let mut repo = Url::parse(repo)?;
+            let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+
+            if repository_host == RepositoryHost::Unknown {
+                repo = client
+                    .remote_client()
+                    .get_redirected_final_url(repo)
+                    .await?;
+                repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+            }
+
+            let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
+
+            let mut is_private = false;
+            if repository_host == RepositoryHost::GitHub {
+                // ensure the URL does not end with .git
+                if repo.as_str().ends_with(".git") {
+                    let repo_name_segment = repo
+                        .path_segments()
+                        .expect("GitHub URLs always have a base")
+                        .last()
+                        .expect("path_segments() always returns at least 1 element");
+
+                    let repo_name = repo_name_segment.trim_end_matches(".git").to_owned();
+
+                    repo.path_segments_mut()
+                        .expect("GitHub URLs always have a base")
+                        .pop()
+                        .push(&repo_name);
+                }
+
+                if client.has_gh_token() {
+                    if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
+                        loop {
+                            match client.get_repo_info(&gh_repo).await {
+                                Ok(Some(gh_repo_info)) => {
+                                    is_private = gh_repo_info.is_private();
+                                    break;
+                                }
+                                Ok(None) => return Err(GhApiError::NotFound.into()),
+                                Err(GhApiError::RateLimit { retry_after }) => {
+                                    sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION))
+                                        .await
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(RepoInfo {
+                subcrate,
+                repo,
+                repository_host,
+                is_private,
+            })
+        }
+
         self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
@@ -192,70 +255,13 @@ impl Data {
                         return Ok(None);
                     };
 
-                    let mut repo = Url::parse(repo)?;
-                    let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+                    let ret = get_repo_info_inner(repo, client).await;
 
-                    if repository_host == RepositoryHost::Unknown {
-                        repo = client
-                            .remote_client()
-                            .get_redirected_final_url(repo)
-                            .await?;
-                        repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+                    if let Ok(repo_info) = &ret {
+                        debug!("Resolved repo_info = {repo_info:#?}");
                     }
 
-                    let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
-
-                    let mut is_private = false;
-                    if repository_host == RepositoryHost::GitHub {
-                        // ensure the URL does not end with .git
-                        if repo.as_str().ends_with(".git") {
-                            let repo_name_segment = repo
-                                .path_segments()
-                                .expect("GitHub URLs always have a base")
-                                .last()
-                                .expect("path_segments() always returns at least 1 element");
-
-                            let repo_name = repo_name_segment.trim_end_matches(".git").to_owned();
-
-                            repo.path_segments_mut()
-                                .expect("GitHub URLs always have a base")
-                                .pop()
-                                .push(&repo_name);
-                        }
-
-                        if client.has_gh_token() {
-                            if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
-                                loop {
-                                    match client.get_repo_info(&gh_repo).await {
-                                        Ok(Some(gh_repo_info)) => {
-                                            is_private = gh_repo_info.is_private();
-                                            break;
-                                        }
-                                        Ok(None) => return Err(GhApiError::NotFound.into()),
-                                        Err(GhApiError::RateLimit { retry_after }) => {
-                                            sleep(
-                                                retry_after
-                                                    .unwrap_or(DEFAULT_GH_API_RETRY_DURATION),
-                                            )
-                                            .await
-                                        }
-                                        Err(err) => return Err(err.into()),
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    let repo_info = RepoInfo {
-                        subcrate,
-                        repo,
-                        repository_host,
-                        is_private,
-                    };
-
-                    debug!("Resolved repo_info = {repo_info:#?}");
-
-                    Ok(Some(repo_info))
+                    ret.map(Some)
                 })
             })
             .await
