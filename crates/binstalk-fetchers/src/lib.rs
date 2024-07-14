@@ -205,16 +205,13 @@ impl Data {
             repo: &str,
             client: &GhApiClient,
         ) -> Result<RepoInfo, FetchError> {
-            let mut repo = Url::parse(repo)?;
-            let mut repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-
-            if repository_host == RepositoryHost::Unknown {
-                repo = client
-                    .remote_client()
-                    .get_redirected_final_url(repo)
-                    .await?;
-                repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-            }
+            let repo = Url::parse(repo)?;
+            let mut repo = client
+                .remote_client()
+                .get_redirected_final_url(repo.clone())
+                .await
+                .unwrap_or(repo);
+            let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
             let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
 
