@@ -247,18 +247,16 @@ impl Data {
                 }
             }
 
-            let mut is_private = false;
-            if client.has_gh_token() {
-                if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
-                    is_private = gh_get_repo_info(client, &gh_repo).await?.is_private();
-                }
-            }
-
             Ok(RepoInfo {
+                is_private: match GhRepo::try_extract_from_url(&repo) {
+                    Some(gh_repo) if client.has_gh_token() => {
+                        gh_get_repo_info(client, &gh_repo).await?.is_private()
+                    }
+                    _ => false,
+                },
                 subcrate,
                 repo,
                 repository_host,
-                is_private,
             })
         }
 
@@ -269,13 +267,11 @@ impl Data {
                         return Ok(None);
                     };
 
-                    let ret = get_repo_info_inner(repo, client).await;
+                    let repo_info = get_repo_info_inner(repo, client).await?;
 
-                    if let Ok(repo_info) = &ret {
-                        debug!("Resolved repo_info = {repo_info:#?}");
-                    }
+                    debug!("Resolved repo_info = {repo_info:#?}");
 
-                    ret.map(Some)
+                    Ok(Some(repo_info))
                 })
             })
             .await
