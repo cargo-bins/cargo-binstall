@@ -3,7 +3,7 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo};
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
 use thiserror::Error as ThisError;
 use tokio::{sync::OnceCell, task::JoinError, time::sleep};
@@ -185,6 +185,22 @@ impl Data {
 
     #[instrument(skip(client))]
     async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
+        async fn gh_get_repo_info(
+            client: &GhApiClient,
+            gh_repo: &GhRepo,
+        ) -> Result<GhRepoInfo, GhApiError> {
+            loop {
+                match client.get_repo_info(gh_repo).await {
+                    Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
+                    Ok(None) => break Err(GhApiError::NotFound),
+                    Err(GhApiError::RateLimit { retry_after }) => {
+                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await
+                    }
+                    Err(err) => break Err(err),
+                }
+            }
+        }
+
         async fn get_repo_info_inner(
             repo: &str,
             client: &GhApiClient,
@@ -202,41 +218,39 @@ impl Data {
 
             let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
 
-            let mut is_private = false;
-            if repository_host == RepositoryHost::GitHub {
-                // ensure the URL does not end with .git
-                if repo.as_str().ends_with(".git") {
-                    let repo_name_segment = repo
-                        .path_segments()
-                        .expect("GitHub URLs always have a base")
-                        .last()
-                        .expect("path_segments() always returns at least 1 element");
-
-                    let repo_name = repo_name_segment.trim_end_matches(".git").to_owned();
-
-                    repo.path_segments_mut()
-                        .expect("GitHub URLs always have a base")
-                        .pop()
-                        .push(&repo_name);
-                }
-
-                if client.has_gh_token() {
+            if let Some(repo) = repo
+                .as_str()
+                .strip_suffix(".git")
+                .and_then(|s| Url::parse(s).ok())
+            {
+                let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
+                if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
                     if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
-                        loop {
-                            match client.get_repo_info(&gh_repo).await {
-                                Ok(Some(gh_repo_info)) => {
-                                    is_private = gh_repo_info.is_private();
-                                    break;
-                                }
-                                Ok(None) => return Err(GhApiError::NotFound.into()),
-                                Err(GhApiError::RateLimit { retry_after }) => {
-                                    sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION))
-                                        .await
-                                }
-                                Err(err) => return Err(err.into()),
-                            }
+                        if let Ok(gh_repo_info) = gh_get_repo_info(client, &gh_repo).await {
+                            return Ok(RepoInfo {
+                                subcrate,
+                                repository_host,
+                                repo,
+                                is_private: gh_repo_info.is_private(),
+                            });
                         }
                     }
+                }
+
+                if let Ok(repo) = client.remote_client().get_redirected_final_url(repo).await {
+                    return Ok(RepoInfo {
+                        subcrate,
+                        repository_host: RepositoryHost::guess_git_hosting_services(&repo),
+                        repo,
+                        is_private: false,
+                    });
+                }
+            }
+
+            let mut is_private = false;
+            if repository_host == RepositoryHost::GitHub && client.has_gh_token() {
+                if let Some(gh_repo) = GhRepo::try_extract_from_url(&repo) {
+                    is_private = gh_get_repo_info(client, &gh_repo).await?.is_private();
                 }
             }
 
