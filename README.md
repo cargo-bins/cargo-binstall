@@ -110,7 +110,7 @@ When Binstall is available, it installs from binary whenever possible... and you
 ## Unsupported crates
 
 Binstall is generally smart enough to auto-detect artifacts in most situations.
-However, if a package fails to install, you can manually specify the `pkg-url`, `bin-dir`, and `pkg-fmt` as needed at the command line, with values as documented in [SUPPORT.md](./SUPPORT.md).
+However, if a package fails to install, you can manually specify the `pkg-url`, `bin-dir`, and `pkg-fmt` as needed at the command line, with values as documented in [SUPPORT.md](https://github.com/cargo-bins/cargo-binstall/blob/main/SUPPORT.md).
 
 ```console
 $ cargo-binstall \
@@ -119,11 +119,11 @@ $ cargo-binstall \
   crate_name
 ```
 
-Maintainers wanting to make their users' life easier can add [explicit Binstall metadata](./SUPPORT.md) to `Cargo.toml` to locate the appropriate binary package for a given version and target.
+Maintainers wanting to make their users' life easier can add [explicit Binstall metadata](https://github.com/cargo-bins/cargo-binstall/blob/main/SUPPORT.md) to `Cargo.toml` to locate the appropriate binary package for a given version and target.
 
 ## Signatures
 
-We have initial, limited [support](./SIGNING.md) for maintainers to specify a signing public key and where to find package signatures.
+We have initial, limited [support](https://github.com/cargo-bins/cargo-binstall/blob/main/SIGNING.md) for maintainers to specify a signing public key and where to find package signatures.
 With this enabled, Binstall will download and verify signatures for that package.
 
 You can use `--only-signed` to refuse to install packages if they're not signed.
@@ -142,7 +142,7 @@ Also, there's this great and woefully underused (IMO) `[package.metadata]` field
 ### Is this secure?
 Yes and also no?
 
-We have [initial support](./SIGNING.md) for verifying signatures, but not a lot of the ecosystem produces signatures at the moment.
+We have [initial support](https://github.com/cargo-bins/cargo-binstall/blob/main/SIGNING.md) for verifying signatures, but not a lot of the ecosystem produces signatures at the moment.
 See [#1](https://github.com/cargo-bins/cargo-binstall/issues/1) to discuss more on this.
 
 We always pull the metadata from crates.io over HTTPS, and verify the checksum of the crate tar.
