@@ -66,12 +66,6 @@ impl CratesToml<'_> {
         Self::load_from_reader(file)
     }
 
-    /// Only use it when you know that the crate is not in the manifest.
-    /// Otherwise, you need to call [`CratesToml::remove`] first.
-    fn insert(&mut self, cvs: &CrateVersionSource, bins: Vec<CompactString>) {
-        self.v1.push((cvs.to_string(), Cow::owned(bins)));
-    }
-
     pub fn remove(&mut self, name: &str) {
         self.v1.retain(|(s, _bin)| {
             s.split_once(' ')

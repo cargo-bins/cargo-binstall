@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt, str::FromStr};
 
-use binstalk_types::{crate_info::cratesio_url, maybe_owned::MaybeOwned};
+use binstalk_types::maybe_owned::MaybeOwned;
 use compact_str::CompactString;
 use miette::Diagnostic;
 use semver::Version;
@@ -40,12 +40,6 @@ pub enum Source<'a> {
     Git(MaybeOwned<'a, Url>),
     Path(MaybeOwned<'a, Url>),
     Registry(MaybeOwned<'a, Url>),
-}
-
-impl Source<'static> {
-    pub fn cratesio_registry() -> Self {
-        Self::Registry(MaybeOwned::Borrowed(cratesio_url()))
-    }
 }
 
 impl<'a> From<&'a CrateSource> for Source<'a> {
