@@ -19,3 +19,6 @@ cargo_binstall_version="$(cargo binstall -V)"
 echo "$cargo_binstall_version"
 
 [ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
+
+cat "$CARGO_HOME/.crates.toml"
+grep -F "cargo-binstall 0.12.0 (path+file://manifests/github-test-Cargo.toml)" <"$CARGO_HOME/.crates.toml"
