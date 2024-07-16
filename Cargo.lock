@@ -3718,9 +3718,9 @@ dependencies = [
 
 [[package]]
 name = "simple-git"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48955a621e2b4a92fdb9fcbf8a5bf0e56b15a56bfe09e6defc01cb25ca59f31c"
+checksum = "ceb5955ab3b66f8c0f0557873ca472c196d30a6c19696074ce3aca4c226b5c3a"
 dependencies = [
  "compact_str",
  "derive_destructure2",
