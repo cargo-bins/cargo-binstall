@@ -200,6 +200,7 @@ impl Registry {
 impl fmt::Display for Registry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "git")]
             Registry::Git(registry) => fmt::Display::fmt(&registry.url(), f),
             Registry::Sparse(registry) => fmt::Display::fmt(&registry.url(), f),
         }
