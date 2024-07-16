@@ -453,7 +453,17 @@ impl PackageInfo {
                         .fetch_crate_matched(client, &name, version_req),
                 )
                 .await?,
-                CrateSource::cratesio_registry(),
+                {
+                    let registry = format!("{}", opts.registry);
+                    if registry == "https://index.crates.io/" {
+                        CrateSource::cratesio_registry()
+                    } else {
+                        CrateSource {
+                            source_type: SourceType::Registry,
+                            url: MaybeOwned::Owned(Url::parse(&registry)?),
+                        }
+                    }
+                },
             ),
         };
 
