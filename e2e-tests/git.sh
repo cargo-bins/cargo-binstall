@@ -48,7 +48,11 @@ cp -r manifests/workspace/* "$GIT"
 )
 COMMIT_HASH="$(cd "$GIT" && git rev-parse HEAD)"
 
-source="(git+file://$(cygpath -m "$GIT")#$COMMIT_HASH)"
+if [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; then
+    source="(git+file:///$(cygpath -m "$GIT")#$COMMIT_HASH)"
+else
+    source="(git+file://$GIT#$COMMIT_HASH)"
+fi
 
 # Install cargo-binstall using `--git`
 "./$1" binstall --force --git "file://$GIT" --no-confirm cargo-binstall
