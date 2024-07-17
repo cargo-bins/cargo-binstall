@@ -45,7 +45,6 @@ cp -r manifests/workspace/* "$GIT"
   cd "$GIT"
   git add .
   git commit -m 'Update to workspace'
-  git rev-parse HEAD
 )
 COMMIT_HASH="$(cd "$GIT" && git rev-parse HEAD)"
 
