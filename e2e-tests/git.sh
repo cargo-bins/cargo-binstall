@@ -57,7 +57,7 @@ test_cargo_binstall_install
 cat "$CARGO_HOME/.crates.toml"
 grep -F "cargo-binstall 0.12.0 (git+file://$GIT#$COMMIT_HASH)" <"$CARGO_HOME/.crates.toml"
 
-# Install cargo-binstall using `--git`
+# Install cargo-watch using `--git`
 "./$1" binstall --force --git "file://$GIT" --no-confirm cargo-watch
 
 cargo_watch_version="$(cargo watch -V)"
