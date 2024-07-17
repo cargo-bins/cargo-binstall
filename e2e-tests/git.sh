@@ -22,7 +22,7 @@ GIT="$(mktemp -d 2>/dev/null || mktemp -d -t 'git')"
 if [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; then
     # Convert it to windows path so `--git "file://$GIT"` would work
     # on windows.
-    GIT="$(cygpath -w "$GIT")"
+    GIT="$(cygpath -m "$GIT")"
 fi
 
 git init "$GIT"
