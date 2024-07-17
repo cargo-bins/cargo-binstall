@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
-use std::{io, str::FromStr, sync::Arc};
+use std::{fmt, io, str::FromStr, sync::Arc};
 
 use base16::DecodeError as Base16DecodeError;
 use binstalk_downloader::{
@@ -193,6 +193,16 @@ impl Registry {
                     .fetch_crate_matched(client, crate_name, version_req)
                     .await
             }
+        }
+    }
+}
+
+impl fmt::Display for Registry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(feature = "git")]
+            Registry::Git(registry) => fmt::Display::fmt(&registry.url(), f),
+            Registry::Sparse(registry) => fmt::Display::fmt(&registry.url(), f),
         }
     }
 }

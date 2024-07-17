@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf, sync::Arc};
+use std::{fmt::Display, io, path::PathBuf, sync::Arc};
 
 use binstalk_downloader::remote::Client;
 use binstalk_types::cargo_toml_binstall::Meta;
@@ -71,6 +71,10 @@ impl GitRegistry {
             url,
             git_index: Default::default(),
         }))
+    }
+
+    pub fn url(&self) -> impl Display + '_ {
+        &self.0.url
     }
 
     /// WARNING: This is a blocking operation.

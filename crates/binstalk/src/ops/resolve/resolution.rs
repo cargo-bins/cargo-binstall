@@ -22,6 +22,7 @@ pub struct ResolutionFetch {
     pub name: CompactString,
     pub version_req: CompactString,
     pub bin_files: Vec<bins::BinFile>,
+    pub source: CrateSource,
 }
 
 pub struct ResolutionSource {
@@ -84,7 +85,7 @@ impl ResolutionFetch {
             name: self.name,
             version_req: self.version_req,
             current_version: self.new_version,
-            source: CrateSource::cratesio_registry(),
+            source: self.source,
             target: self.fetcher.target().to_compact_string(),
             bins: self
                 .bin_files

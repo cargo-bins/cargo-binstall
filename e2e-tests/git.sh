@@ -46,16 +46,29 @@ cp -r manifests/workspace/* "$GIT"
   git add .
   git commit -m 'Update to workspace'
 )
+COMMIT_HASH="$(cd "$GIT" && git rev-parse HEAD)"
 
-# Install binaries using `--git`
+if [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; then
+    source="(git+file:///$(cygpath -m "$GIT")#$COMMIT_HASH)"
+else
+    source="(git+file://$GIT#$COMMIT_HASH)"
+fi
+
+# Install cargo-binstall using `--git`
 "./$1" binstall --force --git "file://$GIT" --no-confirm cargo-binstall
 
 test_cargo_binstall_install
 
-# Install binaries using `--git`
+cat "$CARGO_HOME/.crates.toml"
+grep -F "cargo-binstall 0.12.0 $source" <"$CARGO_HOME/.crates.toml"
+
+# Install cargo-watch using `--git`
 "./$1" binstall --force --git "file://$GIT" --no-confirm cargo-watch
 
 cargo_watch_version="$(cargo watch -V)"
 echo "$cargo_watch_version"
 
 [ "$cargo_watch_version" = "cargo-watch 8.4.0" ]
+
+cat "$CARGO_HOME/.crates.toml"
+grep -F "cargo-watch 8.4.0 $source" <"$CARGO_HOME/.crates.toml"

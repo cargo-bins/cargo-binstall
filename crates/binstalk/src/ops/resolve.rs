@@ -8,6 +8,7 @@ use std::{
 };
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
+use binstalk_types::crate_info::{CrateSource, SourceType};
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
@@ -15,6 +16,7 @@ use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, info, instrument, warn};
+use url::Url;
 
 use crate::{
     bins,
@@ -195,6 +197,7 @@ async fn resolve_inner(
                                 new_version: package_info.version,
                                 name: package_info.name,
                                 version_req: version_req_str,
+                                source: package_info.source,
                                 bin_files,
                             })));
                         } else {
@@ -365,6 +368,7 @@ struct PackageInfo {
     binaries: Vec<Bin>,
     name: CompactString,
     version_str: CompactString,
+    source: CrateSource,
     version: Version,
     repo: Option<String>,
     overrides: BTreeMap<String, PkgOverride>,
@@ -387,43 +391,80 @@ impl PackageInfo {
         use CargoTomlFetchOverride::*;
 
         // Fetch crate via crates.io, git, or use a local manifest path
-        let manifest = match opts.cargo_toml_fetch_override.as_ref() {
-            Some(Path(manifest_path)) => {
-                let manifest_path = manifest_path.clone();
-                let name = name.clone();
+        let (manifest, source) = match opts.cargo_toml_fetch_override.as_ref() {
+            Some(Path(manifest_path)) => (
+                spawn_blocking({
+                    let manifest_path = manifest_path.clone();
+                    let name = name.clone();
 
-                spawn_blocking(move || load_manifest_path(manifest_path, &name)).await??
-            }
+                    move || load_manifest_path(manifest_path, &name)
+                })
+                .await??,
+                CrateSource {
+                    source_type: SourceType::Path,
+                    url: MaybeOwned::Owned(Url::parse(&format!(
+                        "file://{}",
+                        manifest_path.display()
+                    ))?),
+                },
+            ),
             #[cfg(feature = "git")]
             Some(Git(git_url)) => {
                 use crate::helpers::git::{GitCancellationToken, Repository as GitRepository};
 
-                let git_url = git_url.clone();
-                let name = name.clone();
                 let cancellation_token = GitCancellationToken::default();
                 // Cancel git operation if the future is cancelled (dropped).
                 let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
-                let ret = spawn_blocking(move || {
-                    let dir = tempfile::TempDir::new()?;
-                    GitRepository::shallow_clone(git_url, dir.as_ref(), Some(cancellation_token))?;
+                let (ret, commit_hash) = spawn_blocking({
+                    let git_url = git_url.clone();
+                    let name = name.clone();
+                    move || {
+                        let dir = tempfile::TempDir::new()?;
+                        let repo = GitRepository::shallow_clone(
+                            git_url,
+                            dir.as_ref(),
+                            Some(cancellation_token),
+                        )?;
 
-                    load_manifest_from_workspace(dir.as_ref(), &name).map_err(BinstallError::from)
+                        Ok::<_, BinstallError>((
+                            load_manifest_from_workspace(dir.as_ref(), &name)
+                                .map_err(BinstallError::from)?,
+                            repo.get_head_commit_hash()?,
+                        ))
+                    }
                 })
                 .await??;
 
                 // Git operation done, disarm it
                 cancel_on_drop.disarm();
 
-                ret
+                (
+                    ret,
+                    CrateSource {
+                        source_type: SourceType::Git,
+                        url: MaybeOwned::Owned(Url::parse(&format!("{git_url}#{commit_hash}"))?),
+                    },
+                )
             }
-            None => {
+            None => (
                 Box::pin(
                     opts.registry
                         .fetch_crate_matched(client, &name, version_req),
                 )
-                .await?
-            }
+                .await?,
+                {
+                    let registry = format!("{}", opts.registry);
+                    if registry == "https://index.crates.io/" {
+                        CrateSource::cratesio_registry()
+                    } else {
+                        CrateSource {
+                            source_type: SourceType::Registry,
+                            url: MaybeOwned::Owned(Url::parse(&registry)?),
+                        }
+                    }
+                },
+            ),
         };
 
         let Some(mut package) = manifest.package else {
@@ -479,6 +520,7 @@ impl PackageInfo {
                 meta,
                 binaries,
                 name,
+                source,
                 version_str: new_version_str,
                 version: new_version,
                 repo: package.repository().map(ToString::to_string),
