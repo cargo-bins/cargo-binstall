@@ -5,6 +5,7 @@
 use std::{borrow::Cow, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
+use strum_macros::{EnumCount, VariantArray};
 
 mod package_formats;
 #[doc(inline)]
@@ -17,6 +18,41 @@ pub use package_formats::*;
 #[serde(rename_all = "kebab-case")]
 pub struct Meta {
     pub binstall: Option<PkgMeta>,
+}
+
+/// Strategies to use for binary discovery
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    EnumCount,
+    VariantArray,
+    Deserialize,
+    Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum Strategy {
+    /// Attempt to download official pre-built artifacts using
+    /// information provided in `Cargo.toml`.
+    CrateMetaData,
+    /// Query third-party QuickInstall for the crates.
+    QuickInstall,
+    /// Build the crates from source using `cargo-build`.
+    Compile,
+}
+
+impl Strategy {
+    pub const fn to_str(self) -> &'static str {
+        match self {
+            Strategy::CrateMetaData => "crate-meta-data",
+            Strategy::QuickInstall => "quick-install",
+            Strategy::Compile => "compile",
+        }
+    }
 }
 
 /// Metadata for binary installation use.

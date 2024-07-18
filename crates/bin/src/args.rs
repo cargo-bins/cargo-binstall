@@ -13,12 +13,12 @@ use binstalk::{
     ops::resolve::{CrateName, VersionReqExt},
     registry::Registry,
 };
-use clap::{error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use binstalk_manifests::cargo_toml_binstall::Strategy;
+use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use compact_str::CompactString;
 use log::LevelFilter;
 use semver::VersionReq;
 use strum::EnumCount;
-use strum_macros::EnumCount;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Parser)]
@@ -162,13 +162,13 @@ pub struct Args {
         value_delimiter(','),
         env = "BINSTALL_STRATEGIES"
     )]
-    pub(crate) strategies: Vec<Strategy>,
+    pub(crate) strategies: Vec<StrategyWrapped>,
 
     /// Disable the strategies specified.
     /// If a strategy is specified in `--strategies` and `--disable-strategies`,
     /// then it will be removed.
     #[clap(help_heading = "Overrides", long, value_delimiter(','))]
-    pub(crate) disable_strategies: Vec<Strategy>,
+    pub(crate) disable_strategies: Vec<StrategyWrapped>,
 
     /// If `--github-token` or environment variable `GITHUB_TOKEN`/`GH_TOKEN`
     /// is not specified, then cargo-binstall will try to extract github token from
@@ -431,16 +431,20 @@ impl Default for RateLimit {
 }
 
 /// Strategy for installing the package
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ValueEnum, EnumCount)]
-#[repr(u8)]
-pub(crate) enum Strategy {
-    /// Attempt to download official pre-built artifacts using
-    /// information provided in `Cargo.toml`.
-    CrateMetaData,
-    /// Query third-party QuickInstall for the crates.
-    QuickInstall,
-    /// Build the crates from source using `cargo-build`.
-    Compile,
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub(crate) struct StrategyWrapped(pub(crate) Strategy);
+
+impl ValueEnum for StrategyWrapped {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self(Strategy::CrateMetaData),
+            Self(Strategy::QuickInstall),
+            Self(Strategy::Compile),
+        ]
+    }
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        Some(PossibleValue::new(self.0.to_str()))
+    }
 }
 
 pub fn parse() -> Args {
@@ -532,7 +536,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
     let mut is_variant_present = [false; Strategy::COUNT];
 
     for strategy in &opts.strategies {
-        let index = *strategy as u8 as usize;
+        let index = strategy.0 as u8 as usize;
         if is_variant_present[index] {
             new_dup_strategy_err().exit()
         } else {
@@ -543,9 +547,9 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
     // Default strategies if empty
     if opts.strategies.is_empty() {
         opts.strategies = vec![
-            Strategy::CrateMetaData,
-            Strategy::QuickInstall,
-            Strategy::Compile,
+            StrategyWrapped(Strategy::CrateMetaData),
+            StrategyWrapped(Strategy::QuickInstall),
+            StrategyWrapped(Strategy::Compile),
         ];
     }
 
@@ -573,7 +577,8 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
     }
 
     // Ensure that Strategy::Compile is specified as the last strategy
-    if opts.strategies[..(opts.strategies.len() - 1)].contains(&Strategy::Compile) {
+    if opts.strategies[..(opts.strategies.len() - 1)].contains(&StrategyWrapped(Strategy::Compile))
+    {
         command
             .error(
                 ErrorKind::InvalidValue,
