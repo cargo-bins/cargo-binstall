@@ -8,7 +8,10 @@ use std::{
 };
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
-use binstalk_types::crate_info::{CrateSource, SourceType};
+use binstalk_types::{
+    cargo_toml_binstall::Strategy,
+    crate_info::{CrateSource, SourceType},
+};
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
@@ -240,14 +243,30 @@ async fn resolve_inner(
         }
     }
 
-    if opts.cargo_install_fallback {
-        Ok(Resolution::InstallFromSource(ResolutionSource {
-            name: package_info.name,
-            version: package_info.version_str,
-        }))
-    } else {
-        Err(BinstallError::NoFallbackToCargoInstall)
+    if !opts.cargo_install_fallback {
+        return Err(BinstallError::NoFallbackToCargoInstall);
     }
+
+    let target_meta = if let Some((_, target)) = desired_targets.get(0) {
+        package_info.meta.merge_overrides(
+            iter::once(&opts.cli_overrides).chain(package_info.overrides.get(*target)),
+        )
+    } else {
+        package_info
+            .meta
+            .merge_overrides(iter::once(&opts.cli_overrides))
+    };
+
+    if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref() {
+        if disabled_strategies.contains(&Strategy::Compile) {
+            return Err(BinstallError::NoFallbackToCargoInstall);
+        }
+    }
+
+    return Ok(Resolution::InstallFromSource(ResolutionSource {
+        name: package_info.name,
+        version: package_info.version_str,
+    }));
 }
 
 ///  * `fetcher` - `fetcher.find()` must have returned `Ok(true)`.
