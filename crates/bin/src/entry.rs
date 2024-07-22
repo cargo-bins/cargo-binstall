@@ -85,6 +85,7 @@ pub fn install_crates(
         pkg_url: args.pkg_url,
         pkg_fmt: args.pkg_fmt,
         bin_dir: args.bin_dir,
+        disabled_strategies: None,
         signing: None,
     };
 

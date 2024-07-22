@@ -4,7 +4,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
-use binstalk_types::cargo_toml_binstall::SigningAlgorithm;
+use binstalk_types::cargo_toml_binstall::{SigningAlgorithm, Strategy};
 use thiserror::Error as ThisError;
 use tokio::{sync::OnceCell, task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
@@ -133,6 +133,9 @@ pub trait Fetcher: Send + Sync {
     /// It is used to create a temporary dir where it is used for
     /// [`Fetcher::fetch_and_extract`].
     fn fetcher_name(&self) -> &'static str;
+
+    /// The strategy used by this fetcher
+    fn strategy(&self) -> Strategy;
 
     /// Should return true if the remote is from a third-party source
     fn is_third_party(&self) -> bool;

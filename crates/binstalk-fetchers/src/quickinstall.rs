@@ -5,7 +5,7 @@ use std::{
 };
 
 use binstalk_downloader::remote::Method;
-use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning};
+use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning, Strategy};
 use tokio::sync::OnceCell;
 use tracing::{error, info, trace};
 use url::Url;
@@ -250,6 +250,10 @@ by rust officially."#,
 
     fn fetcher_name(&self) -> &'static str {
         "QuickInstall"
+    }
+
+    fn strategy(&self) -> Strategy {
+        Strategy::QuickInstall
     }
 
     fn is_third_party(&self) -> bool {

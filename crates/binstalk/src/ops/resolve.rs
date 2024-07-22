@@ -134,6 +134,8 @@ async fn resolve_inner(
                         },
                     ))
                     .filter_map(|(f, target_data)| {
+                        let disabled_strategies = target_data.meta.disabled_strategies.clone();
+
                         let fetcher = f(
                             opts.client.clone(),
                             gh_api_client.clone(),
@@ -141,6 +143,13 @@ async fn resolve_inner(
                             target_data,
                             opts.signature_policy,
                         );
+
+                        if let Some(disabled_strategies) = disabled_strategies.as_deref() {
+                            if disabled_strategies.contains(&fetcher.strategy()) {
+                                return None;
+                            }
+                        }
+
                         filter_fetcher_by_name_predicate(fetcher.fetcher_name()).then_some(fetcher)
                     }),
             )

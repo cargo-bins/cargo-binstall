@@ -73,6 +73,9 @@ pub struct PkgMeta {
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
 
+    /// Stratgies to disable
+    pub disabled_strategies: Option<Box<[Strategy]>>,
+
     /// Target specific overrides
     pub overrides: BTreeMap<String, PkgOverride>,
 }
@@ -118,9 +121,15 @@ impl PkgMeta {
                 .or_else(|| self.bin_dir.clone()),
 
             signing: pkg_overrides
+                .clone()
                 .into_iter()
                 .find_map(|pkg_override| pkg_override.signing.clone())
                 .or_else(|| self.signing.clone()),
+
+            disabled_strategies: pkg_overrides
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.disabled_strategies.clone())
+                .or_else(|| self.disabled_strategies.clone()),
 
             overrides: Default::default(),
         }
@@ -141,6 +150,9 @@ pub struct PkgOverride {
 
     /// Path template override for binary files in packages
     pub bin_dir: Option<String>,
+
+    /// Stratgies to disable
+    pub disabled_strategies: Option<Box<[Strategy]>>,
 
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
