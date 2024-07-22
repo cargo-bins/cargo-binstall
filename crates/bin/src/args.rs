@@ -434,13 +434,17 @@ impl Default for RateLimit {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct StrategyWrapped(pub(crate) Strategy);
 
+impl StrategyWrapped {
+    const VARIANTS: &'static [Self; 3] = &[
+        Self(Strategy::CrateMetaData),
+        Self(Strategy::QuickInstall),
+        Self(Strategy::Compile),
+    ];
+}
+
 impl ValueEnum for StrategyWrapped {
     fn value_variants<'a>() -> &'a [Self] {
-        &[
-            Self(Strategy::CrateMetaData),
-            Self(Strategy::QuickInstall),
-            Self(Strategy::Compile),
-        ]
+        Self::VARIANTS
     }
     fn to_possible_value(&self) -> Option<PossibleValue> {
         Some(PossibleValue::new(self.0.to_str()))
@@ -598,10 +602,14 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
 
 #[cfg(test)]
 mod test {
+    use strum::VariantArray;
+
     use super::*;
 
     #[test]
     fn verify_cli() {
         Args::command().debug_assert()
     }
+
+    const _: () = assert!(Strategy::VARIANTS.len() == StrategyWrapped::VARIANTS.len());
 }
