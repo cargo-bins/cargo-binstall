@@ -177,3 +177,20 @@ pub enum SigningAlgorithm {
     /// [minisign](https://jedisct1.github.io/minisign/)
     Minisign,
 }
+
+#[cfg(test)]
+mod tests {
+    use strum::VariantArray;
+
+    use super::*;
+
+    #[test]
+    fn test_strategy_ser() {
+        Strategy::VARIANTS.iter().for_each(|strategy| {
+            assert_eq!(
+                serde_json::to_string(&strategy).unwrap(),
+                format!(r#""{}""#, strategy.to_str())
+            )
+        });
+    }
+}
