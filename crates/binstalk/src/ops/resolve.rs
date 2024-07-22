@@ -98,11 +98,17 @@ async fn resolve_inner(
         .await
         .iter()
         .map(|target| {
-            Ok((
-                TargetTriple::from_str(target)?,
-                target,
-                meta.merge_overrides(package_info.overrides.get(target)),
-            ))
+            debug!("Building metadata for target: {target}");
+
+            let meta = meta.merge_overrides(package_info.overrides.get(target));
+
+            debug!("Found metadata: {meta:?}");
+
+            Ok(Arc::new(TargetData {
+                target: target.clone(),
+                meta,
+                target_related_info: TargetTriple::from_str(target)?,
+            }))
         })
         .collect::<Result<Vec<_>, BinstallError>>()?;
     let resolvers = &opts.resolvers;
@@ -128,31 +134,19 @@ async fn resolve_inner(
             handles.extend(
                 resolvers
                     .iter()
-                    .cartesian_product(desired_targets.clone().into_iter().map(
-                        |(triple, target, target_meta)| {
-                            debug!("Building metadata for target: {target}");
-
-                            debug!("Found metadata: {target_meta:?}");
-
-                            Arc::new(TargetData {
-                                target: target.clone(),
-                                meta: target_meta.clone(),
-                                target_related_info: triple,
-                            })
-                        },
-                    ))
+                    .cartesian_product(&desired_targets)
                     .filter_map(|(f, target_data)| {
-                        let disabled_strategies = target_data.meta.disabled_strategies.clone();
-
                         let fetcher = f(
                             opts.client.clone(),
                             gh_api_client.clone(),
                             data.clone(),
-                            target_data,
+                            target_data.clone(),
                             opts.signature_policy,
                         );
 
-                        if let Some(disabled_strategies) = disabled_strategies.as_deref() {
+                        if let Some(disabled_strategies) =
+                            target_data.meta.disabled_strategies.as_deref()
+                        {
                             if disabled_strategies.contains(&fetcher.strategy()) {
                                 return None;
                             }
@@ -254,7 +248,7 @@ async fn resolve_inner(
 
     let target_meta = desired_targets
         .first()
-        .map(|(_, _, target_meta)| target_meta)
+        .map(|target_data| &target_data.meta)
         .unwrap_or(&meta);
 
     if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref() {
