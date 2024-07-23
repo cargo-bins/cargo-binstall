@@ -5,6 +5,7 @@
 use std::{borrow::Cow, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
+use strum_macros::{EnumCount, VariantArray};
 
 mod package_formats;
 #[doc(inline)]
@@ -17,6 +18,41 @@ pub use package_formats::*;
 #[serde(rename_all = "kebab-case")]
 pub struct Meta {
     pub binstall: Option<PkgMeta>,
+}
+
+/// Strategies to use for binary discovery
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    EnumCount,
+    VariantArray,
+    Deserialize,
+    Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum Strategy {
+    /// Attempt to download official pre-built artifacts using
+    /// information provided in `Cargo.toml`.
+    CrateMetaData,
+    /// Query third-party QuickInstall for the crates.
+    QuickInstall,
+    /// Build the crates from source using `cargo-build`.
+    Compile,
+}
+
+impl Strategy {
+    pub const fn to_str(self) -> &'static str {
+        match self {
+            Strategy::CrateMetaData => "crate-meta-data",
+            Strategy::QuickInstall => "quick-install",
+            Strategy::Compile => "compile",
+        }
+    }
 }
 
 /// Metadata for binary installation use.
@@ -36,6 +72,9 @@ pub struct PkgMeta {
 
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
+
+    /// Stratgies to disable
+    pub disabled_strategies: Option<Box<[Strategy]>>,
 
     /// Target specific overrides
     pub overrides: BTreeMap<String, PkgOverride>,
@@ -82,9 +121,15 @@ impl PkgMeta {
                 .or_else(|| self.bin_dir.clone()),
 
             signing: pkg_overrides
+                .clone()
                 .into_iter()
                 .find_map(|pkg_override| pkg_override.signing.clone())
                 .or_else(|| self.signing.clone()),
+
+            disabled_strategies: pkg_overrides
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.disabled_strategies.clone())
+                .or_else(|| self.disabled_strategies.clone()),
 
             overrides: Default::default(),
         }
@@ -105,6 +150,9 @@ pub struct PkgOverride {
 
     /// Path template override for binary files in packages
     pub bin_dir: Option<String>,
+
+    /// Stratgies to disable
+    pub disabled_strategies: Option<Box<[Strategy]>>,
 
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
@@ -140,4 +188,21 @@ pub struct PkgSigning {
 pub enum SigningAlgorithm {
     /// [minisign](https://jedisct1.github.io/minisign/)
     Minisign,
+}
+
+#[cfg(test)]
+mod tests {
+    use strum::VariantArray;
+
+    use super::*;
+
+    #[test]
+    fn test_strategy_ser() {
+        Strategy::VARIANTS.iter().for_each(|strategy| {
+            assert_eq!(
+                serde_json::to_string(&strategy).unwrap(),
+                format!(r#""{}""#, strategy.to_str())
+            )
+        });
+    }
 }

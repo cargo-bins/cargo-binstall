@@ -21,7 +21,9 @@ use binstalk::{
     },
 };
 use binstalk_manifests::{
-    cargo_config::Config, cargo_toml_binstall::PkgOverride, crates_manifests::Manifests,
+    cargo_config::Config,
+    cargo_toml_binstall::{PkgOverride, Strategy},
+    crates_manifests::Manifests,
 };
 use file_format::FileFormat;
 use home::cargo_home;
@@ -30,11 +32,7 @@ use miette::{miette, Report, Result, WrapErr};
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
-use crate::{
-    args::{Args, Strategy},
-    gh_token, git_credentials, install_path,
-    ui::confirm,
-};
+use crate::{args::Args, gh_token, git_credentials, install_path, ui::confirm};
 
 pub fn install_crates(
     args: Args,
@@ -46,7 +44,7 @@ pub fn install_crates(
     let resolvers: Vec<_> = args
         .strategies
         .into_iter()
-        .filter_map(|strategy| match strategy {
+        .filter_map(|strategy| match strategy.0 {
             Strategy::CrateMetaData => Some(GhCrateMeta::new as Resolver),
             Strategy::QuickInstall => Some(QuickInstall::new as Resolver),
             Strategy::Compile => {
@@ -87,6 +85,7 @@ pub fn install_crates(
         pkg_url: args.pkg_url,
         pkg_fmt: args.pkg_fmt,
         bin_dir: args.bin_dir,
+        disabled_strategies: None,
         signing: None,
     };
 

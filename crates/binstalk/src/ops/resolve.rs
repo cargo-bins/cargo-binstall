@@ -8,7 +8,10 @@ use std::{
 };
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
-use binstalk_types::crate_info::{CrateSource, SourceType};
+use binstalk_types::{
+    cargo_toml_binstall::Strategy,
+    crate_info::{CrateSource, SourceType},
+};
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
@@ -90,8 +93,22 @@ async fn resolve_inner(
         .get()
         .await
         .iter()
-        .map(|target| TargetTriple::from_str(target).map(|triple| (triple, target)))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|target| {
+            debug!("Building metadata for target: {target}");
+
+            let meta = package_info.meta.merge_overrides(
+                iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
+            );
+
+            debug!("Found metadata: {meta:?}");
+
+            Ok(Arc::new(TargetData {
+                target: target.clone(),
+                meta,
+                target_related_info: TargetTriple::from_str(target)?,
+            }))
+        })
+        .collect::<Result<Vec<_>, BinstallError>>()?;
     let resolvers = &opts.resolvers;
 
     let binary_name = match package_info.binaries.as_slice() {
@@ -115,32 +132,24 @@ async fn resolve_inner(
             handles.extend(
                 resolvers
                     .iter()
-                    .cartesian_product(desired_targets.clone().into_iter().map(
-                        |(triple, target)| {
-                            debug!("Building metadata for target: {target}");
-
-                            let target_meta = package_info.meta.merge_overrides(
-                                iter::once(&opts.cli_overrides)
-                                    .chain(package_info.overrides.get(target)),
-                            );
-
-                            debug!("Found metadata: {target_meta:?}");
-
-                            Arc::new(TargetData {
-                                target: target.clone(),
-                                meta: target_meta,
-                                target_related_info: triple,
-                            })
-                        },
-                    ))
+                    .cartesian_product(&desired_targets)
                     .filter_map(|(f, target_data)| {
                         let fetcher = f(
                             opts.client.clone(),
                             gh_api_client.clone(),
                             data.clone(),
-                            target_data,
+                            target_data.clone(),
                             opts.signature_policy,
                         );
+
+                        if let Some(disabled_strategies) =
+                            target_data.meta.disabled_strategies.as_deref()
+                        {
+                            if disabled_strategies.contains(&fetcher.strategy()) {
+                                return None;
+                            }
+                        }
+
                         filter_fetcher_by_name_predicate(fetcher.fetcher_name()).then_some(fetcher)
                     }),
             )
@@ -231,14 +240,29 @@ async fn resolve_inner(
         }
     }
 
-    if opts.cargo_install_fallback {
-        Ok(Resolution::InstallFromSource(ResolutionSource {
-            name: package_info.name,
-            version: package_info.version_str,
-        }))
-    } else {
-        Err(BinstallError::NoFallbackToCargoInstall)
+    if !opts.cargo_install_fallback {
+        return Err(BinstallError::NoFallbackToCargoInstall);
     }
+
+    let meta = package_info
+        .meta
+        .merge_overrides(iter::once(&opts.cli_overrides));
+
+    let target_meta = desired_targets
+        .first()
+        .map(|target_data| &target_data.meta)
+        .unwrap_or(&meta);
+
+    if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref() {
+        if disabled_strategies.contains(&Strategy::Compile) {
+            return Err(BinstallError::NoFallbackToCargoInstall);
+        }
+    }
+
+    Ok(Resolution::InstallFromSource(ResolutionSource {
+        name: package_info.name,
+        version: package_info.version_str,
+    }))
 }
 
 ///  * `fetcher` - `fetcher.find()` must have returned `Ok(true)`.

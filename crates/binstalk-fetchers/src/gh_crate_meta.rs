@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
+use binstalk_types::cargo_toml_binstall::Strategy;
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use leon::Template;
@@ -394,6 +395,10 @@ impl super::Fetcher for GhCrateMeta {
 
     fn fetcher_name(&self) -> &'static str {
         FETCHER_GH_CRATE_META
+    }
+
+    fn strategy(&self) -> Strategy {
+        Strategy::CrateMetaData
     }
 
     fn is_third_party(&self) -> bool {
