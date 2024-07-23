@@ -88,10 +88,6 @@ async fn resolve_inner(
         return Ok(Resolution::AlreadyUpToDate);
     };
 
-    let meta = package_info
-        .meta
-        .merge_overrides(iter::once(&opts.cli_overrides));
-
     let desired_targets = opts
         .desired_targets
         .get()
@@ -100,7 +96,9 @@ async fn resolve_inner(
         .map(|target| {
             debug!("Building metadata for target: {target}");
 
-            let meta = meta.merge_overrides(package_info.overrides.get(target));
+            let meta = package_info.meta.merge_overrides(
+                iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
+            );
 
             debug!("Found metadata: {meta:?}");
 
@@ -245,6 +243,10 @@ async fn resolve_inner(
     if !opts.cargo_install_fallback {
         return Err(BinstallError::NoFallbackToCargoInstall);
     }
+
+    let meta = package_info
+        .meta
+        .merge_overrides(iter::once(&opts.cli_overrides));
 
     let target_meta = desired_targets
         .first()
