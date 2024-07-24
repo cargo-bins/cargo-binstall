@@ -175,10 +175,13 @@ async fn resolve_inner(
         );
     }
 
-    for fetcher in handles {
-        if !opts.disable_quick_install_stats {
+    if !opts.disable_quick_install_stats {
+        for fetcher in &handles {
             fetcher.clone().report_to_upstream();
         }
+    }
+
+    for fetcher in handles {
         match AutoAbortJoinHandle::new(fetcher.clone().find())
             .flattened_join()
             .await
