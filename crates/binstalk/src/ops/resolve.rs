@@ -176,7 +176,9 @@ async fn resolve_inner(
     }
 
     for fetcher in handles {
-        fetcher.clone().report_to_upstream();
+        if !opts.disable_quick_install_stats {
+            fetcher.clone().report_to_upstream();
+        }
         match AutoAbortJoinHandle::new(fetcher.clone().find())
             .flattened_join()
             .await

@@ -207,6 +207,7 @@ pub fn install_crates(
         } else {
             SignaturePolicy::IfPresent
         },
+        disable_quick_install_stats: args.disable_quick_install_stats,
     });
 
     // Destruct args before any async function to reduce size of the future

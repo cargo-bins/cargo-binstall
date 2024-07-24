@@ -219,6 +219,14 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub(crate) no_track: bool,
 
+    /// Disable statistics collection on popular crates.
+    ///
+    /// Strategy quick-install (can be disabled via --disable-strategies) collects
+    /// statistics of popular crates by default, by sending the crate, version and
+    /// target to https://warehouse-clerk-tmp.vercel.app/api/crate
+    #[clap(help_heading = "Options", long)]
+    pub(crate) disable_quick_install_stats: bool,
+
     /// Install binaries in a custom location.
     ///
     /// By default, binaries are installed to the global location `$CARGO_HOME/bin`, and global
@@ -609,6 +617,22 @@ mod test {
     #[test]
     fn verify_cli() {
         Args::command().debug_assert()
+    }
+
+    #[test]
+    fn quickinstall_url_matches() {
+        let long_help = Args::command()
+            .get_opts()
+            .find(|opt| opt.get_long() == Some("disable-quick-install-stats"))
+            .unwrap()
+            .get_long_help()
+            .unwrap()
+            .to_string();
+        assert!(
+            long_help.ends_with(binstalk::QUICK_INSTALL_STATS_URL),
+            "{}",
+            long_help
+        );
     }
 
     const _: () = assert!(Strategy::VARIANTS.len() == StrategyWrapped::VARIANTS.len());
