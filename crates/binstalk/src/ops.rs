@@ -55,5 +55,5 @@ pub struct Options {
     pub registry: Registry,
 
     pub signature_policy: SignaturePolicy,
-    pub disable_quick_install_stats: bool,
+    pub disable_telemetry: bool,
 }

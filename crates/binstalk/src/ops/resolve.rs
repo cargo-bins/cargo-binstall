@@ -175,7 +175,7 @@ async fn resolve_inner(
         );
     }
 
-    if !opts.disable_quick_install_stats {
+    if !opts.disable_telemetry {
         for fetcher in &handles {
             fetcher.clone().report_to_upstream();
         }

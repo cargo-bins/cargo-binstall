@@ -225,7 +225,7 @@ pub struct Args {
     /// statistics of popular crates by default, by sending the crate, version and
     /// target to https://warehouse-clerk-tmp.vercel.app/api/crate
     #[clap(help_heading = "Options", long)]
-    pub(crate) disable_quick_install_stats: bool,
+    pub(crate) disable_telemetry: bool,
 
     /// Install binaries in a custom location.
     ///
