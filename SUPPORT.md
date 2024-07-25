@@ -20,7 +20,7 @@ With the following configuration keys:
 - `pkg-url` specifies the package download URL for a given target/version, templated
 - `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
 - `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`)
-- `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository, `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`) for your crate (defaults to empty array).
+- `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository, `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`) for your crate (defaults to empty array). The user can override this by explicitly specifying --strategies on the command line.
 
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
