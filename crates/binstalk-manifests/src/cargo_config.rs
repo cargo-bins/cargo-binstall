@@ -71,7 +71,7 @@ pub struct Config {
 
 fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
     match path {
-        Some(path) if path.is_relative() => *path = dir.join(&path),
+        Some(path) if path.is_relative() => *path = dir.join(&*path),
         _ => (),
     }
 }

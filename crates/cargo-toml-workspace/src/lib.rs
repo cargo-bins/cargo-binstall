@@ -142,6 +142,7 @@ impl Pattern {
     }
 
     /// * `glob_path` - path to dir to glob for
+    ///
     /// return paths relative to `glob_path`.
     fn glob_dirs(&self, glob_path: &Path) -> Result<Vec<PathBuf>, ErrorInner> {
         let mut paths = vec![PathBuf::new()];
