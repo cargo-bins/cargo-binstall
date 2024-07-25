@@ -76,10 +76,16 @@ xz2 = "0.1.7"
 # Otherwise there will be a link conflict.
 zstd = { version = "0.13.2", default-features = false }
 
+[target."cfg(not(target_arch = \"wasm32\"))".dependencies.native-tls-crate]
+optional = true
+package = "native-tls"
+# The version must be kept in sync of reqwest
+version = "0.2.10"
+
 [features]
 default = ["static", "rustls"]
 
-static = ["bzip2/static", "xz2/static"]
+static = ["bzip2/static", "xz2/static", "native-tls-crate?/vendored"]
 pkg-config = ["zstd/pkg-config"]
 
 zlib-ng = ["flate2/zlib-ng"]
@@ -104,6 +110,7 @@ rustls = [
 ]
 native-tls = [
     "__tls",
+    "native-tls-crate",
     "reqwest/native-tls",
     "hickory-resolver?/dns-over-native-tls",
 ]
