@@ -1,0 +1,3 @@
+[[package]] # the double square brackets define a TOML table array
+name = "cargo-binstall"
+release = false # don't process this package
