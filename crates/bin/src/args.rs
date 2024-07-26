@@ -623,7 +623,7 @@ mod test {
     fn quickinstall_url_matches() {
         let long_help = Args::command()
             .get_opts()
-            .find(|opt| opt.get_long() == Some("disable-quick-install-stats"))
+            .find(|opt| opt.get_long() == Some("disable-telemetry"))
             .unwrap()
             .get_long_help()
             .unwrap()
