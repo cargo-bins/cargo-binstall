@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "async-trait",
  "base16",
