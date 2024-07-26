@@ -17,7 +17,7 @@ binstalk-downloader = { version = "0.11.5", path = "../binstalk-downloader", def
     "json",
 ] }
 binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
-cargo-toml-workspace = { version = "6.0.0", path = "../cargo-toml-workspace" }
+cargo-toml-workspace = { version = "6.0.1", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.8.0", features = ["serde"] }
 leon = "3.0.0"
 miette = "7.0.0"
