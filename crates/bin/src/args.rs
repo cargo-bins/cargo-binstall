@@ -167,7 +167,12 @@ pub struct Args {
     /// Disable the strategies specified.
     /// If a strategy is specified in `--strategies` and `--disable-strategies`,
     /// then it will be removed.
-    #[clap(help_heading = "Overrides", long, value_delimiter(','))]
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        value_delimiter(','),
+        env = "BINSTALL_DISABLE_STRATEGIES"
+    )]
     pub(crate) disable_strategies: Vec<StrategyWrapped>,
 
     /// If `--github-token` or environment variable `GITHUB_TOKEN`/`GH_TOKEN`
