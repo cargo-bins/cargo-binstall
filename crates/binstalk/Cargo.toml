@@ -17,7 +17,7 @@ binstalk-fetchers = { version = "0.7.1", path = "../binstalk-fetchers", features
     "quickinstall",
 ] }
 binstalk-registry = { version = "0.9.1", path = "../binstalk-registry" }
-binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
+binstalk-types = { version = "0.8.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "6.0.1", path = "../cargo-toml-workspace" }
 command-group = { version = "5.0.1", features = ["with-tokio"] }
 compact_str = { version = "0.8.0", features = ["serde"] }

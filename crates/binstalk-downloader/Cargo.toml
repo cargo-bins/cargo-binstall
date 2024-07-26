@@ -27,7 +27,7 @@ async_zip = { version = "0.0.17", features = [
     "xz",
     "tokio",
 ] }
-binstalk-types = { version = "0.7.0", path = "../binstalk-types" }
+binstalk-types = { version = "0.8.0", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
 compact_str = "0.8.0"
