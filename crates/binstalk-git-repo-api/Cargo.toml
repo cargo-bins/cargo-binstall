@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-binstalk-downloader = { version = "0.11.5", path = "../binstalk-downloader", default-features = false, features = [
+binstalk-downloader = { version = "0.12.0", path = "../binstalk-downloader", default-features = false, features = [
     "json",
 ] }
 compact_str = "0.8.0"
@@ -25,6 +25,6 @@ url = "2.3.1"
 zeroize = "1.8.1"
 
 [dev-dependencies]
-binstalk-downloader = { version = "0.11.5", path = "../binstalk-downloader" }
+binstalk-downloader = { version = "0.12.0", path = "../binstalk-downloader" }
 tracing-subscriber = "0.3"
 once_cell = "1"
