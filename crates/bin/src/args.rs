@@ -609,6 +609,10 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
         }
     }
+    match opts.github_token.as_deref() {
+        Some(token) if token.is_empty() => opts.github_token = None,
+        _ => (),
+    }
 
     opts
 }
