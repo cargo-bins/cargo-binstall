@@ -12,7 +12,7 @@ license = "GPL-3.0-only"
 [dependencies]
 binstalk-bins = { version = "0.4.0", path = "../binstalk-bins" }
 binstalk-downloader = { version = "0.12.0", path = "../binstalk-downloader", default-features = false }
-binstalk-git-repo-api = { version = "0.3.0", path = "../binstalk-git-repo-api" }
+binstalk-git-repo-api = { version = "0.4.0", path = "../binstalk-git-repo-api" }
 binstalk-fetchers = { version = "0.7.1", path = "../binstalk-fetchers", features = [
     "quickinstall",
 ] }
