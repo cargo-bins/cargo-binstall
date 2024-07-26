@@ -1,6 +1,6 @@
 [package]
 name = "binstalk-registry"
-version = "0.9.1"
+version = "0.10.0"
 edition = "2021"
 rust-version = "1.65.0"
 
