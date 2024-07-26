@@ -224,7 +224,7 @@ pub struct Args {
     /// Strategy quick-install (can be disabled via --disable-strategies) collects
     /// statistics of popular crates by default, by sending the crate, version and
     /// target to https://warehouse-clerk-tmp.vercel.app/api/crate
-    #[clap(help_heading = "Options", long)]
+    #[clap(help_heading = "Options", long, env = "BINSTALL_DISABLE_TELEMETRY")]
     pub(crate) disable_telemetry: bool,
 
     /// Install binaries in a custom location.
