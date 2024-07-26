@@ -55,4 +55,5 @@ pub struct Options {
     pub registry: Registry,
 
     pub signature_policy: SignaturePolicy,
+    pub disable_telemetry: bool,
 }

@@ -207,6 +207,7 @@ pub fn install_crates(
         } else {
             SignaturePolicy::IfPresent
         },
+        disable_telemetry: args.disable_telemetry,
     });
 
     // Destruct args before any async function to reduce size of the future

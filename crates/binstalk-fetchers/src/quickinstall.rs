@@ -16,7 +16,7 @@ use crate::{
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
-const STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
+pub const QUICK_INSTALL_STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
 
 const QUICKINSTALL_SIGN_KEY: Cow<'static, str> =
     Cow::Borrowed("RWTdnnab2pAka9OdwgCMYyOE66M/BlQoFWaJ/JjwcPV+f3n24IRTj97t");
@@ -144,7 +144,7 @@ impl super::Fetcher for QuickInstall {
                 .expect("package_url is pre-generated and should never be invalid url"),
             signature_url: Url::parse(&format!("{url}.sig"))
                 .expect("signature_url is pre-generated and should never be invalid url"),
-            stats_url: Url::parse(&format!("{STATS_URL}/{package}.tar.gz",))
+            stats_url: Url::parse(&format!("{QUICK_INSTALL_STATS_URL}/{package}.tar.gz",))
                 .expect("stats_url is pre-generated and should never be invalid url"),
             package,
             signature_policy,

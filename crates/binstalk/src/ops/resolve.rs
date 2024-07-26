@@ -175,8 +175,13 @@ async fn resolve_inner(
         );
     }
 
+    if !opts.disable_telemetry {
+        for fetcher in &handles {
+            fetcher.clone().report_to_upstream();
+        }
+    }
+
     for fetcher in handles {
-        fetcher.clone().report_to_upstream();
         match AutoAbortJoinHandle::new(fetcher.clone().find())
             .flattened_join()
             .await
