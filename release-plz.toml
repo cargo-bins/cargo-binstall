@@ -1,0 +1,3 @@
+[[package]]
+name = "cargo-binstall"
+release = false # don't process this package
