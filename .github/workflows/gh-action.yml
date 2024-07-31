@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ macos-14, ubuntu-latest, windows-latest ]
+        os: [macos-latest, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +27,7 @@ jobs:
         uses: ./ # uses action.yml from root of the repo
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Verify successful installation - display cargo-binstall's help
         run: cargo binstall --help
 
@@ -35,6 +35,6 @@ jobs:
         run: cargo binstall -y ripgrep
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Verify successful installation - display help of installed binary
         run: rg --help

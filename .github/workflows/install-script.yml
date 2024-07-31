@@ -29,30 +29,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest]
         set_cargo_home: [t, f]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set `CARGO_HOME`
-      if: matrix.set_cargo_home == 't'
-      run: |
-        CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
-        mkdir -p "${CARGO_HOME}/bin"
-        echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+      - name: Set `CARGO_HOME`
+        if: matrix.set_cargo_home == 't'
+        run: |
+          CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
+          mkdir -p "${CARGO_HOME}/bin"
+          echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
 
-    - name: Install `cargo-binstall` using scripts
-      run: ./install-from-binstall-release.sh
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install `cargo-binstall` using scripts
+        run: ./install-from-binstall-release.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Verify `cargo-binstall` installation
-      run: |
-        which cargo-binstall
-        cargo binstall -vV
+      - name: Verify `cargo-binstall` installation
+        run: |
+          which cargo-binstall
+          cargo binstall -vV
 
   windows:
     strategy:
@@ -63,23 +63,23 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set `CARGO_HOME`
-      if: matrix.set_cargo_home == 't'
-      shell: bash
-      run: |
-        CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
-        mkdir -p "${CARGO_HOME}/bin"
-        echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+      - name: Set `CARGO_HOME`
+        if: matrix.set_cargo_home == 't'
+        shell: bash
+        run: |
+          CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
+          mkdir -p "${CARGO_HOME}/bin"
+          echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
 
-    - name: Install `cargo-binstall` using scripts
-      run: ./install-from-binstall-release.ps1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install `cargo-binstall` using scripts
+        run: ./install-from-binstall-release.ps1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Verify `cargo-binstall` installation
-      run: cargo binstall -vV
+      - name: Verify `cargo-binstall` installation
+        run: cargo binstall -vV
 
   windows-bash:
     strategy:
@@ -90,22 +90,22 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set `CARGO_HOME`
-      if: matrix.set_cargo_home == 't'
-      shell: bash
-      run: |
-        CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
-        mkdir -p "${CARGO_HOME}/bin"
-        echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+      - name: Set `CARGO_HOME`
+        if: matrix.set_cargo_home == 't'
+        shell: bash
+        run: |
+          CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
+          mkdir -p "${CARGO_HOME}/bin"
+          echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
 
-    - name: Install `cargo-binstall` using scripts
-      shell: bash
-      run: ./install-from-binstall-release.sh
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install `cargo-binstall` using scripts
+        shell: bash
+        run: ./install-from-binstall-release.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Verify `cargo-binstall` installation
-      shell: bash
-      run: cargo binstall -vV
+      - name: Verify `cargo-binstall` installation
+        shell: bash
+        run: cargo binstall -vV

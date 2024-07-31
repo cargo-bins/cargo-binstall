@@ -27,9 +27,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { o: macos-14, t: x86_64-apple-darwin }
-          - { o: macos-14, t: x86_64h-apple-darwin }
-          - { o: macos-14, t: aarch64-apple-darwin, r: true }
+          - { o: macos-latest, t: x86_64-apple-darwin }
+          - { o: macos-latest, t: x86_64h-apple-darwin }
+          - { o: macos-latest, t: aarch64-apple-darwin, r: true }
           - {
               o: ubuntu-latest,
               t: x86_64-unknown-linux-gnu,
@@ -140,7 +140,7 @@ jobs:
     name: universal-apple-darwin
     permissions:
       contents: write
-    runs-on: macos-14
+    runs-on: macos-latest
     env:
       JUST_FOR_RELEASE: true
 
