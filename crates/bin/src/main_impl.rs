@@ -15,7 +15,7 @@ pub fn do_main() -> impl Termination {
     // This must be the very first thing to happen
     let jobserver_client = LazyJobserverClient::new();
 
-    let args = args::parse();
+    let (args, cli_overrides) = args::parse();
 
     if args.version {
         let cargo_binstall_version = env!("CARGO_PKG_VERSION");
@@ -54,7 +54,7 @@ rustc-llvm-version: {rustc_llvm_version}"#
 
         let start = Instant::now();
 
-        let result = run_tokio_main(|| entry::install_crates(args, jobserver_client));
+        let result = run_tokio_main(|| entry::install_crates(args, cli_overrides, jobserver_client));
 
         let done = start.elapsed();
         debug!("run time: {done:?}");
