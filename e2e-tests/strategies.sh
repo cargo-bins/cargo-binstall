@@ -51,4 +51,4 @@ if [ "$exit_code" != 94 ]; then
 fi
 
 ## Test --strategies overriding `disabled-strategies=["compile"]` in Cargo.toml
- "./$1" binstall --no-confirm --manifest-path "manifests/strategies-test-override-Cargo.toml" --strategies compile cargo-quickinstall@0.2.10
+ "./$1" binstall --no-confirm --manifest-path "manifests/strategies-test-override-Cargo.toml" --strategies compile --disable-strategies quick-install cargo-quickinstall@0.2.10
