@@ -1,6 +1,6 @@
 use std::{mem, ptr};
 use windows_sys::Win32::{
-    Foundation::{FreeLibrary, HMODULE, S_OK},
+    Foundation::{HMODULE, S_OK},
     System::{
         LibraryLoader::{GetProcAddress, LoadLibraryA},
         SystemInformation::{
@@ -30,12 +30,6 @@ impl LibraryHandle {
     unsafe fn get_proc_address<F>(&self, name: &[u8]) -> Option<F> {
         let symbol = unsafe { GetProcAddress(self.0, name.as_ptr() as _) };
         symbol.map(|symbol| unsafe { mem::transmute_copy(&symbol) })
-    }
-}
-
-impl Drop for LibraryHandle {
-    fn drop(&mut self) {
-        unsafe { FreeLibrary(self.0) };
     }
 }
 
