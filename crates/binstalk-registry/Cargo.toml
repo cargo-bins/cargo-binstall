@@ -28,7 +28,7 @@ serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.107"
 sha2 = "0.10.7"
 simple-git = { version = "0.2.4", optional = true }
-tempfile = "3.5.0"
+tempfile = "3.11.0"
 thiserror = "1.0.61"
 tokio = { version = "1.35.0", features = [
     "rt",

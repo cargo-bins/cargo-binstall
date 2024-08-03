@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-tempfile = "3.5.0"
+tempfile = "3.11.0"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/cargo-binstall-{ target }.full.{ archive-format }"

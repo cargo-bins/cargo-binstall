@@ -11,7 +11,7 @@ rust-version = "1.65.0"
 
 [dependencies]
 reflink-copy = "0.1.15"
-tempfile = "3.5.0"
+tempfile = "3.11.0"
 tracing = "0.1.39"
 
 [target.'cfg(windows)'.dependencies]

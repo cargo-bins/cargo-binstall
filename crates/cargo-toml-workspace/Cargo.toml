@@ -19,4 +19,4 @@ thiserror = "1.0.61"
 tracing = "0.1.39"
 
 [dev-dependencies]
-tempfile = "3.5.0"
+tempfile = "3.11.0"
