@@ -56,4 +56,4 @@ set -euxo pipefail
  "./$1" binstall --no-confirm --manifest-path "manifests/strategies-test-override-Cargo.toml" --strategies compile cargo-quickinstall@0.2.10
 
 ## Test --disable-strategies overriding `disabled-strategies=["compile"]` in Cargo.toml
- "./$1" binstall --no-confirm --manifest-path "manifests/strategies-test-override-Cargo.toml" --strategies compile --disable-strategies crate-meta-data,quick-install cargo-quickinstall@0.2.10
+ "./$1" binstall --no-confirm --manifest-path "manifests/strategies-test-override-Cargo.toml" --strategies compile --disable-strategies crate-meta-data,quick-install --force cargo-quickinstall@0.2.10
