@@ -617,16 +617,18 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
-        disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_override).then(|| {
-            opts.disable_strategies
-                .iter()
-                .map(|strategy| strategy.0)
-                .collect::<Vec<_>>()
-                .into_boxed_slice()
-        }),
+        disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_override).then(
+            || {
+                opts.disable_strategies
+                    .iter()
+                    .map(|strategy| strategy.0)
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice()
+            },
+        ),
         signing: None,
     };
-    
+
     (opts, cli_overrides)
 }
 
