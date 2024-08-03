@@ -1,4 +1,4 @@
-use std::{mem, ptr};
+use std::mem;
 use windows_sys::Win32::{
     Foundation::{HMODULE, S_OK},
     System::{
@@ -16,7 +16,7 @@ struct LibraryHandle(HMODULE);
 impl LibraryHandle {
     fn new(name: &[u8]) -> Option<Self> {
         let handle = unsafe { LoadLibraryA(name.as_ptr() as _) };
-        (handle != ptr::null_mut()).then(|| Self(handle))
+        (!handle.is_null()).then_some(Self(handle))
     }
 
     /// Get a function pointer to a function in the library.
