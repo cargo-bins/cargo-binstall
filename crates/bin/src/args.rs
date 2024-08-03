@@ -588,9 +588,6 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
                 .error(ErrorKind::TooFewValues, "You have disabled all strategies")
                 .exit()
         }
-
-        // Free disable_strategies as it will not be used again.
-        opts.disable_strategies = Vec::new();
     }
 
     // Ensure that Strategy::Compile is specified as the last strategy
