@@ -13,7 +13,7 @@ use binstalk::{
     ops::resolve::{CrateName, VersionReqExt},
     registry::Registry,
 };
-use binstalk_manifests::cargo_toml_binstall::Strategy;
+use binstalk_manifests::cargo_toml_binstall::{PkgOverride, Strategy};
 use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, ValueEnum};
 use compact_str::CompactString;
 use log::LevelFilter;
@@ -464,7 +464,7 @@ impl ValueEnum for StrategyWrapped {
     }
 }
 
-pub fn parse() -> Args {
+pub fn parse() -> (Args, PkgOverride) {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
     // `cargo binstall --help` gives ["/home/ryan/.cargo/bin/cargo-binstall", "binstall", "--help"]
@@ -561,6 +561,8 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         }
     }
 
+    let has_strategy_override = !opts.overrides.is_empty();
+
     // Default strategies if empty
     if opts.strategies.is_empty() {
         opts.strategies = vec![
@@ -611,7 +613,22 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         _ => (),
     }
 
-    opts
+    (
+        opts,
+        PkgOverride {
+            pkg_url: opts.pkg_url,
+            pkg_fmt: opts.pkg_fmt,
+            bin_dir: opts.bin_dir,
+            disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategy_ovrrride).then(|| {
+                args.disable_strategies
+                    .into_iter()
+                    .map(|strategy| strategy.0)
+                .collect::<Vec<_>>()
+                .into_boxed_slice()
+            }),
+            signing: None,
+        },
+    )
 }
 
 #[cfg(test)]
