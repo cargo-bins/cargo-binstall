@@ -613,22 +613,21 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         _ => (),
     }
 
-    (
-        opts,
-        PkgOverride {
-            pkg_url: opts.pkg_url,
-            pkg_fmt: opts.pkg_fmt,
-            bin_dir: opts.bin_dir,
-            disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_override).then(|| {
-                opts.disable_strategies
-                    .into_iter()
-                    .map(|strategy| strategy.0)
+    let cli_overrides = PkgOverride {
+        pkg_url: opts.pkg_url.take(),
+        pkg_fmt: opts.pkg_fmt.take(),
+        bin_dir: opts.bin_dir.take(),
+        disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_override).then(|| {
+            opts.disable_strategies
+                .iter()
+                .map(|strategy| strategy.0)
                 .collect::<Vec<_>>()
                 .into_boxed_slice()
-            }),
-            signing: None,
-        },
-    )
+        }),
+        signing: None,
+    };
+    
+    (opts, cli_overrides)
 }
 
 #[cfg(test)]
