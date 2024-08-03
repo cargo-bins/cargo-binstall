@@ -210,10 +210,9 @@ pub fn install_crates(
         },
         disable_telemetry: args.disable_telemetry,
 
-        maximum_resolution_timeout: args
-            .maximum_resolution_timeout
-            .map(|n| Duration::from_secs(n.get().into()))
-            .unwrap_or(Duration::from_secs(180)),
+        maximum_resolution_timeout: Duration::from_secs(
+            args.maximum_resolution_timeout.get().into(),
+        ),
     });
 
     // Destruct args before any async function to reduce size of the future

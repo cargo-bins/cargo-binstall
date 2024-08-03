@@ -191,9 +191,10 @@ pub struct Args {
     #[clap(
         help_heading = "Overrides",
         long,
-        env = "BINSTALL_MAXIMUM_RESOLUTION_TIMEOUT"
+        env = "BINSTALL_MAXIMUM_RESOLUTION_TIMEOUT",
+        default_value_t = NonZeroU16::new(180).unwrap(),
     )]
-    pub(crate) maximum_resolution_timeout: Option<NonZeroU16>,
+    pub(crate) maximum_resolution_timeout: NonZeroU16,
 
     /// This flag is now enabled by default thus a no-op.
     ///
