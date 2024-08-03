@@ -619,7 +619,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             pkg_url: opts.pkg_url,
             pkg_fmt: opts.pkg_fmt,
             bin_dir: opts.bin_dir,
-            disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_ovrrride).then(|| {
+            disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_override).then(|| {
                 opts.disable_strategies
                     .into_iter()
                     .map(|strategy| strategy.0)
