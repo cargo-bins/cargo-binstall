@@ -47,7 +47,7 @@ jobs:
       - name: Install `cargo-binstall` using scripts
         run: ./install-from-binstall-release.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Verify `cargo-binstall` installation
         run: |
@@ -76,7 +76,7 @@ jobs:
       - name: Install `cargo-binstall` using scripts
         run: ./install-from-binstall-release.ps1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Verify `cargo-binstall` installation
         run: cargo binstall -vV
@@ -104,7 +104,7 @@ jobs:
         shell: bash
         run: ./install-from-binstall-release.sh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Verify `cargo-binstall` installation
         shell: bash
