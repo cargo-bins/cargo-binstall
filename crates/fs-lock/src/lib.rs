@@ -8,7 +8,7 @@ use std::{
     ops,
 };
 
-use fs4::FileExt;
+use fs4::fs_std::FileExt;
 
 /// A locked file.
 #[derive(Debug)]
