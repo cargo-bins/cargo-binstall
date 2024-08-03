@@ -561,7 +561,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         }
     }
 
-    let has_strategy_override = !opts.overrides.is_empty();
+    let has_strategies_override = !opts.strategies.is_empty();
 
     // Default strategies if empty
     if opts.strategies.is_empty() {
@@ -619,8 +619,8 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             pkg_url: opts.pkg_url,
             pkg_fmt: opts.pkg_fmt,
             bin_dir: opts.bin_dir,
-            disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategy_ovrrride).then(|| {
-                args.disable_strategies
+            disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_ovrrride).then(|| {
+                opts.disable_strategies
                     .into_iter()
                     .map(|strategy| strategy.0)
                 .collect::<Vec<_>>()
