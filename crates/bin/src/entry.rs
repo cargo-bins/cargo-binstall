@@ -36,6 +36,7 @@ use crate::{args::Args, gh_token, git_credentials, install_path, ui::confirm};
 
 pub fn install_crates(
     args: Args,
+    cli_overrides: PkgOverride,
     jobserver_client: LazyJobserverClient,
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     // Compute Resolvers
@@ -79,15 +80,6 @@ pub fn install_crates(
 
     // Launch target detection
     let desired_targets = get_desired_targets(args.targets);
-
-    // Computer cli_overrides
-    let cli_overrides = PkgOverride {
-        pkg_url: args.pkg_url,
-        pkg_fmt: args.pkg_fmt,
-        bin_dir: args.bin_dir,
-        disabled_strategies: None,
-        signing: None,
-    };
 
     // Initialize reqwest client
     let rate_limit = args.rate_limit;

@@ -1,0 +1,13 @@
+[package]
+name = "cargo-quickinstall"
+repository = "https://github.com/cargo-bins/cargo-quickinstall"
+version = "0.2.10"
+
+[[bin]]
+name = "cargo-quickinstall"
+path = "src/main.rs"
+test = false
+doc = false
+
+[package.metadata.binstall]
+disabled-strategies = ["crate-meta-data", "quick-install", "compile"]
