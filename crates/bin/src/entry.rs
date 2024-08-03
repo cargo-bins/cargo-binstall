@@ -85,8 +85,8 @@ pub fn install_crates(
         pkg_url: args.pkg_url,
         pkg_fmt: args.pkg_fmt,
         bin_dir: args.bin_dir,
-        disabled_strategies: (!args.disabled_strategies.is_empty()).then_some(|| {
-            args.disabled_strategies
+        disabled_strategies: (!args.disable_strategies.is_empty()).then_some(|| {
+            args.disable_strategies
                 .into_iter()
                 .map(|strategy| strategy.0)
                 .collect()
