@@ -187,6 +187,14 @@ pub struct Args {
     )]
     pub(crate) no_discover_github_token: bool,
 
+    /// Maximum time each resolution (one for each possible target and each strategy), in seconds.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        env = "BINSTALL_MAXIMUM_RESOLUTION_TIMEOUT"
+    )]
+    pub(crate) maximum_resolution_timeout: Option<NonZeroU16>,
+
     /// This flag is now enabled by default thus a no-op.
     ///
     /// By default, Binstall will install a binary as-is in the install path.
