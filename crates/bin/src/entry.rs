@@ -2,6 +2,7 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use binstalk::{
@@ -200,6 +201,10 @@ pub fn install_crates(
             SignaturePolicy::IfPresent
         },
         disable_telemetry: args.disable_telemetry,
+
+        maximum_resolution_timeout: Duration::from_secs(
+            args.maximum_resolution_timeout.get().into(),
+        ),
     });
 
     // Destruct args before any async function to reduce size of the future

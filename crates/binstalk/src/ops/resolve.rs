@@ -17,7 +17,7 @@ use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Version, VersionReq};
-use tokio::task::spawn_blocking;
+use tokio::{task::spawn_blocking, time::timeout};
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 
@@ -182,62 +182,73 @@ async fn resolve_inner(
     }
 
     for fetcher in handles {
-        match AutoAbortJoinHandle::new(fetcher.clone().find())
-            .flattened_join()
-            .await
+        match timeout(
+            opts.maximum_resolution_timeout,
+            AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join(),
+        )
+        .await
         {
-            Ok(true) => {
-                // Generate temporary binary path
-                let bin_path = opts.temp_dir.join(format!(
-                    "bin-{}-{}-{}",
-                    package_info.name,
-                    fetcher.target(),
-                    fetcher.fetcher_name()
-                ));
+            Ok(ret) => match ret {
+                Ok(true) => {
+                    // Generate temporary binary path
+                    let bin_path = opts.temp_dir.join(format!(
+                        "bin-{}-{}-{}",
+                        package_info.name,
+                        fetcher.target(),
+                        fetcher.fetcher_name()
+                    ));
 
-                match download_extract_and_verify(
-                    fetcher.as_ref(),
-                    &bin_path,
-                    &package_info,
-                    &opts.install_path,
-                    opts.no_symlinks,
-                )
-                .await
-                {
-                    Ok(bin_files) => {
-                        if !bin_files.is_empty() {
-                            return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
-                                fetcher,
-                                new_version: package_info.version,
-                                name: package_info.name,
-                                version_req: version_req_str,
-                                source: package_info.source,
-                                bin_files,
-                            })));
-                        } else {
-                            warn!(
-                                "Error when checking binaries provided by fetcher {}: \
+                    match download_extract_and_verify(
+                        fetcher.as_ref(),
+                        &bin_path,
+                        &package_info,
+                        &opts.install_path,
+                        opts.no_symlinks,
+                    )
+                    .await
+                    {
+                        Ok(bin_files) => {
+                            if !bin_files.is_empty() {
+                                return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
+                                    fetcher,
+                                    new_version: package_info.version,
+                                    name: package_info.name,
+                                    version_req: version_req_str,
+                                    source: package_info.source,
+                                    bin_files,
+                                })));
+                            } else {
+                                warn!(
+                                    "Error when checking binaries provided by fetcher {}: \
                                 The fetcher does not provide any optional binary",
+                                    fetcher.source_name(),
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            if let BinstallError::UserAbort = err {
+                                return Err(err);
+                            }
+                            warn!(
+                                "Error while downloading and extracting from fetcher {}: {}",
                                 fetcher.source_name(),
+                                err
                             );
                         }
                     }
-                    Err(err) => {
-                        if let BinstallError::UserAbort = err {
-                            return Err(err);
-                        }
-                        warn!(
-                            "Error while downloading and extracting from fetcher {}: {}",
-                            fetcher.source_name(),
-                            err
-                        );
-                    }
                 }
-            }
-            Ok(false) => (),
+                Ok(false) => (),
+                Err(err) => {
+                    warn!(
+                        "Error while checking fetcher {}: {}",
+                        fetcher.source_name(),
+                        err
+                    );
+                }
+            },
             Err(err) => {
                 warn!(
-                    "Error while checking fetcher {}: {}",
+                    "Timeout reached while checking fetcher {}: {}",
                     fetcher.source_name(),
                     err
                 );

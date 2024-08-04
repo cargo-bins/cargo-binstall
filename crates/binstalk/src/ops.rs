@@ -1,6 +1,6 @@
 //! Concrete Binstall operations.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use semver::VersionReq;
 
@@ -56,4 +56,6 @@ pub struct Options {
 
     pub signature_policy: SignaturePolicy,
     pub disable_telemetry: bool,
+
+    pub maximum_resolution_timeout: Duration,
 }
