@@ -3,7 +3,7 @@ name = "binstalk"
 description = "The binstall toolkit (library interface)"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk"
-version = "0.27.0"
+version = "0.27.1"
 rust-version = "1.79.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -21,7 +21,7 @@ binstalk-types = { version = "0.8.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "6.0.1", path = "../cargo-toml-workspace" }
 command-group = { version = "5.0.1", features = ["with-tokio"] }
 compact_str = { version = "0.8.0", features = ["serde"] }
-detect-targets = { version = "0.1.17", path = "../detect-targets", features = [
+detect-targets = { version = "0.1.18", path = "../detect-targets", features = [
     "tracing",
 ] }
 either = "1.11.0"
