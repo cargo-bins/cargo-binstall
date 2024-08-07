@@ -112,10 +112,6 @@ cargo-features := trim_end_match(if override-features != "" { override-features 
 # errors with: "Found a record with an unknown abbreviation code"
 cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
 
-# for ARM64 Windows, use a patched version of ring
-# this should be unnecessary once ring 0.17 is released
-win-arm64-ring16 := if target == "aarch64-pc-windows-msvc" { " --config='patch.crates-io.ring.git=\"https://github.com/awakecoding/ring\"' --config='patch.crates-io.ring.branch=\"0.16.20_alpha\"'" } else { "" }
-
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
 # **DISABLED because it's buggy**
 rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
@@ -175,7 +171,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
     ""
 }
 
-cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo) + (win-arm64-ring16)
+cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo)
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
 export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf) + (if enable-h3 != "" { " --cfg reqwest_unstable" } else { "" })
 
