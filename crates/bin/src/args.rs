@@ -174,7 +174,7 @@ pub struct Args {
     ///
     /// If `--strategies` is not specified, then the strategies specified in this
     /// option will be merged with the  disabled-strategies` in `package.metadata`
-    ///  in the cargo manifest of the installed packages.
+    /// in the cargo manifest of the installed packages.
     #[clap(
         help_heading = "Overrides",
         long,
