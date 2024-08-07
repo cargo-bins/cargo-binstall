@@ -101,6 +101,11 @@ impl PkgMeta {
     where
         It: IntoIterator<Item = &'a PkgOverride> + Clone,
     {
+        let ignore_disabled_strategies = pkg_overrides
+            .clone()
+            .into_iter()
+            .any(|pkg_override| pkg_override.ignore_disabled_strategies);
+
         Self {
             pkg_url: pkg_overrides
                 .clone()
@@ -126,10 +131,22 @@ impl PkgMeta {
                 .find_map(|pkg_override| pkg_override.signing.clone())
                 .or_else(|| self.signing.clone()),
 
-            disabled_strategies: pkg_overrides
-                .into_iter()
-                .find_map(|pkg_override| pkg_override.disabled_strategies.clone())
-                .or_else(|| self.disabled_strategies.clone()),
+            disabled_strategies: if ignore_disabled_strategies {
+                None
+            } else {
+                let mut disabled_strategies = pkg_overrides
+                    .into_iter()
+                    .filter_map(|pkg_override| pkg_override.disabled_strategies.as_deref())
+                    .flatten()
+                    .chain(self.disabled_strategies.as_deref().into_iter().flatten())
+                    .copied()
+                    .collect::<Vec<Strategy>>();
+
+                disabled_strategies.sort_unstable();
+                disabled_strategies.dedup();
+
+                Some(disabled_strategies.into_boxed_slice())
+            },
 
             overrides: Default::default(),
         }
@@ -156,6 +173,9 @@ pub struct PkgOverride {
 
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
+
+    #[serde(skip)]
+    pub ignore_disabled_strategies: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 use std::{
     env,
     ffi::OsString,
-    fmt,
+    fmt, mem,
     num::{NonZeroU16, NonZeroU64, ParseIntError},
     path::PathBuf,
     str::FromStr,
@@ -570,7 +570,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         }
     }
 
-    let has_strategies_override = !opts.strategies.is_empty();
+    let ignore_disabled_strategies = !opts.strategies.is_empty();
 
     // Default strategies if empty
     if opts.strategies.is_empty() {
@@ -626,15 +626,14 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
-        disabled_strategies: (!opts.disable_strategies.is_empty() || has_strategies_override).then(
-            || {
-                opts.disable_strategies
-                    .iter()
-                    .map(|strategy| strategy.0)
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice()
-            },
+        disabled_strategies: Some(
+            mem::take(&mut opts.disable_strategies)
+                .into_iter()
+                .map(|strategy| strategy.0)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         ),
+        ignore_disabled_strategies,
         signing: None,
     };
 
