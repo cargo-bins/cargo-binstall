@@ -155,6 +155,10 @@ pub struct Args {
     /// Specify the strategies to be used,
     /// binstall will run the strategies specified in order.
     ///
+    /// If this option is specified, then cargo-binstall will ignore
+    /// `disabled-strategies` in `package.metadata` in the cargo manifest
+    /// of the installed packages.
+    ///
     /// Default value is "crate-meta-data,quick-install,compile".
     #[clap(
         help_heading = "Overrides",
@@ -167,6 +171,10 @@ pub struct Args {
     /// Disable the strategies specified.
     /// If a strategy is specified in `--strategies` and `--disable-strategies`,
     /// then it will be removed.
+    ///
+    /// If `--strategies` is not specified, then the strategies specified in this
+    /// option will be merged with the  disabled-strategies` in `package.metadata`
+    ///  in the cargo manifest of the installed packages.
     #[clap(
         help_heading = "Overrides",
         long,
