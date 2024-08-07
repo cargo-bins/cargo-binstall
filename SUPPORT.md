@@ -13,6 +13,7 @@ As an example, the configuration would be like this:
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"
 bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
 pkg-fmt = "tgz"
+disabled-strategies = ["quick-install", "compile"]
 ```
 
 With the following configuration keys:
@@ -20,7 +21,11 @@ With the following configuration keys:
 - `pkg-url` specifies the package download URL for a given target/version, templated
 - `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
 - `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`)
-- `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository, `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`) for your crate (defaults to empty array). The user can override this by explicitly specifying --strategies on the command line.
+- `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository,
+  `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`)
+  for your crate (defaults to empty array).
+  If `--strategies` is passed on the command line, then the `disabled-strategies` in `package.metadata` will be ignored.
+  Otherwise, the `disabled-strategies` in `package.metadata` and `--disable-strategies` will be merged.
 
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.

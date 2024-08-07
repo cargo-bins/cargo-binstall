@@ -50,10 +50,17 @@ if [ "$exit_code" != 94 ]; then
     exit 1
 fi
 
-set -euxo pipefail
+set +e
+
+"./$1" binstall --disable-strategies compile --no-confirm --manifest-path "manifests/strategies-test-Cargo2.toml" cargo-update@11.1.2
+exit_code="$?"
+
+set -e
+
+if [ "$exit_code" != 94 ]; then
+    echo "Expected exit code 94, but actual exit code $exit_code"
+    exit 1
+fi
 
 ## Test --strategies overriding `disabled-strategies=["compile"]` in Cargo.toml
  "./$1" binstall --no-confirm --manifest-path "manifests/strategies-test-override-Cargo.toml" --strategies compile cargo-quickinstall@0.2.10
-
-## Test --disable-strategies overriding `disabled-strategies=["compile"]` in Cargo.toml
- "./$1" binstall --no-confirm --manifest-path "manifests/strategies-test-override-Cargo.toml" --disable-strategies crate-meta-data,quick-install --force cargo-quickinstall@0.2.10
