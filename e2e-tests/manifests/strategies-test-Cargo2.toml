@@ -1,0 +1,19 @@
+[package]
+name = "cargo-update"
+repository = "https://github.com/nabijaczleweli/cargo-update"
+version = "11.1.2"
+
+[[bin]]
+name = "cargo-install-update"
+path = "src/main.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "cargo-install-update-config"
+path = "src/main-config.rs"
+test = false
+doc = false
+
+[package.metadata.binstall]
+disabled-strategies = ["quick-install"]
