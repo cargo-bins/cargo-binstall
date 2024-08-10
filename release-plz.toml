@@ -1,4 +1,7 @@
+[workspace]
+git_release_latest = false # don't set release as latest release
+
 [[package]]
 name = "cargo-binstall"
 release = false # don't process this package
-git_release_latest = false # don't set release as latest release
+
