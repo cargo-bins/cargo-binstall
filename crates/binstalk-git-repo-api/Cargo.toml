@@ -15,7 +15,7 @@ binstalk-downloader = { version = "0.12.0", path = "../binstalk-downloader", def
 ] }
 compact_str = "0.8.0"
 percent-encoding = "2.2.0"
-serde = { version = "1.0.163", features = ["derive"] }
+serde = { version = "1.0.205", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
 serde_json = { version = "1.0.107" }
 thiserror = "1.0.52"

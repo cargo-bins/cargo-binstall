@@ -31,7 +31,7 @@ binstalk-types = { version = "0.8.0", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
 compact_str = "0.8.0"
-flate2 = { version = "1.0.28", default-features = false }
+flate2 = { version = "1.0.31", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
@@ -43,7 +43,7 @@ reqwest = { version = "0.12.5", features = [
     "brotli",
     "deflate",
 ], default-features = false }
-serde = { version = "1.0.163", features = ["derive"], optional = true }
+serde = { version = "1.0.205", features = ["derive"], optional = true }
 serde_json = { version = "1.0.107", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
