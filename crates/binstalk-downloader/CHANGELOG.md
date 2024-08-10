@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.12.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.12.0...binstalk-downloader-v0.12.1) - 2024-08-10
+## [0.13.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.12.0...binstalk-downloader-v0.13.0) - 2024-08-10
 
 ### Other
 - Bump hickory-resolver to 0.25.0-alpha.2 ([#1869](https://github.com/cargo-bins/cargo-binstall/pull/1869))

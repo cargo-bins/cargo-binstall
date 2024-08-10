@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.27.2"
+version = "0.28.0"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-bins"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-downloader"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "async-compression",
  "async-trait",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-fetchers"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-git-repo-api"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.14.2"
+version = "0.15.0"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "async-trait",
  "base16",
