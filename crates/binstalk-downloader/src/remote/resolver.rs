@@ -57,7 +57,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
         }
     });
 
-    Ok(TokioAsyncResolver::tokio(config, opts))
+    Ok((config, opts))
 }
 
 #[instrument]
