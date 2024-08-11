@@ -1,13 +1,8 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use hickory_resolver::{
-    config::{
-        LookupIpStrategy,
-        ResolverConfig,
-        ResolverOpts,
-    },
-    system_conf,
-    TokioAsyncResolver,
+    config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
+    system_conf, TokioAsyncResolver,
 };
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
