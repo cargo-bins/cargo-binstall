@@ -1,12 +1,15 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use hickory_resolver::TokioAsyncResolver;
+use hickory_resolver::{
+    config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
+    system_conf, TokioAsyncResolver,
+};
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
-use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
+use hickory_resolver::config::{NameServerConfig, Protocol};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -26,38 +29,44 @@ impl Resolve for TrustDnsResolver {
     }
 }
 
+#[cfg(unix)]
+fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
+    debug!("Using system DNS resolver configuration");
+    system_conf::read_system_conf().map_err(Into::into)
+}
+
+#[cfg(windows)]
+fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
+    debug!("Using custom DNS resolver configuration");
+    let mut config = ResolverConfig::new();
+    let opts = ResolverOpts::default();
+
+    get_adapter()?.dns_servers().iter().for_each(|addr| {
+        tracing::trace!("Adding DNS server: {}", addr);
+        let socket_addr = SocketAddr::new(*addr, 53);
+        for protocol in [Protocol::Udp, Protocol::Tcp] {
+            config.add_name_server(NameServerConfig {
+                socket_addr,
+                protocol,
+                tls_dns_name: None,
+                trust_negative_responses: false,
+                #[cfg(feature = "rustls")]
+                tls_config: None,
+                bind_addr: None,
+            })
+        }
+    });
+
+    Ok((config, opts))
+}
+
 #[instrument]
 fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
-    #[cfg(unix)]
-    {
-        debug!("Using system DNS resolver configuration");
-        Ok(TokioAsyncResolver::tokio_from_system_conf()?)
-    }
-    #[cfg(windows)]
-    {
-        debug!("Using custom DNS resolver configuration");
-        let mut config = ResolverConfig::new();
-        let opts = ResolverOpts::default();
+    let (config, mut opts) = get_configs()?;
 
-        get_adapter()?.dns_servers().iter().for_each(|addr| {
-            tracing::trace!("Adding DNS server: {}", addr);
-            let socket_addr = SocketAddr::new(*addr, 53);
-            for protocol in [Protocol::Udp, Protocol::Tcp] {
-                config.add_name_server(NameServerConfig {
-                    socket_addr,
-                    protocol,
-                    tls_dns_name: None,
-                    trust_negative_responses: false,
-                    #[cfg(feature = "rustls")]
-                    tls_config: None,
-                    bind_addr: None,
-                })
-            }
-        });
-
-        debug!("Resolver configuration complete");
-        Ok(TokioAsyncResolver::tokio(config, opts))
-    }
+    debug!("Resolver configuration complete");
+    opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+    Ok(TokioAsyncResolver::tokio(config, opts))
 }
 
 #[cfg(windows)]
