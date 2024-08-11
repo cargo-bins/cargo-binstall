@@ -31,7 +31,7 @@ impl Resolve for TrustDnsResolver {
 
 #[cfg(unix)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
-    debug!("Using system DNS resolver configuration");  
+    debug!("Using system DNS resolver configuration");
     system_conf::read_system_conf().map_err(Into::into)
 }
 
