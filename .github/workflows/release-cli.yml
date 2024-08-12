@@ -110,7 +110,7 @@ jobs:
       run: cargo publish -p "$crate" --allow-dirty  --no-default-features
 
     - if: fromJSON(inputs.info).is-release == 'true'
-      name: Make release latest
+      name: Upload minisign.pub
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -120,6 +120,12 @@ jobs:
         promote: true
         file: minisign.pub
 
+    - if: fromJSON(inputs.info).is-release == 'true'
+      name: Make release latest
+      run: gh release edit v${{ fromJSON(inputs.info).version }} --latest
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Delete signing key artifact
       uses: geekyeggo/delete-artifact@v5
