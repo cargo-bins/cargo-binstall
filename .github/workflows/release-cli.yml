@@ -122,7 +122,7 @@ jobs:
 
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Make release latest
-      run: gh release edit v${{ fromJSON(inputs.info).version }} --latest
+      run: gh release edit v${{ fromJSON(inputs.info).version }} --latest --draft=false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
