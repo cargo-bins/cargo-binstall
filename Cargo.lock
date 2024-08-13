@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-binstall"
-version = "1.10.1"
+version = "1.10.2"
 dependencies = [
  "binstalk",
  "binstalk-manifests",
