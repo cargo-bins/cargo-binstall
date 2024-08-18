@@ -25,7 +25,13 @@ use zeroize::Zeroizing;
 #[clap(
     version,
     about = "Install a Rust binary... from binaries!",
-    after_long_help = "License: GPLv3. Source available at https://github.com/cargo-bins/cargo-binstall",
+    after_long_help =
+        "License: GPLv3. Source available at https://github.com/cargo-bins/cargo-binstall\n\n\
+        Some crate installation strategies may collect anonymized usage statistics by default. \
+        If you prefer not to participate on such data collection, you can opt out by using the \
+        `--disable-telemetry` flag or its associated environment variable. For more details \
+        about this data collection, please refer to the mentioned flag or the project's README \
+        file",
     arg_required_else_help(true),
     // Avoid conflict with version_req
     disable_version_flag(true),

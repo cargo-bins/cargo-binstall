@@ -157,6 +157,19 @@ You can find a full description of errors including exit codes here: <https://do
 Yes!
 Extra pre-built packages with a `.full` suffix are available and contain split debuginfo, documentation files, and extra binaries like the `detect-wasi` utility.
 
+## Telemetry collection
+
+Some crate installation strategies may collect anonymized usage statistics by default.
+Currently, only the name of the crate to be installed, its version, and the target platform triple are sent to endpoints under the `https://warehouse-clerk-tmp.vercel.app/api/crate` URL when the `quickinstall` artifact host is used.
+The maintainers of the `quickinstall` project use this data to determine which crate versions are most worthwhile to build and host.
+
+If you prefer not to participate in this data collection, you can opt out by any of the following methods:
+
+- Setting the `--disable-telemetry` flag in the command line interface.
+- Setting the `BINSTALL_DISABLE_TELEMETRY` environment variable to `true`.
+- Disabling the `quickinstall` strategy with `--disable-strategy quick-install`, or if specifying a list of strategies to use with `--strategy`, avoiding including `quickinstall` in that list.
+- Adding `quick-install` to the `disabled-strategies` configuration key in the crate metadata (refer to [the related support documentation](SUPPORT.md#support-for-cargo-binstall) for more details).
+
 ---
 
 If you have ideas/contributions or anything is not working the way you expect (in which case, please include an output with `--log-level debug`) and feel free to open an issue or PR.
