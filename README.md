@@ -160,8 +160,10 @@ Extra pre-built packages with a `.full` suffix are available and contain split d
 ## Telemetry collection
 
 Some crate installation strategies may collect anonymized usage statistics by default.
-Currently, only the name of the crate to be installed, its version, and the target platform triple are sent to endpoints under the `https://warehouse-clerk-tmp.vercel.app/api/crate` URL when the `quickinstall` artifact host is used.
+Currently, only the name of the crate to be installed, its version, the target platform triple, and the collecting user agent are sent to endpoints under the `https://warehouse-clerk-tmp.vercel.app/api/crate` URL when the `quickinstall` artifact host is used.
 The maintainers of the `quickinstall` project use this data to determine which crate versions are most worthwhile to build and host.
+The aggregated collected telemetry is publicly accessible at <https://warehouse-clerk-tmp.vercel.app/api/stats>.
+Should you be interested on it, the backend code for these endpoints can be found at <https://github.com/alsuren/warehouse-clerk-tmp/tree/master/pages/api>.
 
 If you prefer not to participate in this data collection, you can opt out by any of the following methods:
 
