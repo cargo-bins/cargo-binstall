@@ -35,8 +35,8 @@ runs:
   - name: Exclude workspace and cargo/rustup home from windows defender
     if: runner.os == 'Windows'
     run: |
-      Add-MpPreference -ExclusionPath $DEV_DRIVE -ExclusionPath $PWD
-    shell: bash
+      Add-MpPreference -ExclusionPath $DEV_DRIVE -ExclusionPath ${{ github.workspace }}
+    shell: pwsh
     
   - uses: samypr100/setup-dev-drive@v3
     if: runner.os == 'Windows'
