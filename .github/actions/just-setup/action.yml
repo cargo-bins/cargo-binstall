@@ -44,7 +44,7 @@ runs:
 
   - name: Exclude target from windows defender
     if: runner.os == 'Windows'
-    run: Add-MpPreference -ExclusionPath $DEV_DRIVE
+    run: Add-MpPreference -ExclusionPath $PWD
   
   - name: Add just to tools to install
     run: echo "tools=just" >>"$GITHUB_ENV"
