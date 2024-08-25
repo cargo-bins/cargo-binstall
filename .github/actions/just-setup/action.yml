@@ -18,9 +18,10 @@ inputs:
 runs:
   using: composite
   steps:
-  - name: Enable macOS developer mode for better performance
-    run: sudo spctl developer-mode enable-terminal
+  - name: Enable macOS developer mode for better
     if: runner.os == 'macOS'
+    run: sudo spctl developer-mode enable-terminal
+    shell: bash
 
   - uses: samypr100/setup-dev-drive@v3
     if: runner.os == 'Windows'
@@ -31,9 +32,11 @@ runs:
         CARGO_HOME,{{ DEV_DRIVE }}/.cargo
         RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
         
-  - name: Exclude cargo/rustup home from windows defender
+  - name: Exclude workspace and cargo/rustup home from windows defender
     if: runner.os == 'Windows'
-    run: Add-MpPreference -ExclusionPath $DEV_DRIVE
+    run: |
+      Add-MpPreference -ExclusionPath $DEV_DRIVE -ExclusionPath $PWD
+    shell: bash
     
   - uses: samypr100/setup-dev-drive@v3
     if: runner.os == 'Windows'
@@ -41,10 +44,6 @@ runs:
       mount-path: ${{ github.workspace }}/target
       drive-size: 3GB
       drive-type: Fixed
-
-  - name: Exclude target from windows defender
-    if: runner.os == 'Windows'
-    run: Add-MpPreference -ExclusionPath $PWD
   
   - name: Add just to tools to install
     run: echo "tools=just" >>"$GITHUB_ENV"
