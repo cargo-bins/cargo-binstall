@@ -21,11 +21,20 @@ runs:
   - name: Enable macOS developer mode for better performance
     run: sudo spctl developer-mode enable-terminal
     if: runner.os == 'macOS'
+
+  - uses: samypr100/setup-dev-drive@v3
+    if: runner.os == 'Windows'
+    with:
+      drive-type: Fixed
+      drive-size: 2GB
+      env-mapping: |
+        CARGO_HOME,{{ DEV_DRIVE }}/.cargo
+        RUSTUP_HOME,{{ DEV_DRIVE }}/.rustup
   - uses: samypr100/setup-dev-drive@v3
     if: runner.os == 'Windows'
     with:
       mount-path: ${{ github.workspace }}/target
-      drive-size: 5GB
+      drive-size: 3GB
       drive-type: Fixed
   
   - name: Add just to tools to install
