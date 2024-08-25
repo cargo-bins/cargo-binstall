@@ -18,6 +18,17 @@ inputs:
 runs:
   using: composite
   steps:
+  - name: Enable macOS developer mode for better
+    if: runner.os == 'macOS'
+    run: sudo spctl developer-mode enable-terminal
+    shell: bash
+        
+  - name: Exclude workspace and cargo/rustup home from windows defender
+    if: runner.os == 'Windows'
+    run: |
+      Add-MpPreference -ExclusionPath '${{ github.workspace }}'
+    shell: pwsh
+    
   - name: Add just to tools to install
     run: echo "tools=just" >>"$GITHUB_ENV"
     shell: bash
