@@ -22,25 +22,11 @@ runs:
     if: runner.os == 'macOS'
     run: sudo spctl developer-mode enable-terminal
     shell: bash
-
-  - name: Export CARGO_TARGET_DIR
-    if: runner.os != 'Windows'
-    run: |
-      echo "CARGO_TARGET_DIR=${{ github.workspace }}/target" >> "$GITHUB_ENV"
-    shell: bash
-
-  - uses: samypr100/setup-dev-drive@v3
-    if: runner.os == 'Windows'
-    with:
-      drive-type: Fixed
-      drive-size: 3GB
-      env-mapping: |
-        CARGO_TARGET_DIR,{{ DEV_DRIVE }}/target
         
   - name: Exclude workspace and cargo/rustup home from windows defender
     if: runner.os == 'Windows'
     run: |
-      Add-MpPreference -ExclusionPath '${{ env.DEV_DRIVE }},${{ github.workspace }}'
+      Add-MpPreference -ExclusionPath '${{ github.workspace }}'
     shell: pwsh
     
   - name: Add just to tools to install
@@ -85,7 +71,6 @@ runs:
     uses: Swatinem/rust-cache@v2
     with:
       env-vars: "CARGO CC CFLAGS CXX CMAKE RUST JUST"
-      workspaces: . -> ${{ env.CARGO_TARGET_DIR }}
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
 
