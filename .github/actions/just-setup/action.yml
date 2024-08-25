@@ -44,6 +44,7 @@ runs:
       mount-path: ${{ github.workspace }}/target
       drive-size: 3GB
       drive-type: Fixed
+      DEV_DRIVE_PATH: D:\target_drive.vhdx
   
   - name: Add just to tools to install
     run: echo "tools=just" >>"$GITHUB_ENV"
