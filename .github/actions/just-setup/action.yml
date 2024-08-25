@@ -18,6 +18,9 @@ inputs:
 runs:
   using: composite
   steps:
+  - name: Enable macOS developer mode for better performance
+    run: sudo spctl developer-mode enable-terminal
+    if: runner.os == 'macOS'
   - name: Add just to tools to install
     run: echo "tools=just" >>"$GITHUB_ENV"
     shell: bash
