@@ -206,7 +206,7 @@ pub struct Args {
         help_heading = "Overrides",
         long,
         env = "BINSTALL_MAXIMUM_RESOLUTION_TIMEOUT",
-        default_value_t = NonZeroU16::new(180).unwrap(),
+        default_value_t = NonZeroU16::new(15).unwrap(),
     )]
     pub(crate) maximum_resolution_timeout: NonZeroU16,
 
