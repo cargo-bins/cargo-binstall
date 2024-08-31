@@ -38,7 +38,7 @@ strum = "0.26.1"
 strum_macros = "0.26.1"
 supports-color = "3.0.0"
 tempfile = "3.5.0"
-tokio = { version = "1.35.0", features = ["rt-multi-thread", "signal"], default-features = false }
+tokio = { version = "1.40.0", features = ["rt-multi-thread", "signal"], default-features = false }
 tracing-core = "0.1.32"
 tracing = { version = "0.1.39", default-features = false }
 tracing-log = { version = "0.2.0", default-features = false }

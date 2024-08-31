@@ -52,7 +52,7 @@ serde_json = { version = "1.0.107", optional = true }
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.5.0"
 thiserror = "1.0.61"
-tokio = { version = "1.35.0", features = [
+tokio = { version = "1.40.0", features = [
     "macros",
     "rt-multi-thread",
     "sync",

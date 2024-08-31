@@ -30,7 +30,7 @@ sha2 = "0.10.7"
 simple-git = { version = "0.2.4", optional = true }
 tempfile = "3.5.0"
 thiserror = "1.0.61"
-tokio = { version = "1.35.0", features = [
+tokio = { version = "1.40.0", features = [
     "rt",
     "sync",
 ], default-features = false }
