@@ -256,7 +256,6 @@ async fn resolve_inner(
         }
     }
 
-
     if !opts.cargo_install_fallback {
         return Err(BinstallError::NoFallbackToCargoInstall);
     }
