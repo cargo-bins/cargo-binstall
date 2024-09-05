@@ -175,13 +175,7 @@ async fn resolve_inner(
         );
     }
 
-    if !opts.disable_telemetry {
-        for fetcher in &handles {
-            fetcher.clone().report_to_upstream();
-        }
-    }
-
-    for fetcher in handles {
+    for fetcher in &handles {
         match timeout(
             opts.maximum_resolution_timeout,
             AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join(),
@@ -210,7 +204,7 @@ async fn resolve_inner(
                         Ok(bin_files) => {
                             if !bin_files.is_empty() {
                                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
-                                    fetcher,
+                                    fetcher.clone(),
                                     new_version: package_info.version,
                                     name: package_info.name,
                                     version_req: version_req_str,
@@ -255,6 +249,13 @@ async fn resolve_inner(
             }
         }
     }
+
+    if !opts.disable_telemetry {
+        for fetcher in &handles {
+            fetcher.clone().report_to_upstream();
+        }
+    }
+
 
     if !opts.cargo_install_fallback {
         return Err(BinstallError::NoFallbackToCargoInstall);
