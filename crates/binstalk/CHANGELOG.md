@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.2...binstalk-v0.28.3) - 2024-09-06
+
+### Other
+- Send telemetry report to quickinstall if no pre-built is found ([#1905](https://github.com/cargo-bins/cargo-binstall/pull/1905))
+
 ## [0.28.2](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.1...binstalk-v0.28.2) - 2024-08-25
 
 ### Other
