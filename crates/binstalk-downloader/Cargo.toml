@@ -43,7 +43,7 @@ reqwest = { version = "0.12.5", features = [
     "brotli",
     "deflate",
 ], default-features = false }
-serde = { version = "1.0.163", features = ["derive"], optional = true }
+serde = { version = "1.0.210", features = ["derive"], optional = true }
 serde_json = { version = "1.0.107", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
