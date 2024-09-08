@@ -200,7 +200,7 @@ by rust officially."#,
             tokio::spawn(async move {
                 if let Err(err) = self.report().await {
                     warn!(
-                        "Failed to send quickinstall report for package {}: {err}",
+                        "Failed to send quickinstall report for package {} (NOTE that this does not affect package resolution): {err}",
                         self.package
                     )
                 }
