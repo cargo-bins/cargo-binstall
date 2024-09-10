@@ -203,6 +203,7 @@ async fn resolve_inner(
                     {
                         Ok(bin_files) => {
                             if !bin_files.is_empty() {
+                                fetcher.report_to_upstream();
                                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                                     fetcher: fetcher.clone(),
                                     new_version: package_info.version,
@@ -250,6 +251,8 @@ async fn resolve_inner(
         }
     }
 
+    // At this point, we don't know whether fallback to cargo install is allowed, or whether it will
+    // succeed, but things start to get convoluted when try to include that data, so this will do.
     if !opts.disable_telemetry {
         for fetcher in handles {
             fetcher.report_to_upstream();
