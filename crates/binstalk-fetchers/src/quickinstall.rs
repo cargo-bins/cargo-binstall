@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     path::Path,
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use binstalk_downloader::remote::Method;
@@ -16,7 +16,8 @@ use crate::{
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
-pub const QUICK_INSTALL_STATS_URL: &str = "https://warehouse-clerk-tmp.vercel.app/api/crate";
+pub const QUICKINSTALL_STATS_URL: &str =
+    "https://cargo-quickinstall-stats-server.fly.dev/record-install";
 
 const QUICKINSTALL_SIGN_KEY: Cow<'static, str> =
     Cow::Borrowed("RWTdnnab2pAka9OdwgCMYyOE66M/BlQoFWaJ/JjwcPV+f3n24IRTj97t");
@@ -58,15 +59,39 @@ pub struct QuickInstall {
     gh_api_client: GhApiClient,
     is_supported_v: OnceCell<bool>,
 
+    data: Arc<Data>,
     package: String,
     package_url: Url,
     signature_url: Url,
-    stats_url: Url,
     signature_policy: SignaturePolicy,
 
     target_data: Arc<TargetDataErased>,
 
     signature_verifier: OnceLock<SignatureVerifier>,
+    status: Mutex<Status>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Status {
+    Start,
+    NotFound,
+    Found,
+    AttemptingInstall,
+    InvalidSignature,
+    InstalledFromTarball,
+}
+
+impl Status {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Status::Start => "start",
+            Status::NotFound => "not-found",
+            Status::Found => "found",
+            Status::AttemptingInstall => "attempting-install",
+            Status::InvalidSignature => "invalid-signature",
+            Status::InstalledFromTarball => "installed-from-tarball",
+        }
+    }
 }
 
 impl QuickInstall {
@@ -116,6 +141,14 @@ impl QuickInstall {
             }
         })
     }
+
+    fn get_status(&self) -> Status {
+        *self.status.lock().unwrap()
+    }
+
+    fn set_status(&self, status: Status) {
+        *self.status.lock().unwrap() = status;
+    }
 }
 
 #[async_trait::async_trait]
@@ -137,6 +170,7 @@ impl super::Fetcher for QuickInstall {
 
         Arc::new(Self {
             client,
+            data,
             gh_api_client,
             is_supported_v: OnceCell::new(),
 
@@ -144,14 +178,13 @@ impl super::Fetcher for QuickInstall {
                 .expect("package_url is pre-generated and should never be invalid url"),
             signature_url: Url::parse(&format!("{url}.sig"))
                 .expect("signature_url is pre-generated and should never be invalid url"),
-            stats_url: Url::parse(&format!("{QUICK_INSTALL_STATS_URL}/{package}.tar.gz",))
-                .expect("stats_url is pre-generated and should never be invalid url"),
             package,
             signature_policy,
 
             target_data,
 
             signature_verifier: OnceLock::new(),
+            status: Mutex::new(Status::Start),
         })
     }
 
@@ -171,6 +204,7 @@ impl super::Fetcher for QuickInstall {
             .await?;
 
             if !is_found {
+                self.set_status(Status::NotFound);
                 return Ok(false);
             }
 
@@ -182,6 +216,7 @@ impl super::Fetcher for QuickInstall {
                 panic!("<QuickInstall as Fetcher>::find is run twice");
             }
 
+            self.set_status(Status::Found);
             Ok(true)
         })
     }
@@ -209,6 +244,7 @@ by rust officially."#,
     }
 
     async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+        self.set_status(Status::AttemptingInstall);
         let Some(verifier) = self.signature_verifier.get() else {
             panic!("<QuickInstall as Fetcher>::find has not been called yet!")
         };
@@ -227,8 +263,10 @@ by rust officially."#,
             if let Some(info) = verifier.info() {
                 info!("Verified signature for package '{}': {info}", self.package);
             }
+            self.set_status(Status::InstalledFromTarball);
             Ok(files)
         } else {
+            self.set_status(Status::InvalidSignature);
             Err(FetchError::InvalidSignature)
         }
     }
@@ -280,10 +318,20 @@ impl QuickInstall {
             return Ok(());
         }
 
-        let url = self.stats_url.clone();
+        let mut url = Url::parse(QUICKINSTALL_STATS_URL)
+            .expect("stats_url is pre-generated and should never be invalid url");
+        url.query_pairs_mut()
+            .append_pair("crate", &self.data.name)
+            .append_pair("version", &self.data.version)
+            .append_pair("target", &self.target_data.target)
+            .append_pair(
+                "agent",
+                concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+            )
+            .append_pair("status", self.get_status().as_str());
         debug!("Sending installation report to quickinstall ({url})");
 
-        self.client.request(Method::HEAD, url).send(true).await?;
+        self.client.request(Method::POST, url).send(true).await?;
 
         Ok(())
     }

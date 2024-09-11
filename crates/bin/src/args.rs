@@ -250,8 +250,8 @@ pub struct Args {
     /// Disable statistics collection on popular crates.
     ///
     /// Strategy quick-install (can be disabled via --disable-strategies) collects
-    /// statistics of popular crates by default, by sending the crate, version and
-    /// target to https://warehouse-clerk-tmp.vercel.app/api/crate
+    /// statistics of popular crates by default, by sending the crate, version, target
+    /// and status to https://cargo-quickinstall-stats-server.fly.dev/record-install
     #[clap(help_heading = "Options", long, env = "BINSTALL_DISABLE_TELEMETRY")]
     pub(crate) disable_telemetry: bool,
 
@@ -675,7 +675,7 @@ mod test {
             .unwrap()
             .to_string();
         assert!(
-            long_help.ends_with(binstalk::QUICK_INSTALL_STATS_URL),
+            long_help.ends_with(binstalk::QUICKINSTALL_STATS_URL),
             "{}",
             long_help
         );

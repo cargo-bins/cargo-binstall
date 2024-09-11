@@ -24,6 +24,9 @@ use crate::FetchError;
 static WARN_RATE_LIMIT_ONCE: Once = Once::new();
 static WARN_UNAUTHORIZED_ONCE: Once = Once::new();
 
+/// Return Ok(Some(api_artifact_url)) if exists, or Ok(None) if it doesn't.
+///
+/// Caches info on all artifacts matching (repo, tag).
 pub(super) async fn get_gh_release_artifact_url(
     gh_api_client: GhApiClient,
     artifact: GhReleaseArtifact,
@@ -54,6 +57,10 @@ pub(super) async fn get_gh_release_artifact_url(
     }
 }
 
+/// Check if the URL exists by querying the GitHub API.
+///
+/// Caches info on all artifacts matching (repo, tag).
+///
 /// This function returns a future where its size should be at most size of
 /// 2-4 pointers.
 pub(super) async fn does_url_exist(

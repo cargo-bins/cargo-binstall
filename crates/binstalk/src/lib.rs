@@ -10,4 +10,4 @@ pub use binstalk_registry as registry;
 pub use binstalk_types as manifests;
 pub use detect_targets::{get_desired_targets, DesiredTargets, TARGET};
 
-pub use fetchers::QUICK_INSTALL_STATS_URL;
+pub use fetchers::QUICKINSTALL_STATS_URL;
