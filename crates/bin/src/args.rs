@@ -675,7 +675,7 @@ mod test {
             .unwrap()
             .to_string();
         assert!(
-            long_help.ends_with(binstalk::QUICK_INSTALL_STATS_URL),
+            long_help.ends_with(binstalk::QUICKINSTALL_STATS_URL),
             "{}",
             long_help
         );

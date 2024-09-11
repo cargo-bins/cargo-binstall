@@ -16,7 +16,7 @@ use crate::{
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
-pub const QUICK_INSTALL_STATS_URL: &str =
+pub const QUICKINSTALL_STATS_URL: &str =
     "https://cargo-quickinstall-stats-server.fly.dev/record-install";
 
 const QUICKINSTALL_SIGN_KEY: Cow<'static, str> =
@@ -63,7 +63,6 @@ pub struct QuickInstall {
     package: String,
     package_url: Url,
     signature_url: Url,
-    stats_url: Url,
     signature_policy: SignaturePolicy,
 
     target_data: Arc<TargetDataErased>,
@@ -179,8 +178,6 @@ impl super::Fetcher for QuickInstall {
                 .expect("package_url is pre-generated and should never be invalid url"),
             signature_url: Url::parse(&format!("{url}.sig"))
                 .expect("signature_url is pre-generated and should never be invalid url"),
-            stats_url: Url::parse("{QUICK_INSTALL_STATS_URL}")
-                .expect("stats_url is pre-generated and should never be invalid url"),
             package,
             signature_policy,
 
@@ -321,7 +318,8 @@ impl QuickInstall {
             return Ok(());
         }
 
-        let mut url = self.stats_url.clone();
+        let mut url = Url::parse(QUICKINSTALL_STATS_URL)
+            .expect("stats_url is pre-generated and should never be invalid url");
         url.query_pairs_mut()
             .append_pair("crate", &self.data.name)
             .append_pair("version", &self.data.version)
