@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.3...binstalk-v0.28.4) - 2024-09-11
+
+### Other
+
+- report to new stats server (with status) ([#1912](https://github.com/cargo-bins/cargo-binstall/pull/1912))
+
 ## [0.28.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.2...binstalk-v0.28.3) - 2024-09-06
 
 ### Other

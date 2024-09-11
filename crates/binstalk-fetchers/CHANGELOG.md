@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.9.1...binstalk-fetchers-v0.10.0) - 2024-09-11
+
+### Other
+
+- report to new stats server (with status) ([#1912](https://github.com/cargo-bins/cargo-binstall/pull/1912))
+- Improve quickinstall telemetry failure message ([#1910](https://github.com/cargo-bins/cargo-binstall/pull/1910))
+
 ## [0.9.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.9.0...binstalk-fetchers-v0.9.1) - 2024-08-12
 
 ### Other
