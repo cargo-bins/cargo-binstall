@@ -3,7 +3,7 @@ name = "binstalk"
 description = "The binstall toolkit (library interface)"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk"
-version = "0.28.3"
+version = "0.28.4"
 rust-version = "1.79.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -12,8 +12,8 @@ license = "GPL-3.0-only"
 [dependencies]
 binstalk-bins = { version = "0.6.0", path = "../binstalk-bins" }
 binstalk-downloader = { version = "0.13.1", path = "../binstalk-downloader", default-features = false }
-binstalk-git-repo-api = { version = "0.5.1", path = "../binstalk-git-repo-api" }
-binstalk-fetchers = { version = "0.9.1", path = "../binstalk-fetchers", features = [
+binstalk-git-repo-api = { version = "0.5.2", path = "../binstalk-git-repo-api" }
+binstalk-fetchers = { version = "0.10.0", path = "../binstalk-fetchers", features = [
     "quickinstall",
 ] }
 binstalk-registry = { version = "0.11.1", path = "../binstalk-registry" }
