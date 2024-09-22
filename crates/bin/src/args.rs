@@ -221,7 +221,12 @@ pub struct Args {
     pub(crate) dry_run: bool,
 
     /// Disable interactive mode / confirmation prompts.
-    #[clap(help_heading = "Options", short = 'y', long)]
+    #[clap(
+        help_heading = "Options",
+        short = 'y',
+        long,
+        env = "BINSTALL_NO_CONFIRM"
+    )]
     pub(crate) no_confirm: bool,
 
     /// Do not cleanup temporary files.
