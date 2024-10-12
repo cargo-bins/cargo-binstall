@@ -528,7 +528,9 @@ mod test {
         let client = create_remote_client();
 
         let auth_token = match env::var("CI_UNIT_TEST_GITHUB_TOKEN") {
-            Ok(auth_token) if !auth_token.is_empty() => zeroize::Zeroizing::new(auth_token.into_boxed_str()),
+            Ok(auth_token) if !auth_token.is_empty() => {
+                zeroize::Zeroizing::new(auth_token.into_boxed_str())
+            }
             _ => None,
         };
 
