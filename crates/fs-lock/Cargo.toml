@@ -10,4 +10,4 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-fs4 = "0.9.1"
+fs4 = "0.10.0"
