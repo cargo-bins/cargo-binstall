@@ -527,10 +527,10 @@ mod test {
     fn create_client() -> Vec<GhApiClient> {
         let client = create_remote_client();
 
-        let auth_token = env::var("CI_UNIT_TEST_GITHUB_TOKEN")
-            .ok()
-            .map(Box::<str>::from)
-            .map(zeroize::Zeroizing::new);
+        let auth_token = match env::var("CI_UNIT_TEST_GITHUB_TOKEN") {
+            Ok(auth_token) if !auth_token.is_empty() => zeroize::Zeroizing::new(auth_token.into_boxed_str()),
+            _ => None,
+        };
 
         let gh_client = GhApiClient::new(client.clone(), auth_token.clone());
         gh_client.set_only_use_restful_api();
