@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.2...binstalk-git-repo-api-v0.5.3) - 2024-10-12
+
+### Fixed
+
+- *(gh_api_client)* remote client should never being shared everywhere bacause the underlying connection pool will be reused. ([#1930](https://github.com/cargo-bins/cargo-binstall/pull/1930))
+
+### Other
+
+- Fix binstalk-git-repo-api on PR of forks ([#1932](https://github.com/cargo-bins/cargo-binstall/pull/1932))
+
 ## [0.5.2](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.1...binstalk-git-repo-api-v0.5.2) - 2024-09-11
 
 ### Other

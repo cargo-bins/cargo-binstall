@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.7"
+version = "0.28.8"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-fetchers"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-git-repo-api"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
