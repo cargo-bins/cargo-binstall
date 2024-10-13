@@ -15,7 +15,7 @@ on:
       - reopened
       - synchronize
   schedule:
-    - cron: "0 3 * * 1"
+    - cron: "0 3 * * 6"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}-${{ inputs.additional_key }}
