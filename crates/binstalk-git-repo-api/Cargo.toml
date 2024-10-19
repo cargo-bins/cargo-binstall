@@ -17,7 +17,7 @@ compact_str = "0.8.0"
 percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
-serde_json = { version = "1.0.107" }
+serde_json = { version = "1.0.131" }
 thiserror = "1.0.52"
 tokio = { version = "1.35.0", features = ["sync"], default-features = false }
 tracing = "0.1.39"
