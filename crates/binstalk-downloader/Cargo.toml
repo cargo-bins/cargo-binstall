@@ -18,23 +18,22 @@ async-compression = { version = "0.4.4", features = [
     "bzip2",
     "tokio",
 ] }
-async_zip = { version = "0.0.17", features = [
-    "deflate",
-    "deflate64",
-    "bzip2",
-    "lzma",
-    "zstd",
-    "xz",
-    "tokio",
-] }
 binstalk-types = { version = "0.9.0", path = "../binstalk-types" }
 bytes = "1.4.0"
 bzip2 = "0.4.4"
+cfg-if = "1"
 compact_str = "0.8.0"
 flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
+rc-zip-sync = { version = "4.2.3", features = [
+    "deflate",
+    "bzip2",
+    "deflate64",
+    "lzma",
+    "zstd",
+] }
 reqwest = { version = "0.12.5", features = [
     "http2",
     "stream",
