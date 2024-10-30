@@ -13,7 +13,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
     let mut extracted_files = ExtractedFiles::new();
 
     for entry in f.read_zip()?.entries() {
-        let Some(name) = entry.sanitized_name() else {
+        let Some(name) = entry.sanitized_name().map(Path::new) else {
             continue;
         };
         let path = dir.join(name);
@@ -30,11 +30,10 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             .parent()
             .expect("all full entry paths should have parent paths");
         create_dir_all(parent)?;
-        extracted_files.add_dir(parent);
 
         match entry.kind() {
             EntryKind::Symlink => {
-                extracted_files.add_file(&path);
+                extracted_files.add_file(&name);
                 cfg_if! {
                     if #[cfg(windows)] {
                         do_extract_file()?;
@@ -57,7 +56,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             }
             EntryKind::Directory => (),
             EntryKind::File => {
-                extracted_files.add_file(&path);
+                extracted_files.add_file(&name);
                 do_extract_file()?;
             }
         }
