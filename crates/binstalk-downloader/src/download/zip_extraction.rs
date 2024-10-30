@@ -33,7 +33,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
 
         match entry.kind() {
             EntryKind::Symlink => {
-                extracted_files.add_file(&name);
+                extracted_files.add_file(name);
                 cfg_if! {
                     if #[cfg(windows)] {
                         do_extract_file()?;
@@ -56,7 +56,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             }
             EntryKind::Directory => (),
             EntryKind::File => {
-                extracted_files.add_file(&name);
+                extracted_files.add_file(name);
                 do_extract_file()?;
             }
         }
