@@ -6,18 +6,17 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use async_zip::base::read::stream::ZipFileReader;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use futures_util::Stream;
+use tempfile::tempfile as create_tmpfile;
 use tokio::sync::mpsc;
-use tokio_util::io::StreamReader;
 use tracing::debug;
 
-use super::{
-    extracter::*, zip_extraction::extract_zip_entry, DownloadError, ExtractedFiles, TarBasedFmt,
-    ZipError,
+use super::{extracter::*, DownloadError, ExtractedFiles, TarBasedFmt};
+use crate::{
+    download::zip_extraction::do_extract_zip,
+    utils::{extract_with_blocking_task, StreamReadable},
 };
-use crate::utils::{extract_with_blocking_task, StreamReadable};
 
 pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
 where
@@ -25,52 +24,30 @@ where
 {
     debug!("Writing to `{}`", path.display());
 
-    extract_with_blocking_decoder(stream, path, |mut rx, path| {
-        let mut file = fs::File::create(path)?;
+    extract_with_blocking_decoder(stream, path, |rx, path| {
+        let mut extracted_files = ExtractedFiles::new();
 
-        while let Some(bytes) = rx.blocking_recv() {
-            file.write_all(&bytes)?;
-        }
+        extracted_files.add_file(Path::new(path.file_name().unwrap()));
 
-        file.flush()
+        write_stream_to_file(rx, fs::File::create(path)?)?;
+
+        Ok(extracted_files)
     })
-    .await?;
-
-    let mut extracted_files = ExtractedFiles::new();
-
-    extracted_files.add_file(Path::new(path.file_name().unwrap()));
-
-    Ok(extracted_files)
+    .await
 }
 
 pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync,
 {
-    debug!("Decompressing from zip archive to `{}`", path.display());
+    debug!("Downloading from zip archive to tempfile");
 
-    let reader = StreamReader::new(stream);
-    let mut zip = ZipFileReader::with_tokio(reader);
-    let mut buf = BytesMut::with_capacity(4 * 4096);
-    let mut extracted_files = ExtractedFiles::new();
+    extract_with_blocking_decoder(stream, path, |rx, path| {
+        debug!("Decompressing from zip archive to `{}`", path.display());
 
-    while let Some(mut zip_reader) = zip.next_with_entry().await.map_err(ZipError::from_inner)? {
-        extract_zip_entry(
-            zip_reader.reader_mut(),
-            path,
-            &mut buf,
-            &mut extracted_files,
-        )
-        .await?;
-
-        // extract_zip_entry would read the zip_reader until read the file until
-        // eof unless extract_zip itself is cancelled or an error is raised.
-        //
-        // So calling done here should not raise any error.
-        zip = zip_reader.done().await.map_err(ZipError::from_inner)?;
-    }
-
-    Ok(extracted_files)
+        do_extract_zip(write_stream_to_file(rx, create_tmpfile()?)?, path).map_err(io::Error::from)
+    })
+    .await
 }
 
 pub async fn extract_tar_based_stream<S>(
@@ -175,4 +152,16 @@ where
 
         f(rx, &path)
     })
+}
+
+fn write_stream_to_file(mut rx: mpsc::Receiver<Bytes>, f: fs::File) -> io::Result<fs::File> {
+    let mut f = io::BufWriter::new(f);
+
+    while let Some(bytes) = rx.blocking_recv() {
+        f.write_all(&bytes)?;
+    }
+
+    f.flush()?;
+
+    f.into_inner().map_err(io::IntoInnerError::into_error)
 }

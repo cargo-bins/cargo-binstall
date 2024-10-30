@@ -7,6 +7,7 @@ use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::{PkgFmt, TarBasedFmt};
+pub use rc_zip_sync::rc_zip::error::Error as ZipError;
 
 use crate::remote::{Client, Error as RemoteError, Response, Url};
 
@@ -23,7 +24,6 @@ mod extracted_files;
 pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
 
 mod zip_extraction;
-pub use zip_extraction::ZipError;
 
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
