@@ -10,7 +10,7 @@ fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String) -> io::Result<()> 
     {
         let mut stdout = io::stdout().lock();
 
-        write!(&mut stdout, "Do you wish to continue? yes/[no]\n? ")?;
+        write!(&mut stdout, "Do you wish to continue? [yes]/no\n? ")?;
         stdout.flush()?;
     }
 
@@ -34,8 +34,8 @@ pub async fn confirm() -> Result<(), BinstallError> {
             }
 
             match input.as_str().trim() {
-                "yes" | "y" | "YES" | "Y" => break true,
-                "no" | "n" | "NO" | "N" | "" => break false,
+                "yes" | "y" | "YES" | "Y" | "" => break true,
+                "no" | "n" | "NO" | "N" => break false,
                 _ => {
                     input.clear();
                     continue;
