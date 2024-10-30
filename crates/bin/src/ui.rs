@@ -34,8 +34,11 @@ pub async fn confirm() -> Result<(), BinstallError> {
             }
 
             match input.as_str().trim() {
-                "yes" | "y" | "YES" | "Y" => break true,
-                _ => => break false,
+                "" | "yes" | "y" | "YES" | "Y" => break false,
+                "no" | "n" | "NO" | "N" => break true,
+                _ => {
+                    input.clear();
+                    continue;
                 }
             }
         };
