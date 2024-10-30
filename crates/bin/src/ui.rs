@@ -10,7 +10,7 @@ fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String) -> io::Result<()> 
     {
         let mut stdout = io::stdout().lock();
 
-        write!(&mut stdout, "Do you wish to continue? yes/NO\n? ")?;
+        write!(&mut stdout, "Do you wish to continue? [yes]/no\n? ")?;
         stdout.flush()?;
     }
 
