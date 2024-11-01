@@ -180,9 +180,19 @@ impl BinFile {
     }
 
     pub fn preview_bin(&self) -> impl fmt::Display + '_ {
-        LazyFormat {
+        struct PreviewBin<'a> {
+            base_name: &'a str,
+            dest: path::Display<'a>,
+        }
+
+        impl fmt::Display for PreviewBin<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{} => {}", self.base_name, self.dest)
+            }
+        }
+
+        PreviewBin {
             base_name: &self.base_name,
-            source: Path::new(self.source.file_name().unwrap()).display(),
             dest: self.dest.display(),
         }
     }
