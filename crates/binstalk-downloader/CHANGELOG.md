@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.2](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.1...binstalk-downloader-v0.13.2) - 2024-11-02
+
+### Other
+
+- Use rc-zip-sync for zip extraction ([#1942](https://github.com/cargo-bins/cargo-binstall/pull/1942))
+
 ## [0.13.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.0...binstalk-downloader-v0.13.1) - 2024-08-12
 
 ### Other
