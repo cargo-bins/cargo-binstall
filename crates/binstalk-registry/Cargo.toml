@@ -29,13 +29,13 @@ serde_json = "1.0.107"
 sha2 = "0.10.7"
 simple-git = { version = "0.2.4", optional = true }
 tempfile = "3.5.0"
-thiserror = "1.0.61"
+thiserror = "1.0.68"
 tokio = { version = "1.35.0", features = [
     "rt",
     "sync",
 ], default-features = false }
 tracing = "0.1.39"
-url = "2.3.1"
+url = "2.5.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
