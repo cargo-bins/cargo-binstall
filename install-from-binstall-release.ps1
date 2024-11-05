@@ -1,7 +1,11 @@
 $ErrorActionPreference = "Stop"
 Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
-$base_url = "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
+$BINSTALL_VERSION = $Env:BINSTALL_VERSION
+if (-not $BINSTALL_VERSION) {
+    $BINSTALL_VERSION = 'latest'
+}
+$base_url = "https://github.com/cargo-bins/cargo-binstall/releases/$BINSTALL_VERSION/download/cargo-binstall-"
 $proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
 if ($proc_arch -eq "AMD64") {
 	$arch = "x86_64"
