@@ -50,7 +50,7 @@ serde_json = { version = "1.0.107", optional = true }
 #tar = "0.4.38"
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.5.0"
-thiserror = "1.0.61"
+thiserror = "1.0.68"
 tokio = { version = "1.35.0", features = [
     "macros",
     "rt-multi-thread",
@@ -65,7 +65,7 @@ hickory-resolver = { version = "0.25.0-alpha.2", optional = true, features = [
     "dnssec-ring",
 ] }
 once_cell = { version = "1.18.0", optional = true }
-url = "2.3.1"
+url = "2.5.3"
 
 xz2 = "0.1.7"
 
