@@ -9,7 +9,7 @@ base_url="https://github.com/cargo-bins/cargo-binstall/releases/latest/download/
 os="$(uname -s)"
 if [ "$os" == "Darwin" ]; then
     url="${base_url}universal-apple-darwin.zip"
-    curl -LO --proto '=https' --tlsv1.2 -sSf "$url"
+    curl -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -LO --proto '=https' --tlsv1.2 -sSf "$url"
     unzip cargo-binstall-universal-apple-darwin.zip
 elif [ "$os" == "Linux" ]; then
     machine="$(uname -m)"
@@ -22,12 +22,12 @@ elif [ "$os" == "Linux" ]; then
     fi
 
     url="${base_url}${target}.tgz"
-    curl -L --proto '=https' --tlsv1.2 -sSf "$url" | tar -xvzf -
+    curl -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -L --proto '=https' --tlsv1.2 -sSf "$url" | tar -xvzf -
 elif [ "${OS-}" = "Windows_NT" ]; then
     machine="$(uname -m)"
     target="${machine}-pc-windows-msvc"
     url="${base_url}${target}.zip"
-    curl -LO --proto '=https' --tlsv1.2 -sSf "$url"
+    curl -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -LO --proto '=https' --tlsv1.2 -sSf "$url"
     unzip "cargo-binstall-${target}.zip"
 else
     echo "Unsupported OS ${os}"
