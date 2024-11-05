@@ -2,9 +2,11 @@
 
 set -euxo pipefail
 
+BINSTALL_VERSION="${BINSTALL_VERSION:-latest}"
+
 cd "$(mktemp -d)"
 
-base_url="https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
+base_url="https://github.com/cargo-bins/cargo-binstall/releases/${BINSTALL_VERSION}/download/cargo-binstall-"
 
 os="$(uname -s)"
 if [ "$os" == "Darwin" ]; then
