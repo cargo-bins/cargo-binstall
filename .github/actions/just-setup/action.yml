@@ -22,7 +22,17 @@ runs:
     if: runner.os == 'macOS'
     run: sudo spctl developer-mode enable-terminal
     shell: bash
-        
+
+  - name: Enable transparent huge page
+    if: runner.os == 'Linux'
+    run: echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+    shell: bash
+
+  - name: Configure jemalloc (used by rustc) to use transparent huge page
+    if: runner.os == 'Linux'
+    run: echo "MALLOC_CONF=thp:always,metadata_thp:always" >> "$GITHUB_ENV"
+    shell: bash
+
   - name: Exclude workspace and cargo/rustup home from windows defender
     if: runner.os == 'Windows'
     run: |
@@ -40,11 +50,6 @@ runs:
     run: echo "tools=$tools,$inputs_tools" >>"$GITHUB_ENV"
     shell: bash
 
-  - name: Install tools
-    uses: taiki-e/install-action@v2
-    with:
-      tool: ${{ env.tools }}
-
   - name: Install rust toolchains
     run: just toolchain
     shell: bash
@@ -52,6 +57,11 @@ runs:
   - name: rustc version
     run: rustc -vV
     shell: bash
+    
+  - name: Install tools
+    uses: taiki-e/install-action@v2
+    with:
+      tool: ${{ env.tools }}
 
   - name: Retrieve RUSTFLAGS for caching
     if: inputs.indexcache || inputs.buildcache
@@ -133,14 +143,4 @@ runs:
     shell: bash
 
   - run: make -v
-    shell: bash
-
-  - name: Enable transparent huge page
-    if: runner.os == 'Linux'
-    run: echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
-    shell: bash
-
-  - name: Configure jemalloc (used by rustc) to use transparent huge page
-    if: runner.os == 'Linux'
-    run: echo "MALLOC_CONF=thp:always,metadata_thp:always" >> "$GITHUB_ENV"
     shell: bash
