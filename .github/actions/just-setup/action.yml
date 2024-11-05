@@ -50,6 +50,15 @@ runs:
     run: echo "tools=$tools,$inputs_tools" >>"$GITHUB_ENV"
     shell: bash
 
+  - name: Install rust toolchains for local
+    run: rustup toolchain install stable --no-self-update --profile minimal
+    shell: bash
+    
+  - name: Install tools
+    uses: taiki-e/install-action@v2
+    with:
+      tool: ${{ env.tools }}
+  
   - name: Install rust toolchains
     run: just toolchain
     shell: bash
@@ -57,11 +66,6 @@ runs:
   - name: rustc version
     run: rustc -vV
     shell: bash
-    
-  - name: Install tools
-    uses: taiki-e/install-action@v2
-    with:
-      tool: ${{ env.tools }}
 
   - name: Retrieve RUSTFLAGS for caching
     if: inputs.indexcache || inputs.buildcache
