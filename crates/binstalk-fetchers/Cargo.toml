@@ -1,6 +1,6 @@
 [package]
 name = "binstalk-fetchers"
-version = "0.10.2"
+version = "0.10.3"
 edition = "2021"
 
 description = "The binstall fetchers"
@@ -12,9 +12,9 @@ license = "GPL-3.0-only"
 
 [dependencies]
 async-trait = "0.1.68"
-binstalk-downloader = { version = "0.13.2", path = "../binstalk-downloader", default-features = false }
-binstalk-git-repo-api = { version = "0.5.4", path = "../binstalk-git-repo-api" }
-binstalk-types = { version = "0.9.0", path = "../binstalk-types" }
+binstalk-downloader = { version = "0.13.3", path = "../binstalk-downloader", default-features = false }
+binstalk-git-repo-api = { version = "0.5.5", path = "../binstalk-git-repo-api" }
+binstalk-types = { version = "0.9.1", path = "../binstalk-types" }
 bytes = "1.4.0"
 compact_str = { version = "0.8.0" }
 either = "1.11.0"
@@ -34,7 +34,7 @@ tracing = "0.1.39"
 url = "2.5.3"
 
 [dev-dependencies]
-binstalk-downloader = { version = "0.13.2", path = "../binstalk-downloader" }
+binstalk-downloader = { version = "0.13.3", path = "../binstalk-downloader" }
 
 [features]
 quickinstall = []
