@@ -56,6 +56,7 @@ runs:
       if [ "$RUNNER_OS" = "macOS" ]; then RUNNER_TARGET=aarch64-apple-darwin; fi
       if [ "$RUNNER_OS" = "Windows" ]; then RUNNER_TARGET=x86_64-pc-windows-msvc; fi
       echo "RUNNER_TARGET=$RUNNER_TARGET" >>"$GITHUB_ENV"
+    shell: bash
     
   - name: Install tools
     uses: taiki-e/install-action@v2
