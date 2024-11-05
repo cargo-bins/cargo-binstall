@@ -62,6 +62,7 @@ runs:
     uses: taiki-e/install-action@v2
     with:
       tool: ${{ env.tools }}
+    env:
       CARGO_BUILD_TARGET: ${{ env.RUNNER_TARGET }}
   
   - name: Install rust toolchains
