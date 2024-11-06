@@ -12,9 +12,6 @@ use crate::{
 };
 
 pub fn do_main() -> impl Termination {
-    // This must be the very first thing to happen
-    let jobserver_client = LazyJobserverClient::new();
-
     let (args, cli_overrides) = args::parse();
 
     if args.version {
@@ -53,6 +50,8 @@ rustc-llvm-version: {rustc_llvm_version}"#
         );
 
         let start = Instant::now();
+
+        let jobserver_client = LazyJobserverClient::new();
 
         let result =
             run_tokio_main(|| entry::install_crates(args, cli_overrides, jobserver_client));
