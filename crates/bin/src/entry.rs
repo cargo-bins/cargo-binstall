@@ -20,8 +20,10 @@ use binstalk::{
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
         CargoTomlFetchOverride, Options, Resolver,
     },
+    TARGET,
 };
 use binstalk_manifests::{
+    binstalk_manifests::crate_info::{CrateInfo, CrateSource},
     cargo_config::Config,
     cargo_toml_binstall::{PkgOverride, Strategy},
     crates_manifests::Manifests,
@@ -30,6 +32,7 @@ use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
+use semver::Version;
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
@@ -581,4 +584,42 @@ fn do_install_fetches_continue_on_failure(
 
         Ok(())
     })
+}
+
+pub fn self_install(
+    args: Args,
+    binary: &Path
+) -> Result<()> {
+    // Load .cargo/config.toml
+    let cargo_home = cargo_home().map_err(BinstallError::from)?;
+    let mut config = Config::load_from_path(cargo_home.join("config.toml"))?;
+
+    // Compute paths
+    let cargo_root = args.root;
+    let (install_path, mut manifests, temp_dir) = compute_paths_and_load_manifests(
+        cargo_root.clone(),
+        args.install_path,
+        args.no_track,
+        cargo_home,
+        &mut config,
+    )?;
+
+    // copy
+
+    if let Some(manifests) = manifests {
+        manifests.update(vec![CrateInfo {
+            name: CompactString::const_new("cargo-binstall"),
+            version_req: CompactString::const_new("*"),
+            current_version: Version::new(
+                env!("CARGO_PKG_VERSION_MAJOR"),
+                env!("CARGO_PKG_VERSION_MINOR"),
+                env!("CARGO_PKG_VERSION_PATCH"),
+            ),
+            source: CrateSource::cratesio_registry(),
+            target: CompactString::const_new(TARGET),
+            bins: vec![CompactString::const_new("cargo-binstall")],
+        }])?;
+    }
+
+    Ok(())
 }
