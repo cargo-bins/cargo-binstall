@@ -406,7 +406,7 @@ pub struct Args {
     pub(crate) quiet: bool,
 
     #[clap(long, hidden(true))]
-    pub(crate) self_install: bool,
+    pub(crate) self_install: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
