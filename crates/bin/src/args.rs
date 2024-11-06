@@ -406,7 +406,7 @@ pub struct Args {
     pub(crate) quiet: bool,
 
     #[clap(long, hidden(true))]
-    pub(crate) self_insall: bool,
+    pub(crate) self_install: bool,
 }
 
 #[derive(Debug, Clone)]
