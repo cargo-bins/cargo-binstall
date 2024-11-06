@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use atomic_file_install::atomic_install;
 use binstalk::{
     errors::{BinstallError, CrateContextError},
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
@@ -588,7 +589,6 @@ fn do_install_fetches_continue_on_failure(
 
 pub fn self_install(
     args: Args,
-    binary: &Path
 ) -> Result<()> {
     // Load .cargo/config.toml
     let cargo_home = cargo_home().map_err(BinstallError::from)?;
@@ -604,7 +604,12 @@ pub fn self_install(
         &mut config,
     )?;
 
-    // copy
+    let dest = install_path.join("cargo-binstall");
+    if cfg!(windows) {
+        assert!(dest.set_extension("exe"));
+    }
+
+    atomic_install(&env::current_exe()?, &dest)?;
 
     if let Some(manifests) = manifests {
         manifests.update(vec![CrateInfo {
