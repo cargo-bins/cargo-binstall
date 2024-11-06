@@ -404,6 +404,9 @@ pub struct Args {
     /// This would override the `log_level`.
     #[clap(help_heading = "Meta", short, long, conflicts_with("verbose"))]
     pub(crate) quiet: bool,
+
+    #[clap(long, hidden(true))]
+    pub(crate) self_insall: bool,
 }
 
 #[derive(Debug, Clone)]
