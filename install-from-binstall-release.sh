@@ -36,7 +36,7 @@ else
     exit 1
 fi
 
-./cargo-binstall -y --force cargo-binstall
+./cargo-binstall --self-install
 
 CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 
