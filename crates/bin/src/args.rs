@@ -405,7 +405,7 @@ pub struct Args {
     #[clap(help_heading = "Meta", short, long, conflicts_with("verbose"))]
     pub(crate) quiet: bool,
 
-    #[clap(long, hidden(true))]
+    #[clap(long, hide(true))]
     pub(crate) self_install: bool,
 }
 
