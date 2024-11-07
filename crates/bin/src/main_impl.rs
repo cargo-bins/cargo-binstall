@@ -43,6 +43,8 @@ rustc-llvm-version: {rustc_llvm_version}"#
             println!("{cargo_binstall_version}");
         }
         MainExit::Success(None)
+    } else if args.self_install {
+        MainExit::new(entry::self_install(), None)
     } else {
         logging(
             args.log_level.unwrap_or(LevelFilter::Info),
@@ -59,6 +61,6 @@ rustc-llvm-version: {rustc_llvm_version}"#
         let done = start.elapsed();
         debug!("run time: {done:?}");
 
-        MainExit::new(result, done)
+        MainExit::new(result, Some(done))
     }
 }
