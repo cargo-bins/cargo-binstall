@@ -24,7 +24,7 @@ use binstalk::{
     TARGET,
 };
 use binstalk_manifests::{
-    binstalk_manifests::crate_info::{CrateInfo, CrateSource},
+    crate_info::{CrateInfo, CrateSource},
     cargo_config::Config,
     cargo_toml_binstall::{PkgOverride, Strategy},
     crates_manifests::Manifests,
