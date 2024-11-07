@@ -609,16 +609,16 @@ pub fn self_install(
         assert!(dest.set_extension("exe"));
     }
 
-    atomic_install(&env::current_exe()?, &dest)?;
+    atomic_install(&env::current_exe()?, &dest).map_err(BinstallError::from)?;
 
     if let Some(manifests) = manifests {
         manifests.update(vec![CrateInfo {
             name: CompactString::const_new("cargo-binstall"),
             version_req: CompactString::const_new("*"),
             current_version: Version::new(
-                env!("CARGO_PKG_VERSION_MAJOR"),
-                env!("CARGO_PKG_VERSION_MINOR"),
-                env!("CARGO_PKG_VERSION_PATCH"),
+                env!("CARGO_PKG_VERSION_MAJOR").try_into().unwrap(),
+                env!("CARGO_PKG_VERSION_MINOR").try_into().unwrap(),
+                env!("CARGO_PKG_VERSION_PATCH").try_into().unwrap(),
             ),
             source: CrateSource::cratesio_registry(),
             target: CompactString::const_new(TARGET),
