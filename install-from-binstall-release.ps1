@@ -19,7 +19,7 @@ $url = "$base_url$arch-pc-windows-msvc.zip"
 Invoke-WebRequest $url -OutFile $tmpdir\cargo-binstall.zip
 Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall
 Write-Host ""
-Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe --self-install"
+Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall"
 Remove-Item -Force $tmpdir\cargo-binstall.zip
 Remove-Item -Recurse -Force $tmpdir\cargo-binstall
 $cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
