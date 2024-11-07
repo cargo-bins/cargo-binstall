@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.5...fs-lock-v0.1.6) - 2024-11-05
+
+### Other
+
+- *(deps)* bump the deps group with 3 updates ([#1954](https://github.com/cargo-bins/cargo-binstall/pull/1954))
+
 ## [0.1.5](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.4...fs-lock-v0.1.5) - 2024-10-12
 
 ### Other
