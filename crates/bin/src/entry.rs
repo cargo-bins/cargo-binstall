@@ -616,9 +616,9 @@ pub fn self_install(
             name: CompactString::const_new("cargo-binstall"),
             version_req: CompactString::const_new("*"),
             current_version: Version::new(
-                env!("CARGO_PKG_VERSION_MAJOR").try_into().unwrap(),
-                env!("CARGO_PKG_VERSION_MINOR").try_into().unwrap(),
-                env!("CARGO_PKG_VERSION_PATCH").try_into().unwrap(),
+                env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
+                env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(),
+                env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(),
             ),
             source: CrateSource::cratesio_registry(),
             target: CompactString::const_new(TARGET),
