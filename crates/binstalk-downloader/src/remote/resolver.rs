@@ -9,7 +9,7 @@ use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
-use hickory_resolver::config::{NameServerConfig, Protocol};
+use hickory_resolver::{config::NameServerConfig, proto::xfer::Protocol};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -53,6 +53,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
                 #[cfg(feature = "rustls")]
                 tls_config: None,
                 bind_addr: None,
+                http_endpoint: None,
             })
         }
     });

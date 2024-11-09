@@ -35,7 +35,7 @@ simple-git = { version = "0.2.10", optional = true }
 strum = "0.26.1"
 target-lexicon = { version = "0.12.11", features = ["std"] }
 tempfile = "3.5.0"
-thiserror = "1.0.68"
+thiserror = "2.0.1"
 tokio = { version = "1.35.0", features = [
     "rt",
     "process",
