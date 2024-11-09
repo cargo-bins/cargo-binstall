@@ -52,7 +52,7 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         value_name = "crate[@version]",
-        required_unless_present_any = ["version", "help"],
+        required_unless_present_any = ["version", "self_install", "help"],
     )]
     pub(crate) crate_names: Vec<CrateName>,
 
@@ -404,6 +404,9 @@ pub struct Args {
     /// This would override the `log_level`.
     #[clap(help_heading = "Meta", short, long, conflicts_with("verbose"))]
     pub(crate) quiet: bool,
+
+    #[clap(long, hide(true))]
+    pub(crate) self_install: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -514,6 +517,10 @@ pub fn parse() -> (Args, PkgOverride) {
 
     // Load options
     let mut opts = Args::parse_from(args);
+
+    if opts.self_install {
+        return (opts, Default::default());
+    }
 
     if opts.log_level.is_none() {
         if let Some(log) = env::var("BINSTALL_LOG_LEVEL")

@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use atomic_file_install::atomic_install;
 use binstalk::{
     errors::{BinstallError, CrateContextError},
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
@@ -20,16 +21,20 @@ use binstalk::{
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
         CargoTomlFetchOverride, Options, Resolver,
     },
+    TARGET,
 };
 use binstalk_manifests::{
     cargo_config::Config,
     cargo_toml_binstall::{PkgOverride, Strategy},
+    crate_info::{CrateInfo, CrateSource},
     crates_manifests::Manifests,
 };
+use compact_str::CompactString;
 use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
+use semver::Version;
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
@@ -581,4 +586,45 @@ fn do_install_fetches_continue_on_failure(
 
         Ok(())
     })
+}
+
+pub fn self_install(args: Args) -> Result<()> {
+    // Load .cargo/config.toml
+    let cargo_home = cargo_home().map_err(BinstallError::from)?;
+    let mut config = Config::load_from_path(cargo_home.join("config.toml"))?;
+
+    // Compute paths
+    let cargo_root = args.root;
+    let (install_path, manifests, _) = compute_paths_and_load_manifests(
+        cargo_root.clone(),
+        args.install_path,
+        args.no_track,
+        cargo_home,
+        &mut config,
+    )?;
+
+    let mut dest = install_path.join("cargo-binstall");
+    if cfg!(windows) {
+        assert!(dest.set_extension("exe"));
+    }
+
+    atomic_install(&env::current_exe().map_err(BinstallError::from)?, &dest)
+        .map_err(BinstallError::from)?;
+
+    if let Some(manifests) = manifests {
+        manifests.update(vec![CrateInfo {
+            name: CompactString::const_new("cargo-binstall"),
+            version_req: CompactString::const_new("*"),
+            current_version: Version::new(
+                env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
+                env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(),
+                env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(),
+            ),
+            source: CrateSource::cratesio_registry(),
+            target: CompactString::const_new(TARGET),
+            bins: vec![CompactString::const_new("cargo-binstall")],
+        }])?;
+    }
+
+    Ok(())
 }
