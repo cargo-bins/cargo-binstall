@@ -52,7 +52,7 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         value_name = "crate[@version]",
-        required_unless_present_any = ["version", "help"],
+        required_unless_present_any = ["version", "self_install", "help"],
     )]
     pub(crate) crate_names: Vec<CrateName>,
 
