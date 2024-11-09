@@ -9,7 +9,7 @@ use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
-use hickory_resolver::config::{NameServerConfig, Protocol};
+use hickory_resolver::{config::NameServerConfig, xfer::Protocol};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
