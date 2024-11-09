@@ -1,6 +1,6 @@
 [package]
 name = "cargo-toml-workspace"
-version = "6.0.2"
+version = "6.0.3"
 edition = "2021"
 description = "Parse cargo workspace and load specific crate"
 repository = "https://github.com/cargo-bins/cargo-binstall"
