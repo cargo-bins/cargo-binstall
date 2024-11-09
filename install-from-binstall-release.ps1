@@ -20,8 +20,9 @@ Invoke-WebRequest $url -OutFile $tmpdir\cargo-binstall.zip
 Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall
 Write-Host ""
 
-Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe --self-install"
-if (-not $?) {
+Try {
+    Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe --self-install"
+} Catch { 
     Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall"
 }
 
