@@ -518,6 +518,10 @@ pub fn parse() -> (Args, PkgOverride) {
     // Load options
     let mut opts = Args::parse_from(args);
 
+    if opts.self_install {
+        return (opts, Default::default());
+    }
+
     if opts.log_level.is_none() {
         if let Some(log) = env::var("BINSTALL_LOG_LEVEL")
             .ok()
