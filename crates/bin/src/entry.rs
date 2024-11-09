@@ -24,9 +24,9 @@ use binstalk::{
     TARGET,
 };
 use binstalk_manifests::{
-    crate_info::{CrateInfo, CrateSource},
     cargo_config::Config,
     cargo_toml_binstall::{PkgOverride, Strategy},
+    crate_info::{CrateInfo, CrateSource},
     crates_manifests::Manifests,
 };
 use compact_str::CompactString;
@@ -588,9 +588,7 @@ fn do_install_fetches_continue_on_failure(
     })
 }
 
-pub fn self_install(
-    args: Args,
-) -> Result<()> {
+pub fn self_install(args: Args) -> Result<()> {
     // Load .cargo/config.toml
     let cargo_home = cargo_home().map_err(BinstallError::from)?;
     let mut config = Config::load_from_path(cargo_home.join("config.toml"))?;
@@ -610,7 +608,8 @@ pub fn self_install(
         assert!(dest.set_extension("exe"));
     }
 
-    atomic_install(&env::current_exe().map_err(BinstallError::from)?, &dest).map_err(BinstallError::from)?;
+    atomic_install(&env::current_exe().map_err(BinstallError::from)?, &dest)
+        .map_err(BinstallError::from)?;
 
     if let Some(manifests) = manifests {
         manifests.update(vec![CrateInfo {
