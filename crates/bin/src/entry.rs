@@ -29,6 +29,7 @@ use binstalk_manifests::{
     cargo_toml_binstall::{PkgOverride, Strategy},
     crates_manifests::Manifests,
 };
+use compact_str::CompactString;
 use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
@@ -609,7 +610,7 @@ pub fn self_install(
         assert!(dest.set_extension("exe"));
     }
 
-    atomic_install(&env::current_exe()?, &dest).map_err(BinstallError::from)?;
+    atomic_install(&env::current_exe().map_err(BinstallError::from)?, &dest).map_err(BinstallError::from)?;
 
     if let Some(manifests) = manifests {
         manifests.update(vec![CrateInfo {
