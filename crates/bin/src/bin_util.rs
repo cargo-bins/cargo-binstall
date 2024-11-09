@@ -37,12 +37,11 @@ impl Termination for MainExit {
 
 impl MainExit {
     pub fn new(res: Result<()>, done: Option<Duration>) -> Self {
-        res.map(|()| MainExit::Success(done))
-            .unwrap_or_else(|err| {
-                err.downcast::<BinstallError>()
-                    .map(MainExit::Error)
-                    .unwrap_or_else(MainExit::Report)
-            })
+        res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
+            err.downcast::<BinstallError>()
+                .map(MainExit::Error)
+                .unwrap_or_else(MainExit::Report)
+        })
     }
 }
 
