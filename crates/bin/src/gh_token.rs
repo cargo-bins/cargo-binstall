@@ -59,12 +59,7 @@ impl CommandExt for Command {
         let mut child = self.spawn()?;
 
         if let Some(input) = input {
-            child
-                .stdin
-                .take()
-                .expect("Failed to open stdin")
-                .write_all(input)
-                .await?;
+            child.stdin.take().unwrap().write_all(input).await?;
         }
 
         let Output { status, stdout, .. } = child.wait_with_output().await?;
