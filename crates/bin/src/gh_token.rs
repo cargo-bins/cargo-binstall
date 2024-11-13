@@ -5,73 +5,100 @@ use std::{
 };
 
 use tokio::{io::AsyncWriteExt, process::Command};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 pub(super) async fn get() -> io::Result<Zeroizing<Box<str>>> {
-    // Prepare the input for the git credential fill command
-    let input = "host=github.com\nprotocol=https";
-
-    let Output { status, stdout, .. } = Command::new("git")
-        .args(["credential", "fill"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output_async_with_stdin(input.as_bytes())
+    let output = Command::new("gh")
+        .args(["auth", "token"])
+        .stdout_with_optional_input(None)
         .await?;
 
-    let stdout = Zeroizing::new(stdout);
-
-    if !status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("process exited with `{status}`"),
-        ));
+    if !output.is_empty() {
+        return Ok(output);
     }
 
-    // Assuming the password field is what's needed
-    let output_str = str::from_utf8(&stdout).map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid output, expected utf8: {err}"),
-        )
-    })?;
-
-    // Extract the password from the output
-    let password = output_str
+    Command::new("git")
+        .args(["credential", "fill"])
+        .stdout_with_optional_input(Some("host=github.com\nprotocol=https".as_bytes()))
+        .await?
         .lines()
         .find_map(|line| {
-            if line.starts_with("password=") {
-                Some(line.trim_start_matches("password=").to_owned())
-            } else {
-                None
-            }
+            line.trim()
+                .strip_prefix("password=")
+                .map(|token| Zeroizing::new(token.into()))
         })
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::Other,
-                "Password not found in the credential output",
+                "Password not found in `git credential fill` output",
             )
-        })?;
-
-    Ok(Zeroizing::new(password.into()))
+        })
 }
 
 trait CommandExt {
-    // Helper function to execute a command with input
-    async fn output_async_with_stdin(&mut self, input: &[u8]) -> io::Result<Output>;
+    // Helper function to execute a command, optionally with input
+    async fn stdout_with_optional_input(
+        &mut self,
+        input: Option<&[u8]>,
+    ) -> io::Result<Zeroizing<Box<str>>>;
 }
 
 impl CommandExt for Command {
-    async fn output_async_with_stdin(&mut self, input: &[u8]) -> io::Result<Output> {
+    async fn stdout_with_optional_input(
+        &mut self,
+        input: Option<&[u8]>,
+    ) -> io::Result<Zeroizing<Box<str>>> {
+        self.stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            });
+
         let mut child = self.spawn()?;
 
-        child
-            .stdin
-            .take()
-            .expect("Failed to open stdin")
-            .write_all(input)
-            .await?;
+        if let Some(input) = input {
+            child
+                .stdin
+                .take()
+                .expect("Failed to open stdin")
+                .write_all(input)
+                .await?;
+        }
 
-        child.wait_with_output().await
+        let Output { status, stdout, .. } = child.wait_with_output().await?;
+
+        if status.success() {
+            let s = String::from_utf8(stdout).map_err(|err| {
+                let msg = format!(
+                    "Invalid output for `{:?}`, expected utf8: {err}",
+                    self.as_std()
+                );
+
+                zeroize_and_drop(err.into_bytes());
+
+                io::Error::new(io::ErrorKind::InvalidData, msg)
+            })?;
+
+            let trimmed = s.trim();
+
+            Ok(if trimmed.len() == s.len() {
+                Zeroizing::new(s.into_boxed_str())
+            } else {
+                Zeroizing::new(trimmed.into())
+            })
+        } else {
+            zeroize_and_drop(stdout);
+
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("`{:?}` process exited with `{status}`", self.as_std()),
+            ))
+        }
     }
+}
+
+fn zeroize_and_drop(mut bytes: Vec<u8>) {
+    bytes.zeroize();
 }
