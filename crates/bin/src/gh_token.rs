@@ -4,7 +4,7 @@ use std::{
     str,
 };
 
-use tokio::process::Command;
+use tokio::{io::AsyncWriteExt, process::Command};
 use zeroize::Zeroizing;
 
 pub(super) async fn get() -> io::Result<Zeroizing<Box<str>>> {
@@ -56,18 +56,22 @@ pub(super) async fn get() -> io::Result<Zeroizing<Box<str>>> {
     Ok(Zeroizing::new(password.into()))
 }
 
-// Helper function to execute a command with input
-async fn output_async_with_stdin(
-    cmd: &mut Command,
-    input: &[u8],
-) -> io::Result<Output> {
-    let mut child = cmd.spawn()?;
-    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+trait CommandExt {
+    // Helper function to execute a command with input
+    async fn output_async_with_stdin(&mut self, input: &[u8]) -> io::Result<Output>;
+}
 
-    tokio::spawn(async move {
-        use tokio::io::AsyncWriteExt;
-        let _ = stdin.write_all(input).await;
-    });
+impl CommandExt for Command {
+    async fn output_async_with_stdin(&mut self, input: &[u8]) -> io::Result<Output> {
+        let mut child = self.spawn()?;
 
-    child.wait_with_output().await
+        child
+            .stdin
+            .take()
+            .expect("Failed to open stdin")
+            .write_all(input)
+            .await?;
+
+        child.wait_with_output().await
+    }
 }
