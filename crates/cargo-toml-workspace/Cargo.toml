@@ -14,8 +14,8 @@ cargo_toml = "0.20.0"
 compact_str = { version = "0.8.0", features = ["serde"] }
 glob = "0.3.1"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
-serde = "1.0.163"
-thiserror = "2.0.1"
+serde = "1.0.215"
+thiserror = "2.0.3"
 tracing = "0.1.39"
 
 [dev-dependencies]

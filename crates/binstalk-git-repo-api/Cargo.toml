@@ -15,10 +15,10 @@ binstalk-downloader = { version = "0.13.4", path = "../binstalk-downloader", def
 ] }
 compact_str = "0.8.0"
 percent-encoding = "2.2.0"
-serde = { version = "1.0.163", features = ["derive"] }
+serde = { version = "1.0.215", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
 serde_json = { version = "1.0.107" }
-thiserror = "2.0.1"
+thiserror = "2.0.3"
 tokio = { version = "1.35.0", features = ["sync"], default-features = false }
 tracing = "0.1.39"
 url = "2.5.3"

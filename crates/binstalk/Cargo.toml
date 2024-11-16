@@ -27,7 +27,7 @@ detect-targets = { version = "0.1.28", path = "../detect-targets", features = [
 either = "1.11.0"
 itertools = "0.13.0"
 jobslot = { version = "0.2.11", features = ["tokio"] }
-leon = "3.0.0"
+leon = "3.0.2"
 maybe-owned = "0.3.4"
 miette = "7.0.0"
 semver = { version = "1.0.17", features = ["serde"] }
@@ -35,7 +35,7 @@ simple-git = { version = "0.2.10", optional = true }
 strum = "0.26.1"
 target-lexicon = { version = "0.12.11", features = ["std"] }
 tempfile = "3.5.0"
-thiserror = "2.0.1"
+thiserror = "2.0.3"
 tokio = { version = "1.35.0", features = [
     "rt",
     "process",

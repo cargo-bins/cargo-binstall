@@ -10,7 +10,7 @@ license = "Apache-2.0 OR MIT"
 rust-version = "1.65.0"
 
 [dependencies]
-reflink-copy = "0.1.15"
+reflink-copy = "0.1.20"
 tempfile = "3.5.0"
 tracing = "0.1.39"
 
