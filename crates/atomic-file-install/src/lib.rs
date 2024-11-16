@@ -33,6 +33,7 @@ fn copy_to_tempfile(src: &Path, dst: &Path) -> io::Result<NamedTempFile> {
         src.display(),
         tempfile.path().display()
     );
+    fs::remove_file(tempfile.path())?;
     // src and dst is likely to be on the same filesystem.
     // Uses reflink if the fs support it, or fallback to
     // `fs::copy` if it doesn't support it or it is not on the
