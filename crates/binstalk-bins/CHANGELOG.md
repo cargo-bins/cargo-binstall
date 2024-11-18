@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.6.3...binstalk-bins-v0.6.4) - 2024-11-18
+
+### Other
+
+- updated the following local packages: atomic-file-install
+
 ## [0.6.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.6.2...binstalk-bins-v0.6.3) - 2024-11-09
 
 ### Other
