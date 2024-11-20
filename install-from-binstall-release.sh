@@ -2,11 +2,21 @@
 
 set -euxo pipefail
 
-BINSTALL_VERSION="${BINSTALL_VERSION:-latest}"
+if [[ -n "${BINSTALL_VERSION:-}" && "$BINSTALL_VERSION" != v* ]]; then
+    # prefix version with v
+    BINSTALL_VERSION="v$BINSTALL_VERSION"
+fi
 
 cd "$(mktemp -d)"
 
-base_url="https://github.com/cargo-bins/cargo-binstall/releases/${BINSTALL_VERSION}/download/cargo-binstall-"
+# Fetch binaries from `[..]/releases/latest/download/[..]` if _no_ version is
+# given, otherwise from `[..]/releases/download/VERSION/[..]`. Note the shifted
+# location of '/download'.
+if [[ -z "${BINSTALL_VERSION:-}" ]]; then
+    base_url="https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
+else
+    base_url="https://github.com/cargo-bins/cargo-binstall/releases/download/${BINSTALL_VERSION}/cargo-binstall-"
+fi
 
 os="$(uname -s)"
 if [ "$os" == "Darwin" ]; then

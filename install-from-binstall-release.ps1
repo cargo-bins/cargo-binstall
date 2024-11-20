@@ -2,10 +2,19 @@ $ErrorActionPreference = "Stop"
 Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
 $BINSTALL_VERSION = $Env:BINSTALL_VERSION
-if (-not $BINSTALL_VERSION) {
-    $BINSTALL_VERSION = 'latest'
+if ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
+    # prefix version with v
+    $BINSTALL_VERSION = "v$BINSTALL_VERSION"
 }
-$base_url = "https://github.com/cargo-bins/cargo-binstall/releases/$BINSTALL_VERSION/download/cargo-binstall-"
+# Fetch binaries from `[..]/releases/latest/download/[..]` if _no_ version is
+# given, otherwise from `[..]/releases/download/VERSION/[..]`. Note the shifted
+# location of '/download'.
+$base_url = if (-not $BINSTALL_VERSION) {
+    "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
+} else {
+    "https://github.com/cargo-bins/cargo-binstall/releases/download/$BINSTALL_VERSION/cargo-binstall-"
+}
+
 $proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
 if ($proc_arch -eq "AMD64") {
 	$arch = "x86_64"

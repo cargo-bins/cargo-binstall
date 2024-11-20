@@ -31,6 +31,7 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest]
         set_cargo_home: [t, f]
+        set_binstall_version: ['no', 'with-v', 'without-v']
 
     runs-on: ${{ matrix.os }}
 
@@ -43,6 +44,18 @@ jobs:
           CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
           mkdir -p "${CARGO_HOME}/bin"
           echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+
+      - name: Set `BINSTALL_VERSION`
+        if: matrix.set_binstall_version != 'no'
+        env:
+          STRIP_V: ${{ matrix.set_cargo_home }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # fetch most recent release tag.
+          BINSTALL_VERSION="$(gh release list --json name --jq '[.[] | select(.name | startswith("v")) | .name] | first')"
+          if [[ $STRIP_V == 'without-v' ]]; then BINSTALL_VERSION="${BINSTALL_VERSION#v*}"; fi
+          echo "Setting BINSTALL_VERSION=$BINSTALL_VERSION"
+          echo "BINSTALL_VERSION=$BINSTALL_VERSION" >> "$GITHUB_ENV"
 
       - name: Install `cargo-binstall` using scripts
         run: ./install-from-binstall-release.sh
@@ -59,6 +72,7 @@ jobs:
       fail-fast: false
       matrix:
         set_cargo_home: [t, f]
+        set_binstall_version: ['no', 'with-v', 'without-v']
 
     runs-on: windows-latest
 
@@ -72,6 +86,19 @@ jobs:
           CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
           mkdir -p "${CARGO_HOME}/bin"
           echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+
+      - name: Set `BINSTALL_VERSION`
+        if: matrix.set_binstall_version != 'no'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STRIP_V: ${{ matrix.set_cargo_home }}
+        run: |
+          # fetch most recent release name.
+          BINSTALL_VERSION="$(gh release list --json name --jq '[.[] | select(.name | startswith("v")) | .name] | first')"
+          if [[ $STRIP_V == 'without-v' ]]; then BINSTALL_VERSION="${BINSTALL_VERSION#v*}"; fi
+          echo "Setting BINSTALL_VERSION=$BINSTALL_VERSION"
+          echo "BINSTALL_VERSION=$BINSTALL_VERSION" >> "$GITHUB_ENV"
 
       - name: Install `cargo-binstall` using scripts
         run: ./install-from-binstall-release.ps1
@@ -86,6 +113,7 @@ jobs:
       fail-fast: false
       matrix:
         set_cargo_home: [t, f]
+        set_binstall_version: ['no', 'with-v', 'without-v']
 
     runs-on: windows-latest
 
@@ -99,6 +127,19 @@ jobs:
           CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
           mkdir -p "${CARGO_HOME}/bin"
           echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+
+      - name: Set `BINSTALL_VERSION`
+        if: matrix.set_binstall_version != 'no'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STRIP_V: ${{ matrix.set_cargo_home }}
+        run: |
+          # fetch most recent release name.
+          BINSTALL_VERSION="$(gh release list --json name --jq '[.[] | select(.name | startswith("v")) | .name] | first')"
+          if [[ $STRIP_V == 'without-v' ]]; then BINSTALL_VERSION="${BINSTALL_VERSION#v*}"; fi
+          echo "Setting BINSTALL_VERSION=$BINSTALL_VERSION"
+          echo "BINSTALL_VERSION=$BINSTALL_VERSION" >> "$GITHUB_ENV"
 
       - name: Install `cargo-binstall` using scripts
         shell: bash
