@@ -10,12 +10,14 @@ on:
     paths:
       - install-from-binstall-release.ps1
       - install-from-binstall-release.sh
+      - .github/workflows/install-script.yml
   push:
     branches:
       - main
     paths:
       - install-from-binstall-release.ps1
       - install-from-binstall-release.sh
+      - .github/workflows/install-script.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}
@@ -48,7 +50,7 @@ jobs:
       - name: Set `BINSTALL_VERSION`
         if: matrix.set_binstall_version != 'no'
         env:
-          STRIP_V: ${{ matrix.set_cargo_home }}
+          STRIP_V: ${{ matrix.set_binstall_version }}
           GH_TOKEN: ${{ github.token }}
         run: |
           # fetch most recent release tag.
@@ -92,7 +94,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          STRIP_V: ${{ matrix.set_cargo_home }}
+          STRIP_V: ${{ matrix.set_binstall_version }}
         run: |
           # fetch most recent release name.
           BINSTALL_VERSION="$(gh release list --json name --jq '[.[] | select(.name | startswith("v")) | .name] | first')"
@@ -133,7 +135,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          STRIP_V: ${{ matrix.set_cargo_home }}
+          STRIP_V: ${{ matrix.set_binstall_version }}
         run: |
           # fetch most recent release name.
           BINSTALL_VERSION="$(gh release list --json name --jq '[.[] | select(.name | startswith("v")) | .name] | first')"
