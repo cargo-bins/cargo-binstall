@@ -31,7 +31,7 @@ tokio = { version = "1.35.0", features = [
     "sync",
 ], default-features = false }
 tracing = "0.1.39"
-url = "2.5.3"
+url = "2.5.4"
 
 [dev-dependencies]
 binstalk-downloader = { version = "0.13.4", path = "../binstalk-downloader" }

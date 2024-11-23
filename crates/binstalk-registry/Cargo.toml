@@ -35,7 +35,7 @@ tokio = { version = "1.35.0", features = [
     "sync",
 ], default-features = false }
 tracing = "0.1.39"
-url = "2.5.3"
+url = "2.5.4"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
