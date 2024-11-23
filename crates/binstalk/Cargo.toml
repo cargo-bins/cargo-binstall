@@ -43,7 +43,7 @@ tokio = { version = "1.35.0", features = [
     "time",
 ], default-features = false }
 tracing = "0.1.39"
-url = { version = "2.5.3", features = ["serde"] }
+url = { version = "2.5.4", features = ["serde"] }
 zeroize = "1.8.1"
 
 [features]
