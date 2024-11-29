@@ -14,8 +14,14 @@ on:
       - opened
       - reopened
       - synchronize
-  schedule:
-    - cron: "0 3 * * 6"
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - '**/Cargo.toml'
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}-${{ inputs.additional_key }}
