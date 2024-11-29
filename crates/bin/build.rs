@@ -17,7 +17,9 @@ fn main() {
         println!("cargo:rerun-if-changed=manifest.rc");
         println!("cargo:rerun-if-changed=windows.manifest");
 
-        embed_resource::compile("manifest.rc", embed_resource::NONE);
+        embed_resource::compile("manifest.rc", embed_resource::NONE)
+            .manifest_required()
+            .unwrap();
     });
 
     let git = Command::new("git").arg("--version").spawn();
