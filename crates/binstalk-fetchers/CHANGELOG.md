@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.6](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.5...binstalk-fetchers-v0.10.6) - 2024-11-29
+
+### Other
+
+- Upgrade transitive dependencies ([#1985](https://github.com/cargo-bins/cargo-binstall/pull/1985))
+
 ## [0.10.5](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.4...binstalk-fetchers-v0.10.5) - 2024-11-23
 
 ### Other
