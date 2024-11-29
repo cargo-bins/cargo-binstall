@@ -75,7 +75,7 @@ impl MinisignVerifier {
 
 pub struct MinisignDataVerifier<'a>(StreamVerifier<'a>);
 
-impl<'a> DataVerifier for MinisignDataVerifier<'a> {
+impl DataVerifier for MinisignDataVerifier<'_> {
     fn update(&mut self, data: &Bytes) {
         self.0.update(data);
     }
