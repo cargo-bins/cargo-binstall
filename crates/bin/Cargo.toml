@@ -43,7 +43,7 @@ tokio = { version = "1.35.0", features = ["rt-multi-thread", "signal"], default-
 tracing-core = "0.1.32"
 tracing = { version = "0.1.39", default-features = false }
 tracing-log = { version = "0.2.0", default-features = false }
-tracing-subscriber = { version = "0.3.17", features = ["fmt", "json", "ansi"], default-features = false }
+tracing-subscriber = { version = "0.3.19", features = ["fmt", "json", "ansi"], default-features = false }
 zeroize = "1.8.1"
 
 [build-dependencies]
