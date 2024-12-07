@@ -256,7 +256,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.15"
+version = "0.28.16"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -381,7 +381,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.15.12"
+version = "0.15.13"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -402,7 +402,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.11.5"
+version = "0.11.6"
 dependencies = [
  "async-trait",
  "base16",
@@ -602,7 +602,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-toml-workspace"
-version = "6.0.3"
+version = "7.0.0"
 dependencies = [
  "cargo_toml",
  "compact_str",
@@ -927,7 +927,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.31"
+version = "0.1.32"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -939,7 +939,7 @@ dependencies = [
 
 [[package]]
 name = "detect-wasi"
-version = "1.0.14"
+version = "1.0.15"
 dependencies = [
  "tempfile",
 ]
@@ -1157,7 +1157,7 @@ dependencies = [
 
 [[package]]
 name = "fs-lock"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "fs4",
 ]

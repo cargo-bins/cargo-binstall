@@ -3,7 +3,7 @@ name = "binstalk"
 description = "The binstall toolkit (library interface)"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk"
-version = "0.28.15"
+version = "0.28.16"
 rust-version = "1.79.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -16,12 +16,12 @@ binstalk-git-repo-api = { version = "0.5.7", path = "../binstalk-git-repo-api" }
 binstalk-fetchers = { version = "0.10.6", path = "../binstalk-fetchers", features = [
     "quickinstall",
 ] }
-binstalk-registry = { version = "0.11.5", path = "../binstalk-registry" }
+binstalk-registry = { version = "0.11.6", path = "../binstalk-registry" }
 binstalk-types = { version = "0.9.2", path = "../binstalk-types" }
-cargo-toml-workspace = { version = "6.0.3", path = "../cargo-toml-workspace" }
+cargo-toml-workspace = { version = "7.0.0", path = "../cargo-toml-workspace" }
 command-group = { version = "5.0.1", features = ["with-tokio"] }
 compact_str = { version = "0.8.0", features = ["serde"] }
-detect-targets = { version = "0.1.31", path = "../detect-targets", features = [
+detect-targets = { version = "0.1.32", path = "../detect-targets", features = [
     "tracing",
 ] }
 either = "1.11.0"
