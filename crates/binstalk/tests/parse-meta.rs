@@ -24,7 +24,7 @@ fn parse_meta() {
         &[Product {
             name: Some("cargo-binstall".to_string()),
             path: Some("src/main.rs".to_string()),
-            edition: Edition::E2021,
+            edition: Some(Edition::E2021),
             ..Default::default()
         },],
     );
