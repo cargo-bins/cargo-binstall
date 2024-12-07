@@ -602,7 +602,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-toml-workspace"
-version = "6.0.4"
+version = "7.0.0"
 dependencies = [
  "cargo_toml",
  "compact_str",

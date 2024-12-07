@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [6.0.4](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v6.0.3...cargo-toml-workspace-v6.0.4) - 2024-12-07
+## [7.0.0](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v6.0.3...cargo-toml-workspace-v7.0.0) - 2024-12-07
 
 ### Other
 
