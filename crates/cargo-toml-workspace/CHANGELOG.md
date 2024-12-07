@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.4](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v6.0.3...cargo-toml-workspace-v6.0.4) - 2024-12-07
+
+### Other
+
+- *(deps)* bump the deps group with 3 updates ([#1993](https://github.com/cargo-bins/cargo-binstall/pull/1993))
+
 ## [6.0.3](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v6.0.2...cargo-toml-workspace-v6.0.3) - 2024-11-09
 
 ### Other
