@@ -1,6 +1,6 @@
 [package]
 name = "binstalk-bins"
-version = "0.6.5"
+version = "0.6.6"
 edition = "2021"
 
 description = "The binstall binaries discovery and installation crate."
