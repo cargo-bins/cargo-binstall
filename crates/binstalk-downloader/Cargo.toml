@@ -20,7 +20,7 @@ async-compression = { version = "0.4.4", features = [
 ] }
 binstalk-types = { version = "0.9.2", path = "../binstalk-types" }
 bytes = "1.4.0"
-bzip2 = "0.4.4"
+bzip2 = "0.5.0"
 cfg-if = "1"
 compact_str = "0.8.0"
 flate2 = { version = "1.0.28", default-features = false }
@@ -50,7 +50,7 @@ serde_json = { version = "1.0.107", optional = true }
 #tar = "0.4.38"
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.5.0"
-thiserror = "2.0.1"
+thiserror = "2.0.7"
 tokio = { version = "1.35.0", features = [
     "macros",
     "rt-multi-thread",
