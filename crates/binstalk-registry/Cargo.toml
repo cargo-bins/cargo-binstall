@@ -11,7 +11,7 @@ authors = ["Jiahao_XU@outlook <Jiahao_XU@outlook.com>"]
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-async-trait = "0.1.68"
+async-trait = "0.1.84"
 base16 = "0.2.1"
 binstalk-downloader = { version = "0.13.6", path = "../binstalk-downloader", default-features = false, features = [
     "json",

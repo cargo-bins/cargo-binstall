@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-async-trait = "0.1.68"
+async-trait = "0.1.84"
 async-compression = { version = "0.4.4", features = [
     "gzip",
     "zstd",
