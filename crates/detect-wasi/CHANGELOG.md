@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.18](https://github.com/cargo-bins/cargo-binstall/compare/detect-wasi-v1.0.17...detect-wasi-v1.0.18) - 2025-01-04
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [1.0.17](https://github.com/cargo-bins/cargo-binstall/compare/detect-wasi-v1.0.16...detect-wasi-v1.0.17) - 2024-12-28
 
 ### Other
