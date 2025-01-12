@@ -3589,9 +3589,9 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.21"
+version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a076c8c302cbd01e62bd6c2f74fc4913c3131aa6fa72dae78047f5535e4fc88"
+checksum = "0a7aea22fc8204e0f291719120cbcdae4f25f0807d7b00f5b6b27d95a8f1a2ad"
 dependencies = [
  "cfg-if",
  "rustix",
