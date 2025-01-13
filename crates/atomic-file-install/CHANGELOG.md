@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.8](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.7...atomic-file-install-v1.0.8) - 2025-01-13
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [1.0.7](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.6...atomic-file-install-v1.0.7) - 2025-01-11
 
 ### Other
