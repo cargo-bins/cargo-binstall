@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.12](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.11...binstalk-git-repo-api-v0.5.12) - 2025-01-19
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.5.11](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.10...binstalk-git-repo-api-v0.5.11) - 2025-01-13
 
 ### Other
