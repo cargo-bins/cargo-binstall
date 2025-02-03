@@ -86,13 +86,17 @@ pub struct Client(Arc<Inner>);
 
 #[cfg_attr(not(feature = "__tls"), allow(unused_variables, unused_mut))]
 impl Client {
-    /// * `per_millis` - The duration (in millisecond) for which at most
-    ///   `num_request` can be sent, itcould be increased if rate-limit
-    ///   happens.
-    /// * `num_request` - maximum number of requests to be processed for
-    ///   each `per` duration.
+    /// Construct a new downloader client
     ///
-    /// The Client created would use at least tls 1.2
+    /// * `per_millis` - The duration (in millisecond) for which at most
+    ///   `num_request` can be sent. Increase it if rate-limit errors
+    ///   happen.
+    /// * `num_request` - maximum number of requests to be processed for
+    ///   each `per_millis` duration.
+    ///
+    /// The [`reqwest::Client`] constructed has secure defaults, such as allowing
+    /// only TLS v1.2 and above, and disallowing plaintext HTTP altogether. If you
+    /// need more control, use the `from_builder` variant.
     pub fn new(
         user_agent: impl AsRef<str>,
         min_tls: Option<TLSVersion>,
@@ -100,55 +104,67 @@ impl Client {
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
     ) -> Result<Self, Error> {
-        fn inner(
-            user_agent: &str,
-            min_tls: Option<TLSVersion>,
-            per_millis: NonZeroU16,
-            num_request: NonZeroU64,
-            certificates: &mut dyn Iterator<Item = Certificate>,
-        ) -> Result<Client, Error> {
-            let mut builder = reqwest::ClientBuilder::new()
-                .user_agent(user_agent)
-                .https_only(true)
-                .tcp_nodelay(false);
-
-            #[cfg(feature = "hickory-dns")]
-            {
-                builder = builder.dns_resolver(Arc::new(TrustDnsResolver::default()));
-            }
-
-            #[cfg(feature = "__tls")]
-            {
-                let tls_ver = min_tls
-                    .map(|tls| tls.max(DEFAULT_MIN_TLS))
-                    .unwrap_or(DEFAULT_MIN_TLS);
-
-                builder = builder.min_tls_version(tls_ver.into());
-
-                for certificate in certificates {
-                    builder = builder.add_root_certificate(certificate.0);
-                }
-            }
-
-            let client = builder.build()?;
-
-            Ok(Client(Arc::new(Inner {
-                client: client.clone(),
-                service: DelayRequest::new(
-                    num_request,
-                    Duration::from_millis(per_millis.get() as u64),
-                    client,
-                ),
-            })))
-        }
-
-        inner(
-            user_agent.as_ref(),
-            min_tls,
+        Self::from_builder(
+            Self::default_builder(user_agent.as_ref(), min_tls, &mut certificates.into_iter()),
             per_millis,
             num_request,
-            &mut certificates.into_iter(),
         )
+    }
+
+    /// Constructs a default [`reqwest::ClientBuilder`].
+    ///
+    /// This may be used alongside [`Client::from_builder`] to start from reasonable
+    /// defaults, but still be able to customise the reqwest instance. Arguments are
+    /// as [`Client::new`], but without generic parameters.
+    pub fn default_builder(
+        user_agent: &str,
+        min_tls: Option<TLSVersion>,
+        certificates: &mut dyn Iterator<Item = Certificate>,
+    ) -> reqwest::ClientBuilder {
+        let mut builder = reqwest::ClientBuilder::new()
+            .user_agent(user_agent)
+            .https_only(true)
+            .tcp_nodelay(false);
+
+        #[cfg(feature = "hickory-dns")]
+        {
+            builder = builder.dns_resolver(Arc::new(TrustDnsResolver::default()));
+        }
+
+        #[cfg(feature = "__tls")]
+        {
+            let tls_ver = min_tls
+                .map(|tls| tls.max(DEFAULT_MIN_TLS))
+                .unwrap_or(DEFAULT_MIN_TLS);
+
+            builder = builder.min_tls_version(tls_ver.into());
+
+            for certificate in certificates {
+                builder = builder.add_root_certificate(certificate.0);
+            }
+        }
+
+        builder
+    }
+
+    /// Construct a custom client from a [`reqwest::ClientBuilder`].
+    ///
+    /// You may want to also use [`Client::default_builder`].
+    pub fn from_builder(
+        builder: reqwest::ClientBuilder,
+        per_millis: NonZeroU16,
+        num_request: NonZeroU64,
+    ) -> Result<Self, Error> {
+        let client = builder.build()?;
+
+        Ok(Client(Arc::new(Inner {
+            client: client.clone(),
+            service: DelayRequest::new(
+                num_request,
+                Duration::from_millis(per_millis.get() as u64),
+                client,
+            ),
+        })))
     }
 
     /// Return inner reqwest client.
