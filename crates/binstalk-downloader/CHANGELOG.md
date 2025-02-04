@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.11](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.10...binstalk-downloader-v0.13.11) - 2025-02-04
+
+### Added
+
+- *(downloader)* allow remote::Client to be customised (#2035)
+
 ## [0.13.10](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.9...binstalk-downloader-v0.13.10) - 2025-01-19
 
 ### Other
