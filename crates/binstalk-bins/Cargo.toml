@@ -15,7 +15,7 @@ atomic-file-install = { version = "1.0.9", path = "../atomic-file-install" }
 binstalk-types = { version = "0.9.2", path = "../binstalk-types" }
 compact_str = { version = "0.8.0", features = ["serde"] }
 leon = "3.0.0"
-miette = "7.0.0"
+miette = "7.5.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
 thiserror = "2.0.11"
 tracing = "0.1.39"

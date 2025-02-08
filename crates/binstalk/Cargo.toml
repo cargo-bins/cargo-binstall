@@ -29,11 +29,11 @@ itertools = "0.14.0"
 jobslot = { version = "0.2.11", features = ["tokio"] }
 leon = "3.0.0"
 maybe-owned = "0.3.4"
-miette = "7.0.0"
+miette = "7.5.0"
 semver = { version = "1.0.17", features = ["serde"] }
 simple-git = { version = "0.2.10", optional = true }
 strum = "0.26.1"
-target-lexicon = { version = "0.13.0", features = ["std"] }
+target-lexicon = { version = "0.13.2", features = ["std"] }
 tempfile = "3.5.0"
 thiserror = "2.0.11"
 tokio = { version = "1.35.0", features = [

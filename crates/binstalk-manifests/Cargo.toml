@@ -15,7 +15,7 @@ binstalk-types = { version = "0.9.2", path = "../binstalk-types" }
 compact_str = { version = "0.8.0", features = ["serde"] }
 fs-lock = { version = "0.1.7", path = "../fs-lock" }
 home = "0.5.9"
-miette = "7.0.0"
+miette = "7.5.0"
 semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
