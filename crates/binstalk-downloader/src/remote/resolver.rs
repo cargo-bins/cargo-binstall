@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use hickory_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
-    system_conf, TokioAsyncResolver,
+    system_conf, TokioResolver as TokioAsyncResolver,
 };
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
@@ -50,8 +50,6 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
                 protocol,
                 tls_dns_name: None,
                 trust_negative_responses: false,
-                #[cfg(feature = "rustls")]
-                tls_config: None,
                 bind_addr: None,
                 http_endpoint: None,
             })
