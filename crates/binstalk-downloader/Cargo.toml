@@ -111,7 +111,6 @@ native-tls = [
     "__tls",
     "native-tls-crate",
     "reqwest/native-tls",
-    "hickory-resolver?/dns-over-native-tls",
 ]
 
 # Enable hickory-resolver so that features on it will also be enabled.
