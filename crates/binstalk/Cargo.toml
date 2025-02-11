@@ -32,7 +32,7 @@ maybe-owned = "0.3.4"
 miette = "7.0.0"
 semver = { version = "1.0.17", features = ["serde"] }
 simple-git = { version = "0.2.10", optional = true }
-strum = "0.26.1"
+strum = "0.27.0"
 target-lexicon = { version = "0.13.0", features = ["std"] }
 tempfile = "3.5.0"
 thiserror = "2.0.11"
