@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.24](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.23...binstalk-v0.28.24) - 2025-02-11
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates (#2044)
+
 ## [0.28.23](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.22...binstalk-v0.28.23) - 2025-02-04
 
 ### Other
