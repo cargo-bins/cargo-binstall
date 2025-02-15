@@ -35,6 +35,7 @@ use zeroize::Zeroizing;
     arg_required_else_help(true),
     // Avoid conflict with version_req
     disable_version_flag(true),
+    styles = clap_cargo::style::CLAP_STYLING,
 )]
 pub struct Args {
     /// Packages to install.
