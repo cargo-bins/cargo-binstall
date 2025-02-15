@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.24"
+version = "0.28.25"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.15.21"
+version = "0.15.22"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -949,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.40"
+version = "0.1.41"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
