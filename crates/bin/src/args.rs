@@ -35,6 +35,7 @@ use zeroize::Zeroizing;
     arg_required_else_help(true),
     // Avoid conflict with version_req
     disable_version_flag(true),
+    styles = clap_cargo::style::CLAP_STYLING,
 )]
 pub struct Args {
     /// Packages to install.
@@ -66,7 +67,8 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         long = "version",
-        value_parser(VersionReq::parse_from_cli)
+        value_parser(VersionReq::parse_from_cli),
+        value_name = "VERSION"
     )]
     pub(crate) version_req: Option<VersionReq>,
 
@@ -97,7 +99,7 @@ pub struct Args {
     /// containing a Cargo.toml file, or the Cargo.toml file itself.
     ///
     /// This option cannot be used with `--git`.
-    #[clap(help_heading = "Overrides", long)]
+    #[clap(help_heading = "Overrides", long, value_name = "PATH")]
     pub(crate) manifest_path: Option<PathBuf>,
 
     #[cfg(feature = "git")]
@@ -107,14 +109,23 @@ pub struct Args {
     /// runs as if `--manifest-path $cloned_repo` is passed to binstall.
     ///
     /// This option cannot be used with `--manifest-path`.
-    #[clap(help_heading = "Overrides", long, conflicts_with("manifest_path"))]
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        conflicts_with("manifest_path"),
+        value_name = "URL"
+    )]
     pub(crate) git: Option<binstalk::registry::GitUrl>,
 
-    /// Override Cargo.toml package manifest bin-dir.
+    /// Path template for binary files in packages
+    ///
+    /// Overrides the Cargo.toml package manifest bin-dir.
     #[clap(help_heading = "Overrides", long)]
     pub(crate) bin_dir: Option<String>,
 
-    /// Override Cargo.toml package manifest pkg-fmt.
+    /// Format for package downloads
+    ///
+    /// Overrides the Cargo.toml package manifest pkg-fmt.
     ///
     /// The available package formats are:
     ///
@@ -134,8 +145,10 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long, value_name = "PKG_FMT")]
     pub(crate) pkg_fmt: Option<PkgFmt>,
 
-    /// Override Cargo.toml package manifest pkg-url.
-    #[clap(help_heading = "Overrides", long)]
+    /// URL template for package downloads
+    ///
+    /// Overrides the Cargo.toml package manifest pkg-url.
+    #[clap(help_heading = "Overrides", long, value_name = "TEMPLATE")]
     pub(crate) pkg_url: Option<String>,
 
     /// Override the rate limit duration.
@@ -154,7 +167,8 @@ pub struct Args {
         help_heading = "Overrides",
         long,
         default_value_t = RateLimit::default(),
-        env = "BINSTALL_RATE_LIMIT"
+        env = "BINSTALL_RATE_LIMIT",
+        value_name = "LIMIT",
     )]
     pub(crate) rate_limit: RateLimit,
 
@@ -185,7 +199,8 @@ pub struct Args {
         help_heading = "Overrides",
         long,
         value_delimiter(','),
-        env = "BINSTALL_DISABLE_STRATEGIES"
+        env = "BINSTALL_DISABLE_STRATEGIES",
+        value_name = "STRATEGIES"
     )]
     pub(crate) disable_strategies: Vec<StrategyWrapped>,
 
@@ -207,6 +222,7 @@ pub struct Args {
         long,
         env = "BINSTALL_MAXIMUM_RESOLUTION_TIMEOUT",
         default_value_t = NonZeroU16::new(15).unwrap(),
+        value_name = "TIMEOUT"
     )]
     pub(crate) maximum_resolution_timeout: NonZeroU16,
 
@@ -266,7 +282,7 @@ pub struct Args {
     /// metadata files are updated with the package information. Specifying another path here
     /// switches over to a "local" install, where binaries are installed at the path given, and the
     /// global metadata files are not updated.
-    #[clap(help_heading = "Options", long)]
+    #[clap(help_heading = "Options", long, value_name = "PATH")]
     pub(crate) install_path: Option<PathBuf>,
 
     /// Install binaries with a custom cargo root.
@@ -332,7 +348,12 @@ pub struct Args {
 
     /// Specify the root certificates to use for https connnections,
     /// in addition to default system-wide ones.
-    #[clap(help_heading = "Options", long, env = "BINSTALL_HTTPS_ROOT_CERTS")]
+    #[clap(
+        help_heading = "Options",
+        long,
+        env = "BINSTALL_HTTPS_ROOT_CERTS",
+        value_name = "PATH"
+    )]
     pub(crate) root_certificates: Vec<PathBuf>,
 
     /// Print logs in json format to be parsable.
@@ -348,7 +369,12 @@ pub struct Args {
     /// If none of them is present, then binstall will try to extract github
     /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
     /// unless `--no-discover-github-token` is specified.
-    #[clap(help_heading = "Options", long, env = "GITHUB_TOKEN")]
+    #[clap(
+        help_heading = "Options",
+        long,
+        env = "GITHUB_TOKEN",
+        value_name = "TOKEN"
+    )]
     pub(crate) github_token: Option<GithubToken>,
 
     /// Only install packages that are signed
