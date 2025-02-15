@@ -117,11 +117,15 @@ pub struct Args {
     )]
     pub(crate) git: Option<binstalk::registry::GitUrl>,
 
-    /// Override Cargo.toml package manifest bin-dir.
+    /// Path template for binary files in packages
+    ///
+    /// Overrides the Cargo.toml package manifest bin-dir.
     #[clap(help_heading = "Overrides", long)]
     pub(crate) bin_dir: Option<String>,
 
-    /// Override Cargo.toml package manifest pkg-fmt.
+    /// Format for package downloads
+    ///
+    /// Overrides the Cargo.toml package manifest pkg-fmt.
     ///
     /// The available package formats are:
     ///
@@ -141,8 +145,10 @@ pub struct Args {
     #[clap(help_heading = "Overrides", long, value_name = "PKG_FMT")]
     pub(crate) pkg_fmt: Option<PkgFmt>,
 
-    /// Override Cargo.toml package manifest pkg-url.
-    #[clap(help_heading = "Overrides", long, value_name = "URL")]
+    /// URL template for package downloads
+    ///
+    /// Overrides the Cargo.toml package manifest pkg-url.
+    #[clap(help_heading = "Overrides", long, value_name = "TEMPLATE")]
     pub(crate) pkg_url: Option<String>,
 
     /// Override the rate limit duration.
