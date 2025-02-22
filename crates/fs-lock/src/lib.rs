@@ -12,7 +12,7 @@ use fs4::fs_std::FileExt;
 
 /// A locked file.
 #[derive(Debug)]
-pub struct FileLock(File);
+pub struct FileLock(File, Option<Box<Path>>);
 
 impl FileLock {
     /// Take an exclusive lock on a [`File`].
@@ -21,7 +21,7 @@ impl FileLock {
     pub fn new_exclusive(file: File) -> io::Result<Self> {
         FileExt::lock_exclusive(&file)?;
 
-        Ok(Self(file))
+        Ok(Self(file, None))
     }
 
     /// Try to take an exclusive lock on a [`File`].
@@ -33,7 +33,7 @@ impl FileLock {
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_exclusive(file: File) -> Result<Self, (File, Option<io::Error>)> {
         match FileExt::try_lock_exclusive(&file) {
-            Ok(()) => Ok(Self(file)),
+            Ok(()) => Ok(Self(file, None)),
             Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
                 Err((file, None))
             }
@@ -47,7 +47,7 @@ impl FileLock {
     pub fn new_shared(file: File) -> io::Result<Self> {
         FileExt::lock_shared(&file)?;
 
-        Ok(Self(file))
+        Ok(Self(file, None))
     }
 
     /// Try to take a shared lock on a [`File`].
@@ -59,7 +59,7 @@ impl FileLock {
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_shared(file: File) -> Result<Self, (File, Option<io::Error>)> {
         match FileExt::try_lock_shared(&file) {
-            Ok(()) => Ok(Self(file)),
+            Ok(()) => Ok(Self(file, None)),
             Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
                 Err((file, None))
             }
@@ -70,7 +70,27 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        let _ = FileExt::unlock(&self.0);
+        let _res = FileExt::unlock(&self.0);
+        #[cfg(feature = "tracing")]
+        if let Err(err) = _res {
+            use std::fmt;
+
+            struct OptionalPath<'a>(Option<&'a Path>);
+            impl fmt::Display for OptionalPath<'_> {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    if let Some(path) = self.0 {
+                        fmt::Display::fmt(&path.display(), f)
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
+
+            tracing::warn!(
+                "Failed to unlock file{}: {err}",
+                OptionalPath(self.1.as_deref()),
+            );
+        }
     }
 }
 
