@@ -15,9 +15,9 @@ binstalk-downloader = { version = "0.13.12", path = "../binstalk-downloader", de
 ] }
 compact_str = "0.8.0"
 percent-encoding = "2.2.0"
-serde = { version = "1.0.163", features = ["derive"] }
+serde = { version = "1.0.218", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
-serde_json = { version = "1.0.107" }
+serde_json = { version = "1.0.139" }
 thiserror = "2.0.11"
 tokio = { version = "1.35.0", features = ["sync"], default-features = false }
 tracing = "0.1.39"

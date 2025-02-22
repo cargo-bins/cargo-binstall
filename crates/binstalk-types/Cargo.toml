@@ -14,9 +14,9 @@ compact_str = { version = "0.8.0", features = ["serde"] }
 maybe-owned = { version = "0.3.4", features = ["serde"] }
 once_cell = "1.18.0"
 semver = { version = "1.0.17", features = ["serde"] }
-serde = { version = "1.0.163", features = ["derive"] }
-strum = "0.27.0"
-strum_macros = "0.27.0"
+serde = { version = "1.0.218", features = ["derive"] }
+strum = "0.27.1"
+strum_macros = "0.27.1"
 url = { version = "2.5.4", features = ["serde"] }
 
 [dev-dependencies]

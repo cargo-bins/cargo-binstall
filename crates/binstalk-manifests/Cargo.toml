@@ -17,9 +17,9 @@ fs-lock = { version = "0.1.7", path = "../fs-lock" }
 home = "0.5.9"
 miette = "7.0.0"
 semver = { version = "1.0.17", features = ["serde"] }
-serde = { version = "1.0.163", features = ["derive"] }
+serde = { version = "1.0.218", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
-serde_json = "1.0.107"
+serde_json = "1.0.139"
 thiserror = "2.0.11"
 toml_edit = { version = "0.22.12", features = ["serde"] }
 url = { version = "2.5.4", features = ["serde"] }
