@@ -138,7 +138,7 @@ impl Config {
         fn inner(path: &Path) -> Result<Config, ConfigLoadError> {
             match File::open(path) {
                 Ok(file) => {
-                    let file = FileLock::new_shared(file)?;
+                    let file = FileLock::new_shared(file)?.set_file_path(path);
                     // Any regular file must have a parent dir
                     Config::load_from_reader(file, path.parent().unwrap())
                 }
