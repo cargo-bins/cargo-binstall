@@ -12,8 +12,7 @@ use thiserror::Error as ThisError;
 use crate::{
     binstall_crates_v1::{Error as BinstallCratesV1Error, Records as BinstallCratesV1Records},
     cargo_crates_v1::{CratesToml, CratesTomlParseError},
-    crate_info::CrateInfo,
-    CompactString, Version,
+    crate_info::CrateInfo, helpers::create_if_not_exist, CompactString, Version,
 };
 
 #[derive(Debug, Diagnostic, ThisError)]
@@ -47,13 +46,7 @@ impl Manifests {
         // Read cargo_install_v1_metadata
         let manifest_path = cargo_roots.join(".crates.toml");
 
-        let cargo_crates_v1 = fs::File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(manifest_path)
-            .and_then(FileLock::new_exclusive)?;
+        let cargo_crates_v1 = create_file_if_not_exist(manifest_path)?;
 
         Ok(Self {
             binstall,
