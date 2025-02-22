@@ -32,7 +32,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_exclusive(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        match file.try_lock_exclusive() {
+        match FileExt::try_lock_exclusive(&file) {
             Ok(()) => Ok(Self(file)),
             Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
                 Err((file, None))
