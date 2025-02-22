@@ -3,7 +3,7 @@
 //! These use the same mechanisms as, and are interoperable with, Cargo.
 
 use std::{
-    fs::File.
+    fs::File,
     io::{self, IoSlice, IoSliceMut, SeekFrom},
     ops, path::Path,
 };
@@ -19,10 +19,13 @@ pub struct FileLock(
 );
 
 impl FileLock {
+    #[cfg(not(feature = "tracing"))]
     fn new(file: File) -> Self {
-        #[cfg(not(feature = "tracing"))]
         Self(file)
-        #[cfg(feature = "tracing")]
+    }
+
+    #[cfg(feature = "tracing")]
+    fn new(file: File) -> Self {
         Self(file, None)
     }
 
