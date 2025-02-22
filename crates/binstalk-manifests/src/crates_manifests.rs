@@ -46,7 +46,7 @@ impl Manifests {
         // Read cargo_install_v1_metadata
         let manifest_path = cargo_roots.join(".crates.toml");
 
-        let cargo_crates_v1 = create_file_if_not_exist(manifest_path)?;
+        let cargo_crates_v1 = create_if_not_exist(manifest_path)?;
 
         Ok(Self {
             binstall,
