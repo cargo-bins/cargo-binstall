@@ -19,7 +19,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_exclusive(file: File) -> io::Result<Self> {
-        file.lock_exclusive()?;
+        FileExt::lock_exclusive(&file)?;
 
         Ok(Self(file))
     }
@@ -45,7 +45,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_shared(file: File) -> io::Result<Self> {
-        file.lock_shared()?;
+        FileExt::lock_shared(&file)?;
 
         Ok(Self(file))
     }
@@ -58,7 +58,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_shared(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        match file.try_lock_shared() {
+        match FileExt::try_lock_shared(&file) {
             Ok(()) => Ok(Self(file)),
             Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
                 Err((file, None))
@@ -70,7 +70,7 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        let _ = self.unlock();
+        let _ = FileExt::unlock(&self.0);
     }
 }
 
