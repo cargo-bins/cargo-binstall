@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.7...fs-lock-v0.1.8) - 2025-02-22
+
+### Other
+
+- Log when FileLock::drop fails to unlock file ([#2064](https://github.com/cargo-bins/cargo-binstall/pull/2064))
+- Fix fs-lock error on nightly ([#2059](https://github.com/cargo-bins/cargo-binstall/pull/2059))
+
 ## [0.1.7](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.6...fs-lock-v0.1.7) - 2024-12-07
 
 ### Other
