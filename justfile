@@ -257,7 +257,7 @@ e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repo
 
 unit-tests: print-env
     cargo test --no-run --target {{target}}
-    cargo nextest run --target {{target}} {{cargo-nextest-additional-args}}
+    cargo nextest run --target {{target}} --no-tests=pass {{cargo-nextest-additional-args}}
     cargo test --doc --target {{target}}
 
 test: unit-tests build e2e-tests
