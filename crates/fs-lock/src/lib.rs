@@ -3,9 +3,9 @@
 //! These use the same mechanisms as, and are interoperable with, Cargo.
 
 use std::{
-    fs::File,
+    fs::File.
     io::{self, IoSlice, IoSliceMut, SeekFrom},
-    ops,
+    ops, path::Path,
 };
 
 use fs4::fs_std::FileExt;
