@@ -20,11 +20,10 @@ pub struct FileLock(
 
 impl FileLock {
     fn new(file: File) -> Self {
-        Self(
-            file,
-            #[cfg(feature = "tracing")]
-            None,
-        )
+        #[cfg(not(feature = "tracing"))]
+        Self(file)
+        #[cfg(feature = "tracing")]
+        Self(file, None)
     }
 
     /// Take an exclusive lock on a [`File`].
@@ -33,7 +32,7 @@ impl FileLock {
     pub fn new_exclusive(file: File) -> io::Result<Self> {
         FileExt::lock_exclusive(&file)?;
 
-        Ok(Self:new(file))
+        Ok(Self::new(file))
     }
 
     /// Try to take an exclusive lock on a [`File`].
