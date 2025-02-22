@@ -43,7 +43,8 @@ where
     Iter: IntoIterator<Item = T>,
     Data: From<T>,
 {
-    let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+    let path = path.as_ref();
+    let mut file = create_if_not_exist(path)?;
     // Move the cursor to EOF
     file.seek(io::SeekFrom::End(0))?;
 
@@ -166,7 +167,7 @@ impl Records {
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
         let mut this = Self {
-            file: FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?,
+            file: create_if_not_exist(path.as_ref())?,
             data: BTreeSet::default(),
         };
         this.load_impl()?;
