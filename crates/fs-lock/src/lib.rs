@@ -5,18 +5,15 @@
 use std::{
     fs::File,
     io::{self, IoSlice, IoSliceMut, SeekFrom},
-    ops, path::Path,
+    ops,
+    path::Path,
 };
 
 use fs4::fs_std::FileExt;
 
 /// A locked file.
 #[derive(Debug)]
-pub struct FileLock(
-    File,
-    #[cfg(feature = "tracing")]
-    Option<Box<Path>>,
-);
+pub struct FileLock(File, #[cfg(feature = "tracing")] Option<Box<Path>>);
 
 impl FileLock {
     #[cfg(not(feature = "tracing"))]
