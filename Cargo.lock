@@ -190,7 +190,7 @@ dependencies = [
 
 [[package]]
 name = "atomic-file-install"
-version = "1.0.9"
+version = "1.0.10"
 dependencies = [
  "reflink-copy",
  "tempfile",
@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.25"
+version = "0.28.26"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -289,7 +289,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-bins"
-version = "0.6.10"
+version = "0.6.11"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.15.22"
+version = "0.15.23"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -949,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.41"
+version = "0.1.42"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "detect-wasi"
-version = "1.0.22"
+version = "1.0.23"
 dependencies = [
  "tempfile",
 ]
@@ -1179,9 +1179,10 @@ dependencies = [
 
 [[package]]
 name = "fs-lock"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "fs4",
+ "tracing",
 ]
 
 [[package]]

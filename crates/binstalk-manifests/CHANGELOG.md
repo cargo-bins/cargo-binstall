@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.23](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.15.22...binstalk-manifests-v0.15.23) - 2025-02-22
+
+### Other
+
+- Log when FileLock::drop fails to unlock file ([#2064](https://github.com/cargo-bins/cargo-binstall/pull/2064))
+
 ## [0.15.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.15.21...binstalk-manifests-v0.15.22) - 2025-02-15
 
 ### Other

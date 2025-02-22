@@ -3,7 +3,7 @@ name = "binstalk-manifests"
 description = "The binstall toolkit for manipulating with manifest"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-manifests"
-version = "0.15.22"
+version = "0.15.23"
 rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -13,7 +13,7 @@ license = "Apache-2.0 OR MIT"
 beef = { version = "0.5.2", features = ["impl_serde"] }
 binstalk-types = { version = "0.9.3", path = "../binstalk-types" }
 compact_str = { version = "0.8.0", features = ["serde"] }
-fs-lock = { version = "0.1.7", path = "../fs-lock", features = ["tracing"] }
+fs-lock = { version = "0.1.8", path = "../fs-lock", features = ["tracing"] }
 home = "0.5.9"
 miette = "7.0.0"
 semver = { version = "1.0.17", features = ["serde"] }
@@ -25,5 +25,5 @@ toml_edit = { version = "0.22.12", features = ["serde"] }
 url = { version = "2.5.4", features = ["serde"] }
 
 [dev-dependencies]
-detect-targets = { version = "0.1.41", path = "../detect-targets" }
+detect-targets = { version = "0.1.42", path = "../detect-targets" }
 tempfile = "3.5.0"
