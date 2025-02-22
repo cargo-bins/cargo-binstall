@@ -62,7 +62,8 @@ impl CratesToml<'_> {
     }
 
     pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
-        let file = FileLock::new_shared(File::open(path)?)?;
+        let path = path.as_ref();
+        let file = FileLock::new_shared(File::open(path)?)?.set_file_path(path);
         Self::load_from_reader(file)
     }
 
@@ -100,7 +101,8 @@ impl CratesToml<'_> {
     }
 
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
-        let mut file = FileLock::new_exclusive(File::create(path)?)?;
+        let path = path.as_ref();
+        let mut file = FileLock::new_exclusive(File::create(path)?)?.set_file_path(path);
         self.write_to_file(&mut file)
     }
 
@@ -142,7 +144,7 @@ impl CratesToml<'_> {
     where
         Iter: IntoIterator<Item = &'a CrateInfo>,
     {
-        let mut file = FileLock::new_exclusive(create_if_not_exist(path.as_ref())?)?;
+        let mut file = create_if_not_exist(path.as_ref())?;
         Self::append_to_file(&mut file, iter)
     }
 
