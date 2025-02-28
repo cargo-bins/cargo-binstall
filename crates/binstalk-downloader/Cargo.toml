@@ -20,14 +20,16 @@ async-compression = { version = "0.4.4", features = [
 ] }
 binstalk-types = { version = "0.9.3", path = "../binstalk-types" }
 bytes = "1.4.0"
-bzip2 = "0.5.2"
+bzip2 = { version = "0.5.2", default-features = false, features = [
+    "libbz2-rs-sys",
+] }
 cfg-if = "1"
 compact_str = "0.9.0"
 flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
-rc-zip-sync = { version = "4.2.3", features = [
+rc-zip-sync = { version = "4.2.6", features = [
     "deflate",
     "bzip2",
     "deflate64",
@@ -108,11 +110,7 @@ rustls = [
     "hickory-resolver?/dns-over-quic",
     "hickory-resolver?/dns-over-h3",
 ]
-native-tls = [
-    "__tls",
-    "native-tls-crate",
-    "reqwest/native-tls",
-]
+native-tls = ["__tls", "native-tls-crate", "reqwest/native-tls"]
 
 # Enable hickory-resolver so that features on it will also be enabled.
 hickory-dns = ["hickory-resolver", "default-net", "ipconfig", "once_cell"]
