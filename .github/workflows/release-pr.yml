@@ -1,37 +1,12 @@
-name: Open a release PR
+name: Open cargo-binstall release PR
 on:
   workflow_dispatch:
     inputs:
-      crate:
-        description: Crate to release
-        required: true
-        type: choice
-        options:
-          - atomic-file-install
-          - bin
-          - binstalk
-          - binstalk-bins
-          - binstalk-fetchers
-          - binstalk-git-repo-api
-          - binstalk-registry
-          - binstalk-manifests
-          - binstalk-types
-          - binstalk-downloader
-          - cargo-toml-workspace
-          - detect-targets
-          - detect-wasi
-          - fs-lock
-          - normalize-path
       version:
         description: Version to release
         required: true
         type: string
         default: patch
-      no-check-semver:
-        description: To disable check semver
-        required: true
-        type: string
-        default: "false"
 
 permissions:
   pull-requests: write
@@ -62,11 +37,11 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           version: ${{ inputs.version }}
-          crate-path: crates/${{ inputs.crate }}
+          crate-path: crates/bin
           pr-label: release
-          pr-release-notes: ${{ inputs.crate == 'bin' }}
+          pr-release-notes: true
           pr-template-file: .github/scripts/release-pr-template.ejs
-          check-semver: ${{ inputs.crate != 'bin' && inputs.no-check-semver != 'true'  }}
+          check-semver: false
           check-package: true
         env:
           RUSTFLAGS: --cfg reqwest_unstable
