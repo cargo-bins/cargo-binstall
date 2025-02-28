@@ -63,6 +63,7 @@ static = ["binstalk/static"]
 pkg-config = ["binstalk/pkg-config"]
 
 zlib-ng = ["binstalk/zlib-ng"]
+zlib-rs = ["binstalk/zlib-rs"]
 
 rustls = ["binstalk/rustls"]
 native-tls = ["binstalk/native-tls"]

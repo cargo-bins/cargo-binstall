@@ -56,6 +56,7 @@ static = ["binstalk-downloader/static"]
 pkg-config = ["binstalk-downloader/pkg-config"]
 
 zlib-ng = ["binstalk-downloader/zlib-ng"]
+zlib-rs = ["binstalk-downloader/zlib-rs"]
 
 rustls = ["binstalk-downloader/rustls", "binstalk-registry/rustls"]
 native-tls = ["binstalk-downloader/native-tls", "binstalk-registry/native-tls"]
