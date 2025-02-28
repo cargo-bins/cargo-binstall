@@ -88,6 +88,7 @@ static = ["bzip2/static", "xz2/static", "native-tls-crate?/vendored"]
 pkg-config = ["zstd/pkg-config"]
 
 zlib-ng = ["flate2/zlib-ng"]
+zlib-rs = ["flate2/zlib-rs"]
 
 # Dummy feature, enabled if rustls or native-tls is enabled.
 # Used to avoid compilation error when no feature is enabled.
