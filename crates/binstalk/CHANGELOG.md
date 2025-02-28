@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.27](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.26...binstalk-v0.28.27) - 2025-02-28
+
+### Other
+
+- Use flate2/zlib-rs for dev/release build ([#2068](https://github.com/cargo-bins/cargo-binstall/pull/2068))
+
 ## [0.28.26](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.25...binstalk-v0.28.26) - 2025-02-22
 
 ### Other
