@@ -140,7 +140,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06575e6a9673580f52661c92107baabffbf41e2141373441cbcdc47cb733003c"
 dependencies = [
  "brotli",
- "bzip2 0.5.1",
+ "bzip2 0.5.2",
  "flate2",
  "futures-core",
  "memchr",
@@ -252,7 +252,7 @@ dependencies = [
  "binstalk-types",
  "cargo-toml-workspace",
  "command-group",
- "compact_str 0.8.1",
+ "compact_str",
  "detect-targets",
  "either",
  "itertools",
@@ -278,7 +278,7 @@ version = "0.6.11"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
- "compact_str 0.8.1",
+ "compact_str",
  "leon",
  "miette",
  "normalize-path",
@@ -295,9 +295,9 @@ dependencies = [
  "binstalk-types",
  "binstall-tar",
  "bytes",
- "bzip2 0.5.1",
+ "bzip2 0.5.2",
  "cfg-if",
- "compact_str 0.8.1",
+ "compact_str",
  "default-net",
  "flate2",
  "futures-io",
@@ -331,7 +331,7 @@ dependencies = [
  "binstalk-git-repo-api",
  "binstalk-types",
  "bytes",
- "compact_str 0.8.1",
+ "compact_str",
  "either",
  "itertools",
  "leon",
@@ -351,7 +351,7 @@ name = "binstalk-git-repo-api"
 version = "0.5.15"
 dependencies = [
  "binstalk-downloader",
- "compact_str 0.8.1",
+ "compact_str",
  "once_cell",
  "percent-encoding",
  "serde",
@@ -371,7 +371,7 @@ version = "0.15.24"
 dependencies = [
  "beef",
  "binstalk-types",
- "compact_str 0.8.1",
+ "compact_str",
  "detect-targets",
  "fs-lock",
  "home",
@@ -395,7 +395,7 @@ dependencies = [
  "binstalk-downloader",
  "binstalk-types",
  "cargo-toml-workspace",
- "compact_str 0.8.1",
+ "compact_str",
  "leon",
  "miette",
  "normalize-path",
@@ -417,7 +417,7 @@ dependencies = [
 name = "binstalk-types"
 version = "0.9.3"
 dependencies = [
- "compact_str 0.8.1",
+ "compact_str",
  "maybe-owned",
  "once_cell",
  "semver",
@@ -528,21 +528,20 @@ dependencies = [
 
 [[package]]
 name = "bzip2"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75b89e7c29231c673a61a46e722602bcd138298f6b9e81e71119693534585f5c"
+checksum = "49ecfb22d906f800d4fe833b6282cf4dc1c298f5057ca0b5445e5c209735ca47"
 dependencies = [
  "bzip2-sys",
 ]
 
 [[package]]
 name = "bzip2-sys"
-version = "0.1.12+1.0.8"
+version = "0.1.13+1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72ebc2f1a417f01e1da30ef264ee86ae31d2dcd2d603ea283d3c244a883ca2a9"
+checksum = "225bff33b2141874fe80d71e07d6eec4f85c5c216453dd96388240f96e1acc14"
 dependencies = [
  "cc",
- "libc",
  "pkg-config",
 ]
 
@@ -564,7 +563,7 @@ dependencies = [
  "binstalk-manifests",
  "clap",
  "clap-cargo",
- "compact_str 0.8.1",
+ "compact_str",
  "dirs",
  "embed-resource",
  "file-format",
@@ -601,7 +600,7 @@ name = "cargo-toml-workspace"
 version = "7.0.4"
 dependencies = [
  "cargo_toml",
- "compact_str 0.8.1",
+ "compact_str",
  "glob",
  "normalize-path",
  "serde",
@@ -772,21 +771,6 @@ dependencies = [
 
 [[package]]
 name = "compact_str"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b79c4069c6cad78e2e0cdfcbd26275770669fb39fd308a752dc110e83b9af32"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "rustversion",
- "ryu",
- "serde",
- "static_assertions",
-]
-
-[[package]]
-name = "compact_str"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb1325a1cece981e8a296ab8f0f9b63ae357bd0784a9faaf548cc7b480707a"
@@ -796,6 +780,7 @@ dependencies = [
  "itoa",
  "rustversion",
  "ryu",
+ "serde",
  "static_assertions",
 ]
 
@@ -1182,12 +1167,12 @@ dependencies = [
 
 [[package]]
 name = "fs4"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c29c30684418547d476f0b48e84f4821639119c483b1eccd566c8cd0cd05f521"
+checksum = "be058769cf1633370c3d0dac6bb9b223b8f18900cf808abadf7843192e706238"
 dependencies = [
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4059,7 +4044,7 @@ version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c73b7cfffb1daffacab7bbb42f02b6c5d9117957edad4c58c6aa83bea187ec84"
 dependencies = [
- "compact_str 0.9.0",
+ "compact_str",
  "derive_destructure2",
  "gix",
  "thiserror 1.0.69",

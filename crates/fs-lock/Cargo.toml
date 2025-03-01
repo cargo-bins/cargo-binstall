@@ -10,5 +10,5 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-fs4 = "0.12.0"
+fs4 = "0.13.0"
 tracing = { version = "0.1", optional = true }

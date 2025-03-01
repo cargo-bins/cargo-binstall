@@ -20,7 +20,7 @@ binstalk-registry = { version = "0.11.14", path = "../binstalk-registry" }
 binstalk-types = { version = "0.9.3", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "7.0.4", path = "../cargo-toml-workspace" }
 command-group = { version = "5.0.1", features = ["with-tokio"] }
-compact_str = { version = "0.8.0", features = ["serde"] }
+compact_str = { version = "0.9.0", features = ["serde"] }
 detect-targets = { version = "0.1.43", path = "../detect-targets", features = [
     "tracing",
 ] }
