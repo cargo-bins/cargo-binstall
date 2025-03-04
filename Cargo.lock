@@ -140,7 +140,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06575e6a9673580f52661c92107baabffbf41e2141373441cbcdc47cb733003c"
 dependencies = [
  "brotli",
- "bzip2 0.5.2",
+ "bzip2",
  "flate2",
  "futures-core",
  "memchr",
@@ -295,7 +295,7 @@ dependencies = [
  "binstalk-types",
  "binstall-tar",
  "bytes",
- "bzip2 0.5.2",
+ "bzip2",
  "cfg-if",
  "compact_str",
  "default-net",
@@ -518,21 +518,12 @@ checksum = "2d2c12f985c78475a6b8d629afd0c360260ef34cfef52efccdcfd31972f81c2e"
 
 [[package]]
 name = "bzip2"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdb116a6ef3f6c3698828873ad02c3014b3c85cadb88496095628e3ef1e347f8"
-dependencies = [
- "bzip2-sys",
- "libc",
-]
-
-[[package]]
-name = "bzip2"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49ecfb22d906f800d4fe833b6282cf4dc1c298f5057ca0b5445e5c209735ca47"
 dependencies = [
  "bzip2-sys",
+ "libbz2-rs-sys",
 ]
 
 [[package]]
@@ -2691,6 +2682,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libbz2-rs-sys"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0864a00c8d019e36216b69c2c4ce50b83b7bd966add3cf5ba554ec44f8bebcf5"
+
+[[package]]
 name = "libc"
 version = "0.2.170"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3531,11 +3528,11 @@ dependencies = [
 
 [[package]]
 name = "rc-zip"
-version = "5.3.0"
+version = "5.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "917010d96cfbd55325038a1db68b0eb70b0a06f70aed2272642c544961c1e9d4"
+checksum = "ebde715984a68b306e5b41884cbcb8158e0e1dbe6e2841212983333b1662c416"
 dependencies = [
- "bzip2 0.4.4",
+ "bzip2",
  "chardetng",
  "chrono",
  "crc32fast",
@@ -3555,9 +3552,9 @@ dependencies = [
 
 [[package]]
 name = "rc-zip-sync"
-version = "4.2.5"
+version = "4.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "335abe288500174621cf56f4ebd65ec91d3e30b7bc9063b4633fc4e4ffbcb12b"
+checksum = "fdd21d17384a7da18df6b70f49bc2daa84d15e0fa0929bc635541383b3827190"
 dependencies = [
  "oval",
  "positioned-io",
