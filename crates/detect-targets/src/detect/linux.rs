@@ -22,7 +22,14 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
         (postfix, Libc::Unknown)
     };
 
-    let musl_fallback_target = || format!("{prefix}-{}{abi}", "musl");
+    let cpu_arch = target
+        .split_once('-')
+        .expect("unwrap: target always has a - for cpu_arch")
+        .0;
+
+    // For android the `-unknown-` is omitted, for alpine it has `-alpine-`
+    // instead of `-unknown-`.
+    let musl_fallback_target = || format!("{cpu_arch}-unknown-linux-musl{abi}");
 
     match libc {
         // guess_host_triple cannot detect whether the system is using glibc,
@@ -33,11 +40,6 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
         //
         // As such, we need to launch the test ourselves.
         Libc::Gnu | Libc::Musl => {
-            let cpu_arch = target
-                .split_once('-')
-                .expect("unwrap: target always has a - for cpu_arch")
-                .0;
-
             let handles: Vec<_> = {
                 let cpu_arch_suffix = cpu_arch.replace('_', "-");
                 let filename = format!("ld-linux-{cpu_arch_suffix}.so.2");
