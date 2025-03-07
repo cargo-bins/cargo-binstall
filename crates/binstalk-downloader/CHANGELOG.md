@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.14](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.13...binstalk-downloader-v0.13.14) - 2025-03-07
+
+### Other
+
+- Use bzip2/libbz2-rs-sys ([#2071](https://github.com/cargo-bins/cargo-binstall/pull/2071))
+- *(deps)* bump the deps group with 3 updates ([#2072](https://github.com/cargo-bins/cargo-binstall/pull/2072))
+
 ## [0.13.13](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.12...binstalk-downloader-v0.13.13) - 2025-02-28
 
 ### Other
