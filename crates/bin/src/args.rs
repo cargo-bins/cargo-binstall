@@ -88,7 +88,8 @@ pub struct Args {
         help_heading = "Package selection",
         alias = "target",
         long,
-        value_name = "TRIPLE"
+        value_name = "TRIPLE",
+        env = "CARGO_BUILD_TARGET"
     )]
     pub(crate) targets: Option<Vec<String>>,
 
