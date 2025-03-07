@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.44](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.43...detect-targets-v0.1.44) - 2025-03-07
+
+### Other
+
+- Fix detect-targets musl fallback for android and alpine ([#2076](https://github.com/cargo-bins/cargo-binstall/pull/2076))
+
 ## [0.1.43](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.42...detect-targets-v0.1.43) - 2025-02-28
 
 ### Other
