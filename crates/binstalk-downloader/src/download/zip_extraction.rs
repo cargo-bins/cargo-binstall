@@ -1,6 +1,6 @@
 use std::{
-    fs::{self, create_dir_all, File},
-    io::{self, Read},
+    fs::{create_dir_all, File},
+    io,
     path::Path,
 };
 
@@ -38,6 +38,8 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                     if #[cfg(windows)] {
                         do_extract_file()?;
                     } else {
+                        use std::{fs, io::Read};
+
                         match fs::symlink_metadata(&path) {
                             Ok(metadata) if metadata.is_file() => fs::remove_file(&path)?,
                             _ => (),

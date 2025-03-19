@@ -8,7 +8,7 @@ use tokio::{process::Command, task};
 use tracing::debug;
 
 pub(super) async fn detect_targets(target: String) -> Vec<String> {
-    let (prefix, postfix) = target
+    let (_, postfix) = target
         .rsplit_once('-')
         .expect("unwrap: target always has a -");
 
