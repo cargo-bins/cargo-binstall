@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.30](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.29...binstalk-v0.28.30) - 2025-03-19
+
+### Other
+
+- Use zlib-rs for gitoxide and avoid pulling in zlib-ng ([#2099](https://github.com/cargo-bins/cargo-binstall/pull/2099))
+
 ## [0.28.29](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.28...binstalk-v0.28.29) - 2025-03-15
 
 ### Other
