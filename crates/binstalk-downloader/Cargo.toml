@@ -63,7 +63,7 @@ tokio = { version = "1.44.0", features = [
 tokio-tar = "0.3.0"
 tokio-util = { version = "0.7.8", features = ["io"] }
 tracing = "0.1.39"
-hickory-resolver = { version = "=0.25.0-alpha.5", optional = true, features = [
+hickory-resolver = { version = "0.25.1", optional = true, features = [
     "dnssec-ring",
 ] }
 once_cell = { version = "1.18.0", optional = true }
@@ -104,11 +104,11 @@ rustls = [
     "reqwest/rustls-tls-native-roots",
 
     # Enable the following features only if hickory-resolver is enabled.
-    "hickory-resolver?/dns-over-rustls",
+    "hickory-resolver?/tls-ring",
     # hickory-resolver currently supports https with rustls
-    "hickory-resolver?/dns-over-https-rustls",
-    "hickory-resolver?/dns-over-quic",
-    "hickory-resolver?/dns-over-h3",
+    "hickory-resolver?/https-ring",
+    "hickory-resolver?/quic-ring",
+    "hickory-resolver?/h3-ring",
 ]
 native-tls = ["__tls", "native-tls-crate", "reqwest/native-tls"]
 
