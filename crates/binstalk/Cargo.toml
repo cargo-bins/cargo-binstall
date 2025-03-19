@@ -31,7 +31,7 @@ leon = "3.0.0"
 maybe-owned = "0.3.4"
 miette = "7.0.0"
 semver = { version = "1.0.17", features = ["serde"] }
-simple-git = { version = "0.2.10", optional = true }
+simple-git = { version = "0.2.18", optional = true }
 strum = "0.27.0"
 target-lexicon = { version = "0.13.0", features = ["std"] }
 tempfile = "3.5.0"
@@ -50,7 +50,7 @@ zeroize = "1.8.1"
 default = ["static", "rustls", "git"]
 
 git = ["binstalk-registry/git", "simple-git"]
-git-max-perf = ["git", "simple-git/git-max-perf"]
+git-max-perf = ["git", "simple-git/git-max-perf-safe", "zlib-rs"]
 
 static = ["binstalk-downloader/static"]
 pkg-config = ["binstalk-downloader/pkg-config"]

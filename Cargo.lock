@@ -1554,7 +1554,6 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "prodash",
- "sha1",
  "sha1_smol",
  "thiserror 2.0.12",
  "walkdir",
@@ -3979,27 +3978,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha1"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "digest",
- "sha1-asm",
-]
-
-[[package]]
-name = "sha1-asm"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "286acebaf8b67c1130aedffad26f594eff0c1292389158135327d2e23aed582b"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "sha1_smol"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4048,9 +4026,9 @@ dependencies = [
 
 [[package]]
 name = "simple-git"
-version = "0.2.17"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c73b7cfffb1daffacab7bbb42f02b6c5d9117957edad4c58c6aa83bea187ec84"
+checksum = "5e87f19cbb1c57c67e149b4d14ee0ae97a96b4bfd97d4fe122880a4a14370af9"
 dependencies = [
  "compact_str",
  "derive_destructure2",
