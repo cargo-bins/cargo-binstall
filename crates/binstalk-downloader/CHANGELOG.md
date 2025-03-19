@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.16](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.15...binstalk-downloader-v0.13.16) - 2025-03-19
+
+### Other
+
+- Fix clippy warnings for detect-targets and binstalk-downloader ([#2098](https://github.com/cargo-bins/cargo-binstall/pull/2098))
+- Bump hickory-resolver to 0.25.1 ([#2096](https://github.com/cargo-bins/cargo-binstall/pull/2096))
+
 ## [0.13.15](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.14...binstalk-downloader-v0.13.15) - 2025-03-15
 
 ### Other

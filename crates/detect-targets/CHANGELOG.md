@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.46](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.45...detect-targets-v0.1.46) - 2025-03-19
+
+### Other
+
+- Fix clippy warnings for detect-targets and binstalk-downloader ([#2098](https://github.com/cargo-bins/cargo-binstall/pull/2098))
+
 ## [0.1.45](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.44...detect-targets-v0.1.45) - 2025-03-15
 
 ### Other

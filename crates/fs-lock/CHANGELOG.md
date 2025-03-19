@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.9...fs-lock-v0.1.10) - 2025-03-19
+
+### Fixed
+
+- actually check if lock was acquired ([#2091](https://github.com/cargo-bins/cargo-binstall/pull/2091))
+
 ## [0.1.9](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.8...fs-lock-v0.1.9) - 2025-03-07
 
 ### Other
