@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.31](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.30...binstalk-v0.28.31) - 2025-03-28
+
+### Other
+
+- updated the following local packages: detect-targets
+
 ## [0.28.30](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.29...binstalk-v0.28.30) - 2025-03-19
 
 ### Other
