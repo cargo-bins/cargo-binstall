@@ -390,7 +390,7 @@ fn parse_header_retry_after(headers: &HeaderMap) -> Option<Duration> {
     let header = headers
         .get_all(RETRY_AFTER)
         .into_iter()
-        .last()?
+        .next_back()?
         .to_str()
         .ok()?;
 
