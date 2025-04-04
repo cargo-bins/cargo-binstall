@@ -86,9 +86,9 @@ impl Config {
     }
 
     /// * `dir` - path to the dir where the config.toml is located.
-    ///           For relative path in the config, `Config::load_from_reader`
-    ///           will join the `dir` and the relative path to form the final
-    ///           path.
+    ///   For relative path in the config, `Config::load_from_reader`
+    ///   will join the `dir` and the relative path to form the final
+    ///   path.
     pub fn load_from_reader<R: io::Read>(
         mut reader: R,
         dir: &Path,
