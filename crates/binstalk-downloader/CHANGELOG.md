@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.17](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.16...binstalk-downloader-v0.13.17) - 2025-04-05
+
+### Other
+
+- Fix clippy lints ([#2111](https://github.com/cargo-bins/cargo-binstall/pull/2111))
+
 ## [0.13.16](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.15...binstalk-downloader-v0.13.16) - 2025-03-19
 
 ### Other
