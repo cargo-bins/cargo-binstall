@@ -29,7 +29,7 @@ flate2 = { version = "1.0.28", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
-rc-zip-sync = { version = "4.2.6", features = [
+rc-zip-sync = { version = "4.3.0", features = [
     "deflate",
     "bzip2",
     "deflate64",
