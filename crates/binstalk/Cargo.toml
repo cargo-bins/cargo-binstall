@@ -29,7 +29,7 @@ itertools = "0.14.0"
 jobslot = { version = "0.2.11", features = ["tokio"] }
 leon = "3.0.0"
 maybe-owned = "0.3.4"
-miette = "7.0.0"
+miette = "7.6.0"
 semver = { version = "1.0.17", features = ["serde"] }
 simple-git = { version = "0.2.18", optional = true }
 strum = "0.27.0"
