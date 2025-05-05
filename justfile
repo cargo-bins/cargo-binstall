@@ -115,13 +115,12 @@ rust-lld := "" #if use-cargo-zigbuild != "" {
 
 # ICF: link-time identical code folding
 #
-# On windows it works out of the box and on linux it uses
-# rust-lld.
+# On windows it works out of the box.
 rustc-icf := if for-release != "" {
     if target-os == "windows" {
         " -C link-arg=-Wl,--icf=safe"
      } else if target-os == "linux" {
-        " -C link-arg=-Wl,--icf=safe"
+        ""
      } else {
         ""
     }

@@ -59,7 +59,6 @@ jobs:
       GLIBC_VERSION: ${{ matrix.g }}
       JUST_USE_CARGO_ZIGBUILD: ${{ matrix.c }}
       JUST_FOR_RELEASE: true
-      JUST_USE_AUDITABLE: true
       JUST_ENABLE_H3: true
 
     steps:
@@ -77,7 +76,7 @@ jobs:
 
       - uses: ./.github/actions/just-setup
         with:
-          tools: cargo-auditable,rsign2,rage
+          tools: rsign2,rage
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
