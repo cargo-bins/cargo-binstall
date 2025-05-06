@@ -52,6 +52,10 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                     format!("/lib64/{dirname}/{filename}"),
                     format!("/usr/lib/{dirname}/{filename}"),
                     format!("/usr/lib64/{dirname}/{filename}"),
+                    format!("/usr/lib/{dirname}/libc.so.6"),
+                    format!("/usr/lib64/{dirname}/libc.so.6"),
+                    format!("/usr/lib/{dirname}/libc.so"),
+                    format!("/usr/lib64/{dirname}/libc.so"),
                 ]
                 .into_iter()
                 .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
