@@ -287,7 +287,7 @@ jobs:
           set -euxo pipefail
           output="$(cargo run --features cli-logging --bin detect-targets)"
           [ "$output" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
-        # Set working directory here, otherwise `cargo-zigbuild` would download
+        # Set working directory here, otherwise `cargo` would download
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
 
