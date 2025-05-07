@@ -275,7 +275,23 @@ jobs:
             --mount src="$PWD/.github/scripts/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
             alpine /bin/ash -c "apk update && apk add bash && test.sh x86_64-unknown-linux-musl"
 
-  detect-targets-ubuntu-test:
+  detect-targets-ubuntu-arm-test:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+      - name: Build and run detect-targets tests
+        run: |
+          set -euxo pipefail
+          output="$(cargo run --features cli-logging --bin detect-targets)"
+          [ "$output" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
+        # Set working directory here, otherwise `cargo-zigbuild` would download
+        # and build quite a few unused dependencies.
+        working-directory: crates/detect-targets
+
+  detect-targets-ubuntu-x86_64-test:
     needs:
       - detect-targets-build
       - changed-files
@@ -283,13 +299,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-         - os: ubuntu-20.04
-           target: x86_64
-         - os: ubuntu-latest
-           target: x86_64
-         - os: ubuntu-24.04-arm
-           target: aarch64
+        os:
+          - ubuntu-20.04
+          - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/download-artifact@v4
@@ -300,7 +312,7 @@ jobs:
       - name: Run test in ubuntu
         run: |
           set -exuo pipefail
-          [ "$(./detect-targets)" = "$(printf '${{ matrix.target }}-unknown-linux-gnu\n${{ matrix.target }}-unknown-linux-musl')" ]
+          [ "$(./detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
   detect-targets-more-glibc-test:
     needs:
@@ -389,7 +401,8 @@ jobs:
       - release-dry-run
       - detect-targets-build
       - detect-targets-alpine-test
-      - detect-targets-ubuntu-test
+      - detect-targets-ubuntu-arm-test
+      - detect-targets-ubuntu-x86_64-test
       - detect-targets-more-glibc-test
       - detect-targets-nix-test
       - detect-targets-android-check
