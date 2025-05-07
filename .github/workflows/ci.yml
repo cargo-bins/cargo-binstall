@@ -275,7 +275,23 @@ jobs:
             --mount src="$PWD/.github/scripts/test-detect-targets-musl.sh",dst=/usr/local/bin/test.sh,type=bind \
             alpine /bin/ash -c "apk update && apk add bash && test.sh x86_64-unknown-linux-musl"
 
-  detect-targets-ubuntu-test:
+  detect-targets-ubuntu-arm-test:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+      - name: Build and run detect-targets tests
+        run: |
+          set -euxo pipefail
+          output="$(cargo run --features cli-logging --bin detect-targets)"
+          [ "$output" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
+        # Set working directory here, otherwise `cargo` would download
+        # and build quite a few unused dependencies.
+        working-directory: crates/detect-targets
+
+  detect-targets-ubuntu-x86_64-test:
     needs:
       - detect-targets-build
       - changed-files
@@ -284,7 +300,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-20.04
+          - ubuntu-22.04
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
@@ -385,7 +401,8 @@ jobs:
       - release-dry-run
       - detect-targets-build
       - detect-targets-alpine-test
-      - detect-targets-ubuntu-test
+      - detect-targets-ubuntu-arm-test
+      - detect-targets-ubuntu-x86_64-test
       - detect-targets-more-glibc-test
       - detect-targets-nix-test
       - detect-targets-android-check
