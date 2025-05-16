@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.33](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.32...binstalk-v0.28.33) - 2025-05-16
+
+### Other
+
+- Upgrade transitive dependencies ([#2154](https://github.com/cargo-bins/cargo-binstall/pull/2154))
+
 ## [0.28.32](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.31...binstalk-v0.28.32) - 2025-05-07
 
 ### Other
