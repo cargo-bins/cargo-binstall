@@ -527,7 +527,7 @@ fn do_install_fetches(
 
         if no_cleanup {
             // Consume temp_dir without removing it from fs.
-            let _ = temp_dir.into_path();
+            let _ = temp_dir.keep();
         } else {
             temp_dir.close().unwrap_or_else(|err| {
                 warn!("Failed to clean up some resources: {err}");
@@ -577,7 +577,7 @@ fn do_install_fetches_continue_on_failure(
 
         if no_cleanup {
             // Consume temp_dir without removing it from fs.
-            let _ = temp_dir.into_path();
+            let _ = temp_dir.keep();
         } else {
             temp_dir.close().unwrap_or_else(|err| {
                 warn!("Failed to clean up some resources: {err}");

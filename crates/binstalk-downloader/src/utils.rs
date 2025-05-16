@@ -100,10 +100,7 @@ where
     async fn inner<T: Send + 'static>(handle: task::JoinHandle<io::Result<T>>) -> io::Result<T> {
         match handle.await {
             Ok(res) => res,
-            Err(err) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("background task failed: {err}"),
-            )),
+            Err(err) => Err(io::Error::other(format!("background task failed: {err}"))),
         }
     }
 
