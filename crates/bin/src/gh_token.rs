@@ -28,10 +28,7 @@ pub(super) async fn get() -> io::Result<Zeroizing<Box<str>>> {
                 .map(|token| Zeroizing::new(token.into()))
         })
         .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                "Password not found in `git credential fill` output",
-            )
+            io::Error::other("Password not found in `git credential fill` output")
         })
 }
 
@@ -86,8 +83,7 @@ impl CommandExt for Command {
         } else {
             zeroize_and_drop(stdout);
 
-            Err(io::Error::new(
-                io::ErrorKind::Other,
+            Err(io::Error::other(
                 format!("`{:?}` process exited with `{status}`", self.as_std()),
             ))
         }
