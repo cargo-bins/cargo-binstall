@@ -539,7 +539,7 @@ impl From<BinstallError> for io::Error {
     fn from(e: BinstallError) -> io::Error {
         match e {
             BinstallError::Io(io_error) => io_error,
-            e => io::Error::new(io::ErrorKind::Other, e),
+            e => io::Error::other(e),
         }
     }
 }
