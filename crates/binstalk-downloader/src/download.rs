@@ -53,7 +53,7 @@ impl From<DownloadError> for io::Error {
     fn from(e: DownloadError) -> io::Error {
         match e {
             DownloadError::Io(io_error) => io_error,
-            e => io::Error::new(io::ErrorKind::Other, e),
+            e => io::Error::othet(e),
         }
     }
 }
