@@ -2,7 +2,7 @@
 
 set -eux
 
-function do_curl {
+do_curl() {
     curl --retry 10 -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -L --proto '=https' --tlsv1.2 -sSf "$@"
 }
 
