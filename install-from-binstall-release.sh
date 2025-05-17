@@ -2,6 +2,10 @@
 
 set -eux
 
+do_curl() {
+    curl --retry 10 -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -L --proto '=https' --tlsv1.2 -sSf "$@"
+}
+
 # Set pipefail if it works in a subshell, disregard if unsupported
 # shellcheck disable=SC3040
 (set -o pipefail 2> /dev/null) && set -o pipefail
@@ -26,7 +30,7 @@ fi
 os="$(uname -s)"
 if [ "$os" = "Darwin" ]; then
     url="${base_url}universal-apple-darwin.zip"
-    curl -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -LO --proto '=https' --tlsv1.2 -sSf "$url"
+    do_curl -O "$url"
     unzip cargo-binstall-universal-apple-darwin.zip
 elif [ "$os" = "Linux" ]; then
     machine="$(uname -m)"
@@ -39,12 +43,12 @@ elif [ "$os" = "Linux" ]; then
     fi
 
     url="${base_url}${target}.tgz"
-    curl -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -L --proto '=https' --tlsv1.2 -sSf "$url" | tar -xvzf -
+    do_curl "$url" | tar -xvzf -
 elif [ "${OS-}" = "Windows_NT" ]; then
     machine="$(uname -m)"
     target="${machine}-pc-windows-msvc"
     url="${base_url}${target}.zip"
-    curl -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -LO --proto '=https' --tlsv1.2 -sSf "$url"
+    do_curl -O "$url"
     unzip "cargo-binstall-${target}.zip"
 else
     echo "Unsupported OS ${os}"
