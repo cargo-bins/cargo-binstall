@@ -8,7 +8,7 @@ runs:
       if: runner.os != 'Windows'
       shell: sh
       run: |
-        set -euo pipefail
+        set -eu
         curl --retry 10 -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
     - name: Install cargo-binstall
       if: runner.os == 'Windows'
