@@ -36,7 +36,7 @@ rc-zip-sync = { version = "4.2.6", features = [
     "lzma",
     "zstd",
 ] }
-reqwest = { version = "0.12.5", features = [
+reqwest = { version = "0.12.17", features = [
     "http2",
     "stream",
     "zstd",
@@ -136,3 +136,6 @@ ipconfig = { version = "0.3.2", optional = true, default-features = false }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }

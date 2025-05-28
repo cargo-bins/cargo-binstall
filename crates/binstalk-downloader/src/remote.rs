@@ -144,6 +144,11 @@ impl Client {
             }
         }
 
+        #[cfg(all(reqwest_unstable, feature = "http3"))]
+        {
+            builder = builder.http3_congestion_bbr().tls_early_data(true);
+        }
+
         builder
     }
 
