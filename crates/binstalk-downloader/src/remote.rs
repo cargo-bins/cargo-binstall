@@ -143,12 +143,12 @@ impl Client {
                 builder = builder.add_root_certificate(certificate.0);
             }
 
-            builder.tls_early_data(true);
+            builder = builder.tls_early_data(true);
         }
 
         #[cfg(all(reqwest_unstable, feature = "http3"))]
         {
-            builder.http3_congestion_bbr();
+            builder = builder.http3_congestion_bbr();
         }
 
         builder
