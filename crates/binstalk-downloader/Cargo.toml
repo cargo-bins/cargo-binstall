@@ -136,3 +136,6 @@ ipconfig = { version = "0.3.2", optional = true, default-features = false }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }
