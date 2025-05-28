@@ -36,7 +36,7 @@ rc-zip-sync = { version = "4.2.6", features = [
     "lzma",
     "zstd",
 ] }
-reqwest = { version = "0.12.18", features = [
+reqwest = { version = "0.12.17", features = [
     "http2",
     "stream",
     "zstd",
