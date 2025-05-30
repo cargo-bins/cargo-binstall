@@ -24,9 +24,9 @@ export PATH="$CARGO_HOME/bin:$PATH"
 #    --no-confirm \
 #    --disable-strategies compile \
 #    cargo-binstall
-
-# Test that the installed binaries can be run
-cargo binstall --help >/dev/null
+#
+## Test that the installed binaries can be run
+#cargo binstall --help >/dev/null
 
 cargo_binstall_version="$(cargo binstall -V)"
 echo "$cargo_binstall_version"
