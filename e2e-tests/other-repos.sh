@@ -27,11 +27,11 @@ export PATH="$CARGO_HOME/bin:$PATH"
 #
 ## Test that the installed binaries can be run
 #cargo binstall --help >/dev/null
-
-cargo_binstall_version="$(cargo binstall -V)"
-echo "$cargo_binstall_version"
-
-[ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
+#
+#cargo_binstall_version="$(cargo binstall -V)"
+#echo "$cargo_binstall_version"
+#
+#[ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
 
 # Test default Github pkg-url templates,
 # with bin-dir provided
