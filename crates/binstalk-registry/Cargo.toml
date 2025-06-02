@@ -19,6 +19,7 @@ binstalk-downloader = { version = "0.13.19", path = "../binstalk-downloader", de
 binstalk-types = { version = "0.9.4", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "7.0.6", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.9.0", features = ["serde"] }
+either = "1.15.0"
 leon = "3.0.0"
 miette = "7.0.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
