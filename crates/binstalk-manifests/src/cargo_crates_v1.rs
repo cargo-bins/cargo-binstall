@@ -68,9 +68,14 @@ impl CratesToml<'_> {
     }
 
     pub fn remove(&mut self, name: &str) {
+        self.remove(&[name]);
+    }
+
+    /// * `sorted_names` - must be sorted
+    pub fn remove_all(&mut self, sorted_names: &[&str]) {
         self.v1.retain(|(s, _bin)| {
             s.split_once(' ')
-                .map(|(crate_name, _rest)| crate_name != name)
+                .map(|(crate_name, _rest)| sorted_names.binary_search(crate_name).is_err())
                 .unwrap_or_default()
         });
     }
@@ -106,35 +111,28 @@ impl CratesToml<'_> {
         self.write_to_file(&mut file)
     }
 
-    pub fn append_to_file<'a, Iter>(file: &mut File, iter: Iter) -> Result<(), CratesTomlParseError>
-    where
-        Iter: IntoIterator<Item = &'a CrateInfo>,
-    {
-        fn inner(
-            file: &mut File,
-            iter: &mut dyn Iterator<Item = &CrateInfo>,
-        ) -> Result<(), CratesTomlParseError> {
-            let mut c1 = CratesToml::load_from_reader(&mut *file)?;
+    pub fn append_to_file(file: &mut File, crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
+        let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
-            for metadata in iter {
-                let name = &metadata.name;
-                let version = &metadata.current_version;
-                let source = Source::from(&metadata.source);
+        let mut crate_names: Vec<_> = crates.iter().map(|metadata| &metadata.name).collect();
+        crate_names.sort_unstable();
+        c1.remove_all(&crate_names);
 
-                c1.remove(name);
-                c1.v1.push((
-                    format!("{name} {version} ({source})"),
-                    Cow::borrowed(&metadata.bins),
-                ));
-            }
+        for metadata in crates {
+            let name = &metadata.name;
+            let version = &metadata.current_version;
+            let source = Source::from(&metadata.source);
 
-            file.rewind()?;
-            c1.write_to_file(file)?;
-
-            Ok(())
+            c1.v1.push((
+                format!("{name} {version} ({source})"),
+                Cow::borrowed(&metadata.bins),
+            ));
         }
 
-        inner(file, &mut iter.into_iter())
+        file.rewind()?;
+        c1.write_to_file(file)?;
+
+        Ok(())
     }
 
     pub fn append_to_path<'a, Iter>(
