@@ -7,7 +7,11 @@ use binstalk_downloader::{
     download::DownloadError,
     remote::{Client, Error as RemoteError},
 };
-use binstalk_types::cargo_toml_binstall::Meta;
+use binstalk_types::{
+    cargo_toml_binstall::Meta,
+    crate_info::{CrateSource, SourceType}, 
+    maybe_owned::MaybeOwned,
+};
 use cargo_toml_workspace::cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
 use leon::{ParseError, RenderError};
@@ -80,7 +84,7 @@ pub enum RegistryError {
     CargoManifest(#[from] Box<CargoTomlError>),
 
     #[error("Failed to parse url: {0}")]
-    UrlParse(#[from] url::ParseError),
+    UrlParse(#[from] UrlParseError),
 
     #[error(transparent)]
     Download(#[from] DownloadError),
@@ -195,15 +199,37 @@ impl Registry {
             }
         }
     }
+
+    /// Get url of the regsitry
+    pub fn url(&self) -> impl fmt::Display + '_ {
+        match self {
+            #[cfg(feature = "git")]
+            Registry::Git(registry) => either::Left(registry.url()),
+            Registry::Sparse(registry) => either::Right(registry.url()),
+        }
+    }
+
+    /// Get crate source of this registry 
+    pub fn crate_source(&self) -> Result<CrateSource, UrlParseError> {
+        let registry = self.to_string();
+        Ok(if registry == "https://index.crates.io/" { 
+            CrateSource::cratesio_registry() 
+        } else { 
+            CrateSource { 
+                source_type: match self {
+                    #[cfg(feature = "git")]
+                    Registry::Git(registry) => SourceType::Git,
+                    Registry::Sparse(registry) => SourceType::Sparse,
+                },
+                url: MaybeOwned::Owned(Url::parse(&registry)?),
+            }
+        })
+    }
 }
 
 impl fmt::Display for Registry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            #[cfg(feature = "git")]
-            Registry::Git(registry) => fmt::Display::fmt(&registry.url(), f),
-            Registry::Sparse(registry) => fmt::Display::fmt(&registry.url(), f),
-        }
+        fmt::Display::fmt(&self.url(), f)
     }
 }
 
