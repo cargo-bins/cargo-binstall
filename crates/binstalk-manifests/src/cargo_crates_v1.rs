@@ -68,14 +68,14 @@ impl CratesToml<'_> {
     }
 
     pub fn remove(&mut self, name: &str) {
-        self.remove(&[name]);
+        self.remove_all(&[name]);
     }
 
     /// * `sorted_names` - must be sorted
     pub fn remove_all(&mut self, sorted_names: &[&str]) {
         self.v1.retain(|(s, _bin)| {
             s.split_once(' ')
-                .map(|(crate_name, _rest)| sorted_names.binary_search(crate_name).is_err())
+                .map(|(crate_name, _rest)| sorted_names.binary_search(&crate_name).is_err())
                 .unwrap_or_default()
         });
     }
@@ -114,9 +114,11 @@ impl CratesToml<'_> {
     pub fn append_to_file(file: &mut File, crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
         let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
-        let mut crate_names: Vec<_> = crates.iter().map(|metadata| &metadata.name).collect();
+        let mut crate_names: Vec<_> = crates.iter().map(|metadata| metadata.name.as_str()).collect();
         crate_names.sort_unstable();
         c1.remove_all(&crate_names);
+
+        c1.v1.reserve_exact(crates.len());
 
         for metadata in crates {
             let name = &metadata.name;
@@ -135,22 +137,13 @@ impl CratesToml<'_> {
         Ok(())
     }
 
-    pub fn append_to_path<'a, Iter>(
-        path: impl AsRef<Path>,
-        iter: Iter,
-    ) -> Result<(), CratesTomlParseError>
-    where
-        Iter: IntoIterator<Item = &'a CrateInfo>,
-    {
+    pub fn append_to_path(path: impl AsRef<Path>, crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
         let mut file = create_if_not_exist(path.as_ref())?;
-        Self::append_to_file(&mut file, iter)
+        Self::append_to_file(&mut file, crates)
     }
 
-    pub fn append<'a, Iter>(iter: Iter) -> Result<(), CratesTomlParseError>
-    where
-        Iter: IntoIterator<Item = &'a CrateInfo>,
-    {
-        Self::append_to_path(Self::default_path()?, iter)
+    pub fn append(crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
+        Self::append_to_path(Self::default_path()?, crates)
     }
 
     /// Return BTreeMap with crate name as key and its corresponding version
