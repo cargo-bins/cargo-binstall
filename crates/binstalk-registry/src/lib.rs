@@ -223,8 +223,8 @@ impl Registry {
             CrateSource { 
                 source_type: match self {
                     #[cfg(feature = "git")]
-                    Registry::Git(registry) => SourceType::Git,
-                    Registry::Sparse(registry) => SourceType::Sparse,
+                    Registry::Git(_) => SourceType::Git,
+                    Registry::Sparse(_) => SourceType::Sparse,
                 },
                 url: MaybeOwned::Owned(Url::parse(&registry)?),
             }
