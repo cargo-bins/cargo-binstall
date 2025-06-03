@@ -9,7 +9,7 @@ use binstalk_downloader::{
 };
 use binstalk_types::{
     cargo_toml_binstall::Meta,
-    crate_info::{CrateSource, SourceType}, 
+    crate_info::{CrateSource, SourceType},
     maybe_owned::MaybeOwned,
 };
 use cargo_toml_workspace::cargo_toml::{Error as CargoTomlError, Manifest};
@@ -214,13 +214,13 @@ impl Registry {
         }
     }
 
-    /// Get crate source of this registry 
+    /// Get crate source of this registry
     pub fn crate_source(&self) -> Result<CrateSource, UrlParseError> {
         let registry = self.to_string();
-        Ok(if registry == "https://index.crates.io/" { 
-            CrateSource::cratesio_registry() 
-        } else { 
-            CrateSource { 
+        Ok(if registry == "https://index.crates.io/" {
+            CrateSource::cratesio_registry()
+        } else {
+            CrateSource {
                 source_type: match self {
                     #[cfg(feature = "git")]
                     Registry::Git(_) => SourceType::Git,
