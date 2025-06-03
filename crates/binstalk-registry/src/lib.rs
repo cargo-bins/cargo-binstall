@@ -202,10 +202,15 @@ impl Registry {
 
     /// Get url of the regsitry
     pub fn url(&self) -> impl fmt::Display + '_ {
-        match self {
-            #[cfg(feature = "git")]
+        #[cfg(feature = "git")]
+        return match self {
             Registry::Git(registry) => either::Left(registry.url()),
             Registry::Sparse(registry) => either::Right(registry.url()),
+        };
+
+        #[cfg(not(feature = "git"))]
+        match self {
+            Registry::Sparse(registry) => registry.url(),
         }
     }
 
