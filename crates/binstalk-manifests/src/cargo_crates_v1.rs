@@ -111,7 +111,10 @@ impl CratesToml<'_> {
         self.write_to_file(&mut file)
     }
 
-    pub fn append_to_file(file: &mut File, crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
+    pub fn append_to_file(
+        file: &mut File,
+        crates: &[CrateInfo],
+    ) -> Result<(), CratesTomlParseError> {
         let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
         let mut crate_names: Vec<_> = crates
