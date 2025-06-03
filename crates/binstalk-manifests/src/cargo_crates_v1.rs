@@ -114,7 +114,10 @@ impl CratesToml<'_> {
     pub fn append_to_file(file: &mut File, crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
         let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
-        let mut crate_names: Vec<_> = crates.iter().map(|metadata| metadata.name.as_str()).collect();
+        let mut crate_names: Vec<_> = crates
+            .iter()
+            .map(|metadata| metadata.name.as_str())
+            .collect();
         crate_names.sort_unstable();
         c1.remove_all(&crate_names);
 
@@ -137,7 +140,10 @@ impl CratesToml<'_> {
         Ok(())
     }
 
-    pub fn append_to_path(path: impl AsRef<Path>, crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
+    pub fn append_to_path(
+        path: impl AsRef<Path>,
+        crates: &[CrateInfo],
+    ) -> Result<(), CratesTomlParseError> {
         let mut file = create_if_not_exist(path.as_ref())?;
         Self::append_to_file(&mut file, crates)
     }
