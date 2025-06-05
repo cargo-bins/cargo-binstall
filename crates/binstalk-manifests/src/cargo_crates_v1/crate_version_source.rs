@@ -1,4 +1,8 @@
-use std::{borrow::Cow, fmt::{self, Write as _}, str::FromStr};
+use std::{
+    borrow::Cow,
+    fmt::{self, Write as _},
+    str::FromStr,
+};
 
 use binstalk_types::maybe_owned::MaybeOwned;
 use compact_str::CompactString;
@@ -136,7 +140,7 @@ impl fmt::Display for Source<'_> {
                 } else {
                     f.write_char('/')
                 }
-            },
+            }
         }
     }
 }
