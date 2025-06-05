@@ -111,7 +111,7 @@ impl CratesToml<'_> {
         self.write_to_file(&mut file)
     }
 
-    pub fn add_crate(&mut self, metadata: &CrateInfo) {
+    pub fn add_crate<'this, 'metadata: 'this>(&'this mut self, metadata: &'metadata CrateInfo) {
         let name = &metadata.name;
         let version = &metadata.current_version;
         let source = Source::from(&metadata.source);
