@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::{Self, Write as _}, str::FromStr};
+use std::{borrow::Cow, fmt::{self, Write as _}, str::FromStr};
 
 use binstalk_types::maybe_owned::MaybeOwned;
 use compact_str::CompactString;
@@ -131,7 +131,7 @@ impl fmt::Display for Source<'_> {
             Source::Sparse(url) => {
                 let url = url.as_str();
                 write!(f, "sparse+{url}")?;
-                if (url.ends_with("/")) {
+                if url.ends_with("/") {
                     Ok(())
                 } else {
                     f.write_char('/')
