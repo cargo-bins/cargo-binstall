@@ -37,7 +37,7 @@ pub struct CratesToml<'a> {
     v1: Vec<(String, Cow<'a, [CompactString]>)>,
 }
 
-impl CratesToml<'_> {
+impl<'v1> CratesToml<'v1> {
     pub fn default_path() -> Result<PathBuf, CratesTomlParseError> {
         Ok(cargo_home()?.join(".crates.toml"))
     }
@@ -111,7 +111,7 @@ impl CratesToml<'_> {
         self.write_to_file(&mut file)
     }
 
-    pub fn add_crate<'this, 'metadata: 'this>(&'this mut self, metadata: &'metadata CrateInfo) {
+    pub fn add_crate(&mut self, metadata: &'v1 CrateInfo) {
         let name = &metadata.name;
         let version = &metadata.current_version;
         let source = Source::from(&metadata.source);
@@ -138,7 +138,7 @@ impl CratesToml<'_> {
         c1.v1.reserve_exact(crates.len());
 
         for metadata in crates {
-            self.add_crate(metadata);
+            c1.add_crate(metadata);
         }
 
         file.rewind()?;
