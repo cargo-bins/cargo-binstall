@@ -111,6 +111,17 @@ impl CratesToml<'_> {
         self.write_to_file(&mut file)
     }
 
+    pub fn add_crate(&mut self, metadata: &CrateInfo) {
+        let name = &metadata.name;
+        let version = &metadata.current_version;
+        let source = Source::from(&metadata.source);
+
+        self.v1.push((
+            format!("{name} {version} ({source})"),
+            Cow::borrowed(&metadata.bins),
+        ));
+    }
+
     pub fn append_to_file(
         file: &mut File,
         crates: &[CrateInfo],
@@ -127,14 +138,7 @@ impl CratesToml<'_> {
         c1.v1.reserve_exact(crates.len());
 
         for metadata in crates {
-            let name = &metadata.name;
-            let version = &metadata.current_version;
-            let source = Source::from(&metadata.source);
-
-            c1.v1.push((
-                format!("{name} {version} ({source})"),
-                Cow::borrowed(&metadata.bins),
-            ));
+            self.add_crate(metadata);
         }
 
         file.rewind()?;
