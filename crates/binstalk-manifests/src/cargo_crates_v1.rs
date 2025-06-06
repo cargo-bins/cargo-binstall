@@ -34,7 +34,7 @@ use crate_version_source::*;
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml<'a> {
     #[serde(with = "tuple_vec_map")]
-    v1: Vec<(String, Cow<'a, [CompactString]>)>,
+    v1: Vec<(Box<str>, Cow<'a, [CompactString]>)>,
 }
 
 impl<'v1> CratesToml<'v1> {
