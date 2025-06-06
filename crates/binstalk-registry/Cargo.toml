@@ -1,6 +1,6 @@
 [package]
 name = "binstalk-registry"
-version = "0.11.20"
+version = "0.11.21"
 edition = "2021"
 rust-version = "1.65.0"
 
@@ -13,10 +13,10 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 async-trait = "0.1.88"
 base16 = "0.2.1"
-binstalk-downloader = { version = "0.13.19", path = "../binstalk-downloader", default-features = false, features = [
+binstalk-downloader = { version = "0.13.20", path = "../binstalk-downloader", default-features = false, features = [
     "json",
 ] }
-binstalk-types = { version = "0.9.4", path = "../binstalk-types" }
+binstalk-types = { version = "0.10.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "7.0.6", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.9.0", features = ["serde"] }
 leon = "3.0.0"
@@ -40,7 +40,7 @@ url = "2.5.4"
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 toml_edit = { version = "0.22.12", features = ["serde"] }
-binstalk-downloader = { version = "0.13.19", path = "../binstalk-downloader", default-features = false, features = [
+binstalk-downloader = { version = "0.13.20", path = "../binstalk-downloader", default-features = false, features = [
     "rustls",
 ] }
 
