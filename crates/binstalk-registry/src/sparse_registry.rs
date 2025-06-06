@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use binstalk_downloader::remote::{Client, Error as RemoteError};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
@@ -30,7 +28,7 @@ impl SparseRegistry {
         }
     }
 
-    pub fn url(&self) -> impl Display + '_ {
+    pub fn url(&self) -> &Url {
         &self.url
     }
 

@@ -7,7 +7,11 @@ use binstalk_downloader::{
     download::DownloadError,
     remote::{Client, Error as RemoteError},
 };
-use binstalk_types::cargo_toml_binstall::Meta;
+use binstalk_types::{
+    cargo_toml_binstall::Meta,
+    crate_info::{CrateSource, SourceType},
+    maybe_owned::MaybeOwned,
+};
 use cargo_toml_workspace::cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
 use leon::{ParseError, RenderError};
@@ -80,7 +84,7 @@ pub enum RegistryError {
     CargoManifest(#[from] Box<CargoTomlError>),
 
     #[error("Failed to parse url: {0}")]
-    UrlParse(#[from] url::ParseError),
+    UrlParse(#[from] UrlParseError),
 
     #[error(transparent)]
     Download(#[from] DownloadError),
@@ -194,6 +198,38 @@ impl Registry {
                     .await
             }
         }
+    }
+
+    /// Get url of the regsitry
+    pub fn url(&self) -> Result<MaybeOwned<'_, Url>, UrlParseError> {
+        match self {
+            #[cfg(feature = "git")]
+            Registry::Git(registry) => {
+                Url::parse(&registry.url().to_string()).map(MaybeOwned::Owned)
+            }
+            Registry::Sparse(registry) => Ok(MaybeOwned::Borrowed(registry.url())),
+        }
+    }
+
+    /// Get crate source of this registry
+    pub fn crate_source(&self) -> Result<CrateSource, UrlParseError> {
+        let registry = self.url()?;
+        let source_type = match self {
+            #[cfg(feature = "git")]
+            Registry::Git(_) => SourceType::Git,
+            Registry::Sparse(_) => SourceType::Sparse,
+        };
+
+        Ok(match (registry.as_str(), source_type) {
+            ("https://index.crates.io/", SourceType::Sparse)
+            | ("https://github.com/rust-lang/crates.io-index", SourceType::Git) => {
+                CrateSource::cratesio_registry()
+            }
+            _ => CrateSource {
+                source_type,
+                url: MaybeOwned::Owned(registry.into_owned()),
+            },
+        })
     }
 }
 

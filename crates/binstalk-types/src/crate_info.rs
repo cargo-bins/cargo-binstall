@@ -65,6 +65,7 @@ pub enum SourceType {
     Git,
     Path,
     Registry,
+    Sparse,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
