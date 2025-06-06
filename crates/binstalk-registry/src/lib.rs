@@ -201,40 +201,41 @@ impl Registry {
     }
 
     /// Get url of the regsitry
-    pub fn url(&self) -> impl fmt::Display + '_ {
-        #[cfg(feature = "git")]
-        return match self {
-            Registry::Git(registry) => either::Left(registry.url()),
-            Registry::Sparse(registry) => either::Right(registry.url()),
-        };
-
-        #[cfg(not(feature = "git"))]
+    pub fn url(&self) -> Result<MaybeOwned<'_, Url>, UrlParseError> {
         match self {
-            Registry::Sparse(registry) => registry.url(),
+            #[cfg(feature = "git")]
+            Registry::Git(registry) => Url::parse(&registry.url().to_string()).map_ok(MaybeOwned::Owned),
+            Registry::Sparse(registry) => Ok(MaybeOwned::Borrowed(registry.url())),
         }
     }
 
     /// Get crate source of this registry
     pub fn crate_source(&self) -> Result<CrateSource, UrlParseError> {
-        let registry = self.to_string();
-        Ok(if registry == "https://index.crates.io/" {
-            CrateSource::cratesio_registry()
-        } else {
-            CrateSource {
-                source_type: match self {
-                    #[cfg(feature = "git")]
-                    Registry::Git(_) => SourceType::Git,
-                    Registry::Sparse(_) => SourceType::Sparse,
-                },
-                url: MaybeOwned::Owned(Url::parse(&registry)?),
-            }
-        })
+        let registry = self.url()?;
+        let source_type = match self {
+            #[cfg(feature = "git")]
+            Registry::Git(_) => SourceType::Git,
+            Registry::Sparse(_) => SourceType::Sparse,
+        };
+
+        match (registry.as_str(), source_type) {
+            ("https://index.crates.io/", SourceType::Sparse) |
+            ("https://github.com/rust-lang/crates.io-index", SourceType::Git) => CrateSource::cratesio_registry(),
+            _ => CrateSource {
+                source_type,
+                url: MaybeOwned::Owned(registry.into_owned()),
+            },
+        }
     }
 }
 
 impl fmt::Display for Registry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.url(), f)
+        match self {
+            #[cfg(feature = "git")]
+            Registry::Git(registry) => fmt::Display::fmt(&registry.url(), fmt),
+            Registry::Sparse(registry) => fmt::Display::fmt(&registry.url(), fmt),
+        }
     }
 }
 
