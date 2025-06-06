@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.14](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.6.13...binstalk-bins-v0.6.14) - 2025-06-06
+
+### Other
+
+- updated the following local packages: binstalk-types
+
 ## [0.6.13](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.6.12...binstalk-bins-v0.6.13) - 2025-03-19
 
 ### Other

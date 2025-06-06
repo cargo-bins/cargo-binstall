@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.15.31...binstalk-manifests-v0.16.0) - 2025-06-06
+
+### Fixed
+
+- fix updating of installed crates manifest on custom sparse registry ([#2178](https://github.com/cargo-bins/cargo-binstall/pull/2178))
+
+### Other
+
+- Optimize CratesToml ([#2186](https://github.com/cargo-bins/cargo-binstall/pull/2186))
+
 ## [0.15.31](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.15.30...binstalk-manifests-v0.15.31) - 2025-05-30
 
 ### Other

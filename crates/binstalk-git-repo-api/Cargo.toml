@@ -3,14 +3,14 @@ name = "binstalk-git-repo-api"
 description = "The binstall toolkit for accessing API for git repository"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-git-repo-api"
-version = "0.5.21"
+version = "0.5.22"
 rust-version = "1.70.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-binstalk-downloader = { version = "0.13.19", path = "../binstalk-downloader", default-features = false, features = [
+binstalk-downloader = { version = "0.13.20", path = "../binstalk-downloader", default-features = false, features = [
     "json",
 ] }
 compact_str = "0.9.0"
@@ -25,6 +25,6 @@ url = "2.5.4"
 zeroize = "1.8.1"
 
 [dev-dependencies]
-binstalk-downloader = { version = "0.13.19", path = "../binstalk-downloader" }
+binstalk-downloader = { version = "0.13.20", path = "../binstalk-downloader" }
 tracing-subscriber = "0.3"
 once_cell = "1"
