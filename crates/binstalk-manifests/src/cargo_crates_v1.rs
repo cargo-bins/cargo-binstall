@@ -34,7 +34,7 @@ use crate_version_source::*;
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml<'a> {
     #[serde(with = "tuple_vec_map")]
-    v1: Vec<(String, Cow<'a, [CompactString]>)>,
+    v1: Vec<(Box<str>, Cow<'a, [CompactString]>)>,
 }
 
 impl<'v1> CratesToml<'v1> {
@@ -117,7 +117,7 @@ impl<'v1> CratesToml<'v1> {
         let source = Source::from(&metadata.source);
 
         self.v1.push((
-            format!("{name} {version} ({source})"),
+            format!("{name} {version} ({source})").into(),
             Cow::borrowed(&metadata.bins),
         ));
     }
@@ -128,12 +128,14 @@ impl<'v1> CratesToml<'v1> {
     ) -> Result<(), CratesTomlParseError> {
         let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
-        let mut crate_names: Vec<_> = crates
-            .iter()
-            .map(|metadata| metadata.name.as_str())
-            .collect();
-        crate_names.sort_unstable();
-        c1.remove_all(&crate_names);
+        c1.remove_all(&{
+            let mut crate_names: Vec<_> = crates
+                .iter()
+                .map(|metadata| metadata.name.as_str())
+                .collect();
+            crate_names.sort_unstable();
+            crate_names
+        });
 
         c1.v1.reserve_exact(crates.len());
 
