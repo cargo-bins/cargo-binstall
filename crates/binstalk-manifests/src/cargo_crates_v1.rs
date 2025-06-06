@@ -117,7 +117,7 @@ impl<'v1> CratesToml<'v1> {
         let source = Source::from(&metadata.source);
 
         self.v1.push((
-            format!("{name} {version} ({source})"),
+            format!("{name} {version} ({source})").into(),
             Cow::borrowed(&metadata.bins),
         ));
     }
@@ -128,12 +128,14 @@ impl<'v1> CratesToml<'v1> {
     ) -> Result<(), CratesTomlParseError> {
         let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
-        let mut crate_names: Vec<_> = crates
+        c1.remove_all(&{
+            let mut crate_names: Vec<_> = crates
             .iter()
             .map(|metadata| metadata.name.as_str())
             .collect();
-        crate_names.sort_unstable();
-        c1.remove_all(&crate_names);
+            crate_names.sort_unstable();
+            crate_names
+        });
 
         c1.v1.reserve_exact(crates.len());
 
