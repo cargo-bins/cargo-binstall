@@ -30,7 +30,7 @@ impl SparseRegistry {
         }
     }
 
-    pub fn url(&self) -> impl Display + '_ {
+    pub fn url(&self) -> &Url {
         &self.url
     }
 
