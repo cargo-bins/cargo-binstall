@@ -11,17 +11,7 @@ fn succeeds(res: io::Result<Child>) -> bool {
         .unwrap_or(false)
 }
 
-fn main() {
-    let handle = thread::spawn(|| {
-        println!("cargo:rerun-if-changed=build.rs");
-        println!("cargo:rerun-if-changed=manifest.rc");
-        println!("cargo:rerun-if-changed=windows.manifest");
-
-        embed_resource::compile("manifest.rc", embed_resource::NONE)
-            .manifest_required()
-            .unwrap();
-    });
-
+fn emit_vergen_info() {
     let git = Command::new("git").arg("--version").spawn();
 
     // .git is usually a dir, but it also can be a file containing
@@ -41,6 +31,22 @@ fn main() {
     }
 
     builder.emit().unwrap();
+}
 
-    handle.join().unwrap();
+fn main() {
+    thread::scope(|s| {
+        let handle = s.spawn(|| {
+            println!("cargo:rerun-if-changed=build.rs");
+            println!("cargo:rerun-if-changed=manifest.rc");
+            println!("cargo:rerun-if-changed=windows.manifest");
+
+            embed_resource::compile("manifest.rc", embed_resource::NONE)
+                .manifest_required()
+                .unwrap();
+        });
+
+        emit_vergen_info();
+
+        handle.join().unwrap();
+    });
 }
