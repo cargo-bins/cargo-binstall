@@ -73,7 +73,7 @@ impl GitRegistry {
         }))
     }
 
-    pub fn url(&self) -> impl Display + '_ {
+    pub fn url(&self) -> &GitUrl {
         &self.0.url
     }
 
