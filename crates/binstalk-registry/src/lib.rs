@@ -204,7 +204,9 @@ impl Registry {
     pub fn url(&self) -> Result<MaybeOwned<'_, Url>, UrlParseError> {
         match self {
             #[cfg(feature = "git")]
-            Registry::Git(registry) => Url::parse(&registry.url().to_string()).map(MaybeOwned::Owned),
+            Registry::Git(registry) => {
+                Url::parse(&registry.url().to_string()).map(MaybeOwned::Owned)
+            }
             Registry::Sparse(registry) => Ok(MaybeOwned::Borrowed(registry.url())),
         }
     }
@@ -219,8 +221,10 @@ impl Registry {
         };
 
         Ok(match (registry.as_str(), source_type) {
-            ("https://index.crates.io/", SourceType::Sparse) |
-            ("https://github.com/rust-lang/crates.io-index", SourceType::Git) => CrateSource::cratesio_registry(),
+            ("https://index.crates.io/", SourceType::Sparse)
+            | ("https://github.com/rust-lang/crates.io-index", SourceType::Git) => {
+                CrateSource::cratesio_registry()
+            }
             _ => CrateSource {
                 source_type,
                 url: MaybeOwned::Owned(registry.into_owned()),
