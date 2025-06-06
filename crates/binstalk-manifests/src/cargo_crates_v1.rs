@@ -130,9 +130,9 @@ impl<'v1> CratesToml<'v1> {
 
         c1.remove_all(&{
             let mut crate_names: Vec<_> = crates
-            .iter()
-            .map(|metadata| metadata.name.as_str())
-            .collect();
+                .iter()
+                .map(|metadata| metadata.name.as_str())
+                .collect();
             crate_names.sort_unstable();
             crate_names
         });
