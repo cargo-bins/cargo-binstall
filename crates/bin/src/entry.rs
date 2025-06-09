@@ -157,6 +157,7 @@ pub fn install_crates(
         desired_targets,
         resolvers,
         cargo_install_fallback,
+        bins: args.bin,
 
         temp_dir: temp_dir.path().to_owned(),
         install_path,

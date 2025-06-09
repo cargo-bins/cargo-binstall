@@ -87,11 +87,16 @@ impl ResolutionFetch {
             current_version: self.new_version,
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
-            bins: self
-                .bin_files
-                .into_iter()
-                .map(|bin| bin.base_name)
-                .collect(),
+            bins: opts
+                .bins
+                .as_ref()
+                .map(|bins| bins.iter().cloned().map(Into::into).collect())
+                .unwrap_or_else(|| {
+                    self.bin_files
+                        .into_iter()
+                        .map(|bin| bin.base_name)
+                        .collect()
+                }),
         })
     }
 

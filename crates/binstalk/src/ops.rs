@@ -44,6 +44,7 @@ pub struct Options {
     pub desired_targets: DesiredTargets,
     pub resolvers: Vec<Resolver>,
     pub cargo_install_fallback: bool,
+    pub bins: Option<Vec<String>>,
 
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,
