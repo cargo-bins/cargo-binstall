@@ -105,7 +105,7 @@ pub struct Args {
         num_args = 1..,
         action = clap::ArgAction::Append
     )]
-    pub(crate) bin: Option<Vec<String>>,
+    pub(crate) bin: Option<Vec<CompactString>>,
 
     /// Override Cargo.toml package manifest path.
     ///
