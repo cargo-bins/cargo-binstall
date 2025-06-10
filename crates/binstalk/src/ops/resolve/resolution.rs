@@ -200,7 +200,7 @@ impl ResolutionSource {
         }
 
         if let Some(bins) = &opts.bins {
-            cmd.args(bins.iter().flat_map(|bin| ["--bin", bin.as_ref()]));
+            cmd.args(bins.iter().map(|bin| ["--bin", bin.as_ref()]));
         }
 
         debug!("Running `{}`", format_cmd(&cmd));
