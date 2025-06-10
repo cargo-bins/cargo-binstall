@@ -158,7 +158,7 @@ pub fn install_crates(
         resolvers,
         cargo_install_fallback,
         bins: args.bin.map(|mut bins| {
-            bins.sort();
+            bins.sort_unstable();
             bins
         }),
 
