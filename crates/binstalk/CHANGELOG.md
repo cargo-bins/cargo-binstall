@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.36](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.35...binstalk-v0.28.36) - 2025-06-10
+
+### Other
+
+- Add a `--bin` argument to mirror `cargo install --bin`. ([#2189](https://github.com/cargo-bins/cargo-binstall/pull/2189))
+
 ## [0.28.35](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.34...binstalk-v0.28.35) - 2025-06-06
 
 ### Fixed
