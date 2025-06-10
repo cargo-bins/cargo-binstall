@@ -88,7 +88,7 @@ impl ResolutionFetch {
             current_version: self.new_version,
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
-            bins: Self::resolve_bins(&opts.bins, &self.bin_files),
+            bins: Self::resolve_bins(&opts.bins, self.bin_files),
         })
     }
 
