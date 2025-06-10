@@ -99,8 +99,8 @@ impl ResolutionFetch {
         // We need to filter crate_bin_files by user_specified_bins in case the prebuilt doesn't
         // have featured-gated (optional) binary (gated behind feature).
         crate_bin_files
-            .iter()
-            .map(|bin| bin.base_name.clone())
+            .into_iter()
+            .map(|bin| bin.base_name)
             .filter(|bin_name| {
                 user_specified_bins
                     .as_ref()
