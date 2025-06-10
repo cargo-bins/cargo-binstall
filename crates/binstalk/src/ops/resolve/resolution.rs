@@ -94,13 +94,13 @@ impl ResolutionFetch {
 
     fn resolve_bins(
         user_specified_bins: &Option<Vec<CompactString>>,
-        crate_bin_files: &[BinFile],
+        crate_bin_files: Vec<BinFile>,
     ) -> Vec<CompactString> {
         // We need to filter crate_bin_files by user_specified_bins in case the prebuilt doesn't
         // have featured-gated (optional) binary (gated behind feature).
         crate_bin_files
             .iter()
-            .map(|bin| bin.base_name.clone())
+            .map(|bin| bin.base_name)
             .filter(|bin_name| {
                 user_specified_bins
                     .as_ref()
