@@ -9,7 +9,7 @@ export CARGO_HOME
 export PATH="$CARGO_HOME/bin:$PATH"
 
 # Install a specific binary, ensuring we don't fallback to source.
-"./$1" binstall --no-confirm taplo-cli --bin taplo --disable-strategies compile
+"./$1" binstall --no-confirm taplo-cli --bin taplo
 
 # Verify that the binary was installed and is executable
 if ! command -v taplo >/dev/null 2>&1; then
