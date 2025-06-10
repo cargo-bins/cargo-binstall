@@ -93,6 +93,20 @@ pub struct Args {
     )]
     pub(crate) targets: Option<Vec<String>>,
 
+    /// Install only the specified binaries.
+    ///
+    /// This mirrors the equivalent argument in `cargo install --bin`.
+    ///
+    /// If omitted, all binaries are installed.
+    #[clap(
+        help_heading = "Package selection",
+        long,
+        value_name = "BINARY",
+        num_args = 1..,
+        action = clap::ArgAction::Append
+    )]
+    pub(crate) bin: Option<Vec<CompactString>>,
+
     /// Override Cargo.toml package manifest path.
     ///
     /// This skips searching crates.io for a manifest and uses the specified path directly, useful

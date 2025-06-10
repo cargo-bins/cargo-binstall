@@ -2,6 +2,7 @@
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
+use compact_str::CompactString;
 use semver::VersionReq;
 
 use crate::{
@@ -44,6 +45,9 @@ pub struct Options {
     pub desired_targets: DesiredTargets,
     pub resolvers: Vec<Resolver>,
     pub cargo_install_fallback: bool,
+
+    /// If provided, the names are sorted.
+    pub bins: Option<Vec<CompactString>>,
 
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,
