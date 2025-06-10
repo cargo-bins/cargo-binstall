@@ -100,7 +100,7 @@ impl ResolutionFetch {
         // have featured-gated (optional) binary (gated behind feature).
         crate_bin_files
             .iter()
-            .map(|bin| bin.base_name)
+            .map(|bin| bin.base_name.clone())
             .filter(|bin_name| {
                 user_specified_bins
                     .as_ref()
@@ -200,7 +200,9 @@ impl ResolutionSource {
         }
 
         if let Some(bins) = &opts.bins {
-            cmd.args(bins.iter().map(|bin| ["--bin", bin.as_ref()]));
+            for bin in bins {
+                cmd.arg("--bin").arg(bin);
+            }
         }
 
         debug!("Running `{}`", format_cmd(&cmd));
