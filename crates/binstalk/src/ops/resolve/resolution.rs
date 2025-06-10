@@ -1,5 +1,6 @@
 use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, path::Path, sync::Arc};
 
+use binstalk_bins::BinFile;
 use command_group::AsyncCommandGroup;
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -87,17 +88,25 @@ impl ResolutionFetch {
             current_version: self.new_version,
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
-            bins: opts
-                .bins
-                .as_ref()
-                .map(|bins| bins.iter().cloned().map(Into::into).collect())
-                .unwrap_or_else(|| {
-                    self.bin_files
-                        .into_iter()
-                        .map(|bin| bin.base_name)
-                        .collect()
-                }),
+            bins: Self::resolve_bins(&opts.bins, &self.bin_files),
         })
+    }
+
+    fn resolve_bins(
+        user_specified_bins: &Option<Vec<CompactString>>,
+        crate_bin_files: &[BinFile],
+    ) -> Vec<CompactString> {
+        // We need to filter crate_bin_files by user_specified_bins in case the prebuilt doesn't
+        // have featured-gated (optional) binary (gated behind feature).
+        crate_bin_files
+            .iter()
+            .map(|bin| bin.base_name.clone())
+            .filter(|bin_name| {
+                user_specified_bins
+                    .as_ref()
+                    .map_or(true, |bins| bins.binary_search(bin_name).is_ok())
+            })
+            .collect()
     }
 
     pub fn print(&self, opts: &Options) {
@@ -188,6 +197,10 @@ impl ResolutionSource {
 
         if opts.no_track {
             cmd.arg("--no-track");
+        }
+
+        if let Some(bins) = &opts.bins {
+            cmd.args(bins.iter().flat_map(|bin| ["--bin", bin.as_ref()]));
         }
 
         debug!("Running `{}`", format_cmd(&cmd));
