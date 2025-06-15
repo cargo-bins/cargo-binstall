@@ -66,3 +66,8 @@ git_mob_version="$(git-mob --version)"
 echo "$git_mob_version"
 
 [ "$git_mob_version" = "git-mob-tool 1.6.1" ]
+
+cargo uninstall b3sum cargo-binstall
+
+"./$1" binstall -y cargo-binstall@0.20.1
+jq <"$CARGO_HOME/binstall/crates-v1.json" | grep -v b3sum
