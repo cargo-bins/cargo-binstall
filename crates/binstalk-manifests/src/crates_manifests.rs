@@ -73,7 +73,7 @@ impl Manifests {
     /// So here we will honour .crates.toml only.
     pub fn installed_crates(
         &self,
-    ) -> BTreeMap<CompactString, Version> {
+    ) -> &BTreeMap<CompactString, Version> {
         &self.installed_crates
     }
 
