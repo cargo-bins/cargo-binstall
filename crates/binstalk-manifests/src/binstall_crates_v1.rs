@@ -214,6 +214,11 @@ impl Records {
         self.data.remove(value.as_ref())
     }
 
+    /// Remove crates that `f(&data.crate_info)` returns `false`.
+    pub fn retain(&mut self, f: impl FnMut(&CrateInfo)) {
+        self.dat.retain(|data| f(&data.crate_info))
+    }
+
     pub fn take(&mut self, value: impl AsRef<str>) -> Option<CrateInfo> {
         self.data.take(value.as_ref()).map(CrateInfo::from)
     }
