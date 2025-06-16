@@ -35,6 +35,7 @@ pub enum ManifestsError {
 pub struct Manifests {
     binstall: BinstallCratesV1Records,
     cargo_crates_v1: FileLock,
+    installed_crates: BTreeMap<CompactString, Version>,
 }
 
 impl Manifests {
@@ -43,16 +44,22 @@ impl Manifests {
         let metadata_path = cargo_roots.join("binstall/crates-v1.json");
         fs::create_dir_all(metadata_path.parent().unwrap())?;
 
-        let binstall = BinstallCratesV1Records::load_from_path(&metadata_path)?;
+        let mut binstall = BinstallCratesV1Records::load_from_path(&metadata_path)?;
 
         // Read cargo_install_v1_metadata
         let manifest_path = cargo_roots.join(".crates.toml");
 
-        let cargo_crates_v1 = create_if_not_exist(&manifest_path)?;
+        let mut cargo_crates_v1 = create_if_not_exist(&manifest_path)?;
+
+        let installed_crates = CratesToml::load_from_reader(&mut cargo_crates_v1)
+            .and_then(CratesToml::collect_into_crates_versions)?;
+
+        binstall.retain(|crate_info| installed_crates.contains_key(&crate_info.name));
 
         Ok(Self {
             binstall,
             cargo_crates_v1,
+            installed_crates,
         })
     }
 
@@ -64,14 +71,8 @@ impl Manifests {
     /// but it only updates .crates.toml.
     ///
     /// So here we will honour .crates.toml only.
-    pub fn load_installed_crates(
-        &mut self,
-    ) -> Result<BTreeMap<CompactString, Version>, ManifestsError> {
-        self.rewind_cargo_crates_v1()?;
-
-        CratesToml::load_from_reader(&mut self.cargo_crates_v1)
-            .and_then(CratesToml::collect_into_crates_versions)
-            .map_err(ManifestsError::from)
+    pub fn installed_crates(&self) -> &BTreeMap<CompactString, Version> {
+        &self.installed_crates
     }
 
     pub fn update(mut self, metadata_vec: Vec<CrateInfo>) -> Result<(), ManifestsError> {

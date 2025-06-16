@@ -67,7 +67,7 @@ pub fn install_crates(
 
     // Compute paths
     let cargo_root = args.root;
-    let (install_path, mut manifests, temp_dir) = compute_paths_and_load_manifests(
+    let (install_path, manifests, temp_dir) = compute_paths_and_load_manifests(
         cargo_root.clone(),
         args.install_path,
         args.no_track,
@@ -77,7 +77,7 @@ pub fn install_crates(
 
     // Remove installed crates
     let mut crate_names =
-        filter_out_installed_crates(args.crate_names, args.force, manifests.as_mut())?.peekable();
+        filter_out_installed_crates(args.crate_names, args.force, manifests.as_ref()).peekable();
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
@@ -456,26 +456,23 @@ fn compute_paths_and_load_manifests(
 }
 
 /// Return vec of (crate_name, current_version)
-fn filter_out_installed_crates(
+fn filter_out_installed_crates<'a>(
     crate_names: Vec<CrateName>,
     force: bool,
-    manifests: Option<&mut Manifests>,
-) -> Result<impl Iterator<Item = (CrateName, Option<semver::Version>)> + '_> {
-    let mut installed_crates = manifests
-        .map(Manifests::load_installed_crates)
-        .transpose()?;
+    manifests: Option<&'a Manifests>,
+) -> impl Iterator<Item = (CrateName, Option<semver::Version>)> + 'a {
+    let installed_crates = manifests.map(|m| m.installed_crates());
 
-    Ok(CrateName::dedup(crate_names)
+    CrateName::dedup(crate_names)
     .filter_map(move |crate_name| {
         let name = &crate_name.name;
 
         let curr_version = installed_crates
-            .as_mut()
             // Since crate_name is deduped, every entry of installed_crates
             // can be visited at most once.
             //
             // So here we take ownership of the version stored to avoid cloning.
-            .and_then(|crates| crates.remove(name));
+            .and_then(|crates| crates.get(name));
 
         match (
             force,
@@ -483,7 +480,7 @@ fn filter_out_installed_crates(
             &crate_name.version_req,
         ) {
             (false, Some(curr_version), Some(version_req))
-                if version_req.is_latest_compatible(&curr_version) =>
+                if version_req.is_latest_compatible(curr_version) =>
             {
                 debug!("Bailing out early because we can assume wanted is already installed from metafile");
                 info!("{name} v{curr_version} is already installed, use --force to override");
@@ -492,12 +489,12 @@ fn filter_out_installed_crates(
 
             // The version req is "*" thus a remote upgraded version could exist
             (false, Some(curr_version), None) => {
-                Some((crate_name, Some(curr_version)))
+                Some((crate_name, Some(curr_version.clone())))
             }
 
             _ => Some((crate_name, None)),
         }
-    }))
+    })
 }
 
 #[allow(clippy::vec_box)]
