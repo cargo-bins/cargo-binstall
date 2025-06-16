@@ -55,7 +55,7 @@ impl Manifests {
             .and_then(CratesToml::collect_into_crates_versions)?;
 
         binstall.retain(|crate_info| installed_crates.contains_key(&crate_info.name));
-        
+ 
         Ok(Self {
             binstall,
             cargo_crates_v1,
@@ -71,9 +71,7 @@ impl Manifests {
     /// but it only updates .crates.toml.
     ///
     /// So here we will honour .crates.toml only.
-    pub fn installed_crates(
-        &self,
-    ) -> &BTreeMap<CompactString, Version> {
+    pub fn installed_crates(&self) -> &BTreeMap<CompactString, Version> {
         &self.installed_crates
     }
 
