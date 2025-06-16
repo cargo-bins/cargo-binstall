@@ -77,7 +77,7 @@ pub fn install_crates(
 
     // Remove installed crates
     let mut crate_names =
-        filter_out_installed_crates(args.crate_names, args.force, manifests.as_mut()).peekable();
+        filter_out_installed_crates(args.crate_names, args.force, manifests.as_ref()).peekable();
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
@@ -464,7 +464,7 @@ fn filter_out_installed_crates<'a>(
     let installed_crates = manifests
         .map(|m| m.installed_crates());
 
-    Ok(CrateName::dedup(crate_names)
+    CrateName::dedup(crate_names)
     .filter_map(move |crate_name| {
         let name = &crate_name.name;
 
@@ -495,7 +495,7 @@ fn filter_out_installed_crates<'a>(
 
             _ => Some((crate_name, None)),
         }
-    }))
+    })
 }
 
 #[allow(clippy::vec_box)]
