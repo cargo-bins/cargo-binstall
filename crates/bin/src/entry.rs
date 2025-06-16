@@ -461,8 +461,7 @@ fn filter_out_installed_crates<'a>(
     force: bool,
     manifests: Option<&'a Manifests>,
 ) -> impl Iterator<Item = (CrateName, Option<semver::Version>)> + 'a {
-    let installed_crates = manifests
-        .map(|m| m.installed_crates());
+    let installed_crates = manifests.map(|m| m.installed_crates());
 
     CrateName::dedup(crate_names)
     .filter_map(move |crate_name| {
