@@ -55,7 +55,7 @@ impl Manifests {
             .and_then(CratesToml::collect_into_crates_versions)?;
 
         binstall.retain(|crate_info| installed_crates.contains_key(&crate_info.name));
- 
+
         Ok(Self {
             binstall,
             cargo_crates_v1,
