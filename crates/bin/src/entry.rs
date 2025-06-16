@@ -67,7 +67,7 @@ pub fn install_crates(
 
     // Compute paths
     let cargo_root = args.root;
-    let (install_path, mut manifests, temp_dir) = compute_paths_and_load_manifests(
+    let (install_path, manifests, temp_dir) = compute_paths_and_load_manifests(
         cargo_root.clone(),
         args.install_path,
         args.no_track,
@@ -481,7 +481,7 @@ fn filter_out_installed_crates<'a>(
             &crate_name.version_req,
         ) {
             (false, Some(curr_version), Some(version_req))
-                if version_req.is_latest_compatible(&curr_version) =>
+                if version_req.is_latest_compatible(curr_version) =>
             {
                 debug!("Bailing out early because we can assume wanted is already installed from metafile");
                 info!("{name} v{curr_version} is already installed, use --force to override");
