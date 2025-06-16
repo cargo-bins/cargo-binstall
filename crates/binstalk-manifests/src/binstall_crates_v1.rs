@@ -215,7 +215,7 @@ impl Records {
     }
 
     /// Remove crates that `f(&data.crate_info)` returns `false`.
-    pub fn retain(&mut self, f: impl FnMut(&CrateInfo) -> bool) {
+    pub fn retain(&mut self, mut f: impl FnMut(&CrateInfo) -> bool) {
         self.data.retain(|data| f(&data.crate_info))
     }
 
