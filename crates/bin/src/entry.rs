@@ -221,15 +221,17 @@ pub fn install_crates(
     let no_cleanup = args.no_cleanup;
 
     // Resolve crates
-    let tasks: Vec<_> = crate_names
-        .map(|(crate_name, current_version)| {
-            AutoAbortJoinHandle::spawn(ops::resolve::resolve(
-                binstall_opts.clone(),
-                crate_name,
-                current_version,
-            ))
+    let tasks = crate_names
+        .map(|res| {
+            res.map(|(crate_name, current_version)| {
+                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
+                    binstall_opts.clone(),
+                    crate_name,
+                    current_version,
+                ))
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, BinstallError>>()?;
 
     Ok(Some(if args.continue_on_failure {
         AutoAbortJoinHandle::spawn(async move {
@@ -498,7 +500,7 @@ fn filter_out_installed_crates<'a>(
                 Some(Ok((crate_name, Some(curr_version.clone()))))
             }
 
-            _ => Some((crate_name, None)),
+            _ => Some(Ok((crate_name, None))),
         }
     })
 }
