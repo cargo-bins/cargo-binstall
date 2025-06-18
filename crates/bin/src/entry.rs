@@ -34,7 +34,7 @@ use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
-use semver::Version;
+use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
