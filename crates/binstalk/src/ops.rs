@@ -38,7 +38,6 @@ pub struct Options {
     pub locked: bool,
     pub no_track: bool,
 
-    pub version_req: Option<VersionReq>,
     pub cargo_toml_fetch_override: Option<CargoTomlFetchOverride>,
     pub cli_overrides: PkgOverride,
 
