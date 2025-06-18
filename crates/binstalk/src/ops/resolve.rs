@@ -67,12 +67,7 @@ async fn resolve_inner(
 ) -> Result<Resolution, BinstallError> {
     info!("Resolving package: '{}'", crate_name);
 
-    let version_req = match (&crate_name.version_req, &opts.version_req) {
-        (Some(version), None) => MaybeOwned::Borrowed(version),
-        (None, Some(version)) => MaybeOwned::Borrowed(version),
-        (Some(_), Some(_)) => Err(BinstallError::SuperfluousVersionOption)?,
-        (None, None) => MaybeOwned::Owned(VersionReq::STAR),
-    };
+    let version_req = crate_name.version_req.unwrap_or(VersionReq::STAR);
 
     let version_req_str = version_req.to_compact_string();
 
