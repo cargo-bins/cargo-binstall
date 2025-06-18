@@ -36,7 +36,7 @@ opt-level = "z"
 
 [profile.dev]
 opt-level = 0
-debug = true
+debug = "line-tables-only"
 lto = false
 debug-assertions = true
 overflow-checks = true
