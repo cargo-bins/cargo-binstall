@@ -3,7 +3,6 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use compact_str::CompactString;
-use semver::VersionReq;
 
 use crate::{
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
