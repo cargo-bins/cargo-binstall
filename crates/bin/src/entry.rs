@@ -76,8 +76,12 @@ pub fn install_crates(
     )?;
 
     // Remove installed crates
-    let mut crate_names =
-        filter_out_installed_crates(args.crate_names, args.force, manifests.as_ref(), args.version_req).peekable();
+    let mut crate_names = filter_out_installed_crates(
+        args.crate_names,
+        args.force,
+        manifests.as_ref(),
+        args.version_req,
+    ).peekable();
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
