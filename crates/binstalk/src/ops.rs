@@ -3,7 +3,6 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use compact_str::CompactString;
-use semver::VersionReq;
 
 use crate::{
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
@@ -38,7 +37,6 @@ pub struct Options {
     pub locked: bool,
     pub no_track: bool,
 
-    pub version_req: Option<VersionReq>,
     pub cargo_toml_fetch_override: Option<CargoTomlFetchOverride>,
     pub cli_overrides: PkgOverride,
 

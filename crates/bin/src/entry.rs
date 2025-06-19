@@ -34,7 +34,7 @@ use file_format::FileFormat;
 use home::cargo_home;
 use log::LevelFilter;
 use miette::{miette, Report, Result, WrapErr};
-use semver::Version;
+use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
@@ -76,8 +76,13 @@ pub fn install_crates(
     )?;
 
     // Remove installed crates
-    let mut crate_names =
-        filter_out_installed_crates(args.crate_names, args.force, manifests.as_ref()).peekable();
+    let mut crate_names = filter_out_installed_crates(
+        args.crate_names,
+        args.force,
+        manifests.as_ref(),
+        args.version_req,
+    )
+    .peekable();
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
@@ -141,7 +146,6 @@ pub fn install_crates(
         locked: args.locked,
         no_track: args.no_track,
 
-        version_req: args.version_req,
         #[cfg(feature = "git")]
         cargo_toml_fetch_override: match (args.manifest_path, args.git) {
             (Some(manifest_path), None) => Some(CargoTomlFetchOverride::Path(manifest_path)),
@@ -222,15 +226,17 @@ pub fn install_crates(
     let no_cleanup = args.no_cleanup;
 
     // Resolve crates
-    let tasks: Vec<_> = crate_names
-        .map(|(crate_name, current_version)| {
-            AutoAbortJoinHandle::spawn(ops::resolve::resolve(
-                binstall_opts.clone(),
-                crate_name,
-                current_version,
-            ))
+    let tasks = crate_names
+        .map(|res| {
+            res.map(|(crate_name, current_version)| {
+                AutoAbortJoinHandle::spawn(ops::resolve::resolve(
+                    binstall_opts.clone(),
+                    crate_name,
+                    current_version,
+                ))
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, BinstallError>>()?;
 
     Ok(Some(if args.continue_on_failure {
         AutoAbortJoinHandle::spawn(async move {
@@ -460,11 +466,12 @@ fn filter_out_installed_crates<'a>(
     crate_names: Vec<CrateName>,
     force: bool,
     manifests: Option<&'a Manifests>,
-) -> impl Iterator<Item = (CrateName, Option<semver::Version>)> + 'a {
+    version_req: Option<VersionReq>,
+) -> impl Iterator<Item = Result<(CrateName, Option<semver::Version>), BinstallError>> + 'a {
     let installed_crates = manifests.map(|m| m.installed_crates());
 
     CrateName::dedup(crate_names)
-    .filter_map(move |crate_name| {
+    .filter_map(move |mut crate_name| {
         let name = &crate_name.name;
 
         let curr_version = installed_crates
@@ -473,6 +480,12 @@ fn filter_out_installed_crates<'a>(
             //
             // So here we take ownership of the version stored to avoid cloning.
             .and_then(|crates| crates.get(name));
+
+        match (crate_name.version_req.is_some(), version_req.is_some()) {
+            (false, true) => crate_name.version_req = version_req.clone(),
+            (true, true) => return Some(Err(BinstallError::SuperfluousVersionOption)),
+            _ => (),
+        };
 
         match (
             force,
@@ -489,10 +502,10 @@ fn filter_out_installed_crates<'a>(
 
             // The version req is "*" thus a remote upgraded version could exist
             (false, Some(curr_version), None) => {
-                Some((crate_name, Some(curr_version.clone())))
+                Some(Ok((crate_name, Some(curr_version.clone()))))
             }
 
-            _ => Some((crate_name, None)),
+            _ => Some(Ok((crate_name, None))),
         }
     })
 }
