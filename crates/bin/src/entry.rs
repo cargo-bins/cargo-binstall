@@ -81,7 +81,8 @@ pub fn install_crates(
         args.force,
         manifests.as_ref(),
         args.version_req,
-    ).peekable();
+    )
+    .peekable();
 
     if crate_names.peek().is_none() {
         debug!("Nothing to do");
@@ -485,7 +486,7 @@ fn filter_out_installed_crates<'a>(
             (true, true) => return Some(Err(BinstallError::SuperfluousVersionOption)),
             _ => (),
         };
-        
+
         match (
             force,
             curr_version,
