@@ -82,8 +82,8 @@ on windows and empty on other platforms).
 
 The default value for `pkg-url` will depend on the repository of the package.
 
-It is set up to work with GitHub releases, GitLab releases, bitbucket downloads
-and source forge downloads.
+It is set up to work with GitHub releases, GitLab releases, bitbucket downloads,
+source forge downloads and Codeberg releases.
 
 If your package already uses any of these URLs, you shouldn't need to set anything.
 
@@ -138,6 +138,11 @@ The URLs also have `/download` appended as per SourceForge's schema.
 
 Binary must be uploaded to the "File" page of your project, under the directory
 `binaries/v{ version }`.
+
+#### for Codeberg
+
+- `{ repo }/releases/download/{ version }/`
+- `{ repo }/releases/download/v{ version }/`
 
 #### Others
 
