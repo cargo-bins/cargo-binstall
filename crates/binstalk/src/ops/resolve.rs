@@ -321,7 +321,7 @@ async fn download_extract_and_verify(
             // skip binaries that were not requested by user
             if bins
                 .as_ref()
-                .is_some_and(|bins| !bins.contains(&bin.name))
+                .is_some_and(|bins| !bins.iter().any(|b| b == bin.name))
             {
                 return None;
             }
