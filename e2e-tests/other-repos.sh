@@ -33,6 +33,9 @@ export PATH="$CARGO_HOME/bin:$PATH"
 #
 #[ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
 
+# Do not test Codeberg, it is donation funded and shouldn't be burdened with
+# unnecessary traffic.
+
 # Test default Github pkg-url templates,
 # with bin-dir provided
 "./$1" binstall \

@@ -290,6 +290,7 @@ impl RepoInfo {
         match repository_host {
             RepositoryHost::GitHub => Self::detect_subcrate_common(repo, &["tree"]),
             RepositoryHost::GitLab => Self::detect_subcrate_common(repo, &["-", "blob"]),
+            RepositoryHost::Codeberg => Self::detect_subcrate_common(repo, &["src", "branch"]),
             _ => None,
         }
     }

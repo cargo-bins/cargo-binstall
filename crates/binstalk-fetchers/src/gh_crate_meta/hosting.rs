@@ -9,6 +9,7 @@ pub enum RepositoryHost {
     GitLab,
     BitBucket,
     SourceForge,
+    Codeberg,
     Unknown,
 }
 
@@ -65,6 +66,7 @@ impl RepositoryHost {
             Some(domain) if domain.starts_with("gitlab") => GitLab,
             Some("bitbucket.org") => BitBucket,
             Some("sourceforge.net") => SourceForge,
+            Some("codeberg.org") => Codeberg,
             _ => Unknown,
         }
     }
@@ -94,6 +96,12 @@ impl RepositoryHost {
                 SOURCEFORGE_RELEASE_PATHS,
                 &[FULL_FILENAMES, NOVERSION_FILENAMES],
                 "/download",
+            )),
+            Codeberg => Some(apply_filenames_to_paths(
+                // Codeberg (Forgejo) has the same release paths as GitHub.
+                GITHUB_RELEASE_PATHS,
+                &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                "",
             )),
             Unknown => None,
         }
