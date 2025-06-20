@@ -193,6 +193,7 @@ async fn resolve_inner(
                         &package_info,
                         &opts.install_path,
                         opts.no_symlinks,
+                        &opts.bins,
                     )
                     .await
                     {
@@ -289,6 +290,7 @@ async fn download_extract_and_verify(
     package_info: &PackageInfo,
     install_path: &Path,
     no_symlinks: bool,
+    bins: &Option<Vec<CompactString>>,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Download and extract it.
     // If that fails, then ignore this fetcher.
@@ -316,6 +318,14 @@ async fn download_extract_and_verify(
         .iter()
         .zip(bin_files)
         .filter_map(|(bin, bin_file)| {
+            // skip binaries that were not requested by user
+            if bins
+                .as_ref()
+                .is_some_and(|bins| !bins.iter().any(|b| b == bin.name))
+            {
+                return None;
+            }
+
             match bin_file.check_source_exists(&mut |p| extracted_files.has_file(p)) {
                 Ok(()) => Some(Ok(bin_file)),
 

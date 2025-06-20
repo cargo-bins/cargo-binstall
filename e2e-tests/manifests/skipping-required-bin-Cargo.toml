@@ -1,0 +1,17 @@
+[package]
+name = "cargo-binstall"
+description = "Rust binary package installer for CI integration"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+version = "0.12.0"
+rust-version = "1.61.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2021"
+license = "GPL-3.0"
+
+[[bin]]
+name = "cargo-binstall"
+path = "src/main.rs"
+
+[[bin]]
+name = "test"
+path = "src/te.rs"
