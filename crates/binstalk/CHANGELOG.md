@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.37](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.36...binstalk-v0.28.37) - 2025-06-21
+
+### Fixed
+
+- Skip binaries user didn't requst ([#2199](https://github.com/cargo-bins/cargo-binstall/pull/2199))
+
+### Other
+
+- check --version and $crate@$version conflict in cargo-binstall ([#2201](https://github.com/cargo-bins/cargo-binstall/pull/2201))
+
 ## [0.28.36](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.35...binstalk-v0.28.36) - 2025-06-10
 
 ### Other

@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.53](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.52...detect-targets-v0.1.53) - 2025-06-21
+
+### Other
+
+- Fix glibc detection on Fedora ([#2205](https://github.com/cargo-bins/cargo-binstall/pull/2205))
+- *(deps)* bump windows-sys from 0.59.0 to 0.60.2 in the deps group ([#2196](https://github.com/cargo-bins/cargo-binstall/pull/2196))
+
 ## [0.1.52](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.51...detect-targets-v0.1.52) - 2025-06-10
 
 ### Other

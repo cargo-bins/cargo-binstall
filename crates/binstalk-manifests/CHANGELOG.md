@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.16.1...binstalk-manifests-v0.17.0) - 2025-06-21
+
+### Fixed
+
+- Rm uninstalled crates from binstall/crates-v1.json ([#2197](https://github.com/cargo-bins/cargo-binstall/pull/2197))
+
 ## [0.16.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.16.0...binstalk-manifests-v0.16.1) - 2025-06-10
 
 ### Other

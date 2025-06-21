@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.21...binstalk-fetchers-v0.10.22) - 2025-06-21
+
+### Added
+
+- Add repository host Codeberg ([#2202](https://github.com/cargo-bins/cargo-binstall/pull/2202))
+
 ## [0.10.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.20...binstalk-fetchers-v0.10.21) - 2025-06-06
 
 ### Other
