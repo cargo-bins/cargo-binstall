@@ -232,27 +232,30 @@ jobs:
     needs: changed-files
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     runs-on: ubuntu-latest
-    env:
-      CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
+    strategy:
+      matrix:
+        arch:
+          - x86_64
+          - aarch64
     steps:
       - uses: actions/checkout@v4
-      - name: Install ${{ env.CARGO_BUILD_TARGET }} target
+      - name: Install ${{ matrix.arch }}-unknown-linux-musl target
         run: |
-          rustup target add $CARGO_BUILD_TARGET
+          rustup target add ${{ matrix.arch }}-unknown-linux-musl
           pip3 install -r zigbuild-requirements.txt
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
       - name: Build detect-targets
         run: |
-          cargo zigbuild --features cli-logging --target $CARGO_BUILD_TARGET
+          cargo zigbuild --features cli-logging --target ${{ matrix.arch }}-unknown-linux-musl
         # Set working directory here, otherwise `cargo-zigbuild` would download
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
       - uses: actions/upload-artifact@v4
         with:
-          name: detect-targets
-          path: target/${{ env.CARGO_BUILD_TARGET }}/debug/detect-targets
+          name: detect-targets-${{ matrix.arch }}
+          path: target/${{ matrix.arch }}-unknown-linux-musl/debug/detect-targets
 
   detect-targets-alpine-test:
     runs-on: ubuntu-latest
@@ -265,7 +268,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: detect-targets
+          name: detect-targets-x86_64
       - run: chmod +x detect-targets
 
       - name: Run test in alpine
@@ -306,7 +309,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: detect-targets
+          name: detect-targets-x86_64
       - run: chmod +x detect-targets
 
       - name: Run test in ubuntu
@@ -332,7 +335,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: detect-targets
+          name: detect-targets-x86_64
       - run: chmod +x detect-targets
 
       - name: Run test
@@ -341,6 +344,27 @@ jobs:
           [ "$(docker run --rm \
             --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
             ${{ matrix.container }} detect-targets )" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
+
+  detect-targets-more-glibc-test-arm:
+    needs:
+      - detect-targets-build
+      - changed-files
+    if: needs.changed-files.outputs.has_detect_target_changed == 'true'
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: detect-targets-aarch64
+      - run: chmod +x detect-targets
+
+      - name: Run test
+        run: |
+          set -exuo pipefail
+          [ "$(docker run --rm \
+            --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+            fedora detect-targets )" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
 
   detect-targets-nix-test:
     needs:
@@ -351,7 +375,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: detect-targets
+          name: detect-targets-x86_64
       - run: chmod +x detect-targets
 
       - name: Run test

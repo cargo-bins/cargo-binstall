@@ -52,8 +52,10 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                     format!("/lib64/{dirname}/{filename}"),
                     format!("/usr/lib/{dirname}/{filename}"),
                     format!("/usr/lib64/{dirname}/{filename}"),
+                    "/usr/lib64/libc.so.6".to_string(),
                     format!("/usr/lib/{dirname}/libc.so.6"),
                     format!("/usr/lib64/{dirname}/libc.so.6"),
+                    "/usr/lib64/libc.so".to_string(),
                     format!("/usr/lib/{dirname}/libc.so"),
                     format!("/usr/lib64/{dirname}/libc.so"),
                 ]
