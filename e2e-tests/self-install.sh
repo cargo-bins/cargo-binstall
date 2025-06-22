@@ -10,5 +10,5 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 "./$1" --self-install
 
-cargo binstall --help
+cargo binstall -vV
 cargo install --list
