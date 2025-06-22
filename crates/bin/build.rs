@@ -50,6 +50,7 @@ fn emit_vergen_info() {
             }
             gitcl_builder.build().unwrap()
         })
+        .unwrap()
         .emit()
         .unwrap();
 }
