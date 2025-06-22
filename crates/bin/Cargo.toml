@@ -49,7 +49,7 @@ zeroize = "1.8.1"
 
 [build-dependencies]
 embed-resource = "3.0.1"
-vergen-gitcl = { version = "9.0.6", features = ["build", "cargo", "rustc"] }
+vergen-gitcl = { version = "1.0.8", features = ["build", "cargo", "rustc"] }
 
 [features]
 default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin", "git"]
