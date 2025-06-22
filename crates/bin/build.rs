@@ -35,7 +35,7 @@ fn emit_vergen_info() {
                 .commit_hash(true)
                 .llvm_version(true)
                 .build()
-                .unwrap()
+                .unwrap(),
         )
         .unwrap()
         .add_instructions(&{
