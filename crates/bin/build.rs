@@ -25,22 +25,18 @@ fn emit_vergen_info() {
 
     Emitter::default()
         .fail_on_error()
-        .add_instructions(&{
-            BuildBuilder::default().build_date(true).build().unwrap()
-        })
+        .add_instructions(&BuildBuilder::default().build_date(true).build().unwrap())
         .unwrap()
-        .add_instructions(&{
-            CargoBuilder::default().features(true).build().unwrap()
-        })
+        .add_instructions(&CargoBuilder::default().features(true).build().unwrap())
         .unwrap()
-        .add_instructions(&{
-            RustcBuilder::default()
+        .add_instructions(
+            &RustcBuilder::default()
                 .semver(true)
                 .commit_hash(true)
-            .llvm_version(true)
-            .build()
-            .unwrap()
-        })
+                .llvm_version(true)
+                .build()
+                .unwrap()
+        )
         .unwrap()
         .add_instructions(&{
             let mut gitcl_builder = GitclBuilder::default();
