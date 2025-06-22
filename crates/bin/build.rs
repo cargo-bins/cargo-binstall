@@ -21,24 +21,34 @@ fn emit_vergen_info() {
     // should exists.
     let is_git_repo = Path::new("../../.git").exists();
 
-    let mut builder = vergen::EmitBuilder::builder();
-    builder.all_build().all_cargo().all_rustc();
+    let build = vergen_gitcl::BuildBuilder::all_build().unwrap();
+    let cargo = vergen_gitcl::CargoBuilder::all_cargo().dependencies(false).unwrap();
+    let rustc = vergen_gitcl::RustcBuilder::all_rustc().unwrap();
 
-    if is_git_repo && succeeds(git) {
-        builder.all_git();
-    } else {
-        builder.disable_git();
+    let mut emitter = vergen_gitcl::Emitter::default();
+    emitter.fail_on_error()
+        .add_instructions(&build)
+        .unwrap()
+        .add_instructions(&cargo)
+        .unwrap()
+        .add_instructions(&rustc)
+        .unwrap();
+    
+    let gitcl = (is_git_repo && succeeds(git)).then(|| vergen_gitcl::GitclBuilder::all_git().unwrap());
+    if let Some(gitcl) = &gitcl {
+        emitter.add_instructions(&gitcl).unwrap();
     }
-
-    builder.emit().unwrap();
+    emitter.emit().unwrap();
 }
+
+const RERUN_INSTRUCTIONS: &str = "cargo:rerun-if-changed=build.rs
+cargo:rerun-if-changed=manifest.rc
+cargo:rerun-if-changed=windows.manifest";
 
 fn main() {
     thread::scope(|s| {
         let handle = s.spawn(|| {
-            println!("cargo:rerun-if-changed=build.rs");
-            println!("cargo:rerun-if-changed=manifest.rc");
-            println!("cargo:rerun-if-changed=windows.manifest");
+            println!("{RERUN_INSTRUCTIONS}");
 
             embed_resource::compile("manifest.rc", embed_resource::NONE)
                 .manifest_required()
