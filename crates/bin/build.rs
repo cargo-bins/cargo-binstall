@@ -12,6 +12,8 @@ fn succeeds(res: io::Result<Child>) -> bool {
 }
 
 fn emit_vergen_info() {
+    use vergen_gitcl::*;
+
     let git = Command::new("git").arg("--version").spawn();
 
     // .git is usually a dir, but it also can be a file containing
@@ -21,24 +23,35 @@ fn emit_vergen_info() {
     // should exists.
     let is_git_repo = Path::new("../../.git").exists();
 
-    let build = vergen_gitcl::BuildBuilder::all_build().unwrap();
-    let cargo = vergen_gitcl::CargoBuilder::all_cargo().dependencies(false).unwrap();
-    let rustc = vergen_gitcl::RustcBuilder::all_rustc().unwrap();
-
-    let mut emitter = vergen_gitcl::Emitter::default();
-    emitter.fail_on_error()
-        .add_instructions(&build)
+    Emitter::default()
+        .fail_on_error()
+        .add_instructions(&{
+            BuildBuilder::default().build_date(true).build().unwrap()
+        })
         .unwrap()
-        .add_instructions(&cargo)
+        .add_instructions(&{
+            CargoBuilder::default().features(true).build().unwrap()
+        })
         .unwrap()
-        .add_instructions(&rustc)
+        .add_instructions(&{
+            RustcBuilder::default()
+                .semver(true)
+                .commit_hash(true)
+            .llvm_version(true)
+            .build()
+            .unwrap()
+        })
+        .unwrap()
+        .add_instructions(&{
+            let mut gitcl_builder = GitclBuilder::default();
+            if is_git_repo && succeeds(git) {
+                // sha(false) means enable the default sha output but not the short output
+                gitcl_builder.commit_date(true).sha(false);
+            }
+            gitcl_builder.build().unwrap()
+        })
+        .emit()
         .unwrap();
-    
-    let gitcl = (is_git_repo && succeeds(git)).then(|| vergen_gitcl::GitclBuilder::all_git().unwrap());
-    if let Some(gitcl) = &gitcl {
-        emitter.add_instructions(&gitcl).unwrap();
-    }
-    emitter.emit().unwrap();
 }
 
 const RERUN_INSTRUCTIONS: &str = "cargo:rerun-if-changed=build.rs
