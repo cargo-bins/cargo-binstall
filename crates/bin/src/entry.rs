@@ -257,7 +257,7 @@ pub fn install_crates(
                         resolution_sources.push(source)
                     }
                     Err(BinstallError::CrateContext(err)) => errors.push(err),
-                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {}", e),
+                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {e}"),
                 }
             }
 
@@ -300,7 +300,7 @@ pub fn install_crates(
                 match task.flattened_join().await {
                     Ok(_) => (),
                     Err(BinstallError::CrateContext(err)) => errors.push(err),
-                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {}", e),
+                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {e}"),
                 }
             }
 
@@ -581,7 +581,7 @@ fn do_install_fetches_continue_on_failure(
                     errors.push(err);
                     None
                 }
-                Err(e) => panic!("Expected BinstallError::CrateContext(_), got {}", e),
+                Err(e) => panic!("Expected BinstallError::CrateContext(_), got {e}"),
             })
             .collect::<Vec<_>>();
 
