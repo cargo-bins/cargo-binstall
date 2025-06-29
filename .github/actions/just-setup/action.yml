@@ -91,9 +91,9 @@ runs:
     uses: Swatinem/rust-cache@v2
     with:
       env-vars: "CARGO CC CFLAGS CXX CMAKE RUST JUST"
+      cache-workspace-crates: true
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
-      cache-workspace-crates: true
 
   - name: Find zig location and create symlink to it in ~/.local/bin
     if: env.JUST_USE_CARGO_ZIGBUILD
