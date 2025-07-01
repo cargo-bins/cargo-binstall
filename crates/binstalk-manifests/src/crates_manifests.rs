@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::{self, Seek},
+    io::{self, Read, Seek, Write},
     path::Path,
 };
 
@@ -36,13 +36,16 @@ pub struct Manifests {
     binstall: BinstallCratesV1Records,
     cargo_crates_v1: FileLock,
     installed_crates: BTreeMap<CompactString, Version>,
+    quickinstall_stats_url: FileLock,
 }
 
 impl Manifests {
     pub fn open_exclusive(cargo_roots: &Path) -> Result<Self, ManifestsError> {
         // Read cargo_binstall_metadata
-        let metadata_path = cargo_roots.join("binstall/crates-v1.json");
-        fs::create_dir_all(metadata_path.parent().unwrap())?;
+        let binstall_dir = cargo_roots.join("binstall");
+        fs::create_dir_all(&binstall_dir)?;
+
+        let metadata_path = binstall_dir.join("crates-v1.json");
 
         let mut binstall = BinstallCratesV1Records::load_from_path(&metadata_path)?;
 
@@ -60,6 +63,7 @@ impl Manifests {
             binstall,
             cargo_crates_v1,
             installed_crates,
+            quickinstall_stats_url: create_if_not_exist(&binstall_dir.join("quickinstall-stats-url")),
         })
     }
 
@@ -84,6 +88,23 @@ impl Manifests {
             self.binstall.replace(metadata);
         }
         self.binstall.overwrite()?;
+
+        Ok(())
+    }
+
+    /// Get the quickinstall stats url previously used
+    pub fn get_quickinstall_stats_url(&self) -> Result<String, ManifestError> {
+        self.quickinstall_stats_url.rewind()?;
+
+        let stats_url = String::new();
+        (&self.quickinstall_stats_url).read_to_string(&mut stats_url)?;
+        Ok(stats_url)
+    }
+
+    pub fn set_quickinstall_stats_url(&self, stats_url: &str) -> Result<(), ManifestError> {
+        self.quickinstall_stats_url.rewind()?;
+        self.quickinstall_stats_url.write_all(stats_url.as_bytes())?
+        self.quickinstall_stats_url.set_len(stats_url.len().into())?;
 
         Ok(())
     }
