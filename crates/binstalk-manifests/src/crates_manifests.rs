@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::{self, Read, Seek},
+    io::{self, Read, Seek, Write},
     path::Path,
 };
 
@@ -96,8 +96,8 @@ impl Manifests {
     pub fn get_quickinstall_stats_url(&self) -> Result<String, ManifestsError> {
         self.quickinstall_stats_url.rewind()?;
 
-        let stats_url = String::new();
-        (&self.quickinstall_stats_url).read_to_string(&mut stats_url)?;
+        let mut stats_url = String::new();
+        self.quickinstall_stats_url.read_to_string(&mut stats_url)?;
         Ok(stats_url)
     }
 
