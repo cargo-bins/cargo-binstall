@@ -84,11 +84,6 @@ pub fn install_crates(
         cargo_home,
         &mut config,
     )?;
-    let prev_recorded_quickinstall_url = if quickinstall_enabled {
-        Some(manifests.get_quickinstall_stats_url()?)
-    } else {
-        None
-    };
 
     // Remove installed crates
     let mut crate_names = filter_out_installed_crates(
@@ -242,8 +237,8 @@ pub fn install_crates(
 
     if
         !no_confirm &&
-        let Some(recorded_url) = prev_recorded_quickinstall_url &&
-        recorded_url != QUICKINSTALL_STATS_URL
+        quickinstall_enabled &&
+        manifests.get_quickinstall_stats_url()? != QUICKINSTALL_STATS_URL
     {
         warn!("cargo-binstall will send http request to {QUICKINSTALL_STATS_URL} for quickinstall stats report");
         warn!("You can disable it by `--disable-telemetry`");
