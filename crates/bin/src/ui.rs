@@ -19,33 +19,41 @@ fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String) -> io::Result<()> 
     Ok(())
 }
 
+pub fn confirm_blocking() -> Result<(), BinstallError> {
+    // This task should be the only one able to
+    // access stdin
+    let mut stdin = io::stdin().lock();
+    let mut input = String::with_capacity(16);
+
+    let res = loop {
+        if ask_for_confirm(&mut stdin, &mut input).is_err() {
+            break false;
+        }
+
+        match input.as_str().trim() {
+            "yes" | "y" | "YES" | "Y" | "" => break true,
+            "no" | "n" | "NO" | "N" => break false,
+            _ => {
+                input.clear();
+                continue;
+            }
+        }
+    };
+
+    if res {
+        Ok(())
+    } else {
+        Err(BinstallError::UserAbort)
+    }
+}
+
 pub async fn confirm() -> Result<(), BinstallError> {
     let (tx, rx) = oneshot::channel();
 
     thread::spawn(move || {
-        // This task should be the only one able to
-        // access stdin
-        let mut stdin = io::stdin().lock();
-        let mut input = String::with_capacity(16);
-
-        let res = loop {
-            if ask_for_confirm(&mut stdin, &mut input).is_err() {
-                break false;
-            }
-
-            match input.as_str().trim() {
-                "yes" | "y" | "YES" | "Y" | "" => break true,
-                "no" | "n" | "NO" | "N" => break false,
-                _ => {
-                    input.clear();
-                    continue;
-                }
-            }
-        };
-
         // The main thread might be terminated by signal and thus cancelled
         // the confirmation.
-        tx.send(res).ok();
+        tx.send(confirm_blocking().is_ok()).ok();
     });
 
     if rx.await.unwrap() {
