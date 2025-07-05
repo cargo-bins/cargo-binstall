@@ -22,6 +22,7 @@ use binstalk::{
         CargoTomlFetchOverride, Options, Resolver,
     },
     TARGET,
+    QUICKINSTALL_STATS_URL;,
 };
 use binstalk_manifests::{
     cargo_config::Config,
@@ -38,7 +39,7 @@ use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
 use tracing::{debug, error, info, warn};
 
-use crate::{args::Args, gh_token, git_credentials, install_path, ui::confirm};
+use crate::{args::Args, gh_token, git_credentials, install_path, ui::{confirm, confirm_blocking}};
 
 pub fn install_crates(
     args: Args,
@@ -48,10 +49,19 @@ pub fn install_crates(
     // Compute Resolvers
     let mut cargo_install_fallback = false;
 
-    let resolvers: Vec<_> = args
+    let quickinstall_enabled: Vec<_> = args
         .strategies
+        .iter()
+        .any(|strategy| matches!(strategy.0, Strategy::QuickInstall));
+
+    let resolvers: Vec<_> = args
+    let quickinstall_enabled: Vec<_> = args
+         .strategies
+         .strategies
         .into_iter()
+        .iter()
         .filter_map(|strategy| match strategy.0 {
+        .any(|strategy| matches!(strategy.0, Strategy::QuickInstall));
             Strategy::CrateMetaData => Some(GhCrateMeta::new as Resolver),
             Strategy::QuickInstall => Some(QuickInstall::new as Resolver),
             Strategy::Compile => {
@@ -74,6 +84,11 @@ pub fn install_crates(
         cargo_home,
         &mut config,
     )?;
+    let prev_recorded_quickinstall_url = if quickinstall_enabled {
+        Some(manifests.get_quickinstall_stats_url()?)
+    } else {
+        None
+    };
 
     // Remove installed crates
     let mut crate_names = filter_out_installed_crates(
@@ -225,6 +240,16 @@ pub fn install_crates(
     let no_confirm = args.no_confirm;
     let no_cleanup = args.no_cleanup;
 
+    if
+        !no_confirm &&
+        let Some(recorded_url) = prev_recorded_quickinstall_url &&
+        recorded_url != QUICKINSTALL_STATS_URL
+    {
+        warn!("cargo-binstall will send http request to {QUICKINSTALL_STATS_URL} for quickinstall stats report");
+        warn!("You can disable it by `--disable-telemetry`");
+        confirm_blocking()?;
+    }
+
     // Resolve crates
     let tasks = crate_names
         .map(|res| {
@@ -289,6 +314,7 @@ pub fn install_crates(
                 temp_dir,
                 no_cleanup,
                 &mut errors,
+                quickinstall_enabled,
             );
 
             let tasks: Vec<_> = resolution_sources
@@ -350,6 +376,7 @@ pub fn install_crates(
                 dry_run,
                 temp_dir,
                 no_cleanup,
+                quickinstall_enabled,
             )?;
 
             let tasks: Vec<_> = resolution_sources
@@ -519,6 +546,7 @@ fn do_install_fetches(
     dry_run: bool,
     temp_dir: tempfile::TempDir,
     no_cleanup: bool,
+    quickinstall_enabled: bool,
 ) -> Result<()> {
     if resolution_fetchs.is_empty() {
         return Ok(());
@@ -535,20 +563,13 @@ fn do_install_fetches(
             .map(|fetch| fetch.install(binstall_opts))
             .collect::<Result<Vec<_>, BinstallError>>()?;
 
-        if let Some(manifests) = manifests {
-            manifests.update(metadata_vec)?;
-        }
-
-        if no_cleanup {
-            // Consume temp_dir without removing it from fs.
-            let _ = temp_dir.keep();
-        } else {
-            temp_dir.close().unwrap_or_else(|err| {
-                warn!("Failed to clean up some resources: {err}");
-            });
-        }
-
-        Ok(())
+        update_manifest(
+            manifests,
+            temp_dir,
+            no_cleanup,
+            quickinstall_enabled,
+            metadata_vec,
+        )
     })
 }
 
@@ -562,6 +583,7 @@ fn do_install_fetches_continue_on_failure(
     temp_dir: tempfile::TempDir,
     no_cleanup: bool,
     errors: &mut Vec<Box<CrateContextError>>,
+    quickinstall_enabled: bool,
 ) -> Result<()> {
     if resolution_fetchs.is_empty() {
         return Ok(());
@@ -585,21 +607,40 @@ fn do_install_fetches_continue_on_failure(
             })
             .collect::<Vec<_>>();
 
-        if let Some(manifests) = manifests {
-            manifests.update(metadata_vec)?;
-        }
-
-        if no_cleanup {
-            // Consume temp_dir without removing it from fs.
-            let _ = temp_dir.keep();
-        } else {
-            temp_dir.close().unwrap_or_else(|err| {
-                warn!("Failed to clean up some resources: {err}");
-            });
-        }
-
-        Ok(())
+        update_manifest(
+            manifests,
+            temp_dir,
+            no_cleanup,
+            quickinstall_enabled,
+            metadata_vec,
+        )
     })
+}
+
+fn update_manifest(
+    manifests: Option<Manifests>,
+    temp_dir: tempfile::TempDir,
+    no_cleanup: bool,
+    quickinstall_enabled: bool,
+    metadata_vec: Vec<CrateInfo>,
+) {
+    if let Some(manifests) = manifests {
+        manifests.update(metadata_vec)?;
+        if quickinstall_enabled {
+            manifests.set_quickinstall_stats_url(QUICKINSTALL_STATS_URL)?;
+        }
+    }
+
+    if no_cleanup {
+        // Consume temp_dir without removing it from fs.
+        let _ = temp_dir.keep();
+    } else {
+        temp_dir.close().unwrap_or_else(|err| {
+            warn!("Failed to clean up some resources: {err}");
+        });
+    }
+
+    Ok(())
 }
 
 pub fn self_install(args: Args) -> Result<()> {
