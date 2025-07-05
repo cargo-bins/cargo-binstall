@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.55](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.54...detect-targets-v0.1.55) - 2025-07-05
+
+### Other
+
+- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
+
 ## [0.1.54](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.53...detect-targets-v0.1.54) - 2025-06-22
 
 ### Other
