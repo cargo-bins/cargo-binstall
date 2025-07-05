@@ -22,7 +22,7 @@ use binstalk::{
         CargoTomlFetchOverride, Options, Resolver,
     },
     TARGET,
-    QUICKINSTALL_STATS_URL;,
+    QUICKINSTALL_STATS_URL,
 };
 use binstalk_manifests::{
     cargo_config::Config,
