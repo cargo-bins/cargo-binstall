@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.21...binstalk-registry-v0.11.22) - 2025-07-12
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2227](https://github.com/cargo-bins/cargo-binstall/pull/2227))
+- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
+
 ## [0.11.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.20...binstalk-registry-v0.11.21) - 2025-06-06
 
 ### Fixed
