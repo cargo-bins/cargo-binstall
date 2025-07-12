@@ -371,7 +371,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.12",
- "toml_edit",
+ "toml_edit 0.23.0",
  "url",
 ]
 
@@ -397,7 +397,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
- "toml_edit",
+ "toml_edit 0.23.0",
  "tracing",
  "url",
 ]
@@ -683,9 +683,9 @@ dependencies = [
 
 [[package]]
 name = "clap-cargo"
-version = "0.15.2"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d546f0e84ff2bfa4da1ce9b54be42285767ba39c688572ca32412a09a73851e5"
+checksum = "c6affd9fc8702a94172345c11fa913aa84601cd05e187af166dcd48deff27b8d"
 dependencies = [
  "anstyle",
  "clap",
@@ -3566,7 +3566,7 @@ version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edce586971a4dfaa28950c6f18ed55e0406c1ab88bbce2c6f6293a7aaba73d35"
 dependencies = [
- "toml_edit",
+ "toml_edit 0.22.27",
 ]
 
 [[package]]
@@ -4665,7 +4665,7 @@ dependencies = [
  "serde",
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.11",
- "toml_edit",
+ "toml_edit 0.22.27",
 ]
 
 [[package]]
@@ -4712,6 +4712,21 @@ dependencies = [
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.11",
  "toml_write",
+ "winnow 0.7.11",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54449f7f7569ce6f57cda7812361961c0f6a77f720802537b5618585b4a7ff4c"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_spanned 1.0.0",
+ "toml_datetime 0.7.0",
+ "toml_parser",
+ "toml_writer",
  "winnow 0.7.11",
 ]
 
