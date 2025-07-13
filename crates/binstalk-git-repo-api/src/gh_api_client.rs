@@ -600,6 +600,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn rate_limited_test_has_release_artifact_and_download_artifacts() {
         const RELEASES: [(GhRelease, &[&str]); 1] = [(
             cargo_binstall_v0_20_1::RELEASE,
