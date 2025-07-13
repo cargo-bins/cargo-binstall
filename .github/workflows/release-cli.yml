@@ -78,6 +78,9 @@ jobs:
     needs: package
     permissions:
       contents: write
+      id-token: write     # Required for OIDC token exchange
+
+
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -89,11 +92,14 @@ jobs:
 
     - run: .github/scripts/ephemeral-crate.sh
 
+    - uses: rust-lang/crates-io-auth-action@v1
+      id: auth
+      
     - if: fromJSON(inputs.info).is-release != 'true' && fromJSON(inputs.info).crate != ''
       name: DRY-RUN Publish to crates.io
       env:
         crate: ${{ fromJSON(inputs.info).crate }}
-        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       run: cargo publish --dry-run -p "$crate" --allow-dirty --no-default-features
     - if: fromJSON(inputs.info).is-release != 'true' && fromJSON(inputs.info).crate != ''
       name: Upload crate package as artifact
@@ -106,7 +112,7 @@ jobs:
       name: Publish to crates.io
       env:
         crate: ${{ fromJSON(inputs.info).crate }}
-        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       run: cargo publish -p "$crate" --allow-dirty  --no-default-features
 
     - if: fromJSON(inputs.info).is-release == 'true'
