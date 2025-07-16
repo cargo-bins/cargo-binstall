@@ -143,14 +143,14 @@ impl io::Write for FileLock {
 }
 impl io::Write for &FileLock {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.write(buf)
+        (&self.0).write(buf)
     }
     fn flush(&mut self) -> io::Result<()> {
-        self.0.flush()
+        (&self.0).flush()
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        self.0.write_vectored(bufs)
+        (&self.0).write_vectored(bufs)
     }
 }
 
@@ -165,11 +165,11 @@ impl io::Read for FileLock {
 }
 impl io::Read for &FileLock {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.read(buf)
+        (&self.0).read(buf)
     }
 
     fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        self.0.read_vectored(bufs)
+        (&self.0).read_vectored(bufs)
     }
 }
 
@@ -187,14 +187,14 @@ impl io::Seek for FileLock {
 }
 impl io::Seek for &FileLock {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        self.0.seek(pos)
+        (&self.0).seek(pos)
     }
 
     fn rewind(&mut self) -> io::Result<()> {
-        self.0.rewind()
+        (&self.0).rewind()
     }
     fn stream_position(&mut self) -> io::Result<u64> {
-        self.0.stream_position()
+        (&self.0).stream_position()
     }
 }
 
