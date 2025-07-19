@@ -215,9 +215,7 @@ pub fn install_crates(
     let dry_run = args.dry_run;
     let no_confirm = !settings.confirm;
     let no_cleanup = args.no_cleanup;
-
-    // Make sure we don't use args beyond this point
-    drop(args);
+    let continue_on_failure = settings.continue_on_failure;
 
     // Resolve crates
     let tasks = crate_names
@@ -232,7 +230,7 @@ pub fn install_crates(
         })
         .collect::<Result<Vec<_>, BinstallError>>()?;
 
-    Ok(Some(if args.continue_on_failure {
+    Ok(Some(if continue_on_failure {
         AutoAbortJoinHandle::spawn(async move {
             // Collect results
             let mut resolution_fetchs = Vec::new();

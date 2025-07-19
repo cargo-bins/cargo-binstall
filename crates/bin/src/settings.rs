@@ -23,6 +23,9 @@ pub struct Settings {
     pub track_installs: bool,
 
     #[serde(default)]
+    pub continue_on_failure: bool,
+
+    #[serde(default)]
     pub targets: Option<Vec<String>>,
 
     #[serde(default)]
@@ -63,6 +66,9 @@ impl Settings {
         if args.no_track {
             self.track_installs = false;
         }
+        if args.continue_on_failure {
+            self.continue_on_failure = true;
+        }
         if let Some(targets) = &args.targets {
             self.targets = Some(targets.clone());
         }
@@ -70,6 +76,17 @@ impl Settings {
             self.strategies = args.strategies.clone();
         }
         self
+    }
+
+    pub(crate) fn write(&self, file: &mut File) -> Result<()> {
+        file.write_all(
+            toml::to_string_pretty(self)
+                .into_diagnostic()
+                .wrap_err("serialise default settings")?
+                .as_bytes(),
+        )
+        .into_diagnostic()
+        .wrap_err("write default settings")
     }
 }
 
@@ -86,14 +103,7 @@ pub fn load(error_if_inaccessible: bool, path: PathBuf) -> Result<Settings> {
             Ok(mut file) => {
                 debug!(?path, "creating new settings file");
                 let settings = Settings::default();
-                file.write_all(
-                    toml::to_string_pretty(&settings)
-                        .into_diagnostic()
-                        .wrap_err("serialise default settings")?
-                        .as_bytes(),
-                )
-                .into_diagnostic()
-                .wrap_err("write default settings")?;
+                settings.write(&mut file)?;
                 Ok(settings)
             }
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
