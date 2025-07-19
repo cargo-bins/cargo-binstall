@@ -98,6 +98,7 @@ impl Settings {
         let mut file = File::options()
             .create(true)
             .write(true)
+            .append(false)
             .open(path)
             .into_diagnostic()
             .wrap_err("open settings file")?;
@@ -115,7 +116,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
         .wrap_err("create settings directory")?;
 
         debug!(?path, "trying to create new settings file");
-        match File::options().create_new(true).open(&path) {
+        match File::options().create_new(true).open(path) {
             Ok(mut file) => {
                 debug!(?path, "writing new settings file");
                 let settings = Settings::default();
@@ -131,7 +132,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
                 debug!(?path, "loading binstall settings");
                 let mut file = File::options()
                     .read(true)
-                    .open(&path)
+                    .open(path)
                     .into_diagnostic()
                     .wrap_err("open existing settings file")?;
 

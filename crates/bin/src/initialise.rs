@@ -66,6 +66,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
 
     if !args.disable_telemetry && !args.no_confirm && !settings.telemetry.consent_asked {
         info!(url=?binstalk::QUICKINSTALL_STATS_URL, "the current QuickInstall statistics endpoint");
+        #[allow(clippy::print_literal)]
         eprintln!(
             "\n{}\n{}\n{}\n{}",
             "Binstall would like to collect install statistics for the QuickInstall project",
@@ -95,7 +96,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         bail!("Could not determine installation path. Provide one with --install-path")
     };
 
-    let settings = settings.merge_args(&args);
+    let settings = settings.merge_args(args);
 
     fs::create_dir_all(&cargo_root).map_err(BinstallError::Io)?;
     fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
