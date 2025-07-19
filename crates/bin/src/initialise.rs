@@ -5,9 +5,9 @@ use binstalk_manifests::{cargo_config::Config as CargoConfig, crates_manifests::
 use home::cargo_home;
 use miette::{bail, Result, WrapErr};
 use tempfile::TempDir;
-use tracing::debug;
+use tracing::{debug, info};
 
-use crate::args::Args;
+use crate::{args::Args, ui::confirm_sync};
 
 pub(crate) struct Init {
     pub(crate) cargo_config: CargoConfig,
@@ -56,15 +56,27 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         CargoConfig::load_from_path(cargo_root.join("config.toml"))?
     };
 
-    let settings = crate::settings::load(
-        args.settings.is_some(),
-        args.settings.clone().unwrap_or(
-            cargo_home
-                .as_ref()
-                .unwrap_or(&cargo_root)
-                .join("binstall.toml"),
-        ),
-    )?;
+    let settings_path = args.settings.clone().unwrap_or(
+        cargo_home
+            .as_ref()
+            .unwrap_or(&cargo_root)
+            .join("binstall.toml"),
+    );
+    let mut settings = crate::settings::load(args.settings.is_some(), &settings_path)?;
+
+    if !args.disable_telemetry && !args.no_confirm && !settings.telemetry.consent_asked {
+        info!(url=?binstalk::QUICKINSTALL_STATS_URL, "the current QuickInstall statistics endpoint");
+        eprintln!(
+            "\n{}\n{}\n{}\n{}",
+            "Binstall would like to collect install statistics for the QuickInstall project",
+            "to help inform which packages should be included in its index in the future.",
+            "If you agree, please type 'yes'. If you disagree, telemetry will not be sent.",
+            "You can change this at any time by editing the binstall settings file.",
+        );
+        settings.telemetry_consent(confirm_sync("Opt in to telemetry? yes/[no] ", false));
+        settings.save(&settings_path)?;
+        info!(path=?settings_path, "Settings saved");
+    }
 
     let (install_path, custom_install_path) = if let Some(p) = &args.install_path {
         debug!(path=?p, "install path from --install-path");

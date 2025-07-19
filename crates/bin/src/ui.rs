@@ -6,11 +6,11 @@ use std::{
 use binstalk::errors::BinstallError;
 use tokio::sync::oneshot;
 
-fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String) -> io::Result<()> {
+fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String, prompt: &str) -> io::Result<()> {
     {
         let mut stdout = io::stdout().lock();
 
-        write!(&mut stdout, "Do you wish to continue? [yes]/no\n? ")?;
+        write!(&mut stdout, "{prompt}",)?;
         stdout.flush()?;
     }
 
@@ -23,28 +23,9 @@ pub async fn confirm() -> Result<(), BinstallError> {
     let (tx, rx) = oneshot::channel();
 
     thread::spawn(move || {
-        // This task should be the only one able to
-        // access stdin
-        let mut stdin = io::stdin().lock();
-        let mut input = String::with_capacity(16);
+        let res = confirm_sync("Do you wish to continue? [yes]/no ", true);
 
-        let res = loop {
-            if ask_for_confirm(&mut stdin, &mut input).is_err() {
-                break false;
-            }
-
-            match input.as_str().trim() {
-                "yes" | "y" | "YES" | "Y" | "" => break true,
-                "no" | "n" | "NO" | "N" => break false,
-                _ => {
-                    input.clear();
-                    continue;
-                }
-            }
-        };
-
-        // The main thread might be terminated by signal and thus cancelled
-        // the confirmation.
+        // The main thread might be terminated by signal and thus cancel the confirmation
         tx.send(res).ok();
     });
 
@@ -52,5 +33,27 @@ pub async fn confirm() -> Result<(), BinstallError> {
         Ok(())
     } else {
         Err(BinstallError::UserAbort)
+    }
+}
+
+pub fn confirm_sync(prompt: &str, default: bool) -> bool {
+    // This task should be the only one able to access stdin
+    let mut stdin = io::stdin().lock();
+    let mut input = String::with_capacity(16);
+
+    loop {
+        if ask_for_confirm(&mut stdin, &mut input, prompt).is_err() {
+            break false;
+        }
+
+        match input.as_str().trim() {
+            "" => break default,
+            "yes" | "y" | "YES" | "Y" => break true,
+            "no" | "n" | "NO" | "N" => break false,
+            _ => {
+                input.clear();
+                continue;
+            }
+        }
     }
 }

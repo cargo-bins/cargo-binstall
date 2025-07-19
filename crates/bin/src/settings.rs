@@ -1,10 +1,9 @@
 use std::{
     fs::{create_dir_all, File},
     io::{Read, Write as _},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
-use binstalk::QUICKINSTALL_STATS_URL;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
@@ -38,21 +37,24 @@ pub struct Settings {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Telemetry {
     pub enabled: bool,
-    pub consent: bool,
-    pub endpoint: String,
+    pub consent_asked: bool,
 }
 
 impl Default for Telemetry {
     fn default() -> Self {
         Self {
             enabled: true,
-            consent: false,
-            endpoint: QUICKINSTALL_STATS_URL.into(),
+            consent_asked: false,
         }
     }
 }
 
 impl Settings {
+    pub(crate) fn telemetry_consent(&mut self, enable: bool) {
+        self.telemetry.consent_asked = true;
+        self.telemetry.enabled = enable;
+    }
+
     pub(crate) fn merge_args(mut self, args: &Args) -> Self {
         if let Some(path) = &args.install_path {
             self.install_path = Some(path.clone());
@@ -75,10 +77,13 @@ impl Settings {
         if !args.strategies.is_empty() {
             self.strategies = args.strategies.clone();
         }
+        if !self.telemetry.consent_asked {
+            self.telemetry.enabled = false;
+        }
         self
     }
 
-    pub(crate) fn write(&self, file: &mut File) -> Result<()> {
+    fn write(&self, file: &mut File) -> Result<()> {
         file.write_all(
             toml::to_string_pretty(self)
                 .into_diagnostic()
@@ -88,10 +93,20 @@ impl Settings {
         .into_diagnostic()
         .wrap_err("write default settings")
     }
+
+    pub(crate) fn save(&self, path: &Path) -> Result<()> {
+        let mut file = File::options()
+            .create(true)
+            .write(true)
+            .open(path)
+            .into_diagnostic()
+            .wrap_err("open settings file")?;
+        self.write(&mut file)
+    }
 }
 
-pub fn load(error_if_inaccessible: bool, path: PathBuf) -> Result<Settings> {
-    fn inner(path: PathBuf) -> Result<Settings> {
+pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
+    fn inner(path: &Path) -> Result<Settings> {
         create_dir_all(
             path.parent()
                 .ok_or_else(|| miette!("settings path has no parent"))?,
@@ -99,14 +114,20 @@ pub fn load(error_if_inaccessible: bool, path: PathBuf) -> Result<Settings> {
         .into_diagnostic()
         .wrap_err("create settings directory")?;
 
+        debug!(?path, "trying to create new settings file");
         match File::options().create_new(true).open(&path) {
             Ok(mut file) => {
-                debug!(?path, "creating new settings file");
+                debug!(?path, "writing new settings file");
                 let settings = Settings::default();
                 settings.write(&mut file)?;
                 Ok(settings)
             }
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(error) => {
+                debug!(
+                    ?error,
+                    "failed to create new settings file, probably because it already exists"
+                );
+
                 debug!(?path, "loading binstall settings");
                 let mut file = File::options()
                     .read(true)
@@ -125,11 +146,6 @@ pub fn load(error_if_inaccessible: bool, path: PathBuf) -> Result<Settings> {
 
                 debug!(?settings, "loaded binstall settings");
                 Ok(settings)
-            }
-            Err(err) => {
-                return Err(err)
-                    .into_diagnostic()
-                    .wrap_err("reading binstall settings file")
             }
         }
     }

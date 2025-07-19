@@ -204,7 +204,7 @@ pub fn install_crates(
         } else {
             SignaturePolicy::IfPresent
         },
-        disable_telemetry: args.disable_telemetry,
+        disable_telemetry: !settings.telemetry.enabled,
 
         maximum_resolution_timeout: Duration::from_secs(
             args.maximum_resolution_timeout.get().into(),
