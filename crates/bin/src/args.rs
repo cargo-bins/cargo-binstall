@@ -409,6 +409,14 @@ pub struct Args {
     #[clap(help_heading = "Options", long, conflicts_with = "only_signed")]
     pub(crate) skip_signatures: bool,
 
+    /// Custom settings file
+    ///
+    /// The default is to read a binstall.toml file from CARGO_HOME or the cargo root directory.
+    ///
+    /// If a file is not found at the path provided, one will be created with the defaults.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) settings: Option<PathBuf>,
+
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
     pub version: bool,

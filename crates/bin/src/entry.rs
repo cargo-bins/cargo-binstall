@@ -45,6 +45,7 @@ pub fn install_crates(
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     let Init {
         cargo_config,
+        settings,
         cargo_root,
         install_path,
         manifests,

@@ -8,6 +8,7 @@ mod git_credentials;
 mod initialise;
 mod logging;
 mod main_impl;
+mod settings;
 mod signal;
 mod ui;
 

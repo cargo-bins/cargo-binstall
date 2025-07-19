@@ -11,6 +11,7 @@ use crate::args::Args;
 
 pub(crate) struct Init {
     pub(crate) cargo_config: CargoConfig,
+    pub(crate) settings: crate::settings::Settings,
     pub(crate) cargo_root: PathBuf,
     pub(crate) install_path: PathBuf,
     pub(crate) manifests: Option<Manifests>,
@@ -55,6 +56,16 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         CargoConfig::load_from_path(cargo_root.join("config.toml"))?
     };
 
+    let settings = crate::settings::load(
+        args.settings.is_some(),
+        args.settings.clone().unwrap_or(
+            cargo_home
+                .as_ref()
+                .unwrap_or(&cargo_root)
+                .join("binstall.toml"),
+        ),
+    );
+
     let (install_path, custom_install_path) = if let Some(p) = &args.install_path {
         debug!(path=?p, "install path from --install-path");
         (p.into(), true)
@@ -89,6 +100,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
 
     Ok(Init {
         cargo_config,
+        settings,
         cargo_root,
         install_path,
         manifests,
