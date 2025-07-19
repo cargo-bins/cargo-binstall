@@ -64,24 +64,31 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
                 .unwrap_or(&cargo_root)
                 .join("binstall.toml"),
         ),
-    );
+    )?;
 
     let (install_path, custom_install_path) = if let Some(p) = &args.install_path {
         debug!(path=?p, "install path from --install-path");
         (p.into(), true)
+    } else if let Some(p) = &settings.install_path {
+        debug!(path=?p, "install path from settings");
+        (p.into(), true)
+    } else if cargo_home.is_some() {
+        let p = cargo_root.join("bin");
+        debug!(path=?p, "install path from cargo root");
+        (p, false)
     } else if let Some(p) = dirs::executable_dir() {
         debug!(path=?p, "install path from executable dir");
         (p, true)
     } else {
-        let p = cargo_root.join("bin");
-        debug!(path=?p, "install path from cargo root");
-        (p, false)
+        bail!("Could not determine installation path. Provide one with --install-path")
     };
+
+    let settings = settings.merge_args(&args);
 
     fs::create_dir_all(&cargo_root).map_err(BinstallError::Io)?;
     fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
 
-    let manifests = if !(args.no_track || custom_install_path) {
+    let manifests = if settings.track_installs && !custom_install_path {
         Some(Manifests::open_exclusive(&cargo_root)?)
     } else {
         None

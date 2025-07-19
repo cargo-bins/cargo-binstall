@@ -53,7 +53,7 @@ pub fn install_crates(
     } = crate::initialise::initialise(&args)?;
 
     let mut cargo_install_fallback = false;
-    let resolvers: Vec<_> = args
+    let resolvers: Vec<_> = settings
         .strategies
         .into_iter()
         .filter_map(|strategy| match strategy.0 {
@@ -81,7 +81,7 @@ pub fn install_crates(
     }
 
     // Launch target detection
-    let desired_targets = get_desired_targets(args.targets);
+    let desired_targets = get_desired_targets(settings.targets);
 
     // Initialize reqwest client
     let rate_limit = args.rate_limit;
@@ -213,8 +213,11 @@ pub fn install_crates(
 
     // Destruct args before any async function to reduce size of the future
     let dry_run = args.dry_run;
-    let no_confirm = args.no_confirm;
+    let no_confirm = !settings.confirm;
     let no_cleanup = args.no_cleanup;
+
+    // Make sure we don't use args beyond this point
+    drop(args);
 
     // Resolve crates
     let tasks = crate_names

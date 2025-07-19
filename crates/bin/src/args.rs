@@ -18,6 +18,7 @@ use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, Val
 use compact_str::CompactString;
 use log::LevelFilter;
 use semver::VersionReq;
+use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 use zeroize::Zeroizing;
 
@@ -524,7 +525,8 @@ impl Default for RateLimit {
 }
 
 /// Strategy for installing the package
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct StrategyWrapped(pub(crate) Strategy);
 
 impl StrategyWrapped {
