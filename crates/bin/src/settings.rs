@@ -99,6 +99,7 @@ impl Settings {
             .create(true)
             .write(true)
             .append(false)
+            .truncate(true)
             .open(path)
             .into_diagnostic()
             .wrap_err("open settings file")?;
