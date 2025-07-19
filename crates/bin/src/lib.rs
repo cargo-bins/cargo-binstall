@@ -5,7 +5,7 @@ mod bin_util;
 mod entry;
 mod gh_token;
 mod git_credentials;
-mod install_path;
+mod initialise;
 mod logging;
 mod main_impl;
 mod signal;

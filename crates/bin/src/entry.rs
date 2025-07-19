@@ -21,33 +21,37 @@ use binstalk::{
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
         CargoTomlFetchOverride, Options, Resolver,
     },
-    QUICKINSTALL_STATS_URL, TARGET,
+    TARGET,
 };
 use binstalk_manifests::{
-    cargo_config::Config,
     cargo_toml_binstall::{PkgOverride, Strategy},
     crate_info::{CrateInfo, CrateSource},
     crates_manifests::Manifests,
 };
 use compact_str::CompactString;
 use file_format::FileFormat;
-use home::cargo_home;
 use log::LevelFilter;
-use miette::{miette, Report, Result, WrapErr};
+use miette::{Report, Result};
 use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
-use crate::{args::Args, gh_token, git_credentials, install_path, ui::confirm};
+use crate::{args::Args, gh_token, git_credentials, initialise::Init, ui::confirm};
 
 pub fn install_crates(
     args: Args,
     cli_overrides: PkgOverride,
     jobserver_client: LazyJobserverClient,
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
-    // Compute Resolvers
-    let mut cargo_install_fallback = false;
+    let Init {
+        cargo_config,
+        cargo_root,
+        install_path,
+        manifests,
+        temp_dir,
+    } = crate::initialise::initialise(&args)?;
 
+    let mut cargo_install_fallback = false;
     let resolvers: Vec<_> = args
         .strategies
         .into_iter()
@@ -60,20 +64,6 @@ pub fn install_crates(
             }
         })
         .collect();
-
-    // Load .cargo/config.toml
-    let cargo_home = cargo_home().map_err(BinstallError::from)?;
-    let mut config = Config::load_from_path(cargo_home.join("config.toml"))?;
-
-    // Compute paths
-    let cargo_root = args.root;
-    let (install_path, manifests, temp_dir) = compute_paths_and_load_manifests(
-        cargo_root.clone(),
-        args.install_path,
-        args.no_track,
-        cargo_home,
-        &mut config,
-    )?;
 
     // Remove installed crates
     let mut crate_names = filter_out_installed_crates(
@@ -95,7 +85,7 @@ pub fn install_crates(
     // Initialize reqwest client
     let rate_limit = args.rate_limit;
 
-    let mut http = config.http.take();
+    let mut http = cargo_config.http.clone();
 
     let client = Client::new(
         concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
@@ -168,7 +158,7 @@ pub fn install_crates(
 
         temp_dir: temp_dir.path().to_owned(),
         install_path,
-        cargo_root,
+        cargo_root: Some(cargo_root),
 
         client,
         gh_api_client,
@@ -177,7 +167,7 @@ pub fn install_crates(
             index
         } else if let Some(registry_name) = args
             .registry
-            .or_else(|| config.registry.and_then(|registry| registry.default))
+            .or_else(|| cargo_config.registry.and_then(|registry| registry.default))
         {
             let registry_name_lowercase = registry_name.to_lowercase();
 
@@ -193,7 +183,7 @@ pub fn install_crates(
             if let Some(v) = &v {
                 v
             } else {
-                config
+                cargo_config
                     .registries
                     .as_ref()
                     .and_then(|registries| registries.get(&registry_name))
@@ -413,54 +403,6 @@ fn read_root_certs(
         })
 }
 
-/// Return (install_path, manifests, temp_dir)
-fn compute_paths_and_load_manifests(
-    roots: Option<PathBuf>,
-    install_path: Option<PathBuf>,
-    no_track: bool,
-    cargo_home: PathBuf,
-    config: &mut Config,
-) -> Result<(PathBuf, Option<Manifests>, tempfile::TempDir)> {
-    // Compute cargo_roots
-    let cargo_roots =
-        install_path::get_cargo_roots_path(roots, cargo_home, config).ok_or_else(|| {
-            error!("No viable cargo roots path found of specified, try `--roots`");
-            miette!("No cargo roots path found or specified")
-        })?;
-
-    // Compute install directory
-    let (install_path, custom_install_path) =
-        install_path::get_install_path(install_path, Some(&cargo_roots));
-    let install_path = install_path.ok_or_else(|| {
-        error!("No viable install path found of specified, try `--install-path`");
-        miette!("No install path found or specified")
-    })?;
-    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
-    debug!("Using install path: {}", install_path.display());
-
-    let no_manifests = no_track || custom_install_path;
-
-    // Load manifests
-    let manifests = if !no_manifests {
-        Some(Manifests::open_exclusive(&cargo_roots)?)
-    } else {
-        None
-    };
-
-    // Create a temporary directory for downloads etc.
-    //
-    // Put all binaries to a temporary directory under `dst` first, catching
-    // some failure modes (e.g., out of space) before touching the existing
-    // binaries. This directory will get cleaned up via RAII.
-    let temp_dir = tempfile::Builder::new()
-        .prefix("cargo-binstall")
-        .tempdir_in(&install_path)
-        .map_err(BinstallError::from)
-        .wrap_err("Creating a temporary directory failed.")?;
-
-    Ok((install_path, manifests, temp_dir))
-}
-
 /// Return vec of (crate_name, current_version)
 fn filter_out_installed_crates<'a>(
     crate_names: Vec<CrateName>,
@@ -599,19 +541,11 @@ fn update_manifest(
 }
 
 pub fn self_install(args: Args) -> Result<()> {
-    // Load .cargo/config.toml
-    let cargo_home = cargo_home().map_err(BinstallError::from)?;
-    let mut config = Config::load_from_path(cargo_home.join("config.toml"))?;
-
-    // Compute paths
-    let cargo_root = args.root;
-    let (install_path, manifests, _) = compute_paths_and_load_manifests(
-        cargo_root.clone(),
-        args.install_path,
-        args.no_track,
-        cargo_home,
-        &mut config,
-    )?;
+    let Init {
+        install_path,
+        manifests,
+        ..
+    } = crate::initialise::initialise(&args)?;
 
     let mut dest = install_path.join("cargo-binstall");
     if cfg!(windows) {
