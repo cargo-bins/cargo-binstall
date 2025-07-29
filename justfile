@@ -155,7 +155,7 @@ cargo-nightly-args := if toolchain-name == "nightly" {
     " -Zhint-mostly-unused"
 } else {
     ""
-};
+}
 
 cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo)
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + cargo-nightly-args + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
