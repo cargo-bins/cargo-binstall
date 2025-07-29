@@ -152,7 +152,7 @@ target-glibc-ver-postfix := if glibc-version != "" {
 
 toolchain-name := if cargo-buildstd != "" { "nightly" } else { "stable" }
 cargo-nightly-args := if toolchain-name == "nightly" {
-    " -Zhint-mostly-unused"
+    " -Zprofile-hint-mostly-unused"
 } else {
     ""
 }
