@@ -150,8 +150,15 @@ target-glibc-ver-postfix := if glibc-version != "" {
     ""
 }
 
+toolchain-name := if cargo-buildstd != "" { "nightly" } else { "stable" }
+cargo-nightly-args := if toolchain-name == "nightly" {
+    " -Zhint-mostly-unused"
+} else {
+    ""
+};
+
 cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo)
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + cargo-nightly-args + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
 export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf) + (if enable-h3 != "" { " --cfg reqwest_unstable" } else { "" })
 
 
@@ -168,7 +175,6 @@ ci-install-deps:
 [windows]
 ci-install-deps:
 
-toolchain-name := if cargo-buildstd != "" { "nightly" } else { "stable" }
 # x86_64h-apple-darwin does not contain pre-built libstd, instead we will
 # install rust-src and use build-std to build it.
 target-name := if target == "x86_64h-apple-darwin" { "" } else { target }
