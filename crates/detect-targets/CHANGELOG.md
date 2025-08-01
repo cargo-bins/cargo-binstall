@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.56](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.55...detect-targets-v0.1.56) - 2025-08-01
+
+### Other
+
+- Fix race condition of DesiredTargets ([#2238](https://github.com/cargo-bins/cargo-binstall/pull/2238))
+
 ## [0.1.55](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.54...detect-targets-v0.1.55) - 2025-07-25
 
 ### Other
