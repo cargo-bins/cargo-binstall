@@ -23,7 +23,7 @@ impl DesiredTargets {
 
         let set_once = arc.clone();
         tokio::spawn(async move {
-            set_once.set(detect_targets().await);
+            set_once.set(detect_targets().await).unwrap();
         });
 
         Self(DesiredTargetsInner::AutoDetect(arc))
