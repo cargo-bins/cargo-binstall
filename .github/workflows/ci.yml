@@ -53,7 +53,7 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@94d97fe3f88298bf8b2f2db6fa2ab150f3c1ab77
+        uses: tj-actions/changed-files@8cdfb7636d150253dee416a80f11c67f5ba7e9be
         with:
           dir_names: true
           dir_names_exclude_current_dir: true
