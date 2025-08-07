@@ -3,13 +3,11 @@
 //! These use the same mechanisms as, and are interoperable with, Cargo.
 
 use std::{
-    fs::File,
+    fs::{File, TryLockError},
     io::{self, IoSlice, IoSliceMut, SeekFrom},
     ops,
     path::Path,
 };
-
-use fs4::fs_std::FileExt;
 
 /// A locked file.
 #[derive(Debug)]
@@ -30,7 +28,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_exclusive(file: File) -> io::Result<Self> {
-        FileExt::lock_exclusive(&file)?;
+        file.lock()?;
 
         Ok(Self::new(file))
     }
@@ -43,13 +41,10 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_exclusive(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        match FileExt::try_lock_exclusive(&file) {
-            Ok(true) => Ok(Self::new(file)),
-            Ok(false) => Err((file, None)),
-            Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
-                Err((file, None))
-            }
-            Err(e) => Err((file, Some(e))),
+        match file.try_lock() {
+            Ok(()) => Ok(Self::new(file)),
+            Err(TryLockError::WouldBlock) => Err((file, None)),
+            Err(TryLockError::Error(e)) => Err((file, Some(e))),
         }
     }
 
@@ -57,7 +52,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_shared(file: File) -> io::Result<Self> {
-        FileExt::lock_shared(&file)?;
+        file.lock_shared()?;
 
         Ok(Self::new(file))
     }
@@ -70,13 +65,10 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_shared(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        match FileExt::try_lock_shared(&file) {
-            Ok(true) => Ok(Self::new(file)),
-            Ok(false) => Err((file, None)),
-            Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
-                Err((file, None))
-            }
-            Err(e) => Err((file, Some(e))),
+        match file.try_lock_shared() {
+            Ok(()) => Ok(Self::new(file)),
+            Err(TryLockError::WouldBlock) => Err((file, None)),
+            Err(TryLockError::Error(e)) => Err((file, Some(e))),
         }
     }
 
@@ -92,7 +84,7 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        let _res = FileExt::unlock(&self.0);
+        let _res = self.0.unlock();
         #[cfg(feature = "tracing")]
         if let Err(err) = _res {
             use std::fmt;
