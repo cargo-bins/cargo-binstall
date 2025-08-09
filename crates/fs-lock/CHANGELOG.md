@@ -1,4 +1,18 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.11](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.10...fs-lock-v0.1.11) - 2025-08-09
+
+### Other
+
+- Use newly stablised stdlib file lock API ([#2254](https://github.com/cargo-bins/cargo-binstall/pull/2254))
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

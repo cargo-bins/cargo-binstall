@@ -219,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.40"
+version = "0.28.41"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.17.3"
+version = "0.17.4"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.56"
+version = "0.1.57"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -1206,7 +1206,7 @@ dependencies = [
 
 [[package]]
 name = "fs-lock"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "tracing",
 ]
