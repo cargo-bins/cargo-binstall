@@ -61,7 +61,7 @@ jobs:
       JUST_ENABLE_H3: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Override release profile lto settings
         if: inputs.CARGO_PROFILE_RELEASE_LTO
@@ -143,7 +143,7 @@ jobs:
       JUST_FOR_RELEASE: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: taiki-e/install-action@v2
         with:
