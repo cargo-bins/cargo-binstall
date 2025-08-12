@@ -21,7 +21,7 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Push cli release tag
       uses: mathieudutour/github-tag-action@v6.2
@@ -33,7 +33,7 @@ jobs:
   keygen:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - uses: cargo-bins/cargo-binstall@main
       env:
@@ -83,7 +83,7 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: actions/download-artifact@v5
       with:
         name: minisign.pub
