@@ -1,4 +1,4 @@
-use std::{env::var_os, fs, path::PathBuf};
+use std::{borrow::Cow, env::var_os, fs, path::PathBuf};
 
 use binstalk::errors::BinstallError;
 use binstalk_manifests::{cargo_config::Config as CargoConfig, crates_manifests::Manifests};
@@ -19,15 +19,13 @@ pub(crate) struct Init {
 }
 
 pub(crate) fn initialise(args: &Args) -> Result<Init> {
-    let (cargo_config, cargo_home) = if let Ok(home) = cargo_home() {
-        (
-            Some(CargoConfig::load_from_path(home.join("config.toml"))?),
-            Some(home),
-        )
+    let (cargo_config_path, cargo_home) = if let Ok(home) = cargo_home() {
+        (home.join("config.toml"), Some(home))
     } else {
-        (None, None)
+        (cargo_root.join("config.toml"), None)
     };
-
+    let cargo_config = CargoConfig::load_from_path(cargo_config_path)?;
+  
     let cargo_root = if let Some(p) = &args.root {
         debug!(path=?p, "install root from --root");
         p.into()
@@ -35,8 +33,9 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         debug!(path=?p, "install root from CARGO_INSTALL_ROOT");
         p
     } else if let Some(p) = cargo_config
+        .install
         .as_ref()
-        .and_then(|config| config.install.clone().and_then(|install| install.root))
+        .and_then(|install| install.root.clone())
     {
         debug!(path=?p, "install root from cargo config");
         p
@@ -50,17 +49,12 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         bail!("No install root found, provide one with --root or CARGO_INSTALL_ROOT");
     };
 
-    let cargo_config = if let Some(config) = cargo_config {
-        config
-    } else {
-        CargoConfig::load_from_path(cargo_root.join("config.toml"))?
-    };
-
     let settings_path = args.settings.as_deref().map(Cow::Borrowed).unwrap_or_else(||
-        Cow::Owned(cargo_home
-            .as_ref()
-            .unwrap_or(&cargo_root)
-            .join("binstall.toml")
+        Cow::Owned(
+            cargo_home
+                .as_ref()
+                .unwrap_or(&cargo_root)
+                .join("binstall.toml")
         )
     );
     let mut settings = crate::settings::load(args.settings.is_some(), &settings_path)?;
