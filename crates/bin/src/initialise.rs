@@ -19,12 +19,14 @@ pub(crate) struct Init {
 }
 
 pub(crate) fn initialise(args: &Args) -> Result<Init> {
-    let (cargo_config_path, cargo_home) = if let Ok(home) = cargo_home() {
-        (home.join("config.toml"), Some(home))
+    let (cargo_config, cargo_home) = if let Ok(home) = cargo_home() {
+        (
+            Some(home.join("config.toml")),
+            Some(home),
+        )
     } else {
-        (cargo_root.join("config.toml"), None)
+        (None, None)
     };
-    let cargo_config = CargoConfig::load_from_path(cargo_config_path)?;
   
     let cargo_root = if let Some(p) = &args.root {
         debug!(path=?p, "install root from --root");
@@ -33,8 +35,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         debug!(path=?p, "install root from CARGO_INSTALL_ROOT");
         p
     } else if let Some(p) = cargo_config
-        .install
         .as_ref()
+        .and_then(|config| config.install.as_ref())
         .and_then(|install| install.root.clone())
     {
         debug!(path=?p, "install root from cargo config");
@@ -47,6 +49,20 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         p
     } else {
         bail!("No install root found, provide one with --root or CARGO_INSTALL_ROOT");
+    };
+
+    let (cargo_root, cargo_config) = if let Some(config) = cargo_config {
+        (cargo_root, config)
+    } else {
+        let config = CargoConfig::load_from_path(cargo_root.join("config.toml"))?;
+        (
+            config
+                .install
+                .as_ref()
+                .and_then(|install| install.root.clone())
+                .unwrap_or(cargo_root),
+            config,
+        )
     };
 
     let settings_path = args.settings.as_deref().map(Cow::Borrowed).unwrap_or_else(||
