@@ -3,7 +3,7 @@ name = "cargo-binstall"
 description = "Binary installation for rust projects"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/cargo-binstall"
-version = "1.14.1"
+version = "1.14.4"
 rust-version = "1.79.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -23,13 +23,13 @@ pkg-fmt = "zip"
 
 [dependencies]
 atomic-file-install = { version = "1.0.11", path = "../atomic-file-install" }
-binstalk = { path = "../binstalk", version = "0.28.38", default-features = false }
-binstalk-manifests = { path = "../binstalk-manifests", version = "0.17.1" }
+binstalk = { path = "../binstalk", version = "0.28.41", default-features = false }
+binstalk-manifests = { path = "../binstalk-manifests", version = "0.17.4" }
 clap = { version = "4.5.3", features = ["derive", "env", "wrap_help"] }
 clap-cargo = "0.16.0"
 compact_str = "0.9.0"
 dirs = "6.0.0"
-file-format = { version = "0.27.0", default-features = false }
+file-format = { version = "0.28.0", default-features = false }
 home = "0.5.9"
 log = { version = "0.4.22", features = ["std"] }
 miette = "7.0.0"

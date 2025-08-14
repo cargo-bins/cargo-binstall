@@ -1,4 +1,30 @@
 # Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.57](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.56...detect-targets-v0.1.57) - 2025-08-09
+
+### Other
+
+- Fix unused Result in DesiredTargets::auto_detect ([#2250](https://github.com/cargo-bins/cargo-binstall/pull/2250))
+
+## [0.1.56](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.55...detect-targets-v0.1.56) - 2025-08-01
+
+### Other
+
+- Fix race condition of DesiredTargets ([#2238](https://github.com/cargo-bins/cargo-binstall/pull/2238))
+
+## [0.1.55](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.54...detect-targets-v0.1.55) - 2025-07-25
+
+### Other
+
+- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
+# Changelog
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

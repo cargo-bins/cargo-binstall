@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set `CARGO_HOME`
         if: matrix.set_cargo_home == 't'
@@ -79,7 +79,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set `CARGO_HOME`
         if: matrix.set_cargo_home == 't'
@@ -120,7 +120,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set `CARGO_HOME`
         if: matrix.set_cargo_home == 't'

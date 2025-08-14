@@ -2,11 +2,11 @@ use crate::detect_targets;
 
 use std::sync::Arc;
 
-use tokio::sync::OnceCell;
+use tokio::sync::SetOnce;
 
 #[derive(Debug)]
 enum DesiredTargetsInner {
-    AutoDetect(Arc<OnceCell<Vec<String>>>),
+    AutoDetect(Arc<SetOnce<Vec<String>>>),
     Initialized(Vec<String>),
 }
 
@@ -19,11 +19,11 @@ impl DesiredTargets {
     }
 
     fn auto_detect() -> Self {
-        let arc = Arc::new(OnceCell::new());
+        let arc = Arc::new(SetOnce::new());
 
-        let once_cell = arc.clone();
+        let set_once = arc.clone();
         tokio::spawn(async move {
-            once_cell.get_or_init(detect_targets).await;
+            set_once.set(detect_targets().await).unwrap();
         });
 
         Self(DesiredTargetsInner::AutoDetect(arc))
@@ -34,11 +34,7 @@ impl DesiredTargets {
 
         match &self.0 {
             Initialized(targets) => targets,
-
-            // This will mostly just wait for the spawned task,
-            // on rare occausion though, it will poll the future
-            // returned by `detect_targets`.
-            AutoDetect(once_cell) => once_cell.get_or_init(detect_targets).await,
+            AutoDetect(set_once) => set_once.wait().await,
         }
     }
 
