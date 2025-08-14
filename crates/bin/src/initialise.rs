@@ -56,11 +56,12 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         CargoConfig::load_from_path(cargo_root.join("config.toml"))?
     };
 
-    let settings_path = args.settings.clone().unwrap_or(
-        cargo_home
+    let settings_path = args.settings.as_deref().map(Cow::Borrowed).unwrap_or_else(||
+        Cow::Owned(cargo_home
             .as_ref()
             .unwrap_or(&cargo_root)
-            .join("binstall.toml"),
+            .join("binstall.toml")
+        )
     );
     let mut settings = crate::settings::load(args.settings.is_some(), &settings_path)?;
 
