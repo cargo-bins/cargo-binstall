@@ -21,7 +21,7 @@ pub(crate) struct Init {
 pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let (cargo_config, cargo_home) = if let Ok(home) = cargo_home() {
         (
-            Some(home.join("config.toml")),
+            Some(CargoConfig::load_from_path(home.join("config.toml"))?),
             Some(home),
         )
     } else {
