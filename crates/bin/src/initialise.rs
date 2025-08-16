@@ -27,7 +27,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     } else {
         (None, None)
     };
-  
+
     let cargo_root = if let Some(p) = &args.root {
         debug!(path=?p, "install root from --root");
         p.into()
@@ -65,14 +65,18 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         )
     };
 
-    let settings_path = args.settings.as_deref().map(Cow::Borrowed).unwrap_or_else(||
-        Cow::Owned(
-            cargo_home
-                .as_ref()
-                .unwrap_or(&cargo_root)
-                .join("binstall.toml")
-        )
-    );
+    let settings_path = args
+        .settings
+        .as_deref()
+        .map(Cow::Borrowed)
+        .unwrap_or_else(||
+            Cow::Owned(
+                cargo_home
+                    .as_ref()
+                    .unwrap_or(&cargo_root)
+                    .join("binstall.toml")
+            )
+        );
     let mut settings = crate::settings::load(args.settings.is_some(), &settings_path)?;
 
     #[allow(clippy::print_literal)]
