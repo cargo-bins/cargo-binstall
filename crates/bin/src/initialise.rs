@@ -56,7 +56,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     } else {
         let config = CargoConfig::load_from_path(cargo_root.join("config.toml"))?;
         (
-            match config  
+            match config
                 .install
                 .as_ref()
                 .and_then(|install| install.root.as_ref())
