@@ -41,8 +41,10 @@ pub struct Manifests {
 impl Manifests {
     pub fn open_exclusive(cargo_roots: &Path) -> Result<Self, ManifestsError> {
         // Read cargo_binstall_metadata
-        let metadata_path = cargo_roots.join("binstall/crates-v1.json");
-        fs::create_dir_all(metadata_path.parent().unwrap())?;
+        let binstall_dir = cargo_roots.join("binstall");
+        fs::create_dir_all(&binstall_dir)?;
+
+        let metadata_path = binstall_dir.join("crates-v1.json");
 
         let mut binstall = BinstallCratesV1Records::load_from_path(&metadata_path)?;
 
