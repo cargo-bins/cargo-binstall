@@ -72,14 +72,14 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         .settings
         .as_deref()
         .map(Cow::Borrowed)
-        .unwrap_or_else(||
+        .unwrap_or_else(|| {
             Cow::Owned(
                 cargo_home
                     .as_ref()
                     .unwrap_or(&cargo_root)
-                    .join("binstall.toml")
+                    .join("binstall.toml"),
             )
-        );
+        });
     let mut settings = crate::settings::load(args.settings.is_some(), &settings_path)?;
 
     #[allow(clippy::print_literal)]
