@@ -28,25 +28,25 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         (None, None)
     };
 
-    let cargo_root = if let Some(p) = &args.root {
+    let (cargo_root, is_cargo_root_overrided) = if let Some(p) = &args.root {
         debug!(path=?p, "install root from --root");
-        p.into()
+        (p.into(), true)
     } else if let Some(p) = var_os("CARGO_INSTALL_ROOT").map(PathBuf::from) {
         debug!(path=?p, "install root from CARGO_INSTALL_ROOT");
-        p
+        (p, true)
     } else if let Some(p) = cargo_config
         .as_ref()
         .and_then(|config| config.install.as_ref())
         .and_then(|install| install.root.clone())
     {
         debug!(path=?p, "install root from cargo config");
-        p
+        (p, false)
     } else if let Some(p) = &cargo_home {
         debug!(path=?p, "install root from cargo home");
-        p.into()
+        (p.into(), false)
     } else if let Some(p) = dirs::executable_dir() {
         debug!(path=?p, "install root from executable dir");
-        p
+        (p, false)
     } else {
         bail!("No install root found, provide one with --root or CARGO_INSTALL_ROOT");
     };
@@ -56,11 +56,14 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     } else {
         let config = CargoConfig::load_from_path(cargo_root.join("config.toml"))?;
         (
-            config
+            match config  
                 .install
                 .as_ref()
-                .and_then(|install| install.root.clone())
-                .unwrap_or(cargo_root),
+                .and_then(|install| install.root.as_ref())
+            {
+                Some(root) if !is_cargo_root_overrided => root.clone(),
+                _ => cargo_root,
+            },
             config,
         )
     };
