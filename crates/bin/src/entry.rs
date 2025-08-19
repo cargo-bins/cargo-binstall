@@ -135,7 +135,7 @@ pub fn install_crates(
         force: args.force,
         quiet: args.log_level == Some(LevelFilter::Off),
         locked: args.locked,
-        no_track: args.no_track,
+        no_track: !settings.track_install,
 
         #[cfg(feature = "git")]
         cargo_toml_fetch_override: match (args.manifest_path, args.git) {
