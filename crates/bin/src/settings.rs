@@ -28,7 +28,7 @@ impl Default for Settings {
             confirm: true,
             install_path: None,
             track_installs: true,
-            continue_on_failure: false
+            continue_on_failure: false,
             targets: None,
             strategies: vec![],
             telemetry: Telemetry::default(),
