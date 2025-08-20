@@ -10,28 +10,30 @@ use tracing::{debug, warn};
 
 use crate::args::{Args, StrategyWrapped};
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
 pub struct Settings {
-    #[serde(default = "tru")]
     pub confirm: bool,
-
-    #[serde(default)]
     pub install_path: Option<PathBuf>,
-
-    #[serde(default = "tru")]
     pub track_installs: bool,
-
-    #[serde(default)]
     pub continue_on_failure: bool,
-
-    #[serde(default)]
     pub targets: Option<Vec<String>>,
-
-    #[serde(default)]
     pub strategies: Vec<StrategyWrapped>,
-
-    #[serde(default)]
     pub telemetry: Telemetry,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            confirm: true,
+            install_path: None,
+            track_installs: true,
+            continue_on_failure: false
+            targets: None,
+            strategies: vec![],
+            telemetry: Telemetry::default(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -162,8 +164,4 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
             })
             .unwrap_or_default())
     }
-}
-
-fn tru() -> bool {
-    true
 }
