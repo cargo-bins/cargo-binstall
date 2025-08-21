@@ -19,13 +19,13 @@ use miette::Diagnostic;
 use serde::Deserialize;
 use thiserror::Error;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Install {
     /// `cargo install` destination directory
     pub root: Option<PathBuf>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Http {
     /// HTTP proxy in libcurl format: "host:port"
     ///

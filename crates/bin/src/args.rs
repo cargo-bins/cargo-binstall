@@ -18,6 +18,7 @@ use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, Val
 use compact_str::CompactString;
 use log::LevelFilter;
 use semver::VersionReq;
+use serde::{Deserialize, Serialize};
 use strum::EnumCount;
 use zeroize::Zeroizing;
 
@@ -409,6 +410,14 @@ pub struct Args {
     #[clap(help_heading = "Options", long, conflicts_with = "only_signed")]
     pub(crate) skip_signatures: bool,
 
+    /// Custom settings file
+    ///
+    /// The default is to read a binstall.toml file from CARGO_HOME or the cargo root directory.
+    ///
+    /// If a file is not found at the path provided, one will be created with the defaults.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) settings: Option<PathBuf>,
+
     /// Print version information
     #[clap(help_heading = "Meta", short = 'V')]
     pub version: bool,
@@ -516,7 +525,8 @@ impl Default for RateLimit {
 }
 
 /// Strategy for installing the package
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct StrategyWrapped(pub(crate) Strategy);
 
 impl StrategyWrapped {
