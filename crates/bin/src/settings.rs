@@ -145,7 +145,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
                 .create_new(true)
                 .open(path)
                 .into_diagnostic()
-                .wrap_err("failed to create new settings file")?;
+                .wrap_err("creating new settings file")?;
             debug!(?path, "writing new settings file");
             let settings = Settings::default();
             settings.write(&mut file)?;
