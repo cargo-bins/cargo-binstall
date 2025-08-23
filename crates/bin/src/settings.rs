@@ -121,9 +121,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
         debug!(?path, "checking if settings file exists");
         if path.exists() {
             debug!(?path, "loading binstall settings");
-            let mut file = File::options()
-                .read(true)
-                .open(path)
+            let mut file = File::open(path)
                 .into_diagnostic()
                 .wrap_err("open existing settings file")?;
 
