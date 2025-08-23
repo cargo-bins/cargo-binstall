@@ -140,10 +140,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
             Ok(settings)
         } else {
             debug!(?path, "trying to create new settings file");
-            let mut file = File::options()
-                .write(true)
-                .create_new(true)
-                .open(path)
+            let mut file = File::create(path)
                 .into_diagnostic()
                 .wrap_err("creating new settings file")?;
             debug!(?path, "writing new settings file");
