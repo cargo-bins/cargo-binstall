@@ -83,7 +83,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let mut settings = crate::settings::load(args.settings.is_some(), &settings_path)?;
 
     #[allow(clippy::print_literal)]
-    if !args.disable_telemetry && !args.no_confirm && !settings.telemetry.consent_asked {
+    if !args.self_install && !args.disable_telemetry && !args.no_confirm && !settings.telemetry.consent_asked {
         info!(url=?binstalk::QUICKINSTALL_STATS_URL, "the current QuickInstall statistics endpoint");
         eprintln!(
             "\n{}\n{}\n{}\n{}",
