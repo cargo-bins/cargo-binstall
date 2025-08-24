@@ -1,12 +1,13 @@
 use std::{
     fs::{create_dir_all, File},
-    io::{self, Read, Write as _},
+    io::{Read, Write as _},
     path::{Path, PathBuf},
 };
 
 use fs_lock::FileLock;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
 use tracing::{debug, warn};
 
 use crate::args::{Args, StrategyWrapped};
@@ -98,7 +99,7 @@ impl Settings {
                 .as_bytes(),
         )
         .into_diagnostic()
-        .wrap_err("write default settings")
+        .wrap_err("write settings")
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<()> {
@@ -117,28 +118,29 @@ impl Settings {
 
 pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
     fn inner(path: &Path) -> Result<Settings> {
-        create_dir_all(
-            path.parent()
-                .ok_or_else(|| miette!("settings path has no parent"))?,
-        )
-        .into_diagnostic()
-        .wrap_err("create settings directory")?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| miette!("settings path has no parent"))?;
+
+        create_dir_all(parent)
+            .into_diagnostic()
+            .wrap_err("create settings directory")?;
 
         debug!(?path, "checking if settings file exists");
         if !path.exists() {    
             debug!(?path, "trying to create new settings file");
-            let mut file = match File::create_new(path) {
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-                res => {
-                    res.and_then(FileLock::new_exclusive)
-                        .into_diagnostic()
-                        .wrap_err("creating new settings file")?;
-                    debug!(?path, "writing new settings file");
-                    let settings = Settings::default();
-                    settings.write(&mut file)?;
-                    return Ok(settings);
-                }
-            };
+            
+            let mut tempfile = NamedTempFile::new_in(parent)
+                .into_diagnostic()
+                .wrap_err("creating new temporary settings file")?;
+            
+            let settings = Settings::default();
+            settings.write(tempfile.as_file_mut())
+                .wrap_err("for new temporary settings file")?;
+            
+            if tempfile.persist_noclobber(path).is_ok() {    
+                return Ok(settings);
+            }
         }
 
         debug!(?path, "loading binstall settings");
