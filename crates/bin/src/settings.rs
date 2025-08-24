@@ -118,39 +118,33 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
         .into_diagnostic()
         .wrap_err("create settings directory")?;
 
-        debug!(?path, "trying to create new settings file");
-        match File::options().create_new(true).open(path) {
-            Ok(mut file) => {
-                debug!(?path, "writing new settings file");
-                let settings = Settings::default();
-                settings.write(&mut file)?;
-                Ok(settings)
-            }
-            Err(error) => {
-                debug!(
-                    ?error,
-                    "failed to create new settings file, probably because it already exists"
-                );
+        debug!(?path, "checking if settings file exists");
+        if path.exists() {
+            debug!(?path, "loading binstall settings");
+            let mut file = File::open(path)
+                .into_diagnostic()
+                .wrap_err("open existing settings file")?;
 
-                debug!(?path, "loading binstall settings");
-                let mut file = File::options()
-                    .read(true)
-                    .open(path)
-                    .into_diagnostic()
-                    .wrap_err("open existing settings file")?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)
+                .into_diagnostic()
+                .wrap_err("read existing settings file")?;
 
-                let mut contents = String::new();
-                file.read_to_string(&mut contents)
-                    .into_diagnostic()
-                    .wrap_err("read existing settings file")?;
+            let settings = toml::from_str(&contents)
+                .into_diagnostic()
+                .wrap_err("parse existing settings file")?;
 
-                let settings = toml::from_str(&contents)
-                    .into_diagnostic()
-                    .wrap_err("parse existing settings file")?;
-
-                debug!(?settings, "loaded binstall settings");
-                Ok(settings)
-            }
+            debug!(?settings, "loaded binstall settings");
+            Ok(settings)
+        } else {
+            debug!(?path, "trying to create new settings file");
+            let mut file = File::create(path)
+                .into_diagnostic()
+                .wrap_err("creating new settings file")?;
+            debug!(?path, "writing new settings file");
+            let settings = Settings::default();
+            settings.write(&mut file)?;
+            Ok(settings)
         }
     }
 
