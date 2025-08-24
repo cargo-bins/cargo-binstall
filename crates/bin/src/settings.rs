@@ -104,16 +104,28 @@ impl Settings {
 
     pub(crate) fn save(&self, path: &Path) -> Result<()> {
         let mut file = File::options()
-            .create(true)
+            .read(true)
             .write(true)
             .append(false)
-            .truncate(true)
             .open(path)
             .and_then(FileLock::new_exclusive)
             .into_diagnostic()
             .wrap_err("open settings file")?;
-        self.write(&mut file)
+        let mut settings = Self::read_from_file(&mut file)?;
+        settings.telemetry = self.telemetry.clone();
+        settings.write(&mut file)
     }
+}
+
+fn read_from_file(file: &mut File) -> Result<Self> {
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .into_diagnostic()
+        .wrap_err("read existing settings file")?;
+
+    toml::from_str(&contents)
+        .into_diagnostic()
+        .wrap_err("parse existing settings file")
 }
 
 pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
@@ -149,14 +161,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
             .into_diagnostic()
             .wrap_err("open existing settings file")?;
 
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)
-            .into_diagnostic()
-            .wrap_err("read existing settings file")?;
-
-        let settings = toml::from_str(&contents)
-            .into_diagnostic()
-            .wrap_err("parse existing settings file")?;
+        let settings = Self::read_from_file(&mut file)?;
 
         debug!(?settings, "loaded binstall settings");
         Ok(settings)
