@@ -7,6 +7,7 @@ use std::{
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
+use fs_lock::FileLock;
 
 use crate::args::{Args, StrategyWrapped};
 
@@ -103,6 +104,7 @@ impl Settings {
             .append(false)
             .truncate(true)
             .open(path)
+            .and_then(FileLock::new_exclusive)
             .into_diagnostic()
             .wrap_err("open settings file")?;
         self.write(&mut file)
@@ -122,6 +124,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
         if path.exists() {
             debug!(?path, "loading binstall settings");
             let mut file = File::open(path)
+                .and_then(FileLock::new_shared)
                 .into_diagnostic()
                 .wrap_err("open existing settings file")?;
 
@@ -139,6 +142,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
         } else {
             debug!(?path, "trying to create new settings file");
             let mut file = File::create(path)
+                .and_then(FileLock::new_exclusive)
                 .into_diagnostic()
                 .wrap_err("creating new settings file")?;
             debug!(?path, "writing new settings file");
