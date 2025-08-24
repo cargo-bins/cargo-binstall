@@ -2,6 +2,10 @@ name: Test GitHub Action installer
 on:
   merge_group:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
     paths:
       - install-from-binstall-release.ps1
       - install-from-binstall-release.sh
@@ -13,6 +17,10 @@ on:
       - install-from-binstall-release.ps1
       - install-from-binstall-release.sh
       - action.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}-${{ inputs.additional_key }}
+  cancel-in-progress: true
 
 jobs:
   test-gha-installer:
@@ -38,3 +46,16 @@ jobs:
 
       - name: Verify successful installation - display help of installed binary
         run: rg --help
+
+  # Dummy job to have a stable name for the "all tests pass" requirement
+  tests-pass:
+    name: GHA installer test pass
+    needs:
+      - test-gha-installer
+    if: always() # always run even if dependencies fail
+    runs-on: ubuntu-latest
+    steps:
+      # fail if ANY dependency has failed or cancelled
+      - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
+        run: exit 1
+      - run: exit 0
