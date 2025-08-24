@@ -87,7 +87,11 @@ impl Settings {
     }
 
     fn write(&self, file: &mut File) -> Result<()> {
-        file.write_all(
+        let write_all_and_set_len = |data| {
+            file.write_all(data)?;
+            file.set_len(data.len().try_into().unwrap())
+        };
+        write_all_and_set_len(
             toml::to_string_pretty(self)
                 .into_diagnostic()
                 .wrap_err("serialise default settings")?
@@ -126,14 +130,13 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
             let mut file = match File::create_new(path) {
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 res => {
-                    res
-                        .and_then(FileLock::new_exclusive)
+                    res.and_then(FileLock::new_exclusive)
                         .into_diagnostic()
                         .wrap_err("creating new settings file")?;
                     debug!(?path, "writing new settings file");
-                   let settings = Settings::default();
-                   settings.write(&mut file)?;
-                   return Ok(settings);
+                    let settings = Settings::default();
+                    settings.write(&mut file)?;
+                    return Ok(settings);
                 }
             };
         }
