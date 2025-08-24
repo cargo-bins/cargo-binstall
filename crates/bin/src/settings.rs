@@ -139,18 +139,19 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
             .wrap_err("create settings directory")?;
 
         debug!(?path, "checking if settings file exists");
-        if !path.exists() {    
+        if !path.exists() {
             debug!(?path, "trying to create new settings file");
-            
+     
             let mut tempfile = NamedTempFile::new_in(parent)
                 .into_diagnostic()
                 .wrap_err("creating new temporary settings file")?;
-            
+
             let settings = Settings::default();
-            settings.write(tempfile.as_file_mut())
+            settings
+                .write(tempfile.as_file_mut())
                 .wrap_err("for new temporary settings file")?;
             
-            if tempfile.persist_noclobber(path).is_ok() {    
+            if tempfile.persist_noclobber(path).is_ok() {
                 return Ok(settings);
             }
         }
