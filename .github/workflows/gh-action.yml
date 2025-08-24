@@ -2,6 +2,10 @@ name: Test GitHub Action installer
 on:
   merge_group:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
     paths:
       - install-from-binstall-release.ps1
       - install-from-binstall-release.sh
