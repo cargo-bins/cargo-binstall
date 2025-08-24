@@ -115,17 +115,17 @@ impl Settings {
         settings.telemetry = self.telemetry.clone();
         settings.write(&mut file)
     }
-}
 
-fn read_from_file(file: &mut File) -> Result<Self> {
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .into_diagnostic()
-        .wrap_err("read existing settings file")?;
+    fn read_from_file(file: &mut File) -> Result<Self> {
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)
+            .into_diagnostic()
+            .wrap_err("read existing settings file")?;
 
-    toml::from_str(&contents)
-        .into_diagnostic()
-        .wrap_err("parse existing settings file")
+        toml::from_str(&contents)
+            .into_diagnostic()
+            .wrap_err("parse existing settings file")
+    }
 }
 
 pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
