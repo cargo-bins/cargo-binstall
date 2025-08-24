@@ -88,7 +88,7 @@ impl Settings {
     }
 
     fn write(&self, file: &mut File) -> Result<()> {
-        let write_all_and_set_len = |data| {
+        let mut write_all_and_set_len = |data| {
             file.write_all(data)?;
             file.set_len(data.len().try_into().unwrap())
         };
@@ -161,7 +161,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
             .into_diagnostic()
             .wrap_err("open existing settings file")?;
 
-        let settings = Self::read_from_file(&mut file)?;
+        let settings = Settings::read_from_file(&mut file)?;
 
         debug!(?settings, "loaded binstall settings");
         Ok(settings)
