@@ -1,13 +1,13 @@
 use std::{
     fs::{create_dir_all, File},
-    io::{Read, Write as _},
+    io::{self, Read, Write as _},
     path::{Path, PathBuf},
 };
 
+use fs_lock::FileLock;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
-use fs_lock::FileLock;
 
 use crate::args::{Args, StrategyWrapped};
 
@@ -121,35 +121,40 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
         .wrap_err("create settings directory")?;
 
         debug!(?path, "checking if settings file exists");
-        if path.exists() {
-            debug!(?path, "loading binstall settings");
-            let mut file = File::open(path)
-                .and_then(FileLock::new_shared)
-                .into_diagnostic()
-                .wrap_err("open existing settings file")?;
-
-            let mut contents = String::new();
-            file.read_to_string(&mut contents)
-                .into_diagnostic()
-                .wrap_err("read existing settings file")?;
-
-            let settings = toml::from_str(&contents)
-                .into_diagnostic()
-                .wrap_err("parse existing settings file")?;
-
-            debug!(?settings, "loaded binstall settings");
-            Ok(settings)
-        } else {
+        if !path.exists() {    
             debug!(?path, "trying to create new settings file");
-            let mut file = File::create(path)
-                .and_then(FileLock::new_exclusive)
-                .into_diagnostic()
-                .wrap_err("creating new settings file")?;
-            debug!(?path, "writing new settings file");
-            let settings = Settings::default();
-            settings.write(&mut file)?;
-            Ok(settings)
+            let mut file = match File::create_new(path) {
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                res => {
+                    res
+                        .and_then(FileLock::new_exclusive)
+                        .into_diagnostic()
+                        .wrap_err("creating new settings file")?;
+                    debug!(?path, "writing new settings file");
+                   let settings = Settings::default();
+                   settings.write(&mut file)?;
+                   return Ok(settings);
+                }
+            };
         }
+
+        debug!(?path, "loading binstall settings");
+        let mut file = File::open(path)
+            .and_then(FileLock::new_shared)
+            .into_diagnostic()
+            .wrap_err("open existing settings file")?;
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)
+            .into_diagnostic()
+            .wrap_err("read existing settings file")?;
+
+        let settings = toml::from_str(&contents)
+            .into_diagnostic()
+            .wrap_err("parse existing settings file")?;
+
+        debug!(?settings, "loaded binstall settings");
+        Ok(settings)
     }
 
     let settings = inner(path);
