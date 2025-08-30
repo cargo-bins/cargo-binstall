@@ -103,7 +103,7 @@ runs:
       ln -s "${python_package_path}/ziglang/zig" "$HOME/.local/bin/zig"
     shell: bash
 
- - name: Cache make compiled
+  - name: Cache make compiled
     if: runner.os == 'macOS'
     id: cache-make
     uses: actions/cache@v4
