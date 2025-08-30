@@ -1,6 +1,6 @@
 use std::{
     fs::{create_dir_all, File},
-    io::{Read, Write as _},
+    io::{Read, Write as _, Seek as _},
     path::{Path, PathBuf},
 };
 
@@ -113,6 +113,7 @@ impl Settings {
             .wrap_err("open settings file")?;
         let mut settings = Self::read_from_file(&mut file)?;
         settings.telemetry = self.telemetry.clone();
+        file.rewind().wrap_err("rewinding settings file for writing")?;
         settings.write(&mut file)
     }
 
