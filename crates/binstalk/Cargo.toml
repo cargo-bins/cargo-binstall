@@ -3,7 +3,7 @@ name = "binstalk"
 description = "The binstall toolkit (library interface)"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk"
-version = "0.28.44"
+version = "0.28.45"
 rust-version = "1.79.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -11,12 +11,12 @@ license = "GPL-3.0-only"
 
 [dependencies]
 binstalk-bins = { version = "0.6.14", path = "../binstalk-bins" }
-binstalk-downloader = { version = "0.13.21", path = "../binstalk-downloader", default-features = false }
-binstalk-git-repo-api = { version = "0.5.23", path = "../binstalk-git-repo-api" }
-binstalk-fetchers = { version = "0.10.23", path = "../binstalk-fetchers", features = [
+binstalk-downloader = { version = "0.13.22", path = "../binstalk-downloader", default-features = false }
+binstalk-git-repo-api = { version = "0.5.24", path = "../binstalk-git-repo-api" }
+binstalk-fetchers = { version = "0.10.24", path = "../binstalk-fetchers", features = [
     "quickinstall",
 ] }
-binstalk-registry = { version = "0.11.22", path = "../binstalk-registry" }
+binstalk-registry = { version = "0.11.23", path = "../binstalk-registry" }
 binstalk-types = { version = "0.10.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "7.0.6", path = "../cargo-toml-workspace" }
 command-group = { version = "5.0.1", features = ["with-tokio"] }
