@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.21...binstalk-downloader-v0.13.22) - 2025-08-30
+
+### Other
+
+- Upgrade compression libraries ([#2289](https://github.com/cargo-bins/cargo-binstall/pull/2289))
+
 ## [0.13.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.20...binstalk-downloader-v0.13.21) - 2025-07-25
 
 ### Other
