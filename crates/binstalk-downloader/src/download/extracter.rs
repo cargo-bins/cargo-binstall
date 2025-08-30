@@ -2,8 +2,8 @@ use std::io::{self, BufRead, Read};
 
 use bzip2::bufread::BzDecoder;
 use flate2::bufread::GzDecoder;
+use liblzma::bufread::XzDecoder;
 use tar::Archive;
-use xz2::bufread::XzDecoder;
 use zstd::stream::Decoder as ZstdDecoder;
 
 use super::TarBasedFmt;
