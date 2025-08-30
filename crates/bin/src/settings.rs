@@ -113,7 +113,7 @@ impl Settings {
             .wrap_err("open settings file")?;
         let mut settings = Self::read_from_file(&mut file)?;
         settings.telemetry = self.telemetry.clone();
-        file.rewind().wrap_err("rewinding settings file for writing")?;
+        file.rewind().into_diagnostic().wrap_err("rewinding settings file for writing")?;
         settings.write(&mut file)
     }
 
