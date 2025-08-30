@@ -103,37 +103,7 @@ runs:
       ln -s "${python_package_path}/ziglang/zig" "$HOME/.local/bin/zig"
     shell: bash
 
-  - name: Calculate zig cache key
-    if: env.JUST_USE_CARGO_ZIGBUILD
-    run: |
-      ZIG_VERSION=$(zig version)
-      SYS_CRATE_HASHSUM=$(cargo tree --all-features --prefix none --no-dedupe --target "$CARGO_BUILD_TARGET" | grep -e '-sys' -e '^ring' | sort -u | sha1sum | sed 's/[ -]*//g')
-      PREFIX=v0-${JOB_ID}-zig-${ZIG_VERSION}-${CARGO_BUILD_TARGET}-
-      echo "ZIG_CACHE_KEY=${PREFIX}${SYS_CRATE_HASHSUM}" >> "$GITHUB_ENV"
-      echo -e "ZIG_CACHE_RESTORE_KEY=$PREFIX" >> "$GITHUB_ENV"
-    shell: bash
-    env:
-      RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
-      JOB_ID: ${{ github.job }}
-
-  - name: Get zig global cache dir
-    if: env.JUST_USE_CARGO_ZIGBUILD
-    id: zig_global_cache_dir_path
-    run: |
-      cache_dir=$(zig env | jq -r '.global_cache_dir')
-      echo "cache_dir=$cache_dir" >> "$GITHUB_OUTPUT"
-    shell: bash
-
-  - name: Cache zig compilation
-    if: env.JUST_USE_CARGO_ZIGBUILD
-    uses: actions/cache@v4
-    with:
-      path: ${{ steps.zig_global_cache_dir_path.outputs.cache_dir }}
-      key: ${{ env.ZIG_CACHE_KEY }}
-      restore-keys: |
-        ${{ env.ZIG_CACHE_RESTORE_KEY }}
-
-  - name: Cache make compiled
+ - name: Cache make compiled
     if: runner.os == 'macOS'
     id: cache-make
     uses: actions/cache@v4
