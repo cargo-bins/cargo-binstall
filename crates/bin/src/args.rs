@@ -292,12 +292,15 @@ pub struct Args {
     #[clap(help_heading = "Options", long, env = "BINSTALL_DISABLE_TELEMETRY")]
     pub(crate) disable_telemetry: bool,
 
-    /// Install binaries in a custom location.
+    /// Install prebuilt binaries in a custom location.
     ///
     /// By default, binaries are installed to the global location `$CARGO_HOME/bin`, and global
     /// metadata files are updated with the package information. Specifying another path here
     /// switches over to a "local" install, where binaries are installed at the path given, and the
     /// global metadata files are not updated.
+    ///
+    /// This option has no effect if the package is installed from source. To install a package
+    /// from source to a specific path, without Cargo metadata use `--root <PATH> --no-track`.
     #[clap(help_heading = "Options", long, value_name = "PATH")]
     pub(crate) install_path: Option<PathBuf>,
 
