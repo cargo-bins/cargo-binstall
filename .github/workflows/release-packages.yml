@@ -28,7 +28,6 @@ jobs:
       matrix:
         include:
           - { o: macos-latest, t: x86_64-apple-darwin }
-          - { o: macos-latest, t: x86_64h-apple-darwin }
           - { o: macos-latest, t: aarch64-apple-darwin }
           - {
               o: ubuntu-latest,
@@ -151,10 +150,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: x86_64h-apple-darwin
-          path: packages/
       - uses: actions/download-artifact@v5
         with:
           name: x86_64-apple-darwin
