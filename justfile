@@ -324,24 +324,20 @@ package-prepare: build package-dir
 lipo-prepare: package-dir
     just target=aarch64-apple-darwin build get-binary packages/prep/arm64
     just target=x86_64-apple-darwin build get-binary packages/prep/x64
-    just target=x86_64h-apple-darwin build get-binary packages/prep/x64h
 
     just target=aarch64-apple-darwin get-binary packages/prep/arm64
     just target=x86_64-apple-darwin get-binary packages/prep/x64
-    just target=x86_64h-apple-darwin get-binary packages/prep/x64h
-    lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64,x64h}/{{output-filename}}
+    lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64}/{{output-filename}}
 
     just target=aarch64-apple-darwin get-output detect-wasi{{output-ext}} packages/prep/arm64
     just target=x86_64-apple-darwin get-output detect-wasi{{output-ext}} packages/prep/x64
-    just target=x86_64h-apple-darwin get-output detect-wasi{{output-ext}} packages/prep/x64h
-    lipo -create -output packages/prep/detect-wasi{{output-ext}} packages/prep/{arm64,x64,x64h}/detect-wasi{{output-ext}}
+    lipo -create -output packages/prep/detect-wasi{{output-ext}} packages/prep/{arm64,x64}/detect-wasi{{output-ext}}
 
     just target=aarch64-apple-darwin get-output detect-targets{{output-ext}} packages/prep/arm64
     just target=x86_64-apple-darwin get-output detect-targets{{output-ext}} packages/prep/x64
-    just target=x86_64h-apple-darwin get-output detect-targets{{output-ext}} packages/prep/x64h
-    lipo -create -output packages/prep/detect-targets{{output-ext}} packages/prep/{arm64,x64,x64h}/detect-targets{{output-ext}}
+    lipo -create -output packages/prep/detect-targets{{output-ext}} packages/prep/{arm64,x64}/detect-targets{{output-ext}}
 
-    rm -rf packages/prep/{arm64,x64,x64h}
+    rm -rf packages/prep/{arm64,x64}
 
 
 [linux]
@@ -369,17 +365,16 @@ package-lipo: lipo-prepare
 repackage-lipo: package-dir
     set -euxo pipefail
 
-    mkdir -p packages/prep/{arm64,x64,x64h}
+    mkdir -p packages/prep/{arm64,x64}
     cd packages/prep/x64 && unzip -o "../../cargo-binstall-x86_64-apple-darwin.full.zip"
-    cd packages/prep/x64h && unzip -o "../../cargo-binstall-x86_64h-apple-darwin.full.zip"
     cd packages/prep/arm64 && unzip -o "../../cargo-binstall-aarch64-apple-darwin.full.zip"
 
-    lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64,x64h}/{{output-filename}}
-    lipo -create -output packages/prep/detect-wasi packages/prep/{arm64,x64,x64h}/detect-wasi
-    lipo -create -output packages/prep/detect-targets packages/prep/{arm64,x64,x64h}/detect-targets
+    lipo -create -output packages/prep/{{output-filename}} packages/prep/{arm64,x64}/{{output-filename}}
+    lipo -create -output packages/prep/detect-wasi packages/prep/{arm64,x64}/detect-wasi
+    lipo -create -output packages/prep/detect-targets packages/prep/{arm64,x64}/detect-targets
 
     ./packages/prep/{{output-filename}} -vV
 
-    rm -rf packages/prep/{arm64,x64,x64h}
+    rm -rf packages/prep/{arm64,x64}
     cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
     cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
