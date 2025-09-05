@@ -459,6 +459,9 @@ pub struct Args {
 
     #[clap(long, hide(true))]
     pub(crate) self_install: bool,
+
+    #[clap(long, hide = true)]
+    pub(crate) markdown_help: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -570,6 +573,11 @@ pub fn parse() -> (Args, PkgOverride) {
 
     // Load options
     let mut opts = Args::parse_from(args);
+
+    if opts.markdown_help {
+        clap_markdown::print_help_markdown::<Args>();
+        std::process::exit(0);
+    }
 
     if opts.self_install {
         return (opts, Default::default());
