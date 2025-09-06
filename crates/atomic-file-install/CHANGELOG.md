@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.12](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.11...atomic-file-install-v1.0.12) - 2025-09-06
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2298](https://github.com/cargo-bins/cargo-binstall/pull/2298))
+
 ## [1.0.11](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.10...atomic-file-install-v1.0.11) - 2025-03-19
 
 ### Other
