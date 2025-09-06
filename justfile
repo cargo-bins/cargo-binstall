@@ -264,7 +264,10 @@ fmt: print-env
 
 fmt-check: fmt
 
-lint: clippy fmt-check doc
+update-help-md: print-env
+    cargo run -p cargo-binstall --features clap-markdown unused-crate-name --markdown-help > HELP.md
+
+lint: clippy fmt-check doc update-help-md
 
 # Rm dev-dependencies for `cargo-check` and clippy to speedup compilation.
 # This is a workaround for the cargo nightly option `-Z avoid-dev-deps`
