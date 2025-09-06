@@ -610,9 +610,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.35"
+version = "1.2.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "590f9024a68a8c40351881787f1934dc11afd69090f5edb6831464694d836ea3"
+checksum = "5252b3d2648e5eedbc1a6f501e3c795e07025c1e93bbf8bbdd6eef7f447a6d54"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1130,7 +1130,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1179,9 +1179,9 @@ dependencies = [
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e178e4fba8a2726903f6ba98a6d221e76f9c12c650d5dc0e6afdc50677b49650"
+checksum = "7fd99930f64d146689264c637b5af2f0233a933bef0d8570e2526bf9e083192d"
 
 [[package]]
 name = "flate2"
@@ -1374,7 +1374,7 @@ dependencies = [
  "js-sys",
  "libc",
  "r-efi",
- "wasi 0.14.3+wasi-0.2.4",
+ "wasi 0.14.4+wasi-0.2.4",
  "wasm-bindgen",
 ]
 
@@ -2748,9 +2748,9 @@ dependencies = [
 
 [[package]]
 name = "jobslot"
-version = "0.2.22"
+version = "0.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3973e0bac2c73405dccca5630494c594f6e6b44b250335750b873246c29ecd6"
+checksum = "58715c67c327da7f1558708348d68c207fd54900c4ae0529e29305d04d795b8c"
 dependencies = [
  "cfg-if",
  "derive_destructure2",
@@ -2758,7 +2758,7 @@ dependencies = [
  "libc",
  "scopeguard",
  "tokio",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -3597,7 +3597,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.0",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3726,14 +3726,14 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.26"
+version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78c81d000a2c524133cc00d2f92f019d399e57906c3b7119271a2495354fe895"
+checksum = "dd34aed05de14a9001009dbffc2a6843095dcd8fe3d1207016192717a449d218"
 dependencies = [
  "cfg-if",
  "libc",
  "rustix",
- "windows 0.61.3",
+ "windows 0.62.0",
 ]
 
 [[package]]
@@ -3868,7 +3868,7 @@ dependencies = [
  "errno 0.3.13",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4340,7 +4340,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4956,9 +4956,9 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi"
-version = "0.14.3+wasi-0.2.4"
+version = "0.14.4+wasi-0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a51ae83037bdd272a9e28ce236db8c07016dd0d50c27038b3f407533c030c95"
+checksum = "88a5f4a424faf49c3c2c344f166f0662341d470ea185e939657aaff130f0ec4a"
 dependencies = [
  "wit-bindgen",
 ]
@@ -5105,7 +5105,7 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0978bf7171b3d90bac376700cb56d606feb40f251a475a5d6634613564460b22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5605,9 +5605,9 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen"
-version = "0.45.0"
+version = "0.45.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "052283831dbae3d879dc7f51f3d92703a316ca49f91540417d38591826127814"
+checksum = "5c573471f125075647d03df72e026074b7203790d41351cd6edc96f46bcccd36"
 
 [[package]]
 name = "writeable"
