@@ -15,4 +15,4 @@ tempfile = "3.5.0"
 tracing = "0.1.39"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61.1", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+windows = { version = "0.62.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
