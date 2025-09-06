@@ -22,9 +22,9 @@ pkg-fmt = "zip"
 pkg-fmt = "zip"
 
 [dependencies]
-atomic-file-install = { version = "1.0.11", path = "../atomic-file-install" }
-binstalk = { path = "../binstalk", version = "0.28.45", default-features = false }
-binstalk-manifests = { path = "../binstalk-manifests", version = "0.17.7" }
+atomic-file-install = { version = "1.0.12", path = "../atomic-file-install" }
+binstalk = { path = "../binstalk", version = "0.28.46", default-features = false }
+binstalk-manifests = { path = "../binstalk-manifests", version = "0.17.8" }
 clap = { version = "4.5.3", features = ["derive", "env", "wrap_help"] }
 clap-cargo = "0.17.0"
 compact_str = "0.9.0"
