@@ -323,19 +323,18 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub(crate) index: Option<Registry>,
 
-    /// Name of the registry to use. Registry names are defined in Cargo config
-    /// files <https://doc.rust-lang.org/cargo/reference/config.html>.
+    /// Name of the registry to use. Registry names are defined in Cargo
+    /// configuration files <https://doc.rust-lang.org/cargo/reference/config.html>.
     ///
-    /// If not specified in cmdline or via environment variable, the default
-    /// registry is used, which is defined by the
-    /// `registry.default` config key in `.cargo/config.toml` which defaults
-    /// to crates-io.
+    /// If not specified on the command line or via an environment variable, the
+    /// default registry is used. This is controlled by the `registry.default` key
+    /// in `.cargo/config.toml`. If that key is not set, the default is `crates.io`.
     ///
-    /// If it is set, then it will try to read environment variable
-    /// `CARGO_REGISTRIES_{registry_name}_INDEX` for index url and fallback to
-    /// reading from `registries.<name>.index`.
+    /// If a registry name is provided, Cargo first checks the environment variable
+    /// `CARGO_REGISTRIES_{registry_name}_INDEX` for the index URL. If that is not
+    /// set, it falls back to the `registries.<name>.index` key in `.cargo/config.toml`.
     ///
-    /// Cannot be used with `--index`.
+    /// Cannot be combined with `--index`.
     #[clap(
         help_heading = "Options",
         long,
