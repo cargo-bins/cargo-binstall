@@ -526,6 +526,7 @@ dependencies = [
  "binstalk-manifests",
  "clap",
  "clap-cargo",
+ "clap-markdown",
  "compact_str",
  "dirs",
  "embed-resource",
@@ -669,6 +670,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db0bd7fba4da3bce65c1ddb068a9d632876c779d20c8b515fbce1e867fccce17"
 dependencies = [
  "anstyle",
+ "clap",
+]
+
+[[package]]
+name = "clap-markdown"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2a2617956a06d4885b490697b5307ebb09fec10b088afc18c81762d848c2339"
+dependencies = [
  "clap",
 ]
 
