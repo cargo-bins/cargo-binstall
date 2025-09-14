@@ -41,6 +41,7 @@ reqwest = { version = "0.12.17", features = [
     "gzip",
     "brotli",
     "deflate",
+    "socks",
 ], default-features = false }
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 serde_json = { version = "1.0.107", optional = true }
