@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.23](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.22...binstalk-downloader-v0.13.23) - 2025-09-14
+
+### Added
+
+- respect socks5 in `https_proxy` ([#2306](https://github.com/cargo-bins/cargo-binstall/pull/2306))
+
 ## [0.13.20](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.19...binstalk-downloader-v0.13.20) - 2025-06-06
 
 ### Other
