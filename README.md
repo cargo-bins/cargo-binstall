@@ -6,7 +6,7 @@ This is intended to work with existing CI artifacts and infrastructure, and with
 Binstall works by fetching the crate information from `crates.io` and searching the linked `repository` for matching releases and artifacts, falling back to the [quickinstall](https://github.com/alsuren/cargo-quickinstall) third-party artifact host, to alternate targets as supported, and finally to `cargo install` as a last resort.
 
 [![CI build](https://github.com/cargo-bins/cargo-binstall/actions/workflows/ci.yml/badge.svg)](https://github.com/cargo-bins/cargo-binstall/actions)
-[![GitHub tag](https://img.shields.io/github/tag/cargo-bins/cargo-binstall.svg)](https://github.com/cargo-bins/cargo-binstall)
+[![GitHub tag](https://img.shields.io/github/tag/cargo-bins/cargo-binstall.svg)](https://github.com/cargo-bins/cargo-binstall/releases)
 [![Crates.io](https://img.shields.io/crates/v/cargo-binstall.svg)](https://crates.io/crates/cargo-binstall)
 
 _You may want to [see this page as it was when the latest version was published](https://crates.io/crates/cargo-binstall)._
