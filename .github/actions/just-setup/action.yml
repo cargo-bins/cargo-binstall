@@ -55,6 +55,8 @@ runs:
       set -exuo pipefail
       rustup update
       rustup default stable
+    shell: bash
+
   - name: Determine native target
     run: |
       set -euxo pipefail
