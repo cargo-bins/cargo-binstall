@@ -50,6 +50,13 @@ runs:
     run: echo "tools=$tools,$inputs_tools" >>"$GITHUB_ENV"
     shell: bash
 
+  - name: Upgrade toolchain
+    run: |
+      set -exuo pipefail
+      rustup update
+      rustup default stable
+    shell: bash
+
   - name: Determine native target
     run: |
       set -euxo pipefail
