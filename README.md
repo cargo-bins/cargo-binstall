@@ -169,7 +169,7 @@ If you prefer not to participate in this data collection, you can opt out by any
 
 - Setting the `--disable-telemetry` flag in the command line interface.
 - Setting the `BINSTALL_DISABLE_TELEMETRY` environment variable to `true`.
-- Disabling the `quickinstall` strategy with `--disable-strategy quick-install`, or if specifying a list of strategies to use with `--strategy`, avoiding including `quickinstall` in that list.
+- Disabling the `quickinstall` strategy with `--disable-strategies quick-install`, or if specifying a list of strategies to use with `--strategies`, avoiding including `quickinstall` in that list.
 - Adding `quick-install` to the `disabled-strategies` configuration key in the crate metadata (refer to [the related support documentation](SUPPORT.md#support-for-cargo-binstall) for more details).
 
 ---
