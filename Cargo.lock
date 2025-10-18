@@ -3159,28 +3159,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num_enum"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a973b4e44ce6cad84ce69d797acf9a044532e4184c4f267913d1b546a0727b7a"
-dependencies = [
- "num_enum_derive",
- "rustversion",
-]
-
-[[package]]
-name = "num_enum_derive"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "num_threads"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3461,15 +3439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-crate"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "219cb19e96be00ab2e37d6e299658a0cfa83e52429179969b0f0121b4ac46983"
-dependencies = [
- "toml_edit",
-]
-
-[[package]]
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3629,9 +3598,9 @@ dependencies = [
 
 [[package]]
 name = "rc-zip"
-version = "5.3.2"
+version = "5.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fd15972184edbcbe29420dd4a06006c6e2d975cba3d2e8a5f3f3a93d19ee1ae"
+checksum = "9ad60aa41abfdc25cadb6baef1fdb6c671f4a33762853c3f9fe4bbfd7f789274"
 dependencies = [
  "bzip2",
  "chardetng",
@@ -3641,7 +3610,6 @@ dependencies = [
  "encoding_rs",
  "lzma-rs",
  "miniz_oxide 0.7.4",
- "num_enum",
  "oem_cp",
  "oval",
  "ownable",
@@ -3653,9 +3621,9 @@ dependencies = [
 
 [[package]]
 name = "rc-zip-sync"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b02124be8e1da76aa2ee3b32c93fe3a0090a41084fba8b9e8551ebd13f3cce87"
+checksum = "8dbbb62743954c246c258053c85035f4850d73d9d85b3ee70a1a0e2e7c37d535"
 dependencies = [
  "oval",
  "positioned-io",
