@@ -1,0 +1,6 @@
+Cargo.lock
+*.inx
+*.wasm
+!.cargo
+!.github
+vendor/

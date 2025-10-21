@@ -1,3 +1,4 @@
+#
 $ErrorActionPreference = "Stop"
 Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP

@@ -1,5 +1,4 @@
 name: Test GitHub Action installer
-#
 on:
   merge_group:
   pull_request:
