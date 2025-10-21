@@ -1,4 +1,3 @@
-#
 $ErrorActionPreference = "Stop"
 Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
@@ -26,8 +25,10 @@ if ($proc_arch -eq "AMD64") {
 	[Environment]::Exit(1)
 }
 $url = "$base_url$arch-pc-windows-msvc.zip"
+$ProgressPreference = 'SilentlyContinue'
 Invoke-WebRequest $url -OutFile $tmpdir\cargo-binstall.zip
 Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall
+$ProgressPreference = 'Continue'
 Write-Host ""
 
 $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall\cargo-binstall.exe" "--self-install"
