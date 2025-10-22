@@ -8,7 +8,7 @@ CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
 export CARGO_HOME
 export PATH="$CARGO_HOME/bin:$PATH"
 
-# first boostrap-install into the CARGO_HOME
+# first bootstrap-install into the CARGO_HOME
 mkdir -p "$CARGO_HOME/bin"
 cp "./$1" "$CARGO_HOME/bin"
 

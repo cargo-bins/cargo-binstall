@@ -49,7 +49,7 @@ where
                     // the first scienario occurs.
                     //
                     // Even if the second scienario occurs, it won't affect the
-                    // extraction process anyway, so we can jsut ignore it.
+                    // extraction process anyway, so we can just ignore it.
                     return Ok(());
                 }
             }

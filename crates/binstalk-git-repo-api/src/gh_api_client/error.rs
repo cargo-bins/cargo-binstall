@@ -104,7 +104,7 @@ impl fmt::Display for GhGraphQLErrors {
             for location in error.locations.as_deref().into_iter().flatten() {
                 write!(
                     f,
-                    ", occured on query line {line} col {col}",
+                    ", occurred on query line {line} col {col}",
                     line = location.line,
                     col = location.column
                 )?;

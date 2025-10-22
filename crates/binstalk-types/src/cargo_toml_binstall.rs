@@ -73,7 +73,7 @@ pub struct PkgMeta {
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
 
-    /// Stratgies to disable
+    /// Strategies to disable
     pub disabled_strategies: Option<Box<[Strategy]>>,
 
     /// Target specific overrides
@@ -168,7 +168,7 @@ pub struct PkgOverride {
     /// Path template override for binary files in packages
     pub bin_dir: Option<String>,
 
-    /// Stratgies to disable
+    /// Strategies to disable
     pub disabled_strategies: Option<Box<[Strategy]>>,
 
     /// Package signing configuration

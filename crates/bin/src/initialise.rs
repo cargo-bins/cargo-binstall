@@ -28,7 +28,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         (None, None)
     };
 
-    let (cargo_root, is_cargo_root_overrided) = if let Some(p) = &args.root {
+    let (cargo_root, is_cargo_root_overridden) = if let Some(p) = &args.root {
         debug!(path=?p, "install root from --root");
         (p.into(), true)
     } else if let Some(p) = var_os("CARGO_INSTALL_ROOT").map(PathBuf::from) {
@@ -61,7 +61,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
                 .as_ref()
                 .and_then(|install| install.root.as_ref())
             {
-                Some(root) if !is_cargo_root_overrided => root.clone(),
+                Some(root) if !is_cargo_root_overridden => root.clone(),
                 _ => cargo_root,
             },
             config,
