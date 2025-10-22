@@ -40,8 +40,7 @@ Write-Host "Start-Process"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall.exe" "--self-install"
 if ($ps.ExitCode -ne 0) {
-    Write-Host "Invoke-Expression"
-    Measure-Command { Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force cargo-binstall" | Out-Default }
+    Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force cargo-binstall"
 }
 $sw.Stop()
 $sw.Elapsed
@@ -49,7 +48,6 @@ $sw.Elapsed
 Write-Host "Rm Files"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $zip | Remove-Item
-Remove-Item -Force "$tmpdir\cargo-binstall.exe"
 $sw.Stop()
 $sw.Elapsed
 Write-Host "Path"
