@@ -151,7 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- *(gh_api_client)* remote client should never being shared everywhere bacause the underlying connection pool will be reused. ([#1930](https://github.com/cargo-bins/cargo-binstall/pull/1930))
+- *(gh_api_client)* remote client should never being shared everywhere because the underlying connection pool will be reused. ([#1930](https://github.com/cargo-bins/cargo-binstall/pull/1930))
 
 ### Other
 

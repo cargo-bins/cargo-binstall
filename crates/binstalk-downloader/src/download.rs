@@ -11,14 +11,14 @@ pub use rc_zip_sync::rc_zip::error::Error as ZipError;
 
 use crate::remote::{Client, Error as RemoteError, Response, Url};
 
-mod async_extracter;
-use async_extracter::*;
+mod async_extractor;
+use async_extractor::*;
 
 mod async_tar_visitor;
 use async_tar_visitor::extract_tar_based_stream_and_visit;
 pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
 
-mod extracter;
+mod extractor;
 
 mod extracted_files;
 pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};

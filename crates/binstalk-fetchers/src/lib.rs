@@ -115,7 +115,7 @@ pub trait Fetcher: Send + Sync {
     fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>>;
 
     /// Report to upstream that cargo-binstall tries to use this fetcher.
-    /// Currently it is only overriden by [`quickinstall::QuickInstall`].
+    /// Currently it is only overridden by [`quickinstall::QuickInstall`].
     fn report_to_upstream(self: Arc<Self>) {}
 
     /// Return the package format

@@ -12,7 +12,7 @@ use tempfile::tempfile as create_tmpfile;
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use super::{extracter::*, DownloadError, ExtractedFiles, TarBasedFmt};
+use super::{extractor::*, DownloadError, ExtractedFiles, TarBasedFmt};
 use crate::{
     download::zip_extraction::do_extract_zip,
     utils::{extract_with_blocking_task, StreamReadable},
@@ -83,7 +83,7 @@ where
         let mut extracted_files = ExtractedFiles::new();
 
         // Delay any directory entries until the end (they will be created if needed by
-        // descendants), to ensure that directory permissions do not interfer with descendant
+        // descendants), to ensure that directory permissions do not interfere with descendant
         // extraction.
         let mut directories = Vec::new();
 

@@ -81,7 +81,7 @@ pub enum TarEntryType {
 }
 
 /// Visitor must iterate over all entries.
-/// Entires can be in arbitary order.
+/// Entries can be in arbitrary order.
 #[async_trait::async_trait]
 pub trait TarEntriesVisitor: Send + Sync {
     /// Will be called once per entry
@@ -117,7 +117,7 @@ where
         visitor.visit(&mut entry).await?;
 
         // Consume all remaining data so that next iteration would work fine
-        // instead of reading the data of prevoius entry.
+        // instead of reading the data of previous entry.
         copy(&mut entry, &mut sink).await?;
     }
 

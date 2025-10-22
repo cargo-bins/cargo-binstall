@@ -177,7 +177,7 @@ impl Client {
         &self.0.client
     }
 
-    /// Return `Err(_)` for fatal error tht cannot be retried.
+    /// Return `Err(_)` for fatal error that cannot be retried.
     ///
     /// Return `Ok(ControlFlow::Continue(res))` for retryable error, `res`
     /// will contain the previous `Result<Response, ReqwestError>`.

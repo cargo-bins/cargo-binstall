@@ -168,7 +168,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
   Possible values: `1.2`, `1.3`
 
-* `--root-certificates <PATH>` — Specify the root certificates to use for https connnections, in addition to default system-wide ones
+* `--root-certificates <PATH>` — Specify the root certificates to use for https connections, in addition to default system-wide ones
 * `--json-output` — Print logs in json format to be parsable
 * `--github-token <TOKEN>` — Provide the github token for accessing the restful API of api.github.com
 

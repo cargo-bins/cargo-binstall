@@ -71,3 +71,8 @@ inherits = "check-only"
 
 [profile.check-only.package."*"]
 inherits = "check-only"
+# https://github.com/crate-ci/typos/blob/master/docs/reference.md
+[workspace.metadata.typos.default]
+extend-ignore-words-re = [
+    '^[a-zA-Z]{1,2}$' # ignore words up to length 2
+]

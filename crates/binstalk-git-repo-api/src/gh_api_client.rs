@@ -136,7 +136,7 @@ struct Inner {
     only_use_restful_api: AtomicBool,
 }
 
-/// Github API client for querying whether a release artifact exitsts.
+/// Github API client for querying whether a release artifact exists.
 /// Can only handle github.com for now.
 #[derive(Clone, Debug)]
 pub struct GhApiClient(Arc<Inner>);
@@ -449,7 +449,7 @@ mod test {
         } = RELEASE;
 
         assert_extract_gh_release_artifacts_failures(&[
-            "https://examle.com",
+            "https://example.com",
             "https://github.com",
             &format!("https://github.com/{owner}"),
             &format!("https://github.com/{owner}/{repo}"),

@@ -200,7 +200,7 @@ impl Registry {
         }
     }
 
-    /// Get url of the regsitry
+    /// Get url of the registry
     pub fn url(&self) -> Result<MaybeOwned<'_, Url>, UrlParseError> {
         match self {
             #[cfg(feature = "git")]
