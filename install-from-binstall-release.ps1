@@ -1,6 +1,5 @@
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
-Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
 $BINSTALL_VERSION = $Env:BINSTALL_VERSION
 if ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
