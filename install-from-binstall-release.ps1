@@ -28,7 +28,7 @@ $url = "$base_url$arch-pc-windows-msvc.zip"
 # create temp with zip extension (or Expand will complain)
 Write-Host "Invoke-WebRequest"
 $zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } –PassThru
-Invoke-WebRequest -OutFile $tmp $zip
+Invoke-WebRequest -OutFile $zip $url
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 Write-Host ""
 
