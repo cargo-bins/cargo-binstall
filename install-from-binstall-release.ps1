@@ -1,3 +1,4 @@
+Set-StrictMode -Version 1
 $PSStyle.Formatting.Verbose = $PSStyle.Foreground.Red
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
