@@ -29,9 +29,9 @@ $sw = [Diagnostics.Stopwatch]::StartNew()
 # create temp with zip extension (or Expand will complain)
 $zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } -PassThru
 try {
-    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -MaximumRetryCount 3
+    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
 } catch {
-    throw "Failed to download: $url"
+    throw "Failed to download: $_"
 }
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 $sw.Stop()
