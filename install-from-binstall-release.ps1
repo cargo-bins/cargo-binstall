@@ -35,7 +35,7 @@ try {
 }
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 $sw.Stop()
-Write-Verbose -Verbose "Download: $($sw.Elapsed.Seconds) seconds"
+Write-Verbose -Verbose -Message "Download: $($sw.Elapsed.Seconds) seconds"
 
 
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -45,7 +45,7 @@ if ($ps.ExitCode -ne 0) {
 }
 $zip | Remove-Item
 $sw.Stop()
-Write-Verbose -Verbose "Installation: $($sw.Elapsed.Seconds) seconds"
+Write-Verbose -Verbose -Message "Installation: $($sw.Elapsed.Seconds) seconds"
 
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $cargo_home = if ($Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
@@ -54,8 +54,8 @@ if ($Env:Path.ToLower() -split ";" -notcontains $cargo_bin.ToLower()) {
     if ($Env:CI -and $Env:GITHUB_PATH) {
         Add-Content -Path $Env:GITHUB_PATH -Value $cargo_bin
     } else {
-        Write-Verbose -Verbose "Your path is missing $cargo_bin, you might want to add it."
+        Write-Verbose -Verbose -Message "Your path is missing $cargo_bin, you might want to add it."
     }
 }
 $sw.Stop()
-Write-Verbose -Verbose "Path addition: $($sw.Elapsed.Seconds) seconds"
+Write-Verbose -Verbose -Message "Path addition: $($sw.Elapsed.Seconds) seconds"
