@@ -28,20 +28,21 @@ $url = "$base_url$arch-pc-windows-msvc.zip"
 Write-Host "Invoke-WebRequest"
 Measure-Command { Invoke-WebRequest $url -OutFile $tmpdir\cargo-binstall.zip | Out-Default }
 Write-Host "Expand-Archive"
-(Measure-Command { Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall | Out-Default }).Seconds
+Measure-Command { Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall | Out-Default }
 Write-Host ""
 
 Write-Host "Start-Process"
-(Measure-Command {
-    $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall\cargo-binstall.exe" "--self-install" | Out-Default
-}).Seconds
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall\cargo-binstall.exe" "--self-install"
 if ($ps.ExitCode -ne 0) {
     Write-Host "Invoke-Expression"
-    (Measure-Command {
-        Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall" | Out-Default
-    }).Seconds
+    Measure-Command { Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall" | Out-Default }
 }
+$sw.Stop()
+$sw.Elapsed
 
+Write-Host "Cleanup"
+$sw = [Diagnostics.Stopwatch]::StartNew()
 Remove-Item -Force $tmpdir\cargo-binstall.zip
 Remove-Item -Recurse -Force $tmpdir\cargo-binstall
 $cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
@@ -54,3 +55,5 @@ if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
 	    Write-Host ""
      }
 }
+$sw.Stop()
+$sw.Elapsed
