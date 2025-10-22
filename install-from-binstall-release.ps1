@@ -16,18 +16,18 @@ $base_url = if (-not $BINSTALL_VERSION) {
 }
 
 $proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
-if ($proc_arch -eq "AMD64") {
-	$arch = "x86_64"
-} elseif ($proc_arch -eq "ARM64") {
-	$arch = "aarch64"
-} else {
-	Write-Verbose -Verbose "Unsupported Architecture: $type"
-	[Environment]::Exit(1)
-}
+$arch = $proc_arch -eq "AMD64" ? "x86_64" :
+        $proc_arch -eq "ARM64" ? "aarch64" :
+        $(throw "Unsupported Architecture: $proc_arch")
+
 $url = "$base_url$arch-pc-windows-msvc.zip"
 # create temp with zip extension (or Expand will complain)
 $zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } –PassThru
-Invoke-WebRequest -OutFile $zip $url
+try {
+    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -MaximumRetryCount 3
+} catch {
+    throw "Failed to download: $_"
+}
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 
 $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall.exe" "--self-install"
@@ -36,11 +36,12 @@ if ($ps.ExitCode -ne 0) {
 }
 
 $zip | Remove-Item
-$cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
-if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
-    if (($Env:CI -ne $null) -and ($Env:GITHUB_PATH -ne $null)) {
-        Add-Content -Path "$Env:GITHUB_PATH" -Value "$cargo_home\bin"
+$cargo_home = $Env:CARGO_HOME ? $Env:CARGO_HOME : "$HOME\.cargo"
+$cargo_bin = Join-Path $cargo_home "bin"
+if ($Env:Path.ToLower() -split ";" -notcontains $cargo_bin.ToLower()) {
+    if ($Env:CI -and $Env:GITHUB_PATH) {
+        Add-Content -Path $Env:GITHUB_PATH -Value $cargo_bin
     } else {
-    	Write-Verbose -Verbose "Your path is missing $cargo_home\bin, you might want to add it."
-     }
+        Write-Verbose -Verbose "Your path is missing $cargo_bin, you might want to add it."
+    }
 }
