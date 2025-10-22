@@ -25,11 +25,14 @@ if ($proc_arch -eq "AMD64") {
 	[Environment]::Exit(1)
 }
 $url = "$base_url$arch-pc-windows-msvc.zip"
-Invoke-WebRequest $url -OutFile $tmpdir\cargo-binstall.zip
-Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall
+Measure-Command { Invoke-WebRequest $url -OutFile $tmpdir\cargo-binstall.zip | Out-Default }
+Measure-Command { Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall | Out-Default }
 Write-Host ""
 
-$ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall\cargo-binstall.exe" "--self-install"
+Measure-Command {
+    $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall\cargo-binstall.exe" "--self-install"
+    | Out-Default
+}
 if ($ps.ExitCode -ne 0) {
     Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall"
 }
