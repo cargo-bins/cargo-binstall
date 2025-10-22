@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Skip binaries user didn't requst ([#2199](https://github.com/cargo-bins/cargo-binstall/pull/2199))
+- Skip binaries user didn't request ([#2199](https://github.com/cargo-bins/cargo-binstall/pull/2199))
 
 ### Other
 

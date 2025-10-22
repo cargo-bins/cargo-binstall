@@ -233,7 +233,7 @@ pub fn install_crates(
     Ok(Some(if continue_on_failure {
         AutoAbortJoinHandle::spawn(async move {
             // Collect results
-            let mut resolution_fetchs = Vec::new();
+            let mut resolution_fetches = Vec::new();
             let mut resolution_sources = Vec::new();
             let mut errors = Vec::new();
 
@@ -242,7 +242,7 @@ pub fn install_crates(
                     Ok(Resolution::AlreadyUpToDate) => {}
                     Ok(Resolution::Fetch(fetch)) => {
                         fetch.print(&binstall_opts);
-                        resolution_fetchs.push(fetch)
+                        resolution_fetches.push(fetch)
                     }
                     Ok(Resolution::InstallFromSource(source)) => {
                         source.print();
@@ -253,7 +253,7 @@ pub fn install_crates(
                 }
             }
 
-            if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
+            if resolution_fetches.is_empty() && resolution_sources.is_empty() {
                 return if let Some(err) = BinstallError::crate_errors(errors) {
                     Err(err.into())
                 } else {
@@ -274,7 +274,7 @@ pub fn install_crates(
             }
 
             let manifest_update_res = do_install_fetches_continue_on_failure(
-                resolution_fetchs,
+                resolution_fetches,
                 manifests,
                 &binstall_opts,
                 dry_run,
@@ -308,7 +308,7 @@ pub fn install_crates(
     } else {
         AutoAbortJoinHandle::spawn(async move {
             // Collect results
-            let mut resolution_fetchs = Vec::new();
+            let mut resolution_fetches = Vec::new();
             let mut resolution_sources = Vec::new();
 
             for task in tasks {
@@ -316,7 +316,7 @@ pub fn install_crates(
                     Resolution::AlreadyUpToDate => {}
                     Resolution::Fetch(fetch) => {
                         fetch.print(&binstall_opts);
-                        resolution_fetchs.push(fetch)
+                        resolution_fetches.push(fetch)
                     }
                     Resolution::InstallFromSource(source) => {
                         source.print();
@@ -325,7 +325,7 @@ pub fn install_crates(
                 }
             }
 
-            if resolution_fetchs.is_empty() && resolution_sources.is_empty() {
+            if resolution_fetches.is_empty() && resolution_sources.is_empty() {
                 debug!("Nothing to do");
                 return Ok(());
             }
@@ -336,7 +336,7 @@ pub fn install_crates(
             }
 
             do_install_fetches(
-                resolution_fetchs,
+                resolution_fetches,
                 manifests,
                 &binstall_opts,
                 dry_run,
@@ -369,7 +369,7 @@ fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> 
         FileFormat::DerCertificate => Certificate::from_der,
         _ => {
             warn!(
-                "Unable to load {}: Expected pem or der ceritificate but found {file_format}",
+                "Unable to load {}: Expected pem or der certificate but found {file_format}",
                 path.display()
             );
 
@@ -456,7 +456,7 @@ fn filter_out_installed_crates<'a>(
 
 #[allow(clippy::vec_box)]
 fn do_install_fetches(
-    resolution_fetchs: Vec<Box<ResolutionFetch>>,
+    resolution_fetches: Vec<Box<ResolutionFetch>>,
     // Take manifests by value to drop the `FileLock`.
     manifests: Option<Manifests>,
     binstall_opts: &Options,
@@ -464,7 +464,7 @@ fn do_install_fetches(
     temp_dir: tempfile::TempDir,
     no_cleanup: bool,
 ) -> Result<()> {
-    if resolution_fetchs.is_empty() {
+    if resolution_fetches.is_empty() {
         return Ok(());
     }
 
@@ -474,7 +474,7 @@ fn do_install_fetches(
     }
 
     block_in_place(|| {
-        let metadata_vec = resolution_fetchs
+        let metadata_vec = resolution_fetches
             .into_iter()
             .map(|fetch| fetch.install(binstall_opts))
             .collect::<Result<Vec<_>, BinstallError>>()?;
@@ -485,7 +485,7 @@ fn do_install_fetches(
 
 #[allow(clippy::vec_box)]
 fn do_install_fetches_continue_on_failure(
-    resolution_fetchs: Vec<Box<ResolutionFetch>>,
+    resolution_fetches: Vec<Box<ResolutionFetch>>,
     // Take manifests by value to drop the `FileLock`.
     manifests: Option<Manifests>,
     binstall_opts: &Options,
@@ -494,7 +494,7 @@ fn do_install_fetches_continue_on_failure(
     no_cleanup: bool,
     errors: &mut Vec<Box<CrateContextError>>,
 ) -> Result<()> {
-    if resolution_fetchs.is_empty() {
+    if resolution_fetches.is_empty() {
         return Ok(());
     }
 
@@ -504,7 +504,7 @@ fn do_install_fetches_continue_on_failure(
     }
 
     block_in_place(|| {
-        let metadata_vec = resolution_fetchs
+        let metadata_vec = resolution_fetches
             .into_iter()
             .filter_map(|fetch| match fetch.install(binstall_opts) {
                 Ok(crate_info) => Some(crate_info),
