@@ -1,5 +1,3 @@
-Set-StrictMode -Version 1
-$PSStyle.Formatting.Verbose = $PSStyle.Foreground.Red
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
 $tmpdir = $Env:TEMP
@@ -23,7 +21,7 @@ if ($proc_arch -eq "AMD64") {
 } elseif ($proc_arch -eq "ARM64") {
 	$arch = "aarch64"
 } else {
-	Write-Verbose "Unsupported Architecture: $type"
+	Write-Verbose -Verbose "Unsupported Architecture: $type"
 	[Environment]::Exit(1)
 }
 $url = "$base_url$arch-pc-windows-msvc.zip"
@@ -43,6 +41,6 @@ if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
     if (($Env:CI -ne $null) -and ($Env:GITHUB_PATH -ne $null)) {
         Add-Content -Path "$Env:GITHUB_PATH" -Value "$cargo_home\bin"
     } else {
-    	Write-Verbose "Your path is missing $cargo_home\bin, you might want to add it."
+    	Write-Verbose -Verbose "Your path is missing $cargo_home\bin, you might want to add it."
      }
 }
