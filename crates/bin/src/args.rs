@@ -364,7 +364,7 @@ pub struct Args {
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub(crate) min_tls_version: Option<TLSVersion>,
 
-    /// Specify the root certificates to use for https connnections,
+    /// Specify the root certificates to use for https connections,
     /// in addition to default system-wide ones.
     #[clap(
         help_heading = "Options",
