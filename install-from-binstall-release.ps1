@@ -27,9 +27,13 @@ if ($proc_arch -eq "AMD64") {
 $url = "$base_url$arch-pc-windows-msvc.zip"
 # create temp with zip extension (or Expand will complain)
 Write-Host "Invoke-WebRequest"
+$sw = [Diagnostics.Stopwatch]::StartNew()
 $zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } –PassThru
 Invoke-WebRequest -OutFile $zip $url
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
+$sw.Stop()
+$sw.Elapsed
+
 Write-Host ""
 
 Write-Host "Start-Process"
@@ -42,10 +46,14 @@ if ($ps.ExitCode -ne 0) {
 $sw.Stop()
 $sw.Elapsed
 
-Write-Host "Cleanup"
+Write-Host "Rm Files"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $zip | Remove-Item
-Remove-Item -Force $tmpdir\cargo-binstall
+Remove-Item -Force "$tmpdir\cargo-binstall.exe"
+$sw.Stop()
+$sw.Elapsed
+Write-Host "Path"
+$sw = [Diagnostics.Stopwatch]::StartNew()
 $cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
     if (($Env:CI -ne $null) -and ($Env:GITHUB_PATH -ne $null)) {
