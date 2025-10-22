@@ -25,24 +25,27 @@ if ($proc_arch -eq "AMD64") {
 	[Environment]::Exit(1)
 }
 $url = "$base_url$arch-pc-windows-msvc.zip"
+# create temp with zip extension (or Expand will complain)
 Write-Host "Invoke-WebRequest"
-$sw = [Diagnostics.Stopwatch]::StartNew()
-(Invoke-WebRequest $url).Content | Expand-Archive -Force -DestinationPath $tmpdir\cargo-binstall
-$sw.Stop()
-$sw.Elapsed
+$zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } –PassThru
+Invoke-WebRequest -OutFile $tmp $zip
+$zip | Expand-Archive -DestinationPath $tmpdir -Force
+Write-Host ""
 
 Write-Host "Start-Process"
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall\cargo-binstall.exe" "--self-install"
+$ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall.exe" "--self-install"
 if ($ps.ExitCode -ne 0) {
-    Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall"
+    Write-Host "Invoke-Expression"
+    Measure-Command { Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force cargo-binstall" | Out-Default }
 }
 $sw.Stop()
 $sw.Elapsed
 
 Write-Host "Cleanup"
 $sw = [Diagnostics.Stopwatch]::StartNew()
-Remove-Item -Recurse -Force $tmpdir\cargo-binstall
+$zip | Remove-Item
+Remove-Item -Force $tmpdir\cargo-binstall
 $cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
     if (($Env:CI -ne $null) -and ($Env:GITHUB_PATH -ne $null)) {
