@@ -1,4 +1,3 @@
-$PSStyle.Formatting.Verbose = $PSStyle.Foreground.Cyan
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
 $tmpdir = $Env:TEMP
