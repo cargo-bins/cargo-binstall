@@ -27,7 +27,7 @@ if ($proc_arch -eq "AMD64") {
 $url = "$base_url$arch-pc-windows-msvc.zip"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 # create temp with zip extension (or Expand will complain)
-$zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } –PassThru
+$zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } -PassThru
 try {
     Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -MaximumRetryCount 3
 } catch {
