@@ -17,6 +17,7 @@ on:
       - install-from-binstall-release.ps1
       - install-from-binstall-release.sh
       - action.yml
+      - .github/workflows/gh-action.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}-${{ inputs.additional_key }}
