@@ -12,6 +12,6 @@ runs:
         bash "${{ github.action_path }}/install-from-binstall-release.sh"
     - name: Install cargo-binstall
       if: runner.os == 'Windows'
-      shell: pwsh
+      shell: powershell
       run: Set-ExecutionPolicy Unrestricted -Scope Process; iex "${{ github.action_path }}/install-from-binstall-release.ps1"
 

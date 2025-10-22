@@ -16,9 +16,13 @@ $base_url = if (-not $BINSTALL_VERSION) {
 }
 
 $proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
-$arch = $proc_arch -eq "AMD64" ? "x86_64" :
-        $proc_arch -eq "ARM64" ? "aarch64" :
-        $(throw "Unsupported Architecture: $proc_arch")
+if ($proc_arch -eq "AMD64") {
+    $arch = "x86_64"
+} elseif ($proc_arch -eq "ARM64") {
+    $arch = "aarch64"
+} else {
+    throw "Unsupported Architecture: $proc_arch"
+}
 
 $url = "$base_url$arch-pc-windows-msvc.zip"
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -44,7 +48,7 @@ $sw.Stop()
 Write-Verbose -Verbose "Installation: $($sw.Elapsed.Seconds) seconds"
 
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$cargo_home = $Env:CARGO_HOME ? $Env:CARGO_HOME : "$HOME\.cargo"
+$cargo_home = if ($Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
 $cargo_bin = Join-Path $cargo_home "bin"
 if ($Env:Path.ToLower() -split ";" -notcontains $cargo_bin.ToLower()) {
     if ($Env:CI -and $Env:GITHUB_PATH) {
