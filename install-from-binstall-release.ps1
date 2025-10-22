@@ -31,7 +31,7 @@ $zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } -P
 try {
     Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -MaximumRetryCount 3
 } catch {
-    throw "Failed to download: $_"
+    throw "Failed to download: $url"
 }
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 $sw.Stop()
