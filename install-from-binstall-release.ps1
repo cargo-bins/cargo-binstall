@@ -1,5 +1,5 @@
+$ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
-Set-PSDebug -Trace 1
 $tmpdir = $Env:TEMP
 $BINSTALL_VERSION = $Env:BINSTALL_VERSION
 if ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
@@ -17,32 +17,45 @@ $base_url = if (-not $BINSTALL_VERSION) {
 
 $proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
 if ($proc_arch -eq "AMD64") {
-	$arch = "x86_64"
+    $arch = "x86_64"
 } elseif ($proc_arch -eq "ARM64") {
-	$arch = "aarch64"
+    $arch = "aarch64"
 } else {
-	Write-Host "Unsupported Architecture: $type" -ForegroundColor Red
-	[Environment]::Exit(1)
+    throw "Unsupported Architecture: $proc_arch"
 }
+
 $url = "$base_url$arch-pc-windows-msvc.zip"
-Invoke-WebRequest $url -OutFile $tmpdir\cargo-binstall.zip
-Expand-Archive -Force $tmpdir\cargo-binstall.zip $tmpdir\cargo-binstall
-Write-Host ""
+$sw = [Diagnostics.Stopwatch]::StartNew()
+# create temp with zip extension (or Expand will complain)
+$zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } -PassThru
+try {
+    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+} catch {
+    throw "Failed to download: $_"
+}
+$zip | Expand-Archive -DestinationPath $tmpdir -Force
+$sw.Stop()
+Write-Verbose -Verbose -Message "Download: $($sw.Elapsed.Seconds) seconds"
 
-$ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall\cargo-binstall.exe" "--self-install"
+
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall.exe" "--self-install"
 if ($ps.ExitCode -ne 0) {
-    Invoke-Expression "$tmpdir\cargo-binstall\cargo-binstall.exe -y --force cargo-binstall"
+    Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force cargo-binstall"
 }
+$zip | Remove-Item
+$sw.Stop()
+Write-Verbose -Verbose -Message "Installation: $($sw.Elapsed.Seconds) seconds"
 
-Remove-Item -Force $tmpdir\cargo-binstall.zip
-Remove-Item -Recurse -Force $tmpdir\cargo-binstall
-$cargo_home = if ($Env:CARGO_HOME -ne $null) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
-if ($Env:Path -split ";" -notcontains "$cargo_home\bin") {
-    if (($Env:CI -ne $null) -and ($Env:GITHUB_PATH -ne $null)) {
-        Add-Content -Path "$Env:GITHUB_PATH" -Value "$cargo_home\bin"
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$cargo_home = if ($Env:CARGO_HOME) { $Env:CARGO_HOME } else { "$HOME\.cargo" }
+$cargo_bin = Join-Path $cargo_home "bin"
+if ($Env:Path.ToLower() -split ";" -notcontains $cargo_bin.ToLower()) {
+    if ($Env:CI -and $Env:GITHUB_PATH) {
+        Add-Content -Path $Env:GITHUB_PATH -Value $cargo_bin
     } else {
-	    Write-Host ""
-    	Write-Host "Your path is missing $cargo_home\bin, you might want to add it." -ForegroundColor Red
-	    Write-Host ""
-     }
+        Write-Verbose -Verbose -Message "Your path is missing $cargo_bin, you might want to add it."
+    }
 }
+$sw.Stop()
+Write-Verbose -Verbose -Message "Path addition: $($sw.Elapsed.Seconds) seconds"

@@ -9,8 +9,8 @@ runs:
       shell: sh
       run: |
         set -eu
-        (curl --retry 10 -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh || echo 'exit 1') | bash
+        bash "${{ github.action_path }}/install-from-binstall-release.sh"
     - name: Install cargo-binstall
       if: runner.os == 'Windows'
-      run: Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
       shell: powershell
+      run: Set-ExecutionPolicy Unrestricted -Scope Process; iex "${{ github.action_path }}/install-from-binstall-release.ps1"
