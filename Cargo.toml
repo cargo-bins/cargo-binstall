@@ -28,7 +28,7 @@ strip = "symbols"
 [profile.release.build-override]
 inherits = "dev.build-override"
 
-[profile.release.package."tokio-tar"]
+[profile.release.package."astral-tokio-tar"]
 opt-level = "z"
 
 [profile.release.package."binstall-tar"]
@@ -46,7 +46,7 @@ codegen-units = 32
 [profile.dev.package."*"]
 opt-level = 3
 
-[profile.dev.package."tokio-tar"]
+[profile.dev.package."astral-tokio-tar"]
 opt-level = "z"
 
 [profile.dev.package."binstall-tar"]
