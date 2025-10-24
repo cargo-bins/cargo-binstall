@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.0...binstalk-types-v0.10.1) - 2025-10-24
+
+### Other
+
+- *(lints)* introduce typos-cli config in `Cargo.toml` and handle typos ([#2337](https://github.com/cargo-bins/cargo-binstall/pull/2337))
+
 ## [0.10.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.9.4...binstalk-types-v0.10.0) - 2025-06-06
 
 ### Fixed

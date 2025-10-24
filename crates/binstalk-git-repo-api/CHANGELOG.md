@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.26](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.25...binstalk-git-repo-api-v0.5.26) - 2025-10-24
+
+### Other
+
+- *(lints)* introduce typos-cli config in `Cargo.toml` and handle typos ([#2337](https://github.com/cargo-bins/cargo-binstall/pull/2337))
+
 ## [0.5.25](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.24...binstalk-git-repo-api-v0.5.25) - 2025-09-14
 
 ### Other

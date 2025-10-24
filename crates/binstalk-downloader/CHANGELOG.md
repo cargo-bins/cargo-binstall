@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.24](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.23...binstalk-downloader-v0.13.24) - 2025-10-24
+
+### Other
+
+- *(lints)* introduce typos-cli config in `Cargo.toml` and handle typos ([#2337](https://github.com/cargo-bins/cargo-binstall/pull/2337))
+- *(deps)* bump rc-zip-sync from 4.3.1 to 4.3.2 in the deps group ([#2334](https://github.com/cargo-bins/cargo-binstall/pull/2334))
+
 ## [0.13.23](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.22...binstalk-downloader-v0.13.23) - 2025-09-14
 
 ### Added
