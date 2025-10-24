@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.12](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.17.11...binstalk-manifests-v0.17.12) - 2025-10-24
+
+### Other
+
+- updated the following local packages: binstalk-types, detect-targets
+
 ## [0.17.11](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.17.10...binstalk-manifests-v0.17.11) - 2025-10-10
 
 ### Other
