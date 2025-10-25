@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.25](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.24...binstalk-downloader-v0.13.25) - 2025-10-25
+
+### Fixed
+
+- fix CVE-2025-62518 ([#2340](https://github.com/cargo-bins/cargo-binstall/pull/2340))
+
+### Other
+
+- *(deps)* bump flate2 from 1.1.4 to 1.1.5 in the deps group ([#2342](https://github.com/cargo-bins/cargo-binstall/pull/2342))
+
 ## [0.13.24](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.23...binstalk-downloader-v0.13.24) - 2025-10-24
 
 ### Other
