@@ -44,7 +44,7 @@ impl FileLock {
             } else {
                 file.lock()?;
             }
-        }
+        };
 
         Ok(Self::new(file))
     }
