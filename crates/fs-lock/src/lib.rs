@@ -12,7 +12,7 @@ use std::{
 use cfg_if::cfg_if;
 
 cfg_if! {
-    if #[cfg(target_os = "android")] {
+    if #[cfg(any(target_os = "android", target_os = "illumos"))] {
         use fs4::fs_std::FileExt;
 
         fn lock_exclusive(file: &File) -> io::Result<()> {
