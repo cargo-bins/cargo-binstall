@@ -111,13 +111,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_shared(file: File) -> io::Result<Self> {
-        cfg_if! {
-            if #[cfg(target_os = "android")] {
-                FileExt::lock_shared(&file)?;
-            } else {
-                file.lock_shared()?;
-            }
-        };
+        lock_shared(&file)?;
 
         Ok(Self::new(file))
     }
