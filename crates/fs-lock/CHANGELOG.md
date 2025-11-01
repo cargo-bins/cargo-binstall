@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.11...fs-lock-v0.1.12) - 2025-11-01
+
+### Other
+
+- Fix `fs-lock` for android ([#2348](https://github.com/cargo-bins/cargo-binstall/pull/2348))
+
 ## [0.1.10](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.9...fs-lock-v0.1.10) - 2025-03-19
 
 ### Fixed
