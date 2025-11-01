@@ -3,7 +3,7 @@
 //! These use the same mechanisms as, and are interoperable with, Cargo.
 
 use std::{
-    fs::File,
+    fs::{File, TryLockError},
     io::{self, IoSlice, IoSliceMut, SeekFrom},
     ops,
     path::Path,
@@ -13,9 +13,56 @@ use cfg_if::cfg_if;
 
 cfg_if! {
     if #[cfg(target_os = "android")] {
-        use fs4::fs_std::FileExt;
+        fn lock_exclusive(file: &File) -> io::Result<()> {
+            FileExt::lock_exclusive(file)
+        }
+
+        fn lock_shared(file: &File) -> io::Result<()> {
+            FileExt::lock_shared(file)
+        }
+
+        fn map_try_lock_result(result: io::Result<bool>) -> Result<(), TryLockError> {
+            match result {
+                Ok(true) => Ok(()),
+                Ok(false) => Err(TryLockError::WouldBlock),
+                Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
+                    Err(TryLockError::WouldBlock)
+                }
+                Err(e) => Err(TryLockError::Error(e)),
+            }
+        }
+
+        fn try_lock_exclusive(file: &File) -> Result<(), TryLockError> {
+            map_try_lock_result(FileExt::try_lock_exclusive(file))
+        }
+
+        fn try_lock_shared(file: &File) -> Result<(), TryLockError> {
+            map_try_lock_result(FileExt::try_lock_shared(file))
+        }
+
+        fn unlock(file: &File) -> io::Result<()> {
+            FileExt::unlock(file)
+        }
     } else {
-        use std::fs::TryLockError;
+        fn lock_exclusive(file: &File) -> io::Result<()> {
+            file.lock()
+        }
+
+        fn lock_shared(file: &File) -> io::Result<()> {
+            file.lock_shared()
+        }
+
+        fn try_lock_exclusive(file: &File) -> Result<(), TryLockError> {
+            file.try_lock()
+        }
+
+        fn try_lock_shared(file: &File) -> Result<(), TryLockError> {
+            file.try_lock_shared()
+        }
+
+        fn unlock(file: &File) -> io::Result<()> {
+            file.unlock()
+        }
     }
 }
 
@@ -38,13 +85,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_exclusive(file: File) -> io::Result<Self> {
-        cfg_if! {
-            if #[cfg(target_os = "android")] {
-                FileExt::lock_exclusive(&file)?;
-            } else {
-                file.lock()?;
-            }
-        };
+        lock_exclusive(&file)?;
 
         Ok(Self::new(file))
     }
@@ -57,23 +98,10 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_exclusive(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        cfg_if! {
-            if #[cfg(target_os = "android")] {
-                match FileExt::try_lock_exclusive(&file) {
-                    Ok(true) => Ok(Self::new(file)),
-                    Ok(false) => Err((file, None)),
-                    Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
-                        Err((file, None))
-                    }
-                    Err(e) => Err((file, Some(e))),
-                }
-            } else {
-                match file.try_lock() {
-                    Ok(()) => Ok(Self::new(file)),
-                    Err(TryLockError::WouldBlock) => Err((file, None)),
-                    Err(TryLockError::Error(e)) => Err((file, Some(e))),
-                }
-            }
+        match try_lock_exclusive(&file) {
+            Ok(()) => Ok(Self::new(file)),
+            Err(TryLockError::WouldBlock) => Err((file, None)),
+            Err(TryLockError::Error(e)) => Err((file, Some(e))),
         }
     }
 
@@ -100,23 +128,10 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_shared(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        cfg_if! {
-            if #[cfg(target_os = "android")] {
-                match FileExt::try_lock_shared(&file) {
-                    Ok(true) => Ok(Self::new(file)),
-                    Ok(false) => Err((file, None)),
-                    Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
-                        Err((file, None))
-                    }
-                    Err(e) => Err((file, Some(e))),
-                }
-            } else {
-                match file.try_lock_shared() {
-                    Ok(()) => Ok(Self::new(file)),
-                    Err(TryLockError::WouldBlock) => Err((file, None)),
-                    Err(TryLockError::Error(e)) => Err((file, Some(e))),
-                }
-            }
+        match try_lock_shared(&file) {
+            Ok(()) => Ok(Self::new(file)),
+            Err(TryLockError::WouldBlock) => Err((file, None)),
+            Err(TryLockError::Error(e)) => Err((file, Some(e))),
         }
     }
 
@@ -132,13 +147,7 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        let _res = cfg_if! {
-            if #[cfg(target_os = "android")] {
-                FileExt::unlock(&self.0)
-            } else {
-                self.0.unlock()
-            }
-        };
+        let _res = unlock(&self.0);
 
         #[cfg(feature = "tracing")]
         if let Err(err) = _res {
