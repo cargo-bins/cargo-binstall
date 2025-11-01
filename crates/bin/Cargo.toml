@@ -23,15 +23,15 @@ pkg-fmt = "zip"
 
 [dependencies]
 atomic-file-install = { version = "1.0.12", path = "../atomic-file-install" }
-binstalk = { path = "../binstalk", version = "0.28.51", default-features = false }
-binstalk-manifests = { path = "../binstalk-manifests", version = "0.17.12" }
+binstalk = { path = "../binstalk", version = "0.28.52", default-features = false }
+binstalk-manifests = { path = "../binstalk-manifests", version = "0.17.13" }
 clap = { version = "4.5.48", features = ["derive", "env", "wrap_help"] }
 clap-cargo = "0.18.0"
 clap-markdown = { version = "0.1.5", optional = true }
 compact_str = "0.9.0"
 dirs = "6.0.0"
 file-format = { version = "0.28.0", default-features = false }
-fs-lock = { version = "0.1.11", path = "../fs-lock", features = ["tracing"] }
+fs-lock = { version = "0.1.12", path = "../fs-lock", features = ["tracing"] }
 home = "0.5.9"
 log = { version = "0.4.22", features = ["std"] }
 miette = "7.0.0"

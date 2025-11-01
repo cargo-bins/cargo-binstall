@@ -230,7 +230,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.51"
+version = "0.28.52"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.17.12"
+version = "0.17.13"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -1050,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.65"
+version = "0.1.66"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -1294,9 +1294,21 @@ dependencies = [
 
 [[package]]
 name = "fs-lock"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
+ "cfg-if",
+ "fs4",
  "tracing",
+]
+
+[[package]]
+name = "fs4"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8640e34b88f7652208ce9e88b1a37a2ae95227d84abec377ccd3c5cfeb141ed4"
+dependencies = [
+ "rustix",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
