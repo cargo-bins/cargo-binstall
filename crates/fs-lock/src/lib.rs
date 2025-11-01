@@ -13,6 +13,8 @@ use cfg_if::cfg_if;
 
 cfg_if! {
     if #[cfg(target_os = "android")] {
+        use fs4::fs_std::FileExt;
+
         fn lock_exclusive(file: &File) -> io::Result<()> {
             FileExt::lock_exclusive(file)
         }
