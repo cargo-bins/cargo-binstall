@@ -87,7 +87,7 @@ impl FileLock {
             } else {
                 file.lock_shared()?;
             }
-        }
+        };
 
         Ok(Self::new(file))
     }
