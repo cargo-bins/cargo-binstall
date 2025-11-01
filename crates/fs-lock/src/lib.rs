@@ -9,6 +9,65 @@ use std::{
     path::Path,
 };
 
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(any(target_os = "android", target_os = "illumos"))] {
+        use fs4::fs_std::FileExt;
+
+        fn lock_exclusive(file: &File) -> io::Result<()> {
+            FileExt::lock_exclusive(file)
+        }
+
+        fn lock_shared(file: &File) -> io::Result<()> {
+            FileExt::lock_shared(file)
+        }
+
+        fn map_try_lock_result(result: io::Result<bool>) -> Result<(), TryLockError> {
+            match result {
+                Ok(true) => Ok(()),
+                Ok(false) => Err(TryLockError::WouldBlock),
+                Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
+                    Err(TryLockError::WouldBlock)
+                }
+                Err(e) => Err(TryLockError::Error(e)),
+            }
+        }
+
+        fn try_lock_exclusive(file: &File) -> Result<(), TryLockError> {
+            map_try_lock_result(FileExt::try_lock_exclusive(file))
+        }
+
+        fn try_lock_shared(file: &File) -> Result<(), TryLockError> {
+            map_try_lock_result(FileExt::try_lock_shared(file))
+        }
+
+        fn unlock(file: &File) -> io::Result<()> {
+            FileExt::unlock(file)
+        }
+    } else {
+        fn lock_exclusive(file: &File) -> io::Result<()> {
+            file.lock()
+        }
+
+        fn lock_shared(file: &File) -> io::Result<()> {
+            file.lock_shared()
+        }
+
+        fn try_lock_exclusive(file: &File) -> Result<(), TryLockError> {
+            file.try_lock()
+        }
+
+        fn try_lock_shared(file: &File) -> Result<(), TryLockError> {
+            file.try_lock_shared()
+        }
+
+        fn unlock(file: &File) -> io::Result<()> {
+            file.unlock()
+        }
+    }
+}
+
 /// A locked file.
 #[derive(Debug)]
 pub struct FileLock(File, #[cfg(feature = "tracing")] Option<Box<Path>>);
@@ -28,7 +87,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_exclusive(file: File) -> io::Result<Self> {
-        file.lock()?;
+        lock_exclusive(&file)?;
 
         Ok(Self::new(file))
     }
@@ -41,7 +100,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_exclusive(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        match file.try_lock() {
+        match try_lock_exclusive(&file) {
             Ok(()) => Ok(Self::new(file)),
             Err(TryLockError::WouldBlock) => Err((file, None)),
             Err(TryLockError::Error(e)) => Err((file, Some(e))),
@@ -52,7 +111,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_shared(file: File) -> io::Result<Self> {
-        file.lock_shared()?;
+        lock_shared(&file)?;
 
         Ok(Self::new(file))
     }
@@ -65,7 +124,7 @@ impl FileLock {
     ///
     /// Note that this operation is blocking, and should not be called in async contexts.
     pub fn new_try_shared(file: File) -> Result<Self, (File, Option<io::Error>)> {
-        match file.try_lock_shared() {
+        match try_lock_shared(&file) {
             Ok(()) => Ok(Self::new(file)),
             Err(TryLockError::WouldBlock) => Err((file, None)),
             Err(TryLockError::Error(e)) => Err((file, Some(e))),
@@ -84,7 +143,8 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        let _res = self.0.unlock();
+        let _res = unlock(&self.0);
+
         #[cfg(feature = "tracing")]
         if let Err(err) = _res {
             use std::fmt;

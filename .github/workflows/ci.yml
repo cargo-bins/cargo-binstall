@@ -45,6 +45,7 @@ jobs:
     outputs:
       crates_changed: ${{ steps.list-changed-files.outputs.crates_changed }}
       has_detect_target_changed: ${{ steps.list-changed-files.outputs.has_detect_target_changed }}
+      has_fs_lock_changed: ${{ steps.list-changed-files.outputs.has_fs_lock_changed }}
 
     steps:
       - uses: actions/checkout@v5
@@ -67,8 +68,10 @@ jobs:
           set -euxo pipefail
           crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 | sed 's/^bin$/cargo-binstall/' || echo)"
           has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true || echo false)"
+          has_fs_lock_changed="$(echo "$crates_changed" | grep -q fs-lock && echo true || echo false)"
           echo "crates_changed=${crates_changed//$'\n'/ }" | tee -a "$GITHUB_OUTPUT"
           echo "has_detect_target_changed=$has_detect_target_changed" | tee -a "$GITHUB_OUTPUT"
+          echo "has_fs_lock_changed=$has_fs_lock_changed" | tee -a "$GITHUB_OUTPUT"
 
   unit-tests:
     needs: changed-files
@@ -413,6 +416,36 @@ jobs:
         # Set working directory here, otherwise `cargo-check` would download
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
+
+  fs-lock-android-check:
+    needs: changed-files
+    if: needs.changed-files.outputs.has_fs_lock_changed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Add ${{ matrix.target }}
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+      - name: Build detect-targets
+        run: |
+          cargo check --target ${{ matrix.target }}
+        # Set working directory here, otherwise `cargo-check` would download
+        # and build quite a few unused dependencies.
+        working-directory: crates/fs-lock
+
 
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
