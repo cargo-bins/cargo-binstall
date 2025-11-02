@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.12...fs-lock-v0.1.13) - 2025-11-02
+
+### Other
+
+- Fix fs-lock: pull in fs4 for Illumos ([#2350](https://github.com/cargo-bins/cargo-binstall/pull/2350))
+
 ## [0.1.12](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.11...fs-lock-v0.1.12) - 2025-11-01
 
 ### Other
