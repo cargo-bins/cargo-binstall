@@ -132,9 +132,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
 
       - run: just build
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - run: just e2e-tests
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: "sccache"
 
   cross-check:
     strategy:
