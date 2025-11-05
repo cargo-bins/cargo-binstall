@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "atomic-file-install"
-version = "1.0.12"
+version = "1.0.13"
 dependencies = [
  "reflink-copy",
  "tempfile",
@@ -230,7 +230,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.53"
+version = "0.28.54"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-bins"
-version = "0.6.16"
+version = "0.6.17"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
