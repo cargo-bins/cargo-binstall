@@ -26,7 +26,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    When multiple names are provided, the --version option and override option `--manifest-path` and `--git` are unavailable due to ambiguity.
 
-   If duplicate names are provided, the last one (and their version requirement) is kept.
+   If duplicate names are provided, the last one (and its version requirement) is kept.
 
 ###### **Options:**
 
@@ -54,7 +54,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
    This option cannot be used with `--git`.
 * `--git <URL>` — Override how to fetch Cargo.toml package manifest.
 
-   This skip searching crates.io and instead clone the repository specified and runs as if `--manifest-path $cloned_repo` is passed to binstall.
+   This skips searching crates.io and instead clones the repository specified and runs as if `--manifest-path $cloned_repo` is passed to binstall.
 
    This option cannot be used with `--manifest-path`.
 * `--bin-dir <BIN_DIR>` — Path template for binary files in packages

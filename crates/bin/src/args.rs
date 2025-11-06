@@ -49,7 +49,7 @@ pub struct Args {
     /// When multiple names are provided, the --version option and override option
     /// `--manifest-path` and `--git` are unavailable due to ambiguity.
     ///
-    /// If duplicate names are provided, the last one (and their version requirement)
+    /// If duplicate names are provided, the last one (and its version requirement)
     /// is kept.
     #[clap(
         help_heading = "Package selection",
@@ -121,7 +121,7 @@ pub struct Args {
     #[cfg(feature = "git")]
     /// Override how to fetch Cargo.toml package manifest.
     ///
-    /// This skip searching crates.io and instead clone the repository specified and
+    /// This skips searching crates.io and instead clones the repository specified and
     /// runs as if `--manifest-path $cloned_repo` is passed to binstall.
     ///
     /// This option cannot be used with `--manifest-path`.
