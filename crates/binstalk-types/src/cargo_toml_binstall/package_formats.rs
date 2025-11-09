@@ -74,7 +74,7 @@ impl PkgFmt {
         let guess = match it.next()? {
             "tar" => Some(PkgFmt::Tar),
 
-            "tbz2" => Some(PkgFmt::Tbz2),
+            "tbz2" | "tbz" => Some(PkgFmt::Tbz2),
             "bz2" if it.next() == Some("tar") => Some(PkgFmt::Tbz2),
 
             "tgz" => Some(PkgFmt::Tgz),
