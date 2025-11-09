@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.26](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.25...binstalk-downloader-v0.13.26) - 2025-11-09
+
+### Other
+
+- Update rc-zip-sync version to 4.3.5 ([#2362](https://github.com/cargo-bins/cargo-binstall/pull/2362))
+
 ## [0.13.25](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.24...binstalk-downloader-v0.13.25) - 2025-10-25
 
 ### Fixed
