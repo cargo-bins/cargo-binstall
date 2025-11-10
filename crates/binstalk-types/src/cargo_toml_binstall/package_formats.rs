@@ -52,7 +52,7 @@ impl PkgFmt {
     pub fn extensions(self, is_windows: bool) -> &'static [&'static str] {
         match self {
             PkgFmt::Tar => &[".tar"],
-            PkgFmt::Tbz2 => &[".tbz2", ".tar.bz2", ".tbz"],
+            PkgFmt::Tbz2 => &[".tbz2", ".tar.bz2", ".tbz", ".tar.bz"],
             PkgFmt::Tgz => &[".tgz", ".tar.gz"],
             PkgFmt::Txz => &[".txz", ".tar.xz"],
             PkgFmt::Tzstd => &[".tzstd", ".tzst", ".tar.zst"],
