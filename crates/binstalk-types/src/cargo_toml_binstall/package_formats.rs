@@ -52,7 +52,7 @@ impl PkgFmt {
     pub fn extensions(self, is_windows: bool) -> &'static [&'static str] {
         match self {
             PkgFmt::Tar => &[".tar"],
-            PkgFmt::Tbz2 => &[".tbz2", ".tar.bz2"],
+            PkgFmt::Tbz2 => &[".tbz2", ".tar.bz2", ".tbz", ".tar.bz"],
             PkgFmt::Tgz => &[".tgz", ".tar.gz"],
             PkgFmt::Txz => &[".txz", ".tar.xz"],
             PkgFmt::Tzstd => &[".tzstd", ".tzst", ".tar.zst"],
@@ -74,8 +74,8 @@ impl PkgFmt {
         let guess = match it.next()? {
             "tar" => Some(PkgFmt::Tar),
 
-            "tbz2" => Some(PkgFmt::Tbz2),
-            "bz2" if it.next() == Some("tar") => Some(PkgFmt::Tbz2),
+            "tbz2" | "tbz" => Some(PkgFmt::Tbz2),
+            "bz2" | "bz" if it.next() == Some("tar") => Some(PkgFmt::Tbz2),
 
             "tgz" => Some(PkgFmt::Tgz),
             "gz" if it.next() == Some("tar") => Some(PkgFmt::Tgz),
