@@ -75,7 +75,7 @@ impl PkgFmt {
             "tar" => Some(PkgFmt::Tar),
 
             "tbz2" | "tbz" => Some(PkgFmt::Tbz2),
-            "bz2" if it.next() == Some("tar") => Some(PkgFmt::Tbz2),
+            "bz2" | "bz" if it.next() == Some("tar") => Some(PkgFmt::Tbz2),
 
             "tgz" => Some(PkgFmt::Tgz),
             "gz" if it.next() == Some("tar") => Some(PkgFmt::Tgz),
