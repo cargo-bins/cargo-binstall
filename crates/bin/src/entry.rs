@@ -185,10 +185,7 @@ pub fn install_crates(
                 v
             } else {
                 cargo_config
-                    .registries
-                    .as_ref()
-                    .and_then(|registries| registries.get(&registry_name))
-                    .and_then(|registry| registry.index.as_deref())
+                    .get_registry_index(&registry_name)
                     .ok_or_else(|| BinstallError::UnknownRegistryName(registry_name))?
             }
             .parse()
