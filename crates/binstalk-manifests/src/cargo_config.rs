@@ -156,7 +156,7 @@ impl Config {
         let registry = self
             .registries
             .as_ref()?
-            .get(&registry_name)?;
+            .get(name)?;
 
         if let Some(name) = registry.replace_with.as_deref() {
             self.get_registry_index(name)
