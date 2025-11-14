@@ -149,6 +149,14 @@ impl Config {
 
         inner(path.as_ref())
     }
+
+    pub fn get_registry_index(&self, name: &str) -> Option<&str> {
+        self
+            .registries
+            .as_ref()
+            .and_then(|registries| registries.get(&registry_name))
+            .and_then(|registry| registry.index.as_deref())
+    }
 }
 
 #[derive(Debug, Diagnostic, Error)]
