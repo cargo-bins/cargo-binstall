@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.55"
+version = "0.28.56"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -256,7 +256,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-bins"
-version = "0.6.17"
+version = "0.6.18"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
@@ -270,7 +270,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-downloader"
-version = "0.13.26"
+version = "0.13.27"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -306,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-fetchers"
-version = "0.10.28"
+version = "0.10.29"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-git-repo-api"
-version = "0.5.28"
+version = "0.5.29"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
@@ -349,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.17.15"
+version = "0.17.16"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.11.27"
+version = "0.11.28"
 dependencies = [
  "async-trait",
  "base16",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-types"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "compact_str",
  "maybe-owned",
@@ -1044,7 +1044,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.68"
+version = "0.1.69"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -1288,7 +1288,7 @@ dependencies = [
 
 [[package]]
 name = "fs-lock"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "cfg-if",
  "fs4",
