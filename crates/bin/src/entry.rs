@@ -44,7 +44,7 @@ pub fn install_crates(
     jobserver_client: LazyJobserverClient,
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     let Init {
-        cargo_config,
+        mut cargo_config,
         settings,
         cargo_root,
         install_path,
@@ -166,10 +166,12 @@ pub fn install_crates(
         jobserver_client,
         registry: if let Some(index) = args.index {
             index
-        } else if let Some(registry_name) = args
-            .registry
-            .or_else(|| cargo_config.registry.and_then(|registry| registry.default))
-        {
+        } else if let Some(registry_name) = args.registry.or_else(|| {
+            cargo_config
+                .registry
+                .take()
+                .and_then(|registry| registry.default)
+        }) {
             let registry_name_lowercase = registry_name.to_lowercase();
 
             let v = env::vars().find_map(|(k, v)| {
@@ -185,10 +187,7 @@ pub fn install_crates(
                 v
             } else {
                 cargo_config
-                    .registries
-                    .as_ref()
-                    .and_then(|registries| registries.get(&registry_name))
-                    .and_then(|registry| registry.index.as_deref())
+                    .get_registry_index(&registry_name)
                     .ok_or_else(|| BinstallError::UnknownRegistryName(registry_name))?
             }
             .parse()

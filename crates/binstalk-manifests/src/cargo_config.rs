@@ -53,6 +53,8 @@ pub enum Env {
 #[derive(Debug, Deserialize)]
 pub struct Registry {
     pub index: Option<CompactString>,
+    #[serde(rename = "replace-with")]
+    pub replace_with: Option<CompactString>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -148,6 +150,16 @@ impl Config {
         }
 
         inner(path.as_ref())
+    }
+
+    pub fn get_registry_index(&self, name: &str) -> Option<&str> {
+        let registry = self.registries.as_ref()?.get(name)?;
+
+        if let Some(name) = registry.replace_with.as_deref() {
+            self.get_registry_index(name)
+        } else {
+            registry.index.as_deref()
+        }
     }
 }
 
