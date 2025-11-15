@@ -166,15 +166,12 @@ pub fn install_crates(
         jobserver_client,
         registry: if let Some(index) = args.index {
             index
-        } else if let Some(registry_name) = args
-            .registry
-            .or_else(|| {
-                cargo_config
-                    .registry
-                    .take()
-                    .and_then(|registry| registry.default)
-            })
-        {
+        } else if let Some(registry_name) = args.registry.or_else(|| {
+            cargo_config
+                .registry
+                .take()
+                .and_then(|registry| registry.default)
+        }) {
             let registry_name_lowercase = registry_name.to_lowercase();
 
             let v = env::vars().find_map(|(k, v)| {
