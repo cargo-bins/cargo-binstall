@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.14](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.13...fs-lock-v0.1.14) - 2025-11-15
+
+### Other
+
+- Rm illumos workaround for fs-lock ([#2368](https://github.com/cargo-bins/cargo-binstall/pull/2368))
+
 ## [0.1.13](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.12...fs-lock-v0.1.13) - 2025-11-02
 
 ### Other
