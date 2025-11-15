@@ -153,10 +153,7 @@ impl Config {
     }
 
     pub fn get_registry_index(&self, name: &str) -> Option<&str> {
-        let registry = self
-            .registries
-            .as_ref()?
-            .get(name)?;
+        let registry = self.registries.as_ref()?.get(name)?;
 
         if let Some(name) = registry.replace_with.as_deref() {
             self.get_registry_index(name)
