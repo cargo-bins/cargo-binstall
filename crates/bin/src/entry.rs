@@ -44,7 +44,7 @@ pub fn install_crates(
     jobserver_client: LazyJobserverClient,
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     let Init {
-        cargo_config,
+        mut cargo_config,
         settings,
         cargo_root,
         install_path,
