@@ -168,7 +168,12 @@ pub fn install_crates(
             index
         } else if let Some(registry_name) = args
             .registry
-            .or_else(|| cargo_config.registry.take().and_then(|registry| registry.default))
+            .or_else(|| {
+                cargo_config
+                    .registry
+                    .take()
+                    .and_then(|registry| registry.default)
+            })
         {
             let registry_name_lowercase = registry_name.to_lowercase();
 
