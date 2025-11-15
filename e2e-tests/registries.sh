@@ -35,6 +35,7 @@ cat >"$CARGO_HOME/config.toml" << EOF
 [registries]
 t1 = { index = "https://github.com/rust-lang/crates.io-index" }
 t2 = { index = "sparse+https://index.crates.io/" }
+t4 = { replace-with = "t2" }
 
 [registry]
 default = "t1"
@@ -49,6 +50,13 @@ test_cargo_binstall_install
 
 # Install binaries using registry t2 in config
 "./$1" binstall --force --registry t2 -y cargo-binstall@0.12.0
+
+grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
+
+test_cargo_binstall_install
+
+# Install binaries using registry t4 in config
+"./$1" binstall --force --registry t4 -y cargo-binstall@0.12.0
 
 grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
 
