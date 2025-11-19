@@ -199,7 +199,9 @@ async fn resolve_inner(
                     {
                         Ok(bin_files) => {
                             if !bin_files.is_empty() {
-                                fetcher.clone().report_to_upstream();
+                                if !opts.disable_telemetry {
+                                    fetcher.clone().report_to_upstream();
+                                }
                                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                                     fetcher: fetcher.clone(),
                                     new_version: package_info.version,
