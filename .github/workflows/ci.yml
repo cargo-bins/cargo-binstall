@@ -48,7 +48,7 @@ jobs:
       has_fs_lock_changed: ${{ steps.list-changed-files.outputs.has_fs_lock_changed }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -80,7 +80,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/just-setup
         env:
           # just-setup use binstall to install sccache,
@@ -124,7 +124,7 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/just-setup
         env:
           # just-setup use binstall to install sccache,
@@ -159,7 +159,7 @@ jobs:
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Enable cargo-zigbuild
         if: matrix.os == 'ubuntu-latest'
@@ -190,7 +190,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/just-setup
         env:
           # just-setup use binstall to install sccache,
@@ -241,7 +241,7 @@ jobs:
           - x86_64
           - aarch64
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install ${{ matrix.arch }}-unknown-linux-musl target
         run: |
           rustup target add ${{ matrix.arch }}-unknown-linux-musl
@@ -267,7 +267,7 @@ jobs:
       - changed-files
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v6
         with:
@@ -284,7 +284,7 @@ jobs:
   detect-targets-ubuntu-arm-test:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
@@ -402,7 +402,7 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
@@ -431,7 +431,7 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
