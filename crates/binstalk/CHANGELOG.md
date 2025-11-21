@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.57](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.56...binstalk-v0.28.57) - 2025-11-21
+
+### Fixed
+
+- Don't send reports when telemetry is disabled ([#2373](https://github.com/cargo-bins/cargo-binstall/pull/2373))
+
 ## [0.28.56](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.55...binstalk-v0.28.56) - 2025-11-15
 
 ### Other
