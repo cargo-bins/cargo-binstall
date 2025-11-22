@@ -51,11 +51,14 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     if interface.dns_servers.is_empty() {
         warn!("No DNS servers found on default interface; falling back to system DNS config");
 
-        if let Ok((sys_config, sys_opts)) = system_conf::read_system_conf() {
-            return Ok((sys_config, sys_opts));
-        }
-        
-        return Err("No DNS servers found and failed to read system DNS config".into());
+        let (sys_config, sys_opts) = system_conf::read_system_conf().map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to read system DNS config: {err}",),
+            )
+        })?;
+
+        return Ok((sys_config, sys_opts));
     }
 
     interface.dns_servers.iter().for_each(|addr| {
