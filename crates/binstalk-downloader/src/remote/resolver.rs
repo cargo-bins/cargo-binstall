@@ -1,5 +1,8 @@
 use std::{net::SocketAddr, sync::Arc};
 
+#[cfg(windows)]
+use std::io;
+
 use hickory_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
     system_conf, TokioResolver as TokioAsyncResolver,
@@ -10,6 +13,8 @@ use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
 use hickory_resolver::{config::NameServerConfig, proto::xfer::Protocol};
+#[cfg(windows)]
+use netdev::Interface;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -41,7 +46,19 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     let mut config = ResolverConfig::new();
     let opts = ResolverOpts::default();
 
-    get_adapter()?.dns_servers().iter().for_each(|addr| {
+    let interface = get_default_interface()?;
+
+    if interface.dns_servers.is_empty() {
+        warn!("No DNS servers found on default interface; falling back to system DNS config");
+
+        if let Ok((sys_config, sys_opts)) = system_conf::read_system_conf() {
+            return Ok((sys_config, sys_opts));
+        }
+        
+        return Err("No DNS servers found and failed to read system DNS config".into());
+    }
+
+    interface.dns_servers.iter().for_each(|addr| {
         tracing::trace!("Adding DNS server: {}", addr);
         let socket_addr = SocketAddr::new(*addr, 53);
         for protocol in [Protocol::Udp, Protocol::Tcp] {
@@ -72,23 +89,26 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
 
 #[cfg(windows)]
 #[instrument]
-fn get_adapter() -> Result<ipconfig::Adapter, BoxError> {
-    debug!("Retrieving local IP address");
-    let local_ip =
-        default_net::interface::get_local_ipaddr().ok_or("Local IP address not found")?;
-    debug!("Local IP address: {local_ip}");
-    debug!("Retrieving network adapters");
-    let adapters = ipconfig::get_adapters()?;
-    debug!("Found {} network adapters", adapters.len());
-    debug!("Searching for adapter with IP address {local_ip}");
-    let adapter = adapters
-        .into_iter()
-        .find(|adapter| adapter.ip_addresses().contains(&local_ip))
-        .ok_or("Adapter not found")?;
+fn get_default_interface() -> Result<Interface, BoxError> {
+    debug!("Retrieving default network interface");
+    let interface = netdev::get_default_interface().map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Failed to get default interface: {err}"),
+        )
+    })?;
+
+    let name = interface
+        .friendly_name
+        .as_deref()
+        .unwrap_or(interface.name.as_str());
+
     debug!(
-        "Using adapter {} with {} DNS servers",
-        adapter.friendly_name(),
-        adapter.dns_servers().len()
+        "Using interface {} (index {}) with {} DNS servers",
+        name,
+        interface.index,
+        interface.dns_servers.len()
     );
-    Ok(adapter)
+
+    Ok(interface)
 }
