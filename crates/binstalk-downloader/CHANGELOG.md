@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.28](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.27...binstalk-downloader-v0.13.28) - 2025-11-23
+
+### Other
+
+- Use netdev instead of default-net/ipconfig on Windows ([#2378](https://github.com/cargo-bins/cargo-binstall/pull/2378))
+
 ## [0.13.27](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.26...binstalk-downloader-v0.13.27) - 2025-11-15
 
 ### Other
