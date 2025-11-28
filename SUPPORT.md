@@ -36,7 +36,7 @@ with the following variables available:
 - `version` is the crate version (per `--version` and the crate manifest)
 - `repo` is the repository linked in `Cargo.toml`
 - `bin` is the name of a specific binary, inferred from the crate configuration
-- `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required()
+- `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required)
 - `archive-suffix` is the filename extension of the package archive format that includes the prefix `.`, e.g. `.tgz` for tgz or `.exe`/`""` for bin.
 - `archive-format` is the soft-deprecated filename extension of the package archive format that does not include the prefix `.`, e.g. `tgz` for tgz or `exe`/`""` for bin.
 - `binary-ext` is the string `.exe` if the `target` is for Windows, or the empty string otherwise
@@ -183,4 +183,4 @@ Were the package to contain binaries in the form `name-target[.exe]`, this could
 bin-dir = "{ bin }-{ target }{ binary-ext }"
 ```
 
-Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so long as cargo builds them this _should_ just work.
+Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so as long as cargo builds them this _should_ just work.
