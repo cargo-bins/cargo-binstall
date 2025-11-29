@@ -18,4 +18,4 @@ leon = "3.0.0"
 miette = "7.0.0"
 normalize-path = { version = "0.2.1", path = "../normalize-path" }
 thiserror = "2.0.11"
-tracing = "0.1.39"
+tracing = "0.1.43"

@@ -20,7 +20,7 @@ serde-tuple-vec-map = "1.0.1"
 serde_json = { version = "1.0.107" }
 thiserror = "2.0.11"
 tokio = { version = "1.46.1", features = ["sync"], default-features = false }
-tracing = "0.1.39"
+tracing = "0.1.43"
 url = "2.5.4"
 zeroize = "1.8.1"
 
