@@ -32,6 +32,7 @@ jobs:
 
   keygen:
     runs-on: ubuntu-latest
+    if: github.repository_owner == 'cargo-bins'
     steps:
     - uses: actions/checkout@v6
 
