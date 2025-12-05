@@ -45,7 +45,7 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                 let filename = format!("ld-linux-{cpu_arch_suffix}.so.2");
                 let dirname = format!("{cpu_arch}-linux-gnu");
 
-                [
+                let mut probe_paths = vec![
                     format!("/lib/{filename}"),
                     format!("/lib64/{filename}"),
                     format!("/lib/{dirname}/{filename}"),
@@ -58,10 +58,25 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                     "/usr/lib64/libc.so".to_string(),
                     format!("/usr/lib/{dirname}/libc.so"),
                     format!("/usr/lib64/{dirname}/libc.so"),
-                ]
-                .into_iter()
-                .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
-                .collect()
+                ];
+
+                // TODO: Find out if other arm-based (32 bit) `target_arch`s use the same
+                // generic "arm" arch in both /lib and /usr/lib prefixed paths to libc.so.6.
+                // For now, only do this for armv7 target_arch because it has been empirically proven.
+                // See: https://github.com/cargo-bins/cargo-binstall/issues/2386
+                if cpu_arch == "armv7" {
+                    // note, `abi` is appended in this case
+                    let arm_dirname = format!("arm-linux-gnu{abi}");
+                    probe_paths.extend([
+                        format!("/lib/{arm_dirname}/libc.so.6"),
+                        format!("/usr/lib/{arm_dirname}/libc.so.6"),
+                    ]);
+                }
+
+                probe_paths
+                    .into_iter()
+                    .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
+                    .collect()
             };
 
             let has_glibc = async move {

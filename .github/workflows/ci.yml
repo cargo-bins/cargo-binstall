@@ -107,7 +107,7 @@ jobs:
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
 
   e2e-tests:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.repository_owner == 'cargo-bins'
     strategy:
       fail-fast: false
       matrix:
@@ -353,8 +353,6 @@ jobs:
       - detect-targets-build
       - changed-files
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
-    strategy:
-      fail-fast: false
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/download-artifact@v6
@@ -467,6 +465,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # fail if ANY dependency has failed or cancelled
-      - if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')"
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
       - run: exit 0
