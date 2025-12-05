@@ -56,6 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.72](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.71...detect-targets-v0.1.72) - 2025-12-05
+
+### Fixed
+
+- verify GNU libc on armv7 target architecture ([#2387](https://github.com/cargo-bins/cargo-binstall/pull/2387))
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2385](https://github.com/cargo-bins/cargo-binstall/pull/2385))
+
 ## [0.1.71](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.70...detect-targets-v0.1.71) - 2025-11-23
 
 ### Other
