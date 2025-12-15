@@ -119,14 +119,14 @@ jobs:
           prerelease: true
       - if: "fromJSON(inputs.publish).is-release != 'true' || runner.os == 'macOS'"
         name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.t }}
           path: packages/cargo-binstall-*
           retention-days: 1
 
       - name: Upload timings
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.t }}-cargo-timings
           path: target/cargo-timings
@@ -188,7 +188,7 @@ jobs:
           prerelease: true
       - if: fromJSON(inputs.publish).is-release != 'true'
         name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: universal-apple-darwin
           path: packages/cargo-binstall-universal-*
