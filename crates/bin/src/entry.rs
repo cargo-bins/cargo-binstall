@@ -186,15 +186,13 @@ pub fn install_crates(
             let v = v
                 .as_deref()
                 .or_else(|| cargo_config.get_registry_index(&registry_name));
-            
+
             if let Some(v) = &v {
-                v
-                    .parse()
-                    .map_err(BinstallError::from)?
+                v.parse().map_err(BinstallError::from)?
             } else if registry_name_lowercase == "crates-io" {
                 Default::default()
             } else {
-                return Err(BinstallError::UnknownRegistryName(registry_name).into())
+                return Err(BinstallError::UnknownRegistryName(registry_name).into());
             }
         } else {
             Default::default()
