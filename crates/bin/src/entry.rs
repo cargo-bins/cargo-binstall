@@ -194,7 +194,7 @@ pub fn install_crates(
             } else if registry_name_lowercase == "crates-io" {
                 Default::default()
             } else {
-                return Err(BinstallError::UnknownRegistryName(registry_name))
+                return Err(BinstallError::UnknownRegistryName(registry_name).into())
             }
         } else {
             Default::default()
