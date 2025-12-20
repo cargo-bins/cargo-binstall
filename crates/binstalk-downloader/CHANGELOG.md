@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.30](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.29...binstalk-downloader-v0.13.30) - 2025-12-20
+
+### Other
+
+- Replace doc_auto_cfg with doc_cfg ([#2402](https://github.com/cargo-bins/cargo-binstall/pull/2402))
+
 ## [0.13.29](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.28...binstalk-downloader-v0.13.29) - 2025-12-05
 
 ### Other

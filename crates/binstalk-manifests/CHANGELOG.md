@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.17.20...binstalk-manifests-v0.17.21) - 2025-12-20
+
+### Other
+
+- *(deps)* bump toml_edit from 0.23.10+spec-1.0.0 to 0.24.0+spec-1.1.0 in the deps group ([#2404](https://github.com/cargo-bins/cargo-binstall/pull/2404))
+
 ## [0.17.20](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.17.19...binstalk-manifests-v0.17.20) - 2025-12-12
 
 ### Other
