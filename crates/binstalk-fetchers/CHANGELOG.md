@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.32](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.31...binstalk-fetchers-v0.10.32) - 2025-12-20
+
+### Other
+
+- Replace doc_auto_cfg with doc_cfg ([#2402](https://github.com/cargo-bins/cargo-binstall/pull/2402))
+
 ## [0.10.31](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.30...binstalk-fetchers-v0.10.31) - 2025-12-05
 
 ### Other

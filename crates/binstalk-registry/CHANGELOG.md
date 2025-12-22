@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.31](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.30...binstalk-registry-v0.11.31) - 2025-12-20
+
+### Other
+
+- *(deps)* bump toml_edit from 0.23.10+spec-1.0.0 to 0.24.0+spec-1.1.0 in the deps group ([#2404](https://github.com/cargo-bins/cargo-binstall/pull/2404))
+- Replace doc_auto_cfg with doc_cfg ([#2402](https://github.com/cargo-bins/cargo-binstall/pull/2402))
+
 ## [0.11.30](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.29...binstalk-registry-v0.11.30) - 2025-12-05
 
 ### Other
