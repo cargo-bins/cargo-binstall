@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.76](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.75...detect-targets-v0.1.76) - 2025-12-27
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.1.75](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.74...detect-targets-v0.1.75) - 2025-12-22
 
 ### Other

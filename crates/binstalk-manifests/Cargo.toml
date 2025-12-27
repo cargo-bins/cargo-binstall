@@ -3,7 +3,7 @@ name = "binstalk-manifests"
 description = "The binstall toolkit for manipulating with manifest"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-manifests"
-version = "0.17.22"
+version = "0.17.23"
 rust-version = "1.61.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -25,5 +25,5 @@ toml_edit = { version = "0.24.0", features = ["serde"] }
 url = { version = "2.5.4", features = ["serde"] }
 
 [dev-dependencies]
-detect-targets = { version = "0.1.75", path = "../detect-targets" }
+detect-targets = { version = "0.1.76", path = "../detect-targets" }
 tempfile = "3.5.0"
