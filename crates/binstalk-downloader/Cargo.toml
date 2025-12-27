@@ -130,7 +130,7 @@ cross-lang-fat-lto = ["zstd/fat-lto"]
 json = ["serde", "serde_json"]
 
 [target."cfg(windows)".dependencies]
-netdev = { version = "0.39.0", optional = true }
+netdev = { version = "0.40.0", optional = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
