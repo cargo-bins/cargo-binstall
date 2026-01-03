@@ -88,6 +88,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         with:
           tools: cargo-nextest
+          cranelift: true
 
       - name: Decide crates to test
         shell: bash
@@ -126,6 +127,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/just-setup
+        with:
+          cranelift: true
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
@@ -168,6 +171,7 @@ jobs:
       - uses: ./.github/actions/just-setup
         with:
           tools: cargo-hack@0.6.10
+          cranelift: true
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
@@ -192,6 +196,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/just-setup
+        with:
+          cranelift: true
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
