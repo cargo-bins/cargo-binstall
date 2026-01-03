@@ -55,25 +55,6 @@ runs:
     run: echo "tools=$tools,$inputs_tools" >>"$GITHUB_ENV"
     shell: bash
 
-  - name: Upgrade toolchain
-    run: |
-      set -exuo pipefail
-      rustup update
-      rustup default stable
-    shell: bash
-
-  - name: Upgrade toolchain
-    if: inputs.cranelift
-    run: |
-      set -exuo pipefail
-      rustup override set nightly
-      rustup component add rustc-codegen-cranelift-preview --toolchain nightly
-      mkdir .cargo
-      echo -e '[unstable]\ncodegen-backend = true' >> .cargo/config.toml
-      echo -e '[profile.dev]\ncodegen-backend = "cranelift"' >> .cargo/config.toml
-      echo -e '[profile.release]\ncodegen-backend = "cranelift"' >> .cargo/config.toml
-    shell: bash
-
   - name: Determine native target
     run: |
       set -euxo pipefail
@@ -94,6 +75,18 @@ runs:
     run: just toolchain
     shell: bash
 
+  - name: enable cranelift
+    if: inputs.cranelift
+    run: |
+      set -exuo pipefail
+      rustup override set nightly
+      rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+      mkdir .cargo
+      echo -e '[unstable]\ncodegen-backend = true' >> .cargo/config.toml
+      echo -e '[profile.dev]\ncodegen-backend = "cranelift"' >> .cargo/config.toml
+      echo -e '[profile.release]\ncodegen-backend = "cranelift"' >> .cargo/config.toml
+    shell: bash
+    
   - name: rustc version
     run: rustc -vV
     shell: bash
