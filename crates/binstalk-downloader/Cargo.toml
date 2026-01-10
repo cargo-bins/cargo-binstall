@@ -44,7 +44,7 @@ reqwest = { version = "0.12.17", features = [
     "socks",
 ], default-features = false }
 serde = { version = "1.0.163", features = ["derive"], optional = true }
-serde_json = { version = "1.0.107", optional = true }
+serde_json = { version = "1.0.149", optional = true }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
 #
@@ -52,7 +52,7 @@ serde_json = { version = "1.0.107", optional = true }
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.5.0"
 thiserror = "2.0.11"
-tokio = { version = "1.46.1", features = [
+tokio = { version = "1.49.0", features = [
     "macros",
     "rt-multi-thread",
     "sync",
@@ -60,13 +60,13 @@ tokio = { version = "1.46.1", features = [
     "fs",
 ], default-features = false }
 astral-tokio-tar = "0.5.6"
-tokio-util = { version = "0.7.8", features = ["io"] }
+tokio-util = { version = "0.7.18", features = ["io"] }
 tracing = "0.1.43"
 hickory-resolver = { version = "0.25.1", optional = true, features = [
     "dnssec-ring",
 ] }
 once_cell = { version = "1.18.0", optional = true }
-url = "2.5.4"
+url = "2.5.8"
 
 liblzma = "0.4"
 

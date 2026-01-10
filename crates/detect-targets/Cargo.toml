@@ -10,7 +10,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-tokio = { version = "1.47.0", features = [
+tokio = { version = "1.49.0", features = [
     "rt",
     "process",
     "sync",
@@ -35,7 +35,7 @@ windows-sys = { version = "0.61.0", features = [
 ] }
 
 [dev-dependencies]
-tokio = { version = "1.46.1", features = ["macros"], default-features = false }
+tokio = { version = "1.49.0", features = ["macros"], default-features = false }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/cargo-binstall-{ target }.full.{ archive-format }"
