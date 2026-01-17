@@ -228,7 +228,6 @@ e2e-test-uninstall: (e2e-test "uninstall")
 e2e-test-no-track: (e2e-test "no-track")
 e2e-test-git: (e2e-test "git")
 e2e-test-registries: (e2e-test "registries")
-e2e-test-signing: (e2e-test "signing")
 e2e-test-continue-on-failure: (e2e-test "continue-on-failure")
 e2e-test-private-github-repo: (e2e-test "private-github-repo")
 e2e-test-self-install: (e2e-test "self-install")
@@ -240,6 +239,7 @@ e2e-test-telemetry-confirm: (e2e-test "telemetry-confirm")
 [windows]
 e2e-test-tls: (e2e-test "tls" "1.2")
 [linux]
+e2e-test-signing: (e2e-test "signing")
 [macos]
 e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 
