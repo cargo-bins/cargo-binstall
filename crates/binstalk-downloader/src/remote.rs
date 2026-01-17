@@ -137,11 +137,9 @@ impl Client {
                 .map(|tls| tls.max(DEFAULT_MIN_TLS))
                 .unwrap_or(DEFAULT_MIN_TLS);
 
-            builder = builder.min_tls_version(tls_ver.into());
-
-            for certificate in certificates {
-                builder = builder.add_root_certificate(certificate.0);
-            }
+            builder = builder
+                .min_tls_version(tls_ver.into())
+                .tls_certs_merge(certificates.map(|cert| cert.0));
         }
 
         #[cfg(all(reqwest_unstable, feature = "http3"))]
