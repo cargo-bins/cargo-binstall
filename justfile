@@ -212,17 +212,7 @@ get-binary outdir=".": (get-output output-filename outdir)
     -chmod +x {{ outdir / output-filename }}
 
 e2e-test file *arguments: (get-binary "e2e-tests")
-    tmpfile="$(mktemp)"
-    echo "::group::{{file}}" >> "$tmpfile"
-    cd e2e-tests
-    env -u RUSTFLAGS \
-        -u CARGO_BUILD_TARGET \
-        bash {{file}}.sh \
-        {{output-filename}} {{arguments}} >> "$tmpfile"
-    exit_status="$?"
-    echo "::endgroup::" >> "$tmpfile"
-    cat "$tmpfile"
-    exit "$exit_status"
+    bash e2e-tests/run_tests.sh {{file}} {{output-filename}} {{arguments}}
 
 e2e-test-live: (e2e-test "live")
 e2e-test-subcrate: (e2e-test "subcrate")
