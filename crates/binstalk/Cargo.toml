@@ -36,14 +36,14 @@ strum = "0.27.0"
 target-lexicon = { version = "0.13.0", features = ["std"] }
 tempfile = "3.5.0"
 thiserror = "2.0.11"
-tokio = { version = "1.46.1", features = [
+tokio = { version = "1.49.0", features = [
     "rt",
     "process",
     "sync",
     "time",
 ], default-features = false }
 tracing = "0.1.43"
-url = { version = "2.5.4", features = ["serde"] }
+url = { version = "2.5.8", features = ["serde"] }
 zeroize = "1.8.1"
 
 [features]
