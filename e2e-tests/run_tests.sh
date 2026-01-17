@@ -11,7 +11,7 @@ set +e
 env -u RUSTFLAGS \
     -u CARGO_BUILD_TARGET \
     bash "$1.sh" \
-    "$2" "${@:3}" >> "$tmpfile"
+    "$2" "${@:3}" >> "$tmpfile" 2>&1
 exit_status="$?"
 set -e
 
