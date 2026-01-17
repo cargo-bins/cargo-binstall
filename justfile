@@ -238,11 +238,16 @@ e2e-test-telemetry-confirm: (e2e-test "telemetry-confirm")
 # WinTLS (Windows in CI) does not have TLS 1.3 support
 [windows]
 e2e-test-tls: (e2e-test "tls" "1.2")
-e2e-test-signing:
+[linux]
+[macos]
+e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
+
 [linux]
 e2e-test-signing: (e2e-test "signing")
-e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
+[windows]
 [macos]
+e2e-test-signing:
+
 e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 e2e-test-signing:
 
