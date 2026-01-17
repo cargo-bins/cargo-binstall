@@ -1,3 +1,5 @@
+#!/bin/bash
+
 set -euxo pipefail
 
 tmpfile="$(mktemp)"
@@ -9,7 +11,7 @@ set +e
 env -u RUSTFLAGS \
     -u CARGO_BUILD_TARGET \
     bash "$1.sh" \
-    "$2" ${@:3} >> "$tmpfile"
+    "$2" "${@:3}" >> "$tmpfile"
 exit_status="$?"
 set -e
 
