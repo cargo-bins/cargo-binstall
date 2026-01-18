@@ -431,7 +431,7 @@ pub enum BinstallError {
     #[error("cargo-install does not support `--install-path`")]
     #[diagnostic(
         severity(error),
-        code(binatall::cargo_install_does_not_support_install_path),
+        code(binatall::cargo_install_does_not_support_install_path)
     )]
     CargoInstallDoesNotSupportInstallPath,
 
