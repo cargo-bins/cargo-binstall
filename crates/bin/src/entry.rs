@@ -159,6 +159,7 @@ pub fn install_crates(
 
         temp_dir: temp_dir.path().to_owned(),
         install_path,
+        has_overriden_install_path: args.install_path.is_some(),
         cargo_root: Some(cargo_root),
 
         client,
