@@ -160,6 +160,10 @@ impl ResolutionSource {
             None
         };
 
+        if opts.install_path.is_some() {
+            return Err(BinstallError::CargoInstallDoesNotSupportInstallPath);
+        }
+
         let name = &self.name;
         let version = &self.version;
 
