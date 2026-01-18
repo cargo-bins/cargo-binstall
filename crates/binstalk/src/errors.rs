@@ -424,6 +424,17 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::load_manifest_from_workspace))]
     LoadManifestFromWSError(#[from] Box<LoadManifestFromWSError>),
 
+    /// `cargo-install` does not support `--install-path`
+    ///
+    /// - Code: `binstall::cargo_install_does_not_support_install_path`
+    /// - Exit: 100
+    #[error("cargo-install does not support `--install-path`")]
+    #[diagnostic(
+        severity(error),
+        code(binatall::cargo_install_does_not_support_install_path)
+    )]
+    CargoInstallDoesNotSupportInstallPath,
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -468,6 +479,7 @@ impl BinstallError {
             #[cfg(feature = "git")]
             GitError(_) => 98,
             LoadManifestFromWSError(_) => 99,
+            CargoInstallDoesNotSupportInstallPath => 100,
             CrateContext(context) => context.err.exit_number(),
             Errors(errors) => (errors.0)[0].err.exit_number(),
         };
