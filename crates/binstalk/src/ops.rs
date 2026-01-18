@@ -49,6 +49,7 @@ pub struct Options {
 
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,
+    pub has_overriden_install_path: bool,
     pub cargo_root: Option<PathBuf>,
 
     pub client: Client,
