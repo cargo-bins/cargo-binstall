@@ -160,7 +160,7 @@ impl ResolutionSource {
             None
         };
 
-        if opts.install_path.is_some() {
+        if opts.has_overriden_install_path {
             return Err(BinstallError::CargoInstallDoesNotSupportInstallPath);
         }
 
