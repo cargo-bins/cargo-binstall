@@ -434,8 +434,7 @@ pub enum BinstallError {
         code(binatall::cargo_install_does_not_support_install_path),
     )]
     CargoInstallDoesNotSupportInstallPath,
-      
-      
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
