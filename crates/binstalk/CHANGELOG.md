@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.64](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.63...binstalk-v0.28.64) - 2026-01-18
+
+### Other
+
+- Error if  --install-path is passed when building from source ([#2430](https://github.com/cargo-bins/cargo-binstall/pull/2430))
+- *(deps)* bump the deps group with 8 updates ([#2424](https://github.com/cargo-bins/cargo-binstall/pull/2424))
+
 ## [0.28.63](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.62...binstalk-v0.28.63) - 2025-12-27
 
 ### Other
