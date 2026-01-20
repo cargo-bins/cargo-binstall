@@ -2,14 +2,20 @@
 //!
 //! This manifest defines how a particular binary crate may be installed by Binstall.
 
-use std::{borrow::Cow, collections::BTreeMap};
+use std::borrow::Cow;
 
+use cargo_platform::{Cfg, Platform};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, VariantArray};
 
 mod package_formats;
+mod target_triple;
+
 #[doc(inline)]
 pub use package_formats::*;
+#[doc(inline)]
+pub use target_triple::*;
 
 /// `binstall` metadata container
 ///
@@ -77,7 +83,7 @@ pub struct PkgMeta {
     pub disabled_strategies: Option<Box<[Strategy]>>,
 
     /// Target specific overrides
-    pub overrides: BTreeMap<String, PkgOverride>,
+    pub overrides: PkgOverrides,
 }
 
 impl PkgMeta {
@@ -153,9 +159,9 @@ impl PkgMeta {
     }
 }
 
-/// Target specific overrides for binary installation
+/// A target-specific override for binary installation.
 ///
-/// Exposed via `[package.metadata.TARGET]` in `Cargo.toml`
+/// Exposed via `[package.metadata.overrides.TARGET]` in `Cargo.toml`.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct PkgOverride {
@@ -176,6 +182,31 @@ pub struct PkgOverride {
 
     #[serde(skip)]
     pub ignore_disabled_strategies: bool,
+}
+
+/// An ordered map of target-specific overrides.
+///
+/// Exposed via `[package.metadata.overrides]` in `Cargo.toml`.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PkgOverrides(IndexMap<Platform, PkgOverride>);
+
+impl PkgOverrides {
+    /// Returns all matching overrides for a target, in order of precedence:
+    /// exact name matches first, followed by `cfg(...)` matches
+    /// in declaration order.
+    pub fn get_matching<'a>(
+        &'a self,
+        target: &'a str,
+        cfgs: &'a [Cfg],
+    ) -> impl Iterator<Item = &'a PkgOverride> + Clone {
+        let name = self.0.get(&Platform::Name(target.to_owned()));
+        let cfgs = self.0.iter().filter_map(|(p, o)| match p {
+            Platform::Cfg(p) if p.matches(cfgs) => Some(o),
+            _ => None,
+        });
+        name.into_iter().chain(cfgs)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -212,6 +243,9 @@ pub enum SigningAlgorithm {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use serde_json::json;
     use strum::VariantArray;
 
     use super::*;
@@ -224,5 +258,124 @@ mod tests {
                 format!(r#""{}""#, strategy.to_str())
             )
         });
+    }
+
+    #[test]
+    fn test_pkg_overrides_parse_target_name() {
+        let json = json!({
+            "x86_64-unknown-linux-gnu": {
+                "pkg-fmt": "tgz",
+            },
+        });
+        let overrides: PkgOverrides = serde_json::from_value(json).unwrap();
+        assert!(matches!(overrides, PkgOverrides(map) if !map.is_empty()));
+    }
+
+    #[test]
+    fn test_pkg_overrides_parse_cfg_expression() {
+        let json = json!({
+            r#"cfg(target_os = "linux")"#: {
+                "pkg-fmt": "tgz",
+            },
+        });
+        let overrides: PkgOverrides = serde_json::from_value(json).unwrap();
+        assert!(matches!(overrides, PkgOverrides(map) if !map.is_empty()));
+    }
+
+    #[test]
+    fn test_pkg_overrides_parse_mixed() {
+        let json = json!({
+            "x86_64-unknown-linux-gnu": {
+                "pkg-fmt": "tar",
+            },
+            r#"cfg(target_os = "linux")"#: {
+                "pkg-fmt": "tgz",
+            },
+            "cfg(unix)": {
+                "bin-dir": "bin",
+            },
+        });
+        let overrides: PkgOverrides = serde_json::from_value(json).unwrap();
+        assert!(matches!(overrides, PkgOverrides(map) if !map.is_empty()));
+    }
+
+    #[test]
+    fn test_pkg_overrides_exact_match_precedence() {
+        let json = json!({
+            r#"cfg(target_os = "linux")"#: {
+                "pkg-fmt": "tgz",
+            },
+            "x86_64-unknown-linux-gnu": {
+                "pkg-fmt": "tar",
+            },
+        });
+        let overrides: PkgOverrides = serde_json::from_value(json).unwrap();
+
+        // `x86_64-unknown-linux-gnu` should match all these.
+        let cfgs = vec![
+            Cfg::from_str(r#"target_os="linux""#).unwrap(),
+            Cfg::from_str(r#"target_arch="x86_64""#).unwrap(),
+            Cfg::from_str("unix").unwrap(),
+        ];
+
+        let matches: Vec<_> = overrides
+            .get_matching("x86_64-unknown-linux-gnu", &cfgs)
+            .collect();
+
+        // The exact match should come first, followed by the `cfg` match.
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].pkg_fmt, Some(PkgFmt::Tar));
+        assert_eq!(matches[1].pkg_fmt, Some(PkgFmt::Tgz));
+    }
+
+    #[test]
+    fn test_pkg_overrides_cfg_match_order() {
+        // `serde_json::Map` is backed by a `BTreeMap` by default,
+        // so we parse directly from a JSON string instead of using
+        // the `json!(...)` macro.
+        let json = r#"{
+            "cfg(unix)": {
+                "pkg-fmt": "tgz"
+            },
+            "cfg(target_os = \"linux\")": {
+                "pkg-fmt": "tar"
+            }
+        }"#;
+        let overrides: PkgOverrides = serde_json::from_str(json).unwrap();
+
+        let cfgs = vec![
+            Cfg::from_str(r#"target_os="linux""#).unwrap(),
+            Cfg::from_str("unix").unwrap(),
+        ];
+
+        let matches: Vec<_> = overrides
+            .get_matching("x86_64-unknown-linux-gnu", &cfgs)
+            .collect();
+
+        // `cfg` matches should be returned in declaration order.
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].pkg_fmt, Some(PkgFmt::Tgz)); // Unix.
+        assert_eq!(matches[1].pkg_fmt, Some(PkgFmt::Tar)); // Linux.
+    }
+
+    #[test]
+    fn test_pkg_overrides_no_match() {
+        let json = json!({
+            r#"cfg(target_os = "windows")"#: {
+                "pkg-fmt": "zip",
+            },
+        });
+        let overrides: PkgOverrides = serde_json::from_value(json).unwrap();
+
+        let cfgs = vec![
+            Cfg::from_str(r#"target_os="linux""#).unwrap(),
+            Cfg::from_str("unix").unwrap(),
+        ];
+
+        let matches: Vec<_> = overrides
+            .get_matching("x86_64-unknown-linux-gnu", &cfgs)
+            .collect();
+
+        assert!(matches.is_empty());
     }
 }

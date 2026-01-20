@@ -269,7 +269,6 @@ dependencies = [
  "semver",
  "simple-git",
  "strum",
- "target-lexicon",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
@@ -422,7 +421,9 @@ dependencies = [
 name = "binstalk-types"
 version = "0.10.3"
 dependencies = [
+ "cargo-platform",
  "compact_str",
+ "indexmap",
  "maybe-owned",
  "once_cell",
  "semver",
@@ -430,6 +431,7 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
+ "target-lexicon",
  "url",
 ]
 
@@ -2685,6 +2687,8 @@ checksum = "7714e70437a7dc3ac8eb7e6f8df75fd8eb422675fc7678aff7364301092b1017"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
