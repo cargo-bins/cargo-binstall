@@ -59,6 +59,51 @@ with the following variables available:
 pkg-fmt = "zip"
 ```
 
+#### Using `cfg` expressions
+
+In addition to exact target names, you can use Cargo-style `cfg(...)` expressions to match multiple targets at once. This avoids having to list each target individually:
+
+```toml
+# Apply to all Linux targets.
+[package.metadata.binstall.overrides.'cfg(target_os = "linux")']
+pkg-fmt = "tgz"
+
+# Apply to all Windows targets.
+[package.metadata.binstall.overrides.'cfg(target_os = "windows")']
+pkg-fmt = "zip"
+
+# Apply to all Unix-like systems.
+[package.metadata.binstall.overrides.'cfg(unix)']
+bin-dir = "{ bin }"
+```
+
+The following `cfg` predicates are available:
+
+- `target_os`: Operating system (e.g., `"linux"`, `"windows"`, `"macos"`)
+- `target_arch`: Architecture (e.g., `"x86_64"`, `"aarch64"`, `"universal"`)
+- `target_env`: ABI environment (e.g., `"gnu"`, `"msvc"`, `"musl"`)
+- `target_vendor`: Vendor (e.g., `"unknown"`, `"apple"`, `"pc"`)
+- `target_family`: Operating system family (`"unix"` or `"windows"`)
+
+You can also use:
+
+- `cfg(unix)` as shorthand for Unix-like systems
+- `cfg(windows)` as shorthand for Windows
+
+Finally, you can combine predicates using `all()`, `any()`, and `not()`:
+
+```toml
+# Match ARM Linux with the GNU C Library.
+[package.metadata.binstall.overrides.'cfg(all(target_os = "linux", target_arch = "aarch64", target_env = "gnu"))']
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-arm64-linux{ archive-suffix }"
+
+# Match any non-Windows system.
+[package.metadata.binstall.overrides.'cfg(not(target_os = "windows"))']
+pkg-fmt = "tgz"
+```
+
+**Precedence:** Exact target names take precedence over `cfg` expressions. When multiple `cfg` expressions match, they're evaluated in the order they appear in `Cargo.toml`.
+
 ### Defaults
 
 By default, `binstall` will try all supported package formats and would do the same for `bin-dir`.

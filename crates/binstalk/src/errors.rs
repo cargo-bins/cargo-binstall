@@ -6,10 +6,10 @@ use std::{
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_fetchers::FetchError;
+use binstalk_types::cargo_toml_binstall::TargetTripleParseError;
 use compact_str::CompactString;
 use itertools::Itertools;
 use miette::{Diagnostic, Report};
-use target_lexicon::ParseError as TargetTripleParseError;
 use thiserror::Error;
 use tokio::task;
 use tracing::{error, warn};
@@ -580,8 +580,8 @@ impl From<GhApiError> for BinstallError {
     }
 }
 
-impl From<target_lexicon::ParseError> for BinstallError {
-    fn from(e: target_lexicon::ParseError) -> Self {
+impl From<TargetTripleParseError> for BinstallError {
+    fn from(e: TargetTripleParseError) -> Self {
         BinstallError::TargetTripleParseError(Box::new(e))
     }
 }

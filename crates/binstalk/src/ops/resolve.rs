@@ -1,11 +1,4 @@
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
-    iter, mem,
-    path::Path,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromStr, sync::Arc};
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
@@ -30,7 +23,7 @@ use crate::{
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
         tasks::AutoAbortJoinHandle,
     },
-    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverride},
+    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverrides},
     ops::{CargoTomlFetchOverride, Options},
 };
 
@@ -91,8 +84,12 @@ async fn resolve_inner(
         .map(|target| {
             debug!("Building metadata for target: {target}");
 
+            let target_related_info = TargetTriple::from_str(target)?;
+
+            let cfgs = target_related_info.cfgs();
             let meta = package_info.meta.merge_overrides(
-                iter::once(&opts.cli_overrides).chain(package_info.overrides.get(target)),
+                iter::once(&opts.cli_overrides)
+                    .chain(package_info.overrides.get_matching(target, &cfgs)),
             );
 
             debug!("Found metadata: {meta:?}");
@@ -100,7 +97,7 @@ async fn resolve_inner(
             Ok(Arc::new(TargetData {
                 target: target.clone(),
                 meta,
-                target_related_info: TargetTriple::from_str(target)?,
+                target_related_info,
             }))
         })
         .collect::<Result<Vec<_>, BinstallError>>()?;
@@ -421,7 +418,7 @@ struct PackageInfo {
     source: CrateSource,
     version: Version,
     repo: Option<String>,
-    overrides: BTreeMap<String, PkgOverride>,
+    overrides: PkgOverrides,
 }
 
 struct Bin {
