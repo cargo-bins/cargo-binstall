@@ -28,7 +28,8 @@ impl Termination for MainExit {
             }
             Self::Error(err) => err.report(),
             Self::Report(err) => {
-                error!("Fatal error:\n{err:?}");
+                error!("Fatal error:");
+                println!("{err:?}");
                 ExitCode::from(16)
             }
         }
