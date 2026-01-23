@@ -51,7 +51,7 @@ serde_json = { version = "1.0.149", optional = true }
 #tar = "0.4.38"
 tar = { package = "binstall-tar", version = "0.4.39" }
 tempfile = "3.5.0"
-thiserror = "2.0.11"
+thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = [
     "macros",
     "rt-multi-thread",

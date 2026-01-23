@@ -27,9 +27,9 @@ semver = { version = "1.0.17", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.149"
 sha2 = "0.10.7"
-simple-git = { version = "0.2.4", optional = true }
+simple-git = { version = "0.2.25", optional = true }
 tempfile = "3.5.0"
-thiserror = "2.0.11"
+thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = [
     "rt",
     "sync",

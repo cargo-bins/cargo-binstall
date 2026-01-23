@@ -18,7 +18,7 @@ percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"
 serde_json = { version = "1.0.149" }
-thiserror = "2.0.11"
+thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["sync"], default-features = false }
 tracing = "0.1.43"
 url = "2.5.8"
