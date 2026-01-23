@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.65](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.64...binstalk-v0.28.65) - 2026-01-23
+
+### Added
+
+- Support `cfg` expressions for overrides. ([#2435](https://github.com/cargo-bins/cargo-binstall/pull/2435))
+
 ## [0.28.64](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.63...binstalk-v0.28.64) - 2026-01-18
 
 ### Other
