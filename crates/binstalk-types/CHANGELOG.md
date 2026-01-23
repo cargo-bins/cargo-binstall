@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.3...binstalk-types-v0.10.4) - 2026-01-23
+
+### Added
+
+- Support `cfg` expressions for overrides. ([#2435](https://github.com/cargo-bins/cargo-binstall/pull/2435))
+
 ## [0.10.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.2...binstalk-types-v0.10.3) - 2026-01-18
 
 ### Other
