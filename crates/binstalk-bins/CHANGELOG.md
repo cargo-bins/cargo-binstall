@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.21](https://github.com/cargo-bins/cargo-binstall/releases/tag/binstalk-bins-v0.6.21) - 2026-01-23
+
+### Other
+
+- release ([#2436](https://github.com/cargo-bins/cargo-binstall/pull/2436))
+
 ## [0.6.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.6.20...binstalk-bins-v0.6.21) - 2026-01-23
 
 ### Other
