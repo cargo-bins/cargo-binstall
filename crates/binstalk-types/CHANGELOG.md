@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.4...binstalk-types-v0.10.5) - 2026-01-24
+
+### Other
+
+- Fix changelog format ([#2454](https://github.com/cargo-bins/cargo-binstall/pull/2454))
+
 ## [0.10.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.3...binstalk-types-v0.10.4) - 2026-01-23
 
 ### Added
