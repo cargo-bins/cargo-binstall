@@ -71,7 +71,6 @@ jobs:
     uses: ./.github/workflows/release-packages.yml
     secrets: inherit
     with:
-      publish: ${{ inputs.info }}
       CARGO_PROFILE_RELEASE_LTO: ${{ inputs.CARGO_PROFILE_RELEASE_LTO }}
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}
 
@@ -80,7 +79,6 @@ jobs:
     permissions:
       contents: write
       id-token: write     # Required for OIDC token exchange
-
 
     runs-on: ubuntu-latest
     steps:
