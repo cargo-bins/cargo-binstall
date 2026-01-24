@@ -176,12 +176,13 @@ impl Pattern {
                         continue;
                     }
 
-                    let filename = entry.file_name();
-                    if filename != "." // Ignore current dir
-                        && filename != ".." // Ignore parent dir
+                    let child_dir = entry.path();
+                    let filename = child_dir.file_name().unwrap();
+                    if filename != OsStr::new(Component::CurDir)
+                        && filename != OsStr::new(Component::ParentDir)
                         && pattern.matches(&filename.to_string_lossy())
                     {
-                        paths.push(path.join(filename));
+                        paths.push(child_dir);
                     }
                 }
             }
