@@ -7,26 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.11.23](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.22...binstalk-registry-v0.11.23) - 2025-08-30
-
-### Other
-
-- updated the following local packages: binstalk-downloader, binstalk-downloader
-
-## [0.11.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.21...binstalk-registry-v0.11.22) - 2025-07-25
-
-### Other
-
-- *(deps)* bump the deps group with 2 updates ([#2227](https://github.com/cargo-bins/cargo-binstall/pull/2227))
-- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
 ## [0.11.34](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.33...binstalk-registry-v0.11.34) - 2026-01-23
 
 ### Other
@@ -93,6 +73,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 
 - updated the following local packages: binstalk-downloader, binstalk-downloader
+
+## [0.11.23](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.22...binstalk-registry-v0.11.23) - 2025-08-30
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader
+
+## [0.11.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.21...binstalk-registry-v0.11.22) - 2025-07-25
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2227](https://github.com/cargo-bins/cargo-binstall/pull/2227))
+- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
 
 ## [0.11.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.11.20...binstalk-registry-v0.11.21) - 2025-06-06
 
