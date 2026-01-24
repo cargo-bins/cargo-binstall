@@ -83,10 +83,12 @@ cargo install cargo-binstall
 
 ### In GitHub Actions
 
-We provide a first-party, minimal action that installs the latest version of Binstall:
+We provide a first-party, minimal action that installs Binstall:
 
 ```yml
   - uses: cargo-bins/cargo-binstall@main
+    with:
+      version: "1.2.3" # optional; defaults to latest
 ```
 
 For more features, we recommend the excellent [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools), which has dedicated support for selected tools and uses Binstall for everything else.
