@@ -3,10 +3,6 @@ name: Build packages for release
 on:
   workflow_call:
     inputs:
-      publish:
-        description: "The release metadata JSON"
-        required: true
-        type: string
       CARGO_PROFILE_RELEASE_LTO:
         description: "Used to speed up CI"
         required: false
