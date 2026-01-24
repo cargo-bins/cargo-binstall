@@ -75,7 +75,11 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     );
 
     let manifest_path = if workspace_path.is_file() {
-        workspace_path.canonicalize()?
+        if workspace_path.parent() == Some("") {
+            workspace_path.canonicalize()?
+        } else {
+            workspace_path.to_owned()
+        }
     } else {
         workspace_path.join("Cargo.toml")
     };
