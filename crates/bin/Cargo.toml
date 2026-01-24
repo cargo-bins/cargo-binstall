@@ -11,10 +11,12 @@ license = "GPL-3.0-only"
 readme = "../../README.md"
 
 # These MUST remain even if they're not needed in recent versions because
-# OLD versions use them to upgrade
+# OLD versions use them to upgrade.
+# Additionally, specifying them speeds up the binary discovery process.
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
 bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-fmt = "zip"
