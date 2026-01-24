@@ -126,7 +126,7 @@ jobs:
         merge-multiple: true
 
     - if: fromJSON(inputs.info).is-release == 'true'
-      name: Upload minisign.pub
+      name: Create release and upload artifacts
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
