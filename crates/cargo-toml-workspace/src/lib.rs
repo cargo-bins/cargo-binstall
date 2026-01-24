@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     io, mem,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use cargo_toml::{Error as CargoTomlError, Manifest};
@@ -79,9 +79,8 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         let parent = workspace_path.parent().unwrap();
 
         if parent == "" {
-            let manifest_path = workspace_path.canonicalize()?;
-            let workspace_path = path.parent().unwrap().to_owned();
-            (manifest_path.into(), workspace_path.into())
+            let current_dir: &Path = Component::CurDir.as_ref();
+            (current_dir.join(workspace_path).into(), Cow::Borrowed(current_dir))
         } else {
             (Cow::Borrowed(workspace_path), Cow::Borrowed(parent))
         }
