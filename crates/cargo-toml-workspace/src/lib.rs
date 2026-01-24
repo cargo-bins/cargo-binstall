@@ -75,23 +75,14 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         workspace_path.display()
     );
 
-    let (manifest_path, workspace_path) = if workspace_path.is_file() {
-        let parent = workspace_path.parent().unwrap();
-
-        if parent == "" {
-            let current_dir: &Path = Component::CurDir.as_ref();
-            (
-                current_dir.join(workspace_path).into(),
-                Cow::Borrowed(current_dir),
-            )
+    let manifest_path = if workspace_path.is_file() {
+        if workspace_path.parent().unwrap() == "" {
+            Path::new(Component::CurDir).join(workspace_path).into()
         } else {
-            (Cow::Borrowed(workspace_path), Cow::Borrowed(parent))
+            Cow::Borrowed(workspace_path)
         }
     } else {
-        (
-            workspace_path.join("Cargo.toml").into(),
-            Cow::Borrowed(workspace_path),
-        )
+        workspace_path.join("Cargo.toml").into()
     };
 
     let mut manifest_paths = vec![manifest_path];
