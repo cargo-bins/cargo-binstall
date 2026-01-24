@@ -169,7 +169,7 @@ impl Pattern {
             for path in mem::take(&mut paths) {
                 let p = glob_path.join(&path);
                 let res = p.read_dir();
-                if res.is_err() && !p.is_dir() {
+                if matches!(res, Err(err) if err.kind() == io::ErrorKind::NotADirectory) {
                     continue;
                 }
                 drop(p);
