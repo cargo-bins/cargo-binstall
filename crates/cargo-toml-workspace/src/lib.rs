@@ -216,7 +216,7 @@ mod test {
         paths.sort_unstable();
         assert_eq!(
             paths,
-            vec![PathBuf::from("a/b/q/ww"), PathBuf::from("d/233/q/d")]
+            vec![tempdir.join("a/b/q/ww"), tempdir.join("d/233/q/d")]
         );
     }
 
