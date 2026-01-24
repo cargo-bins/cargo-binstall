@@ -125,6 +125,7 @@ jobs:
         tag: v${{ fromJSON(inputs.info).version }}
         body: ${{ fromJSON(inputs.info).notes }}
         promote: true
+        draft: true
         file: minisign.pub
 
     - if: fromJSON(inputs.info).is-release == 'true'
