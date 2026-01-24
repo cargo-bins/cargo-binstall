@@ -151,7 +151,7 @@ impl Pattern {
     ///
     /// return paths relative to `glob_path`.
     fn glob_dirs(&self, glob_path: &Path) -> Result<Vec<PathBuf>, ErrorInner> {
-        let mut paths = vec![PathBuf::new()];
+        let mut paths = vec![path.to_owned()];
 
         for pattern in &self.0 {
             if paths.is_empty() {
@@ -159,14 +159,7 @@ impl Pattern {
             }
 
             for path in mem::take(&mut paths) {
-                let p = glob_path.join(&path);
-                let res = p.read_dir();
-                if matches!(res, Err(err) if err.kind() == io::ErrorKind::NotADirectory) {
-                    continue;
-                }
-                drop(p);
-
-                for res in res? {
+                for res in path.read_dir()? {
                     let entry = res?;
                     let child_path = entry.path();
 
@@ -179,7 +172,7 @@ impl Pattern {
                         && filename != OsStr::new(Component::ParentDir)
                         && pattern.matches(&filename.to_string_lossy())
                     {
-                        paths.push(child_dir);
+                        paths.push(child_path);
                     }
                 }
             }
