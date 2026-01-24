@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     io, mem,
     path::{Path, PathBuf},
 };
@@ -74,14 +75,18 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         workspace_path.display()
     );
 
-    let manifest_path = if workspace_path.is_file() {
-        if workspace_path.parent() == Some("") {
-            workspace_path.canonicalize()?
+    let (manifest_path, workspace_path) = if workspace_path.is_file() {
+        let parent = workspace_path.parent().unwrap();
+
+        if parent == "" {
+            let manifest_path = workspace_path.canonicalize()?;
+            let workspace_path = path.parent().unwrap().to_owned();
+            (manifest_path.into(), workspace_path.into())
         } else {
-            workspace_path.to_owned()
+            (Cow::Borrowed(workspace_path), Cow::Borrowed(parent))
         }
     } else {
-        workspace_path.join("Cargo.toml")
+        (workspace_path.join("Cargo.toml").into(), Cow::Borrowed(workspace_path))
     };
 
     let mut manifest_paths = vec![manifest_path];
@@ -121,7 +126,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
                         .iter()
                         .any(|exclude| exclude.matches_with_trailing(&path))
                     {
-                        manifest_paths.push(workspace_path.join(path).join("Cargo.toml"));
+                        manifest_paths.push(workspace_path.join(path).join("Cargo.toml").into());
                     }
                 }
             }
