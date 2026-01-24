@@ -85,12 +85,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - uses: actions/download-artifact@v7
-      with:
-        name: minisign.pub
 
     - run: rustup toolchain install stable --no-self-update --profile minimal
 
+    - uses: actions/download-artifact@v7
+      with:
+        name: minisign.pub
     - run: .github/scripts/ephemeral-crate.sh
 
     - uses: rust-lang/crates-io-auth-action@v1
@@ -116,6 +116,17 @@ jobs:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       run: cargo publish -p "$crate" --allow-dirty  --no-default-features
 
+    - uses: actions/download-artifact@v7
+      with:
+        name: minisign.pub
+        path: artifact
+
+    - uses: actions/download-artifact@v5
+      with:
+        path: artifact
+        pattern: package-*
+        merge-multiple: true
+
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Upload minisign.pub
       uses: svenstaro/upload-release-action@v2
@@ -126,7 +137,8 @@ jobs:
         body: ${{ fromJSON(inputs.info).notes }}
         promote: true
         draft: true
-        file: minisign.pub
+        file: artifact/*
+        file_glob: true
 
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Make release latest
