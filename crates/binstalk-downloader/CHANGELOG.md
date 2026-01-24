@@ -7,25 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.13.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.21...binstalk-downloader-v0.13.22) - 2025-08-30
-
-### Other
-
-- Upgrade compression libraries ([#2289](https://github.com/cargo-bins/cargo-binstall/pull/2289))
-
-## [0.13.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.20...binstalk-downloader-v0.13.21) - 2025-07-25
-
-### Other
-
-- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
 ## [0.13.33](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.32...binstalk-downloader-v0.13.33) - 2026-01-23
 
 ### Other
@@ -97,6 +78,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - respect socks5 in `https_proxy` ([#2306](https://github.com/cargo-bins/cargo-binstall/pull/2306))
+
+## [0.13.22](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.21...binstalk-downloader-v0.13.22) - 2025-08-30
+
+### Other
+
+- Upgrade compression libraries ([#2289](https://github.com/cargo-bins/cargo-binstall/pull/2289))
+
+## [0.13.21](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.20...binstalk-downloader-v0.13.21) - 2025-07-25
+
+### Other
+
+- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
 
 ## [0.13.20](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.19...binstalk-downloader-v0.13.20) - 2025-06-06
 
