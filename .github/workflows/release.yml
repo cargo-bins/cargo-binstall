@@ -22,28 +22,6 @@ jobs:
         event-data: ${{ toJSON(github.event) }}
         extract-notes-under: '### Release notes'
 
-  release-lib:
-    if: needs.info.outputs.is-release == 'true' && needs.info.outputs.crate != 'cargo-binstall'
-    needs: info
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-    - run: rustup toolchain install stable --no-self-update --profile minimal
-    - name: Push lib release tag
-      if: needs.info.outputs.crate != 'cargo-binstall'
-      uses: mathieudutour/github-tag-action@v6.2
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        custom_tag: ${{ needs.info.outputs.version }}
-        tag_prefix: ${{ needs.info.outputs.crate }}-v
-    - name: Publish to crates.io
-      run: |
-        cargo publish -p '${{ needs.info.outputs.crate }}'
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
   release-cli:
     if: needs.info.outputs.crate == 'cargo-binstall'
     needs: info
