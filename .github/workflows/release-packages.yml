@@ -3,10 +3,6 @@ name: Build packages for release
 on:
   workflow_call:
     inputs:
-      publish:
-        description: "The release metadata JSON"
-        required: true
-        type: string
       CARGO_PROFILE_RELEASE_LTO:
         description: "Used to speed up CI"
         required: false
@@ -106,23 +102,10 @@ jobs:
         shell: bash
         run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
 
-      - if: fromJSON(inputs.publish).is-release == 'true'
-        name: Upload to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          release_name: v${{ fromJSON(inputs.publish).version }}
-          tag: v${{ fromJSON(inputs.publish).version }}
-          body: ${{ fromJSON(inputs.publish).notes }}
-          file: packages/cargo-binstall-*
-          file_glob: true
-          prerelease: true
-          draft: true
-      - if: "fromJSON(inputs.publish).is-release != 'true' || runner.os == 'macOS'"
-        name: Upload artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.t }}
+          name: package-${{ matrix.t }}
           path: packages/cargo-binstall-*
           retention-days: 1
 
@@ -153,11 +136,11 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          name: x86_64-apple-darwin
+          name: package-x86_64-apple-darwin
           path: packages/
       - uses: actions/download-artifact@v7
         with:
-          name: aarch64-apple-darwin
+          name: package-aarch64-apple-darwin
           path: packages/
 
       - uses: actions/download-artifact@v7
@@ -175,23 +158,9 @@ jobs:
         shell: bash
         run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
-      - if: fromJSON(inputs.publish).is-release == 'true'
-        name: Upload to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: v${{ fromJSON(inputs.publish).version }}
-          release_name: v${{ fromJSON(inputs.publish).version }}
-          body: ${{ fromJSON(inputs.publish).notes }}
-          file: packages/cargo-binstall-universal-*
-          file_glob: true
-          overwrite: true
-          prerelease: true
-          draft: true
-      - if: fromJSON(inputs.publish).is-release != 'true'
-        name: Upload artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          name: universal-apple-darwin
+          name: package-universal-apple-darwin
           path: packages/cargo-binstall-universal-*
           retention-days: 1

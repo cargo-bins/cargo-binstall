@@ -71,7 +71,6 @@ jobs:
     uses: ./.github/workflows/release-packages.yml
     secrets: inherit
     with:
-      publish: ${{ inputs.info }}
       CARGO_PROFILE_RELEASE_LTO: ${{ inputs.CARGO_PROFILE_RELEASE_LTO }}
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}
 
@@ -81,16 +80,15 @@ jobs:
       contents: write
       id-token: write     # Required for OIDC token exchange
 
-
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - uses: actions/download-artifact@v7
-      with:
-        name: minisign.pub
 
     - run: rustup toolchain install stable --no-self-update --profile minimal
 
+    - uses: actions/download-artifact@v7
+      with:
+        name: minisign.pub
     - run: .github/scripts/ephemeral-crate.sh
 
     - uses: rust-lang/crates-io-auth-action@v1
@@ -116,6 +114,17 @@ jobs:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       run: cargo publish -p "$crate" --allow-dirty  --no-default-features
 
+    - uses: actions/download-artifact@v7
+      with:
+        name: minisign.pub
+        path: artifact
+
+    - uses: actions/download-artifact@v5
+      with:
+        path: artifact
+        pattern: package-*
+        merge-multiple: true
+
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Upload minisign.pub
       uses: svenstaro/upload-release-action@v2
@@ -125,7 +134,9 @@ jobs:
         tag: v${{ fromJSON(inputs.info).version }}
         body: ${{ fromJSON(inputs.info).notes }}
         promote: true
-        file: minisign.pub
+        draft: true
+        file: artifact/*
+        file_glob: true
 
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Make release latest
