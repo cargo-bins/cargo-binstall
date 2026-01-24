@@ -78,7 +78,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
 
     let manifest_path = if workspace_path.is_file() {
         if workspace_path.parent().unwrap() == "" {
-            Path::new(Component::CurDir).join(workspace_path).into()
+            Path::new(&Component::CurDir).join(workspace_path).into()
         } else {
             Cow::Borrowed(workspace_path)
         }
@@ -151,7 +151,7 @@ impl Pattern {
     ///
     /// return paths relative to `glob_path`.
     fn glob_dirs(&self, glob_path: &Path) -> Result<Vec<PathBuf>, ErrorInner> {
-        let mut paths = vec![path.to_owned()];
+        let mut paths = vec![glob_path.to_owned()];
 
         for pattern in &self.0 {
             if paths.is_empty() {
@@ -168,8 +168,8 @@ impl Pattern {
                     }
 
                     let filename = child_path.file_name().unwrap();
-                    if filename != OsStr::new(Component::CurDir)
-                        && filename != OsStr::new(Component::ParentDir)
+                    if filename != OsStr::new(&Component::CurDir)
+                        && filename != OsStr::new(&Component::ParentDir)
                         && pattern.matches(&filename.to_string_lossy())
                     {
                         paths.push(child_path);
