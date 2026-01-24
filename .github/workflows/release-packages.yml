@@ -117,6 +117,7 @@ jobs:
           file: packages/cargo-binstall-*
           file_glob: true
           prerelease: true
+          draft: true
       - if: "fromJSON(inputs.publish).is-release != 'true' || runner.os == 'macOS'"
         name: Upload artifact
         uses: actions/upload-artifact@v6
@@ -186,6 +187,7 @@ jobs:
           file_glob: true
           overwrite: true
           prerelease: true
+          draft: true
       - if: fromJSON(inputs.publish).is-release != 'true'
         name: Upload artifact
         uses: actions/upload-artifact@v6

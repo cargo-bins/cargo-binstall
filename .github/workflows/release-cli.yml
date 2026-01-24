@@ -24,11 +24,11 @@ jobs:
     - uses: actions/checkout@v6
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Push cli release tag
-      uses: softprops/action-gh-release@v2
+      uses: mathieudutour/github-tag-action@v6.2
       with:
-        draft: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        tag_name: v${{ fromJSON(inputs.info).version }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        custom_tag: ${{ fromJSON(inputs.info).version }}
+        tag_prefix: v
 
   keygen:
     runs-on: ubuntu-latest
