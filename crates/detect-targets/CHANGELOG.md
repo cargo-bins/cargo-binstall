@@ -7,55 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.61](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.60...detect-targets-v0.1.61) - 2025-09-06
-
-### Other
-
-- *(deps)* bump the deps group with 2 updates ([#2298](https://github.com/cargo-bins/cargo-binstall/pull/2298))
-
-## [0.1.60](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.59...detect-targets-v0.1.60) - 2025-08-30
-
-### Other
-
-- *(deps)* bump the deps group across 1 directory with 2 updates ([#2286](https://github.com/cargo-bins/cargo-binstall/pull/2286))
-
-## [0.1.59](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.58...detect-targets-v0.1.59) - 2025-08-24
-
-### Other
-
-- update Cargo.lock dependencies
-
-## [0.1.58](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.57...detect-targets-v0.1.58) - 2025-08-22
-
-### Other
-
-- update Cargo.lock dependencies
-
-## [0.1.57](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.56...detect-targets-v0.1.57) - 2025-08-09
-
-### Other
-
-- Fix unused Result in DesiredTargets::auto_detect ([#2250](https://github.com/cargo-bins/cargo-binstall/pull/2250))
-
-## [0.1.56](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.55...detect-targets-v0.1.56) - 2025-08-01
-
-### Other
-
-- Fix race condition of DesiredTargets ([#2238](https://github.com/cargo-bins/cargo-binstall/pull/2238))
-
-## [0.1.55](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.54...detect-targets-v0.1.55) - 2025-07-25
-
-### Other
-
-- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
 ## [0.1.78](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.77...detect-targets-v0.1.78) - 2026-01-23
 
 ### Other
@@ -161,6 +112,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 
 - update Cargo.lock dependencies
+
+## [0.1.61](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.60...detect-targets-v0.1.61) - 2025-09-06
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2298](https://github.com/cargo-bins/cargo-binstall/pull/2298))
+
+## [0.1.60](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.59...detect-targets-v0.1.60) - 2025-08-30
+
+### Other
+
+- *(deps)* bump the deps group across 1 directory with 2 updates ([#2286](https://github.com/cargo-bins/cargo-binstall/pull/2286))
+
+## [0.1.59](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.58...detect-targets-v0.1.59) - 2025-08-24
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.58](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.57...detect-targets-v0.1.58) - 2025-08-22
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.57](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.56...detect-targets-v0.1.57) - 2025-08-09
+
+### Other
+
+- Fix unused Result in DesiredTargets::auto_detect ([#2250](https://github.com/cargo-bins/cargo-binstall/pull/2250))
+
+## [0.1.56](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.55...detect-targets-v0.1.56) - 2025-08-01
+
+### Other
+
+- Fix race condition of DesiredTargets ([#2238](https://github.com/cargo-bins/cargo-binstall/pull/2238))
+
+## [0.1.55](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.54...detect-targets-v0.1.55) - 2025-07-25
+
+### Other
+
+- *(deps)* bump tokio from 1.46.0 to 1.46.1 in the deps group ([#2222](https://github.com/cargo-bins/cargo-binstall/pull/2222))
 
 ## [0.1.54](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.53...detect-targets-v0.1.54) - 2025-06-22
 
