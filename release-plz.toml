@@ -1,5 +1,6 @@
 [workspace]
 git_release_latest = false # don't set release as latest release
+pr_draft = true
 
 [[package]]
 name = "cargo-binstall"
