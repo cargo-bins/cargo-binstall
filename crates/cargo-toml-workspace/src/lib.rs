@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    ffi::OsStr,
     io, mem,
     path::{Component, Path, PathBuf},
 };
@@ -167,17 +168,13 @@ impl Pattern {
 
                 for res in res? {
                     let entry = res?;
+                    let child_path = entry.path();
 
-                    let is_dir = entry
-                        .file_type()
-                        .map(|file_type| file_type.is_dir() || file_type.is_symlink())
-                        .unwrap_or(false);
-                    if !is_dir {
+                    if !child_path.is_dir() {
                         continue;
                     }
 
-                    let child_dir = entry.path();
-                    let filename = child_dir.file_name().unwrap();
+                    let filename = child_path.file_name().unwrap();
                     if filename != OsStr::new(Component::CurDir)
                         && filename != OsStr::new(Component::ParentDir)
                         && pattern.matches(&filename.to_string_lossy())
