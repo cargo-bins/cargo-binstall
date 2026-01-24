@@ -1,5 +1,11 @@
 name: 'Install cargo-binstall'
-description: 'Install the latest version of cargo-binstall tool'
+description: 'Install cargo-binstall tool'
+
+inputs:
+  version:
+    description: 'Version of cargo-binstall to install (e.g. 1.2.3 or v1.2.3). Defaults to latest.'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -7,10 +13,14 @@ runs:
     - name: Install cargo-binstall
       if: runner.os != 'Windows'
       shell: sh
+      env:
+        BINSTALL_VERSION: ${{ inputs.version }}
       run: |
         set -eu
         bash "${{ github.action_path }}/install-from-binstall-release.sh"
     - name: Install cargo-binstall
       if: runner.os == 'Windows'
       shell: powershell
+      env:
+        BINSTALL_VERSION: ${{ inputs.version }}
       run: Set-ExecutionPolicy Unrestricted -Scope Process; iex "${{ github.action_path }}/install-from-binstall-release.ps1"
