@@ -106,23 +106,20 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
             continue;
         }
 
-        let walker = GlobWalkerBuilder::from_patterns(
-            manifest_path.parent().unwrap(),
-            &{
-                let mut patterns = ws.members;
-                patterns.reserve_exact(ws.exclude.len());
-                for mut exclude in ws.exclude {
-                    exclude.reserve_exact(1);
-                    exclude.insert(0, '!');
-                    patterns.push(exclude);
-                }
+        let walker = GlobWalkerBuilder::from_patterns(manifest_path.parent().unwrap(), &{
+            let mut patterns = ws.members;
+            patterns.reserve_exact(ws.exclude.len());
+            for mut exclude in ws.exclude {
+                exclude.reserve_exact(1);
+                exclude.insert(0, '!');
+                patterns.push(exclude);
+            }
 
-                patterns
-            },
-        )
-            .follow_links(true)
-            .file_type(FileType::DIR)
-            .build()?;
+            patterns
+        })
+        .follow_links(true)
+        .file_type(FileType::DIR)
+        .build()?;
 
         for res in walker {
             let mut path = res?.into_path();
