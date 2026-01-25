@@ -45,4 +45,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create --base main --label 'PR: dependencies' --title 'dep: Upgrade transitive dependencies' --body 'Update dependencies' --head $(git branch --show-current)
+          gh pr create \
+            --base main \
+            --label 'PR: dependencies' \
+            --title 'dep: Upgrade transitive dependencies' \
+            --body 'Update dependencies' \
+            --head $(git branch --show-current) \
+            --draft
