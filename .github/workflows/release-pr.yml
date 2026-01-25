@@ -39,6 +39,7 @@ jobs:
           version: ${{ inputs.version }}
           crate-path: crates/bin
           pr-label: release
+          pr-draft: true
           pr-release-notes: true
           pr-template-file: .github/scripts/release-pr-template.ejs
           check-semver: false
