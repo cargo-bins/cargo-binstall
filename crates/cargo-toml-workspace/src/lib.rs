@@ -1,6 +1,6 @@
 use std::{
     io, mem,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use cargo_toml::{Error as CargoTomlError, Manifest};
@@ -75,7 +75,11 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     );
 
     let manifest_path = if workspace_path.is_file() {
-        workspace_path.to_owned()
+        if workspace_path.parent().unwrap() == "" {
+            Path::new(&Component::CurDir).join(workspace_path)
+        } else {
+            workspace_path.to_owned()
+        }
     } else {
         workspace_path.join("Cargo.toml")
     };
