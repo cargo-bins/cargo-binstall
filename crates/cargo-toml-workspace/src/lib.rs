@@ -53,9 +53,6 @@ enum ErrorInner {
     #[error("Failed to walk directory: {0}")]
     WalkDirError(#[from] WalkError),
 
-    #[error("Invalid pattern `{0}`: It must be relative and point within current dir")]
-    InvalidPatternError(CompactString),
-
     #[error("Failed to parse cargo manifest: {0}")]
     CargoManifest(#[from] CargoTomlError),
 
@@ -102,7 +99,9 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
             return Ok(manifest);
         }
 
-        let Some(ws) = manifest.workspace else { continue };
+        let Some(ws) = manifest.workspace else {
+            continue;
+        };
         if ws.members.is_empty() {
             continue;
         }
