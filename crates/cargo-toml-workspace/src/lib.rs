@@ -123,7 +123,9 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         for res in walker {
             let mut path = res?.into_path();
             path.push("Cargo.toml");
-            manifest_paths.push(path);
+            if path.is_file() {
+                manifest_paths.push(path);
+            }
         }
     }
 
