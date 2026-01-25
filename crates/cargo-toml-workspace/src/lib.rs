@@ -1,11 +1,11 @@
 use std::{
-    io, mem,
-    path::{Component, Path, PathBuf},
+    io,
+    path::{Component, Path},
 };
 
 use cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
-use globwalker::{FileType, GlobError, GlobWalkerBuilder};
+use globwalker::{FileType, GlobError, GlobWalkerBuilder, WalkError};
 use normalize_path::NormalizePath;
 use serde::de::DeserializeOwned;
 use thiserror::Error as ThisError;
@@ -50,6 +50,9 @@ pub struct Error {
 enum ErrorInner {
     #[error("Invalid pattern in workspace.members or workspace.exclude: {0}")]
     GlobError(#[from] GlobError),
+
+    #[error("Failed to walk directory: {0}")]
+    WalkDirError(#[from] WalkError),
 
     #[error("Invalid pattern `{0}`: It must be relative and point within current dir")]
     InvalidPatternError(CompactString),
@@ -101,22 +104,20 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         }
 
         let Some(ws) = manifest.workspace else { continue };
-
-        let excludes = ws.exclude;
-        let members = ws.members;
-
-        if members.is_empty() {
+        if ws.members.is_empty() {
             continue;
         }
 
         let workspace_path = manifest_path.parent().unwrap();
 
-        let walker = GlobWalkerBuilder::from_patterns(
-            workspace_path,
-            members
-                .into_iter()
-                .chain(excludes.into_iter().map(|exclude| format!("!{exclude}")))
-        )
+        let mut patterns = ws.members;
+        patterns.reserve_exact(ws.exclude.len());
+        for mut exclude in ws.exclude {
+            exclude.insert(0, '!');
+            patterns.push_back(exclude);
+        }
+
+        let walker = GlobWalkerBuilder::from_patterns(workspace_path, &patterns)
             .follow_links(true)
             .file_type(FileType::DIR)
             .build()?;
