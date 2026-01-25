@@ -22,3 +22,13 @@ echo "$cargo_binstall_version"
 
 cat "$CARGO_HOME/.crates.toml"
 grep -F "cargo-binstall 0.12.0 (path+file://manifests/github-test-Cargo.toml)" <"$CARGO_HOME/.crates.toml"
+
+# Test that `--manifest-path` can handle relative path without parent well
+exe="$(realpath "./$1")"
+cd manifests
+"$exe" binstall --force --manifest-path github-test-Cargo.toml --no-confirm cargo-binstall
+
+cargo_binstall_version="$(cargo binstall -V)"
+echo "$cargo_binstall_version"
+
+[ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
