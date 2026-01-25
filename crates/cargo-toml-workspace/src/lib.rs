@@ -5,7 +5,7 @@ use std::{
 
 use cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
-use glob::PatternError;
+use globwalker::{FileType, GlobError, GlobWalkerBuilder};
 use normalize_path::NormalizePath;
 use serde::de::DeserializeOwned;
 use thiserror::Error as ThisError;
@@ -49,7 +49,7 @@ pub struct Error {
 #[derive(Debug, ThisError)]
 enum ErrorInner {
     #[error("Invalid pattern in workspace.members or workspace.exclude: {0}")]
-    PatternError(#[from] PatternError),
+    GlobError(#[from] GlobError),
 
     #[error("Invalid pattern `{0}`: It must be relative and point within current dir")]
     InvalidPatternError(CompactString),
@@ -100,148 +100,40 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
             return Ok(manifest);
         }
 
-        if let Some(ws) = manifest.workspace {
-            let excludes = ws.exclude;
-            let members = ws.members;
+        let Some(ws) = manifest.workspace else { continue };
 
-            if members.is_empty() {
-                continue;
-            }
+        let excludes = ws.exclude;
+        let members = ws.members;
 
-            let exclude_patterns = excludes
+        if members.is_empty() {
+            continue;
+        }
+
+        let workspace_path = manifest_path.parent().unwrap();
+
+        let walker = GlobWalkerBuilder::from_patterns(
+            workspace_path,
+            members
                 .into_iter()
-                .map(|pat| Pattern::new(&pat))
-                .collect::<Result<Vec<_>, _>>()?;
+                .chain(excludes.into_iter().map(|exclude| format!("!{exclude}")))
+        )
+            .follow_links(true)
+            .file_type(FileType::DIR)
+            .build()?;
 
-            let workspace_path = manifest_path.parent().unwrap();
-
-            for member in members {
-                for path in Pattern::new(&member)?.glob_dirs(workspace_path)? {
-                    if !exclude_patterns
-                        .iter()
-                        .any(|exclude| exclude.matches_with_trailing(&path))
-                    {
-                        manifest_paths.push(workspace_path.join(path).join("Cargo.toml"));
-                    }
-                }
-            }
+        for res in walker {
+            let mut path = res?.into_path();
+            path.push("Cargo.toml");
+            manifest_paths.push(path);
         }
     }
 
     Err(ErrorInner::NotFound)
 }
 
-struct Pattern(Vec<glob::Pattern>);
-
-impl Pattern {
-    fn new(pat: &str) -> Result<Self, ErrorInner> {
-        Path::new(pat)
-            .try_normalize()
-            .ok_or_else(|| ErrorInner::InvalidPatternError(pat.into()))?
-            .iter()
-            .map(|c| glob::Pattern::new(c.to_str().unwrap()))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
-            .map(Self)
-    }
-
-    /// * `glob_path` - path to dir to glob for
-    ///
-    /// return paths relative to `glob_path`.
-    fn glob_dirs(&self, glob_path: &Path) -> Result<Vec<PathBuf>, ErrorInner> {
-        let mut paths = vec![PathBuf::new()];
-
-        for pattern in &self.0 {
-            if paths.is_empty() {
-                break;
-            }
-
-            for path in mem::take(&mut paths) {
-                let p = glob_path.join(&path);
-                let res = p.read_dir();
-                if res.is_err() && !p.is_dir() {
-                    continue;
-                }
-                drop(p);
-
-                for res in res? {
-                    let entry = res?;
-
-                    let is_dir = entry
-                        .file_type()
-                        .map(|file_type| file_type.is_dir() || file_type.is_symlink())
-                        .unwrap_or(false);
-                    if !is_dir {
-                        continue;
-                    }
-
-                    let filename = entry.file_name();
-                    if filename != "." // Ignore current dir
-                        && filename != ".." // Ignore parent dir
-                        && pattern.matches(&filename.to_string_lossy())
-                    {
-                        paths.push(path.join(filename));
-                    }
-                }
-            }
-        }
-
-        Ok(paths)
-    }
-
-    /// Return `true` if `path` matches the pattern.
-    /// It will still return `true` even if there are some trailing components.
-    fn matches_with_trailing(&self, path: &Path) -> bool {
-        let mut iter = path.iter().map(|os_str| os_str.to_string_lossy());
-        for pattern in &self.0 {
-            match iter.next() {
-                Some(s) if pattern.matches(&s) => (),
-                _ => return false,
-            }
-        }
-        true
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use std::fs::create_dir_all as mkdir;
-
-    use tempfile::TempDir;
-
     use super::*;
-
-    #[test]
-    fn test_glob_dirs() {
-        let pattern = Pattern::new("*/*/q/*").unwrap();
-        let tempdir = TempDir::new().unwrap();
-
-        mkdir(tempdir.as_ref().join("a/b/c/efe")).unwrap();
-        mkdir(tempdir.as_ref().join("a/b/q/ww")).unwrap();
-        mkdir(tempdir.as_ref().join("d/233/q/d")).unwrap();
-
-        let mut paths = pattern.glob_dirs(tempdir.as_ref()).unwrap();
-        paths.sort_unstable();
-        assert_eq!(
-            paths,
-            vec![PathBuf::from("a/b/q/ww"), PathBuf::from("d/233/q/d")]
-        );
-    }
-
-    #[test]
-    fn test_matches_with_trailing() {
-        let pattern = Pattern::new("*/*/q/*").unwrap();
-
-        assert!(pattern.matches_with_trailing(Path::new("a/b/q/d/")));
-        assert!(pattern.matches_with_trailing(Path::new("a/b/q/d")));
-        assert!(pattern.matches_with_trailing(Path::new("a/b/q/d/234")));
-        assert!(pattern.matches_with_trailing(Path::new("a/234/q/d/234")));
-
-        assert!(!pattern.matches_with_trailing(Path::new("")));
-        assert!(!pattern.matches_with_trailing(Path::new("a/")));
-        assert!(!pattern.matches_with_trailing(Path::new("a/234")));
-        assert!(!pattern.matches_with_trailing(Path::new("a/234/q")));
-    }
 
     #[test]
     fn test_load() {
