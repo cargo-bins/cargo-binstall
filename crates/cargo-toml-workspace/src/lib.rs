@@ -6,7 +6,6 @@ use std::{
 use cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
 use globwalker::{FileType, GlobError, GlobWalkerBuilder, WalkError};
-use normalize_path::NormalizePath;
 use serde::de::DeserializeOwned;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument, warn};
@@ -114,7 +113,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         patterns.reserve_exact(ws.exclude.len());
         for mut exclude in ws.exclude {
             exclude.insert(0, '!');
-            patterns.push_back(exclude);
+            patterns.push(exclude);
         }
 
         let walker = GlobWalkerBuilder::from_patterns(workspace_path, &patterns)
