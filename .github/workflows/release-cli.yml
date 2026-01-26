@@ -119,7 +119,7 @@ jobs:
         name: minisign.pub
         path: artifact
 
-    - uses: actions/download-artifact@v5
+    - uses: actions/download-artifact@v7
       with:
         path: artifact
         pattern: package-*
