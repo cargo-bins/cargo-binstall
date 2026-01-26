@@ -38,7 +38,16 @@ runs:
     run: |
       Add-MpPreference -ExclusionPath '${{ github.workspace }}'
     shell: pwsh
-    
+
+  - name: Set temp directory on Windows
+    if: runner.os == 'Windows'
+    run: |
+      mkdir -p "D:\a\_temp"
+      echo "TEMP=D:\a\_temp" >> $GITHUB_ENV
+      echo "TMP=D:\a\_temp" >> $GITHUB_ENV
+      echo "TMPDIR=D:\a\_temp" >> $GITHUB_ENV
+    shell: bash
+
   - name: Add just to tools to install
     run: echo "tools=just" >>"$GITHUB_ENV"
     shell: bash
