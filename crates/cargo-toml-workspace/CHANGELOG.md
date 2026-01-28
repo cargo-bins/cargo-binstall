@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.8](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v7.0.7...cargo-toml-workspace-v7.0.8) - 2026-01-27
+
+### Other
+
+- Fix handling of `**` in cargo-toml-workspace ([#2465](https://github.com/cargo-bins/cargo-binstall/pull/2465))
+- Fix loading Cargo.toml in cargo-toml-workspace ([#2459](https://github.com/cargo-bins/cargo-binstall/pull/2459))
+
 ## [7.0.7](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v7.0.6...cargo-toml-workspace-v7.0.7) - 2025-12-05
 
 ### Other
