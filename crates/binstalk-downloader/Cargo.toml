@@ -42,7 +42,6 @@ reqwest = { version = "0.13.1", features = [
     "brotli",
     "deflate",
     "socks",
-    "rustls-native-certs",
 ], default-features = false }
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 serde_json = { version = "1.0.149", optional = true }
@@ -100,6 +99,7 @@ rustls = [
     "__tls",
 
     "reqwest/rustls",
+    "reqwest/rustls-native-certs",
 
     # Enable the following features only if hickory-resolver is enabled.
     "hickory-resolver?/tls-ring",
