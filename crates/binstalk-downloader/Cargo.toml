@@ -101,7 +101,6 @@ rustls = [
     "__tls",
 
     "reqwest/rustls",
-    "reqwest/rustls-native-certs",
 
     # Enable the following features only if hickory-resolver is enabled.
     "hickory-resolver?/tls-ring",
