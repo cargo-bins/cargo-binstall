@@ -36,6 +36,8 @@ rc-zip-sync = { version = "4.3.5", features = [
 ] }
 reqwest = { version = "0.13.1", features = [
     "http2",
+    "charset",
+    "system-proxy",
     "stream",
     "zstd",
     "gzip",
