@@ -74,7 +74,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     );
 
     let manifest_path = if workspace_path.is_file() {
-        if workspace_path.parent().unwrap() == "" {
+        if workspace_path.parent().unwrap() == Path::new("") {
             Path::new(&Component::CurDir).join(workspace_path)
         } else {
             workspace_path.to_owned()
