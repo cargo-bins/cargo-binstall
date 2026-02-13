@@ -39,7 +39,7 @@ url = "2.5.8"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-toml_edit = { version = "0.24.0", features = ["serde"] }
+toml_edit = { version = "0.25.1", features = ["serde"] }
 binstalk-downloader = { version = "0.13.34", path = "../binstalk-downloader", default-features = false, features = [
     "rustls",
 ] }
