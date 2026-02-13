@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.35](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.34...binstalk-downloader-v0.13.35) - 2026-02-13
+
+### Other
+
+- *(deps)* bump bytes from 1.11.0 to 1.11.1 ([#2478](https://github.com/cargo-bins/cargo-binstall/pull/2478))
+- Enable features system-proxy and charset of reqwest by default ([#2474](https://github.com/cargo-bins/cargo-binstall/pull/2474))
+
 ## [0.13.34](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.33...binstalk-downloader-v0.13.34) - 2026-01-27
 
 ### Other

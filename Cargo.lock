@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.66"
+version = "0.28.67"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-downloader"
-version = "0.13.34"
+version = "0.13.35"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-fetchers"
-version = "0.10.36"
+version = "0.10.37"
 dependencies = [
  "async-trait",
  "binstalk-downloader",
@@ -352,7 +352,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-git-repo-api"
-version = "0.5.36"
+version = "0.5.37"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.17.26"
+version = "0.17.27"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.11.35"
+version = "0.11.36"
 dependencies = [
  "async-trait",
  "base16",
@@ -603,7 +603,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-toml-workspace"
-version = "7.0.8"
+version = "7.0.9"
 dependencies = [
  "cargo_toml",
  "compact_str",
@@ -1081,7 +1081,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.79"
+version = "0.1.80"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "detect-wasi"
-version = "1.0.47"
+version = "1.0.48"
 dependencies = [
  "tempfile",
 ]
