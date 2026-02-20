@@ -422,6 +422,13 @@ fn parse_header_retry_after(headers: &HeaderMap) -> Option<Duration> {
 ///
 /// See <https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api>.
 fn parse_header_ratelimit_reset(value: &HeaderValue) -> Option<Duration> {
+    parse_header_ratelimit_reset_with_current_time(value, None)
+}
+
+fn parse_header_ratelimit_reset_with_current_time(
+    value: &HeaderValue,
+    now: Option<SystemTime>,
+) -> Option<Duration> {
     /// Values at or above this are Unix epoch timestamps; below are delta-seconds.
     const EPOCH_THRESHOLD: u64 = 1_000_000_000; // 2001-09-09T01:46:40Z
 
@@ -439,7 +446,8 @@ fn parse_header_ratelimit_reset(value: &HeaderValue) -> Option<Duration> {
             .ok()?,
     };
 
-    let curr_time_unix_timestamp = SystemTime::now()
+    let curr_time_unix_timestamp = now
+        .unwrap_or_else(SystemTime::now)
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("SystemTime before UNIX EPOCH!");
 
@@ -450,6 +458,10 @@ fn parse_header_ratelimit_reset(value: &HeaderValue) -> Option<Duration> {
 mod tests {
     use super::*;
 
+    fn epoch(secs: u64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(secs)
+    }
+
     #[test]
     fn delta_seconds() {
         let dur = parse_header_ratelimit_reset(&HeaderValue::from_static("6")).unwrap();
@@ -458,27 +470,32 @@ mod tests {
 
     #[test]
     fn epoch_timestamp() {
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let hv: HeaderValue = (now + 30).to_string().parse().unwrap();
-        let dur = parse_header_ratelimit_reset(&hv).unwrap();
-        assert!(
-            dur.as_secs() >= 28 && dur.as_secs() <= 32,
-            "expected ~30s, got {dur:?}"
-        );
+        let now = epoch(1700000000);
+
+        let hv: HeaderValue = format!("{}", 1700000000 + 123).parse().unwrap();
+        let dur = parse_header_ratelimit_reset_with_current_time(&hv, Some(now)).unwrap();
+        assert_eq!(dur, Duration::from_secs(123));
     }
 
     #[test]
     fn epoch_in_the_past() {
-        let dur = parse_header_ratelimit_reset(&HeaderValue::from_static("1700000000")).unwrap();
+        let now = epoch(1700000000 + 30);
+
+        let dur = parse_header_ratelimit_reset_with_current_time(
+            &HeaderValue::from_static("1700000000"),
+            Some(now),
+        )
+        .unwrap();
         assert_eq!(dur, Duration::ZERO);
     }
 
     #[test]
     fn http_date() {
+        // Fri, 01 Jan 2038 00:00:00 GMT = epoch 2145916800
         let hv = HeaderValue::from_static("Fri, 01 Jan 2038 00:00:00 GMT");
-        assert!(parse_header_ratelimit_reset(&hv).unwrap().as_secs() > 1000);
+        let dur =
+            parse_header_ratelimit_reset_with_current_time(&hv, Some(epoch(2145916800 - 600)))
+                .unwrap();
+        assert_eq!(dur, Duration::from_secs(600));
     }
 }
