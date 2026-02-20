@@ -232,10 +232,7 @@ impl Client {
         } else if headers.get("x-ratelimit-remaining") == Some(&HEADER_VALUE_0) {
             let duration = headers
                 .get("x-ratelimit-reset")
-                .and_then(|value| {
-                    let secs = value.to_str().ok()?.parse().ok()?;
-                    Some(Duration::from_secs(secs))
-                })
+                .and_then(parse_header_ratelimit_reset)
                 .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT)
                 .min(MAX_RETRY_DURATION);
 
@@ -413,5 +410,92 @@ fn parse_header_retry_after(headers: &HeaderMap) -> Option<Duration> {
             // If underflows, returns Duration::ZERO.
             Some(retry_after_unix_timestamp.saturating_sub(curr_time_unix_timestamp))
         }
+    }
+}
+
+/// Parse an `x-ratelimit-reset` header value into a wait [`Duration`].
+///
+/// Handles three formats:
+/// - **Delta-seconds**: e.g. `6` (IETF)
+/// - **Unix epoch timestamp**: e.g. `1771237802` (GitHub)
+/// - **HTTP-date**: e.g. `Fri, 01 Jan 2038 00:00:00 GMT` (RFC 7231)
+///
+/// See <https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api>.
+fn parse_header_ratelimit_reset(value: &HeaderValue) -> Option<Duration> {
+    parse_header_ratelimit_reset_with_current_time(value, None)
+}
+
+fn parse_header_ratelimit_reset_with_current_time(
+    value: &HeaderValue,
+    now: Option<SystemTime>,
+) -> Option<Duration> {
+    /// Values at or above this are Unix epoch timestamps; below are delta-seconds.
+    const EPOCH_THRESHOLD: u64 = 1_000_000_000; // 2001-09-09T01:46:40Z
+
+    let header = value.to_str().ok()?;
+
+    let reset_unix_timestamp = match header.parse::<u64>() {
+        // Delta-seconds: use directly.
+        Ok(secs) if secs < EPOCH_THRESHOLD => return Some(Duration::from_secs(secs)),
+        // Epoch timestamp (e.g. GitHub x-ratelimit-reset).
+        Ok(epoch) => Duration::from_secs(epoch),
+        // HTTP-date (RFC 7231 IMF-fixdate).
+        Err(_) => parse_http_date(header)
+            .ok()?
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .ok()?,
+    };
+
+    let curr_time_unix_timestamp = now
+        .unwrap_or_else(SystemTime::now)
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("SystemTime before UNIX EPOCH!");
+
+    Some(reset_unix_timestamp.saturating_sub(curr_time_unix_timestamp))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn epoch(secs: u64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_secs(secs)
+    }
+
+    #[test]
+    fn delta_seconds() {
+        let dur = parse_header_ratelimit_reset(&HeaderValue::from_static("6")).unwrap();
+        assert_eq!(dur, Duration::from_secs(6));
+    }
+
+    #[test]
+    fn epoch_timestamp() {
+        let now = epoch(1700000000);
+
+        let hv: HeaderValue = format!("{}", 1700000000 + 123).parse().unwrap();
+        let dur = parse_header_ratelimit_reset_with_current_time(&hv, Some(now)).unwrap();
+        assert_eq!(dur, Duration::from_secs(123));
+    }
+
+    #[test]
+    fn epoch_in_the_past() {
+        let now = epoch(1700000000 + 30);
+
+        let dur = parse_header_ratelimit_reset_with_current_time(
+            &HeaderValue::from_static("1700000000"),
+            Some(now),
+        )
+        .unwrap();
+        assert_eq!(dur, Duration::ZERO);
+    }
+
+    #[test]
+    fn http_date() {
+        // Fri, 01 Jan 2038 00:00:00 GMT = epoch 2145916800
+        let hv = HeaderValue::from_static("Fri, 01 Jan 2038 00:00:00 GMT");
+        let dur =
+            parse_header_ratelimit_reset_with_current_time(&hv, Some(epoch(2145916800 - 600)))
+                .unwrap();
+        assert_eq!(dur, Duration::from_secs(600));
     }
 }
