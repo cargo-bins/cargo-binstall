@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.67"
+version = "0.28.68"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -371,7 +371,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.17.27"
+version = "0.17.28"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -1081,7 +1081,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.80"
+version = "0.1.81"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "detect-wasi"
-version = "1.0.48"
+version = "1.0.49"
 dependencies = [
  "tempfile",
 ]
