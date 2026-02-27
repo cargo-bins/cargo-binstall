@@ -103,14 +103,14 @@ jobs:
         run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-*
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.t }}
           path: packages/cargo-binstall-*
           retention-days: 1
 
       - name: Upload timings
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.t }}-cargo-timings
           path: target/cargo-timings
@@ -159,7 +159,7 @@ jobs:
         run: .github/scripts/ephemeral-sign.sh packages/cargo-binstall-universal-*
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: package-universal-apple-darwin
           path: packages/cargo-binstall-universal-*

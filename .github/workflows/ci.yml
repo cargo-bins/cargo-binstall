@@ -256,7 +256,7 @@ jobs:
         # Set working directory here, otherwise `cargo-zigbuild` would download
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: detect-targets-${{ matrix.arch }}
           path: target/${{ matrix.arch }}-unknown-linux-musl/debug/detect-targets

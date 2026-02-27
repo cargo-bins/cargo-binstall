@@ -49,11 +49,11 @@ jobs:
       env:
         AGE_KEY_PUBLIC: ${{ vars.AGE_KEY_PUBLIC }}
       run: .github/scripts/ephemeral-gen.sh
-    - uses: actions/upload-artifact@v6
+    - uses: actions/upload-artifact@v7
       with:
         name: minisign.pub
         path: minisign.pub
-    - uses: actions/upload-artifact@v6
+    - uses: actions/upload-artifact@v7
       with:
         name: minisign.key.age
         path: minisign.key.age
@@ -102,7 +102,7 @@ jobs:
       run: cargo publish --dry-run -p "$crate" --allow-dirty --no-default-features
     - if: fromJSON(inputs.info).is-release != 'true' && fromJSON(inputs.info).crate != ''
       name: Upload crate package as artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: crate-package
         path: target/package/*.crate
