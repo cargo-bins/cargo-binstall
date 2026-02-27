@@ -422,12 +422,17 @@ fn parse_header_retry_after(headers: &HeaderMap) -> Option<Duration> {
 ///
 /// See <https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api>.
 fn parse_header_ratelimit_reset(value: &HeaderValue) -> Option<Duration> {
-    parse_header_ratelimit_reset_with_current_time(value, None)
+    parse_header_ratelimit_reset_with_current_time(
+        value,
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("SystemTime before UNIX EPOCH!"),
+    )
 }
 
 fn parse_header_ratelimit_reset_with_current_time(
     value: &HeaderValue,
-    now: Option<SystemTime>,
+    curr_time_unix_timestamp: Duration,
 ) -> Option<Duration> {
     /// Values at or above this are Unix epoch timestamps; below are delta-seconds.
     const EPOCH_THRESHOLD: u64 = 1_000_000_000; // 2001-09-09T01:46:40Z
@@ -446,11 +451,6 @@ fn parse_header_ratelimit_reset_with_current_time(
             .ok()?,
     };
 
-    let curr_time_unix_timestamp = now
-        .unwrap_or_else(SystemTime::now)
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("SystemTime before UNIX EPOCH!");
-
     Some(reset_unix_timestamp.saturating_sub(curr_time_unix_timestamp))
 }
 
@@ -458,8 +458,8 @@ fn parse_header_ratelimit_reset_with_current_time(
 mod tests {
     use super::*;
 
-    fn epoch(secs: u64) -> SystemTime {
-        SystemTime::UNIX_EPOCH + Duration::from_secs(secs)
+    fn epoch(secs: u64) -> Duration {
+        Duration::from_secs(secs)
     }
 
     #[test]
@@ -479,11 +479,9 @@ mod tests {
 
     #[test]
     fn epoch_in_the_past() {
-        let now = epoch(1700000000 + 30);
-
         let dur = parse_header_ratelimit_reset_with_current_time(
             &HeaderValue::from_static("1700000000"),
-            Some(now),
+            epoch(1700000000 + 30),
         )
         .unwrap();
         assert_eq!(dur, Duration::ZERO);
@@ -494,7 +492,7 @@ mod tests {
         // Fri, 01 Jan 2038 00:00:00 GMT = epoch 2145916800
         let hv = HeaderValue::from_static("Fri, 01 Jan 2038 00:00:00 GMT");
         let dur =
-            parse_header_ratelimit_reset_with_current_time(&hv, Some(epoch(2145916800 - 600)))
+            parse_header_ratelimit_reset_with_current_time(&hv, epoch(2145916800 - 600))
                 .unwrap();
         assert_eq!(dur, Duration::from_secs(600));
     }
