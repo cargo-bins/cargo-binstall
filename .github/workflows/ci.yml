@@ -270,7 +270,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -311,7 +311,7 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -337,7 +337,7 @@ jobs:
           - fedora
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -356,7 +356,7 @@ jobs:
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: detect-targets-aarch64
       - run: chmod +x detect-targets
@@ -375,7 +375,7 @@ jobs:
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets

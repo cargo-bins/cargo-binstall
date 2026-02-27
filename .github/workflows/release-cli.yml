@@ -86,7 +86,7 @@ jobs:
 
     - run: rustup toolchain install stable --no-self-update --profile minimal
 
-    - uses: actions/download-artifact@v7
+    - uses: actions/download-artifact@v8
       with:
         name: minisign.pub
     - run: .github/scripts/ephemeral-crate.sh
@@ -114,12 +114,12 @@ jobs:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
       run: cargo publish -p "$crate" --allow-dirty  --no-default-features
 
-    - uses: actions/download-artifact@v7
+    - uses: actions/download-artifact@v8
       with:
         name: minisign.pub
         path: artifact
 
-    - uses: actions/download-artifact@v7
+    - uses: actions/download-artifact@v8
       with:
         path: artifact
         pattern: package-*
