@@ -492,8 +492,7 @@ mod tests {
         // Fri, 01 Jan 2038 00:00:00 GMT = epoch 2145916800
         let hv = HeaderValue::from_static("Fri, 01 Jan 2038 00:00:00 GMT");
         let dur =
-            parse_header_ratelimit_reset_with_current_time(&hv, epoch(2145916800 - 600))
-                .unwrap();
+            parse_header_ratelimit_reset_with_current_time(&hv, epoch(2145916800 - 600)).unwrap();
         assert_eq!(dur, Duration::from_secs(600));
     }
 }
