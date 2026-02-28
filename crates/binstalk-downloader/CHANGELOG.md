@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.36](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.35...binstalk-downloader-v0.13.36) - 2026-02-28
+
+### Other
+
+- Correctly parse `x-ratelimit-reset` as epoch timestamp or delta-seconds ([#2485](https://github.com/cargo-bins/cargo-binstall/pull/2485))
+
 ## [0.13.35](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.34...binstalk-downloader-v0.13.35) - 2026-02-13
 
 ### Other

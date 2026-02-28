@@ -3,7 +3,7 @@ name = "binstalk-downloader"
 description = "The binstall toolkit for downloading and extracting file"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-downloader"
-version = "0.13.35"
+version = "0.13.36"
 rust-version = "1.79.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
@@ -18,7 +18,7 @@ async-compression = { version = "0.4.29", features = [
     "bzip2",
     "tokio",
 ] }
-binstalk-types = { version = "0.10.5", path = "../binstalk-types" }
+binstalk-types = { version = "0.10.6", path = "../binstalk-types" }
 bytes = "1.11.1"
 bzip2 = "0.6.0"
 cfg-if = "1"
