@@ -473,7 +473,7 @@ mod tests {
         let now = epoch(1700000000);
 
         let hv: HeaderValue = format!("{}", 1700000000 + 123).parse().unwrap();
-        let dur = parse_header_ratelimit_reset_with_current_time(&hv, Some(now)).unwrap();
+        let dur = parse_header_ratelimit_reset_with_current_time(&hv, now).unwrap();
         assert_eq!(dur, Duration::from_secs(123));
     }
 
