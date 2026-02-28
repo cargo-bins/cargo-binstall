@@ -24,7 +24,7 @@ leon-macros = "1.0.1"
 miette = "7.0.0"
 minisign-verify = "0.2.1"
 once_cell = "1.18.0"
-strum = "0.27.0"
+strum = "0.28.0"
 thiserror = "2.0.11"
 tokio = { version = "1.49.0", features = [
     "rt",
