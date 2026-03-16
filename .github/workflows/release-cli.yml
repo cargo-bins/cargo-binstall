@@ -146,7 +146,7 @@ jobs:
     
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Delete signing key artifact
-      uses: geekyeggo/delete-artifact@v5
+      uses: geekyeggo/delete-artifact@v6
       with:
           name: minisign.key.age
           failOnError: false
