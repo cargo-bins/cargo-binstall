@@ -63,7 +63,7 @@ grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-
 test_cargo_binstall_install
 
 # Install binaries using registry t3 in env
-CARGO_REGISTRIES_t3_INDEX='sparse+https://index.crates.io/' "./$1" binstall --force --registry t3 -y cargo-binstall@0.12.0
+CARGO_REGISTRIES_t3_INDEX='sparse+https://index.crates.io/' "$1" binstall --force --registry t3 -y cargo-binstall@0.12.0
 
 grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
 
