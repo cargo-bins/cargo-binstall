@@ -9,7 +9,7 @@ export CARGO_HOME
 export PATH="$CARGO_HOME/bin:$PATH"
 
 TMPDIR=$(mktemp -d 2>/dev/null || mktemp -d -t tmp)
-cp "./$1" "$TMPDIR/cargo-binstall"
+cp "$1" "$TMPDIR/cargo-binstall"
 "$TMPDIR/cargo-binstall" --self-install
 
 cargo binstall -vV
