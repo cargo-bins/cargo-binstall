@@ -10,7 +10,7 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 # first bootstrap-install into the CARGO_HOME
 mkdir -p "$CARGO_HOME/bin"
-cp "./$1" "$CARGO_HOME/bin"
+cp "$1" "$CARGO_HOME/bin"
 
 # now we're running the CARGO_HOME/bin/cargo-binstall (via cargo):
 
@@ -18,7 +18,7 @@ cp "./$1" "$CARGO_HOME/bin"
 cargo binstall --no-confirm --no-symlinks --force cargo-binstall@0.20.1
 
 # self update replacing no-symlinks with symlinks
-cp "./$1" "$CARGO_HOME/bin"
+cp "$1" "$CARGO_HOME/bin"
 
 cargo binstall --no-confirm --force cargo-binstall@0.20.1
 
