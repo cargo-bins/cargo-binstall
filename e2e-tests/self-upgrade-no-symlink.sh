@@ -10,7 +10,7 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 # first bootstrap-install into the CARGO_HOME
 mkdir -p "$CARGO_HOME/bin"
-cp "$1" "$CARGO_HOME/bin"
+cp "$1" "$CARGO_HOME/bin/cargo-binstall"
 
 # now we're running the CARGO_HOME/bin/cargo-binstall (via cargo):
 
