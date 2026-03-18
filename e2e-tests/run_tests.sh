@@ -2,20 +2,24 @@
 
 set -euxo pipefail
 
-tmpfile="$(mktemp)"
+output="$(mktemp)"
+binary="$(mktemp)"
 
-echo "::group::$1" >> "$tmpfile"
+cp "$2" "$binary"
+chmod 555 "$binary"
+
+echo "::group::$1" >> "$output"
 
 cd e2e-tests
 set +e
 env -u RUSTFLAGS \
     -u CARGO_BUILD_TARGET \
     bash "$1.sh" \
-    "$2" "${@:3}" >> "$tmpfile" 2>&1
+    "$binary" "${@:3}" >> "$output" 2>&1
 exit_status="$?"
 set -e
 
-echo "::endgroup::" >> "$tmpfile"
+echo "::endgroup::" >> "$output"
 
-cat "$tmpfile"
+cat "$output"
 exit "$exit_status"
