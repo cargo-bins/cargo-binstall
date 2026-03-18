@@ -211,8 +211,8 @@ get-output file outdir=".":
 get-binary outdir=".": (get-output output-filename outdir)
     -chmod +x {{ outdir / output-filename }}
 
-e2e-test file *arguments: (get-binary "e2e-tests")
-    bash e2e-tests/run_tests.sh {{file}} {{output-filename}} {{arguments}}
+e2e-test file *arguments:
+    bash e2e-tests/run_tests.sh {{file}} {{output-path}} {{arguments}}
 
 e2e-test-live: (e2e-test "live")
 e2e-test-subcrate: (e2e-test "subcrate")
