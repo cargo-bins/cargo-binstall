@@ -10,7 +10,7 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 # Install binaries using `--manifest-path`
 # Also test default github template
-"./$1" binstall \
+"$1" binstall \
     --force \
     --manifest-path "manifests/skipping-required-bin-Cargo.toml" \
     --no-confirm \
