@@ -21,5 +21,13 @@ set -e
 
 echo "::endgroup::" >> "$output"
 
-cat "$output"
+{
+    flock 200
+    
+    cat "$output"
+    if [ "$exit_status" -ne 0 ]; then
+        echo "$1.sh failed"
+    fi
+} 200>"/tmp/$(basename "$0")-output.lock"
+
 exit "$exit_status"
