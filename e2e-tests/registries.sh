@@ -21,7 +21,7 @@ export PATH="$CARGO_HOME/bin:$PATH"
 # Testing conflicts of `--index` and `--registry`
 set +e
 
-"./$1" binstall --index 'sparse+https://index.crates.io/' --registry t1 cargo-binstall
+"$1" binstall --index 'sparse+https://index.crates.io/' --registry t1 cargo-binstall
 exit_code="$?"
 
 set -e
@@ -42,21 +42,21 @@ default = "t1"
 EOF
 
 # Install binaries using default registry in config
-"./$1" binstall --force -y cargo-binstall@0.12.0
+"$1" binstall --force -y cargo-binstall@0.12.0
 
 grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
 
 test_cargo_binstall_install
 
 # Install binaries using registry t2 in config
-"./$1" binstall --force --registry t2 -y cargo-binstall@0.12.0
+"$1" binstall --force --registry t2 -y cargo-binstall@0.12.0
 
 grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
 
 test_cargo_binstall_install
 
 # Install binaries using registry t4 in config
-"./$1" binstall --force --registry t4 -y cargo-binstall@0.12.0
+"$1" binstall --force --registry t4 -y cargo-binstall@0.12.0
 
 grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
 
@@ -70,7 +70,7 @@ grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-
 test_cargo_binstall_install
 
 # Install binaries using index directly
-"./$1" binstall --force --index 'sparse+https://index.crates.io/' -y cargo-binstall@0.12.0
+"$1" binstall --force --index 'sparse+https://index.crates.io/' -y cargo-binstall@0.12.0
 
 grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
 
