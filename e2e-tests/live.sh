@@ -19,7 +19,7 @@ export PATH="$CARGO_HOME/bin:$othertmpdir/bin:$PATH"
 
 mkdir -p "$othertmpdir/bin"
 # Copy it to bin to test use of env var `CARGO`
-cp "./$1" "$othertmpdir/bin/"
+cp "$1" "$othertmpdir/bin/"
 
 # Install binaries using cargo-binstall
 # shellcheck disable=SC2086
@@ -64,5 +64,5 @@ echo "$git_mob_version"
 
 cargo uninstall b3sum cargo-binstall
 
-"./$1" binstall -y cargo-binstall@0.20.1
+"$1" binstall -y cargo-binstall@0.20.1
 jq <"$CARGO_HOME/binstall/crates-v1.json" | grep -v b3sum
