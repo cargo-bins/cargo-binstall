@@ -3,7 +3,8 @@
 set -euo pipefail
 
 CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-cp "$2" "$CARGO_HOME/"
+tempdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'tempdir')
+cp "$2" "$tempdir/"
 
 output="$(mktemp)"
 echo "::group::$1" >> "$output"
@@ -16,6 +17,7 @@ env -u RUSTFLAGS \
     CARGO_HOME="$CARGO_HOME" \
     PATH="$CARGO_HOME/bin:$PATH" \
     bash "$1.sh" \
+    "$tempdir/$(basename "$2")" \
     "${@:3}" >> "$output" 2>&1
 exit_status="$?"
 set -e
