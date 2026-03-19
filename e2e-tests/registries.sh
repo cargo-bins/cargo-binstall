@@ -12,12 +12,6 @@ test_cargo_binstall_install() {
   [ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
 }
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
-export CARGO_HOME
-export PATH="$CARGO_HOME/bin:$PATH"
-
 # Testing conflicts of `--index` and `--registry`
 set +e
 
