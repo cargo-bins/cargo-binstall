@@ -1,10 +1,9 @@
 #!/bin/bash
 
-set -euxo pipefail
+set -uxo pipefail
 
-## Test --continue-on-failure
-set +e
-cargo binstall --no-confirm --continue-on-failure cargo-watch@8.4.0 non-existent-clippy
+## Test --continue-on-failur
+"$1" --no-confirm --continue-on-failure cargo-watch@8.4.0 non-existent-clippy
 exit_code="$?"
 
 set -e
@@ -22,7 +21,7 @@ echo "$cargo_watch_version"
 
 ## Test that it is no-op when only one crate is passed
 set +e
-cargo binstall --no-confirm --continue-on-failure non-existent-clippy
+"$1" --no-confirm --continue-on-failure non-existent-clippy
 exit_code="$?"
 
 set -e
@@ -34,7 +33,7 @@ fi
 
 # Test if both crates are invalid
 set +e
-cargo binstall --no-confirm --continue-on-failure non-existent-clippy non-existent-clippy2
+"$1" --no-confirm --continue-on-failure non-existent-clippy non-existent-clippy2
 exit_code="$?"
 
 set -e
