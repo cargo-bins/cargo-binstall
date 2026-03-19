@@ -2,12 +2,6 @@
 
 set -euxo pipefail
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-export CARGO_HOME
-export PATH="$CARGO_HOME/bin:$PATH"
-
 # Test skip when installed
 "$1" binstall --no-confirm --force cargo-binstall@0.11.1
 "$1" binstall --log-level=info --no-confirm cargo-binstall@0.11.1 | grep -q 'cargo-binstall v0.11.1 is already installed'
