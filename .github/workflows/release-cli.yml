@@ -58,7 +58,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
     - name: Create ephemeral keypair
-      id: keypair
       run: .github/scripts/ephemeral-gen.sh
 
     - run: rustup toolchain install stable --no-self-update --profile minimal
@@ -118,11 +117,4 @@ jobs:
       run: gh release edit v${{ fromJSON(inputs.info).version }} --latest --draft=false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - if: fromJSON(inputs.info).is-release == 'true'
-      name: Delete signing key artifact
-      uses: geekyeggo/delete-artifact@v5
-      with:
-          name: minisign.key.age
-          failOnError: false
 
