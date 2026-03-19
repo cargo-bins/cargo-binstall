@@ -22,7 +22,7 @@ set -e
 echo "::endgroup::" >> "$output"
 
 {
-    flock 200
+    flock 200 || echo "Flock not supported"
     
     cat "$output"
     if [ "$exit_status" -ne 0 ]; then
