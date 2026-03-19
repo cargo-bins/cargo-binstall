@@ -2,11 +2,6 @@
 
 set -euxo pipefail
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-export CARGO_HOME
-
 printf 'yes\nyes\n' | "$1" binstall cargo-quickinstall
 
 echo
