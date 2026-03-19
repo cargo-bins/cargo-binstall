@@ -2,12 +2,6 @@
 
 set -euxo pipefail
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-export CARGO_HOME
-export PATH="$CARGO_HOME/bin:$PATH"
-
 # Test --version
 "$1" binstall --force --no-confirm --version 0.11.1 cargo-binstall
 # Test that the installed binaries can be run
