@@ -2,8 +2,10 @@
 
 set -euo pipefail
 
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-tempdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'tempdir')
+CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
+mkdir -p "$CARGO_HOME/bin"
+
+tempdir="$(mktemp -d 2>/dev/null || mktemp -d -t 'tempdir')"
 cp "$2" "$tempdir/"
 
 output="$(mktemp)"
