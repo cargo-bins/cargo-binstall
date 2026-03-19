@@ -30,44 +30,9 @@ jobs:
         custom_tag: ${{ fromJSON(inputs.info).version }}
         tag_prefix: v
 
-  keygen:
-    runs-on: ubuntu-latest
-    if: github.repository_owner == 'cargo-bins'
-    steps:
-    - uses: actions/checkout@v6
-
-    - uses: cargo-bins/cargo-binstall@main
-      env:
-        GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-    - name: Install binaries required
-      run: cargo binstall -y --force rsign2 rage
-      env:
-        GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-
-    - name: Create ephemeral keypair
-      id: keypair
-      env:
-        AGE_KEY_PUBLIC: ${{ vars.AGE_KEY_PUBLIC }}
-      run: .github/scripts/ephemeral-gen.sh
-    - uses: actions/upload-artifact@v7
-      with:
-        name: minisign.pub
-        path: minisign.pub
-    - uses: actions/upload-artifact@v7
-      with:
-        name: minisign.key.age
-        path: minisign.key.age
-        retention-days: 1
-    - name: Check that key can be decrypted
-      env:
-        AGE_KEY_SECRET: ${{ secrets.AGE_KEY_SECRET }}
-      shell: bash
-      run: .github/scripts/ephemeral-sign.sh minisign.pub
-
   package:
     needs:
     - tag
-    - keygen
     uses: ./.github/workflows/release-packages.yml
     secrets: inherit
     with:
@@ -84,11 +49,20 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
+    - uses: cargo-bins/cargo-binstall@main
+      env:
+        GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+    - name: Install binaries required
+      run: cargo binstall -y --force rsign2
+      env:
+        GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+
+    - name: Create ephemeral keypair
+      id: keypair
+      run: .github/scripts/ephemeral-gen.sh
+
     - run: rustup toolchain install stable --no-self-update --profile minimal
 
-    - uses: actions/download-artifact@v8
-      with:
-        name: minisign.pub
     - run: .github/scripts/ephemeral-crate.sh
 
     - uses: rust-lang/crates-io-auth-action@v1
@@ -116,15 +90,16 @@ jobs:
 
     - uses: actions/download-artifact@v8
       with:
-        name: minisign.pub
-        path: artifact
-
-    - uses: actions/download-artifact@v8
-      with:
         path: artifact
         pattern: package-*
         merge-multiple: true
 
+    - name: Sign all pre-built binaries
+      shell: bash
+      run: .github/scripts/ephemeral-sign.sh artifact/*
+
+    - run: cp minisign.pub artifact
+ 
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Create release and upload artifacts
       uses: svenstaro/upload-release-action@v2
