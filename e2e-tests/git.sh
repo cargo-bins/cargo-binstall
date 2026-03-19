@@ -12,12 +12,6 @@ test_cargo_binstall_install() {
   [ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
 }
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')"
-export CARGO_HOME
-export PATH="$CARGO_HOME/bin:$PATH"
-
 GIT="$(mktemp -d 2>/dev/null || mktemp -d -t 'git')"
 if [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; then
     # Convert it to windows path so `--git "file://$GIT"` would work
@@ -36,7 +30,7 @@ cp manifests/github-test-Cargo.toml "$GIT/Cargo.toml"
 )
 
 # Install binaries using `--git`
-"./$1" binstall --force --git "file://$GIT" --no-confirm cargo-binstall
+"$1" binstall --force --git "file://$GIT" --no-confirm cargo-binstall
 
 test_cargo_binstall_install
 
@@ -55,7 +49,7 @@ else
 fi
 
 # Install cargo-binstall using `--git`
-"./$1" binstall --force --git "file://$GIT" --no-confirm cargo-binstall
+"$1" binstall --force --git "file://$GIT" --no-confirm cargo-binstall
 
 test_cargo_binstall_install
 
@@ -63,7 +57,7 @@ cat "$CARGO_HOME/.crates.toml"
 grep -F "cargo-binstall 0.12.0 $source" <"$CARGO_HOME/.crates.toml"
 
 # Install cargo-watch using `--git`
-"./$1" binstall --force --git "file://$GIT" --no-confirm cargo-watch
+"$1" binstall --force --git "file://$GIT" --no-confirm cargo-watch
 
 cargo_watch_version="$(cargo watch -V)"
 echo "$cargo_watch_version"

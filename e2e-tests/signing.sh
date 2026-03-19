@@ -2,12 +2,6 @@
 
 set -euxo pipefail
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-export CARGO_HOME
-export PATH="$CARGO_HOME/bin:$PATH"
-
 echo Generate tls cert
 
 CERT_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'cert-dir')
@@ -25,11 +19,11 @@ export BINSTALL_HTTPS_ROOT_CERTS="$CERT_DIR/ca.pem"
 
 signing/wait-for-server.sh
 
-"./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm signing-test
-"./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --only-signed signing-test
-"./$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --skip-signatures signing-test
+"$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm signing-test
+"$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --only-signed signing-test
+"$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --skip-signatures signing-test
 
 # from quick-install
-#"./$1" binstall --force --strategies quick-install --no-confirm --only-signed --target x86_64-unknown-linux-musl zellij@0.38.2
+#"$1" binstall --force --strategies quick-install --no-confirm --only-signed --target x86_64-unknown-linux-musl zellij@0.38.2
 
 kill $server_pid || true

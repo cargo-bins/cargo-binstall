@@ -2,14 +2,8 @@
 
 set -euxo pipefail
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-export CARGO_HOME
-export PATH="$CARGO_HOME/bin:$PATH"
-
 # Install a specific binary, ensuring we don't fallback to source.
-"./$1" binstall --no-confirm \
+"$1" binstall --no-confirm \
     taplo-cli --bin taplo \
     --pkg-url "{ repo }/releases/download/{ version }/taplo-{ target-family }-{ target-arch }.gz" \
     --bin-dir "taplo-{ target-family }-{ target-arch }/{ bin }{ binary-ext }" \
@@ -25,7 +19,7 @@ fi
 taplo --version
 
 # Install a specific binary, but always compile from source.
-"./$1" binstall --no-confirm ripgrep --bin rg --strategies compile
+"$1" binstall --no-confirm ripgrep --bin rg --strategies compile
 
 # Verify that the binary was installed and is executable
 if ! command -v rg >/dev/null 2>&1; then

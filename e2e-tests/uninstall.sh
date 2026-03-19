@@ -2,17 +2,8 @@
 
 set -euxo pipefail
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-export CARGO_HOME
-othertmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-test')
-export PATH="$CARGO_HOME/bin:$othertmpdir/bin:$PATH"
-
-mkdir -p "$othertmpdir/bin"
 # Copy it to bin to test use of env var `CARGO`
-cp "./$1" "$othertmpdir/bin/"
-
+cp "$1" "$CARGO_HOME/bin/"
 
 cargo binstall --no-confirm cargo-watch@8.4.0
 cargo uninstall cargo-watch

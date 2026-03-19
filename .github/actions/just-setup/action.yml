@@ -133,3 +133,8 @@ runs:
 
   - run: make -v
     shell: bash
+
+  - name: Install flock
+    run: brew install flock
+    shell: bash
+    if: runner.os == 'macOS'
