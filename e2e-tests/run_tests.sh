@@ -2,20 +2,21 @@
 
 set -euo pipefail
 
+CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
+cp "$2" "$CARGO_HOME/"
+
 output="$(mktemp)"
-binary="$(mktemp)"
-
-cp "$2" "$binary"
-chmod 555 "$binary"
-
 echo "::group::$1" >> "$output"
 
 cd e2e-tests
 set +e
 env -u RUSTFLAGS \
     -u CARGO_BUILD_TARGET \
+    -u CARGO_INSTALL_ROOT \
+    CARGO_HOME="$CARGO_HOME" \
+    PATH="$CARGO_HOME/bin:$PATH" \
     bash "$1.sh" \
-    "$binary" "${@:3}" >> "$output" 2>&1
+    "${@:3}" >> "$output" 2>&1
 exit_status="$?"
 set -e
 
