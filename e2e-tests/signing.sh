@@ -2,12 +2,6 @@
 
 set -euxo pipefail
 
-unset CARGO_INSTALL_ROOT
-
-CARGO_HOME=$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-home')
-export CARGO_HOME
-export PATH="$CARGO_HOME/bin:$PATH"
-
 echo Generate tls cert
 
 CERT_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'cert-dir')
