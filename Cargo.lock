@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-binstall"
-version = "1.17.7"
+version = "1.17.8"
 dependencies = [
  "atomic-file-install",
  "binstalk",
