@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.37](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.36...binstalk-downloader-v0.13.37) - 2026-03-21
+
+### Other
+
+- *(deps)* bump netdev from 0.40.1 to 0.41.0 in the deps group ([#2509](https://github.com/cargo-bins/cargo-binstall/pull/2509))
+- *(deps)* bump astral-tokio-tar from 0.5.6 to 0.6.0 ([#2504](https://github.com/cargo-bins/cargo-binstall/pull/2504))
+
 ## [0.13.36](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.35...binstalk-downloader-v0.13.36) - 2026-02-28
 
 ### Other
