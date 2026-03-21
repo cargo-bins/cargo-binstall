@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.39](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.38...binstalk-fetchers-v0.10.39) - 2026-03-21
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader, binstalk-git-repo-api
+
 ## [0.10.38](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.37...binstalk-fetchers-v0.10.38) - 2026-02-28
 
 ### Other
