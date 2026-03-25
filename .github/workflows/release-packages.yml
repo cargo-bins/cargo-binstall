@@ -43,6 +43,7 @@ jobs:
           - { o: ubuntu-latest, t: aarch64-unknown-linux-musl, c: true }
           - { o: windows-latest, t: x86_64-pc-windows-msvc }
           - { o: windows-11-arm, t: aarch64-pc-windows-msvc }
+          - { o: ubuntu-latest, t: riscv64gc-unknown-linux-musl, c: true }
 
     name: ${{ matrix.t }}
     runs-on: ${{ matrix.o }}
