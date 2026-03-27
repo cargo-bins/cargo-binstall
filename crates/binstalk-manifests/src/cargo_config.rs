@@ -74,6 +74,26 @@ pub enum IncludedConfig {
 }
 
 impl IncludedConfig {
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Path(path) => path,
+            Self::Extended { path, .. } => path,
+        }
+    }
+
+    pub fn path_mut(&mut self) -> &mut Path {
+        match self {
+            Self::Path(path) => path,
+            Self::Extended { path, .. } => path,
+        }
+    }
+
+    pub fn optional(&self) -> bool {
+        match self {
+            Self::Path(..) => false,
+            Self::Extended { optional, .. } => optional,
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -148,10 +168,7 @@ impl Config {
                 }
     
                 for included_config in &mut config.include {
-                    match included_config {
-                        IncludedConfig(path) => path,
-                        IncludedConfig::Extended { path, .. } => path,
-                    }
+                    join_if_relative(Some(included_config.path_mut()), dir);
                 }
     
                 Ok(config)
