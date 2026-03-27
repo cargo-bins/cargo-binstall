@@ -62,13 +62,30 @@ pub struct DefaultRegistry {
     pub default: Option<CompactString>,
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+pub enum IncludedConfig {
+    Path(PathBuf),
+    Extended {
+        path: PathBuf,
+        #[serde(default)]
+        optional: bool,
+    },
+}
+
+impl IncludedConfig {
+}
+
 #[derive(Debug, Default, Deserialize)]
+#[non_exhaustive]
 pub struct Config {
     pub install: Option<Install>,
     pub http: Option<Http>,
     pub env: Option<BTreeMap<CompactString, Env>>,
     pub registries: Option<BTreeMap<CompactString, Registry>>,
     pub registry: Option<DefaultRegistry>,
+    #[serde(default)]
+    pub include: Vec<IncludedConfig>,
 }
 
 fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
@@ -129,6 +146,14 @@ impl Config {
                         }
                     }
                 }
+    
+                for included_config in &mut config.include {
+                    match included_config {
+                        IncludedConfig(path) => path,
+                        IncludedConfig::Extended { path, .. } => path,
+                    }
+                }
+    
                 Ok(config)
             }
         }
