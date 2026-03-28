@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.70"
+version = "0.28.71"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.11.38"
+version = "0.11.39"
 dependencies = [
  "async-trait",
  "base16",
