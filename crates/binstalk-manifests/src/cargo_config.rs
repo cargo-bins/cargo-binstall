@@ -124,6 +124,49 @@ impl Config {
         Self::load_from_path(Self::default_path()?)
     }
 
+    fn load_from_reader_inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Self, ConfigLoadError> {
+        let mut vec = Vec::new();
+        reader.read_to_end(&mut vec)?;
+
+        if vec.is_empty() {
+            Ok(Default::default())
+        } else {
+            let mut config: Config = toml_edit::de::from_slice(&vec)?;
+            join_if_relative(
+                config
+                    .install
+                    .as_mut()
+                    .and_then(|install| install.root.as_mut()),
+                dir,
+            );
+            join_if_relative(
+                config.http.as_mut().and_then(|http| http.cainfo.as_mut()),
+                dir,
+            );
+            if let Some(envs) = config.env.as_mut() {
+                for env in envs.values_mut() {
+                    if let Env::WithOptions {
+                        value,
+                        relative: Some(true),
+                        ..
+                    } = env
+                    {
+                        let path = Cow::Borrowed(Path::new(&value));
+                        if path.is_relative() {
+                            *value = dir.join(&path).to_string_lossy().into();
+                        }
+                    }
+                }
+            }
+    
+            for included_config in &mut config.include {
+                join_if_relative(Some(included_config.path_mut()), dir);
+            }
+    
+            Ok(config)
+        }
+    }
+
     /// * `dir` - path to the dir where the config.toml is located.
     ///   For relative path in the config, `Config::load_from_reader`
     ///   will join the `dir` and the relative path to form the final
@@ -133,46 +176,7 @@ impl Config {
         dir: &Path,
     ) -> Result<Self, ConfigLoadError> {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
-            let mut vec = Vec::new();
-            reader.read_to_end(&mut vec)?;
-
-            if vec.is_empty() {
-                Ok(Default::default())
-            } else {
-                let mut config: Config = toml_edit::de::from_slice(&vec)?;
-                join_if_relative(
-                    config
-                        .install
-                        .as_mut()
-                        .and_then(|install| install.root.as_mut()),
-                    dir,
-                );
-                join_if_relative(
-                    config.http.as_mut().and_then(|http| http.cainfo.as_mut()),
-                    dir,
-                );
-                if let Some(envs) = config.env.as_mut() {
-                    for env in envs.values_mut() {
-                        if let Env::WithOptions {
-                            value,
-                            relative: Some(true),
-                            ..
-                        } = env
-                        {
-                            let path = Cow::Borrowed(Path::new(&value));
-                            if path.is_relative() {
-                                *value = dir.join(&path).to_string_lossy().into();
-                            }
-                        }
-                    }
-                }
-    
-                for included_config in &mut config.include {
-                    join_if_relative(Some(included_config.path_mut()), dir);
-                }
-    
-                Ok(config)
-            }
+            Config::load_from_reader_inner(reader, path)
         }
 
         inner(&mut reader, dir)
