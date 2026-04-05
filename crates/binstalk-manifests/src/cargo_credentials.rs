@@ -12,6 +12,8 @@ use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
+use crate::helpers::RedactedOption;
+
 type SecretString = Zeroizing<Box<str>>;
 
 #[derive(Clone, Default, Deserialize)]
@@ -82,7 +84,7 @@ where
 impl std::fmt::Debug for RegistryCredential {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RegistryCredential")
-            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .field("token", &RedactedOption(&self.token))
             .finish()
     }
 }
@@ -154,5 +156,17 @@ token = "private-token"
         let credentials = Credentials::load_from_home(home).unwrap();
 
         assert_eq!(credentials.get_registry_token("example"), Some("toml"));
+    }
+
+    #[test]
+    fn test_registry_credential_debug_redacts_token() {
+        let credential = RegistryCredential {
+            token: Some(Zeroizing::new("secret-token".into())),
+        };
+
+        let debug = format!("{credential:?}");
+
+        assert!(!debug.contains("secret-token"));
+        assert!(debug.contains("<redacted>"));
     }
 }

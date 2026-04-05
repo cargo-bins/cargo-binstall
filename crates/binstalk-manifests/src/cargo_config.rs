@@ -16,11 +16,8 @@ use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
 use miette::Diagnostic;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use thiserror::Error;
-use zeroize::Zeroizing;
-
-type SecretString = Zeroizing<Box<str>>;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Install {
@@ -53,18 +50,16 @@ pub enum Env {
     },
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Registry {
     pub index: Option<CompactString>,
     #[serde(rename = "replace-with")]
     pub replace_with: Option<CompactString>,
     #[serde(rename = "credential-provider")]
     pub credential_provider: Option<CredentialProvider>,
-    #[serde(default, deserialize_with = "deserialize_secret_string")]
-    pub token: Option<SecretString>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct DefaultRegistry {
     pub default: Option<CompactString>,
     #[serde(rename = "credential-provider")]
@@ -95,37 +90,6 @@ fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
     match path {
         Some(path) if path.is_relative() => *path = dir.join(&*path),
         _ => (),
-    }
-}
-
-fn deserialize_secret_string<'de, D>(deserializer: D) -> Result<Option<SecretString>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    Option::<Box<str>>::deserialize(deserializer).map(|value| value.map(Zeroizing::new))
-}
-
-impl std::fmt::Debug for Registry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Registry")
-            .field("index", &self.index)
-            .field("replace_with", &self.replace_with)
-            .field("credential_provider", &self.credential_provider)
-            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
-            .finish()
-    }
-}
-
-impl std::fmt::Debug for DefaultRegistry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DefaultRegistry")
-            .field("default", &self.default)
-            .field("credential_provider", &self.credential_provider)
-            .field(
-                "global_credential_providers",
-                &self.global_credential_providers,
-            )
-            .finish()
     }
 }
 

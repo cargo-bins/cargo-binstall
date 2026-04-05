@@ -104,7 +104,6 @@ fn cargo_token_provider_enabled(cargo_config: &CargoConfig, registry_name: Optio
 }
 
 fn resolve_cargo_token(
-    cargo_config: &CargoConfig,
     cargo_credentials: &Credentials,
     registry_name: Option<&str>,
 ) -> Option<Zeroizing<Box<str>>> {
@@ -114,13 +113,6 @@ fn resolve_cargo_token(
         }
 
         if let Some(token) = cargo_credentials.get_registry_token(registry_name) {
-            return Some(Zeroizing::new(token.into()));
-        }
-
-        if let Some(token) = cargo_config
-            .get_registry(registry_name)
-            .and_then(|registry| registry.token.as_ref().map(|token| &token[..]))
-        {
             return Some(Zeroizing::new(token.into()));
         }
     }
@@ -139,7 +131,7 @@ pub(crate) fn resolve_registry_auth(
     }
 
     let cargo_credentials = Credentials::load_from_home(cargo_home).ok()?;
-    let token = resolve_cargo_token(cargo_config, &cargo_credentials, registry_name)?;
+    let token = resolve_cargo_token(&cargo_credentials, registry_name)?;
 
     RegistryAuth::new(registry_name.map(CompactString::from), token)
 }
@@ -314,6 +306,70 @@ token = "secret-token"
 
         assert_eq!(auth.token(), "secret-token");
         assert_eq!(auth.registry_name(), Some("private-registry"));
+    }
+
+    #[test]
+    fn test_resolve_registry_auth_uses_env_token_when_cargo_token_is_enabled() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::set_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN", "secret-token");
+
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "cargo:token"
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+        let tempdir = tempdir().unwrap();
+        let registry: Registry = "sparse+https://registry.example.com/index/"
+            .parse()
+            .unwrap();
+
+        let auth =
+            resolve_registry_auth(&config, tempdir.path(), Some("private-registry"), &registry)
+                .unwrap();
+
+        assert_eq!(auth.token(), "secret-token");
+        assert_eq!(auth.registry_name(), Some("private-registry"));
+
+        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
+    }
+
+    #[test]
+    fn test_resolve_registry_auth_ignores_config_token() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
+
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "cargo:token"
+token = "secret-token"
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+        let tempdir = tempdir().unwrap();
+        let registry: Registry = "sparse+https://registry.example.com/index/"
+            .parse()
+            .unwrap();
+
+        assert!(resolve_registry_auth(
+            &config,
+            tempdir.path(),
+            Some("private-registry"),
+            &registry,
+        )
+        .is_none());
+
+        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
     }
 
     #[test]
