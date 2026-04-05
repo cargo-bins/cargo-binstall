@@ -415,6 +415,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "url",
+ "zeroize",
 ]
 
 [[package]]

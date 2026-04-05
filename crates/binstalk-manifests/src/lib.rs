@@ -13,6 +13,7 @@ mod helpers;
 pub mod binstall_crates_v1;
 pub mod cargo_config;
 pub mod cargo_crates_v1;
+pub mod cargo_credentials;
 /// Contains both [`binstall_crates_v1`] and [`cargo_crates_v1`].
 pub mod crates_manifests;
 

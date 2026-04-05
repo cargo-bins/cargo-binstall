@@ -22,6 +22,9 @@ use thiserror::Error as ThisError;
 use tokio::task;
 use url::{ParseError as UrlParseError, Url};
 
+mod auth;
+pub use auth::{RegistryAuth, ResolvedRegistry};
+
 #[cfg(feature = "git")]
 pub use simple_git::{GitError, GitUrl, GitUrlParseError};
 
@@ -98,6 +101,12 @@ pub enum RegistryError {
     #[cfg(feature = "git")]
     #[error("Failed to shallow clone git repository: {0}")]
     GitError(#[from] GitError),
+
+    #[error("registry requires authentication: {0}")]
+    #[diagnostic(
+        help("Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active.")
+    )]
+    AuthenticationRequired(Box<Url>),
 }
 
 impl From<CargoTomlError> for RegistryError {
@@ -185,16 +194,27 @@ impl Registry {
         crate_name: &str,
         version_req: &VersionReq,
     ) -> Result<Manifest<Meta>, RegistryError> {
+        self.fetch_crate_matched_with_auth(client, None, crate_name, version_req)
+            .await
+    }
+
+    pub(crate) async fn fetch_crate_matched_with_auth(
+        &self,
+        client: Client,
+        auth: Option<&RegistryAuth>,
+        crate_name: &str,
+        version_req: &VersionReq,
+    ) -> Result<Manifest<Meta>, RegistryError> {
         match self {
             Self::Sparse(sparse_registry) => {
                 sparse_registry
-                    .fetch_crate_matched(client, crate_name, version_req)
+                    .fetch_crate_matched(client, auth, crate_name, version_req)
                     .await
             }
             #[cfg(feature = "git")]
             Self::Git(git_registry) => {
                 git_registry
-                    .fetch_crate_matched(client, crate_name, version_req)
+                    .fetch_crate_matched(client, auth, crate_name, version_req)
                     .await
             }
         }
@@ -230,6 +250,14 @@ impl Registry {
                 url: MaybeOwned::Owned(registry.into_owned()),
             },
         })
+    }
+
+    pub fn cargo_install_index_arg(&self) -> String {
+        match self {
+            #[cfg(feature = "git")]
+            Registry::Git(registry) => registry.url().to_string(),
+            Registry::Sparse(registry) => format!("sparse+{}", registry.url()),
+        }
     }
 }
 

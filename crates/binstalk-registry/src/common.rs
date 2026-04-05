@@ -4,7 +4,7 @@ use base16::{decode as decode_base16, encode_lower as encode_base16};
 use binstalk_downloader::{
     bytes::Bytes,
     download::{DataVerifier, Download},
-    remote::{Client, Url},
+    remote::{Client, RequestBuilder, Url},
 };
 use binstalk_types::cargo_toml_binstall::{Meta, TarBasedFmt};
 use cargo_toml_workspace::cargo_toml::Manifest;
@@ -16,11 +16,13 @@ use serde_json::Error as JsonError;
 use sha2::{Digest, Sha256};
 use tracing::{debug, instrument};
 
-use crate::{visitor::ManifestVisitor, RegistryError};
+use crate::{visitor::ManifestVisitor, RegistryAuth, RegistryError};
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(super) struct RegistryConfig {
     pub(super) dl: CompactString,
+    #[serde(rename = "auth-required", default)]
+    pub(super) auth_required: bool,
 }
 
 struct Sha256Digest {
@@ -66,6 +68,7 @@ pub(super) async fn parse_manifest(
     crate_name: &str,
     crate_url: Url,
     MatchedVersion { version, cksum }: MatchedVersion,
+    auth: Option<&RegistryAuth>,
 ) -> Result<Manifest<Meta>, RegistryError> {
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
@@ -74,9 +77,12 @@ pub(super) async fn parse_manifest(
     let checksum = decode_base16(cksum.as_bytes()).map_err(RegistryError::from)?;
     let mut digest = Sha256Digest::new(checksum);
 
-    Download::new_with_data_verifier(client, crate_url, &mut digest)
-        .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
-        .await?;
+    Download::from_response_with_data_verifier(
+        apply_auth(client.get(crate_url), auth).send(true).await?,
+        &mut digest,
+    )
+    .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
+    .await?;
 
     if !digest.validate() {
         Err(RegistryError::UnmatchedChecksum {
@@ -85,6 +91,14 @@ pub(super) async fn parse_manifest(
         })
     } else {
         manifest_visitor.load_manifest()
+    }
+}
+
+pub(super) fn apply_auth(request: RequestBuilder, auth: Option<&RegistryAuth>) -> RequestBuilder {
+    if let Some(auth) = auth {
+        request.header("Authorization", auth.token())
+    } else {
+        request
     }
 }
 
