@@ -12,12 +12,7 @@ pub struct RegistryAuth {
 }
 
 impl RegistryAuth {
-    pub fn new(
-        registry_name: Option<CompactString>,
-        token: impl Into<SecretString>,
-    ) -> Option<Self> {
-        let token = token.into();
-
+    pub fn new(registry_name: Option<CompactString>, token: SecretString) -> Option<Self> {
         if token.is_empty() {
             None
         } else {
