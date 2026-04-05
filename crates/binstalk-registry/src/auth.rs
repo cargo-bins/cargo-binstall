@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc};
 
-use binstalk_manifests::cargo_credentials::SecretString;
+use binstalk_types::SecretString;
 use compact_str::CompactString;
 
 use crate::Registry;

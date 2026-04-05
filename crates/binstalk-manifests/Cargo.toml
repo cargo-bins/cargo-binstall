@@ -23,7 +23,6 @@ serde_json = "1.0.149"
 thiserror = "2.0.11"
 toml_edit = { version = "0.25.1", features = ["serde"] }
 url = { version = "2.5.8", features = ["serde"] }
-zeroize = "1.8.1"
 
 [dev-dependencies]
 detect-targets = { version = "0.1.83", path = "../detect-targets" }

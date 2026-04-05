@@ -5,16 +5,12 @@
 
 use std::{fs::File, io, path::Path};
 
+use binstalk_types::SecretString;
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use miette::Diagnostic;
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
-use zeroize::Zeroizing;
-
-use crate::helpers::Redacted;
-
-pub type SecretString = Redacted<Zeroizing<Box<str>>>;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct RegistryCredential {
@@ -74,7 +70,7 @@ where
     D: Deserializer<'de>,
 {
     Option::<Box<str>>::deserialize(deserializer)
-        .map(|value| value.map(|value| SecretString::new(Zeroizing::new(value))))
+        .map(|value| value.map(SecretString::from_boxed_str))
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -156,7 +152,7 @@ token = "private-token"
     #[test]
     fn test_registry_credential_debug_redacts_token() {
         let credential = RegistryCredential {
-            token: Some(SecretString::new(Zeroizing::new("secret-token".into()))),
+            token: Some(SecretString::from_boxed_str("secret-token".into())),
         };
 
         let debug = format!("{credential:?}");

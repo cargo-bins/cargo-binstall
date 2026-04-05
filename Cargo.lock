@@ -388,7 +388,6 @@ dependencies = [
  "thiserror 2.0.18",
  "toml_edit",
  "url",
- "zeroize",
 ]
 
 [[package]]
@@ -398,7 +397,6 @@ dependencies = [
  "async-trait",
  "base16",
  "binstalk-downloader",
- "binstalk-manifests",
  "binstalk-types",
  "cargo-toml-workspace",
  "compact_str",
@@ -417,7 +415,6 @@ dependencies = [
  "toml_edit",
  "tracing",
  "url",
- "zeroize",
 ]
 
 [[package]]
@@ -436,6 +433,7 @@ dependencies = [
  "strum_macros",
  "target-lexicon",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -574,6 +572,7 @@ dependencies = [
  "atomic-file-install",
  "binstalk",
  "binstalk-manifests",
+ "binstalk-types",
  "clap",
  "clap-cargo",
  "clap-markdown",
