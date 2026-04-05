@@ -27,6 +27,10 @@ fn provider_name_supports_cargo_token(
         return true;
     }
 
+    if provider_name.starts_with("cargo:") {
+        return false;
+    }
+
     if seen_aliases.iter().any(|alias| alias == provider_name) {
         return false;
     }
@@ -67,7 +71,10 @@ fn provider_supports_cargo_token(
         CredentialProvider::String(provider) => {
             provider_name_supports_cargo_token(cargo_config, provider, seen_aliases)
         }
-        CredentialProvider::Array(provider) => provider.len() == 1 && provider[0] == "cargo:token",
+        CredentialProvider::Array(provider) => {
+            provider.len() == 1
+                && provider_name_supports_cargo_token(cargo_config, &provider[0], seen_aliases)
+        }
     }
 }
 
@@ -262,6 +269,52 @@ credential-provider = "custom"
 
 [credential-alias]
 custom = ["cargo-credential-example", "--account", "test"]
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+
+        assert!(!cargo_token_provider_enabled(
+            &config,
+            Some("private-registry")
+        ));
+    }
+
+    #[test]
+    fn test_registry_provider_array_alias_enables_cargo_token() {
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = ["custom"]
+
+[credential-alias]
+custom = "cargo:token"
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+
+        assert!(cargo_token_provider_enabled(
+            &config,
+            Some("private-registry")
+        ));
+    }
+
+    #[test]
+    fn test_registry_provider_builtin_cargo_names_do_not_use_aliases() {
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "cargo:token-from-stdout"
+
+[credential-alias]
+"cargo:token-from-stdout" = "cargo:token"
                 "#,
             ),
             std::path::Path::new("."),
