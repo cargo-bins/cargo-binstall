@@ -48,13 +48,18 @@ impl Credentials {
 
     pub fn load_from_home(cargo_home: impl AsRef<Path>) -> Result<Self, CredentialsLoadError> {
         let cargo_home = cargo_home.as_ref();
-
         let toml_path = cargo_home.join("credentials.toml");
-        if toml_path.exists() {
-            return Self::load_from_path(toml_path);
-        }
 
-        Self::load_from_path(cargo_home.join("credentials"))
+        match File::open(&toml_path) {
+            Ok(file) => {
+                let file = FileLock::new_shared(file)?.set_file_path(toml_path.as_path());
+                Self::load_from_reader(file)
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                Self::load_from_path(cargo_home.join("credentials"))
+            }
+            Err(err) => Err(err.into()),
+        }
     }
 
     pub fn get_registry_token(&self, name: &str) -> Option<&str> {

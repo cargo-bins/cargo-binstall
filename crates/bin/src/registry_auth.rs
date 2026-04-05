@@ -20,12 +20,12 @@ fn normalize_registry_name(value: &str) -> String {
 
 pub(crate) fn get_registry_env_var(name: &str, suffix: &str) -> Option<String> {
     let normalized_name = normalize_registry_name(name);
-    let suffix = suffix.to_ascii_uppercase();
+    let suffix = format!("_{}", suffix.to_ascii_uppercase());
 
     env::vars().find_map(|(key, value)| {
         let registry_name = key
             .strip_prefix("CARGO_REGISTRIES_")?
-            .strip_suffix(&format!("_{suffix}"))?;
+            .strip_suffix(&suffix)?;
 
         (normalize_registry_name(registry_name) == normalized_name).then_some(value)
     })
