@@ -3,7 +3,7 @@ use std::{env, path::Path};
 use binstalk::registry::{Registry, RegistryAuth};
 use binstalk_manifests::{
     cargo_config::{Config as CargoConfig, CredentialProvider},
-    cargo_credentials::Credentials,
+    cargo_credentials::{Credentials, SecretString},
 };
 use compact_str::CompactString;
 use zeroize::Zeroizing;
@@ -113,14 +113,14 @@ fn cargo_token_provider_enabled(cargo_config: &CargoConfig, registry_name: Optio
 fn resolve_cargo_token(
     cargo_credentials: &Credentials,
     registry_name: Option<&str>,
-) -> Option<Zeroizing<Box<str>>> {
+) -> Option<SecretString> {
     if let Some(registry_name) = registry_name {
         if let Some(token) = get_registry_env_var(registry_name, "TOKEN") {
-            return Some(Zeroizing::new(token.into_boxed_str()));
+            return Some(SecretString::new(Zeroizing::new(token.into_boxed_str())));
         }
 
         if let Some(token) = cargo_credentials.get_registry_token(registry_name) {
-            return Some(Zeroizing::new(token.into()));
+            return Some(token.clone());
         }
     }
 

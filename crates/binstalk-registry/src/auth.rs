@@ -1,20 +1,20 @@
 use std::{fmt, sync::Arc};
 
+use binstalk_manifests::cargo_credentials::SecretString;
 use compact_str::CompactString;
-use zeroize::Zeroizing;
 
 use crate::Registry;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RegistryAuth {
     registry_name: Option<CompactString>,
-    token: Arc<Zeroizing<Box<str>>>,
+    token: Arc<SecretString>,
 }
 
 impl RegistryAuth {
     pub fn new(
         registry_name: Option<CompactString>,
-        token: impl Into<Zeroizing<Box<str>>>,
+        token: impl Into<SecretString>,
     ) -> Option<Self> {
         let token = token.into();
 
@@ -29,20 +29,11 @@ impl RegistryAuth {
     }
 
     pub fn token(&self) -> &str {
-        self.token.as_ref().as_ref()
+        &self.token[..]
     }
 
     pub fn registry_name(&self) -> Option<&str> {
         self.registry_name.as_deref()
-    }
-}
-
-impl fmt::Debug for RegistryAuth {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RegistryAuth")
-            .field("registry_name", &self.registry_name)
-            .field("token", &"<redacted>")
-            .finish()
     }
 }
 

@@ -12,11 +12,11 @@ use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-use crate::helpers::RedactedOption;
+use crate::helpers::Redacted;
 
-type SecretString = Zeroizing<Box<str>>;
+pub type SecretString = Redacted<Zeroizing<Box<str>>>;
 
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct RegistryCredential {
     #[serde(default, deserialize_with = "deserialize_secret_string")]
     pub token: Option<SecretString>,
@@ -64,13 +64,8 @@ impl Credentials {
         }
     }
 
-    pub fn get_registry_token(&self, name: &str) -> Option<&str> {
-        self.registries
-            .as_ref()?
-            .get(name)?
-            .token
-            .as_ref()
-            .map(|token| &token[..])
+    pub fn get_registry_token(&self, name: &str) -> Option<&SecretString> {
+        self.registries.as_ref()?.get(name)?.token.as_ref()
     }
 }
 
@@ -78,15 +73,8 @@ fn deserialize_secret_string<'de, D>(deserializer: D) -> Result<Option<SecretStr
 where
     D: Deserializer<'de>,
 {
-    Option::<Box<str>>::deserialize(deserializer).map(|value| value.map(Zeroizing::new))
-}
-
-impl std::fmt::Debug for RegistryCredential {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RegistryCredential")
-            .field("token", &RedactedOption(&self.token))
-            .finish()
-    }
+    Option::<Box<str>>::deserialize(deserializer)
+        .map(|value| value.map(|value| SecretString::new(Zeroizing::new(value))))
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -132,7 +120,9 @@ token = "private-token"
         let credentials = Credentials::load_from_reader(Cursor::new(CREDENTIALS)).unwrap();
 
         assert_eq!(
-            credentials.get_registry_token("private-registry"),
+            credentials
+                .get_registry_token("private-registry")
+                .map(|token| &token[..]),
             Some("private-token")
         );
     }
@@ -155,13 +145,18 @@ token = "private-token"
 
         let credentials = Credentials::load_from_home(home).unwrap();
 
-        assert_eq!(credentials.get_registry_token("example"), Some("toml"));
+        assert_eq!(
+            credentials
+                .get_registry_token("example")
+                .map(|token| &token[..]),
+            Some("toml")
+        );
     }
 
     #[test]
     fn test_registry_credential_debug_redacts_token() {
         let credential = RegistryCredential {
-            token: Some(Zeroizing::new("secret-token".into())),
+            token: Some(SecretString::new(Zeroizing::new("secret-token".into()))),
         };
 
         let debug = format!("{credential:?}");

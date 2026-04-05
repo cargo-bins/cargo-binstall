@@ -398,6 +398,7 @@ dependencies = [
  "async-trait",
  "base16",
  "binstalk-downloader",
+ "binstalk-manifests",
  "binstalk-types",
  "cargo-toml-workspace",
  "compact_str",

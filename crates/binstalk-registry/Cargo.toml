@@ -16,6 +16,7 @@ base16 = "0.2.1"
 binstalk-downloader = { version = "0.13.37", path = "../binstalk-downloader", default-features = false, features = [
     "json",
 ] }
+binstalk-manifests = { version = "0.17.30", path = "../binstalk-manifests" }
 binstalk-types = { version = "0.10.6", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "7.0.9", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.9.0", features = ["serde"] }

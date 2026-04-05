@@ -1,4 +1,4 @@
-use std::{fmt, fs, io, path::Path};
+use std::{fmt, fs, io, ops::Deref, path::Path};
 
 use fs_lock::FileLock;
 
@@ -14,13 +14,26 @@ pub(crate) fn create_if_not_exist(path: &Path) -> io::Result<FileLock> {
         .map(|file_lock| file_lock.set_file_path(path))
 }
 
-pub(crate) struct RedactedOption<'a, T>(pub &'a Option<T>);
+#[repr(transparent)]
+#[derive(Clone, Default)]
+pub struct Redacted<T>(T);
 
-impl<T> fmt::Debug for RedactedOption<'_, T> {
+impl<T> Redacted<T> {
+    pub const fn new(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T> Deref for Redacted<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> fmt::Debug for Redacted<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Some(_) => f.debug_tuple("Some").field(&"<redacted>").finish(),
-            None => f.write_str("None"),
-        }
+        f.write_str("<redacted>")
     }
 }
