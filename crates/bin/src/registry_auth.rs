@@ -18,6 +18,33 @@ fn normalize_registry_name(value: &str) -> String {
         .collect()
 }
 
+fn provider_name_supports_cargo_token(
+    cargo_config: &CargoConfig,
+    provider_name: &str,
+    seen_aliases: &mut Vec<CompactString>,
+) -> bool {
+    if provider_name == "cargo:token" {
+        return true;
+    }
+
+    if seen_aliases.iter().any(|alias| alias == provider_name) {
+        return false;
+    }
+
+    let Some(provider) = cargo_config
+        .credential_alias
+        .as_ref()
+        .and_then(|aliases| aliases.get(provider_name))
+    else {
+        return false;
+    };
+
+    seen_aliases.push(provider_name.into());
+    let supports = provider_supports_cargo_token(cargo_config, provider, seen_aliases);
+    seen_aliases.pop();
+    supports
+}
+
 pub(crate) fn get_registry_env_var(name: &str, suffix: &str) -> Option<String> {
     let normalized_name = normalize_registry_name(name);
     let suffix = format!("_{}", suffix.to_ascii_uppercase());
@@ -31,28 +58,40 @@ pub(crate) fn get_registry_env_var(name: &str, suffix: &str) -> Option<String> {
     })
 }
 
-fn provider_supports_cargo_token(provider: &CredentialProvider) -> bool {
+fn provider_supports_cargo_token(
+    cargo_config: &CargoConfig,
+    provider: &CredentialProvider,
+    seen_aliases: &mut Vec<CompactString>,
+) -> bool {
     match provider {
-        CredentialProvider::String(provider) => provider == "cargo:token",
+        CredentialProvider::String(provider) => {
+            provider_name_supports_cargo_token(cargo_config, provider, seen_aliases)
+        }
         CredentialProvider::Array(provider) => provider.len() == 1 && provider[0] == "cargo:token",
     }
 }
 
-fn global_provider_supports_cargo_token(providers: &[CompactString]) -> bool {
-    providers.iter().any(|provider| provider == "cargo:token")
+fn global_provider_supports_cargo_token(
+    cargo_config: &CargoConfig,
+    providers: &[CompactString],
+) -> bool {
+    let mut seen_aliases = Vec::new();
+    providers.iter().any(|provider| {
+        provider_name_supports_cargo_token(cargo_config, provider, &mut seen_aliases)
+    })
 }
 
 fn cargo_token_provider_enabled(cargo_config: &CargoConfig, registry_name: Option<&str>) -> bool {
     if let Some(registry_name) = registry_name {
         if let Some(provider) = get_registry_env_var(registry_name, "CREDENTIAL_PROVIDER") {
-            return provider == "cargo:token";
+            return provider_name_supports_cargo_token(cargo_config, &provider, &mut Vec::new());
         }
 
         if let Some(provider) = cargo_config
             .get_registry(registry_name)
             .and_then(|registry| registry.credential_provider.as_ref())
         {
-            return provider_supports_cargo_token(provider);
+            return provider_supports_cargo_token(cargo_config, provider, &mut Vec::new());
         }
     }
 
@@ -60,7 +99,7 @@ fn cargo_token_provider_enabled(cargo_config: &CargoConfig, registry_name: Optio
         .registry
         .as_ref()
         .and_then(|registry| registry.global_credential_providers.as_deref())
-        .map(global_provider_supports_cargo_token)
+        .map(|providers| global_provider_supports_cargo_token(cargo_config, providers))
         .unwrap_or(true)
 }
 
@@ -164,6 +203,83 @@ credential-provider = "cargo:token"
         ));
 
         env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER");
+    }
+
+    #[test]
+    fn test_registry_provider_alias_enables_cargo_token() {
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "custom"
+
+[credential-alias]
+custom = "cargo:token"
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+
+        assert!(cargo_token_provider_enabled(
+            &config,
+            Some("private-registry")
+        ));
+    }
+
+    #[test]
+    fn test_registry_provider_env_alias_enables_cargo_token() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::set_var(
+            "CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER",
+            "custom",
+        );
+
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "cargo:libsecret"
+
+[credential-alias]
+custom = "cargo:token"
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+
+        assert!(cargo_token_provider_enabled(
+            &config,
+            Some("private-registry")
+        ));
+
+        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER");
+    }
+
+    #[test]
+    fn test_registry_provider_alias_non_token_disables_cargo_token() {
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "custom"
+
+[credential-alias]
+custom = ["cargo-credential-example", "--account", "test"]
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+
+        assert!(!cargo_token_provider_enabled(
+            &config,
+            Some("private-registry")
+        ));
     }
 
     #[test]
