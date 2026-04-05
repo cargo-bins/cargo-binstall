@@ -56,20 +56,6 @@ fn cargo_token_provider_enabled(cargo_config: &CargoConfig, registry_name: Optio
         }
     }
 
-    if matches!(registry_name, Some("crates-io")) {
-        if let Ok(provider) = env::var("CARGO_REGISTRY_CREDENTIAL_PROVIDER") {
-            return provider == "cargo:token";
-        }
-
-        if let Some(provider) = cargo_config
-            .registry
-            .as_ref()
-            .and_then(|registry| registry.credential_provider.as_ref())
-        {
-            return provider_supports_cargo_token(provider);
-        }
-    }
-
     cargo_config
         .registry
         .as_ref()
@@ -94,27 +80,7 @@ fn resolve_cargo_token(
 
         if let Some(token) = cargo_config
             .get_registry(registry_name)
-            .and_then(|registry| registry.token.as_deref())
-        {
-            return Some(Zeroizing::new(token.into()));
-        }
-    }
-
-    if matches!(registry_name, Some("crates-io")) {
-        if let Ok(token) = env::var("CARGO_REGISTRY_TOKEN") {
-            if !token.is_empty() {
-                return Some(Zeroizing::new(token.into_boxed_str()));
-            }
-        }
-
-        if let Some(token) = cargo_credentials.get_crates_io_token() {
-            return Some(Zeroizing::new(token.into()));
-        }
-
-        if let Some(token) = cargo_config
-            .registry
-            .as_ref()
-            .and_then(|registry| registry.token.as_deref())
+            .and_then(|registry| registry.token.as_ref().map(|token| &token[..]))
         {
             return Some(Zeroizing::new(token.into()));
         }
@@ -170,6 +136,34 @@ mod tests {
             &config,
             Some("private-registry")
         ));
+    }
+
+    #[test]
+    fn test_registry_provider_env_takes_precedence_over_config() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::set_var(
+            "CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER",
+            "cargo:libsecret",
+        );
+
+        let config = CargoConfig::load_from_reader(
+            Cursor::new(
+                r#"
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "cargo:token"
+                "#,
+            ),
+            std::path::Path::new("."),
+        )
+        .unwrap();
+
+        assert!(!cargo_token_provider_enabled(
+            &config,
+            Some("private-registry")
+        ));
+
+        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER");
     }
 
     #[test]

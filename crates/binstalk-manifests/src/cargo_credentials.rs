@@ -8,12 +8,16 @@ use std::{fs::File, io, path::Path};
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use miette::Diagnostic;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use thiserror::Error;
+use zeroize::Zeroizing;
 
-#[derive(Clone, Debug, Default, Deserialize)]
+type SecretString = Zeroizing<Box<str>>;
+
+#[derive(Clone, Default, Deserialize)]
 pub struct RegistryCredential {
-    pub token: Option<CompactString>,
+    #[serde(default, deserialize_with = "deserialize_secret_string")]
+    pub token: Option<SecretString>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -54,11 +58,27 @@ impl Credentials {
     }
 
     pub fn get_registry_token(&self, name: &str) -> Option<&str> {
-        self.registries.as_ref()?.get(name)?.token.as_deref()
+        self.registries
+            .as_ref()?
+            .get(name)?
+            .token
+            .as_ref()
+            .map(|token| &token[..])
     }
+}
 
-    pub fn get_crates_io_token(&self) -> Option<&str> {
-        self.registry.as_ref()?.token.as_deref()
+fn deserialize_secret_string<'de, D>(deserializer: D) -> Result<Option<SecretString>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Box<str>>::deserialize(deserializer).map(|value| value.map(Zeroizing::new))
+}
+
+impl std::fmt::Debug for RegistryCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegistryCredential")
+            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .finish()
     }
 }
 
@@ -104,7 +124,6 @@ token = "private-token"
 
         let credentials = Credentials::load_from_reader(Cursor::new(CREDENTIALS)).unwrap();
 
-        assert_eq!(credentials.get_crates_io_token(), Some("crates-io-token"));
         assert_eq!(
             credentials.get_registry_token("private-registry"),
             Some("private-token")

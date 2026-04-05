@@ -388,6 +388,7 @@ dependencies = [
  "thiserror 2.0.18",
  "toml_edit",
  "url",
+ "zeroize",
 ]
 
 [[package]]
