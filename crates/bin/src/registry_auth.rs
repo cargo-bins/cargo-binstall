@@ -117,8 +117,9 @@ fn resolve_global_supported_provider(
     cargo_config: &CargoConfig,
     providers: &[CompactString],
 ) -> Option<SupportedRegistryCredentialProvider> {
+    let mut seen_aliases = Vec::new();
     providers.iter().rev().find_map(|provider| {
-        resolve_supported_provider_name(cargo_config, provider, &mut Vec::new())
+        resolve_supported_provider_name(cargo_config, provider, &mut seen_aliases)
     })
 }
 
@@ -165,7 +166,8 @@ fn resolve_cargo_token(
 }
 
 fn resolve_provider_command_arg(arg: &str, registry: &Registry) -> String {
-    // Cargo's BasicProcessCredential replaces `{index_url}` before spawning `cargo:token-from-stdout` commands.
+    // Cargo's `BasicProcessCredential` replaces `{index_url}` before spawning `cargo:token-from-stdout` commands.
+    // https://github.com/rust-lang/cargo/blob/master/src/cargo/util/credential/adaptor.rs#L27-L34
     arg.replace("{index_url}", &registry.cargo_install_index_arg())
 }
 
