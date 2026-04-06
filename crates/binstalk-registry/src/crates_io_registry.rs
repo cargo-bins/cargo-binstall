@@ -162,5 +162,12 @@ pub async fn fetch_crate_cratesio_api(
         .push(&version)
         .push("download");
 
-    parse_manifest(client, name, crate_url, MatchedVersion { version, cksum }).await
+    parse_manifest(
+        client,
+        name,
+        crate_url,
+        MatchedVersion { version, cksum },
+        None,
+    )
+    .await
 }

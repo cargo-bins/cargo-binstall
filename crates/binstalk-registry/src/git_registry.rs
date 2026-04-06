@@ -14,15 +14,15 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryConfig,
-    RegistryError,
+    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryAuth,
+    RegistryConfig, RegistryError,
 };
 
 #[derive(Debug)]
 struct GitIndex {
     _tempdir: TempDir,
     repo: Repository,
-    dl_template: CompactString,
+    config: RegistryConfig,
 }
 
 impl GitIndex {
@@ -51,7 +51,7 @@ impl GitIndex {
         Ok(Self {
             _tempdir: tempdir,
             repo,
-            dl_template: config.dl,
+            config,
         })
     }
 }
@@ -110,6 +110,7 @@ impl GitRegistry {
     pub async fn fetch_crate_matched(
         &self,
         client: Client,
+        auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
     ) -> Result<Manifest<Meta>, RegistryError> {
@@ -122,11 +123,11 @@ impl GitRegistry {
         // Cancel git operation if the future is cancelled (dropped).
         let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
-        let (matched_version, dl_url) = spawn_blocking(move || {
+        let (matched_version, dl_url, auth_required) = spawn_blocking(move || {
             let GitIndex {
                 _tempdir: _,
                 repo,
-                dl_template,
+                config,
             } = this
                 .0
                 .git_index
@@ -136,19 +137,31 @@ impl GitRegistry {
                 Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
 
             let url = Url::parse(&render_dl_template(
-                dl_template,
+                &config.dl,
                 &crate_name,
                 &crate_prefix,
                 &matched_version,
             )?)?;
 
-            Ok::<_, RegistryError>((matched_version, url))
+            Ok::<_, RegistryError>((matched_version, url, config.auth_required))
         })
         .await??;
 
         // Git operation done, disarm it
         cancel_on_drop.disarm();
 
-        parse_manifest(client, name, dl_url, matched_version).await
+        let auth = if auth_required {
+            let Some(auth) = auth else {
+                return Err(RegistryError::AuthenticationRequired(Box::new(
+                    dl_url.clone(),
+                )));
+            };
+
+            Some(auth)
+        } else {
+            None
+        };
+
+        parse_manifest(client, name, dl_url, matched_version, auth).await
     }
 }

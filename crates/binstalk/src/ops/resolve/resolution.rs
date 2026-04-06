@@ -179,6 +179,12 @@ impl ResolutionSource {
             .arg(version)
             .kill_on_drop(true);
 
+        apply_registry_selection(
+            &mut cmd,
+            opts.cargo_install_registry.as_deref(),
+            opts.cargo_install_index.as_deref(),
+        );
+
         if let Some(target) = target {
             cmd.arg("--target").arg(target);
         }
@@ -245,6 +251,14 @@ impl ResolutionSource {
     }
 }
 
+fn apply_registry_selection(cmd: &mut Command, registry: Option<&str>, index: Option<&str>) {
+    if let Some(registry) = registry {
+        cmd.arg("--registry").arg(registry);
+    } else if let Some(index) = index {
+        cmd.arg("--index").arg(index);
+    }
+}
+
 fn format_cmd(cmd: &Command) -> impl fmt::Display + '_ {
     let cmd = cmd.as_std();
 
@@ -256,4 +270,44 @@ fn format_cmd(cmd: &Command) -> impl fmt::Display + '_ {
         .map(Either::Right);
 
     iter::once(program).chain(program_args).format(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_apply_registry_selection_uses_registry_name() {
+        let mut cmd = Command::new("cargo");
+
+        apply_registry_selection(&mut cmd, Some("private-test"), None);
+
+        let args: Vec<_> = cmd
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, ["--registry", "private-test"]);
+    }
+
+    #[test]
+    fn test_apply_registry_selection_uses_index_when_registry_name_missing() {
+        let mut cmd = Command::new("cargo");
+
+        apply_registry_selection(
+            &mut cmd,
+            None,
+            Some("sparse+https://registry.example.com/index/"),
+        );
+
+        let args: Vec<_> = cmd
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            ["--index", "sparse+https://registry.example.com/index/"]
+        );
+    }
 }

@@ -11,7 +11,7 @@ use crate::{
         lazy_gh_api_client::LazyGhApiClient, remote::Client,
     },
     manifests::cargo_toml_binstall::PkgOverride,
-    registry::Registry,
+    registry::ResolvedRegistry,
     DesiredTargets,
 };
 
@@ -51,11 +51,13 @@ pub struct Options {
     pub install_path: PathBuf,
     pub has_overriden_install_path: bool,
     pub cargo_root: Option<PathBuf>,
+    pub cargo_install_registry: Option<CompactString>,
+    pub cargo_install_index: Option<CompactString>,
 
     pub client: Client,
     pub gh_api_client: LazyGhApiClient,
     pub jobserver_client: LazyJobserverClient,
-    pub registry: Registry,
+    pub registry: ResolvedRegistry,
 
     pub signature_policy: SignaturePolicy,
     pub disable_telemetry: bool,

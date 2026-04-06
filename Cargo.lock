@@ -433,6 +433,7 @@ dependencies = [
  "strum_macros",
  "target-lexicon",
  "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -571,6 +572,7 @@ dependencies = [
  "atomic-file-install",
  "binstalk",
  "binstalk-manifests",
+ "binstalk-types",
  "clap",
  "clap-cargo",
  "clap-markdown",
