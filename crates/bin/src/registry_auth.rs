@@ -74,13 +74,10 @@ fn resolve_supported_provider(
         return None;
     }
 
-    let Some(provider) = cargo_config
+    let provider = cargo_config
         .credential_alias
         .as_ref()
-        .and_then(|aliases| aliases.get(provider_name.as_str()))
-    else {
-        return None;
-    };
+        .and_then(|aliases| aliases.get(provider_name.as_str()))?;
 
     seen_aliases.push(provider_name.clone());
     let supports = resolve_supported_provider_from_config(cargo_config, provider, seen_aliases);
