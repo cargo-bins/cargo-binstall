@@ -11,7 +11,7 @@ use binstalk_manifests::{
 };
 use binstalk_types::SecretString;
 use compact_str::CompactString;
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum SupportedRegistryCredentialProvider {
@@ -165,6 +165,7 @@ fn resolve_cargo_token(
 }
 
 fn resolve_provider_command_arg(arg: &str, registry: &Registry) -> String {
+    // Cargo's BasicProcessCredential replaces `{index_url}` before spawning `cargo:token-from-stdout` commands.
     arg.replace("{index_url}", &registry.cargo_install_index_arg())
 }
 
@@ -188,6 +189,10 @@ fn resolve_cargo_token_from_stdout(
                 .map(|arg| resolve_provider_command_arg(arg, registry)),
         )
         .env(
+            "CARGO",
+            env::var_os("CARGO").unwrap_or_else(|| "cargo".into()),
+        )
+        .env(
             "CARGO_REGISTRY_INDEX_URL",
             registry.cargo_install_index_arg(),
         )
@@ -198,17 +203,14 @@ fn resolve_cargo_token_from_stdout(
     }
 
     let mut child = command.spawn()?;
-    let Some(mut stdout) = child.stdout.take() else {
-        return Err(io::Error::other("credential process stdout was not piped"));
-    };
+    let mut stdout = child.stdout.take().unwrap();
 
-    let mut buffer = String::new();
+    let mut buffer = Zeroizing::new(String::new());
     use std::io::Read as _;
     stdout.read_to_string(&mut buffer)?;
 
     if let Some(end) = buffer.find('\n') {
         if buffer.len() > end + 1 {
-            buffer.zeroize();
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
@@ -222,14 +224,15 @@ fn resolve_cargo_token_from_stdout(
 
     let status = child.wait()?;
     if !status.success() {
-        buffer.zeroize();
         return Err(io::Error::other(format!(
             "process `{}` failed with status `{status}`",
             executable
         )));
     }
 
-    Ok(SecretString::from_boxed_str(buffer.into_boxed_str()))
+    Ok(SecretString::from_boxed_str(
+        std::mem::take(&mut *buffer).into_boxed_str(),
+    ))
 }
 
 pub(crate) fn resolve_registry_auth(
