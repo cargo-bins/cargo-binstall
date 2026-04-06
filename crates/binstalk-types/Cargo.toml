@@ -15,12 +15,13 @@ compact_str = { version = "0.9.0", features = ["serde"] }
 indexmap = { version = "2.13.0", features = ["serde"] }
 maybe-owned = { version = "0.3.4", features = ["serde"] }
 once_cell = "1.18.0"
-semver = { version = "1.0.17", features = ["serde"] }
+semver = { version = "1.0.28", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
 strum = "0.28.0"
 strum_macros = "0.28.0"
 target-lexicon = { version = "0.13.0", features = ["std"] }
 url = { version = "2.5.8", features = ["serde"] }
+zeroize = "1.8.1"
 
 [dev-dependencies]
 serde_json = "1"

@@ -11,6 +11,7 @@ use crate::{args::Args, ui::confirm_sync};
 
 pub(crate) struct Init {
     pub(crate) cargo_config: CargoConfig,
+    pub(crate) cargo_home: Option<PathBuf>,
     pub(crate) settings: crate::settings::Settings,
     pub(crate) cargo_root: PathBuf,
     pub(crate) install_path: PathBuf,
@@ -142,6 +143,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
 
     Ok(Init {
         cargo_config,
+        cargo_home,
         settings,
         cargo_root,
         install_path,

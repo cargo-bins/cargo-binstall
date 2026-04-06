@@ -36,6 +36,7 @@ use semver::{Version, VersionReq};
 use tokio::task::block_in_place;
 use tracing::{debug, info, warn};
 
+use crate::registry_auth::{get_registry_env_var, resolve_registry_auth};
 use crate::{args::Args, gh_token, git_credentials, initialise::Init, ui::confirm};
 
 pub fn install_crates(
@@ -45,6 +46,7 @@ pub fn install_crates(
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     let Init {
         mut cargo_config,
+        cargo_home,
         settings,
         cargo_root,
         install_path,
@@ -128,6 +130,55 @@ pub fn install_crates(
             }
         });
 
+    let (resolved_registry, cargo_install_registry, cargo_install_index) = {
+        let cargo_home = cargo_home.as_deref().unwrap_or(&cargo_root);
+
+        if let Some(index) = args.index.clone() {
+            let resolved_registry = binstalk::registry::ResolvedRegistry::new(index, None);
+            let cargo_install_index = resolved_registry.cargo_install_index_arg().into();
+
+            (resolved_registry, None, Some(cargo_install_index))
+        } else {
+            let registry_name = args.registry.clone().or_else(|| {
+                cargo_config
+                    .registry
+                    .take()
+                    .and_then(|registry| registry.default)
+            });
+
+            let registry = if let Some(registry_name) = registry_name.as_deref() {
+                let index = get_registry_env_var(registry_name, "INDEX");
+
+                let index = index
+                    .as_deref()
+                    .or_else(|| cargo_config.get_registry_index(registry_name));
+
+                if let Some(index) = index {
+                    index.parse().map_err(BinstallError::from)?
+                } else if registry_name.eq_ignore_ascii_case("crates-io") {
+                    Default::default()
+                } else {
+                    return Err(BinstallError::UnknownRegistryName(registry_name.into()).into());
+                }
+            } else {
+                Default::default()
+            };
+
+            let registry_auth = resolve_registry_auth(
+                &cargo_config,
+                cargo_home,
+                registry_name.as_deref(),
+                &registry,
+            );
+
+            (
+                binstalk::registry::ResolvedRegistry::new(registry, registry_auth),
+                registry_name.filter(|name| !name.eq_ignore_ascii_case("crates-io")),
+                None,
+            )
+        }
+    };
+
     // Create binstall_opts
     let binstall_opts = Arc::new(Options {
         no_symlinks: args.no_symlinks,
@@ -161,43 +212,13 @@ pub fn install_crates(
         install_path,
         has_overriden_install_path: args.install_path.is_some(),
         cargo_root: Some(cargo_root),
+        cargo_install_registry,
+        cargo_install_index,
 
         client,
         gh_api_client,
         jobserver_client,
-        registry: if let Some(index) = args.index {
-            index
-        } else if let Some(registry_name) = args.registry.or_else(|| {
-            cargo_config
-                .registry
-                .take()
-                .and_then(|registry| registry.default)
-        }) {
-            let registry_name_lowercase = registry_name.to_lowercase();
-
-            let v = env::vars().find_map(|(k, v)| {
-                let name_lowercase = k
-                    .strip_prefix("CARGO_REGISTRIES_")?
-                    .strip_suffix("_INDEX")?
-                    .to_lowercase();
-
-                (name_lowercase == registry_name_lowercase).then_some(v)
-            });
-
-            let v = v
-                .as_deref()
-                .or_else(|| cargo_config.get_registry_index(&registry_name));
-
-            if let Some(v) = &v {
-                v.parse().map_err(BinstallError::from)?
-            } else if registry_name_lowercase == "crates-io" {
-                Default::default()
-            } else {
-                return Err(BinstallError::UnknownRegistryName(registry_name).into());
-            }
-        } else {
-            Default::default()
-        },
+        registry: resolved_registry,
 
         signature_policy: if args.only_signed {
             SignaturePolicy::Require

@@ -55,11 +55,24 @@ pub struct Registry {
     pub index: Option<CompactString>,
     #[serde(rename = "replace-with")]
     pub replace_with: Option<CompactString>,
+    #[serde(rename = "credential-provider")]
+    pub credential_provider: Option<CredentialProvider>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DefaultRegistry {
     pub default: Option<CompactString>,
+    #[serde(rename = "credential-provider")]
+    pub credential_provider: Option<CredentialProvider>,
+    #[serde(rename = "global-credential-providers")]
+    pub global_credential_providers: Option<Vec<CompactString>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum CredentialProvider {
+    String(CompactString),
+    Array(Vec<CompactString>),
 }
 
 #[derive(Deserialize, Debug)]
@@ -106,6 +119,8 @@ pub struct Config {
     pub registry: Option<DefaultRegistry>,
     #[serde(default)]
     pub include: Vec<IncludedConfig>,
+    #[serde(rename = "credential-alias")]
+    pub credential_alias: Option<BTreeMap<CompactString, CredentialProvider>>,
 }
 
 fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
@@ -207,6 +222,16 @@ impl Config {
             registry.index.as_deref()
         }
     }
+
+    pub fn get_registry(&self, name: &str) -> Option<&Registry> {
+        let registry = self.registries.as_ref()?.get(name)?;
+
+        if let Some(name) = registry.replace_with.as_deref() {
+            self.get_registry(name)
+        } else {
+            Some(registry)
+        }
+    }
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -256,6 +281,18 @@ cainfo = "cert.pem"         # path to Certificate Authority (CA) bundle
 
 [install]
 root = "/some/path"         # `cargo install` destination directory
+
+[registries.private-registry]
+index = "sparse+https://registry.example.com/index/"
+credential-provider = "cargo:token"
+
+[registry]
+default = "private-registry"
+credential-provider = "cargo:token"
+global-credential-providers = ["cargo:token", "cargo:libsecret"]
+
+[credential-alias]
+custom = ["cargo-credential-example", "--account", "test"]
     "#;
 
     #[test]
@@ -294,5 +331,44 @@ root = "/some/path"         # `cargo install` destination directory
                 relative: Some(true),
             }
         );
+
+        let registries = config.registries.unwrap();
+        let private_registry = registries.get("private-registry").unwrap();
+        assert_eq!(
+            private_registry.index.as_deref(),
+            Some("sparse+https://registry.example.com/index/")
+        );
+        assert!(matches!(
+            private_registry.credential_provider.as_ref(),
+            Some(CredentialProvider::String(provider)) if provider == "cargo:token"
+        ));
+
+        let registry = config.registry.unwrap();
+        assert_eq!(registry.default.as_deref(), Some("private-registry"));
+        assert!(matches!(
+            registry.credential_provider.as_ref(),
+            Some(CredentialProvider::String(provider)) if provider == "cargo:token"
+        ));
+        assert_eq!(
+            registry.global_credential_providers.as_deref(),
+            Some(
+                &[
+                    CompactString::const_new("cargo:token"),
+                    CompactString::const_new("cargo:libsecret"),
+                ][..]
+            )
+        );
+
+        let aliases = config.credential_alias.unwrap();
+        assert!(matches!(
+            aliases.get("custom"),
+            Some(CredentialProvider::Array(provider))
+                if provider
+                    == &[
+                        CompactString::const_new("cargo-credential-example"),
+                        CompactString::const_new("--account"),
+                        CompactString::const_new("test"),
+                    ]
+        ));
     }
 }
