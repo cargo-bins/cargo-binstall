@@ -11,7 +11,6 @@ use binstalk_manifests::{
 };
 use binstalk_types::SecretString;
 use compact_str::CompactString;
-use zeroize::Zeroizing;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum SupportedRegistryCredentialProvider {
@@ -118,6 +117,7 @@ fn resolve_global_supported_provider(
     providers: &[CompactString],
 ) -> Option<SupportedRegistryCredentialProvider> {
     let mut seen_aliases = Vec::new();
+    debug_assert!(seen_aliases.is_empty());
     providers.iter().rev().find_map(|provider| {
         resolve_supported_provider_name(cargo_config, provider, &mut seen_aliases)
     })
@@ -165,10 +165,10 @@ fn resolve_cargo_token(
     None
 }
 
-fn resolve_provider_command_arg(arg: &str, registry: &Registry) -> String {
+fn resolve_provider_command_arg(arg: &str, index_url: &str) -> String {
     // Cargo's `BasicProcessCredential` replaces `{index_url}` before spawning `cargo:token-from-stdout` commands.
     // https://github.com/rust-lang/cargo/blob/master/src/cargo/util/credential/adaptor.rs#L27-L34
-    arg.replace("{index_url}", &registry.cargo_install_index_arg())
+    arg.replace("{index_url}", index_url)
 }
 
 fn resolve_cargo_token_from_stdout(
@@ -182,22 +182,20 @@ fn resolve_cargo_token_from_stdout(
             "The first argument to `cargo:token-from-stdout` must be a command that prints a token on stdout",
         ));
     };
+    let index_url = registry.cargo_install_index_arg();
 
     let mut command = Command::new(executable.as_str());
     command
         .args(
             provider_args[1..]
                 .iter()
-                .map(|arg| resolve_provider_command_arg(arg, registry)),
+                .map(|arg| resolve_provider_command_arg(arg, &index_url)),
         )
         .env(
             "CARGO",
             env::var_os("CARGO").unwrap_or_else(|| "cargo".into()),
         )
-        .env(
-            "CARGO_REGISTRY_INDEX_URL",
-            registry.cargo_install_index_arg(),
-        )
+        .env("CARGO_REGISTRY_INDEX_URL", &index_url)
         .stdout(Stdio::piped());
 
     if let Some(name) = registry_name {
@@ -207,17 +205,25 @@ fn resolve_cargo_token_from_stdout(
     let mut child = command.spawn()?;
     let mut stdout = child.stdout.take().unwrap();
 
-    let mut buffer = Zeroizing::new(String::new());
+    let mut buffer = SecretString::from_string(String::new());
     use std::io::Read as _;
     stdout.read_to_string(&mut buffer)?;
 
-    if let Some(end) = buffer.find('\n') {
-        if buffer.len() > end + 1 {
+    if let Some(line) = buffer.lines().next() {
+        let end = line.len();
+        let line_ending_len = if buffer[end..].starts_with("\r\n") {
+            2
+        } else if buffer[end..].starts_with('\n') {
+            1
+        } else {
+            0
+        };
+
+        if buffer.len() > end + line_ending_len {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "process `{}` returned more than one line of output; expected a single token",
-                    executable
+                    "process `{executable}` returned more than one line of output; expected a single token",
                 ),
             ));
         }
@@ -227,14 +233,11 @@ fn resolve_cargo_token_from_stdout(
     let status = child.wait()?;
     if !status.success() {
         return Err(io::Error::other(format!(
-            "process `{}` failed with status `{status}`",
-            executable
+            "process `{executable}` failed with status `{status}`",
         )));
     }
 
-    Ok(SecretString::from_boxed_str(
-        std::mem::take(&mut *buffer).into_boxed_str(),
-    ))
+    Ok(buffer)
 }
 
 pub(crate) fn resolve_registry_auth(
