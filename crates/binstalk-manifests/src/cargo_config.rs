@@ -6,9 +6,9 @@
 
 use std::{
     borrow::Cow,
-    collections::BTreeMap,
+    collections::{BTreeMap, vec_deque::VecDeque},
     fs::File,
-    io,
+    io, mem,
     path::{Path, PathBuf},
 };
 
@@ -107,10 +107,25 @@ impl IncludedConfig {
             Self::Extended { optional, .. } => optional,
         }
     }
+
+    fn load(&self) -> Result<Option<Config>, ConfigLoadError> {
+        match File::open(self.path()) {
+            Ok(file) => {
+                let file = FileLock::new_shared(file)?.set_file_path(path);
+                // Any regular file must have a parent dir
+                //
+                // Avoid automatically load included configs to avoid blowing
+                // up the stack.
+                Config::load_from_reader_inner(file, path.parent().unwrap()).map(Some)
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound && self.optional() => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
-#[non_exhaustive]
+#[non_exhaustive] I
 pub struct Config {
     pub install: Option<Install>,
     pub http: Option<Http>,
@@ -173,7 +188,7 @@ impl Config {
                     }
                 }
             }
-    
+
             for included_config in &mut config.include {
                 join_if_relative(Some(included_config.path_mut()), dir);
             }
@@ -191,7 +206,15 @@ impl Config {
         dir: &Path,
     ) -> Result<Self, ConfigLoadError> {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
-            Config::load_from_reader_inner(reader, path)
+            let config = Config::load_from_reader_inner(reader, path)?;
+
+            let mut included_configs = mem::take(&mut config.include)
+                .filter_map(|included_config| {
+                    included_config.load().transpose()
+                })
+                .collect::<Result<VecDeque<Config>, ConfigLoadError>>()?;
+
+            Ok(config)
         }
 
         inner(&mut reader, dir)
