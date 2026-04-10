@@ -209,11 +209,18 @@ impl Config {
             let config = Config::load_from_reader_inner(reader, path)?;
 
             let mut included_configs = mem::take(&mut config.include)
-                .filter_map(|included_config| {
-                    included_config.load().transpose()
-                })
+                .filter_map(|included_config| included_config.load().transpose())
                 .collect::<Result<VecDeque<Config>, ConfigLoadError>>()?;
 
+            let mut i = 0;
+            while i < included_configs.len() {
+                for included_config in mem::take(&mut included_configs[i].include) {
+                    if let Some(loaded_config) = included_config.load()? {
+                    }
+                }
+                todo!();
+            }
+            
             Ok(config)
         }
 
