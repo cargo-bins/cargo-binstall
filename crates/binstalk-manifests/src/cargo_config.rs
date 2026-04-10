@@ -216,16 +216,23 @@ impl Config {
 
             let mut i = 0;
             while i < included_configs.len() {
-                let mut insert_index = i;
-                for included_config in mem::take(&mut included_configs[i].include) {
-                    if let Some(loaded_config) = included_config.load()? {
-                        included_configs.insert(insert_index, loaded_config);
-                        insert_index += 1;
+                loop {
+                    let mut insert_index = i;
+                    for included_config in mem::take(&mut included_configs[i].include) {
+                        if let Some(loaded_config) = included_config.load()? {
+                            included_configs.insert(insert_index, loaded_config);
+                            insert_index += 1;
+                       }
+                    }
+                
+                    // If new configs inserted, recursively check the newly inserted element to
+                    // see if it has included configs; otherwise just increment i
+                    if insert_index == i {
+                        break;
                     }
                 }
                 
-                // If new configs inserted, recursively check if it has included configs
-                i = if insert_index > i { i } else { i + 1 };
+                i += 1;
             }
             
             Ok(config)
