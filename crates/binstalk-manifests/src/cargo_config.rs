@@ -208,17 +208,24 @@ impl Config {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
             let config = Config::load_from_reader_inner(reader, path)?;
 
+            // invariant: ordered in the reverse order of precendence: the later element
+            // take precedence from the previous one
             let mut included_configs = mem::take(&mut config.include)
                 .filter_map(|included_config| included_config.load().transpose())
                 .collect::<Result<VecDeque<Config>, ConfigLoadError>>()?;
 
             let mut i = 0;
             while i < included_configs.len() {
+                let mut insert_index = i;
                 for included_config in mem::take(&mut included_configs[i].include) {
                     if let Some(loaded_config) = included_config.load()? {
+                        included_configs.insert(insert_index, loaded_config);
+                        insert_index += 1;
                     }
                 }
-                todo!();
+                
+                // If new configs inserted, recursively check if it has included configs
+                i = if insert_index > i { i } else { i + 1 };
             }
             
             Ok(config)
