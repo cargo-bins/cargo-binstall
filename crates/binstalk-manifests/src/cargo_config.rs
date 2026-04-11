@@ -6,7 +6,7 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, vec_deque::VecDeque},
+    collections::BTreeMap,
     fs::File,
     io, mem,
     path::{Path, PathBuf},
@@ -208,36 +208,21 @@ impl Config {
         dir: &Path,
     ) -> Result<Self, ConfigLoadError> {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
-            let config = Config::load_from_reader_inner(reader, path)?;
+            let mut root_config = Config::load_from_reader_inner(reader, path)?;
 
-            // invariant: ordered in the reverse order of precendence: the later element
-            // take precedence from the previous one
-            let mut included_configs = mem::take(&mut config.include)
-                .filter_map(|included_config| included_config.load().transpose())
-                .collect::<Result<VecDeque<Config>, ConfigLoadError>>()?;
+            // invariant: higher precedence config is the first out
+            let mut stack = mem::take(&mut root_config.include);
 
-            let mut i = 0;
-            while i < included_configs.len() {
-                loop {
-                    let mut insert_index = i;
-                    for included_config in mem::take(&mut included_configs[i].include) {
-                        if let Some(loaded_config) = included_config.load()? {
-                            included_configs.insert(insert_index, loaded_config);
-                            insert_index += 1;
-                       }
-                    }
-                
-                    // If new configs inserted, recursively check the newly inserted element to
-                    // see if it has included configs; otherwise just increment i
-                    if insert_index == i {
-                        break;
-                    }
+            while let Some(config_path) = stack.pop() {
+                let Some(mut included_config) = included_config.load()? else {
+                    continue;
                 }
-                
-                i += 1;
+
+                stack.extend(&included_config.include);
+                root_config.merge_from_include(included_config);
             }
             
-            Ok(config)
+            Ok(root_config)
         }
 
         inner(&mut reader, dir)
@@ -257,6 +242,11 @@ impl Config {
         }
 
         inner(path.as_ref())
+    }
+
+    /// self would take precedence over other
+    fn merge_from_include(&mut self, other: &mut Self) {
+        todo!()
     }
 
     pub fn get_registry_index(&self, name: &str) -> Option<&str> {
