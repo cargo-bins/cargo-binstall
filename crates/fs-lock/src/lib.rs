@@ -139,6 +139,16 @@ impl FileLock {
         }
         self
     }
+
+    pub fn get_file_path(&self) -> Option<&Path> {
+        cfg_if! {
+            if #[cfg(feature = "tracing")] {
+                self.1.as_deref()
+            } else {
+                None
+            }
+        }
+    }
 }
 
 impl Drop for FileLock {
