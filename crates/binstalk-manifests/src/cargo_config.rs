@@ -6,7 +6,7 @@
 
 use std::{
     borrow::Cow,
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs::File,
     io, mem,
     path::{Path, PathBuf},
@@ -210,10 +210,18 @@ impl Config {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
             let mut root_config = Config::load_from_reader_inner(reader, path)?;
 
-            // invariant: higher precedence config is the first out
+            // stack invariant: higher precedence config is the first out
             let mut stack = mem::take(&mut root_config.include);
+            let mut visited_path = HashSet::new();
 
             while let Some(config_path) = stack.pop() {
+                let path = config_path.path();
+                let canonical = path.canonicalize()?;
+
+                if !visited.insert(canonical) {
+                    continue;
+                }
+
                 let Some(mut included_config) = included_config.load()? else {
                     continue;
                 }
