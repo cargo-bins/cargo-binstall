@@ -127,7 +127,7 @@ impl IncludedConfig {
 }
 
 #[derive(Debug, Default, Deserialize)]
-#[non_exhaustive] I
+#[non_exhaustive]
 pub struct Config {
     pub install: Option<Install>,
     pub http: Option<Http>,
