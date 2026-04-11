@@ -16,6 +16,7 @@ use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
 use miette::Diagnostic;
+use normalize_path::NormalizePath;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -215,8 +216,19 @@ impl Config {
 
                 let path = file.get_file_path().unwrap(); // canonicalized path
                 let parent = config_path.path().parent().unwrap(); // original path
-                if !visited.insert(path) {
-                    continue;
+
+                // Use the absolute, canonicalized path (expanded symlink) to track the
+                // content of the config being loaded, and use the normalized parent
+                // (not absolute or expanded symlink) to track the parent, as that
+                // would decide all the relative path in the config.
+                //
+                // Even if one config file has two symlinks, the content might be different
+                // if relative path is present.
+                if !visited.insert((path, parent.normalize())) {
+                    return Err(ConfigLoadError::DeadLoopInLoading {
+                        path: path.into(),
+                        parent: parent.into(),
+                    });
                 }
                 
                 let config = Self::load_from_reader_inner(&file, parent)?;
@@ -281,6 +293,9 @@ pub enum ConfigLoadError {
 
     #[error("Failed to deserialize toml: {0}")]
     TomlParse(Box<toml_edit::de::Error>),
+
+    #[error("Detect deadloop in toml at `{path}` with parent `{parent}`")]
+    DeadLoopInLoading { path: Box<Path>, parent: Box<Path> },
 }
 
 impl From<toml_edit::de::Error> for ConfigLoadError {
