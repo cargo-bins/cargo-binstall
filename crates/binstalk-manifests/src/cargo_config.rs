@@ -109,7 +109,9 @@ impl IncludedConfig {
     }
 
     fn load(&self) -> Result<Option<Config>, ConfigLoadError> {
-        match File::open(self.path()) {
+        let path = self.path();
+        
+        match File::open(path) {
             Ok(file) => {
                 let file = FileLock::new_shared(file)?.set_file_path(path);
                 // Any regular file must have a parent dir
