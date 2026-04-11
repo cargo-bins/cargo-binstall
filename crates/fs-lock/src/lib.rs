@@ -149,6 +149,10 @@ impl FileLock {
             }
         }
     }
+
+    pub fn get_file_parent_path(&self) -> Option<&Path> {
+        self.get_file_path().and_then(Path::parent)
+    }
 }
 
 impl Drop for FileLock {
