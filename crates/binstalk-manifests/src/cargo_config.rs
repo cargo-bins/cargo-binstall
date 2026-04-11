@@ -213,8 +213,8 @@ impl Config {
                     continue;
                 }
 
-                let path = file.get_file_path().unwrap();
-                let parent = path.parent().unwrap();
+                let path = file.get_file_path().unwrap(); // canonicalized path
+                let parent = config_path.path().parent().unwrap(); // original path
                 if !visited.insert(path) {
                     continue;
                 }
