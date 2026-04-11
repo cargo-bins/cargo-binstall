@@ -108,20 +108,14 @@ impl IncludedConfig {
         }
     }
 
-    fn load(&self) -> Result<Option<Config>, ConfigLoadError> {
-        let path = self.path();
+    fn open(&self) -> io::Result<Option<FileLock>> {
+        let path = self.path().canonicalize()?;
         
-        match File::open(path) {
-            Ok(file) => {
-                let file = FileLock::new_shared(file)?.set_file_path(path);
-                // Any regular file must have a parent dir
-                //
-                // Avoid automatically load included configs to avoid blowing
-                // up the stack.
-                Config::load_from_reader_inner(file, path.parent().unwrap()).map(Some)
-            }
+        match File::open(&path) {
             Err(err) if err.kind() == io::ErrorKind::NotFound && self.optional() => Ok(None),
-            Err(err) => Err(err.into()),
+            res => {
+                Ok(Some(FileLock::new_shared(res?)?.set_file_path(path)))
+            }
         }
     }
 }
@@ -215,19 +209,20 @@ impl Config {
             let mut visited_path = HashSet::new();
 
             while let Some(config_path) = stack.pop() {
-                let path = config_path.path();
-                let canonical = path.canonicalize()?;
-
-                if !visited.insert(canonical) {
+                let Some(file) = config_path.open()? else {
                     continue;
                 }
 
-                let Some(mut included_config) = included_config.load()? else {
+                let path = file.get_file_path().unwrap();
+                let parent = path.parent().unwrap();
+                if !visited.insert(path) {
                     continue;
                 }
+                
+                let config = Self::load_from_reader_inner(&file, parent)?;
 
-                stack.extend(&included_config.include);
-                root_config.merge_from_include(included_config);
+                stack.extend(&config.include);
+                root_config.merge_from_include(config);
             }
             
             Ok(root_config)
