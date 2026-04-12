@@ -5,7 +5,6 @@
 //! Binstall reads from them to be compatible with `cargo-install`'s behavior.
 
 use std::{
-    borrow::Cow,
     collections::{
         btree_map::Entry as BTreeMapEntry,
         BTreeMap,
@@ -91,7 +90,7 @@ fn merge_global_credential_providers(
     }
 }
     
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Merge)]
 pub struct DefaultRegistry {
     #[merge(strategy = merge::option::overwrite_none)]
     pub default: Option<CompactString>,
@@ -129,7 +128,7 @@ impl IncludedConfig {
         }
     }
 
-    pub fn path_mut(&mut self) -> &mut Path {
+    pub fn path_mut(&mut self) -> &mut PathBuf {
         match self {
             Self::Path(path) => path,
             Self::Extended { path, .. } => path,
@@ -139,7 +138,7 @@ impl IncludedConfig {
     pub fn optional(&self) -> bool {
         match self {
             Self::Path(..) => false,
-            Self::Extended { optional, .. } => optional,
+            Self::Extended { optional, .. } => *optional,
         }
     }
 
@@ -236,8 +235,8 @@ impl Config {
                     relative: Some(true),
                     ..
                 } = env else {
-                    continue;
-                }
+                    continue
+                };
                 let path = Path::new(&value);
                 if path.is_relative() {
                     *value = dir.join(&path).to_string_lossy().into();
@@ -269,8 +268,8 @@ impl Config {
 
             while let Some(config_path) = stack.pop() {
                 let Some(file) = config_path.open()? else {
-                    continue;
-                }
+                    continue
+                };
 
                 let path = file.get_file_path().unwrap(); // canonicalized path
                 let parent = config_path.path().parent().unwrap(); // original path
@@ -282,14 +281,14 @@ impl Config {
                 //
                 // Even if one config file has two symlinks, the content might be different
                 // if relative path is present.
-                if !visited.insert((path, parent.normalize())) {
+                if !visited_path.insert((path, parent.normalize())) {
                     return Err(ConfigLoadError::DeadLoopInLoading {
                         path: path.into(),
                         parent: parent.into(),
                     });
                 }
                 
-                let config = Self::load_from_reader_inner(&file, parent)?;
+                let config = Config::load_from_reader_inner(&file, parent)?;
 
                 stack.extend(&config.include);
                 root_config.merge(config);
@@ -318,7 +317,7 @@ impl Config {
     }
 
     pub fn get_registry_index(&self, name: &str) -> Option<&str> {
-        let registry = self.registries.as_ref()?.get(name)?;
+        let registry = self.registries.get(name)?;
 
         if let Some(name) = registry.replace_with.as_deref() {
             self.get_registry_index(name)
@@ -328,7 +327,7 @@ impl Config {
     }
 
     pub fn get_registry(&self, name: &str) -> Option<&Registry> {
-        let registry = self.registries.as_ref()?.get(name)?;
+        let registry = self.registries.get(name)?;
 
         if let Some(name) = registry.replace_with.as_deref() {
             self.get_registry(name)
