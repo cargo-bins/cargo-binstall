@@ -79,7 +79,7 @@ fn merge_global_credential_providers(
     right: GlobalCredentialProviders,
 )
 {
-    match (left, right) {
+    match (left.as_mut(), right) {
         (None, right) => *left = right,
         (Some(_), None) => (),
         (Some(left), Some(right)) => {
