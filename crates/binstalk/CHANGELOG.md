@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.72](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.71...binstalk-v0.28.72) - 2026-04-10
+
+### Added
+
+- support `cargo:token` auth for private registries ([#2526](https://github.com/cargo-bins/cargo-binstall/pull/2526))
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2525](https://github.com/cargo-bins/cargo-binstall/pull/2525))
+
 ## [0.28.71](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.70...binstalk-v0.28.71) - 2026-03-28
 
 ### Other
