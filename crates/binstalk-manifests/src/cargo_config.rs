@@ -6,7 +6,7 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashSet, VecDeque},
     fs::File,
     io, mem,
     path::{Path, PathBuf},
@@ -64,17 +64,38 @@ pub struct Registry {
     #[merge(strategy = merge::option::overwrite_none)]
     pub replace_with: Option<CompactString>,
     #[serde(rename = "credential-provider")]
-    #[merge(strategy = merge::option::recurse)]
+    #[merge(strategy = merge::option::overwrite_none)]
     pub credential_provider: Option<CredentialProvider>,
 }
 
+type GlobalCredentialProviders = Option<VecDeque<CompactString>>;
+fn merge_global_credential_providers(
+    left: &mut GlobalCredentialProviders,
+    right: GlobalCredentialProviders,
+)
+{
+    match (left, right) {
+        (None, right) => *left = right,
+        (Some(_), None) => (),
+        (Some(left), Some(right)) => {
+            left.reserve(right.len());
+            for provider in right.into_iter().rev() {
+                left.push_front(provider);
+            }
+        }
+    }
+}
+    
 #[derive(Debug, Deserialize)]
 pub struct DefaultRegistry {
+    #[merge(strategy = merge::option::overwrite_none)]
     pub default: Option<CompactString>,
     #[serde(rename = "credential-provider")]
+    #[merge(strategy = merge::option::overwrite_none)]
     pub credential_provider: Option<CredentialProvider>,
     #[serde(rename = "global-credential-providers")]
-    pub global_credential_providers: Option<Vec<CompactString>>,
+    #[merge(strategy = merge_global_credential_providers)]
+    pub global_credential_providers: GlobalCredentialProviders,
 }
 
 #[derive(Clone, Debug, Deserialize)]
