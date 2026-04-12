@@ -15,14 +15,16 @@ use std::{
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
+use merge::Merge;
 use miette::Diagnostic;
 use normalize_path::NormalizePath;
 use serde::Deserialize;
 use thiserror::Error;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Merge)]
 pub struct Install {
     /// `cargo install` destination directory
+    #[merge(strategy = merge::option::overwrite_none)]
     pub root: Option<PathBuf>,
 }
 
