@@ -28,17 +28,20 @@ pub struct Install {
     pub root: Option<PathBuf>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Merge)]
 pub struct Http {
     /// HTTP proxy in libcurl format: "host:port"
     ///
     /// env: CARGO_HTTP_PROXY or HTTPS_PROXY or https_proxy or http_proxy
+    #[merge(strategy = merge::option::overwrite_none)]
     pub proxy: Option<CompactString>,
     /// timeout for each HTTP request, in seconds
     ///
     /// env: CARGO_HTTP_TIMEOUT or HTTP_TIMEOUT
+    #[merge(strategy = merge::option::overwrite_none)]
     pub timeout: Option<u64>,
     /// path to Certificate Authority (CA) bundle
+    #[merge(strategy = merge::option::overwrite_none)]
     pub cainfo: Option<PathBuf>,
 }
 
@@ -53,12 +56,15 @@ pub enum Env {
     },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Merge)]
 pub struct Registry {
+    #[merge(strategy = merge::option::overwrite_none)]
     pub index: Option<CompactString>,
     #[serde(rename = "replace-with")]
+    #[merge(strategy = merge::option::overwrite_none)]
     pub replace_with: Option<CompactString>,
     #[serde(rename = "credential-provider")]
+    #[merge(strategy = merge::option::recurse)]
     pub credential_provider: Option<CredentialProvider>,
 }
 
