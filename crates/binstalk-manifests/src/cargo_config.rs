@@ -231,16 +231,16 @@ impl Config {
                 dir,
             );
             for env in config.env.values_mut() {
-                if let Env::WithOptions {
+                let Env::WithOptions {
                     value,
                     relative: Some(true),
                     ..
-                } = env
-                {
-                    let path = Cow::Borrowed(Path::new(&value));
-                    if path.is_relative() {
-                        *value = dir.join(&path).to_string_lossy().into();
-                    }
+                } = env else {
+                    continue;
+                }
+                let path = Path::new(&value);
+                if path.is_relative() {
+                    *value = dir.join(&path).to_string_lossy().into();
                 }
             }
 
@@ -292,7 +292,7 @@ impl Config {
                 let config = Self::load_from_reader_inner(&file, parent)?;
 
                 stack.extend(&config.include);
-                root_config.merge_from_include(config);
+                root_config.merge(config);
             }
             
             Ok(root_config)
@@ -315,11 +315,6 @@ impl Config {
         }
 
         inner(path.as_ref())
-    }
-
-    /// self would take precedence over other
-    fn merge_from_include(&mut self, other: &mut Self) {
-        todo!()
     }
 
     pub fn get_registry_index(&self, name: &str) -> Option<&str> {
