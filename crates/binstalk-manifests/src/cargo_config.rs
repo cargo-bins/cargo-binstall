@@ -6,7 +6,12 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{
+        btree_map::Entry as BTreeMapEntry,
+        BTreeMap,
+        HashSet,
+        VecDeque,
+    },
     fs::File,
     io, mem,
     path::{Path, PathBuf},
@@ -150,18 +155,44 @@ impl IncludedConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+fn merge_btreemap<K: Ord, V>(left: &mut BTreeMap<K, V>, right: BTreeMap<K, V>) {
+    for (k, v) in right.into_iter() {
+        left.entry(k).or_insert(v);
+    }
+}
+
+fn merge_btreemap_recursive<K: Ord, V: Merge>(left: &mut BTreeMap<K, V>, right: BTreeMap<K, V>) {
+    for (k, v) in right.into_iter() {
+        match left.entry(k) {
+            BTreeMapEntry::Vacant(entry) => {
+                entry.insert(v);
+            }
+            BTreeMapEntry::Occupied(entry) => entry.into_mut().merge(v), 
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Merge)]
 #[non_exhaustive]
 pub struct Config {
+    #[merge(strategy = merge::option::recurse)]
     pub install: Option<Install>,
+    #[merge(strategy = merge::option::recurse)]
     pub http: Option<Http>,
-    pub env: Option<BTreeMap<CompactString, Env>>,
-    pub registries: Option<BTreeMap<CompactString, Registry>>,
+    #[serde(default)]
+    #[merge(strategy = merge_btreemap)]
+    pub env: BTreeMap<CompactString, Env>,
+    #[serde(default)]
+    #[merge(strategy = merge_btreemap_recursive)]
+    pub registries: BTreeMap<CompactString, Registry>,
+    #[merge(strategy = merge::option::recurse)]
     pub registry: Option<DefaultRegistry>,
     #[serde(default)]
+    #[merge(skip)]
     pub include: Vec<IncludedConfig>,
-    #[serde(rename = "credential-alias")]
-    pub credential_alias: Option<BTreeMap<CompactString, CredentialProvider>>,
+    #[serde(default, rename = "credential-alias")]
+    #[merge(strategy = merge_btreemap)]
+    pub credential_alias: BTreeMap<CompactString, CredentialProvider>,
 }
 
 fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
@@ -199,18 +230,16 @@ impl Config {
                 config.http.as_mut().and_then(|http| http.cainfo.as_mut()),
                 dir,
             );
-            if let Some(envs) = config.env.as_mut() {
-                for env in envs.values_mut() {
-                    if let Env::WithOptions {
-                        value,
-                        relative: Some(true),
-                        ..
-                    } = env
-                    {
-                        let path = Cow::Borrowed(Path::new(&value));
-                        if path.is_relative() {
-                            *value = dir.join(&path).to_string_lossy().into();
-                        }
+            for env in config.env.values_mut() {
+                if let Env::WithOptions {
+                    value,
+                    relative: Some(true),
+                    ..
+                } = env
+                {
+                    let path = Cow::Borrowed(Path::new(&value));
+                    if path.is_relative() {
+                        *value = dir.join(&path).to_string_lossy().into();
                     }
                 }
             }
