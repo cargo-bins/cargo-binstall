@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.72"
+version = "0.28.73"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",

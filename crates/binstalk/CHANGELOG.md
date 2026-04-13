@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.73](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.72...binstalk-v0.28.73) - 2026-04-13
+
+### Other
+
+- Remove GITHUB_TOKEN and GH_TOKEN when installing from source ([#2533](https://github.com/cargo-bins/cargo-binstall/pull/2533))
+
 ## [0.28.72](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.71...binstalk-v0.28.72) - 2026-04-10
 
 ### Added

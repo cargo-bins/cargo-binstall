@@ -25,7 +25,7 @@ pkg-fmt = "zip"
 
 [dependencies]
 atomic-file-install = { version = "1.0.14", path = "../atomic-file-install" }
-binstalk = { path = "../binstalk", version = "0.28.72", default-features = false }
+binstalk = { path = "../binstalk", version = "0.28.73", default-features = false }
 binstalk-manifests = { path = "../binstalk-manifests", version = "0.18.0" }
 binstalk-types = { path = "../binstalk-types", version = "0.10.7" }
 clap = { version = "4.5.54", features = ["derive", "env", "wrap_help"] }
