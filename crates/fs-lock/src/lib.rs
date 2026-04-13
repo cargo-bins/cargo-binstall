@@ -249,7 +249,7 @@ impl io::Read for &FileLock {
     }
 
     fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
-        (&self.0)(&self.0).read_to_string(buf)
+        (&self.0).read_to_string(buf)
     }
 }
 
