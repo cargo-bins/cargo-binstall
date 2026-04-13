@@ -288,7 +288,7 @@ impl Config {
                     });
                 }
                 
-                let config = Config::load_from_reader_inner(&mut file, parent)?;
+                let config = Config::load_from_reader_inner(&mut (&file), parent)?;
 
                 stack.extend(mem::take(&mut config.include));
                 root_config.merge(config);
