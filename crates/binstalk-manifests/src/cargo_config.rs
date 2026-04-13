@@ -260,14 +260,14 @@ impl Config {
         dir: &Path,
     ) -> Result<Self, ConfigLoadError> {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
-            let mut root_config = Config::load_from_reader_inner(reader, path)?;
+            let mut root_config = Config::load_from_reader_inner(reader, dir)?;
 
             // stack invariant: higher precedence config is the first out
             let mut stack = mem::take(&mut root_config.include);
             let mut visited_path = HashSet::new();
 
             while let Some(config_path) = stack.pop() {
-                let Some(file) = config_path.open()? else {
+                let Some(mut file) = config_path.open()? else {
                     continue
                 };
 
@@ -288,7 +288,7 @@ impl Config {
                     });
                 }
                 
-                let config = Config::load_from_reader_inner(&file, parent)?;
+                let config = Config::load_from_reader_inner(&mut file, parent)?;
 
                 stack.extend(&config.include);
                 root_config.merge(config);
