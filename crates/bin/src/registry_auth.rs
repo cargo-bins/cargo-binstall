@@ -35,11 +35,7 @@ fn provider_name_supports_cargo_token(
         return false;
     }
 
-    let Some(provider) = cargo_config
-        .credential_alias
-        .as_ref()
-        .and_then(|aliases| aliases.get(provider_name))
-    else {
+    let Some(provider) = cargo_config.credential_alias.get(provider_name) else {
         return false;
     };
 
