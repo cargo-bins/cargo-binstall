@@ -76,10 +76,10 @@ fn provider_supports_cargo_token(
 
 fn global_provider_supports_cargo_token(
     cargo_config: &CargoConfig,
-    providers: &[CompactString],
+    providers: impl Iterator<Item = &CompactString>,
 ) -> bool {
     let mut seen_aliases = Vec::new();
-    providers.iter().any(|provider| {
+    providers.any(|provider| {
         provider_name_supports_cargo_token(cargo_config, provider, &mut seen_aliases)
     })
 }
@@ -101,8 +101,8 @@ fn cargo_token_provider_enabled(cargo_config: &CargoConfig, registry_name: Optio
     cargo_config
         .registry
         .as_ref()
-        .and_then(|registry| registry.global_credential_providers.as_deref())
-        .map(|providers| global_provider_supports_cargo_token(cargo_config, providers))
+        .and_then(|registry| registry.global_credential_providers.as_ref())
+        .map(|providers| global_provider_supports_cargo_token(cargo_config, providers.iter()))
         .unwrap_or(true)
 }
 
