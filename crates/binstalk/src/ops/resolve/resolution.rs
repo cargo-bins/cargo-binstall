@@ -81,6 +81,16 @@ impl ResolutionFetch {
             install_bin(file)?;
         }
 
+        if !self.extra_files.is_empty() {
+            // Install extras after the binaries themselves so a partially
+            // packaged archive does not leave man/completion files behind when
+            // the primary executable failed to install.
+            info!("Installing extra files...");
+            for file in &self.extra_files {
+                file.install()?;
+            }
+        }
+
         // Generate symlinks
         if !opts.no_symlinks {
             for file in &self.bin_files {

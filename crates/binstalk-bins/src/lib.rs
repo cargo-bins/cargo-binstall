@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    fmt, io,
+    fmt, fs, io,
     path::{self, Component, Path, PathBuf},
 };
 
@@ -450,6 +450,27 @@ impl ExtraFile {
         }
     }
 
+    pub fn install(&self) -> Result<(), Error> {
+        if !self.source.try_exists()? {
+            return Err(Error::SourceFileNotFound((&*self.source).into()));
+        }
+
+        // Extra files may live in nested `share/...` directories that do not
+        // exist yet even when the Cargo root itself does.
+        if let Some(parent) = self.dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        debug!(
+            "Atomically install file from '{}' to '{}'",
+            self.source.display(),
+            self.dest.display()
+        );
+
+        atomic_install(&self.source, &self.dest)?;
+
+        Ok(())
+    }
 }
 
 /// Data required to get bin paths
@@ -549,5 +570,90 @@ impl fmt::Display for OptionalLazyFormat<'_> {
         } else {
             Ok(())
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use std::{borrow::Cow, fs, path::Path};
+
+    use leon::Template;
+    use tempfile::tempdir;
+
+    use super::*;
+
+    struct EmptyValues;
+
+    impl leon::Values for EmptyValues {
+        fn get_value<'s>(&'s self, _: &str) -> Option<Cow<'s, str>> {
+            None
+        }
+    }
+
+    fn test_data<'a>(bin_path: &'a Path, install_path: &'a Path) -> Data<'a> {
+        Data {
+            name: "cargo-watch",
+            target: "x86_64-unknown-linux-gnu",
+            version: "8.4.0",
+            repo: Some("https://github.com/watchexec/cargo-watch"),
+            meta: PkgMeta::default(),
+            bin_path,
+            install_path,
+            target_related_info: &EmptyValues,
+        }
+    }
+
+    #[test]
+    fn extra_file_uses_expected_destinations() {
+        let archive_dir = tempdir().unwrap();
+        let cargo_root = tempdir().unwrap();
+        let data = test_data(archive_dir.path(), cargo_root.path());
+        let template = Template::parse("completions/zsh/_{ bin }").unwrap();
+
+        let extra_file = ExtraFile::new(
+            &data,
+            "cargo-watch",
+            &template,
+            cargo_root.path(),
+            ExtraFileKind::ZshCompletion,
+        )
+        .unwrap();
+
+        assert_eq!(
+            extra_file.relative_dest,
+            PathBuf::from("share/zsh/site-functions/_cargo-watch")
+        );
+        assert_eq!(
+            extra_file.dest,
+            cargo_root
+                .path()
+                .join("share/zsh/site-functions/_cargo-watch")
+        );
+    }
+
+    #[test]
+    fn extra_file_install_copies_to_share_path() {
+        let archive_dir = tempdir().unwrap();
+        let cargo_root = tempdir().unwrap();
+        let source_dir = archive_dir.path().join("man").join("man1");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::write(source_dir.join("cargo-watch.1"), "cargo-watch manual").unwrap();
+
+        let data = test_data(archive_dir.path(), cargo_root.path());
+        let template = Template::parse("man/man1/{ bin }.1").unwrap();
+        let extra_file = ExtraFile::new(
+            &data,
+            "cargo-watch",
+            &template,
+            cargo_root.path(),
+            ExtraFileKind::Man,
+        )
+        .unwrap();
+
+        extra_file.install().unwrap();
+
+        assert_eq!(
+            fs::read_to_string(cargo_root.path().join("share/man/man1/cargo-watch.1")).unwrap(),
+            "cargo-watch manual"
+        );
     }
 }
