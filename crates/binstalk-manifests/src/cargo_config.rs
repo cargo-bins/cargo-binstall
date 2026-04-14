@@ -239,7 +239,7 @@ impl Config {
                 };
                 let path = Path::new(&value);
                 if path.is_relative() {
-                    *value = dir.join(&path).to_string_lossy().into();
+                    *value = dir.join(path).to_string_lossy().into();
                 }
             }
 
