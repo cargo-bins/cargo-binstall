@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     io::{self, Seek},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use fs_lock::FileLock;
@@ -34,6 +34,12 @@ pub enum ManifestsError {
 
 pub struct Manifests {
     binstall: BinstallCratesV1Records,
+    /// Current Cargo root used to resolve tracked extra-file paths.
+    ///
+    /// The persisted manifest stores extra files relative to Cargo root so
+    /// updates can clean up stale files without baking absolute machine-local
+    /// paths into the record.
+    cargo_root: PathBuf,
     cargo_crates_v1: FileLock,
     installed_crates: BTreeMap<CompactString, Version>,
 }
@@ -60,6 +66,7 @@ impl Manifests {
 
         Ok(Self {
             binstall,
+            cargo_root: cargo_roots.to_path_buf(),
             cargo_crates_v1,
             installed_crates,
         })
@@ -82,11 +89,107 @@ impl Manifests {
 
         CratesToml::append_to_file(&mut self.cargo_crates_v1, &metadata_vec)?;
 
+        // Tracking extra files is the most stateful part of this feature, but
+        // it is what makes upgrades behave like users expect: if a release
+        // stops shipping a completion or moves a man page, the old file should
+        // not be left behind indefinitely. We therefore update `.crates.toml`,
+        // remove stale tracked extras for the crate, then replace the binstall
+        // record with the new relative paths.
         for metadata in metadata_vec {
+            // Remove files that this crate used to own before replacing the
+            // record. This keeps upgrades idempotent when a maintainer changes
+            // completion/manpage paths or stops shipping one of them.
+            self.remove_stale_extra_files(&metadata)?;
             self.binstall.replace(metadata);
         }
         self.binstall.overwrite()?;
 
         Ok(())
+    }
+
+    fn remove_stale_extra_files(&self, metadata: &CrateInfo) -> Result<(), ManifestsError> {
+        let Some(previous) = self.binstall.get(&metadata.name) else {
+            return Ok(());
+        };
+
+        // Cleanup is intentionally conservative: only paths previously tracked
+        // for the same crate and no longer present in the new record are
+        // removed. Missing files are ignored so manual deletion does not block
+        // upgrades.
+        for extra_file in previous
+            .extra_files
+            .iter()
+            .filter(|path| !metadata.extra_files.contains(path))
+        {
+            let path = self.cargo_root.join(extra_file);
+            match fs::remove_file(&path) {
+                Ok(()) => (),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                Err(err) => return Err(ManifestsError::Io(err)),
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        binstall_crates_v1::append_to_path as append_binstall_records, cargo_crates_v1::CratesToml,
+        crate_info::CrateSource,
+    };
+    use detect_targets::TARGET;
+    use semver::Version;
+    use tempfile::tempdir;
+
+    #[test]
+    fn update_removes_stale_extra_files() {
+        let cargo_root = tempdir().unwrap();
+        let old_extra = PathBuf::from("share/man/man1/cargo-watch.1");
+        let new_extra = PathBuf::from("share/man/man1/cargo-watch-new.1");
+
+        fs::create_dir_all(cargo_root.path().join("share/man/man1")).unwrap();
+        fs::write(cargo_root.path().join(&old_extra), "old").unwrap();
+        fs::write(cargo_root.path().join(&new_extra), "new").unwrap();
+
+        let old_record = CrateInfo {
+            name: "cargo-watch".into(),
+            version_req: "*".into(),
+            current_version: Version::new(8, 4, 0),
+            source: CrateSource::cratesio_registry(),
+            target: TARGET.into(),
+            bins: vec!["cargo-watch".into()],
+            extra_files: vec![old_extra.clone()],
+        };
+
+        CratesToml::append_to_path(
+            cargo_root.path().join(".crates.toml"),
+            &[old_record.clone()],
+        )
+        .unwrap();
+        fs::create_dir_all(cargo_root.path().join("binstall")).unwrap();
+        append_binstall_records(
+            cargo_root.path().join("binstall/crates-v1.json"),
+            [old_record],
+        )
+        .unwrap();
+
+        let manifests = Manifests::open_exclusive(cargo_root.path()).unwrap();
+        manifests
+            .update(vec![CrateInfo {
+                name: "cargo-watch".into(),
+                version_req: "*".into(),
+                current_version: Version::new(8, 5, 0),
+                source: CrateSource::cratesio_registry(),
+                target: TARGET.into(),
+                bins: vec!["cargo-watch".into()],
+                extra_files: vec![new_extra.clone()],
+            }])
+            .unwrap();
+
+        assert!(!cargo_root.path().join(old_extra).exists());
+        assert!(cargo_root.path().join(new_extra).exists());
     }
 }
