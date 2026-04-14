@@ -276,6 +276,7 @@ mod test {
                 source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
+                extra_files: vec![],
             },
             CrateInfo {
                 name: "b".into(),
@@ -284,6 +285,7 @@ mod test {
                 source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
+                extra_files: vec![],
             },
             CrateInfo {
                 name: "a".into(),
@@ -292,6 +294,7 @@ mod test {
                 source: CrateSource::cratesio_registry(),
                 target: target.clone(),
                 bins: vec!["1".into()],
+                extra_files: vec![],
             },
         ];
 
@@ -322,6 +325,7 @@ mod test {
             source: CrateSource::cratesio_registry(),
             target,
             bins: vec!["1".into(), "2".into()],
+            extra_files: vec![],
         };
         append_to_path(path, [new_metadata.clone()]).unwrap();
         metadata_set.insert(new_metadata);

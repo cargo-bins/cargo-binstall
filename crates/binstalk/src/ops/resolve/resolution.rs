@@ -105,6 +105,13 @@ impl ResolutionFetch {
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
             bins: Self::resolve_bins(&opts.bins, self.bin_files),
+            // Persist relative Cargo-root paths so future upgrades can remove
+            // stale files even if the absolute Cargo root changed.
+            extra_files: self
+                .extra_files
+                .into_iter()
+                .map(|file| file.relative_dest)
+                .collect(),
         })
     }
 
