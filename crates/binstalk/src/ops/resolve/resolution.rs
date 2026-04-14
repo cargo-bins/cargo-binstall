@@ -23,6 +23,12 @@ pub struct ResolutionFetch {
     pub name: CompactString,
     pub version_req: CompactString,
     pub bin_files: Vec<bins::BinFile>,
+    /// Extra files that were resolved against the fetched archive.
+    ///
+    /// Keeping these on the resolved unit, rather than recomputing them during
+    /// install, ensures dry-run output, installation, and manifest tracking all
+    /// refer to the exact same file set.
+    pub extra_files: Vec<bins::ExtraFile>,
     pub source: CrateSource,
 }
 
@@ -142,6 +148,13 @@ impl ResolutionFetch {
                 info!("  - {}", file.preview_link());
             }
         }
+
+        if !self.extra_files.is_empty() {
+            info!("This will also install the following extra files:");
+            for file in &self.extra_files {
+                info!("  - {}", file.preview());
+            }
+        }
     }
 }
 
@@ -166,6 +179,11 @@ impl ResolutionSource {
 
         let name = &self.name;
         let version = &self.version;
+
+        // Source installs intentionally do not participate in extra-file
+        // installation. That keeps the current feature scoped to published
+        // binary artifacts, where archive layout and bundled extras are known
+        // ahead of time.
 
         let cargo = env::var_os("CARGO")
             .map(Cow::Owned)

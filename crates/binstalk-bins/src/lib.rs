@@ -32,6 +32,10 @@ pub enum Error {
     #[error("bin file {} not found", .0.display())]
     BinFileNotFound(Box<Path>),
 
+    /// Source file is not found.
+    #[error("source file {} not found", .0.display())]
+    SourceFileNotFound(Box<Path>),
+
     #[error(transparent)]
     Io(#[from] io::Error),
 
@@ -134,19 +138,9 @@ impl BinFile {
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
-            let path = tt.render(&ctx)?;
+            let path = render_relative_path(tt, &ctx)?;
 
-            let path_normalized = Path::new(&path).normalize();
-
-            if path_normalized.components().next().is_none() {
-                return Err(Error::EmptySourceFilePath);
-            }
-
-            if !is_valid_path(&path_normalized) {
-                return Err(Error::InvalidSourceFilePath(path_normalized.into()));
-            }
-
-            (data.bin_path.join(&path_normalized), path_normalized)
+            (data.bin_path.join(&path), path)
         };
 
         // Destination at install dir + base-name{.extension}
@@ -296,6 +290,168 @@ impl BinFile {
     }
 }
 
+/// The fixed set of extra file kinds supported by binstall v1.
+///
+/// This enum may look heavier than a few ad-hoc string constants, but it keeps
+/// the feature's policy decisions in one place:
+///
+/// - the default archive lookup convention for each kind
+/// - the install destination under Cargo root
+/// - the human-readable label used during preview / dry-run output
+///
+/// Centralizing that mapping makes it harder for preview, install, and docs to
+/// drift from each other as the feature evolves.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ExtraFileKind {
+    Man,
+    BashCompletion,
+    FishCompletion,
+    ZshCompletion,
+}
+
+impl ExtraFileKind {
+    /// Human-readable label used in dry-run / preview output.
+    pub fn label(self) -> &'static str {
+        match self {
+            ExtraFileKind::Man => "man page",
+            ExtraFileKind::BashCompletion => "bash completion",
+            ExtraFileKind::FishCompletion => "fish completion",
+            ExtraFileKind::ZshCompletion => "zsh completion",
+        }
+    }
+
+    /// Conventional archive location to probe when metadata does not specify
+    /// an explicit path for this file kind.
+    ///
+    /// These defaults are intentionally best-effort. Resolver code treats
+    /// missing convention-based files as "not packaged" and only raises an
+    /// error for explicit metadata entries.
+    pub fn default_source_template(self) -> &'static str {
+        match self {
+            ExtraFileKind::Man => "man/man1/{ bin }.1",
+            ExtraFileKind::BashCompletion => "completions/bash/{ bin }",
+            ExtraFileKind::FishCompletion => "completions/fish/{ bin }.fish",
+            ExtraFileKind::ZshCompletion => "completions/zsh/_{ bin }",
+        }
+    }
+
+    /// Relative install location under Cargo root.
+    ///
+    /// Extras are installed under Cargo root rather than `--install-path`
+    /// because they are not peer executables. They belong to Cargo-managed
+    /// shared data directories (`share/man`, completion roots, etc.), and
+    /// keeping them there matches the behavior documented for this feature and
+    /// gives manifest tracking a single stable root to manage.
+    ///
+    /// A different design could have made these destinations relative to the
+    /// binary install path, but that would make custom `--install-path`
+    /// invocations produce less conventional layouts and would complicate
+    /// stale-file cleanup.
+    pub fn dest_relative_path(self, bin: &str) -> PathBuf {
+        match self {
+            ExtraFileKind::Man => PathBuf::from(format!("share/man/man1/{bin}.1")),
+            ExtraFileKind::BashCompletion => {
+                PathBuf::from(format!("share/bash-completion/completions/{bin}"))
+            }
+            ExtraFileKind::FishCompletion => {
+                PathBuf::from(format!("share/fish/vendor_completions.d/{bin}.fish"))
+            }
+            ExtraFileKind::ZshCompletion => {
+                PathBuf::from(format!("share/zsh/site-functions/_{bin}"))
+            }
+        }
+    }
+}
+
+/// A resolved extra file ready for previewing, installation, and manifest
+/// tracking.
+///
+/// This is intentionally parallel to `BinFile`: resolution computes the
+/// archive-relative source path and final destination once, and later phases
+/// reuse that exact result. That avoids re-rendering templates during install
+/// and ensures dry-run output matches what will actually be written to disk.
+pub struct ExtraFile {
+    pub kind: ExtraFileKind,
+    pub source: PathBuf,
+    pub archive_source_path: PathBuf,
+    pub dest: PathBuf,
+    pub relative_dest: PathBuf,
+}
+
+impl ExtraFile {
+    /// Build an installable extra file from archive metadata.
+    ///
+    /// `cargo_root` is passed explicitly rather than inferred from
+    /// `Data::install_path` because callers may override the binary install
+    /// directory while extra files still need to land in Cargo's shared-data
+    /// hierarchy.
+    pub fn new(
+        data: &Data<'_>,
+        base_name: &str,
+        tt: &Template<'_>,
+        cargo_root: &Path,
+        kind: ExtraFileKind,
+    ) -> Result<Self, Error> {
+        let binary_ext = if data.target.contains("windows") {
+            ".exe"
+        } else {
+            ""
+        };
+
+        let ctx = Context {
+            name: data.name,
+            repo: data.repo,
+            target: data.target,
+            version: data.version,
+            bin: base_name,
+            binary_ext,
+            target_related_info: data.target_related_info,
+        };
+
+        let archive_source_path = render_relative_path(tt, &ctx)?;
+        let relative_dest = kind.dest_relative_path(base_name);
+        let dest = cargo_root.join(&relative_dest);
+
+        Ok(Self {
+            kind,
+            source: data.bin_path.join(&archive_source_path),
+            archive_source_path,
+            dest,
+            relative_dest,
+        })
+    }
+
+    pub fn preview(&self) -> impl fmt::Display + '_ {
+        struct PreviewExtraFile<'a> {
+            label: &'a str,
+            dest: path::Display<'a>,
+        }
+
+        impl fmt::Display for PreviewExtraFile<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{} => {}", self.label, self.dest)
+            }
+        }
+
+        PreviewExtraFile {
+            label: self.kind.label(),
+            dest: self.dest.display(),
+        }
+    }
+
+    pub fn check_source_exists(
+        &self,
+        has_file: &mut dyn FnMut(&Path) -> bool,
+    ) -> Result<(), Error> {
+        if has_file(&self.archive_source_path) {
+            Ok(())
+        } else {
+            Err(Error::SourceFileNotFound((&*self.source).into()))
+        }
+    }
+
+}
+
 /// Data required to get bin paths
 pub struct Data<'a> {
     pub name: &'a str,
@@ -304,6 +460,12 @@ pub struct Data<'a> {
     pub repo: Option<&'a str>,
     pub meta: PkgMeta,
     pub bin_path: &'a Path,
+    /// Destination root for the main artifact flow.
+    ///
+    /// For binaries this is the executable install path. Extra-file resolution
+    /// currently reuses the same render context type for access to shared
+    /// template variables, even though `ExtraFile::new` takes the final Cargo
+    /// root destination explicitly.
     pub install_path: &'a Path,
     /// More target related info, it's recommend to provide the following keys:
     ///  - target_family,
@@ -342,6 +504,28 @@ impl leon::Values for Context<'_> {
             key => self.target_related_info.get_value(key),
         }
     }
+}
+
+/// Render a template into a normalized archive-relative path.
+///
+/// Both binaries and extra files use the same path safety rules:
+/// templates may describe files within the extracted package tree, but they
+/// must never escape that tree. Centralizing the validation keeps the binary
+/// and extra-file code paths consistent and makes missing-file behavior easier
+/// to reason about in the resolver.
+fn render_relative_path(tt: &Template<'_>, ctx: &Context<'_>) -> Result<PathBuf, Error> {
+    let path = tt.render(ctx)?;
+    let path_normalized = Path::new(&path).normalize();
+
+    if path_normalized.components().next().is_none() {
+        return Err(Error::EmptySourceFilePath);
+    }
+
+    if !is_valid_path(&path_normalized) {
+        return Err(Error::InvalidSourceFilePath(path_normalized.into()));
+    }
+
+    Ok(path_normalized)
 }
 
 struct LazyFormat<'a> {
