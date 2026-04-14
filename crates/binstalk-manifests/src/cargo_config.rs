@@ -267,7 +267,7 @@ impl Config {
             let mut visited_path = HashSet::new();
 
             while let Some(config_path) = stack.pop() {
-                let Some(mut file) = config_path.open()? else {
+                let Some(file) = config_path.open()? else {
                     continue
                 };
 
@@ -281,14 +281,14 @@ impl Config {
                 //
                 // Even if one config file has two symlinks, the content might be different
                 // if relative path is present.
-                if !visited_path.insert((path, parent.normalize())) {
+                if !visited_path.insert((path.into_owned(), parent.normalize())) {
                     return Err(ConfigLoadError::DeadLoopInLoading {
                         path: path.into(),
                         parent: parent.into(),
                     });
                 }
                 
-                let config = Config::load_from_reader_inner(&mut (&file), parent)?;
+                let mut config = Config::load_from_reader_inner(&mut (&file), parent)?;
 
                 stack.extend(mem::take(&mut config.include));
                 root_config.merge(config);
