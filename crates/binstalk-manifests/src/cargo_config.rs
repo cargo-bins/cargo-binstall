@@ -281,7 +281,7 @@ impl Config {
                 //
                 // Even if one config file has two symlinks, the content might be different
                 // if relative path is present.
-                if !visited_path.insert((path.into_owned(), parent.normalize())) {
+                if !visited_path.insert((path.to_owned(), parent.normalize())) {
                     return Err(ConfigLoadError::DeadLoopInLoading {
                         path: path.into(),
                         parent: parent.into(),
