@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.40](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.39...binstalk-fetchers-v0.10.40) - 2026-04-10
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2525](https://github.com/cargo-bins/cargo-binstall/pull/2525))
+
 ## [0.10.39](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.38...binstalk-fetchers-v0.10.39) - 2026-03-21
 
 ### Other

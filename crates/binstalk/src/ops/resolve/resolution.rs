@@ -179,6 +179,9 @@ impl ResolutionSource {
             .arg(version)
             .kill_on_drop(true);
 
+        // Do not leak tokens to build scripts via environment variables.
+        cmd.env_remove("GITHUB_TOKEN").env_remove("GH_TOKEN");
+
         apply_registry_selection(
             &mut cmd,
             opts.cargo_install_registry.as_deref(),

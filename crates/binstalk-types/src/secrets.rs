@@ -1,4 +1,7 @@
-use std::{fmt, ops::Deref};
+use std::{
+    fmt,
+    ops::{Deref, DerefMut},
+};
 
 use zeroize::Zeroizing;
 
@@ -12,9 +15,13 @@ impl<T> Redacted<T> {
     }
 }
 
-impl Redacted<Zeroizing<Box<str>>> {
-    pub fn from_boxed_str(value: Box<str>) -> Self {
+impl Redacted<Zeroizing<String>> {
+    pub fn from_string(value: String) -> Self {
         Self::new(Zeroizing::new(value))
+    }
+
+    pub fn from_boxed_str(value: Box<str>) -> Self {
+        Self::from_string(value.into())
     }
 }
 
@@ -26,10 +33,16 @@ impl<T> Deref for Redacted<T> {
     }
 }
 
+impl<T> DerefMut for Redacted<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 impl<T> fmt::Debug for Redacted<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("<redacted>")
     }
 }
 
-pub type SecretString = Redacted<Zeroizing<Box<str>>>;
+pub type SecretString = Redacted<Zeroizing<String>>;
