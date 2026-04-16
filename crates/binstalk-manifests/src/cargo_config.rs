@@ -231,7 +231,7 @@ impl Config {
                     ..
                 } = env
                 else {
-                    continue
+                    continue;
                 };
                 let path = Path::new(&value);
                 if path.is_relative() {
