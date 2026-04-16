@@ -111,9 +111,9 @@ fn resolve_supported_provider_from_config(
     }
 }
 
-fn resolve_global_supported_provider(
+fn resolve_global_supported_provider<'a>(
     cargo_config: &CargoConfig,
-    providers: impl DoubleEndedIterator<Item = &CompactString>,
+    providers: impl DoubleEndedIterator<Item = &'a CompactString>,
 ) -> Option<SupportedRegistryCredentialProvider> {
     let mut seen_aliases = Vec::new();
     debug_assert!(seen_aliases.is_empty());
