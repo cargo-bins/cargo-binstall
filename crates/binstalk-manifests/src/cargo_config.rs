@@ -5,12 +5,7 @@
 //! Binstall reads from them to be compatible with `cargo-install`'s behavior.
 
 use std::{
-    collections::{
-        btree_map::Entry as BTreeMapEntry,
-        BTreeMap,
-        HashSet,
-        VecDeque,
-    },
+    collections::{btree_map::Entry as BTreeMapEntry, BTreeMap, HashSet, VecDeque},
     fs::File,
     io, mem,
     path::{Path, PathBuf},
@@ -76,8 +71,7 @@ type GlobalCredentialProviders = Option<VecDeque<CompactString>>;
 fn merge_global_credential_providers(
     left: &mut GlobalCredentialProviders,
     right: GlobalCredentialProviders,
-)
-{
+) {
     match (left.as_mut(), right) {
         (None, right) => *left = right,
         (Some(_), None) => (),
@@ -89,7 +83,7 @@ fn merge_global_credential_providers(
         }
     }
 }
-    
+
 #[derive(Debug, Deserialize, Merge)]
 pub struct DefaultRegistry {
     #[merge(strategy = merge::option::overwrite_none)]
@@ -144,12 +138,10 @@ impl IncludedConfig {
 
     fn open(&self) -> io::Result<Option<FileLock>> {
         let path = self.path().canonicalize()?;
-        
+
         match File::open(&path) {
             Err(err) if err.kind() == io::ErrorKind::NotFound && self.optional() => Ok(None),
-            res => {
-                Ok(Some(FileLock::new_shared(res?)?.set_file_path(path)))
-            }
+            res => Ok(Some(FileLock::new_shared(res?)?.set_file_path(path))),
         }
     }
 }
@@ -166,7 +158,7 @@ fn merge_btreemap_recursive<K: Ord, V: Merge>(left: &mut BTreeMap<K, V>, right: 
             BTreeMapEntry::Vacant(entry) => {
                 entry.insert(v);
             }
-            BTreeMapEntry::Occupied(entry) => entry.into_mut().merge(v), 
+            BTreeMapEntry::Occupied(entry) => entry.into_mut().merge(v),
         }
     }
 }
@@ -210,7 +202,10 @@ impl Config {
         Self::load_from_path(Self::default_path()?)
     }
 
-    fn load_from_reader_inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Self, ConfigLoadError> {
+    fn load_from_reader_inner(
+        reader: &mut dyn io::Read,
+        dir: &Path,
+    ) -> Result<Self, ConfigLoadError> {
         let mut vec = Vec::new();
         reader.read_to_end(&mut vec)?;
 
@@ -234,7 +229,8 @@ impl Config {
                     value,
                     relative: Some(true),
                     ..
-                } = env else {
+                } = env
+                else {
                     continue
                 };
                 let path = Path::new(&value);
@@ -246,7 +242,7 @@ impl Config {
             for included_config in &mut config.include {
                 join_if_relative(Some(included_config.path_mut()), dir);
             }
-    
+
             Ok(config)
         }
     }
@@ -268,7 +264,7 @@ impl Config {
 
             while let Some(config_path) = stack.pop() {
                 let Some(file) = config_path.open()? else {
-                    continue
+                    continue;
                 };
 
                 let path = file.get_file_path().unwrap(); // canonicalized path
@@ -287,13 +283,13 @@ impl Config {
                         parent: parent.into(),
                     });
                 }
-                
+
                 let mut config = Config::load_from_reader_inner(&mut (&file), parent)?;
 
                 stack.extend(mem::take(&mut config.include));
                 root_config.merge(config);
             }
-            
+
             Ok(root_config)
         }
 
