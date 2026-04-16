@@ -89,31 +89,29 @@ where
 
         while let Some(mut entry) = entries.next().transpose()? {
             match entry.header().entry_type() {
-                tar::EntryType::Regular => {
-                    // unpack_in returns false if the path contains ".."
-                    // and is skipped.
-                    if entry.unpack_in(dst)? {
-                        let path = entry.path()?;
+                // unpack_in returns false if the path contains ".."
+                // and is skipped.
+                tar::EntryType::Regular if entry.unpack_in(dst)? => {
+                    let path = entry.path()?;
 
-                        // create normalized_path in the same way
-                        // tar::Entry::unpack_in would normalize the path.
-                        let mut normalized_path = PathBuf::new();
+                    // create normalized_path in the same way
+                    // tar::Entry::unpack_in would normalize the path.
+                    let mut normalized_path = PathBuf::new();
 
-                        for part in path.components() {
-                            match part {
-                                Component::Prefix(..) | Component::RootDir | Component::CurDir => {
-                                    continue
-                                }
-
-                                // unpack_in would return false if this happens.
-                                Component::ParentDir => unreachable!(),
-
-                                Component::Normal(part) => normalized_path.push(part),
+                    for part in path.components() {
+                        match part {
+                            Component::Prefix(..) | Component::RootDir | Component::CurDir => {
+                                continue
                             }
-                        }
 
-                        extracted_files.add_file(&normalized_path);
+                            // unpack_in would return false if this happens.
+                            Component::ParentDir => unreachable!(),
+
+                            Component::Normal(part) => normalized_path.push(part),
+                        }
                     }
+
+                    extracted_files.add_file(&normalized_path);
                 }
                 tar::EntryType::Directory => {
                     directories.push(entry);
