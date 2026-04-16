@@ -117,7 +117,7 @@ fn resolve_global_supported_provider(
 ) -> Option<SupportedRegistryCredentialProvider> {
     let mut seen_aliases = Vec::new();
     debug_assert!(seen_aliases.is_empty());
-    providers.iter().rev().find_map(|provider| {
+    providers.rev().find_map(|provider| {
         resolve_supported_provider_name(cargo_config, provider, &mut seen_aliases)
     })
 }
