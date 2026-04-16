@@ -73,9 +73,7 @@ fn resolve_supported_provider(
         return None;
     }
 
-    let provider = cargo_config
-        .credential_alias
-        .get(provider_name.as_str())?;
+    let provider = cargo_config.credential_alias.get(provider_name.as_str())?;
 
     seen_aliases.push(provider_name.clone());
     let supports = resolve_supported_provider_from_config(cargo_config, provider, seen_aliases);
