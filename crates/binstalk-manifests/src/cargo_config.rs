@@ -411,7 +411,7 @@ custom = ["cargo-credential-example", "--account", "test"]
         assert_eq!(http.timeout.unwrap(), 30);
         assert_eq!(http.cainfo.unwrap(), Path::new("root").join("cert.pem"));
 
-        let env = config.env.unwrap();
+        let env = config.env;
         assert_eq!(env.len(), 3);
         assert_eq!(
             env.get("ENV_VAR_NAME").unwrap(),
@@ -434,7 +434,7 @@ custom = ["cargo-credential-example", "--account", "test"]
             }
         );
 
-        let registries = config.registries.unwrap();
+        let registries = config.registries;
         let private_registry = registries.get("private-registry").unwrap();
         assert_eq!(
             private_registry.index.as_deref(),
@@ -452,7 +452,7 @@ custom = ["cargo-credential-example", "--account", "test"]
             Some(CredentialProvider::String(provider)) if provider == "cargo:token"
         ));
         assert_eq!(
-            registry.global_credential_providers.as_deref(),
+            registry.global_credential_providers.make_contiguous(),
             Some(
                 &[
                     CompactString::const_new("cargo:token"),
@@ -461,7 +461,7 @@ custom = ["cargo-credential-example", "--account", "test"]
             )
         );
 
-        let aliases = config.credential_alias.unwrap();
+        let aliases = config.credential_alias;
         assert!(matches!(
             aliases.get("custom"),
             Some(CredentialProvider::Array(provider))
