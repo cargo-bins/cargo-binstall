@@ -452,7 +452,7 @@ custom = ["cargo-credential-example", "--account", "test"]
             Some(CredentialProvider::String(provider)) if provider == "cargo:token"
         ));
         assert_eq!(
-            registry.global_credential_providers.make_contiguous(),
+            registry.global_credential_providers.as_mut().map(VecDeque::make_contiguous),
             Some(
                 &[
                     CompactString::const_new("cargo:token"),
