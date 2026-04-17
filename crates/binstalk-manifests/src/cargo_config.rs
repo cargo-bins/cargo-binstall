@@ -445,7 +445,7 @@ custom = ["cargo-credential-example", "--account", "test"]
             Some(CredentialProvider::String(provider)) if provider == "cargo:token"
         ));
 
-        let registry = config.registry.unwrap();
+        let mut registry = config.registry.unwrap();
         assert_eq!(registry.default.as_deref(), Some("private-registry"));
         assert!(matches!(
             registry.credential_provider.as_ref(),
