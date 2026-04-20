@@ -193,6 +193,43 @@ fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
     }
 }
 
+fn iterate_reverse_preorder(
+    mut stack: Vec<IncludedConfig>,
+    mut load_config: impl FnMut(
+        reader: &mut dyn io::Read,
+        dir: &Path,
+    ) -> Result<Vec<IncludedConfig>, ConfigLoadError>,
+) -> Result<(), ConfigLoadError>
+{
+    // stack invariant: higher precedence config is the first out
+    let mut visited_path = HashSet::new();
+
+    while let Some(config_path) = stack.pop() {
+        let Some(file) = config_path.open()? else {
+            continue;
+        };
+
+        let path = file.get_file_path().unwrap(); // canonicalized path
+        let parent = config_path.path().parent().unwrap(); // original path
+
+        // Use the absolute, canonicalized path (expanded symlink) to track the
+        // content of the config being loaded, and use the normalized parent
+        // (not absolute or expanded symlink) to track the parent, as that
+        // would decide all the relative path in the config.
+        //
+        // Even if one config file has two symlinks, the content might be different
+        // if relative path is present.
+        if !visited_path.insert((path.to_owned(), parent.normalize())) {
+            return Err(ConfigLoadError::DeadLoopInLoading {
+                path: path.into(),
+                parent: parent.into(),
+            });
+        }
+
+        stack.extend(load_config(&mut (&file), parent)?);
+    }
+}
+
 impl Config {
     pub fn default_path() -> Result<PathBuf, ConfigLoadError> {
         Ok(cargo_home()?.join("config.toml"))
@@ -258,37 +295,15 @@ impl Config {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
             let mut root_config = Config::load_from_reader_inner(reader, dir)?;
 
-            // stack invariant: higher precedence config is the first out
-            let mut stack = mem::take(&mut root_config.include);
-            let mut visited_path = HashSet::new();
-
-            while let Some(config_path) = stack.pop() {
-                let Some(file) = config_path.open()? else {
-                    continue;
-                };
-
-                let path = file.get_file_path().unwrap(); // canonicalized path
-                let parent = config_path.path().parent().unwrap(); // original path
-
-                // Use the absolute, canonicalized path (expanded symlink) to track the
-                // content of the config being loaded, and use the normalized parent
-                // (not absolute or expanded symlink) to track the parent, as that
-                // would decide all the relative path in the config.
-                //
-                // Even if one config file has two symlinks, the content might be different
-                // if relative path is present.
-                if !visited_path.insert((path.to_owned(), parent.normalize())) {
-                    return Err(ConfigLoadError::DeadLoopInLoading {
-                        path: path.into(),
-                        parent: parent.into(),
-                    });
+            iterate_reverse_preorder(
+                mem::take(&mut root_config.include),
+                |file, parent| {
+                    let mut config = Config::load_from_reader_inner(file, parent)?;
+                    let includes = mem::take(&mut config.include);
+                    root_config.merge(config);
+                    Ok(includes)
                 }
-
-                let mut config = Config::load_from_reader_inner(&mut (&file), parent)?;
-
-                stack.extend(mem::take(&mut config.include));
-                root_config.merge(config);
-            }
+            )?;
 
             Ok(root_config)
         }
