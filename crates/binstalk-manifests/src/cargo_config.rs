@@ -297,15 +297,12 @@ impl Config {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
             let mut root_config = Config::load_from_reader_inner(reader, dir)?;
 
-            iterate_reverse_preorder(
-                mem::take(&mut root_config.include),
-                |file, parent| {
-                    let mut config = Config::load_from_reader_inner(file, parent)?;
-                    let includes = mem::take(&mut config.include);
-                    root_config.merge(config);
-                    Ok(includes)
-                }
-            )?;
+            iterate_reverse_preorder(mem::take(&mut root_config.include), |file, parent| {
+                let mut config = Config::load_from_reader_inner(file, parent)?;
+                let includes = mem::take(&mut config.include);
+                root_config.merge(config);
+                Ok(includes)
+            })?;
 
             Ok(root_config)
         }
