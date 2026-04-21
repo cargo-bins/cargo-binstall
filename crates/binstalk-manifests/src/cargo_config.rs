@@ -196,8 +196,8 @@ fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
 fn iterate_reverse_preorder(
     mut stack: Vec<IncludedConfig>,
     mut load_config: impl FnMut(
-        reader: &mut dyn io::Read,
-        dir: &Path,
+        &mut dyn io::Read,
+        &Path,
     ) -> Result<Vec<IncludedConfig>, ConfigLoadError>,
 ) -> Result<(), ConfigLoadError>
 {
@@ -228,6 +228,8 @@ fn iterate_reverse_preorder(
 
         stack.extend(load_config(&mut (&file), parent)?);
     }
+
+    Ok(())
 }
 
 impl Config {
