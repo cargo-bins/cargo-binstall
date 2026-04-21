@@ -199,8 +199,7 @@ fn iterate_reverse_preorder(
         &mut dyn io::Read,
         &Path,
     ) -> Result<Vec<IncludedConfig>, ConfigLoadError>,
-) -> Result<(), ConfigLoadError>
-{
+) -> Result<(), ConfigLoadError> {
     // stack invariant: higher precedence config is the first out
     let mut visited_path = HashSet::new();
 
