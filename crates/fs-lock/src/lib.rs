@@ -13,10 +13,10 @@ use cfg_if::cfg_if;
 
 cfg_if! {
     if #[cfg(any(target_os = "android", target_os = "illumos"))] {
-        use fs4::fs_std::FileExt;
+        use fs4::FileExt;
 
         fn lock_exclusive(file: &File) -> io::Result<()> {
-            FileExt::lock_exclusive(file)
+            FileExt::lock(file)
         }
 
         fn lock_shared(file: &File) -> io::Result<()> {
@@ -25,17 +25,14 @@ cfg_if! {
 
         fn map_try_lock_result(result: io::Result<bool>) -> Result<(), TryLockError> {
             match result {
-                Ok(true) => Ok(()),
-                Ok(false) => Err(TryLockError::WouldBlock),
-                Err(e) if e.raw_os_error() == fs4::lock_contended_error().raw_os_error() => {
-                    Err(TryLockError::WouldBlock)
-                }
-                Err(e) => Err(TryLockError::Error(e)),
+                Ok(()) => Ok(()),
+                Err(fs4::TryLockError::WouldBlock) => Err(TryLockError::WouldBlock),
+                Err(fs4::TryLockError::Error(e)) => Err(TryLockError::Error(e)),
             }
         }
 
         fn try_lock_exclusive(file: &File) -> Result<(), TryLockError> {
-            map_try_lock_result(FileExt::try_lock_exclusive(file))
+            map_try_lock_result(FileExt::try_lock(file))
         }
 
         fn try_lock_shared(file: &File) -> Result<(), TryLockError> {
