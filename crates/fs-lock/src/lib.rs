@@ -23,7 +23,7 @@ cfg_if! {
             FileExt::lock_shared(file)
         }
 
-        fn map_try_lock_result(result: io::Result<bool>) -> Result<(), TryLockError> {
+        fn map_try_lock_result(result: Result<(), fs4::TryLockError>) -> Result<(), TryLockError> {
             match result {
                 Ok(()) => Ok(()),
                 Err(fs4::TryLockError::WouldBlock) => Err(TryLockError::WouldBlock),
