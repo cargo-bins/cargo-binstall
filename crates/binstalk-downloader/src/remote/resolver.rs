@@ -33,7 +33,7 @@ impl Resolve for TrustDnsResolver {
                     .iter()
                     .map(|ip| SocketAddr::new(ip, 0))
                     .collect::<Vec<_>>()
-                    .into_iter()
+                    .into_iter(),
             );
             Ok(addrs)
         })
