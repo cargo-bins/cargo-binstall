@@ -28,7 +28,13 @@ impl Resolve for TrustDnsResolver {
             let resolver = resolver.0.get_or_try_init(new_resolver)?;
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
-            let addrs: Addrs = Box::new(lookup.iter().map(|ip| SocketAddr::new(ip, 0)));
+            let addrs: Addrs = Box::new(
+                lookup
+                    .iter()
+                    .map(|ip| SocketAddr::new(ip, 0))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+            );
             Ok(addrs)
         })
     }
