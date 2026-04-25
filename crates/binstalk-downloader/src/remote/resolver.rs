@@ -12,7 +12,7 @@ use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
-use hickory_resolver::{config::NameServerConfig, proto::xfer::Protocol};
+use hickory_resolver::{config::NameServerConfig, net::xfer::Protocol};
 #[cfg(windows)]
 use netdev::Interface;
 
@@ -28,7 +28,13 @@ impl Resolve for TrustDnsResolver {
             let resolver = resolver.0.get_or_try_init(new_resolver)?;
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
-            let addrs: Addrs = Box::new(lookup.into_iter().map(|ip| SocketAddr::new(ip, 0)));
+            let addrs: Addrs = Box::new(
+                lookup
+                    .iter()
+                    .map(|ip| SocketAddr::new(ip, 0))
+                    .collect::<Vec<_>>()
+                    .into_iter(),
+            );
             Ok(addrs)
         })
     }
@@ -43,7 +49,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
 #[cfg(windows)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using custom DNS resolver configuration");
-    let mut config = ResolverConfig::new();
+    let mut config = ResolverConfig::default();
     let opts = ResolverOpts::default();
 
     let interface = get_default_interface()?;
@@ -58,17 +64,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
 
     interface.dns_servers.iter().for_each(|addr| {
         tracing::trace!("Adding DNS server: {}", addr);
-        let socket_addr = SocketAddr::new(*addr, 53);
-        for protocol in [Protocol::Udp, Protocol::Tcp] {
-            config.add_name_server(NameServerConfig {
-                socket_addr,
-                protocol,
-                tls_dns_name: None,
-                trust_negative_responses: false,
-                bind_addr: None,
-                http_endpoint: None,
-            })
-        }
+        config.add_name_server(NameServerConfig::udp_and_tcp(*addr));
     });
 
     Ok((config, opts))
@@ -82,7 +78,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
     opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
     let mut builder = TokioAsyncResolver::builder_with_config(config, Default::default());
     *builder.options_mut() = opts;
-    Ok(builder.build())
+    Ok(builder.build()?)
 }
 
 #[cfg(windows)]
