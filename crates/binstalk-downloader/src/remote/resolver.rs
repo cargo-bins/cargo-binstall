@@ -63,7 +63,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     }
 
     interface.dns_servers.iter().for_each(|addr| {
-        tracing::trace!("Adding DNS server: {}", addr)
+        tracing::trace!("Adding DNS server: {}", addr);
         config.add_name_server(NameServerConfig::udp_and_tcp(*addr));
     });
 
