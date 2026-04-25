@@ -12,7 +12,7 @@ use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
-use hickory_resolver::{config::NameServerConfig, proto::xfer::Protocol};
+use hickory_resolver::{config::NameServerConfig, net::xfer::Protocol};
 #[cfg(windows)]
 use netdev::Interface;
 
@@ -49,7 +49,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
 #[cfg(windows)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using custom DNS resolver configuration");
-    let mut config = ResolverConfig::new();
+    let mut config = ResolverConfig::default();
     let opts = ResolverOpts::default();
 
     let interface = get_default_interface()?;
@@ -63,18 +63,8 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     }
 
     interface.dns_servers.iter().for_each(|addr| {
-        tracing::trace!("Adding DNS server: {}", addr);
-        let socket_addr = SocketAddr::new(*addr, 53);
-        for protocol in [Protocol::Udp, Protocol::Tcp] {
-            config.add_name_server(NameServerConfig {
-                socket_addr,
-                protocol,
-                tls_dns_name: None,
-                trust_negative_responses: false,
-                bind_addr: None,
-                http_endpoint: None,
-            })
-        }
+        tracing::trace!("Adding DNS server: {}", addr)
+        config.add_name_server(NameServerConfig::udp_and_tcp(*addr));
     });
 
     Ok((config, opts))
