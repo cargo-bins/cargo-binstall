@@ -78,7 +78,7 @@ Download the relevant package for your system below, unpack it, and move the `ca
 With a recent [Rust](https://rustup.rs) installed:
 
 ```
-cargo install cargo-binstall
+cargo install cargo-binstall --locked
 ```
 
 ### In GitHub Actions
