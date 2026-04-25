@@ -28,7 +28,7 @@ impl Resolve for TrustDnsResolver {
             let resolver = resolver.0.get_or_try_init(new_resolver)?;
 
             let lookup = resolver.lookup_ip(name.as_str()).await?;
-            let addrs: Addrs = Box::new(lookup.into_iter().map(|ip| SocketAddr::new(ip, 0)));
+            let addrs: Addrs = Box::new(lookup.iter().map(|ip| SocketAddr::new(ip, 0)));
             Ok(addrs)
         })
     }
@@ -82,7 +82,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
     opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
     let mut builder = TokioAsyncResolver::builder_with_config(config, Default::default());
     *builder.options_mut() = opts;
-    Ok(builder.build())
+    Ok(builder.build()?)
 }
 
 #[cfg(windows)]
