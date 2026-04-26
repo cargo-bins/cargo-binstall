@@ -377,7 +377,7 @@ mod tests {
 
     use std::{io::Cursor, path::MAIN_SEPARATOR};
 
-    use compact_str::format_compact;
+    use compact_str::{format_compact, ToCompactString};
 
     const CONFIG: &str = r#"
 [env]
@@ -489,5 +489,113 @@ custom = ["cargo-credential-example", "--account", "test"]
                         CompactString::const_new("test"),
                     ]
         ));
+    }
+
+    #[test]
+    fn test_merge_config() {
+        let mut config = Config {
+            // Omit include and http as they use prebuilt strategy
+            install: None,
+            http: None,
+            // Skipped during merge
+            include: Vec::new(),
+            // Same strategy as env
+            credential_alias: BTreeMap::new(),
+
+            env: BTreeMap::from([
+                (CompactString::new("1"), Env::Value(CompactString::new("1"))),
+                (CompactString::new("2"), Env::Value(CompactString::new("2"))),
+            ]),
+            registries: BTreeMap::from([
+                (
+                    CompactString::new("1"),
+                    Registry {
+                        index: None,
+                        replace_with: None,
+                        credential_provider: None,
+                    }
+                ),
+                (
+                    CompactString::new("2"),
+                    Registry {
+                        index: Some(CompactString::new("!")),
+                        replace_with: None,
+                        credential_provider: None,
+                    }
+                ),
+            ]),
+            registry: Some(DefaultRegistry {
+                default: Some(CompactString::new("1")),
+                credential_provider: None,
+                global_credential_providers: Some(VecDeque::from([CompactString::new("left")])),
+            }),
+        };
+        config.merge(Config {
+            install: None,
+            http: None,
+            include: Vec::new(),
+            credential_alias: BTreeMap::new(),
+
+            env: BTreeMap::from([
+                (CompactString::new("2"), Env::Value(CompactString::new("qwewrd"))),
+                (CompactString::new("3"), Env::Value(CompactString::new("3"))),
+            ]),
+            registries: BTreeMap::from([
+                (
+                    CompactString::new("2"),
+                    Registry {
+                        index: Some(CompactString::new("indexex")),
+                        replace_with: Some(CompactString::new("ere")),
+                        credential_provider: None,
+                    }
+                ),
+                (
+                    CompactString::new("3"),
+                    Registry {
+                        index: None,
+                        replace_with: Some(CompactString::new("re")),
+                        credential_provider: Some(CredentialProvider::String(CompactString::new("213"))),
+                    }
+                ),
+            ]),
+            registry: Some(DefaultRegistry {
+                default: Some(CompactString::new("www1")),
+                credential_provider: Some(CredentialProvider::String(CompactString::new("ww213"))),
+                global_credential_providers: Some(VecDeque::from([CompactString::new("right", "2")])),
+            }),
+        });
+
+        assert_eq!(
+            config.env,
+            (1..=3)
+                .map(ToCompactString::to_compact_string)
+                .map(|s| (s.clone(), Env::Value(s)))
+                .collect::<BTreeMap<_, _>>(),
+        );
+
+        assert_eq!(config.registries.keys().collect::<Vec<_>>(), ["1", "2", "3"]);
+
+        let registry_1 = config.registries.get("1").unwrap();
+        assert_eq!(registry_1.index, None);
+        assert_eq!(registry_1.replace_with, None);
+        assert!(registry_1.credential_provider.is_none());
+
+        let registry_2 = config.registries.get("2").unwrap();
+        assert_eq!(registry_2.index, Some(CompactString::new("!")));
+        assert_eq!(registry_2.replace_with, Some(CompactString::new("ere")));
+        assert!(registry_2.credential_provider.is_none());
+
+        let registry_3 = config.registries.get("3").unwrap();
+        assert_eq!(registry_3.index, None);
+        assert_eq!(registry_3.replace_with, Some(CompactString::new("re")));
+        assert!(matches!(registry_3.credential_provider.unwrap(), CredentialProvider::String(v) if v == "213"));
+
+        let default_registry = config.registry.unwrap();
+        assert_eq!(default_registry.default, Some(CompactString::new("1")));
+        assert!(matches!(default_registry.credential_provider.unwrap(), CredentialProvider::String(v) if v == "ww213"));
+        assert_eq!(
+            default_registry.global_credential_providers.unwrap(),
+            ["right", "2", "left"].map(CompactString::new).collect::<Vec<_>>(),
+        );
     }
 }
