@@ -513,7 +513,7 @@ custom = ["cargo-credential-example", "--account", "test"]
                         index: None,
                         replace_with: None,
                         credential_provider: None,
-                    }
+                    },
                 ),
                 (
                     CompactString::new("2"),
@@ -521,7 +521,7 @@ custom = ["cargo-credential-example", "--account", "test"]
                         index: Some(CompactString::new("!")),
                         replace_with: None,
                         credential_provider: None,
-                    }
+                    },
                 ),
             ]),
             registry: Some(DefaultRegistry {
@@ -537,7 +537,10 @@ custom = ["cargo-credential-example", "--account", "test"]
             credential_alias: BTreeMap::new(),
 
             env: BTreeMap::from([
-                (CompactString::new("2"), Env::Value(CompactString::new("qwewrd"))),
+                (
+                    CompactString::new("2"),
+                    Env::Value(CompactString::new("qwewrd")),
+                ),
                 (CompactString::new("3"), Env::Value(CompactString::new("3"))),
             ]),
             registries: BTreeMap::from([
@@ -547,33 +550,41 @@ custom = ["cargo-credential-example", "--account", "test"]
                         index: Some(CompactString::new("indexex")),
                         replace_with: Some(CompactString::new("ere")),
                         credential_provider: None,
-                    }
+                    },
                 ),
                 (
                     CompactString::new("3"),
                     Registry {
                         index: None,
                         replace_with: Some(CompactString::new("re")),
-                        credential_provider: Some(CredentialProvider::String(CompactString::new("213"))),
+                        credential_provider: Some(CredentialProvider::String(CompactString::new(
+                            "213",
+                        ))),
                     }
                 ),
             ]),
             registry: Some(DefaultRegistry {
                 default: Some(CompactString::new("www1")),
                 credential_provider: Some(CredentialProvider::String(CompactString::new("ww213"))),
-                global_credential_providers: Some(VecDeque::from([CompactString::new("right", "2")])),
+                global_credential_providers: Some(
+                    ["right", "2"].into_iter().map(Into::into).collect(),
+                ),
             }),
         });
 
         assert_eq!(
             config.env,
-            (1..=3)
+            [1, 2, 3]
+                .into_iter()
                 .map(ToCompactString::to_compact_string)
                 .map(|s| (s.clone(), Env::Value(s)))
                 .collect::<BTreeMap<_, _>>(),
         );
 
-        assert_eq!(config.registries.keys().collect::<Vec<_>>(), ["1", "2", "3"]);
+        assert_eq!(
+            config.registries.keys().collect::<Vec<_>>(),
+            ["1", "2", "3"]
+        );
 
         let registry_1 = config.registries.get("1").unwrap();
         assert_eq!(registry_1.index, None);
@@ -588,14 +599,21 @@ custom = ["cargo-credential-example", "--account", "test"]
         let registry_3 = config.registries.get("3").unwrap();
         assert_eq!(registry_3.index, None);
         assert_eq!(registry_3.replace_with, Some(CompactString::new("re")));
-        assert!(matches!(registry_3.credential_provider.unwrap(), CredentialProvider::String(v) if v == "213"));
+        assert!(
+            matches!(registry_3.credential_provider.unwrap(), CredentialProvider::String(v) if v == "213")
+        );
 
         let default_registry = config.registry.unwrap();
         assert_eq!(default_registry.default, Some(CompactString::new("1")));
-        assert!(matches!(default_registry.credential_provider.unwrap(), CredentialProvider::String(v) if v == "ww213"));
+        assert!(
+            matches!(default_registry.credential_provider.unwrap(), CredentialProvider::String(v) if v == "ww213")
+        );
         assert_eq!(
             default_registry.global_credential_providers.unwrap(),
-            ["right", "2", "left"].map(CompactString::new).collect::<Vec<_>>(),
+            ["right", "2", "left"]
+                .into_iter()
+                .map(CompactString::new)
+                .collect::<Vec<_>>(),
         );
     }
 }
