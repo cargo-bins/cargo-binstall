@@ -586,17 +586,17 @@ custom = ["cargo-credential-example", "--account", "test"]
             ["1", "2", "3"]
         );
 
-        let registry_1 = config.registries.get("1").unwrap();
+        let registry_1 = config.registries.remove("1").unwrap();
         assert_eq!(registry_1.index, None);
         assert_eq!(registry_1.replace_with, None);
         assert!(registry_1.credential_provider.is_none());
 
-        let registry_2 = config.registries.get("2").unwrap();
+        let registry_2 = config.registries.remove("2").unwrap();
         assert_eq!(registry_2.index, Some(CompactString::new("!")));
         assert_eq!(registry_2.replace_with, Some(CompactString::new("ere")));
         assert!(registry_2.credential_provider.is_none());
 
-        let registry_3 = config.registries.get("3").unwrap();
+        let registry_3 = config.registries.remove("3").unwrap();
         assert_eq!(registry_3.index, None);
         assert_eq!(registry_3.replace_with, Some(CompactString::new("re")));
         assert!(
