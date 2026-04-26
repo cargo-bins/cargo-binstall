@@ -560,7 +560,7 @@ custom = ["cargo-credential-example", "--account", "test"]
                         credential_provider: Some(CredentialProvider::String(CompactString::new(
                             "213",
                         ))),
-                    }
+                    },
                 ),
             ]),
             registry: Some(DefaultRegistry {
@@ -575,7 +575,7 @@ custom = ["cargo-credential-example", "--account", "test"]
         assert_eq!(
             config.env,
             [1, 2, 3]
-                .into_iter()
+                .iter()
                 .map(ToCompactString::to_compact_string)
                 .map(|s| (s.clone(), Env::Value(s)))
                 .collect::<BTreeMap<_, _>>(),
