@@ -17,10 +17,10 @@ runs:
         BINSTALL_VERSION: ${{ inputs.version }}
       run: |
         set -eu
-        bash "${{ github.action_path }}/install-from-binstall-release.sh"
+        bash "$GITHUB_ACTION_PATH/install-from-binstall-release.sh"
     - name: Install cargo-binstall
       if: runner.os == 'Windows'
       shell: powershell
       env:
         BINSTALL_VERSION: ${{ inputs.version }}
-      run: Set-ExecutionPolicy Unrestricted -Scope Process; iex "${{ github.action_path }}/install-from-binstall-release.ps1"
+      run: Set-ExecutionPolicy Unrestricted -Scope Process; iex "$Env:GITHUB_ACTION_PATH/install-from-binstall-release.ps1"
