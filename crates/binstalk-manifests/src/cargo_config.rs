@@ -5,37 +5,42 @@
 //! Binstall reads from them to be compatible with `cargo-install`'s behavior.
 
 use std::{
-    borrow::Cow,
-    collections::BTreeMap,
+    collections::{btree_map::Entry as BTreeMapEntry, BTreeMap, HashSet, VecDeque},
     fs::File,
-    io,
+    io, mem,
     path::{Path, PathBuf},
 };
 
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
+use merge::Merge;
 use miette::Diagnostic;
+use normalize_path::NormalizePath;
 use serde::Deserialize;
 use thiserror::Error;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Merge)]
 pub struct Install {
     /// `cargo install` destination directory
+    #[merge(strategy = merge::option::overwrite_none)]
     pub root: Option<PathBuf>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Merge)]
 pub struct Http {
     /// HTTP proxy in libcurl format: "host:port"
     ///
     /// env: CARGO_HTTP_PROXY or HTTPS_PROXY or https_proxy or http_proxy
+    #[merge(strategy = merge::option::overwrite_none)]
     pub proxy: Option<CompactString>,
     /// timeout for each HTTP request, in seconds
     ///
     /// env: CARGO_HTTP_TIMEOUT or HTTP_TIMEOUT
+    #[merge(strategy = merge::option::overwrite_none)]
     pub timeout: Option<u64>,
     /// path to Certificate Authority (CA) bundle
+    #[merge(strategy = merge::option::overwrite_none)]
     pub cainfo: Option<PathBuf>,
 }
 
@@ -50,22 +55,45 @@ pub enum Env {
     },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Merge)]
 pub struct Registry {
+    #[merge(strategy = merge::option::overwrite_none)]
     pub index: Option<CompactString>,
     #[serde(rename = "replace-with")]
+    #[merge(strategy = merge::option::overwrite_none)]
     pub replace_with: Option<CompactString>,
     #[serde(rename = "credential-provider")]
+    #[merge(strategy = merge::option::overwrite_none)]
     pub credential_provider: Option<CredentialProvider>,
 }
 
-#[derive(Debug, Deserialize)]
+type GlobalCredentialProviders = Option<VecDeque<CompactString>>;
+fn merge_global_credential_providers(
+    left: &mut GlobalCredentialProviders,
+    right: GlobalCredentialProviders,
+) {
+    match (left.as_mut(), right) {
+        (None, right) => *left = right,
+        (Some(_), None) => (),
+        (Some(left), Some(right)) => {
+            left.reserve(right.len());
+            for provider in right.into_iter().rev() {
+                left.push_front(provider);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Merge)]
 pub struct DefaultRegistry {
+    #[merge(strategy = merge::option::overwrite_none)]
     pub default: Option<CompactString>,
     #[serde(rename = "credential-provider")]
+    #[merge(strategy = merge::option::overwrite_none)]
     pub credential_provider: Option<CredentialProvider>,
     #[serde(rename = "global-credential-providers")]
-    pub global_credential_providers: Option<Vec<CompactString>>,
+    #[merge(strategy = merge_global_credential_providers)]
+    pub global_credential_providers: GlobalCredentialProviders,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -75,15 +103,87 @@ pub enum CredentialProvider {
     Array(Vec<CompactString>),
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+pub enum IncludedConfig {
+    Path(PathBuf),
+    Extended {
+        path: PathBuf,
+        #[serde(default)]
+        optional: bool,
+    },
+}
+
+impl IncludedConfig {
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Path(path) => path,
+            Self::Extended { path, .. } => path,
+        }
+    }
+
+    pub fn path_mut(&mut self) -> &mut PathBuf {
+        match self {
+            Self::Path(path) => path,
+            Self::Extended { path, .. } => path,
+        }
+    }
+
+    pub fn optional(&self) -> bool {
+        match self {
+            Self::Path(..) => false,
+            Self::Extended { optional, .. } => *optional,
+        }
+    }
+
+    fn open(&self) -> io::Result<Option<FileLock>> {
+        let path = self.path().canonicalize()?;
+
+        match File::open(&path) {
+            Err(err) if err.kind() == io::ErrorKind::NotFound && self.optional() => Ok(None),
+            res => Ok(Some(FileLock::new_shared(res?)?.set_file_path(path))),
+        }
+    }
+}
+
+fn merge_btreemap<K: Ord, V>(left: &mut BTreeMap<K, V>, right: BTreeMap<K, V>) {
+    for (k, v) in right.into_iter() {
+        left.entry(k).or_insert(v);
+    }
+}
+
+fn merge_btreemap_recursive<K: Ord, V: Merge>(left: &mut BTreeMap<K, V>, right: BTreeMap<K, V>) {
+    for (k, v) in right.into_iter() {
+        match left.entry(k) {
+            BTreeMapEntry::Vacant(entry) => {
+                entry.insert(v);
+            }
+            BTreeMapEntry::Occupied(entry) => entry.into_mut().merge(v),
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Merge)]
+#[non_exhaustive]
 pub struct Config {
+    #[merge(strategy = merge::option::recurse)]
     pub install: Option<Install>,
+    #[merge(strategy = merge::option::recurse)]
     pub http: Option<Http>,
-    pub env: Option<BTreeMap<CompactString, Env>>,
-    pub registries: Option<BTreeMap<CompactString, Registry>>,
+    #[serde(default)]
+    #[merge(strategy = merge_btreemap)]
+    pub env: BTreeMap<CompactString, Env>,
+    #[serde(default)]
+    #[merge(strategy = merge_btreemap_recursive)]
+    pub registries: BTreeMap<CompactString, Registry>,
+    #[merge(strategy = merge::option::recurse)]
     pub registry: Option<DefaultRegistry>,
-    #[serde(rename = "credential-alias")]
-    pub credential_alias: Option<BTreeMap<CompactString, CredentialProvider>>,
+    #[serde(default)]
+    #[merge(skip)]
+    pub include: Vec<IncludedConfig>,
+    #[serde(default, rename = "credential-alias")]
+    #[merge(strategy = merge_btreemap)]
+    pub credential_alias: BTreeMap<CompactString, CredentialProvider>,
 }
 
 fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
@@ -91,6 +191,44 @@ fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
         Some(path) if path.is_relative() => *path = dir.join(&*path),
         _ => (),
     }
+}
+
+fn iterate_reverse_preorder(
+    mut stack: Vec<IncludedConfig>,
+    mut load_config: impl FnMut(
+        &mut dyn io::Read,
+        &Path,
+    ) -> Result<Vec<IncludedConfig>, ConfigLoadError>,
+) -> Result<(), ConfigLoadError> {
+    // stack invariant: higher precedence config is the first out
+    let mut visited_path = HashSet::new();
+
+    while let Some(config_path) = stack.pop() {
+        let Some(file) = config_path.open()? else {
+            continue;
+        };
+
+        let path = file.get_file_path().unwrap(); // canonicalized path
+        let parent = config_path.path().parent().unwrap(); // original path
+
+        // Use the absolute, canonicalized path (expanded symlink) to track the
+        // content of the config being loaded, and use the normalized parent
+        // (not absolute or expanded symlink) to track the parent, as that
+        // would decide all the relative path in the config.
+        //
+        // Even if one config file has two symlinks, the content might be different
+        // if relative path is present.
+        if !visited_path.insert((path.to_owned(), parent.normalize())) {
+            return Err(ConfigLoadError::DeadLoopInLoading {
+                path: path.into(),
+                parent: parent.into(),
+            });
+        }
+
+        stack.extend(load_config(&mut (&file), parent)?);
+    }
+
+    Ok(())
 }
 
 impl Config {
@@ -102,6 +240,51 @@ impl Config {
         Self::load_from_path(Self::default_path()?)
     }
 
+    fn load_from_reader_inner(
+        reader: &mut dyn io::Read,
+        dir: &Path,
+    ) -> Result<Self, ConfigLoadError> {
+        let mut vec = Vec::new();
+        reader.read_to_end(&mut vec)?;
+
+        if vec.is_empty() {
+            Ok(Default::default())
+        } else {
+            let mut config: Config = toml_edit::de::from_slice(&vec)?;
+            join_if_relative(
+                config
+                    .install
+                    .as_mut()
+                    .and_then(|install| install.root.as_mut()),
+                dir,
+            );
+            join_if_relative(
+                config.http.as_mut().and_then(|http| http.cainfo.as_mut()),
+                dir,
+            );
+            for env in config.env.values_mut() {
+                let Env::WithOptions {
+                    value,
+                    relative: Some(true),
+                    ..
+                } = env
+                else {
+                    continue;
+                };
+                let path = Path::new(&value);
+                if path.is_relative() {
+                    *value = dir.join(path).to_string_lossy().into();
+                }
+            }
+
+            for included_config in &mut config.include {
+                join_if_relative(Some(included_config.path_mut()), dir);
+            }
+
+            Ok(config)
+        }
+    }
+
     /// * `dir` - path to the dir where the config.toml is located.
     ///   For relative path in the config, `Config::load_from_reader`
     ///   will join the `dir` and the relative path to form the final
@@ -111,41 +294,16 @@ impl Config {
         dir: &Path,
     ) -> Result<Self, ConfigLoadError> {
         fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
-            let mut vec = Vec::new();
-            reader.read_to_end(&mut vec)?;
+            let mut root_config = Config::load_from_reader_inner(reader, dir)?;
 
-            if vec.is_empty() {
-                Ok(Default::default())
-            } else {
-                let mut config: Config = toml_edit::de::from_slice(&vec)?;
-                join_if_relative(
-                    config
-                        .install
-                        .as_mut()
-                        .and_then(|install| install.root.as_mut()),
-                    dir,
-                );
-                join_if_relative(
-                    config.http.as_mut().and_then(|http| http.cainfo.as_mut()),
-                    dir,
-                );
-                if let Some(envs) = config.env.as_mut() {
-                    for env in envs.values_mut() {
-                        if let Env::WithOptions {
-                            value,
-                            relative: Some(true),
-                            ..
-                        } = env
-                        {
-                            let path = Cow::Borrowed(Path::new(&value));
-                            if path.is_relative() {
-                                *value = dir.join(&path).to_string_lossy().into();
-                            }
-                        }
-                    }
-                }
-                Ok(config)
-            }
+            iterate_reverse_preorder(mem::take(&mut root_config.include), |file, parent| {
+                let mut config = Config::load_from_reader_inner(file, parent)?;
+                let includes = mem::take(&mut config.include);
+                root_config.merge(config);
+                Ok(includes)
+            })?;
+
+            Ok(root_config)
         }
 
         inner(&mut reader, dir)
@@ -168,7 +326,7 @@ impl Config {
     }
 
     pub fn get_registry_index(&self, name: &str) -> Option<&str> {
-        let registry = self.registries.as_ref()?.get(name)?;
+        let registry = self.registries.get(name)?;
 
         if let Some(name) = registry.replace_with.as_deref() {
             self.get_registry_index(name)
@@ -178,7 +336,7 @@ impl Config {
     }
 
     pub fn get_registry(&self, name: &str) -> Option<&Registry> {
-        let registry = self.registries.as_ref()?.get(name)?;
+        let registry = self.registries.get(name)?;
 
         if let Some(name) = registry.replace_with.as_deref() {
             self.get_registry(name)
@@ -196,6 +354,9 @@ pub enum ConfigLoadError {
 
     #[error("Failed to deserialize toml: {0}")]
     TomlParse(Box<toml_edit::de::Error>),
+
+    #[error("Detect deadloop in toml at `{path}` with parent `{parent}`")]
+    DeadLoopInLoading { path: Box<Path>, parent: Box<Path> },
 }
 
 impl From<toml_edit::de::Error> for ConfigLoadError {
@@ -216,7 +377,7 @@ mod tests {
 
     use std::{io::Cursor, path::MAIN_SEPARATOR};
 
-    use compact_str::format_compact;
+    use compact_str::{format_compact, ToCompactString};
 
     const CONFIG: &str = r#"
 [env]
@@ -263,7 +424,7 @@ custom = ["cargo-credential-example", "--account", "test"]
         assert_eq!(http.timeout.unwrap(), 30);
         assert_eq!(http.cainfo.unwrap(), Path::new("root").join("cert.pem"));
 
-        let env = config.env.unwrap();
+        let env = config.env;
         assert_eq!(env.len(), 3);
         assert_eq!(
             env.get("ENV_VAR_NAME").unwrap(),
@@ -286,7 +447,7 @@ custom = ["cargo-credential-example", "--account", "test"]
             }
         );
 
-        let registries = config.registries.unwrap();
+        let registries = config.registries;
         let private_registry = registries.get("private-registry").unwrap();
         assert_eq!(
             private_registry.index.as_deref(),
@@ -297,14 +458,18 @@ custom = ["cargo-credential-example", "--account", "test"]
             Some(CredentialProvider::String(provider)) if provider == "cargo:token"
         ));
 
-        let registry = config.registry.unwrap();
+        let mut registry = config.registry.unwrap();
         assert_eq!(registry.default.as_deref(), Some("private-registry"));
         assert!(matches!(
             registry.credential_provider.as_ref(),
             Some(CredentialProvider::String(provider)) if provider == "cargo:token"
         ));
         assert_eq!(
-            registry.global_credential_providers.as_deref(),
+            registry
+                .global_credential_providers
+                .as_mut()
+                .map(VecDeque::make_contiguous)
+                .as_deref(),
             Some(
                 &[
                     CompactString::const_new("cargo:token"),
@@ -313,7 +478,7 @@ custom = ["cargo-credential-example", "--account", "test"]
             )
         );
 
-        let aliases = config.credential_alias.unwrap();
+        let aliases = config.credential_alias;
         assert!(matches!(
             aliases.get("custom"),
             Some(CredentialProvider::Array(provider))
@@ -324,5 +489,131 @@ custom = ["cargo-credential-example", "--account", "test"]
                         CompactString::const_new("test"),
                     ]
         ));
+    }
+
+    #[test]
+    fn test_merge_config() {
+        let mut config = Config {
+            // Omit include and http as they use prebuilt strategy
+            install: None,
+            http: None,
+            // Skipped during merge
+            include: Vec::new(),
+            // Same strategy as env
+            credential_alias: BTreeMap::new(),
+
+            env: BTreeMap::from([
+                (CompactString::new("1"), Env::Value(CompactString::new("1"))),
+                (CompactString::new("2"), Env::Value(CompactString::new("2"))),
+            ]),
+            registries: BTreeMap::from([
+                (
+                    CompactString::new("1"),
+                    Registry {
+                        index: None,
+                        replace_with: None,
+                        credential_provider: None,
+                    },
+                ),
+                (
+                    CompactString::new("2"),
+                    Registry {
+                        index: Some(CompactString::new("!")),
+                        replace_with: None,
+                        credential_provider: None,
+                    },
+                ),
+            ]),
+            registry: Some(DefaultRegistry {
+                default: Some(CompactString::new("1")),
+                credential_provider: None,
+                global_credential_providers: Some(VecDeque::from([CompactString::new("left")])),
+            }),
+        };
+        config.merge(Config {
+            install: None,
+            http: None,
+            include: Vec::new(),
+            credential_alias: BTreeMap::new(),
+
+            env: BTreeMap::from([
+                (
+                    CompactString::new("2"),
+                    Env::Value(CompactString::new("qwewrd")),
+                ),
+                (CompactString::new("3"), Env::Value(CompactString::new("3"))),
+            ]),
+            registries: BTreeMap::from([
+                (
+                    CompactString::new("2"),
+                    Registry {
+                        index: Some(CompactString::new("indexex")),
+                        replace_with: Some(CompactString::new("ere")),
+                        credential_provider: None,
+                    },
+                ),
+                (
+                    CompactString::new("3"),
+                    Registry {
+                        index: None,
+                        replace_with: Some(CompactString::new("re")),
+                        credential_provider: Some(CredentialProvider::String(CompactString::new(
+                            "213",
+                        ))),
+                    },
+                ),
+            ]),
+            registry: Some(DefaultRegistry {
+                default: Some(CompactString::new("www1")),
+                credential_provider: Some(CredentialProvider::String(CompactString::new("ww213"))),
+                global_credential_providers: Some(
+                    ["right", "2"].into_iter().map(Into::into).collect(),
+                ),
+            }),
+        });
+
+        assert_eq!(
+            config.env,
+            [1, 2, 3]
+                .iter()
+                .map(ToCompactString::to_compact_string)
+                .map(|s| (s.clone(), Env::Value(s)))
+                .collect::<BTreeMap<_, _>>(),
+        );
+
+        assert_eq!(
+            config.registries.keys().collect::<Vec<_>>(),
+            ["1", "2", "3"]
+        );
+
+        let registry_1 = config.registries.remove("1").unwrap();
+        assert_eq!(registry_1.index, None);
+        assert_eq!(registry_1.replace_with, None);
+        assert!(registry_1.credential_provider.is_none());
+
+        let registry_2 = config.registries.remove("2").unwrap();
+        assert_eq!(registry_2.index, Some(CompactString::new("!")));
+        assert_eq!(registry_2.replace_with, Some(CompactString::new("ere")));
+        assert!(registry_2.credential_provider.is_none());
+
+        let registry_3 = config.registries.remove("3").unwrap();
+        assert_eq!(registry_3.index, None);
+        assert_eq!(registry_3.replace_with, Some(CompactString::new("re")));
+        assert!(
+            matches!(registry_3.credential_provider.unwrap(), CredentialProvider::String(v) if v == "213")
+        );
+
+        let default_registry = config.registry.unwrap();
+        assert_eq!(default_registry.default, Some(CompactString::new("1")));
+        assert!(
+            matches!(default_registry.credential_provider.unwrap(), CredentialProvider::String(v) if v == "ww213")
+        );
+        assert_eq!(
+            default_registry.global_credential_providers.unwrap(),
+            ["right", "2", "left"]
+                .into_iter()
+                .map(CompactString::new)
+                .collect::<Vec<_>>(),
+        );
     }
 }

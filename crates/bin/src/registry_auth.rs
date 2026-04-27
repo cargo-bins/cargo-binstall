@@ -73,10 +73,7 @@ fn resolve_supported_provider(
         return None;
     }
 
-    let provider = cargo_config
-        .credential_alias
-        .as_ref()
-        .and_then(|aliases| aliases.get(provider_name.as_str()))?;
+    let provider = cargo_config.credential_alias.get(provider_name.as_str())?;
 
     seen_aliases.push(provider_name.clone());
     let supports = resolve_supported_provider_from_config(cargo_config, provider, seen_aliases);
@@ -112,13 +109,13 @@ fn resolve_supported_provider_from_config(
     }
 }
 
-fn resolve_global_supported_provider(
+fn resolve_global_supported_provider<'a>(
     cargo_config: &CargoConfig,
-    providers: &[CompactString],
+    providers: impl DoubleEndedIterator<Item = &'a CompactString>,
 ) -> Option<SupportedRegistryCredentialProvider> {
     let mut seen_aliases = Vec::new();
     debug_assert!(seen_aliases.is_empty());
-    providers.iter().rev().find_map(|provider| {
+    providers.rev().find_map(|provider| {
         resolve_supported_provider_name(cargo_config, provider, &mut seen_aliases)
     })
 }
@@ -143,8 +140,8 @@ fn resolve_registry_credential_provider(
     cargo_config
         .registry
         .as_ref()
-        .and_then(|registry| registry.global_credential_providers.as_deref())
-        .and_then(|providers| resolve_global_supported_provider(cargo_config, providers))
+        .and_then(|registry| registry.global_credential_providers.as_ref())
+        .and_then(|providers| resolve_global_supported_provider(cargo_config, providers.iter()))
         .or(Some(SupportedRegistryCredentialProvider::CargoToken))
 }
 
