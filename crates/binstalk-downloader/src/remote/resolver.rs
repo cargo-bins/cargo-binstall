@@ -43,7 +43,7 @@ impl Resolve for TrustDnsResolver {
 fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
     system_conf::read_system_conf()
         .unwrap_or_else(|err| {
-            log::debug!(
+            debug!(
                 "hickory-dns: failed to load system DNS configuration; \
                 falling back to hickory_resolver defaults: {:?}",
                 err
