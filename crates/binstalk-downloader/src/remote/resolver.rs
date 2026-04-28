@@ -56,7 +56,7 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
 #[cfg(unix)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using system DNS resolver configuration");
-    Ok(get_system_config())
+    Ok(get_system_configs())
 }
 
 #[cfg(windows)]
@@ -70,7 +70,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     if interface.dns_servers.is_empty() {
         warn!("No DNS servers found on default interface; falling back to system DNS config");
 
-        return Ok(get_system_config());
+        return Ok(get_system_configs());
     }
 
     interface.dns_servers.iter().for_each(|addr| {
