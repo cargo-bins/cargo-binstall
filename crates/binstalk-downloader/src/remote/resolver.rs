@@ -40,10 +40,23 @@ impl Resolve for TrustDnsResolver {
     }
 }
 
+fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
+    system_conf::read_system_conf()
+        .unwrap_or_else(|err| {
+            log::debug!(
+                "hickory-dns: failed to load system DNS configuration; \
+                falling back to hickory_resolver defaults: {:?}",
+                err
+            );
+
+            Default::default()
+        })
+}
+
 #[cfg(unix)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using system DNS resolver configuration");
-    system_conf::read_system_conf().map_err(Into::into)
+    Ok(get_system_config())
 }
 
 #[cfg(windows)]
@@ -57,9 +70,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     if interface.dns_servers.is_empty() {
         warn!("No DNS servers found on default interface; falling back to system DNS config");
 
-        return system_conf::read_system_conf().map_err(|err| {
-            io::Error::other(format!("Failed to read system DNS config: {err}")).into()
-        });
+        return Ok(get_system_config());
     }
 
     interface.dns_servers.iter().for_each(|addr| {
