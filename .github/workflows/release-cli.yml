@@ -16,23 +16,7 @@ on:
         type: string
 
 jobs:
-  tag:
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-    - if: fromJSON(inputs.info).is-release == 'true'
-      name: Push cli release tag
-      uses: mathieudutour/github-tag-action@v6.2
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        custom_tag: ${{ fromJSON(inputs.info).version }}
-        tag_prefix: v
-
   package:
-    needs:
-    - tag
     uses: ./.github/workflows/release-packages.yml
     secrets: inherit
     with:
@@ -44,6 +28,7 @@ jobs:
     permissions:
       contents: write
       id-token: write     # Required for OIDC token exchange
+      attestations: write
 
     runs-on: ubuntu-latest
     steps:
@@ -60,9 +45,8 @@ jobs:
     - name: Create ephemeral keypair
       run: .github/scripts/ephemeral-gen.sh
 
-    - run: rustup toolchain install stable --no-self-update --profile minimal
-
-    - run: .github/scripts/ephemeral-crate.sh
+    - name: Write ephemeral public key to Cargo.toml
+      run: .github/scripts/ephemeral-crate.sh
 
     - uses: rust-lang/crates-io-auth-action@v1
       id: auth
@@ -98,7 +82,21 @@ jobs:
       run: .github/scripts/ephemeral-sign.sh artifact/*
 
     - run: cp minisign.pub artifact
- 
+
+    - name: Generate artifact attestation
+      if: fromJSON(inputs.info).is-release == 'true'
+      uses: actions/attest@v4
+      with:
+        subject-path: artifact/*
+
+    - if: fromJSON(inputs.info).is-release == 'true'
+      name: Push cli release tag
+      uses: mathieudutour/github-tag-action@v6.2
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        custom_tag: ${{ fromJSON(inputs.info).version }}
+        tag_prefix: v
+
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Create release and upload artifacts
       uses: svenstaro/upload-release-action@v2
