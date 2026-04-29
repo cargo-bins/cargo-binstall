@@ -49,7 +49,7 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
         );
 
         (
-            ResolverConfig::udp_and_tcp(hickory_resolver::config::GOOGLE),
+            ResolverConfig::udp_and_tcp(&hickory_resolver::config::GOOGLE),
             Default::default(),
         )
     })
