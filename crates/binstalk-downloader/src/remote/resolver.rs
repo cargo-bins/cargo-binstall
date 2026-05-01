@@ -5,16 +5,21 @@ use std::io;
 
 use hickory_resolver::{
     config::{
-        LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts, CLOUDFLARE, GOOGLE, QUAD9,
+        LookupIpStrategy,
+        NameServerConfig,
+        ResolverConfig,
+        ResolverOpts,
+        ServerGroup,
+        CLOUDFLARE,
+        GOOGLE,
+        QUAD9,
     },
-    systemconf, TokioResolver as TokioAsyncResolver,
+    system_conf, TokioResolver as TokioAsyncResolver,
 };
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
-#[cfg(windows)]
-use hickory_resolver::net::xfer::Protocol;
 #[cfg(windows)]
 use netdev::Interface;
 
@@ -46,19 +51,23 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
     system_conf::read_system_conf().unwrap_or_else(|err| {
         debug!(
             "hickory-dns: failed to load system DNS configuration; \
-            falling back to google: {:?}",
+            falling back to quad9, cloudflare and then googld: {:?}",
             err
         );
 
         let mut config = ResolverConfig::default();
-        for dns in [QUAD9, CLOUDFLARE, GOOGLE] {
-            dns.udp_and_tcp()
-                .chain(dns.tls())
-                .chain(dns.https())
-                .chain(dns.quic())
-                .chain(dns.h3())
-                .for_each(|name_server| config.add_name_server(name_server));
-        }
+
+        let dns_providers = [QUAD9, CLOUDFLARE, GOOGLE];
+        // quic first as it is secure while being the fastest
+        dns_providers.iter().flat_map(ServerGroup::quic)
+            // h3 is secure but slower than quic
+            .chain(dns_providers.iter().flat_map(ServerGroup::h3)
+            // likewise tls is faster tha https
+            .chain(dns_providers.iter().flat_map(ServerGroup::tls)
+            .chain(dns_providers.iter().flat_map(ServerGroup::https)
+            // fallback to udp and tcp
+            .chain(dns_providers.iter().flat_map(ServerGroup::udp_and_tcp)
+            .for_each(|name_server| config.add_name_server(name_server));
 
         (config, Default::default())
     })
