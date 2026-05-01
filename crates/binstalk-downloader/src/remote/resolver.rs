@@ -5,15 +5,9 @@ use std::io;
 
 use hickory_resolver::{
     config::{
-        CLOUDFLARE,
-        GOOGLE,
-        LookupIpStrategy,
-        NameServerConfig,
-        QUAD9,
-        ResolverConfig,
-        ResolverOpts,
+        LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts, CLOUDFLARE, GOOGLE, QUAD9,
     },
-    system_conf, TokioResolver as TokioAsyncResolver,
+    systemconf, TokioResolver as TokioAsyncResolver,
 };
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
