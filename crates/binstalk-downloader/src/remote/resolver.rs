@@ -100,8 +100,8 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
             addr,
             true,
             vec![
-                ConnectionConfig::quic(Arc::from(ip.to_string())),
-                ConnectionConfig::tls(Arc::from(ip.to_string())),
+                ConnectionConfig::quic(Arc::from(addr.to_string())),
+                ConnectionConfig::tls(Arc::from(addr.to_string())),
                 ConnectionConfig::udp(),
                 ConnectionConfig::tcp(),
             ],
