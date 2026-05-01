@@ -4,7 +4,15 @@ use std::{net::SocketAddr, sync::Arc};
 use std::io;
 
 use hickory_resolver::{
-    config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
+    config::{
+        CLOUDFLARE,
+        GOOGLE,
+        LookupIpStrategy,
+        NameServerConfig,
+        QUAD9,
+        ResolverConfig,
+        ResolverOpts,
+    },
     system_conf, TokioResolver as TokioAsyncResolver,
 };
 use once_cell::sync::OnceCell;
@@ -12,7 +20,7 @@ use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
 #[cfg(windows)]
-use hickory_resolver::{config::NameServerConfig, net::xfer::Protocol};
+use hickory_resolver::net::xfer::Protocol;
 #[cfg(windows)]
 use netdev::Interface;
 
@@ -48,10 +56,17 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
             err
         );
 
-        (
-            ResolverConfig::udp_and_tcp(&hickory_resolver::config::GOOGLE),
-            Default::default(),
-        )
+        let mut config = ResolverConfig::default();
+        for dns in [QUAD9, CLOUDFLARE, GOOGLE] {
+            dns.udp_and_tcp()
+                .chain(dns.tls())
+                .chain(dns.https())
+                .chain(dns.quic())
+                .chain(dns.h3())
+                .for_each(|name_server| config.add_name_server(name_server));
+        }
+
+        (config, Default::default())
     })
 }
 
