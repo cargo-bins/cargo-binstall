@@ -5,15 +5,8 @@ use std::io;
 
 use hickory_resolver::{
     config::{
-        ConnectionConfig,
-        LookupIpStrategy,
-        NameServerConfig,
-        ResolverConfig,
-        ResolverOpts,
-        ServerGroup,
-        CLOUDFLARE,
-        GOOGLE,
-        QUAD9,
+        ConnectionConfig, LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts,
+        ServerGroup, CLOUDFLARE, GOOGLE, QUAD9,
     },
     system_conf, TokioResolver as TokioAsyncResolver,
 };
@@ -59,8 +52,10 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
         let mut config = ResolverConfig::default();
 
         let dns_providers = [QUAD9, CLOUDFLARE, GOOGLE];
-        // quic first as it is secure while being the fastest
-        dns_providers.iter().flat_map(ServerGroup::quic)
+        // quic first as it is secure while being the fastes
+        dns_providers
+            .iter()
+            .flat_map(ServerGroup::quic)
             // h3 is secure but slower than quic
             .chain(dns_providers.iter().flat_map(ServerGroup::h3))
             // likewise tls is faster tha https
