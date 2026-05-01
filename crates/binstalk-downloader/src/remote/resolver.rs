@@ -62,12 +62,12 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
         // quic first as it is secure while being the fastest
         dns_providers.iter().flat_map(ServerGroup::quic)
             // h3 is secure but slower than quic
-            .chain(dns_providers.iter().flat_map(ServerGroup::h3)
+            .chain(dns_providers.iter().flat_map(ServerGroup::h3))
             // likewise tls is faster tha https
-            .chain(dns_providers.iter().flat_map(ServerGroup::tls)
-            .chain(dns_providers.iter().flat_map(ServerGroup::https)
+            .chain(dns_providers.iter().flat_map(ServerGroup::tls))
+            .chain(dns_providers.iter().flat_map(ServerGroup::https))
             // fallback to udp and tcp
-            .chain(dns_providers.iter().flat_map(ServerGroup::udp_and_tcp)
+            .chain(dns_providers.iter().flat_map(ServerGroup::udp_and_tcp))
             .for_each(|name_server| config.add_name_server(name_server));
 
         (config, Default::default())
