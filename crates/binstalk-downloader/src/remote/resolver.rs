@@ -4,15 +4,16 @@ use std::{net::SocketAddr, sync::Arc};
 use std::io;
 
 use hickory_resolver::{
-    config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
+    config::{
+        ConnectionConfig, LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts,
+        ServerGroup, CLOUDFLARE, GOOGLE, QUAD9,
+    },
     system_conf, TokioResolver as TokioAsyncResolver,
 };
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
 
-#[cfg(windows)]
-use hickory_resolver::{config::NameServerConfig, net::xfer::Protocol};
 #[cfg(windows)]
 use netdev::Interface;
 
@@ -40,10 +41,38 @@ impl Resolve for TrustDnsResolver {
     }
 }
 
+fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
+    system_conf::read_system_conf().unwrap_or_else(|err| {
+        debug!(
+            "hickory-dns: failed to load system DNS configuration; \
+            falling back to quad9, cloudflare and then googld: {:?}",
+            err
+        );
+
+        let mut config = ResolverConfig::default();
+
+        let dns_providers = [QUAD9, CLOUDFLARE, GOOGLE];
+        // quic first as it is secure while being the fastes
+        dns_providers
+            .iter()
+            .flat_map(ServerGroup::quic)
+            // h3 is secure but slower than quic
+            .chain(dns_providers.iter().flat_map(ServerGroup::h3))
+            // likewise tls is faster tha https
+            .chain(dns_providers.iter().flat_map(ServerGroup::tls))
+            .chain(dns_providers.iter().flat_map(ServerGroup::https))
+            // fallback to udp and tcp
+            .chain(dns_providers.iter().flat_map(ServerGroup::udp_and_tcp))
+            .for_each(|name_server| config.add_name_server(name_server));
+
+        (config, Default::default())
+    })
+}
+
 #[cfg(unix)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using system DNS resolver configuration");
-    system_conf::read_system_conf().map_err(Into::into)
+    Ok(get_system_configs())
 }
 
 #[cfg(windows)]
@@ -57,14 +86,21 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     if interface.dns_servers.is_empty() {
         warn!("No DNS servers found on default interface; falling back to system DNS config");
 
-        return system_conf::read_system_conf().map_err(|err| {
-            io::Error::other(format!("Failed to read system DNS config: {err}")).into()
-        });
+        return Ok(get_system_configs());
     }
 
-    interface.dns_servers.iter().for_each(|addr| {
+    interface.dns_servers.into_iter().for_each(|addr| {
         tracing::trace!("Adding DNS server: {}", addr);
-        config.add_name_server(NameServerConfig::udp_and_tcp(*addr));
+        config.add_name_server(NameServerConfig::new(
+            addr,
+            true,
+            vec![
+                ConnectionConfig::quic(Arc::from(addr.to_string())),
+                ConnectionConfig::tls(Arc::from(addr.to_string())),
+                ConnectionConfig::udp(),
+                ConnectionConfig::tcp(),
+            ],
+        ));
     });
 
     Ok((config, opts))
@@ -75,7 +111,10 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
     let (config, mut opts) = get_configs()?;
 
     debug!("Resolver configuration complete");
+
+    opts.validate = true;
     opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+
     let mut builder = TokioAsyncResolver::builder_with_config(config, Default::default());
     *builder.options_mut() = opts;
     Ok(builder.build()?)
