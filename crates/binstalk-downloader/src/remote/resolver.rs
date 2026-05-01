@@ -5,6 +5,7 @@ use std::io;
 
 use hickory_resolver::{
     config::{
+        ConnectionConfig,
         LookupIpStrategy,
         NameServerConfig,
         ResolverConfig,
@@ -93,9 +94,18 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
         return Ok(get_system_configs());
     }
 
-    interface.dns_servers.iter().for_each(|addr| {
+    interface.dns_servers.into_iter().for_each(|addr| {
         tracing::trace!("Adding DNS server: {}", addr);
-        config.add_name_server(NameServerConfig::opportunistic_encryption(*addr));
+        config.add_name_server(NameServerConfig::new(
+            addr,
+            true,
+            vec![
+                ConnectionConfig::quic(Arc::from(ip.to_string())),
+                ConnectionConfig::tls(Arc::from(ip.to_string())),
+                ConnectionConfig::udp(),
+                ConnectionConfig::tcp(),
+            ],
+        ));
     });
 
     Ok((config, opts))
