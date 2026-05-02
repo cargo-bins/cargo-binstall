@@ -526,7 +526,7 @@ impl BinstallError {
         }
     }
 
-    pub fn get_report() -> Option<Report> {
+    pub fn get_report(self) -> Option<Report> {
         if let BinstallError::UserAbort = self {
             None
         } else {
