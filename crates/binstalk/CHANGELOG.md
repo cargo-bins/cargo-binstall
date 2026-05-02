@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.74](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.73...binstalk-v0.28.74) - 2026-05-02
+
+### Other
+
+- Fix Error message outputs ANSI escape sequences ([#2556](https://github.com/cargo-bins/cargo-binstall/pull/2556))
+
 ## [0.28.73](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.72...binstalk-v0.28.73) - 2026-04-13
 
 ### Other

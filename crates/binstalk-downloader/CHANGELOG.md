@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.39](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.38...binstalk-downloader-v0.13.39) - 2026-05-02
+
+### Fixed
+
+- fallback to hickory_resolver's default config if reading /etc/resolv.conf fails ([#2550](https://github.com/cargo-bins/cargo-binstall/pull/2550))
+
+### Other
+
+- *(deps)* bump hickory-resolver from 0.26.0 to 0.26.1 in the deps group ([#2555](https://github.com/cargo-bins/cargo-binstall/pull/2555))
+- *(deps)* bump the deps group with 4 updates ([#2544](https://github.com/cargo-bins/cargo-binstall/pull/2544))
+- Fix clippy in async_extractor ([#2538](https://github.com/cargo-bins/cargo-binstall/pull/2538))
+
 ## [0.13.38](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.37...binstalk-downloader-v0.13.38) - 2026-04-10
 
 ### Other
