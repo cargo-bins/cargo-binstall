@@ -3,9 +3,7 @@ use std::{
     time::Duration,
 };
 
-use binstalk::{
-    errors::BinstallError, helpers::tasks::AutoAbortJoinHandle,
-};
+use binstalk::{errors::BinstallError, helpers::tasks::AutoAbortJoinHandle};
 use miette::Result;
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
