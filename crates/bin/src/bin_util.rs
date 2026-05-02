@@ -3,11 +3,12 @@ use std::{
     time::Duration,
 };
 
-use binstalk::errors::BinstallError;
-use binstalk::helpers::tasks::AutoAbortJoinHandle;
+use binstalk::{
+    errors::BinstallError, helpers::tasks::AutoAbortJoinHandle,
+};
 use miette::Result;
 use tokio::runtime::Runtime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::signal::cancel_on_user_sig_term;
 
@@ -24,7 +25,7 @@ impl Termination for MainExit {
                 if let Some(spent) = spent {
                     info!("Done in {spent:?}");
                 }
-                ExitCode::SUCCESS
+                return ExitCode::SUCCESS;
             }
             Self::Error(err) => {
                 let code = err.report();
@@ -34,13 +35,13 @@ impl Termination for MainExit {
                 }
                 (code, report)
             }
-            Self::Report(err) => {
-                (ExitCode::from(16), err)
-            }
+            Self::Report(err) => (ExitCode::from(16), err),
         };
 
         error!("Fatal error:");
         println!("{err:?}");
+
+        code
     }
 }
 
