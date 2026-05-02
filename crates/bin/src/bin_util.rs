@@ -19,20 +19,28 @@ pub enum MainExit {
 
 impl Termination for MainExit {
     fn report(self) -> ExitCode {
-        match self {
+        let (code, err) = match self {
             Self::Success(spent) => {
                 if let Some(spent) = spent {
                     info!("Done in {spent:?}");
                 }
                 ExitCode::SUCCESS
             }
-            Self::Error(err) => err.report(),
-            Self::Report(err) => {
-                error!("Fatal error:");
-                println!("{err:?}");
-                ExitCode::from(16)
+            Self::Error(err) => {
+                let code = err.report();
+                let Some(report) = err.get_report() else {
+                    warn!("Installation cancelled");
+                    return code;
+                }
+                (code, report)
             }
-        }
+            Self::Report(err) => {
+                (ExitCode::from(16), err)
+            }
+        };
+
+        error!("Fatal error:");
+        println!("{err:?}");
     }
 }
 
