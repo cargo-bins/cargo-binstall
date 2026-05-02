@@ -12,7 +12,6 @@ use itertools::Itertools;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tokio::task;
-use tracing::{error, warn};
 
 use crate::{
     bins,
@@ -525,18 +524,19 @@ impl BinstallError {
             Some(Self::Errors(CrateErrors(errors.into_boxed_slice())))
         }
     }
+
+    pub fn get_report(self) -> Option<Report> {
+        if let BinstallError::UserAbort = self {
+            None
+        } else {
+            Some(Report::new(self))
+        }
+    }
 }
 
 impl Termination for BinstallError {
     fn report(self) -> ExitCode {
-        let code = self.exit_code();
-        if let BinstallError::UserAbort = self {
-            warn!("Installation cancelled");
-        } else {
-            error!("Fatal error:\n{:?}", Report::new(self));
-        }
-
-        code
+        self.exit_code()
     }
 }
 

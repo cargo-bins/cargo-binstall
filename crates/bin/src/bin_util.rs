@@ -3,11 +3,10 @@ use std::{
     time::Duration,
 };
 
-use binstalk::errors::BinstallError;
-use binstalk::helpers::tasks::AutoAbortJoinHandle;
+use binstalk::{errors::BinstallError, helpers::tasks::AutoAbortJoinHandle};
 use miette::Result;
 use tokio::runtime::Runtime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::signal::cancel_on_user_sig_term;
 
@@ -19,20 +18,28 @@ pub enum MainExit {
 
 impl Termination for MainExit {
     fn report(self) -> ExitCode {
-        match self {
+        let (code, err) = match self {
             Self::Success(spent) => {
                 if let Some(spent) = spent {
                     info!("Done in {spent:?}");
                 }
-                ExitCode::SUCCESS
+                return ExitCode::SUCCESS;
             }
-            Self::Error(err) => err.report(),
-            Self::Report(err) => {
-                error!("Fatal error:");
-                println!("{err:?}");
-                ExitCode::from(16)
+            Self::Error(err) => {
+                let code = err.exit_code();
+                let Some(report) = err.get_report() else {
+                    warn!("Installation cancelled");
+                    return code;
+                };
+                (code, report)
             }
-        }
+            Self::Report(err) => (ExitCode::from(16), err),
+        };
+
+        error!("Fatal error:");
+        println!("{err:?}");
+
+        code
     }
 }
 
