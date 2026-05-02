@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.18.0...binstalk-manifests-v0.19.0) - 2026-05-02
+
+### Added
+
+- Support cargo config.toml include field ([#2531](https://github.com/cargo-bins/cargo-binstall/pull/2531))
+
 ## [0.18.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.17.30...binstalk-manifests-v0.18.0) - 2026-04-10
 
 ### Added

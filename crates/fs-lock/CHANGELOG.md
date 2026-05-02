@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.15...fs-lock-v0.1.16) - 2026-05-02
+
+### Added
+
+- Support cargo config.toml include field ([#2531](https://github.com/cargo-bins/cargo-binstall/pull/2531))
+
+### Other
+
+- *(deps)* bump the deps group with 4 updates ([#2544](https://github.com/cargo-bins/cargo-binstall/pull/2544))
+
 ## [0.1.15](https://github.com/cargo-bins/cargo-binstall/compare/fs-lock-v0.1.14...fs-lock-v0.1.15) - 2026-01-27
 
 ### Other
