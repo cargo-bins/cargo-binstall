@@ -12,7 +12,6 @@ use itertools::Itertools;
 use miette::{Diagnostic, Report};
 use thiserror::Error;
 use tokio::task;
-use tracing::{error, warn};
 
 use crate::{
     bins,
