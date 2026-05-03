@@ -37,6 +37,9 @@ elif [ "$os" = "Linux" ]; then
     if [ "$machine" = "armv7l" ]; then
         machine="armv7"
     fi
+    if [ "$machine" = "riscv64" ]; then
+        machine="riscv64gc"
+    fi
     target="${machine}-unknown-linux-musl"
     if [ "$machine" = "armv7" ]; then
         target="${target}eabihf"
