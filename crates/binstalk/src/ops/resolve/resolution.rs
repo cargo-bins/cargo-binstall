@@ -23,6 +23,12 @@ pub struct ResolutionFetch {
     pub name: CompactString,
     pub version_req: CompactString,
     pub bin_files: Vec<bins::BinFile>,
+    /// Extra files that were resolved against the fetched archive.
+    ///
+    /// Keeping these on the resolved unit, rather than recomputing them during
+    /// install, ensures dry-run output, installation, and manifest tracking all
+    /// refer to the exact same file set.
+    pub extra_files: Vec<bins::ExtraFile>,
     pub source: CrateSource,
 }
 
@@ -75,6 +81,16 @@ impl ResolutionFetch {
             install_bin(file)?;
         }
 
+        if !self.extra_files.is_empty() {
+            // Install extras after the binaries themselves so a partially
+            // packaged archive does not leave man/completion files behind when
+            // the primary executable failed to install.
+            info!("Installing extra files...");
+            for file in &self.extra_files {
+                file.install()?;
+            }
+        }
+
         // Generate symlinks
         if !opts.no_symlinks {
             for file in &self.bin_files {
@@ -89,6 +105,13 @@ impl ResolutionFetch {
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
             bins: Self::resolve_bins(&opts.bins, self.bin_files),
+            // Persist relative Cargo-root paths so future upgrades can remove
+            // stale files even if the absolute Cargo root changed.
+            extra_files: self
+                .extra_files
+                .into_iter()
+                .map(|file| file.relative_dest)
+                .collect(),
         })
     }
 
@@ -142,6 +165,13 @@ impl ResolutionFetch {
                 info!("  - {}", file.preview_link());
             }
         }
+
+        if !self.extra_files.is_empty() {
+            info!("This will also install the following extra files:");
+            for file in &self.extra_files {
+                info!("  - {}", file.preview());
+            }
+        }
     }
 }
 
@@ -166,6 +196,11 @@ impl ResolutionSource {
 
         let name = &self.name;
         let version = &self.version;
+
+        // Source installs intentionally do not participate in extra-file
+        // installation. That keeps the current feature scoped to published
+        // binary artifacts, where archive layout and bundled extras are known
+        // ahead of time.
 
         let cargo = env::var_os("CARGO")
             .map(Cow::Owned)

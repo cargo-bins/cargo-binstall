@@ -12,6 +12,10 @@ As an example, the configuration would be like this:
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }{ archive-suffix }"
 bin-dir = "{ name }-{ target }-v{ version }/{ bin }{ binary-ext }"
+man = "man/man1/{ bin }.1"
+bash-completion = "completions/bash/{ bin }"
+fish-completion = "completions/fish/{ bin }.fish"
+zsh-completion = "completions/zsh/_{ bin }"
 pkg-fmt = "tgz"
 disabled-strategies = ["quick-install", "compile"]
 ```
@@ -20,6 +24,10 @@ With the following configuration keys:
 
 - `pkg-url` specifies the package download URL for a given target/version, templated
 - `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
+- `man` specifies the man page source path within the package archive, templated
+- `bash-completion` specifies the bash completion source path within the package archive, templated
+- `fish-completion` specifies the fish completion source path within the package archive, templated
+- `zsh-completion` specifies the zsh completion source path within the package archive, templated
 - `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`), check [the documentation](https://docs.rs/binstalk-types/latest/binstalk_types/cargo_toml_binstall/enum.PkgFmt.html) for all supported formats.
 - `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository,
   `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`)
@@ -27,8 +35,8 @@ With the following configuration keys:
   If `--strategies` is passed on the command line, then the `disabled-strategies` in `package.metadata` will be ignored.
   Otherwise, the `disabled-strategies` in `package.metadata` and `--disable-strategies` will be merged.
 
-
-`pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
+`pkg-url`, `bin-dir`, and the extra-file source paths are templated to support different names for
+different versions / architectures / etc.
 Template variables use the format `{ VAR }` where `VAR` is the name of the variable,
 `\{` for literal `{`, `\}` for literal `}` and `\\` for literal `\`,
 with the following variables available:
@@ -52,7 +60,9 @@ with the following variables available:
 [`target_lexicon::Environment`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Environment.html
 [`target_lexicon::Vendor`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Vendor.html
 
-`pkg-url`, `pkg-fmt` and `bin-dir` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
+`pkg-url`, `pkg-fmt`, `bin-dir`, and the extra-file source paths can be overridden on a
+per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip`
+archives this could be set via:
 
 ```toml
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
@@ -121,6 +131,42 @@ that exists:
  - `{ name }`
 
 Then it will concat the dir with `"{ bin }{ binary-ext }"` and use that as the final `bin-dir`.
+
+When the package archive contains extra files, `binstall` also checks these default source paths
+for each installed binary:
+
+- `man/man1/{ bin }.1`
+- `completions/bash/{ bin }`
+- `completions/fish/{ bin }.fish`
+- `completions/zsh/_{ bin }`
+
+If present, they are installed automatically to:
+
+- `$CARGO_HOME/share/man/man1/{bin}.1`
+- `$CARGO_HOME/share/bash-completion/completions/{bin}`
+- `$CARGO_HOME/share/fish/vendor_completions.d/{bin}.fish`
+- `$CARGO_HOME/share/zsh/site-functions/_{bin}`
+
+Missing default extra files are ignored. If you set `man`, `bash-completion`, `fish-completion`,
+or `zsh-completion` explicitly, the referenced file must exist in the archive.
+
+The destination side of this feature is intentionally opinionated: metadata
+describes where extra files live in the published archive, while `binstall`
+chooses where to install them locally. In v1, that means extra files always
+target Cargo's `share/` tree rather than following a custom binary
+`--install-path`. This keeps packaged layout separate from host install policy
+and gives upgrades a stable root for cleanup.
+
+Extra-file templates are evaluated per installed binary using that binary's
+`{ bin }` value. For multi-bin crates, use templates that vary with `{ bin }`
+when each binary has its own man page or completion file. If several selected
+binaries resolve to the same installed extra-file destination, `binstall`
+reports that as an error rather than letting one overwrite another.
+
+Extra-file installation currently applies only when `binstall` installs from a
+fetched binary artifact. If resolution falls back to `cargo install`, binstall
+does not try to discover or install man pages or shell completions from the
+source build.
 
 `name` here is name of the crate, `bin` is the cargo binary name and `binary-ext` is `.exe`
 on windows and empty on other platforms).
@@ -229,3 +275,32 @@ bin-dir = "{ bin }-{ target }{ binary-ext }"
 ```
 
 Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so as long as cargo builds them this _should_ just work.
+
+#### If the package includes man pages or shell completions
+
+The default extra-file conventions already match a layout like this:
+
+```text
+my-tool-v1.2.3-x86_64-unknown-linux-gnu/
+  my-tool
+  man/
+    man1/
+      my-tool.1
+  completions/
+    bash/
+      my-tool
+    fish/
+      my-tool.fish
+    zsh/
+      _my-tool
+```
+
+If your archive uses different paths, override them explicitly:
+
+```toml
+[package.metadata.binstall]
+man = "docs/man/{ bin }.1"
+bash-completion = "assets/completions/bash/{ bin }"
+fish-completion = "assets/completions/fish/{ bin }.fish"
+zsh-completion = "assets/completions/zsh/_{ bin }"
+```

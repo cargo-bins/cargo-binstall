@@ -592,6 +592,7 @@ pub fn self_install(args: Args) -> Result<()> {
             source: CrateSource::cratesio_registry(),
             target: CompactString::const_new(TARGET),
             bins: vec![CompactString::const_new("cargo-binstall")],
+            extra_files: Vec::new(),
         }])?;
     }
 
