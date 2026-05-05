@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 #[cfg(windows)]
-use std::io;
+use std::{io, time::Duration};
 
 use hickory_resolver::{
     config::{
@@ -78,9 +78,6 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
 #[cfg(windows)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using custom DNS resolver configuration");
-    let mut config = ResolverConfig::default();
-    let opts = ResolverOpts::default();
-
     let interface = get_default_interface()?;
 
     if interface.dns_servers.is_empty() {
@@ -88,6 +85,9 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
 
         return Ok(get_system_configs());
     }
+
+    let mut config = ResolverConfig::default();
+    let opts = ResolverOpts::default();
 
     interface.dns_servers.into_iter().for_each(|addr| {
         tracing::trace!("Adding DNS server: {}", addr);
@@ -102,6 +102,8 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
             ],
         ));
     });
+
+    opts.timeout = Duration::from_millis(200);
 
     Ok((config, opts))
 }
