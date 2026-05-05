@@ -87,7 +87,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     }
 
     let mut config = ResolverConfig::default();
-    let opts = ResolverOpts::default();
+    let mut opts = ResolverOpts::default();
 
     interface.dns_servers.into_iter().for_each(|addr| {
         tracing::trace!("Adding DNS server: {}", addr);
