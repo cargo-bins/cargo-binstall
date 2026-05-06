@@ -50,6 +50,7 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
         );
 
         let mut config = ResolverConfig::default();
+        let mut opts = ResolverOpts::default();
 
         let dns_providers = [QUAD9, CLOUDFLARE, GOOGLE];
         // quic first as it is secure while being the fastes
@@ -65,7 +66,9 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
             .chain(dns_providers.iter().flat_map(ServerGroup::udp_and_tcp))
             .for_each(|name_server| config.add_name_server(name_server));
 
-        (config, Default::default())
+        opts.timeout = Duration::from_millis(750);
+
+        (config, opts)
     })
 }
 
