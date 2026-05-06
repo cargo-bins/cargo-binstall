@@ -103,7 +103,7 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
         ));
     });
 
-    opts.timeout = Duration::from_millis(200);
+    opts.timeout = Duration::from_millis(750);
 
     Ok((config, opts))
 }
