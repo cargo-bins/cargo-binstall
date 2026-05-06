@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 #[cfg(windows)]
 use std::io;
@@ -50,6 +50,7 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
         );
 
         let mut config = ResolverConfig::default();
+        let mut opts = ResolverOpts::default();
 
         let dns_providers = [QUAD9, CLOUDFLARE, GOOGLE];
         // quic first as it is secure while being the fastes
@@ -65,7 +66,9 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
             .chain(dns_providers.iter().flat_map(ServerGroup::udp_and_tcp))
             .for_each(|name_server| config.add_name_server(name_server));
 
-        (config, Default::default())
+        opts.timeout = Duration::from_millis(750);
+
+        (config, opts)
     })
 }
 
@@ -78,9 +81,6 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
 #[cfg(windows)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using custom DNS resolver configuration");
-    let mut config = ResolverConfig::default();
-    let opts = ResolverOpts::default();
-
     let interface = get_default_interface()?;
 
     if interface.dns_servers.is_empty() {
@@ -88,6 +88,9 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
 
         return Ok(get_system_configs());
     }
+
+    let mut config = ResolverConfig::default();
+    let mut opts = ResolverOpts::default();
 
     interface.dns_servers.into_iter().for_each(|addr| {
         tracing::trace!("Adding DNS server: {}", addr);
@@ -103,6 +106,8 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
         ));
     });
 
+    opts.timeout = Duration::from_millis(750);
+
     Ok((config, opts))
 }
 
@@ -112,7 +117,6 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
 
     debug!("Resolver configuration complete");
 
-    opts.validate = true;
     opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 
     let mut builder = TokioAsyncResolver::builder_with_config(config, Default::default());
