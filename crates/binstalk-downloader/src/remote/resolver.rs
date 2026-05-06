@@ -1,7 +1,7 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 #[cfg(windows)]
-use std::{io, time::Duration};
+use std::io;
 
 use hickory_resolver::{
     config::{
