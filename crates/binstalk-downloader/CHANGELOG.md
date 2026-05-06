@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.40](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.39...binstalk-downloader-v0.13.40) - 2026-05-06
+
+### Other
+
+- Disable dnssec and set dns timeout to 750ms ([#2560](https://github.com/cargo-bins/cargo-binstall/pull/2560))
+
 ## [0.13.39](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.38...binstalk-downloader-v0.13.39) - 2026-05-02
 
 ### Fixed
