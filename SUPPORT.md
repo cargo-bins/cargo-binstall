@@ -42,6 +42,7 @@ with the following variables available:
 - `binary-ext` is the string `.exe` if the `target` is for Windows, or the empty string otherwise
 - `format` is a soft-deprecated alias for `archive-format` in `pkg-url`, and alias for `binary-ext` in `bin-dir`; in the future, this may warn at install time.
 - `target-family`: Operating system of the target from [`target_lexicon::OperatingSystem`]
+- `os-name`: `rustc`-style operating system name of the target, e.g. `windows`, `macos` or `linux`
 - `target-arch`: Architecture of the target, `universal` on `{universal, universal2}-apple-darwin`,
   otherwise from [`target_lexicon::Architecture`]
 - `target-libc`: ABI environment of the target from [`target_lexicon::Environment`]
