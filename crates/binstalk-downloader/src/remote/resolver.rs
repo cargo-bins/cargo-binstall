@@ -45,14 +45,14 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
     system_conf::read_system_conf().unwrap_or_else(|err| {
         debug!(
             "hickory-dns: failed to load system DNS configuration; \
-            falling back to quad9, cloudflare and then googld: {:?}",
+            falling back to cloudflare and then googld: {:?}",
             err
         );
 
         let mut config = ResolverConfig::default();
         let mut opts = ResolverOpts::default();
 
-        let dns_providers = [QUAD9, CLOUDFLARE, GOOGLE];
+        let dns_providers = [CLOUDFLARE, GOOGLE];
         // quic first as it is secure while being the fastes
         dns_providers
             .iter()
