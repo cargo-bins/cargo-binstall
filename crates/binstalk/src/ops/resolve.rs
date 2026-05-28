@@ -196,6 +196,17 @@ async fn resolve_inner(
                     {
                         Ok(bin_files) => {
                             if !bin_files.is_empty() {
+                                if !opts.features.is_empty() {
+                                    warn!(
+                                        "--features {} was supplied, but binstall \
+                                         selected a prebuilt binary from fetcher `{}`. \
+                                         Feature flags cannot be enforced on prebuilt \
+                                         artifacts and will be ignored. Re-run with \
+                                         --strategies compile to force a build from source.",
+                                        opts.features.iter().format(","),
+                                        fetcher.source_name(),
+                                    );
+                                }
                                 if !opts.disable_telemetry {
                                     fetcher.clone().report_to_upstream();
                                 }

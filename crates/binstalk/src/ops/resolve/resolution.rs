@@ -218,6 +218,13 @@ impl ResolutionSource {
             }
         }
 
+        apply_feature_selection(
+            &mut cmd,
+            opts.all_features,
+            opts.no_default_features,
+            &opts.features,
+        );
+
         debug!("Running `{}`", format_cmd(&cmd));
 
         if !opts.dry_run {
@@ -259,6 +266,27 @@ fn apply_registry_selection(cmd: &mut Command, registry: Option<&str>, index: Op
         cmd.arg("--registry").arg(registry);
     } else if let Some(index) = index {
         cmd.arg("--index").arg(index);
+    }
+}
+
+// binstall rejects `--all-features` together with `--no-default-features` at
+// parse time in `crates/bin/src/args.rs` via `clap`'s `conflicts_with` (cargo
+// itself accepts both, treating `--no-default-features` as a redundant no-op).
+// The `else if` mirrors that precedence at the call site so a future code path
+// that bypasses arg-parsing prefers `--all-features` rather than emitting both.
+fn apply_feature_selection(
+    cmd: &mut Command,
+    all_features: bool,
+    no_default_features: bool,
+    features: &[CompactString],
+) {
+    if all_features {
+        cmd.arg("--all-features");
+    } else if no_default_features {
+        cmd.arg("--no-default-features");
+    }
+    for feature in features {
+        cmd.arg("--features").arg(feature.as_str());
     }
 }
 
@@ -312,5 +340,77 @@ mod tests {
             args,
             ["--index", "sparse+https://registry.example.com/index/"]
         );
+    }
+
+    fn collect_args(cmd: &Command) -> Vec<String> {
+        cmd.as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn test_feature_selection_all_features_only_when_both_set() {
+        // `--all-features` takes precedence over `--no-default-features`.
+        // CLI-level `conflicts_with` makes this combination unreachable from
+        // the binary (binstall is stricter than cargo here), but library
+        // callers may set both fields on `Options`.
+        let mut cmd = Command::new("cargo");
+        let features = vec![CompactString::from("a"), CompactString::from("b")];
+
+        apply_feature_selection(&mut cmd, true, true, &features);
+
+        assert_eq!(
+            collect_args(&cmd),
+            ["--all-features", "--features", "a", "--features", "b",]
+        );
+    }
+
+    #[test]
+    fn test_feature_selection_no_default_features_with_features() {
+        let mut cmd = Command::new("cargo");
+        let features = vec![CompactString::from("tls")];
+
+        apply_feature_selection(&mut cmd, false, true, &features);
+
+        assert_eq!(
+            collect_args(&cmd),
+            ["--no-default-features", "--features", "tls"]
+        );
+    }
+
+    #[test]
+    fn test_feature_selection_emits_nothing_when_all_disabled() {
+        let mut cmd = Command::new("cargo");
+        let features: Vec<CompactString> = Vec::new();
+
+        apply_feature_selection(&mut cmd, false, false, &features);
+
+        assert_eq!(cmd.as_std().get_args().count(), 0);
+    }
+
+    #[test]
+    fn test_feature_selection_preserves_pkg_slash_feat_syntax() {
+        let mut cmd = Command::new("cargo");
+        let features = vec![CompactString::from("dep/feat-x")];
+
+        apply_feature_selection(&mut cmd, false, true, &features);
+
+        assert_eq!(
+            collect_args(&cmd),
+            ["--no-default-features", "--features", "dep/feat-x"]
+        );
+    }
+
+    #[test]
+    fn test_feature_selection_features_only() {
+        // Plain `--features X` without --all-features or --no-default-features
+        // is the warn-and-proceed code path's "compile from source" arm.
+        let mut cmd = Command::new("cargo");
+        let features = vec![CompactString::from("a"), CompactString::from("b")];
+
+        apply_feature_selection(&mut cmd, false, false, &features);
+
+        assert_eq!(collect_args(&cmd), ["--features", "a", "--features", "b"]);
     }
 }

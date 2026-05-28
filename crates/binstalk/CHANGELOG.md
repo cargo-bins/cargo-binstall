@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New `Options` fields `features: Vec<CompactString>`, `no_default_features: bool`, and `all_features: bool`. Forwarded to `cargo install` when the `Compile` resolution path is used. The `features` list also drives a warn-and-proceed advisory when a prebuilt fetcher is selected.
+
 ## [0.28.75](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.74...binstalk-v0.28.75) - 2026-05-06
 
 ### Other
