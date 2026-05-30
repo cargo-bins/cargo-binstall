@@ -50,16 +50,19 @@ fn public_dns_configs() -> (ResolverConfig, ResolverOpts) {
     let mut opts = ResolverOpts::default();
 
     let dns_providers = [CLOUDFLARE, GOOGLE];
-    // quic first as it is secure while being the fastes
+    // Order for reachability, not raw speed: hickory queries servers in config order
+    // (two at a time) until it has RTT statistics, so the cold-start order decides what
+    // is attempted first. Lead with the TCP-based encrypted transports (DoT then DoH),
+    // which traverse UDP-blocking / restrictive networks where DoQ and DoH3 (UDP-based)
+    // silently stall. Keep plain unencrypted DNS as the universal last resort.
     dns_providers
         .iter()
-        .flat_map(ServerGroup::quic)
-        // h3 is secure but slower than quic
-        .chain(dns_providers.iter().flat_map(ServerGroup::h3))
-        // likewise tls is faster tha https
-        .chain(dns_providers.iter().flat_map(ServerGroup::tls))
+        .flat_map(ServerGroup::tls)
         .chain(dns_providers.iter().flat_map(ServerGroup::https))
-        // fallback to udp and tcp
+        // UDP-based encrypted transports: faster when reachable, often firewalled.
+        .chain(dns_providers.iter().flat_map(ServerGroup::quic))
+        .chain(dns_providers.iter().flat_map(ServerGroup::h3))
+        // Last resort: plain, unencrypted DNS.
         .chain(dns_providers.iter().flat_map(ServerGroup::udp_and_tcp))
         .for_each(|name_server| config.add_name_server(name_server));
 
@@ -221,7 +224,7 @@ fn get_default_interface() -> Result<Interface, BoxError> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::parse_nameservers;
-    use std::net::IpAddr;
+    use std::{net::IpAddr, time::Duration};
 
     fn ips(contents: &str) -> Vec<IpAddr> {
         parse_nameservers(contents)
@@ -277,6 +280,54 @@ mod tests {
                 "1.1.1.1".parse::<IpAddr>().unwrap(),
                 "2606:4700:4700::1111".parse::<IpAddr>().unwrap(),
             ]
+        );
+    }
+
+    /// The cold-resolver query order is the config order (hickory defaults to
+    /// `QueryStatistics` ordering, which with no statistics yet preserves insertion
+    /// order, and queries `num_concurrent_reqs == 2` servers at a time). The public-DNS
+    /// fallback must therefore lead with the encrypted transports most likely to
+    /// traverse restrictive/UDP-blocking networks (TCP-based DoT/DoH) before the
+    /// UDP-based ones (DoQ/DoH3), and keep plain unencrypted DNS as the last resort.
+    #[test]
+    fn public_dns_fallback_orders_transports_for_reachability() {
+        use hickory_resolver::config::ProtocolConfig;
+
+        fn tier(p: &ProtocolConfig) -> u8 {
+            match p {
+                ProtocolConfig::Tls { .. } => 0,                // DoT  — TCP/853
+                ProtocolConfig::Https { .. } => 1,              // DoH  — TCP/443
+                ProtocolConfig::Quic { .. } => 2,               // DoQ  — UDP/853
+                ProtocolConfig::H3 { .. } => 3,                 // DoH3 — UDP/443
+                ProtocolConfig::Udp | ProtocolConfig::Tcp => 4, // plain, unencrypted
+            }
+        }
+
+        let (config, opts) = super::public_dns_configs();
+        let tiers: Vec<u8> = config
+            .name_servers()
+            .iter()
+            .map(|ns| tier(&ns.connections[0].protocol))
+            .collect();
+
+        assert!(!tiers.is_empty());
+        assert!(
+            tiers.windows(2).all(|w| w[0] <= w[1]),
+            "transport tiers not non-decreasing: {tiers:?}"
+        );
+        assert_eq!(
+            tiers.first(),
+            Some(&0),
+            "DoT (TCP/853) should be tried first"
+        );
+        assert_eq!(
+            tiers.last(),
+            Some(&4),
+            "plain unencrypted DNS should be last"
+        );
+        assert!(
+            opts.timeout <= Duration::from_millis(750),
+            "fallback per-query timeout should stay aggressive so blocked transports fail fast"
         );
     }
 }
