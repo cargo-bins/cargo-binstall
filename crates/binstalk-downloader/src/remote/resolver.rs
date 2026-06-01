@@ -83,51 +83,63 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
     })
 }
 
-/// Extract the usable nameserver IPs from `/etc/resolv.conf`-style contents.
-///
-/// `hickory_resolver::system_conf::read_system_conf` is all-or-nothing: a single
-/// unparseable `nameserver` entry fails the whole load. macOS routinely lists a
-/// router-advertised link-local IPv6 server with a zone id (e.g.
-/// `fe80::1%en0`) that it cannot parse, which throws away the valid
-/// IPv4 nameserver alongside it. We salvage the entries we can actually use: scoped
-/// (zone-suffixed) addresses are skipped because a link-local server is unusable without
-/// its scope id, and anything that is not a bare `IpAddr` is ignored.
+/// Build a resolver config from a parsed `resolv_conf::Config`, skipping scoped IPv6
+/// nameservers (link-local with zone id, e.g. `fe80::1%en0`) that are unusable without
+/// the scope id. Returns `None` when no usable nameservers remain.
 #[cfg(unix)]
-fn parse_nameservers(contents: &str) -> Vec<std::net::IpAddr> {
-    contents
-        .lines()
-        .filter_map(|line| {
-            let mut tokens = line.split_whitespace();
-            (tokens.next() == Some("nameserver"))
-                .then(|| tokens.next())
-                .flatten()
-        })
-        // Skip scoped/link-local entries (`addr%zone`); unusable without scope handling.
-        .filter(|tok| !tok.contains('%'))
-        .filter_map(|tok| tok.parse().ok())
-        .collect()
-}
+fn configs_from_resolv_conf(
+    parsed: resolv_conf::Config,
+) -> Option<(ResolverConfig, ResolverOpts)> {
+    use hickory_resolver::proto::rr::Name as DnsName;
+    use std::str::FromStr as _;
 
-/// Build a resolver config from the parseable system nameservers, or `None` if none are
-/// usable.
-#[cfg(unix)]
-fn salvage_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
-    let contents = std::fs::read_to_string("/etc/resolv.conf").ok()?;
-    let nameservers = parse_nameservers(&contents);
+    let nameservers: Vec<NameServerConfig> = parsed
+        .nameservers
+        .iter()
+        .filter(|ip| !matches!(ip, resolv_conf::ScopedIp::V6(_, Some(_))))
+        .map(|ip| NameServerConfig::udp_and_tcp(ip.into()))
+        .collect();
+
     if nameservers.is_empty() {
         return None;
     }
 
-    debug!(
-        "Salvaged {} usable system nameserver(s) from /etc/resolv.conf",
-        nameservers.len()
-    );
+    let domain = parsed
+        .get_system_domain()
+        .and_then(|d| DnsName::from_str(d.as_str()).ok());
 
-    let mut config = ResolverConfig::default();
-    for ip in nameservers {
-        config.add_name_server(NameServerConfig::udp_and_tcp(ip));
+    let search = parsed
+        .get_last_search_or_domain()
+        .filter(|s| *s != "--")
+        .filter_map(|s| DnsName::from_str_relaxed(s).ok())
+        .collect();
+
+    let config = ResolverConfig::from_parts(domain, search, nameservers);
+
+    let mut opts = ResolverOpts::default();
+    opts.ndots = parsed.ndots as usize;
+    opts.timeout = Duration::from_secs(u64::from(parsed.timeout));
+    opts.attempts = parsed.attempts as usize;
+    opts.edns0 = parsed.edns0;
+
+    Some((config, opts))
+}
+
+/// Read `/etc/resolv.conf` and build a resolver config, salvaging nameservers that
+/// hickory's all-or-nothing parser would reject (e.g. scoped link-local IPv6 entries).
+/// Returns `None` when no usable nameservers remain or the file cannot be read.
+#[cfg(unix)]
+fn salvage_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
+    let data = std::fs::read("/etc/resolv.conf").ok()?;
+    let parsed = resolv_conf::Config::parse(&data).ok()?;
+    let result = configs_from_resolv_conf(parsed);
+    if let Some((ref config, _)) = result {
+        debug!(
+            "Salvaged {} usable system nameserver(s) from /etc/resolv.conf",
+            config.name_servers().len()
+        );
     }
-    Some((config, ResolverOpts::default()))
+    result
 }
 
 #[cfg(unix)]
@@ -223,11 +235,19 @@ fn get_default_interface() -> Result<Interface, BoxError> {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::parse_nameservers;
+    use super::configs_from_resolv_conf;
     use std::{net::IpAddr, time::Duration};
 
-    fn ips(contents: &str) -> Vec<IpAddr> {
-        parse_nameservers(contents)
+    fn nameserver_ips(resolv: &str) -> Vec<IpAddr> {
+        let parsed = resolv_conf::Config::parse(resolv.as_bytes()).expect("parse failed");
+        configs_from_resolv_conf(parsed)
+            .map(|(cfg, _)| cfg.name_servers().iter().map(|ns| ns.ip).collect())
+            .unwrap_or_default()
+    }
+
+    fn configs(resolv: &str) -> Option<(hickory_resolver::config::ResolverConfig, hickory_resolver::config::ResolverOpts)> {
+        let parsed = resolv_conf::Config::parse(resolv.as_bytes()).expect("parse failed");
+        configs_from_resolv_conf(parsed)
     }
 
     #[test]
@@ -238,34 +258,40 @@ mod tests {
         let resolv = "search home\n\
                       nameserver fe80::1%en0\n\
                       nameserver 192.168.1.254\n";
-        let got = ips(resolv);
-        assert_eq!(got, vec!["192.168.1.254".parse::<IpAddr>().unwrap()]);
+        assert_eq!(
+            nameserver_ips(resolv),
+            vec!["192.168.1.254".parse::<IpAddr>().unwrap()]
+        );
     }
 
     #[test]
     fn keeps_plain_ipv6_nameserver() {
-        let got = ips("nameserver 2606:4700:4700::1111\n");
-        assert_eq!(got, vec!["2606:4700:4700::1111".parse::<IpAddr>().unwrap()]);
+        assert_eq!(
+            nameserver_ips("nameserver 2606:4700:4700::1111\n"),
+            vec!["2606:4700:4700::1111".parse::<IpAddr>().unwrap()]
+        );
     }
 
     #[test]
-    fn all_unparseable_yields_empty() {
-        let got = ips("nameserver fe80::1%en0\nnameserver not-an-ip\n");
-        assert!(got.is_empty());
+    fn all_scoped_yields_none() {
+        // resolv_conf parses scoped addresses fine; configs_from_resolv_conf should
+        // filter them all out and return None.
+        let parsed =
+            resolv_conf::Config::parse("nameserver fe80::1%en0\n".as_bytes()).expect("parse");
+        assert!(configs_from_resolv_conf(parsed).is_none());
     }
 
     #[test]
     fn ignores_comments_and_other_directives() {
         let resolv = "# a comment\n\
-                      ; another comment\n\
                       domain example.com\n\
                       options edns0\n\
                       search a.example b.example\n\
-                      nameserver 8.8.8.8\n\
-                      garbage line without keyword\n\
-                      nameserver\n";
-        let got = ips(resolv);
-        assert_eq!(got, vec!["8.8.8.8".parse::<IpAddr>().unwrap()]);
+                      nameserver 8.8.8.8\n";
+        assert_eq!(
+            nameserver_ips(resolv),
+            vec!["8.8.8.8".parse::<IpAddr>().unwrap()]
+        );
     }
 
     #[test]
@@ -273,14 +299,24 @@ mod tests {
         let resolv = "nameserver 1.1.1.1\n\
                       nameserver fe80::1%en0\n\
                       nameserver 2606:4700:4700::1111\n";
-        let got = ips(resolv);
         assert_eq!(
-            got,
+            nameserver_ips(resolv),
             vec![
                 "1.1.1.1".parse::<IpAddr>().unwrap(),
                 "2606:4700:4700::1111".parse::<IpAddr>().unwrap(),
             ]
         );
+    }
+
+    #[test]
+    fn extracts_resolver_opts() {
+        let resolv = "nameserver 8.8.8.8\n\
+                      options ndots:3 timeout:2 attempts:4 edns0\n";
+        let (_, opts) = configs(resolv).expect("should produce config");
+        assert_eq!(opts.ndots, 3);
+        assert_eq!(opts.timeout, Duration::from_secs(2));
+        assert_eq!(opts.attempts, 4);
+        assert!(opts.edns0);
     }
 
     /// The cold-resolver query order is the config order (hickory defaults to

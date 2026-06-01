@@ -315,6 +315,7 @@ dependencies = [
  "once_cell",
  "rc-zip-sync",
  "reqwest",
+ "resolv-conf",
  "serde",
  "serde_json",
  "tempfile",

@@ -1,6 +1,6 @@
 # IPv6 / DNS Remediation Plan
 
-**Status:** implemented (§5.1 option 1) and verified on an affected host
+**Status:** implemented (§5.1 option 1) and verified on an affected host; salvage parser refactored to use `resolv_conf` crate (PR #2579)
 **Scope:** restore `cargo-binstall` DNS resolution on macOS hosts where the failure
 manifests as an IPv6-related error. Other (non-IPv6) failures are out of scope.
 
@@ -172,7 +172,13 @@ Two sub-options for the scoped link-local entry:
    hickory gains scope support. This gap does **not** affect hosts that have a usable
    IPv4 nameserver.
 
-Sketch (option 1):
+Implemented as `configs_from_resolv_conf` (testable, takes a parsed `resolv_conf::Config`)
+plus `salvage_system_configs` (reads the file and calls the former). Uses the `resolv_conf`
+crate for parsing — already a transitive dep via `hickory-resolver` — instead of a
+hand-rolled line scanner. Filters `ScopedIp::V6(_, Some(_))` entries (scoped link-local)
+and propagates all other resolver options (`domain`, `search`, `ndots`, `timeout`,
+`attempts`, `edns0`) so a salvaged config is fully equivalent to what hickory would have
+built from a clean parse.
 
 ```rust
 #[cfg(unix)]
@@ -182,19 +188,14 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
         Err(err) => {
             debug!("read_system_conf failed ({err}); attempting to salvage \
                     parseable nameservers from /etc/resolv.conf");
-            match build_config_from_resolv_conf() {        // strips scoped/link-local
-                Some(cfg) => Ok(cfg),
-                None => Ok(get_system_configs()),           // existing public-DNS fallback
-            }
+            Ok(salvage_system_configs().unwrap_or_else(|| {
+                debug!("No usable system nameservers; falling back to public encrypted DNS");
+                public_dns_configs()
+            }))
         }
     }
 }
 ```
-
-`build_config_from_resolv_conf()` parses nameserver lines, strips any `%zone` suffix,
-attempts `IpAddr::from_str`, and adds each successful one with
-`config.add_name_server(NameServerConfig::udp_and_tcp(SocketAddr::new(ip, 53)))`.
-Returns `None` if no nameserver parses.
 
 ### 5.2 Secondary hardening — order the public-DNS fallback for reachability — DONE
 
@@ -219,20 +220,19 @@ connector — not by suppressing AAAA in DNS.
 
 ---
 
-## 6. Tests (TDD — write first)
+## 6. Tests
 
-Pure-function target: a `parse_nameservers(resolv_conf_contents: &str) -> Vec<IpAddr>`
-(or `Vec<NameServerConfig>`) extracted so it is unit-testable without touching the OS.
+Pure-function target: `configs_from_resolv_conf(resolv_conf::Config) -> Option<(ResolverConfig, ResolverOpts)>`.
 
 1. **Scoped link-local v6 is skipped, IPv4 retained** (the core failure case):
    input two nameservers `fe80::1%en0` and a plain IPv4 address →
    output contains the IPv4 address, is non-empty.
 2. **Plain IPv6 nameserver retained:** `2606:4700:4700::1111` → kept.
-3. **All-unparseable input → `None`/empty**, so caller uses public-DNS fallback.
+3. **All-scoped input → `None`**, so caller uses public-DNS fallback.
 4. **Mixed garbage tolerated:** comments, `search` lines, malformed entries ignored
-   without failing the whole parse.
-5. (If implementing 5.1-option-2) **zone id parsed into scope_id** for a link-local
-   entry.
+   without failing the whole parse (handled by `resolv_conf::Config::parse`).
+5. **Resolver options extracted:** `ndots`, `timeout`, `attempts`, `edns0` match
+   the values in the `options` line.
 
 Integration-level (best-effort, network-gated, not in CI default): with hickory enabled,
 a resolver built from a config containing only the salvaged IPv4 nameserver resolves
@@ -244,7 +244,7 @@ a resolver built from a config containing only the salvaged IPv4 nameserver reso
 
 - [x] Reproduce pre-fix: `cargo-binstall binstall ripgrep --dry-run --no-confirm
       --log-level debug` → `dns error` (baseline confirmed).
-- [x] Unit tests in §6 pass (5 tests, `--features hickory-dns`).
+- [x] Unit tests in §6 pass (6 tests, `--features hickory-dns`).
 - [x] Post-fix, same command resolves and completes the dry-run with the scoped
       link-local nameserver still present in `scutil --dns` (i.e. without workaround §4a).
       Log shows `Salvaged 1 usable system nameserver(s)` then successful fetches.
@@ -262,11 +262,11 @@ possible with hickory-resolver 0.26.1, see §5.1 for the dependency limitation a
 ## 8. Files
 
 - `crates/binstalk-downloader/src/remote/resolver.rs` — `get_configs` (unix),
-  `get_system_configs`, new `parse_nameservers` / `build_config_from_resolv_conf`.
-- Tests: same crate, `#[cfg(test)]` module.
-- Note: an unrelated pre-existing `unused_imports` warning (`QUAD9`, `ConnectionConfig`,
-  `NameServerConfig`) exists after the quad9 fallback removal; tidy while in the file but
-  it is not part of this fix.
+  `configs_from_resolv_conf`, `salvage_system_configs`.
+- `crates/binstalk-downloader/Cargo.toml` — `resolv-conf = "0.7.6"` added as a
+  unix-only optional dep, enabled by the `hickory-dns` feature (already a transitive dep,
+  so no new binary weight).
+- Tests: same crate, `#[cfg(all(test, unix))]` module.
 
 ---
 
@@ -325,9 +325,9 @@ In increasing order of cost / decreasing preference:
 `hickory_resolver::system_conf::read_system_conf()` is all-or-nothing: one unparseable
 `nameserver` entry fails the entire load. That strictness is what forced our §5.1 salvage
 workaround. An upstream fix to skip/tolerate unparseable entries (or to parse scoped
-addresses) would make `parse_nameservers` / `salvage_system_configs` redundant — they
-could be removed once a fixed hickory is in `Cargo.lock`. → optional **bug report to
-hickory**; our workaround is harmless until then.
+addresses) would make `salvage_system_configs` redundant — it could be removed once a
+fixed hickory is in `Cargo.lock`. → optional **bug report to hickory**; our workaround
+is harmless until then.
 
 ### 9.5 Action items outside this repo
 
