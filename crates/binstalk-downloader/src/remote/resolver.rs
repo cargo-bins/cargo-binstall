@@ -131,7 +131,14 @@ fn configs_from_resolv_conf(
 #[cfg(unix)]
 fn salvage_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
     let data = std::fs::read("/etc/resolv.conf").ok()?;
-    let parsed = resolv_conf::Config::parse(&data).ok()?;
+    let (parsed, errors) = resolv_conf::Config::parse_with_errors(&data);
+    if let Some(err) = errors.first() {
+        debug!(
+            "Ignoring {} resolv.conf parse error(s) while salvaging usable nameservers; first error: {:?}",
+            errors.len(),
+            err
+        );
+    }
     let result = configs_from_resolv_conf(parsed);
     if let Some((ref config, _)) = result {
         debug!(
@@ -239,14 +246,14 @@ mod tests {
     use std::{net::IpAddr, time::Duration};
 
     fn nameserver_ips(resolv: &str) -> Vec<IpAddr> {
-        let parsed = resolv_conf::Config::parse(resolv.as_bytes()).expect("parse failed");
+        let (parsed, _) = resolv_conf::Config::parse_with_errors(resolv.as_bytes());
         configs_from_resolv_conf(parsed)
             .map(|(cfg, _)| cfg.name_servers().iter().map(|ns| ns.ip).collect())
             .unwrap_or_default()
     }
 
     fn configs(resolv: &str) -> Option<(hickory_resolver::config::ResolverConfig, hickory_resolver::config::ResolverOpts)> {
-        let parsed = resolv_conf::Config::parse(resolv.as_bytes()).expect("parse failed");
+        let (parsed, _) = resolv_conf::Config::parse_with_errors(resolv.as_bytes());
         configs_from_resolv_conf(parsed)
     }
 
@@ -288,6 +295,19 @@ mod tests {
                       options edns0\n\
                       search a.example b.example\n\
                       nameserver 8.8.8.8\n";
+        assert_eq!(
+            nameserver_ips(resolv),
+            vec!["8.8.8.8".parse::<IpAddr>().unwrap()]
+        );
+    }
+
+    #[test]
+    fn salvages_nameservers_despite_malformed_lines() {
+        let resolv = "nameserver fe80::1%en0\n\
+                      search a.example b.example\n\
+                      garbage line without keyword\n\
+                      nameserver 8.8.8.8\n\
+                      nameserver\n";
         assert_eq!(
             nameserver_ips(resolv),
             vec!["8.8.8.8".parse::<IpAddr>().unwrap()]

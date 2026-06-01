@@ -1,6 +1,6 @@
 # IPv6 / DNS Remediation Plan
 
-**Status:** implemented (§5.1 option 1) and verified on an affected host; salvage parser refactored to use `resolv_conf` crate (PR #2579)
+**Status:** implemented (§5.1 option 1) and verified on an affected host; salvage parser refactored to use `resolv_conf` crate (PR #2579), with a follow-up fix to retain best-effort salvage on malformed `resolv.conf` lines
 **Scope:** restore `cargo-binstall` DNS resolution on macOS hosts where the failure
 manifests as an IPv6-related error. Other (non-IPv6) failures are out of scope.
 
@@ -180,6 +180,13 @@ and propagates all other resolver options (`domain`, `search`, `ndots`, `timeout
 `attempts`, `edns0`) so a salvaged config is fully equivalent to what hickory would have
 built from a clean parse.
 
+Important correction after the initial refactor: `resolv_conf::Config::parse()` is
+fail-fast, so using it directly reintroduced an all-or-nothing failure mode for malformed
+`resolv.conf` content. The salvage path must use `Config::parse_with_errors()` and then
+build a resolver config from the partial parse result, otherwise unrelated malformed lines
+or a bad `nameserver` entry defeat the salvage path and incorrectly force the public-DNS
+fallback.
+
 ```rust
 #[cfg(unix)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
@@ -230,7 +237,7 @@ Pure-function target: `configs_from_resolv_conf(resolv_conf::Config) -> Option<(
 2. **Plain IPv6 nameserver retained:** `2606:4700:4700::1111` → kept.
 3. **All-scoped input → `None`**, so caller uses public-DNS fallback.
 4. **Mixed garbage tolerated:** comments, `search` lines, malformed entries ignored
-   without failing the whole parse (handled by `resolv_conf::Config::parse`).
+   without failing the whole parse (handled by `resolv_conf::Config::parse_with_errors`).
 5. **Resolver options extracted:** `ndots`, `timeout`, `attempts`, `edns0` match
    the values in the `options` line.
 
@@ -244,7 +251,8 @@ a resolver built from a config containing only the salvaged IPv4 nameserver reso
 
 - [x] Reproduce pre-fix: `cargo-binstall binstall ripgrep --dry-run --no-confirm
       --log-level debug` → `dns error` (baseline confirmed).
-- [x] Unit tests in §6 pass (6 tests, `--features hickory-dns`).
+- [x] Unit tests in §6 pass (7 tests, `--features hickory-dns`), including a regression
+      test proving malformed lines do not defeat salvage.
 - [x] Post-fix, same command resolves and completes the dry-run with the scoped
       link-local nameserver still present in `scutil --dns` (i.e. without workaround §4a).
       Log shows `Salvaged 1 usable system nameserver(s)` then successful fetches.
