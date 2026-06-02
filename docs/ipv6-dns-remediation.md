@@ -356,7 +356,8 @@ In increasing order of cost / decreasing preference:
    `scope_id` (or accept `SocketAddrV6`) through `NameServerConfig` and connection setup.
    Once available, adopt it here by parsing the `%zone` (numeric, or interface name via
    `libc::if_nametoindex`) and building scoped name servers. This is the correct fix and
-   the only one that keeps hickory in the loop. → **File a hickory feature request.**
+   the only one that keeps hickory in the loop. → **Filed:**
+   [hickory-dns/hickory-dns#3713](https://github.com/hickory-dns/hickory-dns/issues/3713).
 2. **Supported workaround (no upstream needed):** affected users build/install with
    `--no-default-features` so the `trust-dns`/`hickory-dns` feature is off and binstall
    uses reqwest's system resolver (`getaddrinfo`), which handles `%zone` correctly.
@@ -375,7 +376,8 @@ is harmless until then.
 
 ### 9.5 Action items outside this repo
 
-- [ ] Open hickory feature request: scoped/link-local nameserver support (`scope_id`). (§9.3.1)
+- [x] Open hickory feature request: scoped/link-local nameserver support (`scope_id`). (§9.3.1)
+      → [hickory-dns/hickory-dns#3713](https://github.com/hickory-dns/hickory-dns/issues/3713)
 - [ ] (Optional) Open hickory bug: `read_system_conf` should not fail wholesale on one
       bad `nameserver` line. (§9.4)
 - [ ] Add user-facing note: on IPv6-only LANs with only a link-local resolver, install

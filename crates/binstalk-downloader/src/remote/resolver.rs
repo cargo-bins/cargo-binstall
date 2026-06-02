@@ -96,7 +96,8 @@ fn configs_from_resolv_conf(parsed: resolv_conf::Config) -> Option<(ResolverConf
         .iter()
         // Drop scoped IPv6 nameservers for now: hickory only accepts socket addresses here,
         // so link-local entries with a zone id from resolv.conf cannot be represented.
-        // Revisit this once hickory supports scoped nameserver addresses directly.
+        // Revisit this once hickory supports scoped nameserver addresses directly:
+        // https://github.com/hickory-dns/hickory-dns/issues/3713
         .filter(|ip| !matches!(ip, resolv_conf::ScopedIp::V6(_, Some(_))))
         .map(|ip| NameServerConfig::opportunistic_encryption(ip.into()))
         .collect();
