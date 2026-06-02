@@ -133,12 +133,12 @@ fn configs_from_resolv_conf(parsed: resolv_conf::Config) -> Option<(ResolverConf
 fn salvage_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
     let data = std::fs::read("/etc/resolv.conf").ok()?;
     let (parsed, errors) = resolv_conf::Config::parse_with_errors(&data);
-    if let Some(err) = errors.first() {
+    if !errors.is_empty() {
         debug!(
-            "Ignoring {} resolv.conf parse error(s) while salvaging usable nameservers; first error: {:?}",
-            errors.len(),
-            err
+            "Ignoring {} resolv.conf parse error(s) while salvaging usable nameservers:",
+            errors.len()
         );
+        errors.iter().for_each(|err| debug!("    {err:?}"));
     }
     let result = configs_from_resolv_conf(parsed);
     if let Some((ref config, _)) = result {
