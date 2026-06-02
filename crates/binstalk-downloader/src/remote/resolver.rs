@@ -98,7 +98,7 @@ fn configs_from_resolv_conf(parsed: resolv_conf::Config) -> Option<(ResolverConf
         // so link-local entries with a zone id from resolv.conf cannot be represented.
         // Revisit this once hickory supports scoped nameserver addresses directly.
         .filter(|ip| !matches!(ip, resolv_conf::ScopedIp::V6(_, Some(_))))
-        .map(|ip| NameServerConfig::udp_and_tcp(ip.into()))
+        .map(|ip| NameServerConfig::opportunistic_encryption(ip.into()))
         .collect();
 
     if nameservers.is_empty() {
@@ -343,6 +343,33 @@ mod tests {
         assert_eq!(opts.timeout, Duration::from_secs(2));
         assert_eq!(opts.attempts, 4);
         assert!(opts.edns0);
+    }
+
+    #[test]
+    fn salvaged_nameservers_use_opportunistic_encryption() {
+        use hickory_resolver::config::NameServerConfig;
+        use std::net::IpAddr;
+
+        let (config, _) = configs("nameserver 8.8.8.8\n").expect("should produce config");
+        let nameserver = config
+            .name_servers()
+            .first()
+            .expect("should contain a nameserver");
+        let expected =
+            NameServerConfig::opportunistic_encryption("8.8.8.8".parse::<IpAddr>().unwrap());
+
+        let protocols: Vec<String> = nameserver
+            .connections
+            .iter()
+            .map(|connection| format!("{:?}", connection.protocol))
+            .collect();
+        let expected_protocols: Vec<String> = expected
+            .connections
+            .iter()
+            .map(|connection| format!("{:?}", connection.protocol))
+            .collect();
+
+        assert_eq!(protocols, expected_protocols);
     }
 
     /// The cold-resolver query order is the config order (hickory defaults to
