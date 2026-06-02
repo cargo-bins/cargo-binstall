@@ -87,9 +87,7 @@ fn get_system_configs() -> (ResolverConfig, ResolverOpts) {
 /// nameservers (link-local with zone id, e.g. `fe80::1%en0`) that are unusable without
 /// the scope id. Returns `None` when no usable nameservers remain.
 #[cfg(unix)]
-fn configs_from_resolv_conf(
-    parsed: resolv_conf::Config,
-) -> Option<(ResolverConfig, ResolverOpts)> {
+fn configs_from_resolv_conf(parsed: resolv_conf::Config) -> Option<(ResolverConfig, ResolverOpts)> {
     use hickory_resolver::proto::rr::Name as DnsName;
     use std::str::FromStr as _;
 
@@ -252,7 +250,12 @@ mod tests {
             .unwrap_or_default()
     }
 
-    fn configs(resolv: &str) -> Option<(hickory_resolver::config::ResolverConfig, hickory_resolver::config::ResolverOpts)> {
+    fn configs(
+        resolv: &str,
+    ) -> Option<(
+        hickory_resolver::config::ResolverConfig,
+        hickory_resolver::config::ResolverOpts,
+    )> {
         let (parsed, _) = resolv_conf::Config::parse_with_errors(resolv.as_bytes());
         configs_from_resolv_conf(parsed)
     }
