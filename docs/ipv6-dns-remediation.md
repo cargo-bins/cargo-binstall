@@ -65,8 +65,16 @@ nameserver[0] : fe80::1%en0      <-- link-local IPv6 + zone id
 nameserver[1] : <LAN IPv4>       <-- plain IPv4, fine
 ```
 
-`/etc/resolv.conf` mirrors this; `nameserver[0]` is the router advertising itself as the
-IPv6 DNS server via RA. The `%en0` zone id is what hickory's `IpAddr` parse chokes on.
+`nameserver[0]` is the router advertising itself as the IPv6 DNS server via RA. The
+`%en0` zone id is what hickory's `IpAddr` parse chokes on.
+
+On macOS this list does **not** come from `/etc/resolv.conf`: hickory's `read_system_conf`
+uses `system_conf/apple.rs`, which reads `ServerAddresses` from the System Configuration
+dynamic store (`State:/Network/Global/DNS`) and parses each entry with
+`IpAddr::from_str`. `/etc/resolv.conf` only *mirrors* the same servers — it matters
+because binstall's **salvage** path re-reads that file with the tolerant `resolv_conf`
+parser (see §3 and §5.1). The original failure, though, originates in the SC store, not
+in `/etc/resolv.conf`.
 
 ### 2.4 Both nameservers actually work
 
@@ -94,14 +102,38 @@ LAN resolver that was wrongly discarded.
 system_conf::read_system_conf().unwrap_or_else(|err| { /* public-DNS fallback */ })
 ```
 
-`read_system_conf()` is **all-or-nothing**: a single unparseable nameserver entry
+`read_system_conf()` is **all-or-nothing on macOS**: a single unparseable nameserver entry
 (here, the scoped link-local IPv6 address) makes the whole call return `Err`, taking the
 valid IPv4 nameserver down with it. The code then jumps straight to encrypted public DNS
-instead of using the still-valid system nameservers.
+(or, with the §5.1 fix, into the salvage path) instead of using the still-valid system
+nameservers.
 
-This is a known class of issue with `resolv-conf` / `hickory-resolver` and macOS RA-advertised
-link-local IPv6 DNS servers (zone-scoped addresses). Versions in tree:
-`hickory-resolver 0.26.1`, `reqwest 0.13.4`, `hyper-util 0.1.20`.
+The exact mechanism is **platform-specific**, because hickory's `read_system_conf` is a
+different implementation per OS:
+
+- **macOS (`system_conf/apple.rs`):** reads `ServerAddresses` from the System
+  Configuration dynamic store and parses each with `IpAddr::from_str`, mapping a failure
+  to `"failed to parse nameserver address: {e}"` and propagating it with `?`. So one
+  scoped entry hard-fails the **entire** read with exactly the §2.2 error
+  (`invalid IP address syntax`). This is the affected path for the reported hosts, and the
+  hard `Err` is what routes binstall into the salvage path. Verified on macOS:
+  `IpAddr::from_str("fe80::1%en0")` → `invalid IP address syntax`. Note this path never
+  touches `resolv-conf`, so scoped-address support in `resolv-conf` alone would not help
+  it — `apple.rs` would need its own `%zone` handling.
+- **Linux (`system_conf/unix.rs`):** parses via `resolv_conf::Config::parse` (fail-fast)
+  and maps nameservers with `ip.into()`. With `resolv-conf 0.7.6`, `parse` **succeeds** on
+  a scoped address (it becomes a `ScopedIp::V6(_, Some(_))`) and `ip.into(): IpAddr`
+  **silently drops the zone**, yielding a scope-0 `fe80::1`. So `read_system_conf` returns
+  `Ok` with an unusable nameserver, and binstall's `Ok` arm uses it directly — the salvage
+  path is **not** triggered. Non-fatal when a usable nameserver coexists (the dead entry
+  is merely queried and times out); for an IPv6-only LAN whose only server is link-local
+  this leaks a dead config with no public-DNS fallback. This is a latent, Linux-only edge
+  case; the reported failure is macOS-only.
+
+Both symptoms share one root: there is nowhere in hickory's `NameServerConfig` to carry a
+scope id (tracked upstream as [hickory-dns/hickory-dns#3713](https://github.com/hickory-dns/hickory-dns/issues/3713)).
+Versions in tree: `hickory-resolver 0.26.1`, `resolv-conf 0.7.6`, `reqwest 0.13.4`,
+`hyper-util 0.1.20`.
 
 ---
 
