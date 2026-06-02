@@ -1,6 +1,6 @@
 # IPv6 / DNS Remediation Plan
 
-**Status:** implemented (§5.1 option 1) and verified on an affected host; salvage parser refactored to use `resolv_conf` crate (PR #2579), with a follow-up fix to retain best-effort salvage on malformed `resolv.conf` lines
+**Status:** implemented (§5.1 option 1) and verified on an affected host; salvage parser refactored to use `resolv_conf` crate (PR #2579), with follow-up fixes to retain best-effort salvage on malformed `resolv.conf` lines, to log all (not just the first) parse errors at debug, and to apply opportunistic encryption to salvaged nameservers (§5.1.1)
 **Scope:** restore `cargo-binstall` DNS resolution on macOS hosts where the failure
 manifests as an IPv6-related error. Other (non-IPv6) failures are out of scope.
 
@@ -177,8 +177,9 @@ plus `salvage_system_configs` (reads the file and calls the former). Uses the `r
 crate for parsing — already a transitive dep via `hickory-resolver` — instead of a
 hand-rolled line scanner. Filters `ScopedIp::V6(_, Some(_))` entries (scoped link-local)
 and propagates all other resolver options (`domain`, `search`, `ndots`, `timeout`,
-`attempts`, `edns0`) so a salvaged config is fully equivalent to what hickory would have
-built from a clean parse.
+`attempts`, `edns0`) so a salvaged config carries the same options hickory would have
+built from a clean parse. The one intentional difference is the per-nameserver transport
+set, described in §5.1.1.
 
 Important correction after the initial refactor: `resolv_conf::Config::parse()` is
 fail-fast, so using it directly reintroduced an all-or-nothing failure mode for malformed
@@ -203,6 +204,32 @@ fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     }
 }
 ```
+
+### 5.1.1 Salvaged nameservers use opportunistic encryption — DONE
+
+Salvaged nameservers are built with `NameServerConfig::opportunistic_encryption(ip)`
+rather than `udp_and_tcp(ip)`. This attaches DNS-over-TLS and DNS-over-QUIC connections
+alongside the plaintext UDP/TCP ones, so a salvaged resolver opportunistically upgrades to
+encrypted DNS where the server supports it (many ISP resolvers do) and silently stays on
+plaintext where it does not. It is the same privacy preference §5.2 applies to the
+public-DNS fallback, extended to system nameservers.
+
+Two properties of hickory's `opportunistic_encryption` matter here:
+
+- **Connection order is plaintext-first** (`udp`, `tcp`, then `tls`, `quic`), the inverse
+  of the public-DNS fallback's encrypted-first ordering in §5.2. That is deliberate:
+  salvaged servers are typically the LAN/ISP resolver and are reachable over plaintext, so
+  there is no firewall-traversal problem to solve — plaintext-first keeps the common path
+  fast and treats encryption as a best-effort upgrade.
+- **TLS/QUIC peer certificates are not verified**, per RFC 9539 §4.6.3.4 (opportunistic
+  encryption uses the nameserver IP as the TLS server name; there is no PKI name to verify
+  against). This is the spec-mandated behaviour for opportunistic encryption and does not
+  weaken the plaintext baseline.
+
+This is a deliberate divergence from what a clean `read_system_conf()` parse would
+produce (plain UDP/TCP only); see the note in §5.1. Requires hickory's `__tls`/`__quic`
+features, which are already enabled in this workspace. Covered by the
+`salvaged_nameservers_use_opportunistic_encryption` unit test.
 
 ### 5.2 Secondary hardening — order the public-DNS fallback for reachability — DONE
 
@@ -240,6 +267,13 @@ Pure-function target: `configs_from_resolv_conf(resolv_conf::Config) -> Option<(
    without failing the whole parse (handled by `resolv_conf::Config::parse_with_errors`).
 5. **Resolver options extracted:** `ndots`, `timeout`, `attempts`, `edns0` match
    the values in the `options` line.
+6. **Salvaged nameservers use opportunistic encryption** (§5.1.1): a salvaged config's
+   per-nameserver transport set matches `NameServerConfig::opportunistic_encryption`
+   (plaintext UDP/TCP plus DoT/DoQ), confirming the wiring survives
+   `ResolverConfig::from_parts`.
+7. **Public-DNS fallback transport ordering** (§5.2):
+   `public_dns_fallback_orders_transports_for_reachability` asserts the fallback leads
+   with DoT and ends with plain DNS, with an aggressive per-query timeout.
 
 Integration-level (best-effort, network-gated, not in CI default): with hickory enabled,
 a resolver built from a config containing only the salvaged IPv4 nameserver resolves
@@ -251,8 +285,9 @@ a resolver built from a config containing only the salvaged IPv4 nameserver reso
 
 - [x] Reproduce pre-fix: `cargo-binstall binstall ripgrep --dry-run --no-confirm
       --log-level debug` → `dns error` (baseline confirmed).
-- [x] Unit tests in §6 pass (7 tests, `--features hickory-dns`), including a regression
-      test proving malformed lines do not defeat salvage.
+- [x] Unit tests in §6 pass (9 tests, `--features hickory-dns`), including a regression
+      test proving malformed lines do not defeat salvage and one asserting salvaged
+      nameservers carry opportunistic-encryption transports.
 - [x] Post-fix, same command resolves and completes the dry-run with the scoped
       link-local nameserver still present in `scutil --dns` (i.e. without workaround §4a).
       Log shows `Salvaged 1 usable system nameserver(s)` then successful fetches.
@@ -260,8 +295,9 @@ a resolver built from a config containing only the salvaged IPv4 nameserver reso
       (the `Ok` arm is untouched).
 - [x] `ip_strategy` remains `Ipv4AndIpv6`.
 
-Implemented: §5.1 option 1 (skip scoped entries) and §5.2 (public-DNS fallback transport
-ordering). Blocked: §5.1 option 2 (honour link-local servers via scope id) — not
+Implemented: §5.1 option 1 (skip scoped entries), §5.1.1 (opportunistic encryption for
+salvaged nameservers) and §5.2 (public-DNS fallback transport ordering). Blocked: §5.1
+option 2 (honour link-local servers via scope id) — not
 possible with hickory-resolver 0.26.1, see §5.1 for the dependency limitation and the
 `--no-default-features` workaround for the IPv6-only-LAN case.
 
