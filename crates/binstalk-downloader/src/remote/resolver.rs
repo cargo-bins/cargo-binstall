@@ -10,8 +10,11 @@ use hickory_resolver::{
         LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts, ServerGroup, CLOUDFLARE,
         GOOGLE,
     },
-    system_conf, TokioResolver as TokioAsyncResolver,
+    TokioResolver as TokioAsyncResolver,
 };
+
+#[cfg(windows)]
+use hickory_resolver::system_conf;
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tracing::{debug, instrument, warn};
@@ -127,16 +130,18 @@ fn configs_from_resolv_conf(parsed: resolv_conf::Config) -> Option<(ResolverConf
     Some((config, opts))
 }
 
-/// Read `/etc/resolv.conf` and build a resolver config, salvaging nameservers that
-/// hickory's all-or-nothing parser would reject (e.g. scoped link-local IPv6 entries).
-/// Returns `None` when no usable nameservers remain or the file cannot be read.
+/// Read `/etc/resolv.conf` and build a resolver config, keeping usable nameservers that
+/// hickory's all-or-nothing `read_system_conf` would reject (e.g. scoped link-local IPv6
+/// entries). This is our own parser, used in place of hickory's so a single unparseable
+/// entry does not discard the whole configuration. Returns `None` when no usable
+/// nameservers remain or the file cannot be read.
 #[cfg(unix)]
-fn salvage_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
+fn read_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
     let data = std::fs::read("/etc/resolv.conf").ok()?;
     let (parsed, errors) = resolv_conf::Config::parse_with_errors(&data);
     if !errors.is_empty() {
         debug!(
-            "Ignoring {} resolv.conf parse error(s) while salvaging usable nameservers:",
+            "Ignoring {} resolv.conf parse error(s) while keeping usable nameservers:",
             errors.len()
         );
         errors.iter().for_each(|err| debug!("    {err:?}"));
@@ -144,7 +149,7 @@ fn salvage_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
     let result = configs_from_resolv_conf(parsed);
     if let Some((ref config, _)) = result {
         debug!(
-            "Salvaged {} usable system nameserver(s) from /etc/resolv.conf",
+            "Loaded {} usable system nameserver(s) from /etc/resolv.conf",
             config.name_servers().len()
         );
     }
@@ -154,20 +159,10 @@ fn salvage_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
 #[cfg(unix)]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using system DNS resolver configuration");
-    match system_conf::read_system_conf() {
-        Ok(configs) => Ok(configs),
-        Err(err) => {
-            debug!(
-                "hickory-dns: failed to load system DNS configuration ({:?}); \
-                attempting to salvage parseable nameservers from /etc/resolv.conf",
-                err
-            );
-            Ok(salvage_system_configs().unwrap_or_else(|| {
-                debug!("No usable system nameservers; falling back to public encrypted DNS");
-                public_dns_configs()
-            }))
-        }
-    }
+    Ok(read_system_configs().unwrap_or_else(|| {
+        debug!("No usable system nameservers; falling back to public encrypted DNS");
+        public_dns_configs()
+    }))
 }
 
 #[cfg(windows)]
