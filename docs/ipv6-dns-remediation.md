@@ -16,8 +16,9 @@ connectivity — IPv6 routing on such hosts is healthy. The actual cause is:
 > identifier** (e.g. `fe80::1%en0`). `hickory-resolver`'s
 > `system_conf::read_system_conf()` cannot parse the `%en0` zone suffix, fails the
 > **entire** system-config load, and discards the working IPv4 nameserver alongside it.
-> binstall then falls back to encrypted public DNS (Cloudflare/Google over
-> QUIC/H3/TLS/HTTPS), which restrictive networks do not reliably allow, so resolution
+> binstall then falls back to public DNS (Cloudflare/Google), preferring encrypted
+> transports (DoT/DoH over TCP, then DoQ/DoH3 over UDP) and dropping to **plain UDP/TCP**
+> as a last resort — none of which restrictive networks reliably allow, so resolution
 > fails completely.
 
 A previously-considered change — switching `LookupIpStrategy::Ipv4AndIpv6` →
@@ -75,6 +76,18 @@ dynamic store (`State:/Network/Global/DNS`) and parses each entry with
 because binstall's **salvage** path re-reads that file with the tolerant `resolv_conf`
 parser (see §3 and §5.1). The original failure, though, originates in the SC store, not
 in `/etc/resolv.conf`.
+
+> **Why not `unix.rs` / `/etc/resolv.conf` on macOS?** `system_conf::read_system_conf` is
+> picked per target in `hickory-resolver 0.26.1`'s `src/system_conf/mod.rs`. The
+> `/etc/resolv.conf` reader (`unix.rs`) is gated
+> `#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]`, so apple
+> targets are *excluded* from it and instead compile `apple.rs`
+> (`#[cfg(target_vendor = "apple")]`). The `apple.rs` path is real in this workspace, not
+> theoretical: enabling hickory's `system-config` feature pulls `system-configuration` as
+> an apple-only dependency (present in `Cargo.lock`), which `apple.rs` uses to read the SC
+> dynamic store. The verbatim §2.2 error string (`failed to parse nameserver address: …`)
+> is produced only by `apple.rs`. (docs.rs "latest" may show a different `unix.rs`; the
+> pinned `0.26.1` in this tree is what determines the actual path.)
 
 ### 2.4 Both nameservers actually work
 
