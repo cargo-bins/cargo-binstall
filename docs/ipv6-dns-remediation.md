@@ -142,6 +142,21 @@ different implementation per OS:
   is merely queried and times out); for an IPv6-only LAN whose only server is link-local
   this leaks a dead config with no public-DNS fallback. This is a latent, Linux-only edge
   case; the reported failure is macOS-only.
+- **Windows — cannot reproduce the wholesale failure.** binstall does not even reach
+  hickory's `read_system_conf` on the normal Windows path: `get_configs()` (`#[cfg(windows)]`)
+  reads `netdev::get_default_interface().dns_servers` (a `Vec<IpAddr>`) and adds each server
+  to the `ResolverConfig` in an independent loop; hickory's `system_conf/windows.rs`
+  (the fallback used only when `netdev` returns zero servers) likewise iterates
+  `ipconfig` adapter `dns_servers()` and pushes each `IpAddr` independently. Two
+  consequences: (1) the IPv6 **zone is already gone** — both Win32 sources hand back
+  parsed `IpAddr` values, so there is no `%zone` string for `IpAddr::from_str` to choke
+  on, unlike `apple.rs`; (2) because servers are added one-by-one, a single unusable
+  entry can **never** discard the working ones. The worst case on Windows is the milder
+  Linux-style outcome — a scope-0 link-local entry added as a dead nameserver that is
+  queried and times out — and only when such a server is active alongside no usable one.
+  There is therefore no Windows analogue of the macOS all-or-nothing crash, and the §5.1
+  salvage parser (which is inherently a `/etc/resolv.conf` reader) neither applies to nor
+  is needed on Windows.
 
 Both symptoms share one root: there is nowhere in hickory's `NameServerConfig` to carry a
 scope id (tracked upstream as [hickory-dns/hickory-dns#3713](https://github.com/hickory-dns/hickory-dns/issues/3713)).
