@@ -13,7 +13,7 @@ use hickory_resolver::{
     TokioResolver as TokioAsyncResolver,
 };
 
-#[cfg(windows)]
+#[cfg(any(windows, target_vendor = "apple"))]
 use hickory_resolver::system_conf;
 use once_cell::sync::OnceCell;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
@@ -156,7 +156,38 @@ fn read_system_configs() -> Option<(ResolverConfig, ResolverOpts)> {
     result
 }
 
-#[cfg(unix)]
+/// macOS reads its authoritative DNS configuration from the System Configuration dynamic
+/// store, not `/etc/resolv.conf`: hickory's `read_system_conf` compiles `apple.rs` on
+/// `target_vendor = "apple"` and queries `State:/Network/Global/DNS`, while
+/// `/etc/resolv.conf` is only a best-effort mirror. So prefer `read_system_conf` here and
+/// keep its result whenever it parses. It is all-or-nothing, though — a single scoped
+/// link-local IPv6 nameserver (e.g. `fe80::1%en0`) hard-fails the whole read with
+/// "invalid IP address syntax" — and only then do we salvage parseable entries from the
+/// `/etc/resolv.conf` mirror before falling back to public encrypted DNS.
+/// See https://github.com/hickory-dns/hickory-dns/issues/3713.
+#[cfg(target_vendor = "apple")]
+fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
+    debug!("Using system DNS resolver configuration");
+    if let Ok(configs) = system_conf::read_system_conf() {
+        return Ok(configs);
+    }
+
+    debug!(
+        "hickory-dns: failed to load system DNS configuration; \
+        attempting to salvage parseable nameservers from /etc/resolv.conf"
+    );
+    Ok(read_system_configs().unwrap_or_else(|| {
+        debug!("No usable system nameservers; falling back to public encrypted DNS");
+        public_dns_configs()
+    }))
+}
+
+/// On non-apple unix, hickory's `read_system_conf` (`unix.rs`) reads the same
+/// `/etc/resolv.conf` our parser does, but via `resolv_conf`'s fail-fast `parse` and an
+/// `ip.into()` that silently drops IPv6 zone ids. Our parser reads that file directly,
+/// tolerates malformed lines, and keeps usable nameservers a scoped entry would otherwise
+/// discard, so it is the sole primary path here with no hickory call to fall back from.
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
     debug!("Using system DNS resolver configuration");
     Ok(read_system_configs().unwrap_or_else(|| {

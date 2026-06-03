@@ -136,12 +136,14 @@ different implementation per OS:
 - **Linux (`system_conf/unix.rs`):** parses via `resolv_conf::Config::parse` (fail-fast)
   and maps nameservers with `ip.into()`. With `resolv-conf 0.7.6`, `parse` **succeeds** on
   a scoped address (it becomes a `ScopedIp::V6(_, Some(_))`) and `ip.into(): IpAddr`
-  **silently drops the zone**, yielding a scope-0 `fe80::1`. So `read_system_conf` returns
-  `Ok` with an unusable nameserver, and binstall's `Ok` arm uses it directly — the salvage
-  path is **not** triggered. Non-fatal when a usable nameserver coexists (the dead entry
-  is merely queried and times out); for an IPv6-only LAN whose only server is link-local
-  this leaks a dead config with no public-DNS fallback. This is a latent, Linux-only edge
-  case; the reported failure is macOS-only.
+  **silently drops the zone**, yielding a scope-0 `fe80::1`. So hickory's
+  `read_system_conf` returns `Ok` with an unusable nameserver. binstall **no longer calls
+  it on non-apple unix** (see §5.1): it parses `/etc/resolv.conf` directly through
+  `read_system_configs`, which filters the scoped entry out rather than emitting a dead
+  scope-0 server. The earlier Linux edge case (a dead link-local entry leaking through the
+  `Ok` arm) is therefore avoided; an IPv6-only LAN whose only server is link-local still
+  has no usable nameserver and falls back to public DNS. The reported failure is
+  macOS-only.
 - **Windows — cannot reproduce the wholesale failure.** binstall does not even reach
   hickory's `read_system_conf` on the normal Windows path: `get_configs()` (`#[cfg(windows)]`)
   reads `netdev::get_default_interface().dns_servers` (a `Vec<IpAddr>`) and adds each server
@@ -233,13 +235,13 @@ Two sub-options for the scoped link-local entry:
    IPv4 nameserver.
 
 Implemented as `configs_from_resolv_conf` (testable, takes a parsed `resolv_conf::Config`)
-plus `salvage_system_configs` (reads the file and calls the former). Uses the `resolv_conf`
-crate for parsing — already a transitive dep via `hickory-resolver` — instead of a
-hand-rolled line scanner. Filters `ScopedIp::V6(_, Some(_))` entries (scoped link-local)
-and propagates all other resolver options (`domain`, `search`, `ndots`, `timeout`,
-`attempts`, `edns0`) so a salvaged config carries the same options hickory would have
-built from a clean parse. The one intentional difference is the per-nameserver transport
-set, described in §5.1.1.
+plus `read_system_configs` (reads `/etc/resolv.conf` and calls the former). Uses the
+`resolv_conf` crate for parsing — already a transitive dep via `hickory-resolver` — instead
+of a hand-rolled line scanner. Filters `ScopedIp::V6(_, Some(_))` entries (scoped
+link-local) and propagates all other resolver options (`domain`, `search`, `ndots`,
+`timeout`, `attempts`, `edns0`) so a salvaged config carries the same options hickory would
+have built from a clean parse. The one intentional difference is the per-nameserver
+transport set, described in §5.1.1.
 
 Important correction after the initial refactor: `resolv_conf::Config::parse()` is
 fail-fast, so using it directly reintroduced an all-or-nothing failure mode for malformed
@@ -248,20 +250,47 @@ build a resolver config from the partial parse result, otherwise unrelated malfo
 or a bad `nameserver` entry defeat the salvage path and incorrectly force the public-DNS
 fallback.
 
+**The unix `get_configs` is split by `target_vendor`**, because hickory's
+`read_system_conf` source differs by platform (§3) and the two paths want different
+behaviour:
+
+- **apple** — `read_system_conf` (`apple.rs`) reads the **authoritative** System
+  Configuration dynamic store, *not* `/etc/resolv.conf`. So keep it as the primary source
+  and only fall through to the `read_system_configs` salvage parser (which re-reads the
+  `/etc/resolv.conf` mirror) when the all-or-nothing read hard-fails on a scoped entry.
+- **non-apple unix** — hickory's `read_system_conf` (`unix.rs`) reads the same
+  `/etc/resolv.conf` our parser does, but via fail-fast `parse` + an `ip.into()` that
+  silently drops IPv6 zone ids (§3). Our `read_system_configs` is therefore strictly
+  better and is used as the **sole primary path**, with no hickory call to fall back from.
+
+This is a deliberate divergence from earlier drafts of this section, which called
+`read_system_conf` first on *all* `#[cfg(unix)]`. On Linux that first call only ever
+returned a clean parse (our parser handles the rest) or an `Ok` carrying a zone-stripped
+dead nameserver, so it added nothing; restricting it to apple keeps the authoritative SC
+store on macOS while letting Linux use the tolerant parser unconditionally.
+
 ```rust
-#[cfg(unix)]
+#[cfg(target_vendor = "apple")]
 fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
-    match system_conf::read_system_conf() {
-        Ok(cfg) => Ok(cfg),
-        Err(err) => {
-            debug!("read_system_conf failed ({err}); attempting to salvage \
-                    parseable nameservers from /etc/resolv.conf");
-            Ok(salvage_system_configs().unwrap_or_else(|| {
-                debug!("No usable system nameservers; falling back to public encrypted DNS");
-                public_dns_configs()
-            }))
-        }
+    // apple.rs reads the authoritative System Configuration store, so prefer it.
+    if let Ok(configs) = system_conf::read_system_conf() {
+        return Ok(configs);
     }
+    debug!("read_system_conf failed; salvaging parseable nameservers from /etc/resolv.conf");
+    Ok(read_system_configs().unwrap_or_else(|| {
+        debug!("No usable system nameservers; falling back to public encrypted DNS");
+        public_dns_configs()
+    }))
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+fn get_configs() -> Result<(ResolverConfig, ResolverOpts), BoxError> {
+    // unix.rs reads the same /etc/resolv.conf but drops IPv6 zones, so our parser is the
+    // sole primary path here.
+    Ok(read_system_configs().unwrap_or_else(|| {
+        debug!("No usable system nameservers; falling back to public encrypted DNS");
+        public_dns_configs()
+    }))
 }
 ```
 
@@ -350,9 +379,9 @@ a resolver built from a config containing only the salvaged IPv4 nameserver reso
       nameservers carry opportunistic-encryption transports.
 - [x] Post-fix, same command resolves and completes the dry-run with the scoped
       link-local nameserver still present in `scutil --dns` (i.e. without workaround §4a).
-      Log shows `Salvaged 1 usable system nameserver(s)` then successful fetches.
-- [x] No behavioural change on a host whose `read_system_conf()` already succeeds
-      (the `Ok` arm is untouched).
+      Log shows `Loaded 1 usable system nameserver(s)` then successful fetches.
+- [x] No behavioural change on an apple host whose `read_system_conf()` already succeeds
+      (the apple `get_configs` keeps its result untouched).
 - [x] `ip_strategy` remains `Ipv4AndIpv6`.
 
 Implemented: §5.1 option 1 (skip scoped entries), §5.1.1 (opportunistic encryption for
@@ -365,8 +394,8 @@ possible with hickory-resolver 0.26.1, see §5.1 for the dependency limitation a
 
 ## 8. Files
 
-- `crates/binstalk-downloader/src/remote/resolver.rs` — `get_configs` (unix),
-  `configs_from_resolv_conf`, `salvage_system_configs`.
+- `crates/binstalk-downloader/src/remote/resolver.rs` — `get_configs` (apple and
+  non-apple unix variants), `configs_from_resolv_conf`, `read_system_configs`.
 - `crates/binstalk-downloader/Cargo.toml` — `resolv-conf = "0.7.6"` added as a
   unix-only optional dep, enabled by the `hickory-dns` feature (already a transitive dep,
   so no new binary weight).
@@ -430,8 +459,8 @@ In increasing order of cost / decreasing preference:
 `hickory_resolver::system_conf::read_system_conf()` is all-or-nothing: one unparseable
 `nameserver` entry fails the entire load. That strictness is what forced our §5.1 salvage
 workaround. An upstream fix to skip/tolerate unparseable entries (or to parse scoped
-addresses) would make `salvage_system_configs` redundant — it could be removed once a
-fixed hickory is in `Cargo.lock`. → optional **bug report to hickory**; our workaround
+addresses) would make `read_system_configs` redundant on apple — it could be removed once
+a fixed hickory is in `Cargo.lock`. → optional **bug report to hickory**; our workaround
 is harmless until then.
 
 ### 9.5 Action items outside this repo
