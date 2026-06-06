@@ -47,6 +47,26 @@ pub struct Options {
     /// If provided, the names are sorted.
     pub bins: Option<Vec<CompactString>>,
 
+    /// Features to activate when the `compile` (cargo install) strategy is used.
+    ///
+    /// These are passed through verbatim to `cargo install --features <value>` (one
+    /// argument per element). When a prebuilt fetcher is selected instead, binstall
+    /// will log a warning that the feature list cannot be enforced.
+    pub features: Vec<CompactString>,
+
+    /// When true, the `compile` strategy will be invoked with
+    /// `--no-default-features`. Callers are responsible for ensuring the compile
+    /// strategy is actually reachable (e.g. by removing prebuilt resolvers from
+    /// `resolvers`). Ignored when `all_features == true`, matching cargo's
+    /// mutual exclusion of the two flags.
+    pub no_default_features: bool,
+
+    /// When true, the `compile` strategy will be invoked with `--all-features`.
+    /// Callers are responsible for ensuring the compile strategy is actually
+    /// reachable (e.g. by removing prebuilt resolvers from `resolvers`).
+    /// Takes precedence over `no_default_features`.
+    pub all_features: bool,
+
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,
     pub has_overriden_install_path: bool,

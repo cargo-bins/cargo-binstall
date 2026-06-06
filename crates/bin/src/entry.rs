@@ -54,11 +54,16 @@ pub fn install_crates(
         temp_dir,
     } = crate::initialise::initialise(&args)?;
 
+    let must_compile = args.no_default_features || args.all_features;
+
     let mut cargo_install_fallback = false;
     let resolvers: Vec<_> = settings
         .strategies
         .into_iter()
         .filter_map(|strategy| match strategy.0 {
+            // --no-default-features / --all-features demand a custom build that no
+            // prebuilt artifact can satisfy, so drop prebuilt fetchers entirely.
+            Strategy::CrateMetaData | Strategy::QuickInstall if must_compile => None,
             Strategy::CrateMetaData => Some(GhCrateMeta::new as Resolver),
             Strategy::QuickInstall => Some(QuickInstall::new as Resolver),
             Strategy::Compile => {
@@ -67,6 +72,20 @@ pub fn install_crates(
             }
         })
         .collect();
+
+    if must_compile {
+        // args.rs rejects must_compile without Strategy::Compile at parse time, so the
+        // Compile arm above has already set this. assert! (not debug_assert!) so an
+        // arg-validation regression surfaces in release builds too.
+        assert!(
+            cargo_install_fallback,
+            "must_compile invariant: args.rs must guarantee Compile is enabled"
+        );
+        info!(
+            "--no-default-features/--all-features requested; \
+             prebuilt strategies disabled, will use `cargo install` directly"
+        );
+    }
 
     // Remove installed crates
     let mut crate_names = filter_out_installed_crates(
@@ -207,6 +226,10 @@ pub fn install_crates(
             bins.sort_unstable();
             bins
         }),
+
+        features: args.features,
+        no_default_features: args.no_default_features,
+        all_features: args.all_features,
 
         temp_dir: temp_dir.path().to_owned(),
         install_path,

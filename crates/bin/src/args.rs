@@ -108,6 +108,39 @@ pub struct Args {
     )]
     pub(crate) bin: Option<Vec<CompactString>>,
 
+    /// Space- or comma-separated list of features to activate.
+    ///
+    /// This flag only affects the `compile` strategy (cargo install fallback).
+    /// If a prebuilt binary is selected, binstall will warn that the feature
+    /// list cannot be enforced and proceed with the prebuilt.
+    #[clap(
+        help_heading = "Overrides",
+        short = 'F',
+        long,
+        value_delimiter(','),
+        action = clap::ArgAction::Append,
+        value_name = "FEATURES"
+    )]
+    pub(crate) features: Vec<CompactString>,
+
+    /// Do not activate the `default` feature when compiling from source.
+    ///
+    /// Implies that the compile strategy is required: prebuilt strategies
+    /// (crate-meta-data, quick-install) are disabled for this invocation.
+    #[clap(help_heading = "Overrides", long)]
+    pub(crate) no_default_features: bool,
+
+    /// Activate every feature declared by the package when compiling from source.
+    ///
+    /// Implies that the compile strategy is required: prebuilt strategies
+    /// (crate-meta-data, quick-install) are disabled for this invocation.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        conflicts_with = "no_default_features"
+    )]
+    pub(crate) all_features: bool,
+
     /// Override Cargo.toml package manifest path.
     ///
     /// This skips searching crates.io for a manifest and uses the specified path directly, useful
@@ -552,6 +585,20 @@ impl ValueEnum for StrategyWrapped {
     }
 }
 
+/// `--features` accepts a "space or comma separated list" per cargo's contract.
+///
+/// clap's `value_delimiter(',')` on the `features` field already handles
+/// commas. `split_ascii_whitespace` then expands whitespace inside each parsed
+/// value and, because it never yields empty slices, also drops the empty
+/// entries produced by stray commas (e.g. `--features a,,b`).
+fn sanitize_features(parsed: &[CompactString]) -> Vec<CompactString> {
+    parsed
+        .iter()
+        .flat_map(|value| value.split_ascii_whitespace())
+        .map(CompactString::from)
+        .collect()
+}
+
 pub fn parse() -> (Args, PkgOverride) {
     // Filter extraneous arg when invoked by cargo
     // `cargo run -- --help` gives ["target/debug/cargo-binstall", "--help"]
@@ -574,6 +621,8 @@ pub fn parse() -> (Args, PkgOverride) {
 
     // Load options
     let mut opts = Args::parse_from(args);
+
+    opts.features = sanitize_features(&opts.features);
 
     #[cfg(feature = "clap-markdown")]
     if opts.markdown_help {
@@ -606,6 +655,12 @@ pub fn parse() -> (Args, PkgOverride) {
             "version"
         } else if opts.manifest_path.is_some() {
             "manifest-path"
+        } else if !opts.features.is_empty() {
+            "features"
+        } else if opts.no_default_features {
+            "no-default-features"
+        } else if opts.all_features {
+            "all-features"
         } else {
             #[cfg(not(feature = "git"))]
             {
@@ -701,6 +756,19 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             .exit()
     }
 
+    // --no-default-features / --all-features require the `compile` strategy.
+    // Reject up-front instead of failing later with NoFallbackToCargoInstall (exit 94).
+    let must_compile = opts.no_default_features || opts.all_features;
+    if must_compile && !opts.strategies.iter().any(|s| s.0 == Strategy::Compile) {
+        command
+            .error(
+                ErrorKind::ArgumentConflict,
+                "--no-default-features and --all-features require the `compile` strategy, \
+                 but it has been disabled via --strategies or --disable-strategies",
+            )
+            .exit()
+    }
+
     if opts.github_token.is_none() {
         if let Ok(github_token) = env::var("GH_TOKEN") {
             opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
@@ -738,6 +806,106 @@ mod test {
     #[test]
     fn verify_cli() {
         Args::command().debug_assert()
+    }
+
+    fn cs(s: &str) -> CompactString {
+        CompactString::from(s)
+    }
+
+    #[test]
+    fn sanitize_features_splits_on_whitespace() {
+        // M1: cargo accepts `--features "foo bar"` (a single arg with whitespace).
+        // clap's value_delimiter splits commas; sanitize_features must split spaces.
+        assert_eq!(sanitize_features(&[cs("foo bar")]), [cs("foo"), cs("bar")]);
+    }
+
+    #[test]
+    fn sanitize_features_drops_empty_from_stray_commas() {
+        // M2: clap value_delimiter(',') on input "a,,b" produces ["a", "", "b"].
+        // The empty entry must not reach `cargo install` as `--features ''`.
+        assert_eq!(
+            sanitize_features(&[cs("a"), cs(""), cs("b")]),
+            [cs("a"), cs("b")]
+        );
+    }
+
+    #[test]
+    fn sanitize_features_drops_whitespace_only_entries() {
+        assert_eq!(
+            sanitize_features(&[cs("   "), cs("tls"), cs("\t\n")]),
+            [cs("tls")]
+        );
+    }
+
+    #[test]
+    fn sanitize_features_preserves_pkg_slash_feat_syntax() {
+        assert_eq!(sanitize_features(&[cs("dep/feat-x")]), [cs("dep/feat-x")]);
+    }
+
+    #[test]
+    fn sanitize_features_handles_mixed_whitespace_and_commas() {
+        // Repeated --features arg with internal mixed delimiters.
+        assert_eq!(
+            sanitize_features(&[cs("tls async"), cs("extra")]),
+            [cs("tls"), cs("async"), cs("extra")]
+        );
+    }
+
+    #[test]
+    fn sanitize_features_empty_input_yields_empty() {
+        assert!(sanitize_features(&[]).is_empty());
+    }
+
+    #[test]
+    fn no_default_features_conflicts_with_all_features() {
+        // binstall deliberately rejects both flags together via clap's
+        // `conflicts_with`. Note this is stricter than cargo, which accepts
+        // `--all-features --no-default-features` (the latter is redundant but
+        // not an error); we reject it up-front to avoid a confusing no-op flag.
+        let err = Args::try_parse_from([
+            "cargo-binstall",
+            "--no-default-features",
+            "--all-features",
+            "ripgrep",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn features_accept_comma_separated() {
+        let args =
+            Args::try_parse_from(["cargo-binstall", "--features", "tls,async", "ripgrep"]).unwrap();
+        assert_eq!(
+            args.features.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            ["tls", "async"]
+        );
+    }
+
+    #[test]
+    fn features_short_flag_is_capital_f() {
+        let args = Args::try_parse_from(["cargo-binstall", "-F", "tls", "ripgrep"]).unwrap();
+        assert_eq!(
+            args.features.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            ["tls"]
+        );
+    }
+
+    #[test]
+    fn features_can_be_repeated() {
+        let args = Args::try_parse_from([
+            "cargo-binstall",
+            "--features",
+            "a",
+            "--features",
+            "b,c",
+            "ripgrep",
+        ])
+        .unwrap();
+        assert_eq!(
+            args.features.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
     }
 
     #[test]
