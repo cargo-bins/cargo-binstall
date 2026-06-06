@@ -133,7 +133,7 @@ json = ["serde", "serde_json"]
 resolv-conf = { version = "0.7.6", optional = true }
 
 [target."cfg(windows)".dependencies]
-netdev = { version = "0.43.0", optional = true }
+netdev = { version = "0.44.0", optional = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
