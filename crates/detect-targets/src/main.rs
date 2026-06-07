@@ -25,21 +25,31 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-/// Run every known loader probe and print its result, one
-/// `target: outcome` line each.
+/// Run every known loader probe in both dynamic and static mode and
+/// print the results, one `target: outcome, static: outcome` line
+/// each. The dynamic outcome attests dynamically-linked binaries of
+/// that target (arch + libc loader); the static outcome attests
+/// statically-linked ones (arch only).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn probe_all(rt: runtime::Runtime) -> io::Result<()> {
     use detect_targets::probe::{probes, ProbeResult};
 
+    fn fmt(result: ProbeResult) -> String {
+        match result {
+            ProbeResult::Runnable => "runnable".into(),
+            ProbeResult::NotRunnable => "not-runnable".into(),
+            ProbeResult::Inconclusive(err) => format!("inconclusive: {err}"),
+        }
+    }
+
     rt.block_on(async {
         for probe in probes() {
-            match probe.run().await {
-                ProbeResult::Runnable => println!("{}: runnable", probe.target),
-                ProbeResult::NotRunnable => println!("{}: not-runnable", probe.target),
-                ProbeResult::Inconclusive(err) => {
-                    println!("{}: inconclusive: {err}", probe.target)
-                }
-            }
+            println!(
+                "{}: {}, static: {}",
+                probe.target,
+                fmt(probe.run().await),
+                fmt(probe.run_static().await),
+            );
         }
     });
 

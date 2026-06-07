@@ -75,13 +75,40 @@ pub fn find(target: &str) -> Option<&'static Probe> {
 }
 
 impl Probe {
-    /// The synthesized probe executable.
+    /// The synthesized dynamically-linked probe executable.
     pub fn synthesize(&self) -> Vec<u8> {
-        elf::synthesize(&self.spec)
+        elf::synthesize(&self.spec, true)
     }
 
-    /// Write the probe executable to a temporary directory and run it.
+    /// The synthesized static probe executable (no `PT_INTERP`).
+    pub fn synthesize_static(&self) -> Vec<u8> {
+        elf::synthesize(&self.spec, false)
+    }
+
+    /// Write the dynamically-linked probe executable to a temporary
+    /// directory and run it.
+    ///
+    /// [`ProbeResult::Runnable`] proves both that the kernel can
+    /// execute this architecture and that the dynamic loader of this
+    /// target's libc is present and working — i.e. dynamically-linked
+    /// binaries for this target run here.
     pub async fn run(&self) -> ProbeResult {
+        self.exec(self.synthesize()).await
+    }
+
+    /// Write the static probe executable to a temporary directory and
+    /// run it.
+    ///
+    /// [`ProbeResult::Runnable`] proves only that the kernel can
+    /// execute binaries of this architecture — natively, via compat
+    /// mode (e.g. ia32 on x86_64, aarch32 on arm64), or through a
+    /// binfmt handler. That is the requirement for *statically*
+    /// linked binaries, which Rust musl artifacts typically are.
+    pub async fn run_static(&self) -> ProbeResult {
+        self.exec(self.synthesize_static()).await
+    }
+
+    async fn exec(&self, executable: Vec<u8>) -> ProbeResult {
         let progdir = match tempfile::tempdir() {
             Ok(dir) => dir,
             Err(err) => return ProbeResult::Inconclusive(err),
@@ -89,7 +116,7 @@ impl Probe {
         let prog = progdir.path().join(self.target);
 
         let setup = (|| {
-            fs::write(&prog, self.synthesize())?;
+            fs::write(&prog, executable)?;
             fs::set_permissions(&prog, fs::Permissions::from_mode(0o755))
         })();
         if let Err(err) = setup {
@@ -171,6 +198,24 @@ mod tests {
                 ProbeResult::NotRunnable => assert!(!loader_exists),
                 ProbeResult::Inconclusive(err) => panic!("probe inconclusive: {err}"),
             }
+        }
+    }
+
+    /// The static probe for the native architecture must always run:
+    /// the kernel can execute its own architecture by definition.
+    #[tokio::test]
+    async fn native_static_probe_runnable() {
+        #[cfg(target_arch = "x86_64")]
+        let target = "x86_64-unknown-linux-musl";
+        #[cfg(target_arch = "aarch64")]
+        let target = "aarch64-unknown-linux-musl";
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        return;
+
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        match find(target).unwrap().run_static().await {
+            ProbeResult::Runnable => (),
+            res => panic!("expected Runnable, got {res:?}"),
         }
     }
 

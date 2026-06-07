@@ -60,13 +60,59 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                 None => fallback::has_glibc(cpu_arch, abi).await,
             };
 
+            let compat_targets = detect_compat_targets(cpu_arch, abi).await;
+
             [has_glibc.then_some(gnu_target), Some(musl_fallback_target())]
+                .into_iter()
+                .flatten()
+                .chain(compat_targets)
+                .collect()
         }
-        Libc::Android | Libc::Unknown => [Some(target.clone()), Some(musl_fallback_target())],
+        Libc::Android | Libc::Unknown => vec![target.clone(), musl_fallback_target()],
     }
-    .into_iter()
-    .flatten()
-    .collect()
+}
+
+/// Cross-arch / cross-ABI targets that may also run on this machine,
+/// in preference order, each verified by a loader probe. These are
+/// appended after the native targets, so they are only used when no
+/// native artifact is available.
+///
+/// gnu candidates are gated on the dynamic probe (they need the glibc
+/// loader, e.g. multilib); musl candidates on the static probe, since
+/// Rust musl artifacts are typically statically linked and only need
+/// the kernel to support the architecture.
+async fn detect_compat_targets(cpu_arch: &str, abi: &str) -> Vec<String> {
+    let candidates: &[&str] = match (cpu_arch, abi) {
+        // 64-bit kernels usually retain compat support for their
+        // 32-bit predecessors.
+        ("x86_64", _) => &["i686-unknown-linux-gnu", "i686-unknown-linux-musl"],
+        ("aarch64", _) => &[
+            "armv7-unknown-linux-gnueabihf",
+            "armv7-unknown-linux-musleabihf",
+        ],
+        // An i686 userland may be running on an x86_64 kernel.
+        ("i686", _) => &["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl"],
+        // Soft-float binaries run fine on hard-float systems. The
+        // reverse cannot be probed: the probe stub exercises no FPU,
+        // so it cannot attest hard-float support on a soft-float host.
+        ("armv7", "eabihf") => &["armv7-unknown-linux-gnueabi", "armv7-unknown-linux-musleabi"],
+        _ => &[],
+    };
+
+    let mut targets = Vec::new();
+    for candidate in candidates {
+        if let Some(probe) = probe::find(candidate) {
+            let result = if candidate.contains("-musl") {
+                probe.run_static().await
+            } else {
+                probe.run().await
+            };
+            if matches!(result, ProbeResult::Runnable) {
+                targets.push(candidate.to_string());
+            }
+        }
+    }
+    targets
 }
 
 enum Libc {

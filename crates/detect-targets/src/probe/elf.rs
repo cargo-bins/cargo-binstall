@@ -115,26 +115,37 @@ fn align(v: usize, to: usize) -> usize {
 }
 
 /// Synthesize the probe executable described by `spec`.
-pub(crate) fn synthesize(spec: &ElfSpec) -> Vec<u8> {
+///
+/// With `with_interp` set, the executable carries a `PT_INTERP` and
+/// running it exercises the dynamic loader at `spec.interp`. Without
+/// it, the executable is static: the kernel jumps straight to the
+/// stub, so a clean exit only proves the kernel can execute this
+/// architecture (natively, via compat mode, or through a binfmt
+/// handler).
+pub(crate) fn synthesize(spec: &ElfSpec, with_interp: bool) -> Vec<u8> {
     let class = spec.class;
     let (ehsize, phentsize, dynent, syment) = match class {
         // sizes of Ehdr, Phdr, Dyn, Sym
         Class::Elf64 => (64usize, 56usize, 16usize, 24usize),
         Class::Elf32 => (52, 32, 8, 16),
     };
-    // PT_PHDR, PT_LOAD, PT_INTERP, PT_DYNAMIC, PT_GNU_STACK
+    // PT_PHDR, PT_LOAD, [PT_INTERP,] PT_DYNAMIC, PT_GNU_STACK
     //
     // PT_PHDR is required: it is how the dynamic loader computes the
     // load base of an ET_DYN main program (l_addr = AT_PHDR -
     // PT_PHDR.p_vaddr); without it glibc assumes a load base of 0 and
     // crashes dereferencing unrelocated p_vaddr values.
-    let phnum = 5usize;
+    let phnum = if with_interp { 5usize } else { 4 };
 
     // File layout. Since this is ET_DYN, virtual addresses equal file
     // offsets (single PT_LOAD mapping the whole file at base 0).
     let phoff = ehsize;
     let interp_off = phoff + phnum * phentsize;
-    let interp_size = spec.interp.len() + 1; // including NUL
+    let interp_size = if with_interp {
+        spec.interp.len() + 1 // including NUL
+    } else {
+        0
+    };
     // Empty DT_HASH: nbucket = 1, nchain = 1, bucket[0] = 0, chain[0] = 0.
     let hash_off = align(interp_off + interp_size, 8);
     let hash_size = 4 * 4;
@@ -202,13 +213,17 @@ pub(crate) fn synthesize(spec: &ElfSpec) -> Vec<u8> {
 
     phdr(&mut out, PT_PHDR, PF_R, phoff, phnum * phentsize, 8);
     phdr(&mut out, PT_LOAD, PF_R | PF_X, 0, total, 0x1000);
-    phdr(&mut out, PT_INTERP, PF_R, interp_off, interp_size, 1);
+    if with_interp {
+        phdr(&mut out, PT_INTERP, PF_R, interp_off, interp_size, 1);
+    }
     phdr(&mut out, PT_DYNAMIC, PF_R, dyn_off, dyn_size, 8);
     phdr(&mut out, PT_GNU_STACK, PF_R | PF_W, 0, 0, 0x10);
     debug_assert_eq!(out.buf.len(), interp_off);
 
-    out.buf.extend_from_slice(spec.interp.as_bytes());
-    out.buf.push(0);
+    if with_interp {
+        out.buf.extend_from_slice(spec.interp.as_bytes());
+        out.buf.push(0);
+    }
 
     // Hash table: pad_to gets us there, then nbucket = nchain = 1
     // followed by an all-zero bucket and chain (zero-filled by pad_to
@@ -254,7 +269,7 @@ mod tests {
     #[test]
     fn elf64_layout() {
         let spec = x86_64_gnu_spec();
-        let elf = synthesize(&spec);
+        let elf = synthesize(&spec, true);
 
         // ELF magic, class, endian
         assert_eq!(&elf[..6], &[0x7f, b'E', b'L', b'F', 2, 1]);
@@ -289,7 +304,7 @@ mod tests {
             interp: "/lib/ld-linux.so.2",
             stub: &[0x31, 0xdb, 0xb8, 0xfc, 0, 0, 0, 0xcd, 0x80],
         };
-        let elf = synthesize(&spec);
+        let elf = synthesize(&spec, true);
 
         assert_eq!(&elf[..6], &[0x7f, b'E', b'L', b'F', 1, 1]);
         // e_phoff = 52
@@ -315,10 +330,27 @@ mod tests {
             interp: "/lib/ld64.so.1",
             stub: &[0xa7, 0x29, 0, 0, 0x0a, 0xf8],
         };
-        let elf = synthesize(&spec);
+        let elf = synthesize(&spec, true);
 
         assert_eq!(&elf[..6], &[0x7f, b'E', b'L', b'F', 2, 2]);
         assert_eq!(&elf[16..20], &[0, 3, 0, 22]);
         assert_eq!(&elf[32..40], 64u64.to_be_bytes());
+    }
+
+    #[test]
+    fn static_layout() {
+        let spec = x86_64_gnu_spec();
+        let elf = synthesize(&spec, false);
+
+        // e_phnum = 4: no PT_INTERP
+        assert_eq!(&elf[56..58], 4u16.to_le_bytes());
+        // and no interpreter path anywhere in the file
+        assert!(!elf
+            .windows(spec.interp.len())
+            .any(|w| w == spec.interp.as_bytes()));
+
+        // entry still points at the stub at the end of the file
+        let entry = u64::from_le_bytes(elf[24..32].try_into().unwrap()) as usize;
+        assert_eq!(&elf[entry..], spec.stub);
     }
 }
