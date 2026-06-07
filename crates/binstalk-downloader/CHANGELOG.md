@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.41](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.40...binstalk-downloader-v0.13.41) - 2026-06-06
+
+### Other
+
+- *(deps)* bump netdev from 0.43.0 to 0.44.0 in the deps group ([#2581](https://github.com/cargo-bins/cargo-binstall/pull/2581))
+- IPv6 DNS issue ([#2579](https://github.com/cargo-bins/cargo-binstall/pull/2579))
+- Remove quad9 dns fallback ([#2572](https://github.com/cargo-bins/cargo-binstall/pull/2572))
+- *(deps)* bump the deps group with 2 updates ([#2566](https://github.com/cargo-bins/cargo-binstall/pull/2566))
+
 ## [0.13.40](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.39...binstalk-downloader-v0.13.40) - 2026-05-06
 
 ### Other

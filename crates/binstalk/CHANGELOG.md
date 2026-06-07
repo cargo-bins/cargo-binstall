@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.76](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.75...binstalk-v0.28.76) - 2026-06-06
+
+### Added
+
+- add os-name template variable for pkg-url and bin-dir ([#2570](https://github.com/cargo-bins/cargo-binstall/pull/2570))
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2566](https://github.com/cargo-bins/cargo-binstall/pull/2566))
+
 ## [0.28.75](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.74...binstalk-v0.28.75) - 2026-05-06
 
 ### Other
