@@ -403,9 +403,12 @@ jobs:
       - name: Check compat targets are wired into detection
         run: |
           set -exuo pipefail
+          # first the native fallback, then the compat tier; foreign
+          # (binfmt-emulated) targets may follow if the host kernel has
+          # qemu handlers registered
           [ "$(docker run --rm --platform linux/386 \
             --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-            i386/debian detect-targets)" = "$(printf 'x86_64-unknown-linux-musl\ni686-unknown-linux-gnu\ni686-unknown-linux-musl')" ]
+            i386/debian detect-targets | head -n3)" = "$(printf 'x86_64-unknown-linux-musl\ni686-unknown-linux-gnu\ni686-unknown-linux-musl')" ]
 
   detect-targets-nix-test:
     needs:
