@@ -335,6 +335,9 @@ jobs:
           - fedora:38
           - fedora:39
           - fedora
+          # rebrands the glibc loader version banner, so only detectable
+          # via the exec-probe: https://github.com/cargo-bins/cargo-binstall/issues/1999
+          - gentoo/stage3
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -367,6 +370,31 @@ jobs:
           [ "$(docker run --rm \
             --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
             fedora detect-targets )" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
+
+  detect-targets-probe-multilib-test:
+    needs:
+      - detect-targets-build
+      - changed-files
+    if: needs.changed-files.outputs.has_detect_target_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: detect-targets-x86_64
+      - run: chmod +x detect-targets
+
+      # An i386 userland on an x86_64 kernel: the i686 glibc loader is
+      # present while the x86_64 one is not, which exercises the
+      # cross-arch (multilib) surface of the loader probes.
+      - name: Run probes in i386/debian
+        run: |
+          set -exuo pipefail
+          output="$(docker run --rm --platform linux/386 \
+            --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+            i386/debian detect-targets --probe-all)"
+          echo "$output" | grep -x 'i686-unknown-linux-gnu: runnable'
+          echo "$output" | grep -x 'x86_64-unknown-linux-gnu: not-runnable'
+          echo "$output" | grep -x 'i686-unknown-linux-musl: not-runnable'
 
   detect-targets-nix-test:
     needs:

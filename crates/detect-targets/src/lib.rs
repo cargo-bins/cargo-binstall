@@ -3,8 +3,12 @@
 //! It runs `$CARGO -vV` if environment variable `CARGO` is present
 //! for cargo subcommands, otherwise it would try running `rustc -vV`.
 //!
-//! If both `rustc` isn't present on the system, it will fallback
-//! to using syscalls plus `ldd` on Linux to detect targets.
+//! If `rustc` isn't present on the system, it will fallback
+//! to using syscalls to detect targets.
+//!
+//! On Linux, the libc (glibc/musl) is detected by executing a
+//! synthesized loader probe (see the [`probe`] module), with a
+//! fallback to probing known dynamic loader paths.
 //!
 //! Example use cases:
 //!  - The binary is built with musl libc to run on anywhere, but
