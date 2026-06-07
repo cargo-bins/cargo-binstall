@@ -10,7 +10,9 @@ fn main() -> io::Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    let rt = runtime::Builder::new_current_thread().enable_all().build()?;
+    let rt = runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
 
     if std::env::args().any(|arg| arg == "--probe-all") {
         return probe_all(rt);

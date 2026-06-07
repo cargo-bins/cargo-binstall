@@ -6,7 +6,7 @@
 //! libc flavour. Stub encodings were produced by clang's integrated
 //! assembler and are committed as commented hex.
 
-use super::elf::{Class, Endian, ElfSpec};
+use super::elf::{Class, ElfSpec, Endian};
 use super::Probe;
 
 /// `mov eax, 231; xor edi, edi; syscall`
@@ -101,6 +101,9 @@ macro_rules! probe {
 /// All known probes, grouped by libc flavour.
 ///
 /// Note that x32 binaries are ELFCLASS32 with `EM_X86_64`.
+// Deliberately tabular, one row per probe: kept out of rustfmt's
+// hands so the table stays scannable.
+#[rustfmt::skip]
 pub(super) const PROBES: &[Probe] = &[
     // glibc — the loader path is the per-arch ELF ABI standard one,
     // which every prebuilt gnu binary hardcodes, so distros must

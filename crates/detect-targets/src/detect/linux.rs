@@ -62,11 +62,14 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
 
             let compat_targets = detect_extra_targets(cpu_arch, abi).await;
 
-            [has_glibc.then_some(gnu_target), Some(musl_fallback_target())]
-                .into_iter()
-                .flatten()
-                .chain(compat_targets)
-                .collect()
+            [
+                has_glibc.then_some(gnu_target),
+                Some(musl_fallback_target()),
+            ]
+            .into_iter()
+            .flatten()
+            .chain(compat_targets)
+            .collect()
         }
         Libc::Android | Libc::Unknown => vec![target.clone(), musl_fallback_target()],
     }
@@ -105,7 +108,10 @@ async fn detect_extra_targets(cpu_arch: &str, abi: &str) -> Vec<String> {
         // Soft-float binaries run fine on hard-float systems. The
         // reverse cannot be probed: the probe stub exercises no FPU,
         // so it cannot attest hard-float support on a soft-float host.
-        ("armv7", "eabihf") => &["armv7-unknown-linux-gnueabi", "armv7-unknown-linux-musleabi"],
+        ("armv7", "eabihf") => &[
+            "armv7-unknown-linux-gnueabi",
+            "armv7-unknown-linux-musleabi",
+        ],
         _ => &[],
     };
 

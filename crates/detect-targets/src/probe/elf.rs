@@ -165,21 +165,19 @@ pub(crate) fn synthesize(spec: &ElfSpec, with_interp: bool) -> Vec<u8> {
     };
 
     // ELF header
-    out.buf.extend_from_slice(&[
-        0x7f, b'E', b'L', b'F',
-        match class {
-            Class::Elf32 => 1,
-            Class::Elf64 => 2,
-        },
-        match spec.endian {
-            Endian::Little => 1,
-            Endian::Big => 2,
-        },
-        1, // EV_CURRENT
-        0, // ELFOSABI_NONE
-        0, // ABI version
-        0, 0, 0, 0, 0, 0, 0, // padding
-    ]);
+    out.buf.extend_from_slice(b"\x7fELF");
+    out.buf.push(match class {
+        Class::Elf32 => 1,
+        Class::Elf64 => 2,
+    });
+    out.buf.push(match spec.endian {
+        Endian::Little => 1,
+        Endian::Big => 2,
+    });
+    out.buf.push(1); // EV_CURRENT
+    out.buf.push(0); // ELFOSABI_NONE
+    out.buf.push(0); // ABI version
+    out.buf.extend_from_slice(&[0; 7]); // padding
     out.u16(ET_DYN);
     out.u16(spec.e_machine);
     out.u32(1); // e_version
