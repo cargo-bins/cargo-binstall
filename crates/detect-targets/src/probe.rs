@@ -31,7 +31,7 @@
 
 use std::{fs, io, os::unix::fs::PermissionsExt, process::Stdio};
 
-use tokio::process::Command;
+use tokio::{process::Command, sync::Mutex};
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
@@ -109,24 +109,57 @@ impl Probe {
     }
 
     async fn exec(&self, executable: Vec<u8>) -> ProbeResult {
+        // Serializes the write-then-spawn sections of concurrent
+        // probes. A fork performed while another probe's file is
+        // still open for writing leaves a copy of the write fd in the
+        // forked child until its execve completes, making the exec of
+        // that other probe fail with ETXTBSY.
+        static EXEC_LOCK: Mutex<()> = Mutex::const_new(());
+
         let progdir = match tempfile::tempdir() {
             Ok(dir) => dir,
             Err(err) => return ProbeResult::Inconclusive(err),
         };
         let prog = progdir.path().join(self.target);
 
-        let setup = (|| {
-            fs::write(&prog, executable)?;
-            fs::set_permissions(&prog, fs::Permissions::from_mode(0o755))
-        })();
-        if let Err(err) = setup {
-            return ProbeResult::Inconclusive(err);
-        }
+        let spawned = {
+            let _guard = EXEC_LOCK.lock().await;
 
-        let result = Command::new(&prog)
-            .stdin(Stdio::null())
-            .output()
-            .await;
+            let setup = (|| {
+                fs::write(&prog, executable)?;
+                fs::set_permissions(&prog, fs::Permissions::from_mode(0o755))
+            })();
+            if let Err(err) = setup {
+                return ProbeResult::Inconclusive(err);
+            }
+
+            let mut command = Command::new(&prog);
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            // The lock does not cover forks performed elsewhere in
+            // the process, so a residual ETXTBSY is still possible;
+            // it resolves as soon as the offending child execs, so
+            // retry after yielding.
+            let mut attempts = 0;
+            loop {
+                match command.spawn() {
+                    // ETXTBSY
+                    Err(err) if err.raw_os_error() == Some(26) && attempts < 10 => {
+                        attempts += 1;
+                        tokio::task::yield_now().await;
+                    }
+                    spawned => break spawned,
+                }
+            }
+        };
+
+        let result = match spawned {
+            Ok(child) => child.wait_with_output().await,
+            Err(err) => Err(err),
+        };
 
         match result {
             // The stub only ever calls exit_group(0); any output or
