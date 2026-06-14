@@ -25,12 +25,12 @@ fn emit_vergen_info() {
 
     Emitter::default()
         .fail_on_error()
-        .add_instructions(&BuildBuilder::default().build_date(true).build().unwrap())
+        .add_instructions(&Build::builder().build_date(true).build().unwrap())
         .unwrap()
-        .add_instructions(&CargoBuilder::default().features(true).build().unwrap())
+        .add_instructions(&Cargo::builder().features(true).build().unwrap())
         .unwrap()
         .add_instructions(
-            &RustcBuilder::default()
+            &Rustc::builder()
                 .semver(true)
                 .commit_hash(true)
                 .llvm_version(true)
@@ -39,7 +39,7 @@ fn emit_vergen_info() {
         )
         .unwrap()
         .add_instructions(&{
-            let mut gitcl_builder = GitclBuilder::default();
+            let mut gitcl_builder = Gitcl::builder();
             if is_git_repo && succeeds(git) {
                 // sha(false) means enable the default sha output but not the short output
                 gitcl_builder.commit_date(true).sha(false);
