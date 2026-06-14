@@ -43,7 +43,7 @@ fn emit_vergen_info() {
                 // sha(false) means enable the default sha output but not the short output
                 gitcl_builder.commit_date(true).sha(false).build()
             } else {
-               gitcl_builder.build()
+                gitcl_builder.build()
             }
         })
         .unwrap()
