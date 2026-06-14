@@ -38,12 +38,13 @@ fn emit_vergen_info() {
         )
         .unwrap()
         .add_instructions(&{
-            let mut gitcl_builder = Gitcl::builder();
+            let gitcl_builder = Gitcl::builder();
             if is_git_repo && succeeds(git) {
                 // sha(false) means enable the default sha output but not the short output
-                gitcl_builder = gitcl_builder.commit_date(true).sha(false);
+                gitcl_builder.commit_date(true).sha(false).build()
+            } else {
+               gitcl_builder.build()
             }
-            gitcl_builder.build()
         })
         .unwrap()
         .emit()
