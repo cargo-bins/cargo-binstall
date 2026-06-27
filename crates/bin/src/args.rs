@@ -715,6 +715,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),
         bin_dir: opts.bin_dir.take(),
+        extra_files: Default::default(),
         disabled_strategies: Some(
             mem::take(&mut opts.disable_strategies)
                 .into_iter()

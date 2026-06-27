@@ -374,6 +374,18 @@ pub enum BinstallError {
     #[diagnostic(severity(error), code(binstall::SourceFilePath))]
     DuplicateSourceFilePath { path: PathBuf },
 
+    /// Extra-file configuration resolves to duplicate install destinations.
+    ///
+    /// This commonly indicates a multi-bin crate whose extra-file templates do
+    /// not vary by `{ bin }`, causing several selected binaries to install to
+    /// the same manpage or completion path.
+    ///
+    /// - Code: `binstall::extra_files::duplicate_destination`
+    /// - Exit: 91
+    #[error("extra-file configuration resolves to duplicate install destination: {path}")]
+    #[diagnostic(severity(error), code(binstall::extra_files::duplicate_destination))]
+    DuplicateExtraFileDestination { path: PathBuf },
+
     /// Fallback to `cargo-install` is disabled.
     ///
     /// - Code: `binstall::no_fallback_to_cargo_install`
@@ -471,6 +483,7 @@ impl BinstallError {
             BinFile(_) => 88,
             CargoTomlMissingPackage(_) => 89,
             DuplicateSourceFilePath { .. } => 90,
+            DuplicateExtraFileDestination { .. } => 91,
             NoFallbackToCargoInstall => 94,
             InvalidPkgFmt(..) => 95,
             GhApiErr(..) => 96,

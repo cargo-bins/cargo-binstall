@@ -1,4 +1,31 @@
-use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromStr, sync::Arc};
+//! Resolution for binary and extra-file installs from fetched artifacts.
+//!
+//! This module turns manifest metadata plus archive contents into a concrete
+//! install plan. The key policy choice is that binaries and extra files use the
+//! same archive-resolution pass but different destination roots:
+//!
+//! - binaries target `Options::install_path`
+//! - extra files target `Options::cargo_root` and therefore Cargo's `share/`
+//!   tree
+//!
+//! Keeping that decision at resolution time means preview output, validation,
+//! installation, and manifest tracking all operate on the same resolved file
+//! set instead of recomputing paths later.
+//!
+//! This module only resolves extra files for fetched artifacts. Source builds
+//! performed through `cargo install` are intentionally out of scope here
+//! because they do not have a stable, already-packaged archive layout to
+//! inspect. That boundary keeps this logic focused on "consume packaged
+//! artifacts as published" rather than trying to infer post-build outputs.
+
+use std::{
+    borrow::Cow,
+    collections::BTreeSet,
+    iter, mem,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
@@ -189,12 +216,13 @@ async fn resolve_inner(
                         &bin_path,
                         &package_info,
                         &opts.install_path,
+                        opts.cargo_root.as_deref(),
                         opts.no_symlinks,
                         &opts.bins,
                     )
                     .await
                     {
-                        Ok(bin_files) => {
+                        Ok((bin_files, extra_files)) => {
                             if !bin_files.is_empty() {
                                 if !opts.disable_telemetry {
                                     fetcher.clone().report_to_upstream();
@@ -206,6 +234,7 @@ async fn resolve_inner(
                                     version_req: version_req_str,
                                     source: package_info.source,
                                     bin_files,
+                                    extra_files,
                                 })));
                             } else {
                                 warn!(
@@ -283,14 +312,20 @@ async fn resolve_inner(
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
+///
+/// Extra files are resolved here as well because they depend on the same
+/// extracted archive inventory as binaries. Doing this before installation
+/// keeps preview output, required-file validation, and later manifest tracking
+/// all driven from the same resolved set.
 async fn download_extract_and_verify(
     fetcher: &dyn Fetcher,
     bin_path: &Path,
     package_info: &PackageInfo,
     install_path: &Path,
+    cargo_root: Option<&Path>,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
-) -> Result<Vec<bins::BinFile>, BinstallError> {
+) -> Result<(Vec<bins::BinFile>, Vec<bins::ExtraFile>), BinstallError> {
     // Download and extract it.
     // If that fails, then ignore this fetcher.
     let extracted_files = fetcher.fetch_and_extract(bin_path).await?;
@@ -303,7 +338,7 @@ async fn download_extract_and_verify(
     let bin_files = collect_bin_files(
         fetcher,
         package_info,
-        meta,
+        meta.clone(),
         bin_path,
         install_path,
         no_symlinks,
@@ -311,50 +346,58 @@ async fn download_extract_and_verify(
     )?;
 
     let name = &package_info.name;
+    let mut selected_bin_files = Vec::new();
+    let mut extra_files = Vec::new();
+    // Extra files install into Cargo's shared data tree, not the executable
+    // directory. In practice `cargo_root` should be present for normal CLI
+    // flows; the fallback keeps library callers from panicking if they omit it.
+    let cargo_root = cargo_root.unwrap_or(install_path);
 
-    package_info
-        .binaries
-        .iter()
-        .zip(bin_files)
-        .filter_map(|(bin, bin_file)| {
-            // skip binaries that were not requested by user
-            if bins
-                .as_ref()
-                .is_some_and(|bins| !bins.iter().any(|b| b == bin.name))
-            {
-                return None;
+    for (bin, bin_file) in package_info.binaries.iter().zip(bin_files) {
+        if bins
+            .as_ref()
+            .is_some_and(|bins| !bins.iter().any(|b| b == bin.name))
+        {
+            continue;
+        }
+
+        match bin_file.check_source_exists(&mut |p| extracted_files.has_file(p)) {
+            Ok(()) => {
+                extra_files.extend(collect_extra_files(
+                    fetcher,
+                    package_info,
+                    &meta,
+                    bin.name.as_str(),
+                    bin_path,
+                    cargo_root,
+                    &extracted_files,
+                )?);
+                selected_bin_files.push(bin_file);
             }
 
-            match bin_file.check_source_exists(&mut |p| extracted_files.has_file(p)) {
-                Ok(()) => Some(Ok(bin_file)),
+            Err(err) => {
+                let required_features = &bin.required_features;
+                let bin_name = bin.name.as_str();
 
-                // This binary is optional
-                Err(err) => {
-                    let required_features = &bin.required_features;
-                    let bin_name = bin.name.as_str();
-
-                    if required_features.is_empty() {
-                        error!(
-                            "When resolving {name} bin {bin_name} is not found. \
+                if required_features.is_empty() {
+                    error!(
+                        "When resolving {name} bin {bin_name} is not found. \
 This binary is not optional so it must be included in the archive, please contact with \
 upstream to fix this issue."
-                        );
-                        // This bin is not optional, error
-                        Some(Err(err))
-                    } else {
-                        // Optional, print a warning and continue.
-                        let features = required_features.iter().format(",");
-                        warn!(
-                            "When resolving {name} bin {bin_name} is not found. \
+                    );
+                    return Err(BinstallError::from(err));
+                } else {
+                    let features = required_features.iter().format(",");
+                    warn!(
+                        "When resolving {name} bin {bin_name} is not found. \
 But since it requires features {features}, this bin is ignored."
-                        );
-                        None
-                    }
+                    );
                 }
             }
-        })
-        .collect::<Result<Vec<bins::BinFile>, bins::Error>>()
-        .map_err(BinstallError::from)
+        }
+    }
+
+    Ok((selected_bin_files, extra_files))
 }
 
 fn collect_bin_files(
@@ -408,6 +451,98 @@ fn collect_bin_files(
     }
 
     Ok(bin_files)
+}
+
+/// Resolve extra files for one selected binary from the extracted archive.
+///
+/// This returns fully resolved [`bins::ExtraFile`] values rather than raw
+/// paths so preview output, installation, and later manifest tracking all use
+/// the exact same resolved file set. Centralizing that resolution here avoids
+/// each later phase re-rendering templates and drifting on path policy.
+///
+/// Extra-file templates are evaluated per binary. That allows one crate-level
+/// template to expand differently via `{ bin }`, but it also means constant
+/// templates in multi-bin crates can collide on the same installed destination.
+/// Those collisions are rejected here during resolution.
+///
+/// The render context intentionally reuses the binary path template data so
+/// extra-file metadata can refer to the same `{ bin }`, `{ version }`,
+/// `{ target }`, and related variables as `bin-dir`.
+fn collect_extra_files(
+    fetcher: &dyn Fetcher,
+    package_info: &PackageInfo,
+    meta: &PkgMeta,
+    bin_name: &str,
+    bin_path: &Path,
+    cargo_root: &Path,
+    extracted_files: &ExtractedFiles,
+) -> Result<Vec<bins::ExtraFile>, BinstallError> {
+    // Reuse the same render context as binaries so archive templates can refer
+    // to `{ bin }`, `{ version }`, `{ target }`, etc. The `install_path` field
+    // on `Data` is unused for path rendering here, but passing Cargo root keeps
+    // the struct semantically aligned with the resulting `ExtraFile`.
+    let bin_data = bins::Data {
+        name: &package_info.name,
+        target: fetcher.target(),
+        version: &package_info.version_str,
+        repo: package_info.repo.as_deref(),
+        meta: meta.clone(),
+        bin_path,
+        install_path: cargo_root,
+        target_related_info: &fetcher.target_data().target_related_info,
+    };
+
+    let mut extra_files = Vec::new();
+    let mut destinations = BTreeSet::<PathBuf>::new();
+
+    for (kind, template, is_explicit) in [
+        (
+            bins::ExtraFileKind::Man,
+            meta.extra_files.man.as_deref(),
+            meta.extra_files.man.is_some(),
+        ),
+        (
+            bins::ExtraFileKind::BashCompletion,
+            meta.extra_files.bash_completion.as_deref(),
+            meta.extra_files.bash_completion.is_some(),
+        ),
+        (
+            bins::ExtraFileKind::FishCompletion,
+            meta.extra_files.fish_completion.as_deref(),
+            meta.extra_files.fish_completion.is_some(),
+        ),
+        (
+            bins::ExtraFileKind::ZshCompletion,
+            meta.extra_files.zsh_completion.as_deref(),
+            meta.extra_files.zsh_completion.is_some(),
+        ),
+    ] {
+        // Convention-based lookup is best-effort; explicit metadata is a hard
+        // contract with the packager and therefore becomes a resolution error
+        // when the file is absent.
+        let template = template.unwrap_or_else(|| kind.default_source_template());
+        let template = Template::parse(template)?;
+        let extra_file = bins::ExtraFile::new(&bin_data, bin_name, &template, cargo_root, kind)?;
+
+        match extra_file.check_source_exists(&mut |p| extracted_files.has_file(p)) {
+            Ok(()) => {
+                // Different kinds may legally point at different archive paths,
+                // but they must not overwrite the same installed destination.
+                // This also catches multi-bin crates that try to reuse one
+                // fixed destination for more than one selected binary.
+                if !destinations.insert(extra_file.dest.clone()) {
+                    return Err(BinstallError::DuplicateExtraFileDestination {
+                        path: extra_file.dest.clone(),
+                    });
+                }
+                extra_files.push(extra_file);
+            }
+            Err(_err) if !is_explicit => (),
+            Err(err) => return Err(BinstallError::from(err)),
+        }
+    }
+
+    Ok(extra_files)
 }
 
 struct PackageInfo {

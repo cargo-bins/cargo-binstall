@@ -1,6 +1,6 @@
 //! Common structure for crate information for post-install manifests.
 
-use std::{borrow, cmp, hash};
+use std::{borrow, cmp, hash, path::PathBuf};
 
 use compact_str::CompactString;
 use maybe_owned::MaybeOwned;
@@ -24,6 +24,13 @@ pub struct CrateInfo {
     pub source: CrateSource,
     pub target: CompactString,
     pub bins: Vec<CompactString>,
+    /// Relative paths rooted at Cargo root for extra installed files.
+    ///
+    /// These are persisted as relative paths rather than absolute paths so
+    /// records remain portable if the Cargo root moves and so stale cleanup
+    /// can reconstruct the current on-disk location at update time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_files: Vec<PathBuf>,
 }
 
 impl borrow::Borrow<str> for CrateInfo {
