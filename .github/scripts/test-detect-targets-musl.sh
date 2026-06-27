@@ -4,7 +4,9 @@ set -exuo pipefail
 
 TARGET=${1?}
 
-[ "$(detect-targets)" = "$TARGET" ]
+# native targets first; compat targets (e.g. i686 via ia32 compat mode)
+# may follow
+[ "$(detect-targets | head -n1)" = "$TARGET" ]
 
 apk update
 apk add gcompat
@@ -13,6 +15,6 @@ ls -lsha /lib
 
 GNU_TARGET=${TARGET//musl/gnu}
 
-[ "$(detect-targets)" = "$(printf '%s\n%s' "$GNU_TARGET" "$TARGET")" ]
+[ "$(detect-targets | head -n2)" = "$(printf '%s\n%s' "$GNU_TARGET" "$TARGET")" ]
 
 echo
