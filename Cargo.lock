@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk"
-version = "0.28.77"
+version = "0.28.78"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -372,7 +372,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.19.2"
+version = "0.19.3"
 dependencies = [
  "beef",
  "binstalk-types",
@@ -395,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.12.4"
+version = "0.12.5"
 dependencies = [
  "async-trait",
  "base16",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-toml-workspace"
-version = "7.0.9"
+version = "7.0.10"
 dependencies = [
  "cargo_toml",
  "compact_str",
@@ -1139,7 +1139,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.87"
+version = "0.1.88"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
