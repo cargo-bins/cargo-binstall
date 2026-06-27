@@ -150,7 +150,7 @@ mod test {
             load_manifest_from_workspace::<cargo_toml::Value>(&p, "cargo-binstall").unwrap();
         let package = manifest.package.unwrap();
         assert_eq!(package.name, "cargo-binstall");
-        assert_eq!(package.version.as_ref().unwrap(), "0.12.0");
+        assert_eq!(package.version.as_ref().unwrap().to_string(), "0.12.0");
         assert_eq!(manifest.bin.len(), 1);
         assert_eq!(manifest.bin[0].name.as_deref().unwrap(), "cargo-binstall");
         assert_eq!(manifest.bin[0].path.as_deref().unwrap(), "src/main.rs");
@@ -163,7 +163,7 @@ mod test {
             load_manifest_from_workspace::<cargo_toml::Value>(&p, "cargo-watch").unwrap();
         let package = manifest.package.unwrap();
         assert_eq!(package.name, "cargo-watch");
-        assert_eq!(package.version.as_ref().unwrap(), "8.4.0");
+        assert_eq!(package.version.as_ref().unwrap().to_string(), "8.4.0");
         assert_eq!(manifest.bin.len(), 1);
         assert_eq!(manifest.bin[0].name.as_deref().unwrap(), "cargo-watch");
     }
