@@ -235,7 +235,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
 
     debug!("Resolver configuration complete");
 
-    opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+    opts.ip_strategy = LookupIpStrategy::Ipv6AndIpv4;
 
     let mut builder = TokioAsyncResolver::builder_with_config(config, Default::default());
     *builder.options_mut() = opts;
