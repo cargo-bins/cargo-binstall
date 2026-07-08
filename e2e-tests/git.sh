@@ -34,6 +34,19 @@ cp manifests/github-test-Cargo.toml "$GIT/Cargo.toml"
 
 test_cargo_binstall_install
 
+perl -0pi -e 's/version = "0.12.0"/version = "0.12.0-dev"/' "$GIT/Cargo.toml"
+(
+  cd "$GIT"
+  git add Cargo.toml
+  git commit -m "Use development manifest version"
+)
+
+# Install a release from a git manifest whose in-tree version differs from the
+# requested release version.
+"$1" binstall --force --git "file://$GIT" --version 0.12.0 --no-confirm cargo-binstall
+
+test_cargo_binstall_install
+
 cp -r manifests/workspace/* "$GIT"
 (
   cd "$GIT"
