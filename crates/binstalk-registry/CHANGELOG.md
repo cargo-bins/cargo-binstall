@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.5](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.4...binstalk-registry-v0.12.5) - 2026-07-09
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader, cargo-toml-workspace
+
 ## [0.12.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.3...binstalk-registry-v0.12.4) - 2026-06-20
 
 ### Other
