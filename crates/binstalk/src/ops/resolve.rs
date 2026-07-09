@@ -9,7 +9,7 @@ use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
-use semver::{Version, VersionReq};
+use semver::{Comparator, Op as ComparatorOp, Version, VersionReq};
 use tokio::{task::spawn_blocking, time::timeout};
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
@@ -508,16 +508,14 @@ impl PackageInfo {
             return Err(BinstallError::CargoTomlMissingPackage(name));
         };
 
-        let new_version_str = package.version().to_compact_string();
-        let new_version = match Version::parse(&new_version_str) {
-            Ok(new_version) => new_version,
-            Err(err) => {
-                return Err(Box::new(VersionParseError {
-                    v: new_version_str,
-                    err,
-                })
-                .into())
-            }
+        let manifest_version_str = package.version().to_compact_string();
+        let (new_version_str, new_version) = if opts.cargo_toml_fetch_override.is_some() {
+            exact_version_req(version_req).map_or_else(
+                || parse_package_version(manifest_version_str),
+                |version| Ok((version.to_compact_string(), version)),
+            )?
+        } else {
+            parse_package_version(manifest_version_str)?
         };
 
         if let Some(curr_version) = curr_version {
@@ -563,6 +561,42 @@ impl PackageInfo {
                 repo: package.repository().map(ToString::to_string),
             }))
         }
+    }
+}
+
+fn parse_package_version(
+    version_str: CompactString,
+) -> Result<(CompactString, Version), BinstallError> {
+    let version = match Version::parse(&version_str) {
+        Ok(version) => version,
+        Err(err) => {
+            return Err(Box::new(VersionParseError {
+                v: version_str,
+                err,
+            })
+            .into())
+        }
+    };
+
+    Ok((version_str, version))
+}
+
+fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
+    match version_req.comparators.as_slice() {
+        [Comparator {
+            op: ComparatorOp::Exact,
+            major,
+            minor: Some(minor),
+            patch: Some(patch),
+            pre,
+        }] => Some(Version {
+            major: *major,
+            minor: *minor,
+            patch: *patch,
+            pre: pre.clone(),
+            build: Default::default(),
+        }),
+        _ => None,
     }
 }
 
