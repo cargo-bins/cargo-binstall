@@ -23,6 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { o: macos-latest, t: x86_64-apple-darwin }
           - { o: macos-latest, t: aarch64-apple-darwin }
           - {
               o: ubuntu-latest,
@@ -102,3 +103,40 @@ jobs:
           path: target/cargo-timings
           retention-days: 1
 
+  lipo:
+    needs: build
+    name: universal-apple-darwin
+    permissions:
+      contents: write
+    runs-on: macos-latest
+    env:
+      JUST_FOR_RELEASE: true
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: package-x86_64-apple-darwin
+          path: packages/
+      - uses: actions/download-artifact@v8
+        with:
+          name: package-aarch64-apple-darwin
+          path: packages/
+
+      - run: ls -shalr packages/
+      - run: just repackage-lipo
+      - run: ls -shal packages/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-universal-apple-darwin
+          path: packages/cargo-binstall-universal-*
+          retention-days: 1
