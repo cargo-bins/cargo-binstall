@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.43](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.42...binstalk-downloader-v0.13.43) - 2026-07-11
+
+### Other
+
+- Prefer ipv6 ([#2595](https://github.com/cargo-bins/cargo-binstall/pull/2595))
+
 ## [0.13.42](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.41...binstalk-downloader-v0.13.42) - 2026-06-20
 
 ### Other
