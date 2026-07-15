@@ -33,7 +33,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - run: rustup toolchain install stable --no-self-update --profile minimal
-      - uses: cargo-bins/release-pr@v2.1.3
+      - uses: cargo-bins/release-pr@v2.1.4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           version: ${{ inputs.version }}
