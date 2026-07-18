@@ -1142,6 +1142,7 @@ version = "0.1.88"
 dependencies = [
  "cfg-if",
  "guess_host_triple",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",

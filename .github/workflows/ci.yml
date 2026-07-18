@@ -293,7 +293,9 @@ jobs:
         run: |
           set -euxo pipefail
           output="$(cargo run --features cli-logging --bin detect-targets)"
-          [ "$output" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
+          # native targets first; compat targets (e.g. armv7 on aarch64
+          # kernels with aarch32 support) may follow
+          [ "$(echo "$output" | head -n2)" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
         # Set working directory here, otherwise `cargo` would download
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
@@ -319,7 +321,9 @@ jobs:
       - name: Run test in ubuntu
         run: |
           set -exuo pipefail
-          [ "$(./detect-targets)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
+          # native targets first; compat targets (e.g. i686 via ia32
+          # compat mode) may follow
+          [ "$(./detect-targets | head -n2)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
   detect-targets-more-glibc-test:
     needs:
@@ -335,6 +339,9 @@ jobs:
           - fedora:38
           - fedora:39
           - fedora
+          # rebrands the glibc loader version banner, so only detectable
+          # via the exec-probe: https://github.com/cargo-bins/cargo-binstall/issues/1999
+          - gentoo/stage3
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
@@ -347,7 +354,7 @@ jobs:
           set -exuo pipefail
           [ "$(docker run --rm \
             --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-            ${{ matrix.container }} detect-targets )" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
+            ${{ matrix.container }} detect-targets | head -n2)" = "$(printf 'x86_64-unknown-linux-gnu\nx86_64-unknown-linux-musl')" ]
 
   detect-targets-more-glibc-test-arm:
     needs:
@@ -366,7 +373,42 @@ jobs:
           set -exuo pipefail
           [ "$(docker run --rm \
             --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
-            fedora detect-targets )" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
+            fedora detect-targets | head -n2)" = "$(printf 'aarch64-unknown-linux-gnu\naarch64-unknown-linux-musl')" ]
+
+  detect-targets-probe-multilib-test:
+    needs:
+      - detect-targets-build
+      - changed-files
+    if: needs.changed-files.outputs.has_detect_target_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: detect-targets-x86_64
+      - run: chmod +x detect-targets
+
+      # An i386 userland on an x86_64 kernel: the i686 glibc loader is
+      # present while the x86_64 one is not, which exercises the
+      # cross-arch (multilib) surface of the loader probes.
+      - name: Run probes in i386/debian
+        run: |
+          set -exuo pipefail
+          output="$(docker run --rm --platform linux/386 \
+            --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+            i386/debian detect-targets --probe-all)"
+          echo "$output" | grep -x 'i686-unknown-linux-gnu: runnable, static: runnable'
+          echo "$output" | grep -x 'x86_64-unknown-linux-gnu: not-runnable, static: runnable'
+          echo "$output" | grep -x 'i686-unknown-linux-musl: not-runnable, static: runnable'
+
+      - name: Check compat targets are wired into detection
+        run: |
+          set -exuo pipefail
+          # first the native fallback, then the compat tier; foreign
+          # (binfmt-emulated) targets may follow if the host kernel has
+          # qemu handlers registered
+          [ "$(docker run --rm --platform linux/386 \
+            --mount src="$PWD/detect-targets",dst=/usr/local/bin/detect-targets,type=bind \
+            i386/debian detect-targets | head -n3)" = "$(printf 'x86_64-unknown-linux-musl\ni686-unknown-linux-gnu\ni686-unknown-linux-musl')" ]
 
   detect-targets-nix-test:
     needs:
@@ -385,7 +427,7 @@ jobs:
           set -exuo pipefail
           [ "$(docker run --rm \
             --mount src="$PWD/detect-targets",dst=/detect-targets,type=bind \
-            nixos/nix /detect-targets )" = x86_64-unknown-linux-musl ]
+            nixos/nix /detect-targets | head -n1)" = x86_64-unknown-linux-musl ]
 
   detect-targets-android-check:
     needs: changed-files
