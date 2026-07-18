@@ -288,6 +288,7 @@ dependencies = [
  "leon",
  "miette",
  "normalize-path",
+ "tempfile",
  "thiserror 2.0.18",
  "tracing",
 ]
