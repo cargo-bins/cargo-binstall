@@ -259,7 +259,7 @@ dependencies = [
  "binstalk-types",
  "cargo-toml-workspace",
  "command-group",
- "compact_str 0.9.1",
+ "compact_str",
  "detect-targets",
  "either",
  "itertools",
@@ -284,7 +284,7 @@ version = "0.6.24"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
- "compact_str 0.9.1",
+ "compact_str",
  "leon",
  "miette",
  "normalize-path",
@@ -304,7 +304,7 @@ dependencies = [
  "bytes",
  "bzip2",
  "cfg-if",
- "compact_str 0.9.1",
+ "compact_str",
  "flate2",
  "futures-io",
  "futures-util",
@@ -337,7 +337,7 @@ dependencies = [
  "binstalk-git-repo-api",
  "binstalk-types",
  "bytes",
- "compact_str 0.9.1",
+ "compact_str",
  "either",
  "itertools",
  "leon",
@@ -357,7 +357,7 @@ name = "binstalk-git-repo-api"
 version = "0.5.45"
 dependencies = [
  "binstalk-downloader",
- "compact_str 0.9.1",
+ "compact_str",
  "once_cell",
  "percent-encoding",
  "serde",
@@ -377,7 +377,7 @@ version = "0.19.3"
 dependencies = [
  "beef",
  "binstalk-types",
- "compact_str 0.9.1",
+ "compact_str",
  "detect-targets",
  "fs-lock",
  "home",
@@ -403,7 +403,7 @@ dependencies = [
  "binstalk-downloader",
  "binstalk-types",
  "cargo-toml-workspace",
- "compact_str 0.9.1",
+ "compact_str",
  "leon",
  "miette",
  "normalize-path",
@@ -426,7 +426,7 @@ name = "binstalk-types"
 version = "0.10.7"
 dependencies = [
  "cargo-platform",
- "compact_str 0.9.1",
+ "compact_str",
  "indexmap",
  "maybe-owned",
  "once_cell",
@@ -602,7 +602,7 @@ dependencies = [
  "clap",
  "clap-cargo",
  "clap-markdown",
- "compact_str 0.9.1",
+ "compact_str",
  "dirs",
  "embed-resource",
  "file-format",
@@ -643,7 +643,7 @@ name = "cargo-toml-workspace"
 version = "7.0.10"
 dependencies = [
  "cargo_toml",
- "compact_str 0.9.1",
+ "compact_str",
  "globwalker",
  "serde",
  "tempfile",
@@ -840,21 +840,6 @@ dependencies = [
 
 [[package]]
 name = "compact_str"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dfdd1c2274d9aa354115b09dc9a901d6c5576818cdf70d14cae2bdb47df00ab"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "rustversion",
- "ryu",
- "serde",
- "static_assertions",
-]
-
-[[package]]
-name = "compact_str"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79fcda08c33bb58b97008b2cdada6622500e949e060f5913361763121abd2416"
@@ -862,6 +847,7 @@ dependencies = [
  "castaway",
  "cfg-if",
  "itoa",
+ "serde",
  "static_assertions",
  "zmij",
 ]
@@ -4272,12 +4258,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
-name = "ryu"
-version = "1.0.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4486,7 +4466,7 @@ version = "0.2.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "663533c3337a0982b350a04a9ca26125c0ea5da71af073876c8aea4d221c088b"
 dependencies = [
- "compact_str 0.10.0",
+ "compact_str",
  "derive_destructure2",
  "gix",
  "thiserror 1.0.69",
@@ -4790,9 +4770,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.52.4"
+version = "1.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "317fafbbe3f02fc663dad00ea6186197de963cd4190e86a26d8d0fae095539af"
+checksum = "d988bcd52dbe076d3d46903332f58c912b87a2c49b1428419a5845154762ffee"
 dependencies = [
  "bytes",
  "libc",
