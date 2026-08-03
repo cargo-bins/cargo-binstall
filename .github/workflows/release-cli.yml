@@ -85,7 +85,7 @@ jobs:
 
     - name: Generate artifact attestation
       if: fromJSON(inputs.info).is-release == 'true'
-      uses: actions/attest@v4.2.0
+      uses: actions/attest@v4.2.1
       with:
         subject-path: artifact/*
 
