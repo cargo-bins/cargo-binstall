@@ -1,11 +1,9 @@
-use std::{
-    process::{Output, Stdio},
-    str,
-};
+use crate::probe::{self, ProbeResult};
 
-use tokio::{process::Command, task};
 #[cfg(feature = "tracing")]
 use tracing::debug;
+
+mod fallback;
 
 pub(super) async fn detect_targets(target: String) -> Vec<String> {
     let (_, postfix) = target
@@ -33,157 +31,146 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
 
     match libc {
         // guess_host_triple cannot detect whether the system is using glibc,
-        // musl libc or other libc.
+        // musl libc or other libc, and the compile-time libc may not match
+        // the runtime environment: a musl build runs fine on a glibc distro,
+        // and Alpine can run glibc programs via `apk add gcompat`.
         //
-        // On Alpine, you can use `apk add gcompat` to install glibc
-        // and run glibc programs.
-        //
-        // As such, we need to launch the test ourselves.
+        // Test for a working glibc by executing a synthesized probe binary
+        // whose PT_INTERP is the ABI-standard glibc loader path — the same
+        // mechanism any real gnu binary uses. If the environment prevents
+        // the test from running at all (e.g. noexec temp dir, seccomp),
+        // fall back to probing known loader paths and parsing their
+        // `--version` banners.
         Libc::Gnu | Libc::Musl => {
-            let handles: Vec<_> = {
-                let cpu_arch_suffix = cpu_arch.replace('_', "-");
-                let filename = format!("ld-linux-{cpu_arch_suffix}.so.2");
-                let dirname = format!("{cpu_arch}-linux-gnu");
+            let gnu_target = format!("{cpu_arch}-unknown-linux-gnu{abi}");
 
-                let mut probe_paths = vec![
-                    format!("/lib/{filename}"),
-                    format!("/lib64/{filename}"),
-                    format!("/lib/{dirname}/{filename}"),
-                    format!("/lib64/{dirname}/{filename}"),
-                    format!("/usr/lib/{dirname}/{filename}"),
-                    format!("/usr/lib64/{dirname}/{filename}"),
-                    "/usr/lib64/libc.so.6".to_string(),
-                    format!("/usr/lib/{dirname}/libc.so.6"),
-                    format!("/usr/lib64/{dirname}/libc.so.6"),
-                    "/usr/lib64/libc.so".to_string(),
-                    format!("/usr/lib/{dirname}/libc.so"),
-                    format!("/usr/lib64/{dirname}/libc.so"),
-                ];
-
-                // TODO: Find out if other arm-based (32 bit) `target_arch`s use the same
-                // generic "arm" arch in both /lib and /usr/lib prefixed paths to libc.so.6.
-                // For now, only do this for armv7 target_arch because it has been empirically proven.
-                // See: https://github.com/cargo-bins/cargo-binstall/issues/2386
-                if cpu_arch == "armv7" {
-                    // note, `abi` is appended in this case
-                    let arm_dirname = format!("arm-linux-gnu{abi}");
-                    probe_paths.extend([
-                        format!("/lib/{arm_dirname}/libc.so.6"),
-                        format!("/usr/lib/{arm_dirname}/libc.so.6"),
-                    ]);
-                }
-
-                probe_paths
-                    .into_iter()
-                    .map(|p| AutoAbortHandle(tokio::spawn(is_gnu_ld(p))))
-                    .collect()
+            let has_glibc = match probe::find(&gnu_target) {
+                Some(probe) => match probe.run().await {
+                    ProbeResult::Runnable => true,
+                    ProbeResult::NotRunnable => false,
+                    ProbeResult::Inconclusive(_err) => {
+                        #[cfg(feature = "tracing")]
+                        debug!(
+                            "glibc probe inconclusive ({_err}), \
+                             falling back to loader path detection"
+                        );
+                        fallback::has_glibc(cpu_arch, abi).await
+                    }
+                },
+                None => fallback::has_glibc(cpu_arch, abi).await,
             };
 
-            let has_glibc = async move {
-                for mut handle in handles {
-                    if let Ok(true) = (&mut handle.0).await {
-                        return true;
-                    }
-                }
-
-                false
-            }
-            .await;
+            let compat_targets = detect_extra_targets(cpu_arch, abi).await;
 
             [
-                has_glibc.then(|| format!("{cpu_arch}-unknown-linux-gnu{abi}")),
+                has_glibc.then_some(gnu_target),
                 Some(musl_fallback_target()),
             ]
+            .into_iter()
+            .flatten()
+            .chain(compat_targets)
+            .collect()
         }
-        Libc::Android | Libc::Unknown => [Some(target.clone()), Some(musl_fallback_target())],
+        Libc::Android | Libc::Unknown => vec![target.clone(), musl_fallback_target()],
     }
-    .into_iter()
-    .flatten()
-    .collect()
 }
 
-async fn is_gnu_ld(cmd: String) -> bool {
-    get_ld_flavor(&cmd).await == Some(Libc::Gnu)
-}
-
-async fn get_ld_flavor(cmd: &str) -> Option<Libc> {
-    let Output {
-        status,
-        stdout,
-        stderr,
-    } = match Command::new(cmd)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .output()
-        .await
-    {
-        Ok(output) => output,
-        Err(_err) => {
-            #[cfg(feature = "tracing")]
-            debug!("Running `{cmd} --version`: err={_err:?}");
-            return None;
-        }
+/// Cross-arch / cross-ABI targets that may also run on this machine,
+/// in preference order, each verified by a loader probe. These are
+/// appended after the native targets, so they are only used when no
+/// native artifact is available.
+///
+/// Two tiers, ranked in that order:
+///
+/// 1. compat: targets the kernel runs natively alongside the host
+///    arch (ia32 on x86_64, aarch32 on arm64, soft-float on
+///    hard-float, a 64-bit kernel under a 32-bit userland);
+/// 2. foreign: targets that only run through a binfmt handler such as
+///    qemu-user. Emulation is slow, but a runnable artifact still
+///    beats no artifact at all when nothing else is available.
+///
+/// gnu candidates are gated on the dynamic probe (they need the glibc
+/// loader, e.g. multilib or a multiarch/sysroot setup); musl
+/// candidates on the static probe, since Rust musl artifacts are
+/// typically statically linked and only need the kernel (or its
+/// binfmt handler) to support the architecture.
+async fn detect_extra_targets(cpu_arch: &str, abi: &str) -> Vec<String> {
+    let compat: &[&str] = match (cpu_arch, abi) {
+        // 64-bit kernels usually retain compat support for their
+        // 32-bit predecessors.
+        ("x86_64", _) => &["i686-unknown-linux-gnu", "i686-unknown-linux-musl"],
+        ("aarch64", _) => &[
+            "armv7-unknown-linux-gnueabihf",
+            "armv7-unknown-linux-musleabihf",
+        ],
+        // An i686 userland may be running on an x86_64 kernel.
+        ("i686", _) => &["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl"],
+        // Soft-float binaries run fine on hard-float systems. The
+        // reverse cannot be probed: the probe stub exercises no FPU,
+        // so it cannot attest hard-float support on a soft-float host.
+        ("armv7", "eabihf") => &[
+            "armv7-unknown-linux-gnueabi",
+            "armv7-unknown-linux-musleabi",
+        ],
+        _ => &[],
     };
 
-    let stdout = String::from_utf8_lossy(&stdout);
-    let stderr = String::from_utf8_lossy(&stderr);
+    const FOREIGN: &[&str] = &[
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "armv7-unknown-linux-gnueabihf",
+        "armv7-unknown-linux-musleabihf",
+        "riscv64gc-unknown-linux-gnu",
+        "riscv64gc-unknown-linux-musl",
+        "powerpc64le-unknown-linux-gnu",
+        "powerpc64le-unknown-linux-musl",
+        "s390x-unknown-linux-gnu",
+        "s390x-unknown-linux-musl",
+        "loongarch64-unknown-linux-gnu",
+        "loongarch64-unknown-linux-musl",
+        "i686-unknown-linux-gnu",
+        "i686-unknown-linux-musl",
+    ];
 
-    #[cfg(feature = "tracing")]
-    debug!("`{cmd} --version`: status={status}, stdout='{stdout}', stderr='{stderr}'");
+    let native_prefix = format!("{cpu_arch}-");
+    let candidates = compat.iter().chain(
+        FOREIGN
+            .iter()
+            // native targets are handled by the caller, and compat
+            // targets have already been listed in the first tier
+            .filter(|t| !t.starts_with(&native_prefix) && !compat.contains(t)),
+    );
 
-    const ALPINE_GCOMPAT: &str = r#"This is the gcompat ELF interpreter stub.
-You are not meant to run this directly.
-"#;
+    // Each probe is an exec of a tiny binary; run them all
+    // concurrently and collect the results in candidate order.
+    let handles: Vec<_> = candidates
+        .map(|&candidate| {
+            tokio::spawn(async move {
+                let probe = probe::find(candidate)?;
+                let result = if candidate.contains("-musl") {
+                    probe.run_static().await
+                } else {
+                    probe.run().await
+                };
+                matches!(result, ProbeResult::Runnable).then(|| candidate.to_string())
+            })
+        })
+        .collect();
 
-    if status.success() {
-        // Executing glibc ldd or /lib/ld-linux-{cpu_arch}.so.1 will always
-        // succeeds.
-        (stdout.contains("GLIBC") || stdout.contains("GNU libc")).then_some(Libc::Gnu)
-    } else if status.code() == Some(1) {
-        // On Alpine, executing both the gcompat glibc and the ldd and
-        // /lib/ld-musl-{cpu_arch}.so.1 will fail with exit status 1.
-        if stdout == ALPINE_GCOMPAT {
-            // Alpine's gcompat package will output ALPINE_GCOMPAT to stdout
-            Some(Libc::Gnu)
-        } else if stderr.contains("musl libc") {
-            // Alpine/s ldd and musl dynlib will output to stderr
-            Some(Libc::Musl)
-        } else {
-            None
+    let mut targets = Vec::new();
+    for handle in handles {
+        if let Ok(Some(target)) = handle.await {
+            targets.push(target);
         }
-    } else if status.code() == Some(127) {
-        // On Ubuntu 20.04 (glibc 2.31), the `--version` flag is not supported
-        // and it will exit with status 127.
-        let status = Command::new(cmd)
-            .arg("/bin/true")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await
-            .ok()?;
-
-        #[cfg(feature = "tracing")]
-        debug!("`{cmd} --version`: status={status}");
-
-        status.success().then_some(Libc::Gnu)
-    } else {
-        None
     }
+    targets
 }
 
-#[derive(Eq, PartialEq)]
 enum Libc {
     Gnu,
     Musl,
     Android,
     Unknown,
-}
-
-struct AutoAbortHandle<T>(task::JoinHandle<T>);
-
-impl<T> Drop for AutoAbortHandle<T> {
-    fn drop(&mut self) {
-        self.0.abort();
-    }
 }
