@@ -26,7 +26,7 @@ jobs:
           rustup default nightly
       - uses: chainguard-dev/actions/setup-gitsign@main
       - name: Install cargo-release
-        uses: taiki-e/install-action@v2.85.3
+        uses: taiki-e/install-action@v2.85.13
         with:
           tool: cargo-release,cargo-semver-checks
         env:
