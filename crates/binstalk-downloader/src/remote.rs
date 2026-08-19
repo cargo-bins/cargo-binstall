@@ -95,17 +95,25 @@ impl Client {
     ///   each `per_millis` duration.
     ///
     /// The [`reqwest::Client`] constructed has secure defaults, such as allowing
-    /// only TLS v1.2 and above, and disallowing plaintext HTTP altogether. If you
-    /// need more control, use the `from_builder` variant.
+    /// only TLS v1.2 and above, and disallowing plaintext HTTP altogether. Set
+    /// `allow_insecure_http` to `true` to permit plaintext HTTP requests, which
+    /// is useful for talking to a registry served over HTTP (e.g. in tests). If
+    /// you need more control, use the `from_builder` variant.
     pub fn new(
         user_agent: impl AsRef<str>,
         min_tls: Option<TLSVersion>,
+        allow_insecure_http: bool,
         per_millis: NonZeroU16,
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
     ) -> Result<Self, Error> {
         Self::from_builder(
-            Self::default_builder(user_agent.as_ref(), min_tls, &mut certificates.into_iter()),
+            Self::default_builder(
+                user_agent.as_ref(),
+                min_tls,
+                allow_insecure_http,
+                &mut certificates.into_iter(),
+            ),
             per_millis,
             num_request,
         )
@@ -119,11 +127,12 @@ impl Client {
     pub fn default_builder(
         user_agent: &str,
         min_tls: Option<TLSVersion>,
+        allow_insecure_http: bool,
         certificates: &mut dyn Iterator<Item = Certificate>,
     ) -> reqwest::ClientBuilder {
         let mut builder = reqwest::ClientBuilder::new()
             .user_agent(user_agent)
-            .https_only(true)
+            .https_only(!allow_insecure_http)
             .tcp_nodelay(false);
 
         #[cfg(feature = "hickory-dns")]
@@ -458,8 +467,26 @@ fn parse_header_ratelimit_reset_with_current_time(
 mod tests {
     use super::*;
 
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
+
     fn epoch(secs: u64) -> Duration {
         Duration::from_secs(secs)
+    }
+
+    fn test_client(allow_insecure_http: bool) -> Client {
+        Client::new(
+            "cargo-binstall-test",
+            None,
+            allow_insecure_http,
+            NonZeroU16::new(10).unwrap(),
+            NonZeroU64::new(1).unwrap(),
+            [],
+        )
+        .unwrap()
     }
 
     #[test]
@@ -494,5 +521,46 @@ mod tests {
         let dur =
             parse_header_ratelimit_reset_with_current_time(&hv, epoch(2145916800 - 600)).unwrap();
         assert_eq!(dur, Duration::from_secs(600));
+    }
+
+    #[tokio::test]
+    async fn allow_insecure_http_permits_plaintext_http() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .unwrap();
+            stream.flush().unwrap();
+        });
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let body = test_client(true)
+            .get(url)
+            .send(true)
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"ok");
+
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn https_only_rejects_plaintext_http_by_default() {
+        // No server is needed here: with `https_only` the request is rejected
+        // before any connection is attempted.
+        let url = Url::parse("http://127.0.0.1:1/").unwrap();
+        let res = test_client(false).get(url).send(true).await;
+        assert!(
+            res.is_err(),
+            "plaintext http should be rejected unless allow_insecure_http is set"
+        );
     }
 }

@@ -364,6 +364,16 @@ pub struct Args {
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub(crate) min_tls_version: Option<TLSVersion>,
 
+    /// Allow plaintext HTTP requests to remote endpoints.
+    ///
+    /// The default is to only allow HTTPS, rejecting any plaintext HTTP url. This option relaxes
+    /// that so registries and download urls served over plain HTTP can be used, which is handy for
+    /// talking to a local registry during testing.
+    ///
+    /// Note that this is insecure and not recommended outside of testing.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) allow_insecure_http: bool,
+
     /// Specify the root certificates to use for https connections,
     /// in addition to default system-wide ones.
     #[clap(

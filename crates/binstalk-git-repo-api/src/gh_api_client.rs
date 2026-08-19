@@ -508,6 +508,7 @@ mod test {
         remote::Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
+            false,
             NonZeroU16::new(300).unwrap(),
             1.try_into().unwrap(),
             [],

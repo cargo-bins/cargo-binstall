@@ -443,6 +443,7 @@ mod test {
             Client::new(
                 "user-agent",
                 None,
+                false,
                 NonZeroU16::new(1000).unwrap(),
                 NonZeroU64::new(1000).unwrap(),
                 [],

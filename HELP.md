@@ -168,6 +168,11 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
   Possible values: `1.2`, `1.3`
 
+* `--allow-insecure-http` — Allow plaintext HTTP requests to remote endpoints.
+
+   The default is to only allow HTTPS, rejecting any plaintext HTTP url. This option relaxes that so registries and download urls served over plain HTTP can be used, which is handy for talking to a local registry during testing.
+
+   Note that this is insecure and not recommended outside of testing.
 * `--root-certificates <PATH>` — Specify the root certificates to use for https connections, in addition to default system-wide ones
 * `--json-output` — Print logs in json format to be parsable
 * `--github-token <TOKEN>` — Provide the github token for accessing the restful API of api.github.com
