@@ -93,6 +93,7 @@ pub fn install_crates(
     let client = Client::new(
         concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
         args.min_tls_version.map(|v| v.into()),
+        args.allow_insecure_http,
         rate_limit.duration,
         rate_limit.request_count,
         read_root_certs(

@@ -348,6 +348,7 @@ mod test {
         Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
+            false,
             NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
