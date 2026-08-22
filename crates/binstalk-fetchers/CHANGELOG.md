@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.47](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.46...binstalk-fetchers-v0.10.47) - 2026-08-22
+
+### Added
+
+- add --allow-insecure-http to permit plaintext HTTP ([#2635](https://github.com/cargo-bins/cargo-binstall/pull/2635))
+
 ## [0.10.46](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.45...binstalk-fetchers-v0.10.46) - 2026-07-24
 
 ### Other

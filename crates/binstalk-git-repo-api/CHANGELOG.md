@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.47](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.46...binstalk-git-repo-api-v0.5.47) - 2026-08-22
+
+### Added
+
+- add --allow-insecure-http to permit plaintext HTTP ([#2635](https://github.com/cargo-bins/cargo-binstall/pull/2635))
+
 ## [0.5.46](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.45...binstalk-git-repo-api-v0.5.46) - 2026-07-24
 
 ### Other

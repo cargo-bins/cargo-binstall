@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.45](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.44...binstalk-downloader-v0.13.45) - 2026-08-22
+
+### Added
+
+- add --allow-insecure-http to permit plaintext HTTP ([#2635](https://github.com/cargo-bins/cargo-binstall/pull/2635))
+
+### Other
+
+- *(deps)* bump netdev from 0.45.0 to 0.46.0 in the deps group ([#2632](https://github.com/cargo-bins/cargo-binstall/pull/2632))
+
 ## [0.13.44](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.43...binstalk-downloader-v0.13.44) - 2026-07-24
 
 ### Other
