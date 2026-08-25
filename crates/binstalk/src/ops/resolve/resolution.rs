@@ -98,13 +98,18 @@ impl ResolutionFetch {
     ) -> Vec<CompactString> {
         // We need to filter crate_bin_files by user_specified_bins in case the prebuilt doesn't
         // have featured-gated (optional) binary (gated behind feature).
+        //
+        // Aliases follow their parent binary: they are recorded (so uninstall
+        // removes them) whenever the binary they point at is installed.
         crate_bin_files
             .into_iter()
-            .map(|bin| bin.base_name)
-            .filter(|bin_name| {
+            .filter(|bin| {
                 user_specified_bins
                     .as_ref()
-                    .map_or(true, |bins| bins.binary_search(bin_name).is_ok())
+                    .map_or(true, |bins| bins.binary_search(&bin.base_name).is_ok())
+            })
+            .flat_map(|bin| {
+                iter::once(bin.base_name).chain(bin.aliases.into_iter().map(|alias| alias.name))
             })
             .collect()
     }

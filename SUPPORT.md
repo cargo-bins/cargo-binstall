@@ -26,6 +26,8 @@ With the following configuration keys:
   for your crate (defaults to empty array).
   If `--strategies` is passed on the command line, then the `disabled-strategies` in `package.metadata` will be ignored.
   Otherwise, the `disabled-strategies` in `package.metadata` and `--disable-strategies` will be merged.
+- `aliases` is a list of extra names to symlink to the installed binary, for example `aliases = ["mcr"]` would also create an `mcr` symlink next to it.
+  This is only honoured for crates that ship a single binary, and the symlinks are skipped when `--no-symlinks` is set. Aliases are removed on uninstall just like the binary itself.
 
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
@@ -53,7 +55,7 @@ with the following variables available:
 [`target_lexicon::Environment`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Environment.html
 [`target_lexicon::Vendor`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Vendor.html
 
-`pkg-url`, `pkg-fmt` and `bin-dir` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
+`pkg-url`, `pkg-fmt`, `bin-dir` and `aliases` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
 ```toml
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
