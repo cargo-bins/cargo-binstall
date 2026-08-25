@@ -131,6 +131,14 @@ pub fn infer_bin_dir_template(
         .unwrap_or(default_bin_dir_template)
 }
 
+/// An extra name symlinked to the installed binary.
+pub struct AliasLink {
+    /// Alias file name, including the binary extension (e.g. `.exe` on Windows).
+    pub name: CompactString,
+    /// Absolute path of the alias symlink, i.e. `install_path/<name>`.
+    pub path: PathBuf,
+}
+
 pub struct BinFile {
     pub base_name: CompactString,
     pub source: PathBuf,
@@ -139,6 +147,10 @@ pub struct BinFile {
     pub link: Option<PathBuf>,
     /// The dir `source` must stay inside of.
     extracted_dir: PathBuf,
+    /// Extra symlinks pointing at the same target as `link`.
+    ///
+    /// Always empty when `link` is `None`, since aliases are symlinks too.
+    pub aliases: Vec<AliasLink>,
 }
 
 impl BinFile {
@@ -148,6 +160,7 @@ impl BinFile {
         base_name: &str,
         tt: &Template<'_>,
         no_symlinks: bool,
+        aliases: &[CompactString],
     ) -> Result<Self, Error> {
         if !is_valid_bin_name(base_name) {
             return Err(Error::InvalidBinName(base_name.into()));
@@ -220,6 +233,21 @@ impl BinFile {
             (dest_with_ver, Some(dest))
         };
 
+        // Aliases are symlinks, so they only make sense when the primary
+        // symlink is created too.
+        let aliases = if link.is_some() {
+            aliases
+                .iter()
+                .map(|alias| {
+                    let name = format_compact!("{alias}{binary_ext}");
+                    let path = data.install_path.join(name.as_str());
+                    AliasLink { name, path }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         Ok(Self {
             base_name: format_compact!("{base_name}{binary_ext}"),
             source,
@@ -227,6 +255,7 @@ impl BinFile {
             dest,
             link,
             extracted_dir,
+            aliases,
         })
     }
 
@@ -253,6 +282,7 @@ impl BinFile {
             base_name: &self.base_name,
             source: link.display(),
             dest: self.link_dest().display(),
+            aliases: &self.aliases,
         }))
     }
 
@@ -328,6 +358,15 @@ impl BinFile {
                 dest.display()
             );
             atomic_symlink_file(dest, link)?;
+
+            for alias in &self.aliases {
+                debug!(
+                    "Create alias link '{}' pointing to '{}'",
+                    alias.path.display(),
+                    dest.display()
+                );
+                atomic_symlink_file(dest, &alias.path)?;
+            }
         }
 
         Ok(())
@@ -342,6 +381,15 @@ impl BinFile {
                 dest.display()
             );
             atomic_symlink_file_noclobber(dest, link)?;
+
+            for alias in &self.aliases {
+                debug!(
+                    "Create alias link '{}' pointing to '{}' only if dst not exists",
+                    alias.path.display(),
+                    dest.display()
+                );
+                atomic_symlink_file_noclobber(dest, &alias.path)?;
+            }
         }
 
         Ok(())
@@ -408,11 +456,22 @@ struct LazyFormat<'a> {
     base_name: &'a str,
     source: path::Display<'a>,
     dest: path::Display<'a>,
+    aliases: &'a [AliasLink],
 }
 
 impl fmt::Display for LazyFormat<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({} -> {})", self.base_name, self.source, self.dest)
+        write!(f, "{} ({} -> {})", self.base_name, self.source, self.dest)?;
+        if !self.aliases.is_empty() {
+            write!(f, ", aliases: ")?;
+            for (i, alias) in self.aliases.iter().enumerate() {
+                if i != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}", alias.name)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -482,6 +541,7 @@ mod tests {
                 dest: install.join("bin"),
                 link: None,
                 extracted_dir: extracted.to_path_buf(),
+                aliases: Vec::new(),
             }
         }
 
@@ -561,6 +621,89 @@ mod tests {
             assert_eq!(fs::read(&installed).unwrap(), b"bin");
             let mode = fs::metadata(&installed).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o755);
+        }
+    }
+
+    mod aliases {
+        use super::*;
+        use binstalk_types::cargo_toml_binstall::PkgMeta;
+
+        struct NoValues;
+        impl leon::Values for NoValues {
+            fn get_value(&self, _key: &str) -> Option<Cow<'_, str>> {
+                None
+            }
+        }
+
+        fn bin_file(target: &str, no_symlinks: bool, aliases: &[CompactString]) -> BinFile {
+            let bin_path = Path::new("/tmp/pkg/mycrate");
+            let install_path = Path::new("/home/user/.cargo/bin");
+            let data = Data {
+                name: "mycrate",
+                target,
+                version: "1.2.3",
+                repo: None,
+                meta: PkgMeta {
+                    pkg_fmt: Some(PkgFmt::Bin),
+                    ..Default::default()
+                },
+                bin_path,
+                install_path,
+                target_related_info: &NoValues,
+            };
+
+            // With `PkgFmt::Bin` the template is never rendered, but `new` still
+            // requires one.
+            let tt = Template::parse("{ bin }{ binary-ext }").unwrap();
+            BinFile::new(&data, "mycrate", &tt, no_symlinks, aliases).unwrap()
+        }
+
+        #[test]
+        fn aliases_symlink_alongside_the_binary() {
+            let bin = bin_file(
+                "x86_64-unknown-linux-gnu",
+                false,
+                &["mcr".into(), "myc".into()],
+            );
+
+            assert_eq!(
+                bin.link.as_deref(),
+                Some(Path::new("/home/user/.cargo/bin/mycrate"))
+            );
+            assert_eq!(bin.dest, Path::new("/home/user/.cargo/bin/mycrate-v1.2.3"));
+
+            let aliases: Vec<_> = bin
+                .aliases
+                .iter()
+                .map(|alias| (alias.name.as_str(), alias.path.as_path()))
+                .collect();
+            assert_eq!(
+                aliases,
+                [
+                    ("mcr", Path::new("/home/user/.cargo/bin/mcr")),
+                    ("myc", Path::new("/home/user/.cargo/bin/myc")),
+                ]
+            );
+        }
+
+        #[test]
+        fn aliases_get_the_windows_binary_extension() {
+            let bin = bin_file("x86_64-pc-windows-msvc", false, &["mcr".into()]);
+
+            assert_eq!(bin.aliases.len(), 1);
+            assert_eq!(bin.aliases[0].name, "mcr.exe");
+            assert_eq!(
+                bin.aliases[0].path,
+                Path::new("/home/user/.cargo/bin/mcr.exe")
+            );
+        }
+
+        #[test]
+        fn aliases_are_dropped_without_symlinks() {
+            let bin = bin_file("x86_64-unknown-linux-gnu", true, &["mcr".into()]);
+
+            assert!(bin.link.is_none());
+            assert!(bin.aliases.is_empty());
         }
     }
 }
