@@ -15,14 +15,14 @@ _You may want to [see this page as it was when the latest version was published]
 
 ```console
 $ cargo binstall radio-sx128x@0.14.1-alpha.5
- INFO resolve: Resolving package: 'radio-sx128x@=0.14.1-alpha.5'
- WARN The package radio-sx128x v0.14.1-alpha.5 (x86_64-unknown-linux-gnu) has been downloaded from github.com
- INFO This will install the following binaries:
- INFO   - sx128x-util (sx128x-util-x86_64-unknown-linux-gnu -> /home/.cargo/bin/sx128x-util)
+cargo-binstall:  INFO resolve: Resolving package: 'radio-sx128x@=0.14.1-alpha.5'
+cargo-binstall:  WARN The package radio-sx128x v0.14.1-alpha.5 (x86_64-unknown-linux-gnu) has been downloaded from github.com
+cargo-binstall:  INFO This will install the following binaries:
+cargo-binstall:  INFO   - sx128x-util (sx128x-util-x86_64-unknown-linux-gnu -> /home/.cargo/bin/sx128x-util)
 Do you wish to continue? [yes]/no
 ? yes
- INFO Installing binaries...
- INFO Done in 2.838798298s
+cargo-binstall:  INFO Installing binaries...
+cargo-binstall:  INFO Done in 2.838798298s
 ```
 
 Binstall aims to be a drop-in replacement for `cargo install` in many cases, and supports similar options.

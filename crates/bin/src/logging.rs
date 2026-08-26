@@ -17,8 +17,13 @@ use tracing_core::{identify_callsite, metadata::Kind, subscriber::Subscriber};
 use tracing_log::AsTrace;
 use tracing_subscriber::{
     filter::targets::Targets,
-    fmt::{fmt, MakeWriter},
+    fmt::{
+        fmt,
+        format::{self, FormatEvent, FormatFields, Writer},
+        FmtContext, MakeWriter,
+    },
     layer::SubscriberExt,
+    registry::LookupSpan,
 };
 
 // Shamelessly taken from tracing-log
@@ -189,6 +194,39 @@ impl<'a> MakeWriter<'a> for ErrorFreeWriter {
     }
 }
 
+struct HumanEventFormatter(format::Format<format::Full, ()>);
+
+impl Default for HumanEventFormatter {
+    fn default() -> Self {
+        // Keep the existing compact human output while adding the program prefix.
+        Self(
+            format::format()
+                .without_time()
+                .with_target(false)
+                .with_file(false)
+                .with_line_number(false)
+                .with_thread_names(false)
+                .with_thread_ids(false),
+        )
+    }
+}
+
+impl<S, N> FormatEvent<S, N> for HumanEventFormatter
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+    N: for<'writer> FormatFields<'writer> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        writer.write_str("cargo-binstall: ")?;
+        self.0.format_event(ctx, writer, event)
+    }
+}
+
 pub fn logging(log_level: LevelFilter, json_output: bool) {
     // Calculate log_level
     let log_level = min(log_level, STATIC_MAX_LEVEL);
@@ -216,23 +254,18 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
     let subscriber: Box<dyn Subscriber + Send + Sync> = if json_output {
         Box::new(subscriber_builder.json().finish())
     } else {
-        // Disable time, target, file, line_num, thread name/ids to make the
-        // output more readable
-        let subscriber_builder = subscriber_builder
-            .without_time()
-            .with_target(false)
-            .with_file(false)
-            .with_line_number(false)
-            .with_thread_names(false)
-            .with_thread_ids(false);
-
         // subscriber_builder defaults to write to io::stdout(),
         // so tests whether it supports color.
         let stdout_supports_color = supports_color_on_stream(Stdout)
             .map(|color_level| color_level.has_basic)
             .unwrap_or_default();
 
-        Box::new(subscriber_builder.with_ansi(stdout_supports_color).finish())
+        Box::new(
+            subscriber_builder
+                .with_ansi(stdout_supports_color)
+                .event_format(HumanEventFormatter::default())
+                .finish(),
+        )
     };
 
     // Builder layer for filtering
@@ -245,4 +278,113 @@ pub fn logging(log_level: LevelFilter, json_output: bool) {
 
     // Setup global subscriber
     set_global_default(subscriber).unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        io,
+        sync::{Arc, Mutex},
+    };
+
+    use serde_json::Value;
+    use tracing::subscriber;
+
+    use super::*;
+
+    #[derive(Clone, Default)]
+    struct SharedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl io::Write for SharedWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().write(buf)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for SharedWriter {
+        type Writer = Self;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    impl SharedWriter {
+        fn output(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    fn human_subscriber(writer: SharedWriter) -> impl Subscriber {
+        fmt()
+            .with_max_level(Level::TRACE)
+            .with_writer(writer)
+            .with_ansi(false)
+            .event_format(HumanEventFormatter::default())
+            .finish()
+    }
+
+    #[test]
+    fn human_events_include_program_prefix() {
+        let writer = SharedWriter::default();
+        let subscriber = human_subscriber(writer.clone());
+
+        subscriber::with_default(subscriber, || {
+            tracing::info!("info message");
+            tracing::warn!("warn message");
+            tracing::error!("error message");
+        });
+
+        let output = writer.output();
+        let mut lines = output.lines();
+        let info = lines.next().unwrap();
+        let warn = lines.next().unwrap();
+        let error = lines.next().unwrap();
+
+        assert!(info.starts_with("cargo-binstall:  INFO"));
+        assert!(info.ends_with("info message"));
+        assert!(warn.starts_with("cargo-binstall:  WARN"));
+        assert!(warn.ends_with("warn message"));
+        assert!(error.starts_with("cargo-binstall: ERROR"));
+        assert!(error.ends_with("error message"));
+        assert!(lines.next().is_none());
+    }
+
+    #[test]
+    fn human_prefix_is_per_event() {
+        let writer = SharedWriter::default();
+        let subscriber = human_subscriber(writer.clone());
+
+        subscriber::with_default(subscriber, || tracing::info!("first line\nsecond line"));
+
+        assert_eq!(
+            writer.output(),
+            "cargo-binstall:  INFO first line\nsecond line\n"
+        );
+    }
+
+    #[test]
+    fn json_events_remain_parseable_and_unchanged() {
+        let writer = SharedWriter::default();
+        let subscriber = fmt()
+            .with_max_level(Level::TRACE)
+            .with_writer(writer.clone())
+            .without_time()
+            .with_ansi(false)
+            .json()
+            .finish();
+
+        subscriber::with_default(subscriber, || tracing::warn!("json message"));
+
+        let output = writer.output();
+        assert!(!output.starts_with("cargo-binstall: "));
+
+        let event: Value = serde_json::from_str(output.trim()).unwrap();
+        assert_eq!(event["level"], "WARN");
+        assert_eq!(event["fields"]["message"], "json message");
+    }
 }
