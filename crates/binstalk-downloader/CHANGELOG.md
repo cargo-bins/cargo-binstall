@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.46](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.45...binstalk-downloader-v0.13.46) - 2026-09-05
+
+### Other
+
+- *(deps)* bump astral-tokio-tar from 0.6.4 to 0.7.0 in the deps group ([#2654](https://github.com/cargo-bins/cargo-binstall/pull/2654))
+
 ## [0.13.45](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.44...binstalk-downloader-v0.13.45) - 2026-08-22
 
 ### Added
