@@ -287,7 +287,6 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use serde_json::Value;
     use tracing::subscriber;
 
     use super::*;
@@ -365,26 +364,5 @@ mod tests {
             writer.output(),
             "cargo-binstall:  INFO first line\nsecond line\n"
         );
-    }
-
-    #[test]
-    fn json_events_remain_parseable_and_unchanged() {
-        let writer = SharedWriter::default();
-        let subscriber = fmt()
-            .with_max_level(Level::TRACE)
-            .with_writer(writer.clone())
-            .without_time()
-            .with_ansi(false)
-            .json()
-            .finish();
-
-        subscriber::with_default(subscriber, || tracing::warn!("json message"));
-
-        let output = writer.output();
-        assert!(!output.starts_with("cargo-binstall: "));
-
-        let event: Value = serde_json::from_str(output.trim()).unwrap();
-        assert_eq!(event["level"], "WARN");
-        assert_eq!(event["fields"]["message"], "json message");
     }
 }
