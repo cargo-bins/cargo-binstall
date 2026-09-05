@@ -48,7 +48,7 @@ impl<R: AsyncRead + Unpin + Send + Sync> TarEntry for Entry<R> {
     }
 
     fn size(&self) -> io::Result<u64> {
-        self.header().size()
+        self.header().raw_file_size()
     }
 
     fn entry_type(&self) -> TarEntryType {
