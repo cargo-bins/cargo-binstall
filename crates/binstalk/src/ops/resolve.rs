@@ -390,11 +390,38 @@ fn collect_bin_files(
 
     let template = Template::parse(&bin_dir)?;
 
+    // Aliases are only meaningful for single-binary crates: with more than one
+    // binary it is ambiguous which one an alias should point at.
+    let aliases: &[CompactString] = match bin_data.meta.aliases.as_deref() {
+        Some(aliases) if !aliases.is_empty() => {
+            if package_info.binaries.len() == 1 {
+                aliases
+            } else {
+                warn!(
+                    "Ignoring `aliases` for {}: aliases are only supported for crates that \
+provide exactly one binary, but this crate provides {}",
+                    package_info.name,
+                    package_info.binaries.len()
+                );
+                &[]
+            }
+        }
+        _ => &[],
+    };
+
     // Create bin_files
     let bin_files = package_info
         .binaries
         .iter()
-        .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &template, no_symlinks))
+        .map(|bin| {
+            bins::BinFile::new(
+                &bin_data,
+                bin.name.as_str(),
+                &template,
+                no_symlinks,
+                aliases,
+            )
+        })
         .collect::<Result<Vec<_>, bins::Error>>()?;
 
     let mut source_set = BTreeSet::new();
