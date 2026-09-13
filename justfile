@@ -134,8 +134,12 @@ rustc-icf := if for-release != "" {
 # Temporarily disable this on linux due to mismatch llvm version
 # } else if target-os == "linux" {
 #     "-C linker-plugin-lto "
-linker-plugin-lto := if for-release == "" {
-    ""
+linker-plugin-lto := if for-release != "" {
+    if target == "x86_64-unknown-linux-gnu" {
+        "-C linker-plugin-lto "
+    } else {
+        ""
+    }
 } else {
     ""
 }
