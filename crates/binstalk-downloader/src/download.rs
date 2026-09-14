@@ -1,7 +1,7 @@
-use std::{fmt, io, path::Path};
+use std::{fmt, io, path::Path, pin::Pin};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures_util::{stream::FusedStream, Stream, StreamExt};
 use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
@@ -24,6 +24,9 @@ mod extracted_files;
 pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
 
 mod zip_extraction;
+
+mod resumable;
+use resumable::resumable_stream;
 
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
@@ -85,10 +88,27 @@ enum DownloadContent {
 }
 
 impl DownloadContent {
-    async fn into_response(self) -> Result<Response, DownloadError> {
+    /// The body to read, continuing it with `Range` requests if it breaks
+    /// partway.
+    ///
+    /// Only a download this issues itself can be continued: a caller-supplied
+    /// [`Response`] came from a request that isn't ours to repeat, since its
+    /// headers and its authorisation are not recorded here, so its body is read
+    /// as-is.
+    async fn into_byte_stream(
+        self,
+        resume: bool,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, RemoteError>> + Send + Sync>>, DownloadError>
+    {
         Ok(match self {
-            DownloadContent::ToIssue { client, url } => client.get(url).send(true).await?,
-            DownloadContent::Response(response) => response,
+            DownloadContent::ToIssue { client, url } if resume => {
+                let response = client.get(url.clone()).send(true).await?;
+                Box::pin(resumable_stream(client, url, response))
+            }
+            DownloadContent::ToIssue { client, url } => {
+                Box::pin(client.get(url).send(true).await?.bytes_stream())
+            }
+            DownloadContent::Response(response) => Box::pin(response.bytes_stream()),
         })
     }
 }
@@ -96,6 +116,7 @@ impl DownloadContent {
 pub struct Download<'a> {
     content: DownloadContent,
     data_verifier: Option<&'a mut dyn DataVerifier>,
+    resume: bool,
 }
 
 impl fmt::Debug for Download<'_> {
@@ -109,6 +130,7 @@ impl Download<'static> {
         Self {
             content: DownloadContent::ToIssue { client, url },
             data_verifier: None,
+            resume: true,
         }
     }
 
@@ -116,6 +138,7 @@ impl Download<'static> {
         Self {
             content: DownloadContent::Response(response),
             data_verifier: None,
+            resume: true,
         }
     }
 }
@@ -129,6 +152,7 @@ impl<'a> Download<'a> {
         Self {
             content: DownloadContent::ToIssue { client, url },
             data_verifier: Some(data_verifier),
+            resume: true,
         }
     }
 
@@ -139,6 +163,7 @@ impl<'a> Download<'a> {
         Self {
             content: DownloadContent::Response(response),
             data_verifier: Some(data_verifier),
+            resume: true,
         }
     }
 
@@ -146,6 +171,26 @@ impl<'a> Download<'a> {
         Download {
             content: self.content,
             data_verifier: Some(data_verifier),
+            resume: self.resume,
+        }
+    }
+
+    /// Read the body in a single request, without continuing it if it stops
+    /// early.
+    ///
+    /// By default a body that breaks partway is picked up with a `Range`
+    /// request from where it stopped, so a long transfer over a lossy link
+    /// doesn't have to start again. Turn that off for a download that must be
+    /// exactly one request, because the caller retries at its own level or
+    /// because requests to the host are metered or rate-limited more tightly
+    /// than the bytes are.
+    ///
+    /// A download from a caller-supplied [`Response`] is never continued
+    /// regardless, since the request behind it isn't ours to repeat.
+    pub fn without_resume(self) -> Self {
+        Self {
+            resume: false,
+            ..self
         }
     }
 
@@ -158,9 +203,8 @@ impl<'a> Download<'a> {
         let mut data_verifier = self.data_verifier;
         Ok(self
             .content
-            .into_response()
+            .into_byte_stream(self.resume)
             .await?
-            .bytes_stream()
             .map(move |res| {
                 let bytes = res?;
 
@@ -270,7 +314,13 @@ impl Download<'_> {
 
     #[instrument(skip(self))]
     pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
-        let bytes = self.content.into_response().await?.bytes().await?;
+        let mut stream = self.content.into_byte_stream(self.resume).await?;
+        let mut bytes = BytesMut::new();
+        while let Some(chunk) = stream.next().await {
+            bytes.extend_from_slice(&chunk?);
+        }
+
+        let bytes = bytes.freeze();
         if let Some(verifier) = self.data_verifier {
             verifier.update(&bytes);
         }
