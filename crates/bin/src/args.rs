@@ -349,6 +349,21 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub(crate) locked: bool,
 
+    /// Activate the specified features when installing from source.
+    ///
+    /// This mirrors the equivalent argument in `cargo install --features`.
+    ///
+    /// This only takes effect when falling back to `cargo install`; prebuilt binaries are
+    /// unaffected, since they are built ahead of time with a fixed set of features.
+    #[clap(
+        help_heading = "Options",
+        long,
+        value_name = "FEATURES",
+        num_args = 1..,
+        action = clap::ArgAction::Append
+    )]
+    pub(crate) features: Option<Vec<CompactString>>,
+
     /// Deprecated, here for back-compat only. Secure is now on by default.
     #[clap(hide(true), long)]
     pub(crate) secure: bool,

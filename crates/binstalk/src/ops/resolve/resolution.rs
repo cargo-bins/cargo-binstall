@@ -218,6 +218,12 @@ impl ResolutionSource {
             }
         }
 
+        if let Some(features) = &opts.features {
+            for feature in features {
+                cmd.arg("--features").arg(feature);
+            }
+        }
+
         debug!("Running `{}`", format_cmd(&cmd));
 
         if !opts.dry_run {

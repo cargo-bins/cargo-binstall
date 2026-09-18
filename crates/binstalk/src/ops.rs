@@ -47,6 +47,9 @@ pub struct Options {
     /// If provided, the names are sorted.
     pub bins: Option<Vec<CompactString>>,
 
+    /// Features to pass to `cargo install` when falling back to installing from source.
+    pub features: Option<Vec<CompactString>>,
+
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,
     pub has_overriden_install_path: bool,

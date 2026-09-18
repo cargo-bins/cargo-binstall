@@ -230,6 +230,7 @@ e2e-test-continue-on-failure: (e2e-test "continue-on-failure")
 e2e-test-private-github-repo: (e2e-test "private-github-repo")
 e2e-test-self-install: (e2e-test "self-install")
 e2e-test-specific-binaries: (e2e-test "specific-binaries")
+e2e-test-features: (e2e-test "features")
 e2e-test-skipping-required-bin: (e2e-test "skipping-required-bin")
 e2e-test-telemetry-confirm: (e2e-test "telemetry-confirm")
 
@@ -247,7 +248,7 @@ e2e-test-signing: (e2e-test "signing")
 e2e-test-signing:
 
 [parallel]
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features
 
 unit-tests: print-env
     cargo test --no-run --target {{target}}
