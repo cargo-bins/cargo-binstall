@@ -5,6 +5,7 @@
 use std::borrow::Cow;
 
 use cargo_platform::{Cfg, Platform};
+use compact_str::CompactString;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, VariantArray};
@@ -82,6 +83,12 @@ pub struct PkgMeta {
     /// Strategies to disable
     pub disabled_strategies: Option<Box<[Strategy]>>,
 
+    /// Extra names to symlink to the installed binary.
+    ///
+    /// Only honoured when the crate ships a single binary, and only when
+    /// symlinks are enabled (i.e. not with `--no-symlinks`).
+    pub aliases: Option<Vec<CompactString>>,
+
     /// Target specific overrides
     pub overrides: PkgOverrides,
 }
@@ -97,6 +104,9 @@ impl PkgMeta {
         }
         if let Some(o) = &pkg_override.bin_dir {
             self.bin_dir = Some(o.clone());
+        }
+        if let Some(o) = &pkg_override.aliases {
+            self.aliases = Some(o.clone());
         }
     }
 
@@ -136,6 +146,12 @@ impl PkgMeta {
                 .into_iter()
                 .find_map(|pkg_override| pkg_override.signing.clone())
                 .or_else(|| self.signing.clone()),
+
+            aliases: pkg_overrides
+                .clone()
+                .into_iter()
+                .find_map(|pkg_override| pkg_override.aliases.clone())
+                .or_else(|| self.aliases.clone()),
 
             disabled_strategies: if ignore_disabled_strategies {
                 None
@@ -179,6 +195,9 @@ pub struct PkgOverride {
 
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
+
+    /// Extra names to symlink to the installed binary.
+    pub aliases: Option<Vec<CompactString>>,
 
     #[serde(skip)]
     pub ignore_disabled_strategies: bool,
@@ -356,6 +375,33 @@ mod tests {
         assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].pkg_fmt, Some(PkgFmt::Tgz)); // Unix.
         assert_eq!(matches[1].pkg_fmt, Some(PkgFmt::Tar)); // Linux.
+    }
+
+    #[test]
+    fn test_aliases_parse_and_override() {
+        let base: PkgMeta = serde_json::from_value(json!({
+            "aliases": ["mcr"],
+        }))
+        .unwrap();
+        assert_eq!(base.aliases.as_deref(), Some(["mcr".into()].as_slice()));
+
+        // A target override replaces the base aliases entirely.
+        let override_win = PkgOverride {
+            aliases: Some(vec!["mcr".into(), "mycrate-win".into()]),
+            ..Default::default()
+        };
+        let merged = base.merge_overrides([&override_win]);
+        assert_eq!(
+            merged.aliases.as_deref(),
+            Some(["mcr".into(), "mycrate-win".into()].as_slice())
+        );
+
+        // Without an override the base aliases are kept.
+        let empty = PkgOverride::default();
+        assert_eq!(
+            base.merge_overrides([&empty]).aliases.as_deref(),
+            Some(["mcr".into()].as_slice())
+        );
     }
 
     #[test]
