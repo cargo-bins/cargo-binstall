@@ -208,6 +208,7 @@ pub fn install_crates(
             bins.sort_unstable();
             bins
         }),
+        features: args.features,
 
         temp_dir: temp_dir.path().to_owned(),
         install_path,
