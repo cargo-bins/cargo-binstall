@@ -656,6 +656,22 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
                 )
                 .exit();
         }
+
+        if opts
+            .features
+            .as_ref()
+            .is_some_and(|features| !features.is_empty())
+        {
+            command
+                .error(
+                    ErrorKind::ArgumentConflict,
+                    format_args!(
+                        r#"--features option used with multi package syntax.
+You cannot use --features and specify multiple packages at the same time. Do one or the other."#
+                    ),
+                )
+                .exit();
+        }
     }
 
     // Check strategies for duplicates

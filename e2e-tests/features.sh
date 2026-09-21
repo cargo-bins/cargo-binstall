@@ -20,3 +20,16 @@ fi
 
 # Run the binary to check it works
 cargo-about --version
+
+# Verify that --features cannot be combined with multiple packages
+set +e
+
+"$1" binstall --no-confirm cargo-binstall cargo-about --strategies compile --features cli
+exit_code="$?"
+
+set -e
+
+if [ "$exit_code" != 2 ]; then
+    echo "Expected exit code 2, but actual exit code $exit_code"
+    exit 1
+fi
