@@ -161,6 +161,11 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--locked` — This option will be passed through to all `cargo-install` invocations.
 
    It will require `Cargo.lock` to be up to date.
+* `--features <FEATURES>` — Activate the specified features when installing from source.
+
+   This mirrors the equivalent argument in `cargo install --features`.
+
+   This only takes effect when falling back to `cargo install`; prebuilt binaries are unaffected, since they are built ahead of time with a fixed set of features.
 * `--force` — Force a crate to be installed even if it is already installed
 * `--min-tls-version <VERSION>` — Require a minimum TLS version from remote endpoints.
 
