@@ -25,4 +25,8 @@ jobs:
         uses: MarcoIeni/release-plz-action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # cargo-semver-checks builds binstalk-downloader with its `http3`
+          # feature enabled, which reqwest only compiles under this cfg
+          # (same as ci.yml with JUST_ENABLE_H3 and release-pr.yml).
+          RUSTFLAGS: --cfg reqwest_unstable
 
