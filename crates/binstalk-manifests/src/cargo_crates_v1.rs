@@ -11,8 +11,8 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{self, Seek},
-    iter::IntoIterator,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use beef::Cow;
@@ -28,8 +28,11 @@ use crate::helpers::create_if_not_exist;
 
 use super::crate_info::CrateInfo;
 
-mod crate_version_source;
-use crate_version_source::*;
+pub mod crate_version_source;
+pub use crate_version_source::*;
+
+pub type CratesVersionsMap = BTreeMap<CompactString, Version>;
+pub type CratesDetailsMap = BTreeMap<CompactString, (Version, Source<'static>, Vec<CompactString>)>;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CratesToml<'a> {
@@ -161,22 +164,29 @@ impl<'v1> CratesToml<'v1> {
         Self::append_to_path(Self::default_path()?, crates)
     }
 
+    /// Return both crate name -> version and crate name -> (version, source, bins).
+    pub fn collect_into_crates_details(
+        self,
+    ) -> Result<(CratesVersionsMap, CratesDetailsMap), CratesTomlParseError> {
+        let mut versions = BTreeMap::new();
+        let mut details = BTreeMap::new();
+
+        for (s, bins) in self.v1 {
+            let cvs = CrateVersionSource::from_str(&s)?;
+            versions.insert(cvs.name.clone(), cvs.version.clone());
+            details.insert(cvs.name, (cvs.version, cvs.source, bins.into_owned()));
+        }
+
+        Ok((versions, details))
+    }
+
     /// Return BTreeMap with crate name as key and its corresponding version
     /// as value.
     pub fn collect_into_crates_versions(
         self,
     ) -> Result<BTreeMap<CompactString, Version>, CratesTomlParseError> {
-        fn parse_name_ver(s: &str) -> Result<(CompactString, Version), CvsParseError> {
-            match s.splitn(3, ' ').collect::<Vec<_>>()[..] {
-                [name, version, _source] => Ok((CompactString::new(name), version.parse()?)),
-                _ => Err(CvsParseError::BadFormat),
-            }
-        }
-
-        self.v1
-            .into_iter()
-            .map(|(s, _bins)| parse_name_ver(&s).map_err(CratesTomlParseError::from))
-            .collect()
+        self.collect_into_crates_details()
+            .map(|(versions, _details)| versions)
     }
 }
 

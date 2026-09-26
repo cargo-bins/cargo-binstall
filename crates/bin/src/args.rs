@@ -54,7 +54,7 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         value_name = "crate[@version]",
-        required_unless_present_any = ["version", "self_install", "help"],
+        required_unless_present_any = ["version", "self_install", "help", "list", "prune"],
     )]
     pub(crate) crate_names: Vec<CrateName>,
 
@@ -484,6 +484,22 @@ pub struct Args {
 
     #[clap(long, hide(true))]
     pub(crate) self_install: bool,
+
+    /// List installed crates and their installation methods (binstall, cargo install, local path, drifted).
+    #[clap(
+        help_heading = "Package selection",
+        long = "list",
+        conflicts_with_all = ["crate_names", "prune"]
+    )]
+    pub(crate) list: bool,
+
+    /// Prune stale or drifted binstall records for uninstalled or recompiled packages.
+    #[clap(
+        help_heading = "Package selection",
+        long = "prune",
+        conflicts_with_all = ["crate_names", "list"]
+    )]
+    pub(crate) prune: bool,
 
     #[cfg(feature = "clap-markdown")]
     #[clap(long, hide = true)]

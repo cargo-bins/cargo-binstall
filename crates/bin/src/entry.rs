@@ -599,3 +599,112 @@ pub fn self_install(args: Args) -> Result<()> {
 
     Ok(())
 }
+
+pub fn list_crates(args: Args) -> Result<()> {
+    let Init { manifests, .. } = crate::initialise::initialise(&args)?;
+
+    let Some(manifests) = manifests else {
+        println!("Installation tracking is disabled or using custom install path.");
+        return Ok(());
+    };
+
+    let crates = manifests.list_crates();
+    if crates.is_empty() {
+        println!("No installed crates found.");
+        return Ok(());
+    }
+
+    if args.json_output {
+        let json_str = serde_json::to_string_pretty(&crates).map_err(|e| miette::miette!("{e}"))?;
+        println!("{json_str}");
+        return Ok(());
+    }
+
+    println!(
+        "{:<20} {:<12} {:<14} {:<18}",
+        "Package", "Cargo Ver", "Binstall Ver", "Method"
+    );
+    println!("{}", "-".repeat(66));
+
+    let mut binstall_count = 0;
+    let mut install_count = 0;
+    let mut local_count = 0;
+    let mut git_count = 0;
+    let mut drifted_count = 0;
+
+    for info in &crates {
+        let method_str = match &info.method {
+            binstalk_manifests::crates_manifests::InstalledMethod::Binstall => {
+                binstall_count += 1;
+                "cargo binstall".to_string()
+            }
+            binstalk_manifests::crates_manifests::InstalledMethod::CargoInstall => {
+                install_count += 1;
+                "cargo install".to_string()
+            }
+            binstalk_manifests::crates_manifests::InstalledMethod::LocalPath => {
+                local_count += 1;
+                "local path".to_string()
+            }
+            binstalk_manifests::crates_manifests::InstalledMethod::Git => {
+                git_count += 1;
+                "git".to_string()
+            }
+            binstalk_manifests::crates_manifests::InstalledMethod::Drifted {
+                binstall_version,
+                cargo_version,
+            } => {
+                drifted_count += 1;
+                format!("drifted ({binstall_version}->{cargo_version})")
+            }
+        };
+
+        let binstall_ver_str = info
+            .binstall_version
+            .as_ref()
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "-".to_string());
+
+        println!(
+            "{:<20} {:<12} {:<14} {:<18}",
+            info.name, info.cargo_version, binstall_ver_str, method_str
+        );
+    }
+
+    println!("{}", "-".repeat(66));
+    println!(
+        "Total: {} | Binstall: {} | Source: {} | Local: {} | Git: {} | Drifted: {}",
+        crates.len(),
+        binstall_count,
+        install_count,
+        local_count,
+        git_count,
+        drifted_count
+    );
+
+    Ok(())
+}
+
+pub fn prune_crates(args: Args) -> Result<()> {
+    let Init { manifests, .. } = crate::initialise::initialise(&args)?;
+
+    let Some(manifests) = manifests else {
+        println!("Installation tracking is disabled or using custom install path.");
+        return Ok(());
+    };
+
+    let pruned = manifests.prune_stale()?;
+    if pruned.is_empty() {
+        println!("Everything is clean. No stale binstall records found.");
+    } else {
+        for name in &pruned {
+            println!("Pruned stale record: {name}");
+        }
+        println!(
+            "\nSuccessfully pruned {} stale binstall record(s).",
+            pruned.len()
+        );
+    }
+
+    Ok(())
+}
