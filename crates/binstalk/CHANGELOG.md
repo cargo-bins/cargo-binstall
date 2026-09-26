@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.81...binstalk-v0.29.0) - 2026-09-26
+
+### Other
+
+- Add --feature flag for passing down into cargo when falling back to s… ([#2668](https://github.com/cargo-bins/cargo-binstall/pull/2668))
+
 ## [0.28.81](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.80...binstalk-v0.28.81) - 2026-09-05
 
 ### Other
