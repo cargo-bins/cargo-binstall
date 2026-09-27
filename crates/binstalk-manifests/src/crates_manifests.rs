@@ -159,8 +159,14 @@ impl Manifests {
 
         CratesToml::append_to_file(&mut self.cargo_crates_v1, &metadata_vec)?;
 
-        self.binstall
-            .retain(|crate_info| self.installed_crates.contains_key(&crate_info.name));
+        // Automatically prune uninstalled and version-drifted records
+        let installed = &self.installed_crates;
+        self.binstall.retain(|crate_info| {
+            installed
+                .get(&crate_info.name)
+                .map(|ver| ver == &crate_info.current_version)
+                .unwrap_or(false)
+        });
 
         for metadata in metadata_vec {
             self.binstall.replace(metadata);
@@ -289,5 +295,52 @@ mod tests {
         // Second prune should prune 0 crates
         let pruned_again = manifests_after.prune_stale().unwrap();
         assert!(pruned_again.is_empty());
+    }
+
+    #[test]
+    fn test_update_auto_prunes_drift() {
+        let tempdir = TempDir::new().unwrap();
+        let cargo_roots = tempdir.path();
+
+        let crates_toml_path = cargo_roots.join(".crates.toml");
+        let toml_data = br#"
+[v1]
+"sccache 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["sccache"]
+"#;
+        File::create(&crates_toml_path)
+            .unwrap()
+            .write_all(toml_data)
+            .unwrap();
+
+        let binstall_dir = cargo_roots.join("binstall");
+        fs::create_dir_all(&binstall_dir).unwrap();
+        let binstall_json_path = binstall_dir.join("crates-v1.json");
+
+        let binstall_data = vec![CrateInfo {
+            name: "sccache".into(),
+            version_req: "0.17.0".into(),
+            current_version: Version::new(0, 17, 0),
+            source: CrateSource::cratesio_registry(),
+            target: "x86_64-unknown-linux-gnu".into(),
+            bins: vec!["sccache".into()],
+        }];
+        append_to_path(&binstall_json_path, binstall_data).unwrap();
+
+        let manifests = Manifests::open_exclusive(cargo_roots).unwrap();
+        let new_crate = CrateInfo {
+            name: "new-tool".into(),
+            version_req: "1.0.0".into(),
+            current_version: Version::new(1, 0, 0),
+            source: CrateSource::cratesio_registry(),
+            target: "x86_64-unknown-linux-gnu".into(),
+            bins: vec!["new-tool".into()],
+        };
+        manifests.update(vec![new_crate]).unwrap();
+
+        let records =
+            crate::binstall_crates_v1::Records::load_from_path(&binstall_json_path).unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(records.get("new-tool").is_some());
+        assert!(records.get("sccache").is_none());
     }
 }
