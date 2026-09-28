@@ -11,7 +11,7 @@ use thiserror::Error as ThisError;
 
 use crate::{
     binstall_crates_v1::{Error as BinstallCratesV1Error, Records as BinstallCratesV1Records},
-    cargo_crates_v1::{CratesToml, CratesTomlParseError, Source},
+    cargo_crates_v1::{CratesDetailsMap, CratesToml, CratesTomlParseError, Source},
     crate_info::CrateInfo,
     helpers::create_if_not_exist,
     CompactString, Version,
@@ -57,8 +57,7 @@ pub struct Manifests {
     binstall: BinstallCratesV1Records,
     cargo_crates_v1: FileLock,
     installed_crates: BTreeMap<CompactString, Version>,
-    installed_crates_details:
-        BTreeMap<CompactString, (Version, Source<'static>, Vec<CompactString>)>,
+    installed_crates_details: CratesDetailsMap,
 }
 
 impl Manifests {

@@ -624,6 +624,7 @@ dependencies = [
  "strum_macros",
  "supports-color",
  "tempfile",
+ "terminal_size",
  "tokio",
  "toml",
  "tracing",

@@ -47,6 +47,7 @@ strum = "0.28.0"
 strum_macros = "0.28.0"
 supports-color = "3.0.0"
 tempfile = "3.5.0"
+terminal_size = "0.4.4"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "signal"], default-features = false }
 toml = "1.0.6"
 tracing = { version = "0.1.43", default-features = false }

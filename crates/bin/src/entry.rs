@@ -28,11 +28,12 @@ use binstalk_manifests::{
     crate_info::{CrateInfo, CrateSource},
     crates_manifests::Manifests,
 };
-use compact_str::CompactString;
+use compact_str::{format_compact, CompactString};
 use file_format::FileFormat;
 use log::LevelFilter;
 use miette::{Report, Result};
 use semver::{Version, VersionReq};
+use terminal_size::{terminal_size, Width};
 use tokio::task::block_in_place;
 use tracing::{debug, info, warn};
 
@@ -600,6 +601,10 @@ pub fn self_install(args: Args) -> Result<()> {
     Ok(())
 }
 
+fn print_divider(width: usize) {
+    println!("{}", "-".repeat(width));
+}
+
 pub fn list_crates(args: Args) -> Result<()> {
     let Init { manifests, .. } = crate::initialise::initialise(&args)?;
 
@@ -620,11 +625,19 @@ pub fn list_crates(args: Args) -> Result<()> {
         return Ok(());
     }
 
-    println!(
-        "{:<20} {:<12} {:<14} {:<18}",
-        "Package", "Cargo Ver", "Binstall Ver", "Method"
-    );
-    println!("{}", "-".repeat(66));
+    let term_width = terminal_size().map(|(Width(w), _)| w as usize);
+    let is_narrow = term_width.is_some_and(|w| w < 67);
+    let divider_width = term_width.map_or(67, |w| w.min(67));
+
+    if is_narrow {
+        print_divider(divider_width);
+    } else {
+        println!(
+            "{:<20} {:<12} {:<14} {:<18}",
+            "Package", "Cargo Ver", "Binstall Ver", "Method"
+        );
+        print_divider(divider_width);
+    }
 
     let mut binstall_count = 0;
     let mut install_count = 0;
@@ -636,51 +649,57 @@ pub fn list_crates(args: Args) -> Result<()> {
         let method_str = match &info.method {
             binstalk_manifests::crates_manifests::InstalledMethod::Binstall => {
                 binstall_count += 1;
-                "cargo binstall".to_string()
+                CompactString::const_new("cargo binstall")
             }
             binstalk_manifests::crates_manifests::InstalledMethod::CargoInstall => {
                 install_count += 1;
-                "cargo install".to_string()
+                CompactString::const_new("cargo install")
             }
             binstalk_manifests::crates_manifests::InstalledMethod::LocalPath => {
                 local_count += 1;
-                "local path".to_string()
+                CompactString::const_new("local path")
             }
             binstalk_manifests::crates_manifests::InstalledMethod::Git => {
                 git_count += 1;
-                "git".to_string()
+                CompactString::const_new("git")
             }
             binstalk_manifests::crates_manifests::InstalledMethod::Drifted {
                 binstall_version,
                 cargo_version,
             } => {
                 drifted_count += 1;
-                format!("drifted ({binstall_version}->{cargo_version})")
+                format_compact!("drifted ({binstall_version}->{cargo_version})")
             }
         };
 
-        let binstall_ver_str = info
-            .binstall_version
-            .as_ref()
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "-".to_string());
+        if is_narrow {
+            println!("{} v{} [{method_str}]", info.name, info.cargo_version);
+        } else {
+            let binstall_ver_str = match &info.binstall_version {
+                Some(v) => format_compact!("{v}"),
+                None => CompactString::const_new("-"),
+            };
 
-        println!(
-            "{:<20} {:<12} {:<14} {:<18}",
-            info.name, info.cargo_version, binstall_ver_str, method_str
-        );
+            println!(
+                "{:<20} {:<12} {binstall_ver_str:<14} {method_str:<18}",
+                info.name, info.cargo_version,
+            );
+        }
     }
 
-    println!("{}", "-".repeat(66));
-    println!(
-        "Total: {} | Binstall: {} | Source: {} | Local: {} | Git: {} | Drifted: {}",
-        crates.len(),
-        binstall_count,
-        install_count,
-        local_count,
-        git_count,
-        drifted_count
-    );
+    print_divider(divider_width);
+    if is_narrow {
+        println!(
+            "Total: {} | Binstall: {binstall_count} | Source: {install_count}",
+            crates.len(),
+        );
+        println!("Local: {local_count} | Git: {git_count} | Drifted: {drifted_count}");
+    } else {
+        println!(
+            "Total: {} | Binstall: {binstall_count} | Source: {install_count} | Local: {local_count} | Git: {git_count} | Drifted: {drifted_count}",
+            crates.len(),
+        );
+    }
 
     Ok(())
 }
