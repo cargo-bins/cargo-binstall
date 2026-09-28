@@ -136,10 +136,7 @@ impl Manifests {
         let installed = &self.installed_crates;
 
         self.binstall.retain(|crate_info| {
-            let is_valid = installed
-                .get(&crate_info.name)
-                .map(|ver| ver == &crate_info.current_version)
-                .unwrap_or(false);
+            let is_valid = installed.get(&crate_info.name) == Some(&crate_info.current_version);
 
             if !is_valid {
                 pruned.push(crate_info.name.clone());
@@ -162,10 +159,7 @@ impl Manifests {
         // Automatically prune uninstalled and version-drifted records
         let installed = &self.installed_crates;
         self.binstall.retain(|crate_info| {
-            installed
-                .get(&crate_info.name)
-                .map(|ver| ver == &crate_info.current_version)
-                .unwrap_or(false)
+            installed.get(&crate_info.name) == Some(&crate_info.current_version)
         });
 
         for metadata in metadata_vec {
