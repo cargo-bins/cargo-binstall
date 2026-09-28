@@ -91,7 +91,7 @@ jobs:
 
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Push cli release tag
-      uses: mathieudutour/github-tag-action@v6.2
+      uses: mathieudutour/github-tag-action@v7
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         custom_tag: ${{ fromJSON(inputs.info).version }}
