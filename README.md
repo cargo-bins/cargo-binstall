@@ -41,29 +41,12 @@ options please see `cargo binstall --help`.
 ## For Crate Authors
 
 To support `cargo binstall` for your crate, add metadata to your `Cargo.toml`
-and publish pre-built binaries to GitHub Releases.
+and publish pre-built binaries to GitHub Releases on each release.
 
-### 1. Add binstall metadata
-
-```toml
-[package.metadata.binstall]
-pkg-url = "https://github.com/owner/repo/releases/download/v{ version }/{ name }-{ target }.tar.gz"
-bin-dir = "{ name }-{ target }/{ name }{ binary-ext }"
-pkg-fmt = "tgz"
-```
-
-### 2. Publish binaries on each release
-
-Upload a tarball per target to your GitHub Release. The artifact name must match
-`pkg-url`. Common targets: `x86_64-unknown-linux-gnu`,
-`aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`.
-
-### 3. How releases work
-
-On each release, your CI builds the binaries and uploads them to GitHub Releases.
-Binstall fetches the release for the current version, matches the artifact name
-against `pkg-url`, downloads it, and extracts the binary from the path in
-`bin-dir`. If no matching artifact is found it falls back to `cargo install`.
+See
+[SUPPORT.md](https://github.com/cargo-bins/cargo-binstall/blob/main/SUPPORT.md)
+for full documentation on the metadata format, artifact naming, and supported
+options.
 
 ## Installation
 
