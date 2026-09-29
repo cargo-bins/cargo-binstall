@@ -606,8 +606,8 @@ fn print_divider(width: usize) {
     println!("{}", repeat_n("-", width).format(""));
 }
 
-pub fn list_crates(args: Args) -> Result<()> {
-    let Init { manifests, .. } = crate::initialise::initialise(&args)?;
+fn load_manifests(args: &Args) -> Result<Option<Manifests>> {
+    let Init { manifests, .. } = crate::initialise::initialise(args)?;
 
     let Some(manifests) = manifests else {
         if args.json_output {
@@ -615,6 +615,14 @@ pub fn list_crates(args: Args) -> Result<()> {
         } else {
             println!("Installation tracking is disabled or using custom install path.");
         }
+        return Ok(None);
+    };
+
+    Ok(Some(manifests))
+}
+
+pub fn list_crates(args: Args) -> Result<()> {
+    let Some(manifests) = load_manifests(&args)? else {
         return Ok(());
     };
 
@@ -705,14 +713,7 @@ pub fn list_crates(args: Args) -> Result<()> {
 }
 
 pub fn prune_crates(args: Args) -> Result<()> {
-    let Init { manifests, .. } = crate::initialise::initialise(&args)?;
-
-    let Some(manifests) = manifests else {
-        if args.json_output {
-            println!("{}", serde_json::json!({ "message": "disabled" }));
-        } else {
-            println!("Installation tracking is disabled or using custom install path.");
-        }
+    let Some(manifests) = load_manifests(&args)? else {
         return Ok(());
     };
 
