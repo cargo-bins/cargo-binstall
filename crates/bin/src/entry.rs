@@ -30,6 +30,7 @@ use binstalk_manifests::{
 };
 use compact_str::{format_compact, CompactString};
 use file_format::FileFormat;
+use itertools::{repeat_n, Itertools};
 use log::LevelFilter;
 use miette::{Report, Result};
 use semver::{Version, VersionReq};
@@ -602,22 +603,22 @@ pub fn self_install(args: Args) -> Result<()> {
 }
 
 fn print_divider(width: usize) {
-    println!("{}", "-".repeat(width));
+    println!("{}", repeat_n("-", width).format(""));
 }
 
 pub fn list_crates(args: Args) -> Result<()> {
     let Init { manifests, .. } = crate::initialise::initialise(&args)?;
 
     let Some(manifests) = manifests else {
-        println!("Installation tracking is disabled or using custom install path.");
+        if args.json_output {
+            println!("{}", serde_json::json!({ "message": "disabled" }));
+        } else {
+            println!("Installation tracking is disabled or using custom install path.");
+        }
         return Ok(());
     };
 
     let crates = manifests.list_crates();
-    if crates.is_empty() {
-        println!("No installed crates found.");
-        return Ok(());
-    }
 
     if args.json_output {
         let json_str = serde_json::to_string_pretty(&crates).map_err(|e| miette::miette!("{e}"))?;
@@ -625,18 +626,24 @@ pub fn list_crates(args: Args) -> Result<()> {
         return Ok(());
     }
 
+    if crates.is_empty() {
+        println!("No installed crates found.");
+        return Ok(());
+    }
+
     let term_width = terminal_size().map(|(Width(w), _)| w as usize);
     let is_narrow = term_width.is_some_and(|w| w < 67);
     let divider_width = term_width.map_or(67, |w| w.min(67));
+    let divide_output = || print_divider(divider_width);
 
     if is_narrow {
-        print_divider(divider_width);
+        divide_output();
     } else {
         println!(
             "{:<20} {:<12} {:<14} {:<18}",
             "Package", "Cargo Ver", "Binstall Ver", "Method"
         );
-        print_divider(divider_width);
+        divide_output();
     }
 
     let mut binstall_count = 0;
@@ -687,19 +694,12 @@ pub fn list_crates(args: Args) -> Result<()> {
         }
     }
 
-    print_divider(divider_width);
-    if is_narrow {
-        println!(
-            "Total: {} | Binstall: {binstall_count} | Source: {install_count}",
-            crates.len(),
-        );
-        println!("Local: {local_count} | Git: {git_count} | Drifted: {drifted_count}");
-    } else {
-        println!(
-            "Total: {} | Binstall: {binstall_count} | Source: {install_count} | Local: {local_count} | Git: {git_count} | Drifted: {drifted_count}",
-            crates.len(),
-        );
-    }
+    divide_output();
+    println!(
+        "Total: {} | Binstall: {binstall_count} | Source: {install_count}{}Local: {local_count} | Git: {git_count} | Drifted: {drifted_count}",
+        crates.len(),
+        if is_narrow { "\n" } else { " | " },
+    );
 
     Ok(())
 }
@@ -708,11 +708,25 @@ pub fn prune_crates(args: Args) -> Result<()> {
     let Init { manifests, .. } = crate::initialise::initialise(&args)?;
 
     let Some(manifests) = manifests else {
-        println!("Installation tracking is disabled or using custom install path.");
+        if args.json_output {
+            println!("{}", serde_json::json!({ "message": "disabled" }));
+        } else {
+            println!("Installation tracking is disabled or using custom install path.");
+        }
         return Ok(());
     };
 
     let pruned = manifests.prune_stale()?;
+
+    if args.json_output {
+        let json_str = serde_json::to_string_pretty(&serde_json::json!({
+            "pruned": pruned,
+        }))
+        .map_err(|e| miette::miette!("{e}"))?;
+        println!("{json_str}");
+        return Ok(());
+    }
+
     if pruned.is_empty() {
         println!("Everything is clean. No stale binstall records found.");
     } else {

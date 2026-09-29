@@ -4,7 +4,9 @@ set -euxo pipefail
 
 # 1. Initial empty state
 "$1" binstall --list | grep "No installed crates found."
+"$1" binstall --list --json-output | grep '\[\]'
 "$1" binstall --prune | grep "Everything is clean. No stale binstall records found."
+"$1" binstall --prune --json-output | grep '"pruned": \[\]'
 
 # 2. Install a binary via binstall
 "$1" binstall -y cargo-watch@8.4.0
@@ -15,13 +17,16 @@ set -euxo pipefail
 
 # 4. Prune when up-to-date (no-op)
 "$1" binstall --prune | grep "Everything is clean. No stale binstall records found."
+"$1" binstall --prune --json-output | grep '"pruned": \[\]'
 
 # 5. Uninstall from cargo to create a stale binstall manifest record
 cargo uninstall cargo-watch
 
 # 6. Verify --prune detects and removes the stale uninstalled crate
-"$1" binstall --prune | grep "Pruned stale record: cargo-watch"
+"$1" binstall --prune --json-output | grep '"cargo-watch"'
 
 # 7. Second prune confirms clean state
 "$1" binstall --prune | grep "Everything is clean. No stale binstall records found."
+"$1" binstall --prune --json-output | grep '"pruned": \[\]'
 "$1" binstall --list | grep "No installed crates found."
+"$1" binstall --list --json-output | grep '\[\]'

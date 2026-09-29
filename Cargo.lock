@@ -613,6 +613,7 @@ dependencies = [
  "file-format",
  "fs-lock",
  "home",
+ "itertools",
  "log",
  "miette",
  "mimalloc",
