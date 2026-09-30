@@ -85,6 +85,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
 
     #[allow(clippy::print_literal)]
     if !args.self_install
+        && !args.list
+        && !args.prune
         && !args.disable_telemetry
         && !args.no_confirm
         && !settings.telemetry.consent_asked

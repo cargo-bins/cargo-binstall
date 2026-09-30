@@ -45,6 +45,10 @@ rustc-llvm-version: {rustc_llvm_version}"#
         MainExit::Success(None)
     } else if args.self_install {
         MainExit::new(entry::self_install(args), None)
+    } else if args.list {
+        MainExit::new(entry::list_crates(args), None)
+    } else if args.prune {
+        MainExit::new(entry::prune_crates(args), None)
     } else {
         logging(
             args.log_level.unwrap_or(LevelFilter::Info),
