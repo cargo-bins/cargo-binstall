@@ -25,7 +25,11 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
     let mut extracted_files = ExtractedFiles::new();
 
     for entry in f.read_zip()?.entries() {
-        let Some(name) = entry.sanitized_name().map(Path::new).and_then(safe_relative) else {
+        let Some(name) = entry
+            .sanitized_name()
+            .map(Path::new)
+            .and_then(safe_relative)
+        else {
             continue;
         };
         let path = dir.join(&name);
