@@ -69,7 +69,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
 
                 // src is relative to link_dir
                 let link_dir = name.parent().unwrap_or(Path::new(""));
-                if link_dir.join(&src) == *name {
+                if link_dir.join(src) == *name {
                     warn!("Skip symlink loop {}", path.display());
                     continue;
                 }
