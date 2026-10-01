@@ -24,15 +24,22 @@ fn read_symlink_src(reader: impl io::Read) -> io::Result<std::path::PathBuf> {
     cfg_select! {
         any(unix, wasi) => {
             let mut src = Vec::new();
-            entry.reader().read_to_end(&mut src)?;
+            reader.read_to_end(&mut src)?;
             Ok(OsStringExt::from_vec(src).into())
         }
         _ => {
             let mut src = String::new();
-            entry.reader().read_to_string(&mut src)?;
+            reader.read_to_string(&mut src)?;
             Ok(src.into())
         }
     }
+}
+
+fn create_parent_dir(path: &Path) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .expect("all full entry paths should have parent paths");
+    create_dir_all(parent)
 }
 
 pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadError> {
@@ -49,21 +56,12 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
         };
         let path = dir.join(&name);
 
-        let create_parent_dir = || {
-            let parent = path
-                .parent()
-                .expect("all full entry paths should have parent paths");
-            create_dir_all(parent)
-        };
-
         let do_extract_file = || {
-            create_parent_dir()?;
+            create_parent_dir(&path)?;
 
             let mut entry_writer = File::create_new(&path)?;
             let mut entry_reader = entry.reader();
-            io::copy(&mut entry_reader, &mut entry_writer)?;
-
-            Ok::<_, io::Error>(())
+            io::copy(&mut entry_reader, &mut entry_writer)
         };
 
         match entry.kind() {
@@ -86,12 +84,8 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                             continue
                         }
 
-                        create_parent_dir()?;
-
-                        let parent = src
-                            .parent()
-                            .expect("all full entry paths should have parent paths");
-                        create_dir_all(parent)?;
+                        create_parent_dir(&src)?;
+                        create_parent_dir(&path)?;
 
                         std::os::unix::fs::symlink(src, &path)?;
                     }
