@@ -34,7 +34,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
         match entry.kind() {
             #[cfg(any(unix, target_os = "wasi"))]
             EntryKind::Symlink => {
-                use std::io::Read;
+                use std::{ffi::OsStr, io::Read};
     
                 #[cfg(unix)]
                 use std::os::unix::{ffi::OsStrExt, fs::symlink};
