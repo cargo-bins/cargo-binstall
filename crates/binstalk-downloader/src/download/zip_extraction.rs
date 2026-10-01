@@ -40,6 +40,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
 
     for entry in f.read_zip()?.entries() {
         let Some(name) = entry.sanitized_name() else {
+            warn!("Skip zip entry {} for suspected zip slip", entry.name);
             continue;
         };
         let Some(name) = Path::new(name).try_normalize() else {
