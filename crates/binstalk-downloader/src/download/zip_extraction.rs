@@ -13,7 +13,7 @@ use super::{DownloadError, ExtractedFiles};
 
 #[cfg(not(windows))]
 fn read_symlink_src(reader: impl io::Read) -> io::Result<std::path::PathBuf> {
-    use std::{fs, io::Read};
+    use std::io::Read;
     
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
