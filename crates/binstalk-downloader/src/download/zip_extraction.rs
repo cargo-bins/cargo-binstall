@@ -15,10 +15,10 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
     let mut extracted_files = ExtractedFiles::new();
 
     for entry in f.read_zip()?.entries() {
-        let Some(name) = entry.sanitized_name().map(Path::new) else {
+        let Some(name) = entry.sanitized_name() else {
             continue;
         };
-        let Some(name) = name.try_normalize() else {
+        let Some(name) = Path::new(name).try_normalize() else {
             warn!("Skip zip entry {name} pointing outside, beware of possible malware");
             continue;
         };
