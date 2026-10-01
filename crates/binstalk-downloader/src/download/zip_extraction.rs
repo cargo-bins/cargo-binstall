@@ -50,11 +50,6 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                     _ => {
                         use std::{fs, io::Read};
 
-                        match fs::symlink_metadata(&path) {
-                            Ok(metadata) if metadata.is_file() => fs::remove_file(&path)?,
-                            _ => (),
-                        }
-
                         let mut src = String::new();
                         entry.reader().read_to_string(&mut src)?;
 
