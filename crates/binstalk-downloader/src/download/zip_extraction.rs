@@ -45,11 +45,12 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
 
         match entry.kind() {
             EntryKind::Symlink => {
-                extracted_files.add_file(name);
+                extracted_files.add_file(&name);
                 cfg_select! {
-                    if #[cfg(windows)] {
+                    windows => {
                         do_extract_file()?;
-                    } else {
+                    }
+                    _ => {
                         use std::{fs, io::Read};
 
                         match fs::symlink_metadata(&path) {
@@ -70,7 +71,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             }
             EntryKind::Directory => (),
             EntryKind::File => {
-                extracted_files.add_file(name);
+                extracted_files.add_file(&name);
                 do_extract_file()?;
             }
         }
