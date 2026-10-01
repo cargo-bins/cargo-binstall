@@ -43,7 +43,6 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
 
         match entry.kind() {
             EntryKind::Symlink => {
-                extracted_files.add_file(&name);
                 cfg_select! {
                     windows => {
                         do_extract_file()?;
@@ -59,7 +58,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                         let mut src = String::new();
                         entry.reader().read_to_string(&mut src)?;
 
-                        // validate pointing path before creating a symbolic link
+                        // validate pointing path before creating a symlink
                         let Some(src) = Path::new(&src).try_normalize() else {
                             warn!(
                                 "Skip zip symlink {src} pointing outside, beware of possible malware"
@@ -70,13 +69,14 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                         std::os::unix::fs::symlink(src, &path)?;
                     }
                 }
+                extracted_files.add_file(&name);
             }
             EntryKind::Directory => {
                 create_dir_all(path)?;
             }
             EntryKind::File => {
-                extracted_files.add_file(&name);
                 do_extract_file()?;
+                extracted_files.add_file(&name);
             }
         }
     }
