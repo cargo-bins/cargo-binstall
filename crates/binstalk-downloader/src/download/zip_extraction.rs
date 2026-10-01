@@ -10,6 +10,8 @@ use tracing::warn;
 
 use super::{DownloadError, ExtractedFiles};
 
+const MAX_LINK_TARGET: u64 = 4096;
+
 fn create_parent_dir(path: &Path) -> io::Result<()> {
     let parent = path
         .parent()
@@ -43,13 +45,18 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                 use std::os::wasi::{ffi::OsStrExt, fs::symlink_path as symlink};
 
                 let mut src = Vec::new();
-                entry.reader().read_to_end(&mut src)?;
-                let src = Path::new(OsStr::from_bytes(&src));
+                entry.reader().take(MAX_LINK_TARGET + 1).read_to_end(&mut src)?;
+                if src.is_empty() || src.len() as u64 > MAX_LINK_TARGET || src.contains(&0) {
+                    warn!("Skip zip symlink dest={} with invalid target", path.display());
+                    continue;
+                }
 
+                let src = Path::new(OsStr::from_bytes(&src));
                 let Some(src) = &src.try_normalize() else {
                     warn!(
-                        "Skip zip symlink {} pointing outside, beware of possible malware",
+                        "Skip zip symlink {} => {} with target pointing outside, beware of possible malware",
                         src.display(),
+                        path.display(),
                     );
                     continue;
                 };
