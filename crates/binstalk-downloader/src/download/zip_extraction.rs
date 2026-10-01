@@ -31,7 +31,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
         let path = dir.join(name);
 
         let do_extract_file = || {
-            let mut entry_writer = OpenOptions::new().write(true).create_new(true).open(&path)?;
+            let mut entry_writer = File::create_new(&path)?;
             let mut entry_reader = entry.reader();
             io::copy(&mut entry_reader, &mut entry_writer)?;
 
@@ -64,7 +64,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                         // validate pointing path before creating a symbolic link
                         let Some(src) = safe_relative(Path::new(&src)) else {
                             continue;
-                        }
+                        };
                         std::os::unix::fs::symlink(src, &path)?;
                     }
                 }
