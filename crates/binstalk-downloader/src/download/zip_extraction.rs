@@ -308,11 +308,12 @@ mod tests {
     }
 
     #[test]
-    fn dotdot_that_stays_inside_is_normalized() {
+    fn dotdot_inside_entry_name_never_escapes() {
         let sb = Sandbox::new();
+        // rc-zip's `sanitized_name()` drops names containing `..`, so this
+        // entry is skipped before our own normalization sees it.
         sb.extract(&[TestEntry::file("a/../b.txt", b"b")]).unwrap();
 
-        assert_eq!(fs::read(sb.out().join("b.txt")).unwrap(), b"b");
         sb.assert_root_contains_only(&["out"]);
     }
 
@@ -516,4 +517,3 @@ mod tests {
         }
     }
 }
-
