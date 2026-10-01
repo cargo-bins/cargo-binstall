@@ -7,6 +7,7 @@ use std::{
 
 use normalize_path::NormalizePath;
 use rc_zip_sync::{rc_zip::parse::EntryKind, ReadZip};
+use tracing::warn;
 
 use super::{DownloadError, ExtractedFiles};
 
@@ -14,11 +15,12 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
     let mut extracted_files = ExtractedFiles::new();
 
     for entry in f.read_zip()?.entries() {
-        let Some(name) = entry
-            .sanitized_name()
+        let name = entry.sanitized_name();
+        let Some(name) = name
             .map(Path::new)
             .and_then(NormalizePath::try_normalize)
         else {
+            warn!("Skip zip entry {name} pointing outside, beware of possible malware");
             continue;
         };
         let path = dir.join(&name);
@@ -29,7 +31,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                 .expect("all full entry paths should have parent paths");
             create_dir_all(parent)
         };
-        
+
         let do_extract_file = || {
             create_parent_dir()?;
 
@@ -60,6 +62,9 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
 
                         // validate pointing path before creating a symbolic link
                         let Some(src) = Path::new(&src).try_normalize() else {
+                            warn!(
+                                "Skip zip symlink {src} pointing outside, beware of possible malware"
+                            );
                             continue;
                         };
                         create_parent_dir()?;
