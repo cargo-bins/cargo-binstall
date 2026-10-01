@@ -65,6 +65,10 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                             );
                             continue;
                         };
+                        if src == path {
+                            warn!("Skip symlink loop {src} -> {path}");
+                            continue
+                        }
                         create_parent_dir()?;
                         std::os::unix::fs::symlink(src, &path)?;
                     }
