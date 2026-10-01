@@ -11,6 +11,30 @@ use tracing::warn;
 
 use super::{DownloadError, ExtractedFiles};
 
+#[cfg(not(windows))]
+fn read_symlink_src(reader: impl io::Read) -> io::Result<std::path::PathBuf> {
+    use std::{fs, io::Read};
+    
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
+    
+    #[cfg(wasi)]
+    use std::os::wasi::ffi::OsStringExt;
+
+    cfg_select! {
+        any(unix, wasi) => {
+            let mut src = Vec::new();
+            entry.reader().read_to_end(&mut src)?;
+            Ok(OsStringExt::from_vec(src).into())
+        }
+        _ => {
+            let mut src = String::new();
+            entry.reader().read_to_string(&mut src)?;
+            Ok(src.into())
+        }
+    }
+}
+
 pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadError> {
     let mut extracted_files = ExtractedFiles::new();
 
@@ -48,13 +72,9 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                         do_extract_file()?;
                     }
                     _ => {
-                        use std::{fs, io::Read};
+                        let src = read_symlink_src(entry.reader())?;
 
-                        let mut src = String::new();
-                        entry.reader().read_to_string(&mut src)?;
-
-                        // validate pointing path before creating a symlink
-                        let Some(src) = Path::new(&src).try_normalize() else {
+                        let Some(src) = src.try_normalize() else {
                             warn!(
                                 "Skip zip symlink {src} pointing outside, beware of possible malware"
                             );
