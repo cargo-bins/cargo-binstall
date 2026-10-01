@@ -85,7 +85,14 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                             warn!("Skip symlink loop {} -> {}", src.display(), path.display());
                             continue
                         }
+
                         create_parent_dir()?;
+
+                        let parent = src
+                            .parent()
+                            .expect("all full entry paths should have parent paths");
+                        create_dir_all(parent)?;
+
                         std::os::unix::fs::symlink(src, &path)?;
                     }
                 }
