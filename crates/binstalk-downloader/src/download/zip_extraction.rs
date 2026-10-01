@@ -35,10 +35,10 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             #[cfg(any(unix, target_os = "wasi"))]
             EntryKind::Symlink => {
                 use std::{ffi::OsStr, io::Read};
-    
+
                 #[cfg(unix)]
                 use std::os::unix::{ffi::OsStrExt, fs::symlink};
-    
+
                 #[cfg(target_os = "wasi")]
                 use std::os::wasi::{ffi::OsStrExt, fs::symlink_path as symlink};
 
@@ -53,15 +53,16 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                     );
                     continue;
                 };
+                let src = &dir.join(src);
+
                 if src == path {
                     warn!("Skip symlink loop {}", src.display());
                     continue;
                 }
 
-                create_parent_dir(src)?;
                 create_parent_dir(path)?;
-
                 symlink(src, path)?;
+
                 extracted_files.add_file(name);
             }
             EntryKind::Directory => {
