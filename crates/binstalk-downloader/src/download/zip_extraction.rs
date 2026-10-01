@@ -23,18 +23,22 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
         };
         let path = dir.join(&name);
 
+        let create_parent_dir = || {
+            let parent = path
+                .parent()
+                .expect("all full entry paths should have parent paths");
+            create_dir_all(parent)
+        };
+        
         let do_extract_file = || {
+            create_parent_dir()?;
+
             let mut entry_writer = File::create_new(&path)?;
             let mut entry_reader = entry.reader();
             io::copy(&mut entry_reader, &mut entry_writer)?;
 
             Ok::<_, io::Error>(())
         };
-
-        let parent = path
-            .parent()
-            .expect("all full entry paths should have parent paths");
-        create_dir_all(parent)?;
 
         match entry.kind() {
             EntryKind::Symlink => {
@@ -58,11 +62,14 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                         let Some(src) = Path::new(&src).try_normalize() else {
                             continue;
                         };
+                        create_parent_dir()?;
                         std::os::unix::fs::symlink(src, &path)?;
                     }
                 }
             }
-            EntryKind::Directory => (),
+            EntryKind::Directory => {
+                create_dir_all(path)?;
+            }
             EntryKind::File => {
                 extracted_files.add_file(&name);
                 do_extract_file()?;
