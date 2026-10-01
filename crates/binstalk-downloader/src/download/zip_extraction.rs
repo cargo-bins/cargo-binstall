@@ -1,25 +1,37 @@
 use std::{
+    cfg_select,
     fs::{create_dir_all, File},
     io,
-    path::Path,
+    path::{Component, Path, PathBuf},
 };
 
-use cfg_if::cfg_if;
 use rc_zip_sync::{rc_zip::parse::EntryKind, ReadZip};
 
 use super::{DownloadError, ExtractedFiles};
+
+fn safe_relative(p: &Path) -> Option<PathBuf> {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::Normal(s) => out.push(s),
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then_some(out)
+}
 
 pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadError> {
     let mut extracted_files = ExtractedFiles::new();
 
     for entry in f.read_zip()?.entries() {
-        let Some(name) = entry.sanitized_name().map(Path::new) else {
+        let Some(name) = entry.sanitized_name().map(Path::new).and_then(safe_relative) else {
             continue;
         };
         let path = dir.join(name);
 
         let do_extract_file = || {
-            let mut entry_writer = File::create(&path)?;
+            let mut entry_writer = OpenOptions::new().write(true).create_new(true).open(&path)?;
             let mut entry_reader = entry.reader();
             io::copy(&mut entry_reader, &mut entry_writer)?;
 
@@ -34,7 +46,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
         match entry.kind() {
             EntryKind::Symlink => {
                 extracted_files.add_file(name);
-                cfg_if! {
+                cfg_select! {
                     if #[cfg(windows)] {
                         do_extract_file()?;
                     } else {
@@ -49,7 +61,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                         entry.reader().read_to_string(&mut src)?;
 
                         // validate pointing path before creating a symbolic link
-                        if src.contains("..") {
+                        let Some(src) = safe_relative(Path::new(&src)) else {
                             continue;
                         }
                         std::os::unix::fs::symlink(src, &path)?;
