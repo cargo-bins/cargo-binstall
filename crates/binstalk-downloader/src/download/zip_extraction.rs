@@ -45,9 +45,15 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                 use std::os::wasi::{ffi::OsStrExt, fs::symlink_path as symlink};
 
                 let mut src = Vec::new();
-                entry.reader().take(MAX_LINK_TARGET + 1).read_to_end(&mut src)?;
+                entry
+                    .reader()
+                    .take(MAX_LINK_TARGET + 1)
+                    .read_to_end(&mut src)?;
                 if src.is_empty() || src.len() as u64 > MAX_LINK_TARGET || src.contains(&0) {
-                    warn!("Skip zip symlink dest={} with invalid target", path.display());
+                    warn!(
+                        "Skip zip symlink dest={} with invalid target",
+                        path.display(),
+                    );
                     continue;
                 }
 
@@ -60,10 +66,11 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                     );
                     continue;
                 };
-                let src = &dir.join(src);
 
-                if src == path {
-                    warn!("Skip symlink loop {}", src.display());
+                // src is relative to link_dir
+                let link_dir = name.parent().unwrap_or(Path::new(""));
+                if link_dir.join(&src) == *name {
+                    warn!("Skip symlink loop {}", path.display());
                     continue;
                 }
 
