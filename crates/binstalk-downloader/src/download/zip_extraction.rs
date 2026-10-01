@@ -25,11 +25,11 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             warn!("Skip zip entry {} for suspected zip slip", entry.name);
             continue;
         };
-        let Some(name) = Path::new(name).try_normalize() else {
+        let Some(name) = &Path::new(name).try_normalize() else {
             warn!("Skip zip entry {name} pointing outside, beware of possible malware");
             continue;
         };
-        let path = &dir.join(&name);
+        let path = &dir.join(name);
 
         match entry.kind() {
             #[cfg(any(unix, target_os = "wasi"))]
@@ -43,7 +43,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                 use std::os::wasi::{ffi::OsStrExt, fs::symlink_path as symlink};
 
                 let mut src = Vec::new();
-                reader.read_to_end(&mut src)?;
+                entry.reader().read_to_end(&mut src)?;
                 let src = Path::new(OsStr::from_bytes(&src));
 
                 let Some(src) = &src.try_normalize() else {
@@ -54,7 +54,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                     continue;
                 };
                 if src == path {
-                    warn!("Skip symlink loop {} -> {}", src.display(), path.display());
+                    warn!("Skip symlink loop {}", src.display());
                     continue;
                 }
 
@@ -62,7 +62,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                 create_parent_dir(path)?;
 
                 symlink(src, path)?;
-                extracted_files.add_file(&name);
+                extracted_files.add_file(name);
             }
             EntryKind::Directory => {
                 create_dir_all(path)?;
@@ -75,7 +75,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                 let mut entry_reader = entry.reader();
                 io::copy(&mut entry_reader, &mut entry_writer)?;
 
-                extracted_files.add_file(&name);
+                extracted_files.add_file(name);
             }
         }
     }
