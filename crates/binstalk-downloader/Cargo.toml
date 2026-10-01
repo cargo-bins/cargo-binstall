@@ -27,6 +27,7 @@ flate2 = { version = "1.1.8", default-features = false }
 futures-util = "0.3.30"
 futures-io = "0.3.30"
 httpdate = "1.0.2"
+normalize-path = { version = "0.2.1", path = "../normalize-path" }
 rc-zip-sync = { version = "4.3.5", features = [
     "deflate",
     "bzip2",
