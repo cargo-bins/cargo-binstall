@@ -18,11 +18,11 @@ fn read_symlink_src(reader: impl io::Read) -> io::Result<std::path::PathBuf> {
     #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
     
-    #[cfg(wasi)]
+    #[cfg(target_os = "wasi")]
     use std::os::wasi::ffi::OsStringExt;
 
     cfg_select! {
-        any(unix, wasi) => {
+        any(unix, target_os = "wasi") => {
             let mut src = Vec::new();
             reader.read_to_end(&mut src)?;
             Ok(OsStringExt::from_vec(src).into())
@@ -56,47 +56,40 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
         };
         let path = dir.join(&name);
 
-        let do_extract_file = || {
-            create_parent_dir(&path)?;
-
-            let mut entry_writer = File::create_new(&path)?;
-            let mut entry_reader = entry.reader();
-            io::copy(&mut entry_reader, &mut entry_writer)
-        };
-
         match entry.kind() {
+            #[cfg(not(windows))]
             EntryKind::Symlink => {
-                cfg_select! {
-                    windows => {
-                        do_extract_file()?;
-                    }
-                    _ => {
-                        let src = read_symlink_src(entry.reader())?;
+                let src = read_symlink_src(entry.reader())?;
 
-                        let Some(src) = src.try_normalize() else {
-                            warn!(
-                                "Skip zip symlink {src} pointing outside, beware of possible malware"
-                            );
-                            continue;
-                        };
-                        if src == path {
-                            warn!("Skip symlink loop {} -> {}", src.display(), path.display());
-                            continue
-                        }
-
-                        create_parent_dir(&src)?;
-                        create_parent_dir(&path)?;
-
-                        std::os::unix::fs::symlink(src, &path)?;
-                    }
+                let Some(src) = src.try_normalize() else {
+                    warn!(
+                        "Skip zip symlink {} pointing outside, beware of possible malware",
+                        src.display(),
+                    );
+                    continue;
+                };
+                if src == path {
+                    warn!("Skip symlink loop {} -> {}", src.display(), path.display());
+                    continue;
                 }
+
+                create_parent_dir(&src)?;
+                create_parent_dir(&path)?;
+
+                std::os::unix::fs::symlink(src, &path)?;
                 extracted_files.add_file(&name);
             }
             EntryKind::Directory => {
                 create_dir_all(path)?;
             }
-            EntryKind::File => {
-                do_extract_file()?;
+            #[cfg_attr(not(windows), allow(unreachable_patterns))] // Symlink is handled above on non-Windows
+            EntryKind::File | EntryKind::Symlink => {
+                create_parent_dir(&path)?;
+
+                let mut entry_writer = File::create_new(&path)?;
+                let mut entry_reader = entry.reader();
+                io::copy(&mut entry_reader, &mut entry_writer)?;
+
                 extracted_files.add_file(&name);
             }
         }
