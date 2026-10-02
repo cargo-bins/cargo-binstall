@@ -54,6 +54,15 @@ pub enum Error {
     #[error(transparent)]
     Http(Box<HttpError>),
 
+    /// A response body ended before the length its headers promised, and the
+    /// remainder could not be fetched.
+    #[error("{url} ended after {read} of {expected} bytes")]
+    Truncated {
+        url: Box<url::Url>,
+        read: u64,
+        expected: u64,
+    },
+
     #[cfg(feature = "json")]
     #[error("Failed to parse http response body as Json: {0}")]
     Json(#[from] JsonError),
