@@ -28,7 +28,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             continue;
         };
         let Some(name) = &Path::new(name).try_normalize() else {
-            warn!("Skip zip entry {name} pointing outside, beware of possible malware");
+            warn!("Skip zip entry {name} pointing outside, report to packager please");
             continue;
         };
         let path = &dir.join(name);
