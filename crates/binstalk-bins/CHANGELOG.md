@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.26](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.6.25...binstalk-bins-v0.6.26) - 2026-10-02
+
+### Other
+
+- updated the following local packages: normalize-path
+
 ## [0.6.25](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.6.24...binstalk-bins-v0.6.25) - 2026-07-24
 
 ### Other

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.50](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.49...binstalk-fetchers-v0.10.50) - 2026-10-02
+
+### Other
+
+- *(deps)* bump minisign-verify from 0.2.5 to 0.3.0 in the deps group ([#2690](https://github.com/cargo-bins/cargo-binstall/pull/2690))
+
 ## [0.10.49](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.48...binstalk-fetchers-v0.10.49) - 2026-09-26
 
 ### Other

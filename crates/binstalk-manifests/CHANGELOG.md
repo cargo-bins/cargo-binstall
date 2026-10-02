@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.8](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.7...binstalk-manifests-v0.19.8) - 2026-10-02
+
+### Added
+
+- *(cli)* add --list and --prune to inspect and reconcile manifests ([#2677](https://github.com/cargo-bins/cargo-binstall/pull/2677))
+
 ## [0.19.7](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.6...binstalk-manifests-v0.19.7) - 2026-09-26
 
 ### Other
