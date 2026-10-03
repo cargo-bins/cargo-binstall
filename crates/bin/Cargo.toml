@@ -20,7 +20,15 @@ pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
 pkg-fmt = "zip"
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
 [package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.universal-apple-darwin]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.universal2-apple-darwin]
 pkg-fmt = "zip"
 
 [dependencies]
