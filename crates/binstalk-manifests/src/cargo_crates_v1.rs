@@ -326,4 +326,26 @@ mod tests {
 
         CratesToml::load_from_reader(raw_data.as_slice()).unwrap();
     }
+
+    #[test]
+    fn test_loading_sparse_source() {
+        let raw_data = br#"
+[v1]
+"cargo-watch 8.5.3 (sparse+https://rsproxy.cn/index/)" = ["cargo-watch"]
+"cargo-edit 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = ["cargo-add"]
+        "#;
+
+        let (versions, details) = CratesToml::load_from_reader(raw_data.as_slice())
+            .unwrap()
+            .collect_into_crates_details()
+            .unwrap();
+
+        assert_eq!(versions.len(), 2);
+        assert_eq!(versions.get("cargo-watch").unwrap(), &Version::new(8, 5, 3));
+
+        let (_, source, bins) = details.get("cargo-watch").unwrap();
+        assert!(matches!(source, Source::Sparse(_)));
+        assert_eq!(source.to_string(), "sparse+https://rsproxy.cn/index/");
+        assert_eq!(bins, &["cargo-watch"]);
+    }
 }
