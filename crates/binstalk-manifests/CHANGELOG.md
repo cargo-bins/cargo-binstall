@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.9](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.8...binstalk-manifests-v0.19.9) - 2026-10-06
+
+### Fixed
+
+- *(manifests)* parse sparse+ sources in .crates.toml ([#2696](https://github.com/cargo-bins/cargo-binstall/pull/2696))
+
 ## [0.19.8](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.7...binstalk-manifests-v0.19.8) - 2026-10-02
 
 ### Added
