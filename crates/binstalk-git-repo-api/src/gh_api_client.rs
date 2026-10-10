@@ -12,7 +12,7 @@ use std::{
 use binstalk_downloader::{download::Download, remote};
 use compact_str::{format_compact, CompactString, ToCompactString};
 use tokio::sync::OnceCell;
-use tracing::{instrument, Level};
+use tracing::{instrument, warn, Level};
 use url::Url;
 use zeroize::Zeroizing;
 
@@ -136,6 +136,18 @@ struct Inner {
     only_use_restful_api: AtomicBool,
 }
 
+/// Trim surrounding whitespace (e.g. a trailing `\n` from a CI secret), and drop
+/// a token that still can't be sent in an HTTP header: it would make every
+/// request fail to build, instead of falling back to unauthenticated requests.
+fn sanitize_auth_token(token: Zeroizing<Box<str>>) -> Option<Zeroizing<Box<str>>> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() || !trimmed.bytes().all(|b| b.is_ascii_graphic()) {
+        warn!("Ignoring the GitHub token: it is empty or contains invalid characters");
+        return None;
+    }
+    Some(Zeroizing::new(trimmed.into()))
+}
+
 /// Github API client for querying whether a release artifact exists.
 /// Can only handle github.com for now.
 #[derive(Clone, Debug)]
@@ -148,7 +160,7 @@ impl GhApiClient {
             release_artifacts: Default::default(),
             retry_after: Default::default(),
 
-            auth_token,
+            auth_token: auth_token.and_then(sanitize_auth_token),
             is_auth_token_valid: AtomicBool::new(true),
 
             only_use_restful_api: AtomicBool::new(false),
@@ -333,6 +345,16 @@ mod test {
     use tracing_subscriber::{filter::LevelFilter, fmt::fmt};
 
     static DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(1);
+
+    #[test]
+    fn test_sanitize_auth_token() {
+        let sanitize =
+            |s: &str| sanitize_auth_token(Zeroizing::new(s.into())).map(|t| t.to_string());
+        assert_eq!(sanitize("ghp_abc123\n").as_deref(), Some("ghp_abc123"));
+        assert_eq!(sanitize(" ghp_abc123\r\n").as_deref(), Some("ghp_abc123"));
+        assert_eq!(sanitize("ghp_abc 123"), None);
+        assert_eq!(sanitize("\n"), None);
+    }
 
     mod cargo_binstall_v0_20_1 {
         use super::{CompactString, GhRelease, GhRepo};
