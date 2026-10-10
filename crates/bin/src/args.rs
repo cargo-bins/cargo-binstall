@@ -15,6 +15,7 @@ use binstalk::{
 };
 use binstalk_manifests::cargo_toml_binstall::{PkgOverride, Strategy};
 use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use clap_complete::Shell;
 use compact_str::CompactString;
 use log::LevelFilter;
 use semver::VersionReq;
@@ -54,7 +55,7 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         value_name = "crate[@version]",
-        required_unless_present_any = ["version", "self_install", "help", "list", "prune"],
+        required_unless_present_any = ["version", "self_install", "help", "list", "prune", "completions"],
     )]
     pub(crate) crate_names: Vec<CrateName>,
 
@@ -501,6 +502,15 @@ pub struct Args {
     )]
     pub(crate) prune: bool,
 
+    /// Print shell completions for the given shell to stdout and exit.
+    #[clap(
+        help_heading = "Meta",
+        long = "completions",
+        value_name = "SHELL",
+        conflicts_with_all = ["crate_names", "list", "prune"]
+    )]
+    pub(crate) completions: Option<Shell>,
+
     #[cfg(feature = "clap-markdown")]
     #[clap(long, hide = true)]
     pub(crate) markdown_help: bool,
@@ -619,6 +629,16 @@ pub fn parse() -> (Args, PkgOverride) {
     #[cfg(feature = "clap-markdown")]
     if opts.markdown_help {
         clap_markdown::print_help_markdown::<Args>();
+        std::process::exit(0);
+    }
+
+    if let Some(shell) = opts.completions {
+        clap_complete::generate(
+            shell,
+            &mut Args::command(),
+            "cargo-binstall",
+            &mut std::io::stdout(),
+        );
         std::process::exit(0);
     }
 
