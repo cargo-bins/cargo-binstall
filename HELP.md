@@ -178,6 +178,16 @@ Some crate installation strategies may collect anonymized usage statistics by de
    The default is to only allow HTTPS, rejecting any plaintext HTTP url. This option relaxes that so registries and download urls served over plain HTTP can be used, which is handy for talking to a local registry during testing.
 
    Note that this is insecure and not recommended outside of testing.
+* `--dns <RESOLVER>` — Select the DNS resolver used for all network requests.
+
+   `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`) instead, which helps on hosts where hickory-dns cannot resolve names, for example behind some VPNs or in containers that rely on NSS. The value can also be set with the `BINSTALL_DNS` environment variable.
+
+   If cargo-binstall was built without the `trust-dns` feature, the system resolver is always used.
+
+  Default value: `hickory`
+
+  Possible values: `system`, `hickory`
+
 * `--root-certificates <PATH>` — Specify the root certificates to use for https connections, in addition to default system-wide ones
 * `--json-output` — Print logs in json format to be parsable
 * `--github-token <TOKEN>` — Provide the github token for accessing the restful API of api.github.com

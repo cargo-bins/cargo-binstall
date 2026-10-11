@@ -389,6 +389,26 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub(crate) allow_insecure_http: bool,
 
+    /// Select the DNS resolver used for all network requests.
+    ///
+    /// `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself
+    /// and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`)
+    /// instead, which helps on hosts where hickory-dns cannot resolve names, for example behind
+    /// some VPNs or in containers that rely on NSS. The value can also be set with the
+    /// `BINSTALL_DNS` environment variable.
+    ///
+    /// If cargo-binstall was built without the `trust-dns` feature, the system resolver is always
+    /// used.
+    #[clap(
+        help_heading = "Options",
+        long,
+        value_enum,
+        env = "BINSTALL_DNS",
+        value_name = "RESOLVER",
+        default_value_t
+    )]
+    pub(crate) dns: DnsResolver,
+
     /// Specify the root certificates to use for https connections,
     /// in addition to default system-wide ones.
     #[clap(
@@ -528,6 +548,22 @@ impl From<TLSVersion> for remote::TLSVersion {
         match ver {
             TLSVersion::Tls1_2 => remote::TLSVersion::TLS_1_2,
             TLSVersion::Tls1_3 => remote::TLSVersion::TLS_1_3,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ValueEnum)]
+pub(crate) enum DnsResolver {
+    System,
+    #[default]
+    Hickory,
+}
+
+impl From<DnsResolver> for remote::DnsResolver {
+    fn from(dns: DnsResolver) -> Self {
+        match dns {
+            DnsResolver::System => remote::DnsResolver::System,
+            DnsResolver::Hickory => remote::DnsResolver::Hickory,
         }
     }
 }
@@ -788,6 +824,7 @@ You cannot use --features and specify multiple packages at the same time. Do one
 
 #[cfg(test)]
 mod test {
+    use clap::FromArgMatches;
     use strum::VariantArray;
 
     use super::*;
@@ -814,4 +851,52 @@ mod test {
     }
 
     const _: () = assert!(Strategy::VARIANTS.len() == StrategyWrapped::VARIANTS.len());
+
+    #[test]
+    fn dns_defaults_to_hickory() {
+        let args = Args::try_parse_from(["cargo-binstall", "ripgrep"]).unwrap();
+        assert_eq!(args.dns, DnsResolver::Hickory);
+    }
+
+    #[test]
+    fn dns_flag_selects_resolver() {
+        let args = Args::try_parse_from(["cargo-binstall", "--dns", "system", "ripgrep"]).unwrap();
+        assert_eq!(args.dns, DnsResolver::System);
+
+        let args = Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).unwrap();
+        assert_eq!(args.dns, DnsResolver::Hickory);
+
+        assert!(
+            Args::try_parse_from(["cargo-binstall", "--dns", "getaddrinfo", "ripgrep"]).is_err()
+        );
+    }
+
+    #[test]
+    fn dns_env_var_selects_resolver() {
+        let cmd = Args::command();
+        let env_name = cmd
+            .get_arguments()
+            .find(|arg| arg.get_id() == "dns")
+            .unwrap()
+            .get_env()
+            .unwrap();
+        assert_eq!(env_name, "BINSTALL_DNS");
+
+        // Parse against a renamed variable so this test cannot race with the
+        // other tests in this module that also read the real `BINSTALL_DNS`.
+        // clap captures the variable's value when `Arg::env` is called, so set
+        // it first.
+        env::set_var("TEST_BINSTALL_DNS", "system");
+        let cmd = cmd.mut_arg("dns", |arg| arg.env("TEST_BINSTALL_DNS"));
+        env::remove_var("TEST_BINSTALL_DNS");
+
+        let parse = |argv: &[&str]| {
+            Args::from_arg_matches(&cmd.clone().try_get_matches_from(argv).unwrap()).unwrap()
+        };
+        let from_env = parse(&["cargo-binstall", "ripgrep"]);
+        let flag_wins = parse(&["cargo-binstall", "--dns", "hickory", "ripgrep"]);
+
+        assert_eq!(from_env.dns, DnsResolver::System);
+        assert_eq!(flag_wins.dns, DnsResolver::Hickory);
+    }
 }
