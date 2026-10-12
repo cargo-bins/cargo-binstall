@@ -89,19 +89,12 @@ pub struct Client(Arc<Inner>);
 
 /// Returns the hickory-dns resolver to install on the [`reqwest::ClientBuilder`]
 /// for `dns`, or `None` to keep reqwest's default system resolver (`getaddrinfo`).
-#[cfg(feature = "hickory-dns")]
-fn hickory_resolver(dns: DnsResolver) -> Option<Arc<TrustDnsResolver>> {
+fn hickory_resolver(dns: DnsResolver) -> Option<Arc<dyn reqwest::dns::Resolve>> {
     match dns {
         DnsResolver::System => None,
+        #[cfg(feature = "hickory-dns")]
         DnsResolver::Hickory => Some(Arc::new(TrustDnsResolver::default())),
     }
-}
-
-/// Without the `hickory-dns` feature only the system resolver is available.
-#[cfg(not(feature = "hickory-dns"))]
-fn hickory_resolver(dns: DnsResolver) -> Option<Arc<dyn reqwest::dns::Resolve>> {
-    let DnsResolver::System = dns;
-    None
 }
 
 #[cfg_attr(not(feature = "__tls"), allow(unused_variables, unused_mut))]
