@@ -182,7 +182,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`) instead, which helps on hosts where hickory-dns cannot resolve names, for example behind some VPNs or in containers that rely on NSS. The value can also be set with the `BINSTALL_DNS` environment variable.
 
-   If cargo-binstall was built without the `trust-dns` feature, the system resolver is always used.
+   `hickory` is only available when cargo-binstall was built with the `trust-dns` feature (enabled by default); without it `system` is the only resolver.
 
   Default value: `hickory`
 

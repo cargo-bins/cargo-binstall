@@ -100,9 +100,7 @@ fn hickory_resolver(dns: DnsResolver) -> Option<Arc<TrustDnsResolver>> {
 /// Without the `hickory-dns` feature only the system resolver is available.
 #[cfg(not(feature = "hickory-dns"))]
 fn hickory_resolver(dns: DnsResolver) -> Option<Arc<dyn reqwest::dns::Resolve>> {
-    if dns == DnsResolver::Hickory {
-        tracing::warn!("hickory-dns is not compiled in, using the system DNS resolver instead");
-    }
+    let DnsResolver::System = dns;
     None
 }
 
@@ -515,9 +513,16 @@ mod tests {
         .unwrap()
     }
 
+    #[cfg(feature = "hickory-dns")]
     #[test]
     fn dns_resolver_defaults_to_hickory() {
         assert_eq!(DnsResolver::default(), DnsResolver::Hickory);
+    }
+
+    #[cfg(not(feature = "hickory-dns"))]
+    #[test]
+    fn dns_resolver_defaults_to_system_without_hickory() {
+        assert_eq!(DnsResolver::default(), DnsResolver::System);
     }
 
     #[test]
@@ -531,15 +536,14 @@ mod tests {
         assert!(hickory_resolver(DnsResolver::Hickory).is_some());
     }
 
-    #[cfg(not(feature = "hickory-dns"))]
-    #[test]
-    fn hickory_dns_falls_back_to_system_resolver_when_not_compiled_in() {
-        assert!(hickory_resolver(DnsResolver::Hickory).is_none());
-    }
-
     #[test]
     fn client_builds_with_either_dns_resolver() {
-        for dns in [DnsResolver::System, DnsResolver::Hickory] {
+        #[cfg(feature = "hickory-dns")]
+        let resolvers = [DnsResolver::System, DnsResolver::Hickory];
+        #[cfg(not(feature = "hickory-dns"))]
+        let resolvers = [DnsResolver::System];
+
+        for dns in resolvers {
             Client::new(
                 "cargo-binstall-test",
                 None,

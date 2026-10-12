@@ -397,8 +397,8 @@ pub struct Args {
     /// some VPNs or in containers that rely on NSS. The value can also be set with the
     /// `BINSTALL_DNS` environment variable.
     ///
-    /// If cargo-binstall was built without the `trust-dns` feature, the system resolver is always
-    /// used.
+    /// `hickory` is only available when cargo-binstall was built with the `trust-dns` feature
+    /// (enabled by default); without it `system` is the only resolver.
     #[clap(
         help_heading = "Options",
         long,
@@ -554,7 +554,9 @@ impl From<TLSVersion> for remote::TLSVersion {
 
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ValueEnum)]
 pub(crate) enum DnsResolver {
+    #[cfg_attr(not(feature = "trust-dns"), default)]
     System,
+    #[cfg(feature = "trust-dns")]
     #[default]
     Hickory,
 }
@@ -563,6 +565,7 @@ impl From<DnsResolver> for remote::DnsResolver {
     fn from(dns: DnsResolver) -> Self {
         match dns {
             DnsResolver::System => remote::DnsResolver::System,
+            #[cfg(feature = "trust-dns")]
             DnsResolver::Hickory => remote::DnsResolver::Hickory,
         }
     }
@@ -852,10 +855,20 @@ mod test {
 
     const _: () = assert!(Strategy::VARIANTS.len() == StrategyWrapped::VARIANTS.len());
 
+    #[cfg(feature = "trust-dns")]
     #[test]
     fn dns_defaults_to_hickory() {
         let args = Args::try_parse_from(["cargo-binstall", "ripgrep"]).unwrap();
         assert_eq!(args.dns, DnsResolver::Hickory);
+    }
+
+    #[cfg(not(feature = "trust-dns"))]
+    #[test]
+    fn dns_defaults_to_system_without_hickory() {
+        let args = Args::try_parse_from(["cargo-binstall", "ripgrep"]).unwrap();
+        assert_eq!(args.dns, DnsResolver::System);
+
+        assert!(Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).is_err());
     }
 
     #[test]
@@ -863,8 +876,12 @@ mod test {
         let args = Args::try_parse_from(["cargo-binstall", "--dns", "system", "ripgrep"]).unwrap();
         assert_eq!(args.dns, DnsResolver::System);
 
-        let args = Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).unwrap();
-        assert_eq!(args.dns, DnsResolver::Hickory);
+        #[cfg(feature = "trust-dns")]
+        {
+            let args =
+                Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).unwrap();
+            assert_eq!(args.dns, DnsResolver::Hickory);
+        }
 
         assert!(
             Args::try_parse_from(["cargo-binstall", "--dns", "getaddrinfo", "ripgrep"]).is_err()
@@ -894,9 +911,12 @@ mod test {
             Args::from_arg_matches(&cmd.clone().try_get_matches_from(argv).unwrap()).unwrap()
         };
         let from_env = parse(&["cargo-binstall", "ripgrep"]);
-        let flag_wins = parse(&["cargo-binstall", "--dns", "hickory", "ripgrep"]);
-
         assert_eq!(from_env.dns, DnsResolver::System);
-        assert_eq!(flag_wins.dns, DnsResolver::Hickory);
+
+        #[cfg(feature = "trust-dns")]
+        {
+            let flag_wins = parse(&["cargo-binstall", "--dns", "hickory", "ripgrep"]);
+            assert_eq!(flag_wins.dns, DnsResolver::Hickory);
+        }
     }
 }
