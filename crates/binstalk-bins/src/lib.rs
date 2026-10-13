@@ -32,6 +32,11 @@ pub enum Error {
     #[error("bin file {} not found", .0.display())]
     BinFileNotFound(Box<Path>),
 
+    /// Bin name from the crate manifest is not a plain file name, so it
+    /// would place the binary outside of the install dir.
+    #[error("invalid bin name {0:?}: must be a plain file name")]
+    InvalidBinName(CompactString),
+
     #[error(transparent)]
     Io(#[from] io::Error),
 
@@ -50,6 +55,26 @@ fn is_valid_path(path: &Path) -> bool {
         // so checking prefix/rootdir is enough.
         Some(Component::Prefix(..) | Component::RootDir)
     )
+}
+
+/// Return true if `name` is safe to use as a file name inside the install dir.
+///
+/// Bin names come from the crate's `Cargo.toml`, which is controlled by the
+/// crate publisher, so they must not contain anything that lets
+/// `install_path.join(name)` escape `install_path`: path separators of any
+/// platform, `.`/`..`, drive prefixes (`C:`) or NUL.
+///
+/// The check is the same on every platform so that a name rejected on
+/// Windows is also rejected on unix and vice versa.
+pub fn is_valid_bin_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains(['/', '\\', ':', '\0'])
+        && matches!(
+            Path::new(name).components().collect::<Vec<_>>().as_slice(),
+            [Component::Normal(_)]
+        )
 }
 
 /// Must be called after the archive is downloaded and extracted.
@@ -109,6 +134,10 @@ impl BinFile {
         tt: &Template<'_>,
         no_symlinks: bool,
     ) -> Result<Self, Error> {
+        if !is_valid_bin_name(base_name) {
+            return Err(Error::InvalidBinName(base_name.into()));
+        }
+
         let binary_ext = if data.target.contains("windows") {
             ".exe"
         } else {
@@ -364,6 +393,48 @@ impl fmt::Display for OptionalLazyFormat<'_> {
             fmt::Display::fmt(lazy_format, f)
         } else {
             Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_valid_bin_name;
+
+    #[test]
+    fn valid_bin_names() {
+        for name in [
+            "foo",
+            "foo-bar",
+            "foo_bar",
+            "foo.bar",
+            "cargo-binstall",
+            "..foo",
+            "foo..",
+        ] {
+            assert!(is_valid_bin_name(name), "{name:?} should be valid");
+        }
+    }
+
+    #[test]
+    fn invalid_bin_names() {
+        for name in [
+            "",
+            ".",
+            "..",
+            "../foo",
+            "../../.bashrc",
+            "foo/bar",
+            "foo/",
+            "/etc/passwd",
+            "..\\foo",
+            "foo\\bar",
+            "C:foo",
+            "C:\\Windows\\foo",
+            "\\\\server\\share\\foo",
+            "foo\0",
+        ] {
+            assert!(!is_valid_bin_name(name), "{name:?} should be invalid");
         }
     }
 }
