@@ -403,7 +403,15 @@ mod tests {
 
     #[test]
     fn valid_bin_names() {
-        for name in ["foo", "foo-bar", "foo_bar", "foo.bar", "cargo-binstall", "..foo", "foo.."] {
+        for name in [
+            "foo",
+            "foo-bar",
+            "foo_bar",
+            "foo.bar",
+            "cargo-binstall",
+            "..foo",
+            "foo..",
+        ] {
             assert!(is_valid_bin_name(name), "{name:?} should be valid");
         }
     }
