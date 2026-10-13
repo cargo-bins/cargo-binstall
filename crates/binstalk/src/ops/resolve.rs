@@ -546,6 +546,16 @@ impl PackageInfo {
                 .collect(),
         );
 
+        // Bin names come from the crate publisher and are later joined onto
+        // the install path, so reject anything that is not a plain file name
+        // before downloading anything.
+        if let Some(bin) = binaries
+            .iter()
+            .find(|bin| !bins::is_valid_bin_name(&bin.name))
+        {
+            return Err(bins::Error::InvalidBinName(bin.name.as_str().into()).into());
+        }
+
         // Check binaries
         if binaries.is_empty() {
             Err(BinstallError::UnspecifiedBinaries)
