@@ -297,6 +297,7 @@ mod test {
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
             false,
+            Default::default(),
             NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
