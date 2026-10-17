@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.3...binstalk-v0.29.4) - 2026-10-17
+
+### Fixed
+
+- *(bins)* reject bin names that escape the install dir ([#2712](https://github.com/cargo-bins/cargo-binstall/pull/2712))
+
 ## [0.29.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.2...binstalk-v0.29.3) - 2026-10-10
 
 ### Other

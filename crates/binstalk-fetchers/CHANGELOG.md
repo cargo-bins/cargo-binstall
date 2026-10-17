@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.52](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.51...binstalk-fetchers-v0.10.52) - 2026-10-17
+
+### Added
+
+- add --dns to select the DNS resolver at runtime ([#2709](https://github.com/cargo-bins/cargo-binstall/pull/2709))
+
 ## [0.10.51](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.50...binstalk-fetchers-v0.10.51) - 2026-10-10
 
 ### Other
