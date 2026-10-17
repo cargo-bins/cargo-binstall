@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.11](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.10...binstalk-registry-v0.12.11) - 2026-10-17
+
+### Added
+
+- add --dns to select the DNS resolver at runtime ([#2709](https://github.com/cargo-bins/cargo-binstall/pull/2709))
+
 ## [0.12.10](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.9...binstalk-registry-v0.12.10) - 2026-10-02
 
 ### Other
