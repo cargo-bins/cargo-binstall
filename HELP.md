@@ -230,6 +230,10 @@ Some crate installation strategies may collect anonymized usage statistics by de
    This would override the `log_level`.
 * `--list` — List installed crates and their installation methods (binstall, cargo install, local path, drifted)
 * `--prune` — Prune stale or drifted binstall records for uninstalled or recompiled packages
+* `--completions <SHELL>` — Print shell completions for the given shell to stdout and exit
+
+  Possible values: `bash`, `elvish`, `fish`, `powershell`, `zsh`
+
 
 
 
