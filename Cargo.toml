@@ -28,10 +28,10 @@ strip = "symbols"
 [profile.release.build-override]
 inherits = "dev.build-override"
 
-[profile.release.package."astral-tokio-tar"]
+[profile.release.package."tar-codec"]
 opt-level = "z"
 
-[profile.release.package."binstall-tar"]
+[profile.release.package."tar-framing"]
 opt-level = "z"
 
 [profile.dev]
@@ -46,10 +46,10 @@ codegen-units = 32
 [profile.dev.package."*"]
 opt-level = 3
 
-[profile.dev.package."astral-tokio-tar"]
+[profile.dev.package."tar-codec"]
 opt-level = "z"
 
-[profile.dev.package."binstall-tar"]
+[profile.dev.package."tar-framing"]
 opt-level = "z"
 
 [profile.dev.build-override]

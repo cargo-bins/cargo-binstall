@@ -1,33 +1,38 @@
-use std::{borrow::Cow, fmt::Debug, io, path::Path, pin::Pin};
+use std::{borrow::Cow, fmt::Debug, future::Future, io, path::Path, pin::Pin};
 
-use async_compression::tokio::bufread;
 use bytes::Bytes;
-use futures_util::{Stream, StreamExt};
-use tokio::io::{copy, sink, AsyncRead};
-use tokio_tar::{Archive, Entry, EntryType};
-use tokio_util::io::StreamReader;
+use futures_util::Stream;
+use tar_codec::{
+    DecodeError, LentPayload, Member, MemberPayload, Members, SpecialKind, TarArchive,
+    TarMemberPayload,
+};
 use tracing::debug;
 
 use super::{
-    DownloadError,
-    TarBasedFmt::{self, *},
+    tar::{create_tar_archive, create_tar_decoder, decode_error, TarDecoder},
+    DownloadError, TarBasedFmt,
 };
 
-pub trait TarEntry: AsyncRead + Send + Sync + Unpin + Debug {
+#[async_trait::async_trait]
+pub trait TarEntry: Send + Sync + Debug {
     /// Returns the path name for this entry.
     ///
-    /// This method may fail if the pathname is not valid Unicode and
-    /// this is called on a Windows platform.
-    ///
-    /// Note that this function will convert any `\` characters to
-    /// directory separators.
+    /// The path is returned as stored in the archive, it is not normalized
+    /// and might contain `..` or be absolute.
     fn path(&self) -> io::Result<Cow<'_, Path>>;
 
+    /// Returns the size of the content of this entry.
     fn size(&self) -> io::Result<u64>;
 
     fn entry_type(&self) -> TarEntryType;
+
+    /// Read all remaining content of this entry and append it to `buf`.
+    ///
+    /// Returns the number of bytes appended.
+    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize, DownloadError>;
 }
 
+#[async_trait::async_trait]
 impl<T: TarEntry + ?Sized> TarEntry for &mut T {
     fn path(&self) -> io::Result<Cow<'_, Path>> {
         T::path(self)
@@ -40,30 +45,69 @@ impl<T: TarEntry + ?Sized> TarEntry for &mut T {
     fn entry_type(&self) -> TarEntryType {
         T::entry_type(self)
     }
+
+    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize, DownloadError> {
+        T::read_to_end(self, buf).await
+    }
 }
 
-impl<R: AsyncRead + Unpin + Send + Sync> TarEntry for Entry<R> {
+/// Chunk size used when reading the content of an entry.
+const CHUNK_SIZE: usize = 64 * 1024;
+
+type Payload<'a, 's> = LentPayload<'a, TarMemberPayload<'a, TarDecoder<'s>>>;
+
+struct Entry<'a, 's> {
+    path: String,
+    size: u64,
+    entry_type: TarEntryType,
+    payload: Option<Payload<'a, 's>>,
+}
+
+impl Debug for Entry<'_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Entry")
+            .field("path", &self.path)
+            .field("size", &self.size)
+            .field("entry_type", &self.entry_type)
+            .finish_non_exhaustive()
+    }
+}
+
+#[async_trait::async_trait]
+impl TarEntry for Entry<'_, '_> {
     fn path(&self) -> io::Result<Cow<'_, Path>> {
-        Entry::path(self)
+        Ok(Cow::Borrowed(Path::new(&self.path)))
     }
 
     fn size(&self) -> io::Result<u64> {
-        self.header().raw_file_size()
+        Ok(self.size)
     }
 
     fn entry_type(&self) -> TarEntryType {
-        match self.header().entry_type() {
-            EntryType::Regular => TarEntryType::Regular,
-            EntryType::Link => TarEntryType::Link,
-            EntryType::Symlink => TarEntryType::Symlink,
-            EntryType::Char => TarEntryType::Char,
-            EntryType::Block => TarEntryType::Block,
-            EntryType::Directory => TarEntryType::Directory,
-            EntryType::Fifo => TarEntryType::Fifo,
-            // Implementation-defined ‘high-performance’ type, treated as regular file
-            EntryType::Continuous => TarEntryType::Regular,
-            _ => TarEntryType::Unknown,
+        self.entry_type
+    }
+
+    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize, DownloadError> {
+        let Some(payload) = self.payload.as_mut() else {
+            return Ok(0);
+        };
+
+        let mut chunk = Vec::new();
+        let mut n = 0;
+
+        while payload
+            .next_chunk(&mut chunk, CHUNK_SIZE)
+            .await
+            .map_err(decode_error)?
+        {
+            buf.extend_from_slice(&chunk);
+            n += chunk.len();
         }
+
+        // The payload is fully consumed.
+        self.payload = None;
+
+        Ok(n)
     }
 }
 
@@ -88,7 +132,30 @@ pub trait TarEntriesVisitor: Send + Sync {
     async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError>;
 }
 
-pub(crate) async fn extract_tar_based_stream_and_visit<S>(
+pub(crate) fn extract_tar_based_stream_and_visit<'a, S>(
+    stream: S,
+    fmt: TarBasedFmt,
+    visitor: &'a mut dyn TarEntriesVisitor,
+) -> Pin<Box<dyn Future<Output = Result<(), DownloadError>> + Send + 'a>>
+where
+    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + 'a,
+{
+    // The future is boxed here so that it is proven to be `Send` with
+    // concrete lifetimes, otherwise rustc fails with "implementation of
+    // `Send` is not general enough" in callers, see rust-lang/rust#110338.
+    Box::pin(visit_tar_based_stream(stream, fmt, visitor))
+}
+
+type NextMember<'a, 's> =
+    Pin<Box<dyn Future<Output = Result<Option<Member<Payload<'a, 's>>>, DecodeError>> + Send + 'a>>;
+
+/// Box the future returned by [`Members::next`] with concrete lifetimes so
+/// that rustc can prove it is `Send`.
+fn next_member<'a, 's>(members: &'a mut Members<TarArchive<TarDecoder<'s>>>) -> NextMember<'a, 's> {
+    Box::pin(members.next())
+}
+
+async fn visit_tar_based_stream<S>(
     stream: S,
     fmt: TarBasedFmt,
     visitor: &mut dyn TarEntriesVisitor,
@@ -98,27 +165,47 @@ where
 {
     debug!("Extracting from {fmt} archive to process it in memory");
 
-    let reader = StreamReader::new(stream);
-    let decoder: Pin<Box<dyn AsyncRead + Send + Sync>> = match fmt {
-        Tar => Box::pin(reader),
-        Tbz2 => Box::pin(bufread::BzDecoder::new(reader)),
-        Tgz => Box::pin(bufread::GzipDecoder::new(reader)),
-        Txz => Box::pin(bufread::XzDecoder::new(reader)),
-        Tzstd => Box::pin(bufread::ZstdDecoder::new(reader)),
-    };
+    let mut members =
+        tar_codec::Archive::members(create_tar_archive(create_tar_decoder(stream, fmt)));
 
-    let mut tar = Archive::new(decoder);
-    let mut entries = tar.entries()?;
+    while let Some(member) = next_member(&mut members).await.map_err(decode_error)? {
+        let (metadata, size, entry_type, payload) = match member {
+            Member::File {
+                metadata,
+                size,
+                payload,
+                ..
+            } => (metadata, size, TarEntryType::Regular, Some(payload)),
+            Member::HardLink {
+                metadata,
+                size,
+                payload,
+                ..
+            } => (metadata, size, TarEntryType::Link, Some(payload)),
+            Member::Directory { metadata } => (metadata, 0, TarEntryType::Directory, None),
+            Member::SymbolicLink { metadata, .. } => (metadata, 0, TarEntryType::Symlink, None),
+            Member::Special { metadata, kind } => (
+                metadata,
+                0,
+                match kind {
+                    SpecialKind::CharacterDevice => TarEntryType::Char,
+                    SpecialKind::BlockDevice => TarEntryType::Block,
+                    SpecialKind::Fifo => TarEntryType::Fifo,
+                },
+                None,
+            ),
+        };
 
-    let mut sink = sink();
-
-    while let Some(res) = entries.next().await {
-        let mut entry = res?;
+        let mut entry = Entry {
+            path: metadata.path,
+            size,
+            entry_type,
+            payload,
+        };
         visitor.visit(&mut entry).await?;
 
-        // Consume all remaining data so that next iteration would work fine
-        // instead of reading the data of previous entry.
-        copy(&mut entry, &mut sink).await?;
+        // Any remaining content of the entry is drained and validated by
+        // `members.next()`.
     }
 
     Ok(())

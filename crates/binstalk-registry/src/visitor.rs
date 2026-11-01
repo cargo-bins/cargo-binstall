@@ -4,7 +4,6 @@ use binstalk_downloader::download::{DownloadError, TarEntriesVisitor, TarEntry};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::{Manifest, Value};
 use normalize_path::NormalizePath;
-use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use crate::{vfs::Vfs, RegistryError};

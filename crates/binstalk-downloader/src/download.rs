@@ -18,7 +18,8 @@ mod async_tar_visitor;
 use async_tar_visitor::extract_tar_based_stream_and_visit;
 pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
 
-mod extractor;
+mod tar;
+pub use tar::TarError;
 
 mod extracted_files;
 pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
@@ -33,6 +34,9 @@ pub enum DownloadError {
 
     #[error("Failed to download from remote: {0}")]
     Remote(#[from] RemoteError),
+
+    #[error("Failed to extract tar archive: {0}")]
+    Tar(#[from] TarError),
 
     /// A generic I/O error.
     ///
@@ -198,8 +202,7 @@ impl Download<'_> {
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
     ///
-    /// NOTE that this API does not support gnu extension sparse file unlike
-    /// [`Download::and_extract`].
+    /// NOTE that this API does not support gnu extension sparse file.
     #[instrument(skip(self, visitor))]
     pub async fn and_visit_tar(
         self,
@@ -248,7 +251,7 @@ impl Download<'_> {
 
             let res = match fmt.decompose() {
                 PkgFmtDecomposed::Tar(fmt) => {
-                    extract_tar_based_stream(&mut stream, path, fmt).await
+                    tar::extract_tar_based_stream(&mut stream, path, fmt).await
                 }
                 PkgFmtDecomposed::Bin => extract_bin(&mut stream, path).await,
                 PkgFmtDecomposed::Zip => extract_zip(&mut stream, path).await,
