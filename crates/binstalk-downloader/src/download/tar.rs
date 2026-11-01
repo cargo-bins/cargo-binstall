@@ -334,6 +334,19 @@ mod test {
             self
         }
 
+        /// Add a regular file using a legacy v7 header.
+        fn v7_file(mut self, name: &str, data: &[u8]) -> Self {
+            self.header(name, 0, 0o755, data.len(), "");
+            let start = self.0.len() - 512;
+            let header = &mut self.0[start..];
+            header[257..265].fill(0);
+            header[148..156].copy_from_slice(b"        ");
+            let checksum: u32 = header.iter().map(|b| u32::from(*b)).sum();
+            header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+            self.data(data);
+            self
+        }
+
         fn entry(mut self, name: &str, typeflag: u8, link: &str) -> Self {
             self.header(name, typeflag, 0o755, 0, link);
             self
@@ -472,6 +485,41 @@ mod test {
             .await
             .unwrap_err();
         assert!(matches!(err, DownloadError::Tar(_)), "{err:?}");
+    }
+
+    #[tokio::test]
+    async fn v7_archive() {
+        let tempdir = tempdir().unwrap();
+
+        let archive = TarBuilder::default()
+            .v7_file("a", b"a")
+            .v7_file("dir/b", b"b")
+            .finish();
+        let dst = tempdir.path().join("v7");
+        let extracted_files = extract(archive, &dst).await.unwrap();
+        assert!(extracted_files.has_file(Path::new("a")));
+        assert!(extracted_files.has_file(Path::new("dir/b")));
+        assert_eq!(fs::read(dst.join("dir/b")).unwrap(), b"b");
+
+        // Mixing v7 with ustar/pax/GNU headers is rejected, since there is no
+        // way to tell how other implementations would interpret it.
+        for archive in [
+            TarBuilder::default()
+                .v7_file("a", b"a")
+                .file("b", 0o644, b"b")
+                .finish(),
+            TarBuilder::default()
+                .v7_file("a", b"a")
+                .pax(&[("path", "c")])
+                .file("b", 0o644, b"b")
+                .finish(),
+        ] {
+            let dst = tempdir.path().join("mixed");
+            let err = extract(archive, &dst).await.unwrap_err();
+            assert!(err.to_string().contains("v7"), "{err}");
+            assert!(!dst.join("b").exists());
+            assert!(!dst.join("c").exists());
+        }
     }
 
     #[tokio::test]

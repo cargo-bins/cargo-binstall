@@ -11,9 +11,9 @@
 //! validation to `tar_codec`.
 //!
 //! The adapter is conservative: it is only enabled if the first header of the
-//! archive is a v7 header, and it stops rewriting as soon as it encounters a
-//! block it does not understand, in which case `tar_codec` rejects the
-//! archive.
+//! archive is a v7 header. A ustar/pax/GNU header after v7 headers is an
+//! error, and any other header it does not understand is forwarded unchanged,
+//! in which case `tar_codec` rejects the archive since it has no magic.
 
 use std::{
     io,
@@ -40,6 +40,8 @@ enum State {
     V7 { data_blocks: u64 },
     /// Forward everything unchanged.
     Passthrough,
+    /// A ustar/pax/GNU header follows v7 headers.
+    Mixed,
 }
 
 pub(crate) struct V7ToUstar<R> {
@@ -69,7 +71,7 @@ impl<R> V7ToUstar<R> {
         let block = &mut self.block;
 
         self.state = match self.state {
-            State::Passthrough => State::Passthrough,
+            State::Passthrough | State::Mixed => self.state,
             State::V7 { data_blocks } if data_blocks > 0 => State::V7 {
                 data_blocks: data_blocks - 1,
             },
@@ -78,6 +80,13 @@ impl<R> V7ToUstar<R> {
             // Not a v7 archive.
             State::First if block[MAGIC_AND_VERSION].iter().any(|byte| *byte != 0) => {
                 State::Passthrough
+            }
+            // Reject mixing v7 with ustar/pax/GNU headers: forwarding it
+            // unchanged would let tar_codec accept e.g. pax extensions after
+            // the upgraded v7 headers, an archive that other implementations
+            // may interpret differently.
+            State::V7 { .. } if block[MAGIC_AND_VERSION].iter().any(|byte| *byte != 0) => {
+                State::Mixed
             }
             State::First | State::V7 { .. } => match upgrade_header(block) {
                 Some(size) => State::V7 {
@@ -99,6 +108,13 @@ impl<R: AsyncRead + Unpin> AsyncRead for V7ToUstar<R> {
         let this = self.get_mut();
 
         loop {
+            if this.state == State::Mixed {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "tar archive mixes v7 headers with ustar/pax/GNU headers",
+                )));
+            }
+
             if let Some(emitted) = this.emitted {
                 if emitted < this.filled {
                     let n = buf.remaining().min(this.filled - emitted);
@@ -355,5 +371,23 @@ mod test {
 
         let input = &v7_header("file", 0, 0)[..300];
         assert_eq!(upgrade(input).await, input);
+    }
+
+    #[tokio::test]
+    async fn rejects_ustar_after_v7() {
+        let mut ustar = v7_header("file2", b'0', 0);
+        ustar[MAGIC_AND_VERSION].copy_from_slice(b"ustar\x0000");
+
+        let mut input = v7_header("file", 0, 0).to_vec();
+        input.extend_from_slice(&ustar);
+
+        let mut reader = V7ToUstar::new(&input[..]);
+        let mut output = Vec::new();
+        let err = reader.read_to_end(&mut output).await.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        // Only the upgraded v7 header is returned.
+        assert_eq!(output.len(), BLOCK_SIZE);
+        // The error is sticky.
+        assert!(reader.read(&mut [0; 16]).await.is_err());
     }
 }
