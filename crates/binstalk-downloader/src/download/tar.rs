@@ -662,6 +662,80 @@ mod test {
         }
     }
 
+    /// cargo-quickinstall builds its tarballs with `tar --format=v7`, using
+    /// GNU tar on Linux and bsdtar on macOS. The two encode v7 headers
+    /// differently (e.g. bsdtar marks directories only with a trailing `/`),
+    /// so test both. The fixtures were generated with:
+    ///
+    /// ```sh
+    /// printf '#!/bin/sh\necho foo\n' > cargo-foo && chmod 755 cargo-foo
+    /// mkdir share && head -c 1500 /dev/zero | tr '\0' x > share/doc.txt
+    /// ln -s cargo-foo cargo-foo-link
+    /// tar --format=v7 --owner=0 --group=0 --numeric-owner --sort=name \
+    ///     -cf - cargo-foo cargo-foo-link share | gzip -9n > gnu-v7.tar.gz
+    /// bsdtar --format=v7 --uid 0 --gid 0 \
+    ///     -cf - cargo-foo cargo-foo-link share | gzip -9n > bsdtar-v7.tar.gz
+    /// ```
+    #[tokio::test]
+    async fn quickinstall_v7_archives() {
+        let tempdir = tempdir().unwrap();
+
+        for (name, archive) in [
+            ("gnu", &include_bytes!("tar/testdata/gnu-v7.tar.gz")[..]),
+            (
+                "bsdtar",
+                &include_bytes!("tar/testdata/bsdtar-v7.tar.gz")[..],
+            ),
+        ] {
+            let dst = tempdir.path().join(name);
+            let extracted_files = extract_tar_based_stream(
+                stream::iter([Ok(Bytes::from_static(archive))]),
+                &dst,
+                TarBasedFmt::Tgz,
+            )
+            .await
+            .unwrap_or_else(|err| panic!("{name}: {err}"));
+
+            assert_eq!(
+                extracted_files.0,
+                [
+                    (Path::new(".").into(), dir_entry(&["cargo-foo", "share"])),
+                    (Path::new("cargo-foo").into(), ExtractedFilesEntry::File),
+                    (Path::new("share").into(), dir_entry(&["doc.txt"])),
+                    (Path::new("share/doc.txt").into(), ExtractedFilesEntry::File),
+                ]
+                .into_iter()
+                .collect(),
+                "{name}"
+            );
+
+            assert_eq!(
+                fs::read(dst.join("cargo-foo")).unwrap(),
+                b"#!/bin/sh\necho foo\n",
+                "{name}"
+            );
+            assert_eq!(
+                fs::read(dst.join("share/doc.txt")).unwrap(),
+                [b'x'; 1500],
+                "{name}"
+            );
+            // Symlinks are skipped.
+            assert!(
+                dst.join("cargo-foo-link").symlink_metadata().is_err(),
+                "{name}"
+            );
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                let mode = |path| fs::metadata(dst.join(path)).unwrap().permissions().mode();
+                assert_ne!(mode("cargo-foo") & 0o111, 0, "{name}");
+                assert_eq!(mode("share/doc.txt") & 0o111, 0, "{name}");
+            }
+        }
+    }
+
     #[tokio::test]
     async fn invalid_archive_is_rejected() {
         let tempdir = tempdir().unwrap();
