@@ -13,17 +13,20 @@ use bytes::Bytes;
 use futures_util::{stream, Stream};
 use tar_codec::{
     extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy},
-    Archive, DecodeError, DecodePolicy, ExtractError, Member, MemberMetadata, PaxDecodePolicy,
-    PaxVendorExtensionPolicy, TarArchive,
+    Archive, DecodeError, DecodePolicy, ExtractError, Member, MemberMetadata, MemberPayload,
+    PaxDecodePolicy, PaxVendorExtensionPolicy, TarArchive, TarMemberPayload,
 };
-use tar_framing::{FrameError, FrameErrorInner};
+use tar_framing::{Block, FrameError, FrameErrorInner, BLOCK_SIZE};
 use thiserror::Error as ThisError;
-use tokio::{io::AsyncRead, runtime::Handle};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, Chain},
+    runtime::Handle,
+};
 use tokio_util::io::StreamReader;
 use tracing::debug;
 
 mod v7;
-use v7::V7ToUstar;
+use v7::{V7Archive, V7Error, V7Payload};
 
 use super::{
     super::utils::extract_with_blocking_task,
@@ -45,68 +48,201 @@ impl fmt::Debug for TarError {
 #[derive(Debug, ThisError)]
 enum TarErrorInner {
     #[error(transparent)]
-    Decode(DecodeError),
+    Decode(TarDecodeError),
 
     #[error(transparent)]
-    Extract(ExtractError<DecodeError>),
+    Extract(ExtractError<TarDecodeError>),
+}
+
+/// Error returned by [`AnyTarArchive`].
+#[derive(Debug, ThisError)]
+pub(super) enum TarDecodeError {
+    #[error(transparent)]
+    Codec(DecodeError),
+
+    #[error(transparent)]
+    V7(V7Error),
 }
 
 /// Convert a decoding error into [`DownloadError`], unwrapping I/O errors
 /// returned by the underlying reader so that errors returned by the
 /// download stream (e.g. [`DownloadError::Remote`]) are preserved.
-pub(super) fn decode_error(err: DecodeError) -> DownloadError {
+pub(super) fn decode_error(err: TarDecodeError) -> DownloadError {
     match err {
-        DecodeError::Framing(FrameError {
+        TarDecodeError::Codec(DecodeError::Framing(FrameError {
             inner: FrameErrorInner::Io { source },
             ..
-        }) => DownloadError::from(source),
+        }))
+        | TarDecodeError::V7(V7Error::Io(source)) => DownloadError::from(source),
         err => DownloadError::Tar(TarError(TarErrorInner::Decode(err))),
     }
 }
 
-fn extract_error(err: ExtractError<DecodeError>) -> DownloadError {
+fn extract_error(err: ExtractError<TarDecodeError>) -> DownloadError {
     match err {
         ExtractError::Archive(err) => decode_error(err),
         err => DownloadError::Tar(TarError(TarErrorInner::Extract(err))),
     }
 }
 
-pub(super) type TarDecoder<'s> = V7ToUstar<Pin<Box<dyn AsyncRead + Send + Sync + 's>>>;
+/// Decompressed tar stream.
+pub(super) type TarReader<'s> = Pin<Box<dyn AsyncRead + Send + Sync + 's>>;
 
 /// Decompress the stream according to `fmt`.
-pub(super) fn create_tar_decoder<'s, S>(stream: S, fmt: TarBasedFmt) -> TarDecoder<'s>
+pub(super) fn create_tar_decoder<'s, S>(stream: S, fmt: TarBasedFmt) -> TarReader<'s>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + 's,
 {
     let reader = StreamReader::new(stream);
-    V7ToUstar::new(match fmt {
+    match fmt {
         Tar => Box::pin(reader),
         Tbz2 => Box::pin(bufread::BzDecoder::new(reader)),
         Tgz => Box::pin(bufread::GzipDecoder::new(reader)),
         Txz => Box::pin(bufread::XzDecoder::new(reader)),
         Tzstd => Box::pin(bufread::ZstdDecoder::new(reader)),
-    })
+    }
 }
 
-/// Create a tar archive decoder with the policy used by binstall.
-pub(super) fn create_tar_archive(decoder: TarDecoder<'_>) -> TarArchive<TarDecoder<'_>> {
-    TarArchive::new(decoder).with_policy(
-        DecodePolicy::default()
-            // CPython's tarfile is known to fill uname/gname without the
-            // NUL terminator. These fields are never used by binstall.
-            .allow_header_uname_and_gname_without_terminator(true)
-            .pax_policy(PaxDecodePolicy::default().vendor_extension_policy(
-                // bsdtar (default `tar` on macOS) and star record xattrs, ACLs
-                // and file flags under these vendor namespaces. They carry no
-                // information affecting member framing, path or contents, so
-                // they are safe to ignore.
-                //
-                // Other vendor records (e.g. `GNU.sparse.*`) are still
-                // rejected since ignoring them would change the extracted
-                // contents.
-                PaxVendorExtensionPolicy::ignore(["LIBARCHIVE", "SCHILY"]),
-            )),
-    )
+/// The reader of `tar_codec`: the first block, already read to detect the
+/// format, followed by the rest of the stream.
+type CodecReader<'s> = Chain<io::Cursor<Vec<u8>>, TarReader<'s>>;
+
+/// A tar archive, decoded by `tar_codec`, or by [`V7Archive`] for legacy v7
+/// archives which `tar_codec` deliberately does not support.
+pub(super) enum AnyTarArchive<'s> {
+    Codec(Box<TarArchive<CodecReader<'s>>>),
+    V7(V7Archive<TarReader<'s>>),
+}
+
+pub(super) enum AnyTarPayload<'a, 's> {
+    Codec(TarMemberPayload<'a, CodecReader<'s>>),
+    V7(V7Payload<'a, TarReader<'s>>),
+}
+
+fn map_payload<P, Q>(member: Member<P>, f: impl FnOnce(P) -> Q) -> Member<Q> {
+    match member {
+        Member::File {
+            metadata,
+            size,
+            executable,
+            payload,
+        } => Member::File {
+            metadata,
+            size,
+            executable,
+            payload: f(payload),
+        },
+        Member::HardLink {
+            metadata,
+            target,
+            size,
+            payload,
+        } => Member::HardLink {
+            metadata,
+            target,
+            size,
+            payload: f(payload),
+        },
+        Member::Directory { metadata } => Member::Directory { metadata },
+        Member::SymbolicLink { metadata, target } => Member::SymbolicLink { metadata, target },
+        Member::Special { metadata, kind } => Member::Special { metadata, kind },
+    }
+}
+
+impl<'s> Archive for AnyTarArchive<'s> {
+    type Error = TarDecodeError;
+    type Payload<'a>
+        = AnyTarPayload<'a, 's>
+    where
+        Self: 'a;
+
+    async fn next_member<'a>(
+        &'a mut self,
+    ) -> Result<Option<Member<Self::Payload<'a>>>, Self::Error> {
+        Ok(match self {
+            Self::Codec(archive) => archive
+                .next_member()
+                .await
+                .map_err(TarDecodeError::Codec)?
+                .map(|member| map_payload(member, AnyTarPayload::Codec)),
+            Self::V7(archive) => archive
+                .next_member()
+                .await
+                .map_err(TarDecodeError::V7)?
+                .map(|member| map_payload(member, AnyTarPayload::V7)),
+        })
+    }
+}
+
+impl MemberPayload for AnyTarPayload<'_, '_> {
+    type Error = TarDecodeError;
+
+    async fn next_chunk(
+        &mut self,
+        buffer: &mut Vec<u8>,
+        target_len: usize,
+    ) -> Result<bool, Self::Error> {
+        match self {
+            Self::Codec(payload) => payload
+                .next_chunk(buffer, target_len)
+                .await
+                .map_err(TarDecodeError::Codec),
+            Self::V7(payload) => payload
+                .next_chunk(buffer, target_len)
+                .await
+                .map_err(TarDecodeError::V7),
+        }
+    }
+
+    async fn skip(self) -> Result<(), Self::Error> {
+        match self {
+            Self::Codec(payload) => payload.skip().await.map_err(TarDecodeError::Codec),
+            Self::V7(payload) => payload.skip().await.map_err(TarDecodeError::V7),
+        }
+    }
+}
+
+/// Detect the format from the first block and create the corresponding
+/// decoder with the policy used by binstall.
+pub(super) async fn open_tar_archive(
+    mut reader: TarReader<'_>,
+) -> Result<AnyTarArchive<'_>, DownloadError> {
+    let mut first: Block = [0; BLOCK_SIZE];
+    let mut filled = 0;
+    while filled < BLOCK_SIZE {
+        let n = reader.read(&mut first[filled..]).await?;
+        if n == 0 {
+            break;
+        }
+        filled += n;
+    }
+
+    if filled == BLOCK_SIZE && v7::is_v7_header(&first) {
+        debug!("Detected legacy v7 tar archive");
+        return Ok(AnyTarArchive::V7(V7Archive::new(reader, first)));
+    }
+
+    let reader = io::Cursor::new(first[..filled].to_vec()).chain(reader);
+
+    Ok(AnyTarArchive::Codec(Box::new(
+        TarArchive::new(reader).with_policy(
+            DecodePolicy::default()
+                // CPython's tarfile is known to fill uname/gname without the
+                // NUL terminator. These fields are never used by binstall.
+                .allow_header_uname_and_gname_without_terminator(true)
+                .pax_policy(PaxDecodePolicy::default().vendor_extension_policy(
+                    // bsdtar (default `tar` on macOS) and star record xattrs, ACLs
+                    // and file flags under these vendor namespaces. They carry no
+                    // information affecting member framing, path or contents, so
+                    // they are safe to ignore.
+                    //
+                    // Other vendor records (e.g. `GNU.sparse.*`) are still
+                    // rejected since ignoring them would change the extracted
+                    // contents.
+                    PaxVendorExtensionPolicy::ignore(["LIBARCHIVE", "SCHILY"]),
+                )),
+        ),
+    )))
 }
 
 /// Normalize an archive member path the same way `tar::Entry::unpack_in`
@@ -254,8 +390,12 @@ where
 
             let mut extracted_files = ExtractedFiles::new();
 
+            let archive = open_tar_archive(create_tar_decoder(stream, fmt))
+                .await
+                .map_err(io::Error::from)?;
+
             ExtractedFilesRecorder {
-                inner: create_tar_archive(create_tar_decoder(stream, fmt)),
+                inner: archive,
                 extracted_files: &mut extracted_files,
             }
             .extract_in(

@@ -2,14 +2,14 @@ use std::{borrow::Cow, fmt::Debug, future::Future, io, path::Path, pin::Pin};
 
 use bytes::Bytes;
 use futures_util::Stream;
-use tar_codec::{
-    DecodeError, LentPayload, Member, MemberPayload, Members, SpecialKind, TarArchive,
-    TarMemberPayload,
-};
+use tar_codec::{Archive, LentPayload, Member, MemberPayload, Members, SpecialKind};
 use tracing::debug;
 
 use super::{
-    tar::{create_tar_archive, create_tar_decoder, decode_error, TarDecoder},
+    tar::{
+        create_tar_decoder, decode_error, open_tar_archive, AnyTarArchive, AnyTarPayload,
+        TarDecodeError,
+    },
     DownloadError, TarBasedFmt,
 };
 
@@ -54,7 +54,7 @@ impl<T: TarEntry + ?Sized> TarEntry for &mut T {
 /// Chunk size used when reading the content of an entry.
 const CHUNK_SIZE: usize = 64 * 1024;
 
-type Payload<'a, 's> = LentPayload<'a, TarMemberPayload<'a, TarDecoder<'s>>>;
+type Payload<'a, 's> = LentPayload<'a, AnyTarPayload<'a, 's>>;
 
 struct Entry<'a, 's> {
     path: String,
@@ -146,12 +146,13 @@ where
     Box::pin(visit_tar_based_stream(stream, fmt, visitor))
 }
 
-type NextMember<'a, 's> =
-    Pin<Box<dyn Future<Output = Result<Option<Member<Payload<'a, 's>>>, DecodeError>> + Send + 'a>>;
+type NextMember<'a, 's> = Pin<
+    Box<dyn Future<Output = Result<Option<Member<Payload<'a, 's>>>, TarDecodeError>> + Send + 'a>,
+>;
 
 /// Box the future returned by [`Members::next`] with concrete lifetimes so
 /// that rustc can prove it is `Send`.
-fn next_member<'a, 's>(members: &'a mut Members<TarArchive<TarDecoder<'s>>>) -> NextMember<'a, 's> {
+fn next_member<'a, 's>(members: &'a mut Members<AnyTarArchive<'s>>) -> NextMember<'a, 's> {
     Box::pin(members.next())
 }
 
@@ -165,8 +166,9 @@ where
 {
     debug!("Extracting from {fmt} archive to process it in memory");
 
-    let mut members =
-        tar_codec::Archive::members(create_tar_archive(create_tar_decoder(stream, fmt)));
+    let mut members = open_tar_archive(create_tar_decoder(stream, fmt))
+        .await?
+        .members();
 
     while let Some(member) = next_member(&mut members).await.map_err(decode_error)? {
         let (metadata, size, entry_type, payload) = match member {
