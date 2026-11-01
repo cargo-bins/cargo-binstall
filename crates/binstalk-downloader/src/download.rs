@@ -6,8 +6,8 @@ use futures_util::{stream::FusedStream, Stream, StreamExt};
 use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
 
+pub use async_zip::error::ZipError;
 pub use binstalk_types::cargo_toml_binstall::{PkgFmt, TarBasedFmt};
-pub use rc_zip_sync::rc_zip::error::Error as ZipError;
 
 use crate::remote::{Client, Error as RemoteError, Response, Url};
 
