@@ -14,9 +14,12 @@
 //! - Only the v7 typeflags (regular file, hard link, symbolic link) and
 //!   directories are supported; links and directories must have `size == 0`.
 //! - Numeric fields must be octal; paths must be UTF-8.
+//! - The archive must end with a two-block end-of-archive marker.
 //!
-//! Members are exposed through [`Archive`], so extraction goes through the
-//! same capability-relative [`Archive::extract_in`] as `tar_codec`.
+//! The decoding is done by the sans-io [`V7Decoder`]. [`V7Archive`] drives it
+//! from an [`AsyncRead`] and exposes the members through [`Archive`], so
+//! extraction goes through the same capability-relative
+//! [`Archive::extract_in`] as `tar_codec`.
 
 use std::io;
 
@@ -30,6 +33,8 @@ use tar_framing::{
 };
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncReadExt};
+
+use super::map_payload;
 
 const BLOCK_SIZE_U64: u64 = BLOCK_SIZE as u64;
 
@@ -52,18 +57,191 @@ pub(crate) fn is_v7_header(block: &Block) -> bool {
     block[IDENTITY_RANGE].iter().all(|byte| *byte == 0) && block.iter().any(|byte| *byte != 0)
 }
 
+fn is_zero_block(block: &[u8]) -> bool {
+    block.iter().all(|byte| *byte == 0)
+}
+
+/// Sans-io v7 decoder.
+///
+/// [`V7Decoder::decode`] consumes a prefix of its input and returns what it
+/// found. The decoder never performs IO and keeps no reference to the input,
+/// so the caller is free to buffer and read however it wants.
+#[derive(Debug, Default)]
+pub(crate) struct V7Decoder {
+    state: State,
+    /// Position in the archive of the next byte to decode.
+    position: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum State {
+    /// Expecting a member header or the end-of-archive marker.
+    #[default]
+    Header,
+    /// Inside the payload of the current member, which is followed by
+    /// `padding` bytes.
+    Payload { remaining: u64, padding: u64 },
+    /// Inside the padding following a payload.
+    Padding { remaining: u64 },
+    /// The first zero block of the end-of-archive marker was decoded.
+    SecondZero,
+    /// The end-of-archive marker was decoded; anything after it (e.g.
+    /// padding to the record size) is ignored.
+    Done,
+    /// An error was returned.
+    Failed,
+}
+
+#[derive(Debug)]
+pub(crate) enum Event {
+    /// More input is needed, or [`V7Decoder::eof`] if there is none.
+    NeedData,
+    /// The header of a member, which is followed by its payload as
+    /// [`Event::Payload`] if it has a non-zero `size`.
+    Member(Member<()>),
+    /// The first `len` bytes of the input are (part of) the payload of the
+    /// current member.
+    Payload { len: usize },
+    /// The archive ended, or an error was returned before.
+    End,
+}
+
+impl V7Decoder {
+    /// Decode a prefix of `input`.
+    ///
+    /// Returns the number of bytes consumed along with the event, which must
+    /// be dropped from the input before calling this again.
+    pub(crate) fn decode(&mut self, input: &[u8]) -> Result<(usize, Event), V7Error> {
+        let mut consumed = 0;
+        let res = self.decode_inner(input, &mut consumed);
+
+        self.position += consumed as u64;
+        if res.is_err() {
+            self.state = State::Failed;
+        }
+
+        res.map(|event| (consumed, event))
+    }
+
+    fn decode_inner(&mut self, input: &[u8], consumed: &mut usize) -> Result<Event, V7Error> {
+        loop {
+            let input = &input[*consumed..];
+            let position = self.position + *consumed as u64;
+
+            match self.state {
+                State::Done | State::Failed => return Ok(Event::End),
+
+                State::Payload { remaining, padding } => {
+                    if input.is_empty() {
+                        return Ok(Event::NeedData);
+                    }
+                    let len = input
+                        .len()
+                        .min(usize::try_from(remaining).unwrap_or(usize::MAX));
+                    let remaining = remaining - len as u64;
+                    *consumed += len;
+                    self.state = match (remaining, padding) {
+                        (0, 0) => State::Header,
+                        (0, padding) => State::Padding { remaining: padding },
+                        (remaining, padding) => State::Payload { remaining, padding },
+                    };
+                    return Ok(Event::Payload { len });
+                }
+
+                State::Padding { remaining } => {
+                    if input.is_empty() {
+                        return Ok(Event::NeedData);
+                    }
+                    let len = input
+                        .len()
+                        .min(usize::try_from(remaining).unwrap_or(usize::MAX));
+                    let remaining = remaining - len as u64;
+                    *consumed += len;
+                    self.state = if remaining == 0 {
+                        State::Header
+                    } else {
+                        State::Padding { remaining }
+                    };
+                }
+
+                State::Header | State::SecondZero => {
+                    let Some(block) = input.first_chunk::<BLOCK_SIZE>() else {
+                        return Ok(Event::NeedData);
+                    };
+
+                    if self.state == State::SecondZero {
+                        if !is_zero_block(block) {
+                            return Err(invalid(
+                                position - BLOCK_SIZE_U64,
+                                "incomplete end-of-archive marker",
+                            ));
+                        }
+                        *consumed += BLOCK_SIZE;
+                        self.state = State::Done;
+                        return Ok(Event::End);
+                    }
+
+                    if is_zero_block(block) {
+                        *consumed += BLOCK_SIZE;
+                        self.state = State::SecondZero;
+                        continue;
+                    }
+
+                    let Header { member, size } = parse_header(position, block)?;
+                    *consumed += BLOCK_SIZE;
+                    let padding = size.next_multiple_of(BLOCK_SIZE_U64) - size;
+                    self.state = if size == 0 {
+                        State::Header
+                    } else {
+                        State::Payload {
+                            remaining: size,
+                            padding,
+                        }
+                    };
+                    return Ok(Event::Member(member));
+                }
+            }
+        }
+    }
+
+    /// Called when there is no more input after [`Event::NeedData`].
+    pub(crate) fn eof(&mut self) -> V7Error {
+        let (position, reason) = match self.state {
+            State::Header => (self.position, "missing end-of-archive marker"),
+            State::Payload { .. } | State::Padding { .. } => {
+                (self.position, "truncated member payload")
+            }
+            // Point at the first zero block, as when the second block is not
+            // zero.
+            State::SecondZero => (
+                self.position - BLOCK_SIZE_U64,
+                "incomplete end-of-archive marker",
+            ),
+            State::Done | State::Failed => (self.position, "unexpected end of input"),
+        };
+        self.state = State::Failed;
+        invalid(position, reason)
+    }
+
+    /// Return true if inside the payload of the current member.
+    pub(crate) fn in_payload(&self) -> bool {
+        matches!(self.state, State::Payload { .. })
+    }
+}
+
+/// How much to read from the underlying reader at once.
+const READ_SIZE: usize = 64 * 1024;
+
+/// Drives [`V7Decoder`] from an [`AsyncRead`].
+///
+/// All methods are cancel safe: input is buffered in `self` and only dropped
+/// once the decoder consumed it.
 pub(crate) struct V7Archive<R> {
     reader: R,
-    /// The first header, already read to detect the format.
-    first: Option<Box<Block>>,
-    /// Position of the next byte to read.
-    position: u64,
-    /// Remaining payload bytes of the current member.
-    remaining: u64,
-    /// Padding bytes following the payload of the current member.
-    padding: u64,
-    /// Set once the end of archive is reached or an error occurred.
-    fused: bool,
+    decoder: V7Decoder,
+    /// Read but not yet consumed input is `buffer[start..]`.
+    buffer: Vec<u8>,
+    start: usize,
 }
 
 impl<R: AsyncRead + Unpin> V7Archive<R> {
@@ -72,92 +250,44 @@ impl<R: AsyncRead + Unpin> V7Archive<R> {
     pub(crate) fn new(reader: R, first: Block) -> Self {
         Self {
             reader,
-            first: Some(Box::new(first)),
-            position: BLOCK_SIZE_U64,
-            remaining: 0,
-            padding: 0,
-            fused: false,
+            decoder: V7Decoder::default(),
+            buffer: first.to_vec(),
+            start: 0,
         }
     }
 
-    async fn read_block(&mut self) -> Result<Option<Block>, V7Error> {
-        let mut block = [0; BLOCK_SIZE];
-        let mut filled = 0;
+    /// Return the next event other than [`Event::NeedData`], passing at most
+    /// `limit` bytes of input to the decoder at a time.
+    async fn next_event(&mut self, limit: usize) -> Result<Event, V7Error> {
+        loop {
+            let input = &self.buffer[self.start..];
+            let (consumed, event) = self.decoder.decode(&input[..input.len().min(limit)])?;
+            self.start += consumed;
 
-        while filled < BLOCK_SIZE {
-            let n = self
-                .reader
-                .read(&mut block[filled..])
-                .await
-                .map_err(V7Error::Io)?;
-            if n == 0 {
-                return if filled == 0 {
-                    Ok(None)
-                } else {
-                    Err(invalid(self.position, "incomplete block"))
-                };
+            if !matches!(event, Event::NeedData) {
+                return Ok(event);
             }
-            filled += n;
-        }
 
-        self.position += BLOCK_SIZE_U64;
-        Ok(Some(block))
-    }
+            // Drop consumed input before reading more.
+            self.buffer.drain(..self.start);
+            self.start = 0;
+            self.buffer.reserve(READ_SIZE);
 
-    /// Discard the rest of the current member.
-    async fn drain(&mut self) -> Result<(), V7Error> {
-        let mut buf = [0; 8192];
-
-        while self.remaining + self.padding > 0 {
-            let to_skip = self.remaining + self.padding;
-            let len = buf
-                .len()
-                .min(usize::try_from(to_skip).unwrap_or(usize::MAX));
-            let n = self
+            if self
                 .reader
-                .read(&mut buf[..len])
+                .read_buf(&mut self.buffer)
                 .await
-                .map_err(V7Error::Io)?;
-            if n == 0 {
-                return Err(invalid(self.position, "truncated member payload"));
+                .map_err(V7Error::Io)?
+                == 0
+            {
+                return Err(self.decoder.eof());
             }
-            let n = n as u64;
-            let from_payload = n.min(self.remaining);
-            self.remaining -= from_payload;
-            self.padding -= n - from_payload;
-            self.position += n;
         }
-
-        Ok(())
     }
 
-    async fn next_header(&mut self) -> Result<Option<Member<()>>, V7Error> {
-        self.drain().await?;
-
-        let block = match self.first.take() {
-            Some(block) => *block,
-            None => self
-                .read_block()
-                .await?
-                .ok_or_else(|| invalid(self.position, "missing end-of-archive marker"))?,
-        };
-        // The header starts one block before the current position.
-        let position = self.position - BLOCK_SIZE_U64;
-
-        if block.iter().all(|byte| *byte == 0) {
-            // End-of-archive marker is two zero blocks; anything after it
-            // (e.g. padding to the record size) is ignored.
-            return match self.read_block().await? {
-                Some(block) if block.iter().all(|byte| *byte == 0) => Ok(None),
-                _ => Err(invalid(position, "incomplete end-of-archive marker")),
-            };
-        }
-
-        let header = parse_header(position, &block)?;
-        self.remaining = header.size;
-        self.padding = header.size.next_multiple_of(BLOCK_SIZE_U64) - header.size;
-
-        Ok(Some(header.member))
+    /// Return the payload consumed by the last [`Event::Payload`].
+    fn payload(&self, len: usize) -> &[u8] {
+        &self.buffer[self.start - len..self.start]
     }
 }
 
@@ -171,46 +301,17 @@ impl<R: AsyncRead + Unpin> Archive for V7Archive<R> {
     async fn next_member<'a>(
         &'a mut self,
     ) -> Result<Option<Member<Self::Payload<'a>>>, Self::Error> {
-        if self.fused {
-            return Ok(None);
-        }
-
-        let member = match self.next_header().await {
-            Ok(Some(member)) => member,
-            res => {
-                self.fused = true;
-                return res.map(|_| None);
+        loop {
+            match self.next_event(usize::MAX).await? {
+                Event::Member(member) => {
+                    return Ok(Some(map_payload(member, |()| V7Payload { archive: self })))
+                }
+                // Unread payload of the previous member.
+                Event::Payload { .. } => (),
+                Event::End => return Ok(None),
+                Event::NeedData => unreachable!("handled by next_event"),
             }
-        };
-
-        let payload = V7Payload { archive: self };
-        Ok(Some(match member {
-            Member::File {
-                metadata,
-                size,
-                executable,
-                ..
-            } => Member::File {
-                metadata,
-                size,
-                executable,
-                payload,
-            },
-            Member::HardLink {
-                metadata,
-                target,
-                size,
-                ..
-            } => Member::HardLink {
-                metadata,
-                target,
-                size,
-                payload,
-            },
-            Member::Directory { metadata } => Member::Directory { metadata },
-            Member::SymbolicLink { metadata, target } => Member::SymbolicLink { metadata, target },
-            Member::Special { metadata, kind } => Member::Special { metadata, kind },
-        }))
+        }
     }
 }
 
@@ -226,35 +327,27 @@ impl<R: AsyncRead + Unpin> MemberPayload for V7Payload<'_, R> {
         buffer: &mut Vec<u8>,
         target_len: usize,
     ) -> Result<bool, Self::Error> {
-        let archive = &mut *self.archive;
-
-        if archive.remaining == 0 {
+        if !self.archive.decoder.in_payload() {
             return Ok(false);
         }
 
-        let len = usize::try_from(archive.remaining)
-            .unwrap_or(usize::MAX)
-            .min(target_len.max(1));
-        buffer.clear();
-        buffer.resize(len, 0);
-
-        let n = match archive.reader.read(buffer).await {
-            Ok(0) => Err(invalid(archive.position, "truncated member payload")),
-            Ok(n) => Ok(n),
-            Err(err) => Err(V7Error::Io(err)),
+        match self.archive.next_event(target_len.max(1)).await? {
+            Event::Payload { len } => {
+                buffer.clear();
+                buffer.extend_from_slice(self.archive.payload(len));
+                Ok(true)
+            }
+            // An error was returned before.
+            Event::End => Ok(false),
+            Event::Member(_) | Event::NeedData => unreachable!("in payload"),
         }
-        .inspect_err(|_| archive.fused = true)?;
-
-        buffer.truncate(n);
-        archive.remaining -= n as u64;
-        archive.position += n as u64;
-
-        Ok(true)
     }
 
     async fn skip(self) -> Result<(), Self::Error> {
-        let archive = self.archive;
-        archive.drain().await.inspect_err(|_| archive.fused = true)
+        while self.archive.decoder.in_payload() {
+            self.archive.next_event(usize::MAX).await?;
+        }
+        Ok(())
     }
 }
 
@@ -399,6 +492,14 @@ fn parse_header(position: u64, block: &Block) -> Result<Header, V7Error> {
 
 #[cfg(test)]
 mod test {
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
+
+    use futures_util::FutureExt;
+    use tokio::io::ReadBuf;
+
     use super::*;
 
     fn v7_header(name: &str, typeflag: u8, size: u64) -> Block {
@@ -608,5 +709,148 @@ mod test {
         data.extend_from_slice(&[0; BLOCK_SIZE]);
         let err = decode(&data).await.unwrap_err();
         assert!(err.to_string().contains("end-of-archive"), "{err}");
+    }
+
+    /// An archive with members of various sizes.
+    fn sample_archive() -> Vec<u8> {
+        let mut blocks = file("a", &[1; 700]);
+        blocks.push(v7_header("dir/", 0, 0));
+        blocks.extend(file("dir/b", &[2; 512]));
+        blocks.extend(file("empty", b""));
+        blocks.extend(file("c", &[3; 1500]));
+        archive(&blocks)
+    }
+
+    type Decoded = Vec<(String, Vec<u8>)>;
+
+    /// Drive [`V7Decoder`] synchronously, feeding it `step` bytes at a time.
+    fn decode_sync(data: &[u8], step: usize) -> Result<Decoded, V7Error> {
+        let mut decoder = V7Decoder::default();
+        let mut input = Vec::new();
+        let mut fed = 0;
+        let mut out: Decoded = Vec::new();
+
+        loop {
+            let (consumed, event) = decoder.decode(&input)?;
+            match event {
+                Event::NeedData => {
+                    if fed == data.len() {
+                        return Err(decoder.eof());
+                    }
+                    let n = step.min(data.len() - fed);
+                    input.drain(..consumed);
+                    input.extend_from_slice(&data[fed..fed + n]);
+                    fed += n;
+                    continue;
+                }
+                Event::Member(member) => out.push((member.metadata().path.clone(), Vec::new())),
+                Event::Payload { len } => {
+                    out.last_mut().unwrap().1.extend_from_slice(&input[..len])
+                }
+                Event::End => return Ok(out),
+            }
+            input.drain(..consumed);
+        }
+    }
+
+    #[test]
+    fn decoder_is_incremental() {
+        let data = sample_archive();
+        let expected = decode_sync(&data, usize::MAX).unwrap();
+        assert_eq!(
+            expected
+                .iter()
+                .map(|(path, content)| (path.as_str(), content.len()))
+                .collect::<Vec<_>>(),
+            [
+                ("a", 700),
+                ("dir/", 0),
+                ("dir/b", 512),
+                ("empty", 0),
+                ("c", 1500)
+            ]
+        );
+
+        for step in [1, 7, 511, 512, 513, 4096] {
+            assert_eq!(decode_sync(&data, step).unwrap(), expected, "step {step}");
+        }
+
+        // Errors do not depend on how the input is split either.
+        let truncated = &data[..1000];
+        for step in [1, 7, 512, usize::MAX] {
+            let err = decode_sync(truncated, step).unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "at byte 1000: invalid v7 tar archive: truncated member payload",
+                "step {step}"
+            );
+        }
+    }
+
+    /// Returns a few bytes at a time, and `Pending` every other poll.
+    struct Trickle<'a> {
+        data: &'a [u8],
+        pending: bool,
+        step: usize,
+    }
+
+    impl AsyncRead for Trickle<'_> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            let this = &mut *self;
+            this.pending = !this.pending;
+            if this.pending {
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            this.step = this.step % 13 + 1;
+            let n = this.step.min(this.data.len()).min(buf.remaining());
+            buf.put_slice(&this.data[..n]);
+            this.data = &this.data[n..];
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    #[test]
+    fn archive_is_cancel_safe() {
+        let data = sample_archive();
+        let first: Block = data[..BLOCK_SIZE].try_into().unwrap();
+        let reader = Trickle {
+            data: &data[BLOCK_SIZE..],
+            pending: false,
+            step: 0,
+        };
+        let mut archive = V7Archive::new(reader, first);
+
+        let mut out: Decoded = Vec::new();
+        let mut cancelled = 0;
+        loop {
+            let limit = if archive.decoder.in_payload() {
+                100
+            } else {
+                usize::MAX
+            };
+            // Poll once, dropping the future if it is not ready.
+            let Some(event) = archive.next_event(limit).now_or_never() else {
+                cancelled += 1;
+                continue;
+            };
+            match event.unwrap() {
+                Event::Member(member) => out.push((member.metadata().path.clone(), Vec::new())),
+                Event::Payload { len } => out
+                    .last_mut()
+                    .unwrap()
+                    .1
+                    .extend_from_slice(archive.payload(len)),
+                Event::End => break,
+                Event::NeedData => unreachable!(),
+            }
+        }
+
+        assert!(cancelled > 100, "{cancelled}");
+        assert_eq!(out, decode_sync(&data, usize::MAX).unwrap());
     }
 }
