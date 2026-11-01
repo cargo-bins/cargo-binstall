@@ -21,19 +21,15 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use tar_framing::{
+    header::{
+        CHECKSUM_RANGE as CHECKSUM, GID_RANGE as GID, IDENTITY_RANGE as MAGIC_AND_VERSION,
+        MODE_RANGE as MODE, MTIME_RANGE as MTIME, NAME_RANGE as NAME, SIZE_RANGE as SIZE,
+        TYPEFLAG_OFFSET as TYPEFLAG, UID_RANGE as UID, USTAR_IDENTITY,
+    },
+    Block, BLOCK_SIZE,
+};
 use tokio::io::{AsyncRead, ReadBuf};
-
-const BLOCK_SIZE: usize = 512;
-
-const NAME: std::ops::Range<usize> = 0..100;
-const MODE: std::ops::Range<usize> = 100..108;
-const UID: std::ops::Range<usize> = 108..116;
-const GID: std::ops::Range<usize> = 116..124;
-const SIZE: std::ops::Range<usize> = 124..136;
-const MTIME: std::ops::Range<usize> = 136..148;
-const CHECKSUM: std::ops::Range<usize> = 148..156;
-const TYPEFLAG: usize = 156;
-const MAGIC_AND_VERSION: std::ops::Range<usize> = 257..265;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum State {
@@ -48,7 +44,7 @@ enum State {
 
 pub(crate) struct V7ToUstar<R> {
     inner: R,
-    block: [u8; BLOCK_SIZE],
+    block: Block,
     /// Number of bytes read into `block`.
     filled: usize,
     /// Number of bytes of a processed `block` already returned.
@@ -189,7 +185,7 @@ fn write_octal(field: &mut [u8], value: u64) -> Option<()> {
     Some(())
 }
 
-fn checksum(block: &[u8; BLOCK_SIZE], signed: bool) -> u64 {
+fn checksum(block: &Block, signed: bool) -> u64 {
     block
         .iter()
         .enumerate()
@@ -210,7 +206,7 @@ fn checksum(block: &[u8; BLOCK_SIZE], signed: bool) -> u64 {
 ///
 /// Returns the size of the payload on success, or `None` if `block` is not
 /// a valid v7 header, in which case `block` is left unmodified.
-fn upgrade_header(block: &mut [u8; BLOCK_SIZE]) -> Option<u64> {
+fn upgrade_header(block: &mut Block) -> Option<u64> {
     if block[MAGIC_AND_VERSION].iter().any(|byte| *byte != 0) {
         return None;
     }
@@ -250,7 +246,7 @@ fn upgrade_header(block: &mut [u8; BLOCK_SIZE]) -> Option<u64> {
     }
 
     upgraded[TYPEFLAG] = typeflag;
-    upgraded[MAGIC_AND_VERSION].copy_from_slice(b"ustar\x0000");
+    upgraded[MAGIC_AND_VERSION].copy_from_slice(USTAR_IDENTITY);
 
     let checksum = checksum(&upgraded, false);
     upgraded[CHECKSUM].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
@@ -266,7 +262,7 @@ mod test {
 
     use tokio::io::AsyncReadExt;
 
-    fn v7_header(name: &str, typeflag: u8, size: u64) -> [u8; BLOCK_SIZE] {
+    fn v7_header(name: &str, typeflag: u8, size: u64) -> Block {
         let mut header = [0u8; BLOCK_SIZE];
         header[..name.len()].copy_from_slice(name.as_bytes());
         header[MODE].copy_from_slice(b"   755 \0");
@@ -325,7 +321,7 @@ mod test {
             assert_eq!(&block[MAGIC_AND_VERSION], b"ustar\x0000");
             assert_eq!(block[TYPEFLAG], typeflag);
             assert_eq!(&block[MODE], b"0000755\0");
-            let block: &[u8; BLOCK_SIZE] = block.try_into().unwrap();
+            let block: &Block = block.try_into().unwrap();
             let stored = parse_octal(&block[CHECKSUM]).unwrap().unwrap();
             assert_eq!(stored, checksum(block, false));
         }
