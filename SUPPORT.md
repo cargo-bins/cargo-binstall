@@ -123,8 +123,8 @@ that exists:
 
 Then it will concat the dir with `"{ bin }{ binary-ext }"` and use that as the final `bin-dir`.
 
-`name` here is name of the crate, `bin` is the cargo binary name and `binary-ext` is `.exe`
-on windows and empty on other platforms).
+`name` here is the name of the crate, `bin` is the cargo binary name and `binary-ext` is `.exe`
+on windows and empty on other platforms.
 
 The default value for `pkg-url` will depend on the repository of the package.
 
@@ -205,7 +205,7 @@ For example, the default configuration (as shown above) for a crate called `radi
 
 - A download URL of `https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz`
 - Containing a single binary file `rust-radio-sx128x-x86_64-unknown-linux-gnu-v0.14.1-alpha.5/rust-radio-x86_64-unknown-linux-gnu`
-- Installed to`$HOME/.cargo/bin/rust-radio-sx128x-v0.14.1-alpha.5`
+- Installed to `$HOME/.cargo/bin/rust-radio-sx128x-v0.14.1-alpha.5`
 - With a symlink from `$HOME/.cargo/bin/rust-radio-sx128x`
 
 ####  If the package name does not match the crate name
