@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Debug, future::Future, io, path::Path, pin::Pin};
+use std::{fmt::Debug, future::Future, path::Path, pin::Pin};
 
 use bytes::Bytes;
 use futures_util::Stream;
@@ -19,26 +19,24 @@ pub trait TarEntry: Send + Sync + Debug {
     ///
     /// The path is returned as stored in the archive, it is not normalized
     /// and might contain `..` or be absolute.
-    fn path(&self) -> io::Result<Cow<'_, Path>>;
+    fn path(&self) -> &Path;
 
     /// Returns the size of the content of this entry.
-    fn size(&self) -> io::Result<u64>;
+    fn size(&self) -> u64;
 
     fn entry_type(&self) -> TarEntryType;
 
-    /// Read all remaining content of this entry and append it to `buf`.
-    ///
-    /// Returns the number of bytes appended.
-    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize, DownloadError>;
+    /// Replace the content of `buf` with the content of this entry.
+    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<(), DownloadError>;
 }
 
 #[async_trait::async_trait]
 impl<T: TarEntry + ?Sized> TarEntry for &mut T {
-    fn path(&self) -> io::Result<Cow<'_, Path>> {
+    fn path(&self) -> &Path {
         T::path(self)
     }
 
-    fn size(&self) -> io::Result<u64> {
+    fn size(&self) -> u64 {
         T::size(self)
     }
 
@@ -46,13 +44,10 @@ impl<T: TarEntry + ?Sized> TarEntry for &mut T {
         T::entry_type(self)
     }
 
-    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize, DownloadError> {
+    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<(), DownloadError> {
         T::read_to_end(self, buf).await
     }
 }
-
-/// Chunk size used when reading the content of an entry.
-const CHUNK_SIZE: usize = 64 * 1024;
 
 type Payload<'a, 's> = LentPayload<'a, AnyTarPayload<'a, 's>>;
 
@@ -75,39 +70,52 @@ impl Debug for Entry<'_, '_> {
 
 #[async_trait::async_trait]
 impl TarEntry for Entry<'_, '_> {
-    fn path(&self) -> io::Result<Cow<'_, Path>> {
-        Ok(Cow::Borrowed(Path::new(&self.path)))
+    fn path(&self) -> &Path {
+        Path::new(&self.path)
     }
 
-    fn size(&self) -> io::Result<u64> {
-        Ok(self.size)
+    fn size(&self) -> u64 {
+        self.size
     }
 
     fn entry_type(&self) -> TarEntryType {
         self.entry_type
     }
 
-    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize, DownloadError> {
-        let Some(payload) = self.payload.as_mut() else {
-            return Ok(0);
+    async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<(), DownloadError> {
+        buf.clear();
+
+        let Some(mut payload) = self.payload.take() else {
+            return Ok(());
+        };
+        let remaining = |buf: &Vec<u8>| {
+            usize::try_from(self.size)
+                .unwrap_or(usize::MAX)
+                .saturating_sub(buf.len())
+                .max(1)
         };
 
-        let mut chunk = Vec::new();
-        let mut n = 0;
+        // `next_chunk` replaces the content of the buffer instead of
+        // appending to it. Ask for the whole content at once, which `tar_codec`
+        // returns in a single chunk, so that usually no extra buffer is needed.
+        if !payload
+            .next_chunk(buf, remaining(buf))
+            .await
+            .map_err(decode_error)?
+        {
+            return Ok(());
+        }
 
+        let mut chunk = Vec::new();
         while payload
-            .next_chunk(&mut chunk, CHUNK_SIZE)
+            .next_chunk(&mut chunk, remaining(buf))
             .await
             .map_err(decode_error)?
         {
             buf.extend_from_slice(&chunk);
-            n += chunk.len();
         }
 
-        // The payload is fully consumed.
-        self.payload = None;
-
-        Ok(n)
+        Ok(())
     }
 }
 
@@ -211,4 +219,88 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use futures_util::stream;
+
+    use super::{super::tar::test::TarBuilder, *};
+
+    #[derive(Default)]
+    struct Recorder(Vec<(String, u64, String, Vec<u8>)>);
+
+    #[async_trait::async_trait]
+    impl TarEntriesVisitor for Recorder {
+        async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError> {
+            // `read_to_end` must replace the content of the buffer.
+            let mut content = b"garbage".to_vec();
+            entry.read_to_end(&mut content).await?;
+            self.0.push((
+                entry.path().to_str().unwrap().to_owned(),
+                entry.size(),
+                format!("{:?}", entry.entry_type()),
+                content,
+            ));
+            Ok(())
+        }
+    }
+
+    async fn visit(archive: Bytes) -> Vec<(String, u64, String, Vec<u8>)> {
+        let mut recorder = Recorder::default();
+        extract_tar_based_stream_and_visit(
+            stream::iter([Ok(archive)]),
+            TarBasedFmt::Tar,
+            &mut recorder,
+        )
+        .await
+        .unwrap();
+        recorder.0
+    }
+
+    #[tokio::test]
+    async fn visits_entries() {
+        let big = vec![b'b'; 200 * 1024];
+
+        for (name, archive) in [
+            (
+                "ustar",
+                TarBuilder::default()
+                    .entry("dir/", b'5', "")
+                    .file("dir/big", 0o644, &big)
+                    .entry("link", b'2', "dir/big")
+                    .file("empty", 0o644, b"")
+                    .finish(),
+            ),
+            (
+                "v7",
+                TarBuilder::default()
+                    .v7_file("dir/big", &big)
+                    .v7_file("empty", b"")
+                    .finish(),
+            ),
+        ] {
+            let entries = visit(archive).await;
+            let file = |path: &str, content: &[u8]| {
+                (
+                    path.to_owned(),
+                    content.len() as u64,
+                    "Regular".to_owned(),
+                    content.to_vec(),
+                )
+            };
+
+            let expected = if name == "ustar" {
+                vec![
+                    ("dir/".to_owned(), 0, "Directory".to_owned(), vec![]),
+                    file("dir/big", &big),
+                    ("link".to_owned(), 0, "Symlink".to_owned(), vec![]),
+                    file("empty", b""),
+                ]
+            } else {
+                vec![file("dir/big", &big), file("empty", b"")]
+            };
+            assert!(entries == expected, "{name}");
+        }
+    }
 }

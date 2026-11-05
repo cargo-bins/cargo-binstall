@@ -23,18 +23,15 @@
 
 use std::io;
 
-use tar_codec::{Archive, Member, MemberMetadata, MemberPayload};
-use tar_framing::{
-    header::{
-        CHECKSUM_RANGE, GID_RANGE, IDENTITY_RANGE, LINK_NAME_RANGE, MODE_RANGE, MTIME_RANGE,
-        NAME_RANGE, SIZE_RANGE, TYPEFLAG_OFFSET, UID_RANGE,
-    },
-    Block, BLOCK_SIZE,
-};
+use tar_codec::{Archive, Member, MemberPayload};
+use tar_framing::{header::IDENTITY_RANGE, Block, BLOCK_SIZE};
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use super::map_payload;
+
+mod header;
+use header::{parse_header, Header};
 
 const BLOCK_SIZE_U64: u64 = BLOCK_SIZE as u64;
 
@@ -351,145 +348,6 @@ impl<R: AsyncRead + Unpin> MemberPayload for V7Payload<'_, R> {
     }
 }
 
-struct Header {
-    member: Member<()>,
-    size: u64,
-}
-
-/// Parse an octal number, allowing leading spaces as historic tar
-/// implementations do.
-///
-/// Returns `Ok(None)` if the field is empty.
-fn parse_octal(field: &[u8]) -> Result<Option<u64>, ()> {
-    let mut value: Option<u64> = None;
-    let mut terminated = false;
-
-    for byte in field {
-        match *byte {
-            b' ' if value.is_none() && !terminated => (),
-            b'0'..=b'7' if !terminated => {
-                value = Some(
-                    value
-                        .unwrap_or(0)
-                        .checked_mul(8)
-                        .and_then(|value| value.checked_add(u64::from(byte - b'0')))
-                        .ok_or(())?,
-                );
-            }
-            0 | b' ' => terminated = true,
-            _ => return Err(()),
-        }
-    }
-
-    if value.is_some() && !terminated {
-        // The field must be terminated.
-        return Err(());
-    }
-
-    Ok(value)
-}
-
-fn checksum(block: &Block, signed: bool) -> u64 {
-    block
-        .iter()
-        .enumerate()
-        .map(|(i, byte)| {
-            let byte = if CHECKSUM_RANGE.contains(&i) {
-                b' '
-            } else {
-                *byte
-            };
-            if signed {
-                // Historic implementations computed the checksum using signed
-                // char.
-                i64::from(byte as i8) as u64
-            } else {
-                u64::from(byte)
-            }
-        })
-        .fold(0, u64::wrapping_add)
-}
-
-fn str_field(position: u64, field: &[u8], reason: &'static str) -> Result<String, V7Error> {
-    let field = &field[..field
-        .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or(field.len())];
-    String::from_utf8(field.to_vec()).map_err(|_| invalid(position, reason))
-}
-
-fn parse_header(position: u64, block: &Block) -> Result<Header, V7Error> {
-    if block[IDENTITY_RANGE].iter().any(|byte| *byte != 0) {
-        return Err(invalid(
-            position,
-            "v7 archive must not contain ustar/pax/GNU headers",
-        ));
-    }
-    if block[IDENTITY_RANGE.start..].iter().any(|byte| *byte != 0) {
-        return Err(invalid(
-            position,
-            "non-zero bytes after the v7 header fields",
-        ));
-    }
-
-    let stored = parse_octal(&block[CHECKSUM_RANGE])
-        .ok()
-        .flatten()
-        .ok_or_else(|| invalid(position, "invalid checksum field"))?;
-    if stored != checksum(block, false) && stored != checksum(block, true) {
-        return Err(invalid(position, "checksum mismatch"));
-    }
-
-    let octal = |range: std::ops::Range<usize>, reason| {
-        parse_octal(&block[range]).map_err(|_| invalid(position, reason))
-    };
-    let mode = octal(MODE_RANGE, "invalid mode field")?;
-    octal(UID_RANGE, "invalid uid field")?;
-    octal(GID_RANGE, "invalid gid field")?;
-    octal(MTIME_RANGE, "invalid mtime field")?;
-    let size = octal(SIZE_RANGE, "invalid size field")?
-        .ok_or_else(|| invalid(position, "missing size field"))?;
-
-    let path = str_field(position, &block[NAME_RANGE], "path is not valid UTF-8")?;
-    if path.is_empty() {
-        return Err(invalid(position, "empty path"));
-    }
-    let target = str_field(
-        position,
-        &block[LINK_NAME_RANGE],
-        "link target is not valid UTF-8",
-    )?;
-
-    let metadata = MemberMetadata { path, position };
-
-    let member = match block[TYPEFLAG_OFFSET] {
-        // v7 marks directories using a trailing slash.
-        0 | b'0' if metadata.path.ends_with('/') => Member::Directory { metadata },
-        0 | b'0' => Member::File {
-            metadata,
-            size,
-            executable: mode.unwrap_or(0) & 0o111 != 0,
-            payload: (),
-        },
-        b'1' => Member::HardLink {
-            metadata,
-            target,
-            size,
-            payload: (),
-        },
-        b'2' => Member::SymbolicLink { metadata, target },
-        // Not part of v7, but written by e.g. GNU tar for directories.
-        b'5' => Member::Directory { metadata },
-        _ => return Err(invalid(position, "unsupported typeflag")),
-    };
-
-    if !matches!(member, Member::File { .. }) && size != 0 {
-        return Err(invalid(position, "non-file member with non-zero size"));
-    }
-
-    Ok(Header { member, size })
-}
-
 #[cfg(test)]
 mod test {
     use std::{
@@ -498,9 +356,13 @@ mod test {
     };
 
     use futures_util::FutureExt;
+    use tar_framing::header::{
+        CHECKSUM_RANGE, GID_RANGE, LINK_NAME_RANGE, MODE_RANGE, MTIME_RANGE, SIZE_RANGE,
+        TYPEFLAG_OFFSET, UID_RANGE,
+    };
     use tokio::io::ReadBuf;
 
-    use super::*;
+    use super::{header::checksum, *};
 
     fn v7_header(name: &str, typeflag: u8, size: u64) -> Block {
         let mut header = [0u8; BLOCK_SIZE];
@@ -573,17 +435,6 @@ mod test {
             blocks.push(block);
         }
         blocks
-    }
-
-    #[test]
-    fn test_parse_octal() {
-        assert_eq!(parse_octal(b"0000755 \0"), Ok(Some(0o755)));
-        assert_eq!(parse_octal(b"   755 \0"), Ok(Some(0o755)));
-        assert_eq!(parse_octal(b"\0\0\0\0"), Ok(None));
-        assert_eq!(parse_octal(b"        "), Ok(None));
-        assert_eq!(parse_octal(b"0000758\0"), Err(()));
-        assert_eq!(parse_octal(b"00007550"), Err(()));
-        assert_eq!(parse_octal(b"07 5\0"), Err(()));
     }
 
     #[tokio::test]

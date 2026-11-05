@@ -202,7 +202,8 @@ impl Download<'_> {
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
     ///
-    /// NOTE that this API does not support gnu extension sparse file.
+    /// NOTE that like [`Download::and_extract`], this API does not support
+    /// GNU sparse files.
     #[instrument(skip(self, visitor))]
     pub async fn and_visit_tar(
         self,
@@ -229,7 +230,8 @@ impl Download<'_> {
 
     /// Download a file from the provided URL and extract it to the provided path.
     ///
-    /// NOTE that this will only extract directory and regular files.
+    /// NOTE that this will only extract directory and regular files, and that
+    /// GNU sparse files are not supported for tar based formats.
     #[instrument(
         skip(self, path),
         fields(path = format_args!("{}", path.as_ref().display()))

@@ -31,8 +31,7 @@ impl ManifestVisitor {
 #[async_trait::async_trait]
 impl TarEntriesVisitor for ManifestVisitor {
     async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError> {
-        let path = entry.path()?;
-        let path = path.normalize();
+        let path = entry.path().normalize();
 
         let path = if let Ok(path) = path.strip_prefix(&self.manifest_dir_path) {
             path
@@ -51,11 +50,8 @@ impl TarEntriesVisitor for ManifestVisitor {
 
         if path == Path::new("Cargo.toml") {
             // Since it is possible for the same Cargo.toml to appear
-            // multiple times using `tar --keep-old-files`, here we
-            // clear the buffer first before reading into it.
-            self.cargo_toml_content.clear();
-            self.cargo_toml_content
-                .reserve_exact(entry.size()?.try_into().unwrap_or(usize::MAX));
+            // multiple times using `tar --keep-old-files`, the content of
+            // the last one is kept.
             entry.read_to_end(&mut self.cargo_toml_content).await?;
         }
 

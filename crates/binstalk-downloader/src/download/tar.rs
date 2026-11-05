@@ -6,11 +6,19 @@
 //! capability-relative (via `cap-std`), so that no member can escape the
 //! extraction root through `..`, absolute paths or pre-existing links.
 
-use std::{fmt, fs, io, path::Path, pin::Pin};
+use std::{
+    fmt,
+    future::Future,
+    io,
+    path::{Component, Path, PathBuf},
+    pin::Pin,
+    sync::{Arc, Mutex, PoisonError},
+};
 
 use async_compression::tokio::bufread;
 use bytes::Bytes;
 use futures_util::{stream, Stream};
+use normalize_path::NormalizePath;
 use tar_codec::{
     extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy},
     Archive, DecodeError, DecodePolicy, ExtractError, Member, MemberMetadata, MemberPayload,
@@ -20,7 +28,7 @@ use tar_framing::{Block, FrameError, FrameErrorInner, BLOCK_SIZE};
 use thiserror::Error as ThisError;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, Chain},
-    runtime::Handle,
+    sync::mpsc,
 };
 use tokio_util::io::StreamReader;
 use tracing::debug;
@@ -29,7 +37,7 @@ mod v7;
 use v7::{V7Archive, V7Error, V7Payload};
 
 use super::{
-    super::utils::extract_with_blocking_task,
+    super::utils::extract_with_task,
     DownloadError, ExtractedFiles,
     TarBasedFmt::{self, *},
 };
@@ -245,23 +253,22 @@ pub(super) async fn open_tar_archive(
     )))
 }
 
-/// Normalize an archive member path the same way `tar::Entry::unpack_in`
-/// does: leading `/` and `.` components are stripped.
+/// Normalize an archive member path using [`NormalizePath::try_normalize`],
+/// the same way as zip extraction.
 ///
-/// Return `None` if the path contains a `..` component.
+/// Return `None` if the path is absolute or escapes the extraction root, which
+/// itself is returned as an empty path.
 fn normalize_member_path(path: &str) -> Option<String> {
     let mut normalized = String::with_capacity(path.len());
 
-    for component in path.split('/') {
-        match component {
-            "" | "." => (),
-            ".." => return None,
-            component => {
-                if !normalized.is_empty() {
-                    normalized.push('/');
-                }
-                normalized.push_str(component);
+    for component in Path::new(path).try_normalize()?.components() {
+        // `try_normalize` only returns normal components, or `.` for the root.
+        if let Component::Normal(component) = component {
+            if !normalized.is_empty() {
+                // `extract_in` uses `/` as separator on all platforms.
+                normalized.push('/');
             }
+            normalized.push_str(component.to_str()?);
         }
     }
 
@@ -275,9 +282,18 @@ fn normalize_member_path(path: &str) -> Option<String> {
 /// Every member path is normalized before being passed to
 /// [`Archive::extract_in`], so that paths recorded are exactly the ones
 /// extracted.
-struct ExtractedFilesRecorder<'f, A> {
+///
+/// `extracted_files` is shared instead of borrowed so that the recorder has no
+/// lifetime, see [`extract_tar`].
+struct ExtractedFilesRecorder<A> {
     inner: A,
-    extracted_files: &'f mut ExtractedFiles,
+    extracted_files: Arc<Mutex<ExtractedFiles>>,
+}
+
+fn record(extracted_files: &Mutex<ExtractedFiles>, f: impl FnOnce(&mut ExtractedFiles)) {
+    f(&mut extracted_files
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner))
 }
 
 /// A directory member pointing to the extraction root, which `extract_in`
@@ -295,7 +311,7 @@ fn skipped_member<P>(metadata: MemberMetadata) -> Member<P> {
     }
 }
 
-impl<A: Archive> Archive for ExtractedFilesRecorder<'_, A> {
+impl<A: Archive> Archive for ExtractedFilesRecorder<A> {
     type Error = A::Error;
     type Payload<'a>
         = A::Payload<'a>
@@ -317,7 +333,9 @@ impl<A: Archive> Archive for ExtractedFilesRecorder<'_, A> {
                 payload,
             } => match normalize_member_path(&metadata.path) {
                 Some(path) if !path.is_empty() => {
-                    self.extracted_files.add_file(Path::new(&path));
+                    record(&self.extracted_files, |files| {
+                        files.add_file(Path::new(&path))
+                    });
                     Member::File {
                         metadata: MemberMetadata {
                             path,
@@ -335,11 +353,9 @@ impl<A: Archive> Archive for ExtractedFilesRecorder<'_, A> {
             },
             Member::Directory { metadata } => match normalize_member_path(&metadata.path) {
                 Some(path) => {
-                    self.extracted_files.add_dir(Path::new(if path.is_empty() {
-                        "."
-                    } else {
-                        &path
-                    }));
+                    record(&self.extracted_files, |files| {
+                        files.add_dir(Path::new(if path.is_empty() { "." } else { &path }))
+                    });
                     Member::Directory {
                         metadata: MemberMetadata {
                             path,
@@ -373,50 +389,70 @@ where
 {
     debug!("Extracting from {fmt} archive to {}", dst.display());
 
-    let dst = dst.to_owned();
+    extract_with_task(stream, |rx| extract_tar(rx, dst.to_owned(), fmt)).await
+}
 
-    // rustc is currently unable to prove that the future returned by
-    // `Archive::extract_in` is `Send` (it fails with "implementation of `Send`
-    // is not general enough", see rust-lang/rust#110338), so drive it on a
-    // blocking thread via `Handle::block_on`, which does not require `Send`.
-    //
-    // The download stream is still polled on the async runtime and forwarded
-    // via a channel.
-    extract_with_blocking_task(stream, move |mut rx| {
-        Handle::current().block_on(async move {
-            fs::create_dir_all(&dst)?;
+/// [`AnyTarArchive`] without lifetime, see [`extract_tar`].
+struct StaticTarArchive(AnyTarArchive<'static>);
 
-            let stream = stream::poll_fn(move |cx| rx.poll_recv(cx).map(|bytes| bytes.map(Ok)));
+impl Archive for StaticTarArchive {
+    type Error = TarDecodeError;
+    type Payload<'a> = AnyTarPayload<'a, 'static>;
 
-            let mut extracted_files = ExtractedFiles::new();
+    async fn next_member<'a>(
+        &'a mut self,
+    ) -> Result<Option<Member<Self::Payload<'a>>>, Self::Error> {
+        self.0.next_member().await
+    }
+}
 
-            let archive = open_tar_archive(create_tar_decoder(stream, fmt))
+/// Extract the tar archive received from `rx` to `dst`.
+///
+/// rustc is currently unable to prove that the future returned by
+/// [`Archive::extract_in`] is `Send` when the archive type has a lifetime (it
+/// fails with "implementation of `Send` is not general enough", see
+/// rust-lang/rust#110338). So the archive is decoded from a channel rather
+/// than from the borrowed download stream, which makes every type here
+/// `'static`, and the future is boxed to prove that it is `Send` here.
+fn extract_tar(
+    mut rx: mpsc::Receiver<Bytes>,
+    dst: PathBuf,
+    fmt: TarBasedFmt,
+) -> Pin<Box<dyn Future<Output = io::Result<ExtractedFiles>> + Send>> {
+    Box::pin(async move {
+        let stream = stream::poll_fn(move |cx| rx.poll_recv(cx).map(|bytes| bytes.map(Ok)));
+        let archive = StaticTarArchive(
+            open_tar_archive(create_tar_decoder(stream, fmt))
                 .await
-                .map_err(io::Error::from)?;
+                .map_err(io::Error::from)?,
+        );
 
-            ExtractedFilesRecorder {
-                inner: archive,
-                extracted_files: &mut extracted_files,
-            }
-            .extract_in(
-                &dst,
-                ExtractPolicy::default()
-                    .link_policy(LinkPolicy::default().symlink_policy(SymlinkPolicy::Skip)),
-            )
-            .await
-            .map_err(|err| io::Error::from(extract_error(err)))?;
+        let extracted_files = Arc::new(Mutex::new(ExtractedFiles::new()));
 
-            Ok(extracted_files)
-        })
+        ExtractedFilesRecorder {
+            inner: archive,
+            extracted_files: extracted_files.clone(),
+        }
+        .extract_in(
+            dst,
+            ExtractPolicy::default()
+                .link_policy(LinkPolicy::default().symlink_policy(SymlinkPolicy::Skip)),
+        )
+        .await
+        .map_err(|err| io::Error::from(extract_error(err)))?;
+
+        Ok(Arc::into_inner(extracted_files)
+            .expect("the recorder is dropped by extract_in")
+            .into_inner()
+            .unwrap_or_else(PoisonError::into_inner))
     })
-    .await
 }
 
 #[cfg(test)]
-mod test {
+pub(super) mod test {
     use super::*;
 
-    use std::{collections::HashSet, ffi::OsStr};
+    use std::{collections::HashSet, ffi::OsStr, fs};
 
     use tempfile::tempdir;
 
@@ -427,12 +463,14 @@ mod test {
         for (path, expected) in [
             ("a", Some("a")),
             ("./a/b", Some("a/b")),
-            ("/a//b/", Some("a/b")),
+            ("a//b/", Some("a/b")),
             ("a/./b/.", Some("a/b")),
             ("./", Some("")),
             ("", Some("")),
-            ("a/../b", None),
+            ("a/../b", Some("b")),
+            ("/a", None),
             ("../a", None),
+            ("a/../../b", None),
         ] {
             assert_eq!(normalize_member_path(path).as_deref(), expected, "{path:?}");
         }
@@ -440,7 +478,7 @@ mod test {
 
     /// Minimal ustar archive writer for tests.
     #[derive(Default)]
-    struct TarBuilder(Vec<u8>);
+    pub(crate) struct TarBuilder(Vec<u8>);
 
     impl TarBuilder {
         fn header(&mut self, name: &str, typeflag: u8, mode: u32, size: usize, link: &str) {
@@ -468,14 +506,14 @@ mod test {
             self.0.resize(self.0.len().next_multiple_of(512), 0);
         }
 
-        fn file(mut self, name: &str, mode: u32, data: &[u8]) -> Self {
+        pub(crate) fn file(mut self, name: &str, mode: u32, data: &[u8]) -> Self {
             self.header(name, b'0', mode, data.len(), "");
             self.data(data);
             self
         }
 
         /// Add a regular file using a legacy v7 header.
-        fn v7_file(mut self, name: &str, data: &[u8]) -> Self {
+        pub(crate) fn v7_file(mut self, name: &str, data: &[u8]) -> Self {
             self.header(name, 0, 0o755, data.len(), "");
             let start = self.0.len() - 512;
             let header = &mut self.0[start..];
@@ -487,7 +525,7 @@ mod test {
             self
         }
 
-        fn entry(mut self, name: &str, typeflag: u8, link: &str) -> Self {
+        pub(crate) fn entry(mut self, name: &str, typeflag: u8, link: &str) -> Self {
             self.header(name, typeflag, 0o755, 0, link);
             self
         }
@@ -508,7 +546,7 @@ mod test {
             self
         }
 
-        fn finish(mut self) -> Bytes {
+        pub(crate) fn finish(mut self) -> Bytes {
             self.0.extend_from_slice(&[0; 1024]);
             self.0.into()
         }
@@ -536,11 +574,12 @@ mod test {
             .entry("./", b'5', "")
             .entry("./dir/", b'5', "")
             .file("./dir/bin", 0o755, b"bin")
+            .file("dir/../file", 0o644, b"file")
             .file("/abs", 0o644, b"abs")
             .file("../escape", 0o644, b"escape")
             .file("dir/../../escape2", 0o644, b"escape")
             .entry("symlink", b'2', "../escape")
-            .entry("hardlink", b'1', "abs")
+            .entry("hardlink", b'1', "file")
             .entry("fifo", b'6', "")
             .finish();
 
@@ -549,17 +588,19 @@ mod test {
         assert_eq!(
             extracted_files.0,
             [
-                (Path::new(".").into(), dir_entry(&["dir", "abs"])),
+                (Path::new(".").into(), dir_entry(&["dir", "file"])),
                 (Path::new("dir").into(), dir_entry(&["bin"])),
                 (Path::new("dir/bin").into(), ExtractedFilesEntry::File),
-                (Path::new("abs").into(), ExtractedFilesEntry::File),
+                (Path::new("file").into(), ExtractedFilesEntry::File),
             ]
             .into_iter()
             .collect()
         );
 
         assert_eq!(fs::read(dst.join("dir/bin")).unwrap(), b"bin");
-        assert_eq!(fs::read(dst.join("abs")).unwrap(), b"abs");
+        assert_eq!(fs::read(dst.join("file")).unwrap(), b"file");
+        // Absolute paths are skipped, as in zip extraction.
+        assert!(dst.join("abs").symlink_metadata().is_err());
         assert!(!tempdir.path().join("escape").exists());
         assert!(!tempdir.path().join("escape2").exists());
         for name in ["symlink", "hardlink", "fifo"] {
@@ -572,7 +613,7 @@ mod test {
 
             let mode = |path| fs::metadata(dst.join(path)).unwrap().permissions().mode();
             assert_ne!(mode("dir/bin") & 0o111, 0);
-            assert_eq!(mode("abs") & 0o111, 0);
+            assert_eq!(mode("file") & 0o111, 0);
         }
     }
 
