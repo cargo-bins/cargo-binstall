@@ -166,7 +166,11 @@ pub async fn fetch_crate_cratesio_api(
         client,
         name,
         crate_url,
-        MatchedVersion { version, cksum },
+        MatchedVersion {
+            version,
+            cksum,
+            pubtime: None,
+        },
         None,
     )
     .await
