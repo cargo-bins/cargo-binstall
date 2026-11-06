@@ -24,14 +24,14 @@
 use std::io;
 
 use tar_codec::{Archive, Member, MemberPayload};
-use tar_framing::{header::IDENTITY_RANGE, Block, BLOCK_SIZE};
+use tar_framing::{Block, BLOCK_SIZE};
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use super::map_payload;
 
 mod header;
-use header::{parse_header, Header};
+use header::{parse_header, Header, V7Header};
 
 const BLOCK_SIZE_U64: u64 = BLOCK_SIZE as u64;
 
@@ -51,7 +51,11 @@ fn invalid(position: u64, reason: &'static str) -> V7Error {
 /// Return true if `block` looks like a v7 header, i.e. it has no ustar/GNU
 /// magic and is not the end-of-archive marker.
 pub(crate) fn is_v7_header(block: &Block) -> bool {
-    block[IDENTITY_RANGE].iter().all(|byte| *byte == 0) && block.iter().any(|byte| *byte != 0)
+    V7Header::from_block(block)
+        .identity()
+        .iter()
+        .all(|byte| *byte == 0)
+        && block.iter().any(|byte| *byte != 0)
 }
 
 fn is_zero_block(block: &[u8]) -> bool {
@@ -356,30 +360,38 @@ mod test {
     };
 
     use futures_util::FutureExt;
-    use tar_framing::header::{
-        CHECKSUM_RANGE, GID_RANGE, LINK_NAME_RANGE, MODE_RANGE, MTIME_RANGE, SIZE_RANGE,
-        TYPEFLAG_OFFSET, UID_RANGE,
-    };
     use tokio::io::ReadBuf;
 
-    use super::{header::checksum, *};
+    use super::*;
 
     fn v7_header(name: &str, typeflag: u8, size: u64) -> Block {
         let mut header = [0u8; BLOCK_SIZE];
         header[..name.len()].copy_from_slice(name.as_bytes());
-        header[MODE_RANGE].copy_from_slice(b"   755 \0");
-        header[UID_RANGE].copy_from_slice(b"0000765 ");
-        header[GID_RANGE].copy_from_slice(b"0000024 ");
-        header[SIZE_RANGE].copy_from_slice(format!("{size:011o} ").as_bytes());
-        header[MTIME_RANGE].copy_from_slice(b"15057527731 ");
-        header[TYPEFLAG_OFFSET] = typeflag;
+        let fields = V7Header::from_block_mut(&mut header);
+        fields.mode.0 = *b"   755 \0";
+        fields.uid.0 = *b"0000765 ";
+        fields.gid.0 = *b"0000024 ";
+        fields
+            .size
+            .0
+            .copy_from_slice(format!("{size:011o} ").as_bytes());
+        fields.mtime.0 = *b"15057527731 ";
+        fields.typeflag = typeflag;
         set_checksum(&mut header);
         header
     }
 
     fn set_checksum(header: &mut Block) {
-        let checksum = checksum(header, false);
-        header[CHECKSUM_RANGE].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+        set_checksum_with(header, false);
+    }
+
+    fn set_checksum_with(header: &mut Block, signed: bool) {
+        let header = V7Header::from_block_mut(header);
+        let checksum = header.compute_checksum(signed);
+        header
+            .checksum
+            .0
+            .copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
     }
 
     fn archive(blocks: &[Block]) -> Vec<u8> {
@@ -448,12 +460,12 @@ mod test {
         blocks.extend(file("empty", b""));
         blocks.push(v7_header("link", b'2', 0));
         let mut hardlink = v7_header("hardlink", b'1', 0);
-        hardlink[LINK_NAME_RANGE.start..LINK_NAME_RANGE.start + 5].copy_from_slice(b"empty");
+        V7Header::from_block_mut(&mut hardlink).link_name.0[..5].copy_from_slice(b"empty");
         set_checksum(&mut hardlink);
         blocks.push(hardlink);
         blocks.push(v7_header("dir2", b'5', 0));
         let mut not_executable = v7_header("data", 0, 0);
-        not_executable[MODE_RANGE].copy_from_slice(b"0000644\0");
+        V7Header::from_block_mut(&mut not_executable).mode.0 = *b"0000644\0";
         set_checksum(&mut not_executable);
         blocks.push(not_executable);
 
@@ -476,8 +488,7 @@ mod test {
         let mut blocks = file("a", &[0xff; 700]);
         // Header with a high byte, checksummed using signed char.
         let mut header = v7_header("\u{e9}", 0, 1);
-        let checksum = checksum(&header, true);
-        header[CHECKSUM_RANGE].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+        set_checksum_with(&mut header, true);
         blocks.push(header);
         blocks.push([b'x'; BLOCK_SIZE]);
 
@@ -498,18 +509,18 @@ mod test {
     #[tokio::test]
     async fn rejects_invalid_archives() {
         let mut ustar = v7_header("b", b'0', 0);
-        ustar[IDENTITY_RANGE].copy_from_slice(b"ustar\x0000");
+        V7Header::from_block_mut(&mut ustar).rest[..8].copy_from_slice(b"ustar\x0000");
         set_checksum(&mut ustar);
 
         let mut bad_checksum = v7_header("b", 0, 0);
-        bad_checksum[CHECKSUM_RANGE.start] = b'7';
+        V7Header::from_block_mut(&mut bad_checksum).checksum.0[0] = b'7';
 
         let mut trailing = v7_header("b", 0, 0);
         trailing[400] = 1;
         set_checksum(&mut trailing);
 
         let mut bad_mode = v7_header("b", 0, 0);
-        bad_mode[MODE_RANGE].copy_from_slice(b"0000x55\0");
+        V7Header::from_block_mut(&mut bad_mode).mode.0 = *b"0000x55\0";
         set_checksum(&mut bad_mode);
 
         let mut non_utf8 = v7_header("b", 0, 0);

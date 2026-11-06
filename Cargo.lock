@@ -341,6 +341,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+ "zerocopy",
  "zstd 0.14.3",
 ]
 
