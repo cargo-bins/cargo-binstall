@@ -82,6 +82,10 @@ package = "native-tls"
 # The version must be kept in sync of reqwest
 version = "0.2.10"
 
+[dev-dependencies]
+# Reference implementation to test the v7 decoder against.
+tar = "0.4.46"
+
 [features]
 default = ["static", "rustls"]
 

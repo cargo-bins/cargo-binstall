@@ -1,17 +1,14 @@
-use std::{fmt::Debug, future::Future, path::Path, pin::Pin};
+//! In memory processing of tar archives.
+
+use std::{fmt::Debug, path::Path};
 
 use bytes::Bytes;
 use futures_util::Stream;
-use tar_codec::{Archive, LentPayload, Member, MemberPayload, Members, SpecialKind};
+use tar_codec::{Archive, LentPayload, Member, MemberPayload, SpecialKind};
 use tracing::debug;
 
-use super::{
-    tar::{
-        create_tar_decoder, decode_error, open_tar_archive, AnyTarArchive, AnyTarPayload,
-        TarDecodeError,
-    },
-    DownloadError, TarBasedFmt,
-};
+use super::{decode_error, DownloadError, TarArchive, TarBasedFmt, TarPayload};
+use crate::utils::extract_with_task;
 
 #[async_trait::async_trait]
 pub trait TarEntry: Send + Sync + Debug {
@@ -49,16 +46,16 @@ impl<T: TarEntry + ?Sized> TarEntry for &mut T {
     }
 }
 
-type Payload<'a, 's> = LentPayload<'a, AnyTarPayload<'a, 's>>;
+type Payload<'a> = LentPayload<'a, TarPayload<'a>>;
 
-struct Entry<'a, 's> {
+struct Entry<'a> {
     path: String,
     size: u64,
     entry_type: TarEntryType,
-    payload: Option<Payload<'a, 's>>,
+    payload: Option<Payload<'a>>,
 }
 
-impl Debug for Entry<'_, '_> {
+impl Debug for Entry<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Entry")
             .field("path", &self.path)
@@ -69,7 +66,7 @@ impl Debug for Entry<'_, '_> {
 }
 
 #[async_trait::async_trait]
-impl TarEntry for Entry<'_, '_> {
+impl TarEntry for Entry<'_> {
     fn path(&self) -> &Path {
         Path::new(&self.path)
     }
@@ -140,92 +137,69 @@ pub trait TarEntriesVisitor: Send + Sync {
     async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError>;
 }
 
-pub(crate) fn extract_tar_based_stream_and_visit<'a, S>(
-    stream: S,
-    fmt: TarBasedFmt,
-    visitor: &'a mut dyn TarEntriesVisitor,
-) -> Pin<Box<dyn Future<Output = Result<(), DownloadError>> + Send + 'a>>
-where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + 'a,
-{
-    // The future is boxed here so that it is proven to be `Send` with
-    // concrete lifetimes, otherwise rustc fails with "implementation of
-    // `Send` is not general enough" in callers, see rust-lang/rust#110338.
-    Box::pin(visit_tar_based_stream(stream, fmt, visitor))
-}
-
-type NextMember<'a, 's> = Pin<
-    Box<dyn Future<Output = Result<Option<Member<Payload<'a, 's>>>, TarDecodeError>> + Send + 'a>,
->;
-
-/// Box the future returned by [`Members::next`] with concrete lifetimes so
-/// that rustc can prove it is `Send`.
-fn next_member<'a, 's>(members: &'a mut Members<AnyTarArchive<'s>>) -> NextMember<'a, 's> {
-    Box::pin(members.next())
-}
-
-async fn visit_tar_based_stream<S>(
+pub(in crate::download) async fn visit_tar_based_stream<S>(
     stream: S,
     fmt: TarBasedFmt,
     visitor: &mut dyn TarEntriesVisitor,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
 {
     debug!("Extracting from {fmt} archive to process it in memory");
 
-    let mut members = open_tar_archive(create_tar_decoder(stream, fmt))
-        .await?
-        .members();
+    extract_with_task(stream, |rx| async move {
+        let mut members = TarArchive::open(rx, fmt).await?.members();
 
-    while let Some(member) = next_member(&mut members).await.map_err(decode_error)? {
-        let (metadata, size, entry_type, payload) = match member {
-            Member::File {
-                metadata,
+        while let Some(member) = members.next().await.map_err(decode_error)? {
+            let (metadata, size, entry_type, payload) = match member {
+                Member::File {
+                    metadata,
+                    size,
+                    payload,
+                    ..
+                } => (metadata, size, TarEntryType::Regular, Some(payload)),
+                Member::HardLink {
+                    metadata,
+                    size,
+                    payload,
+                    ..
+                } => (metadata, size, TarEntryType::Link, Some(payload)),
+                Member::Directory { metadata } => (metadata, 0, TarEntryType::Directory, None),
+                Member::SymbolicLink { metadata, .. } => (metadata, 0, TarEntryType::Symlink, None),
+                Member::Special { metadata, kind } => (
+                    metadata,
+                    0,
+                    match kind {
+                        SpecialKind::CharacterDevice => TarEntryType::Char,
+                        SpecialKind::BlockDevice => TarEntryType::Block,
+                        SpecialKind::Fifo => TarEntryType::Fifo,
+                    },
+                    None,
+                ),
+            };
+
+            let mut entry = Entry {
+                path: metadata.path,
                 size,
+                entry_type,
                 payload,
-                ..
-            } => (metadata, size, TarEntryType::Regular, Some(payload)),
-            Member::HardLink {
-                metadata,
-                size,
-                payload,
-                ..
-            } => (metadata, size, TarEntryType::Link, Some(payload)),
-            Member::Directory { metadata } => (metadata, 0, TarEntryType::Directory, None),
-            Member::SymbolicLink { metadata, .. } => (metadata, 0, TarEntryType::Symlink, None),
-            Member::Special { metadata, kind } => (
-                metadata,
-                0,
-                match kind {
-                    SpecialKind::CharacterDevice => TarEntryType::Char,
-                    SpecialKind::BlockDevice => TarEntryType::Block,
-                    SpecialKind::Fifo => TarEntryType::Fifo,
-                },
-                None,
-            ),
-        };
+            };
+            visitor.visit(&mut entry).await?;
 
-        let mut entry = Entry {
-            path: metadata.path,
-            size,
-            entry_type,
-            payload,
-        };
-        visitor.visit(&mut entry).await?;
+            // Any remaining content of the entry is drained and validated by
+            // `members.next()`.
+        }
 
-        // Any remaining content of the entry is drained and validated by
-        // `members.next()`.
-    }
-
-    Ok(())
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]
 mod test {
     use futures_util::stream;
 
-    use super::{super::tar::test::TarBuilder, *};
+    use super::{super::test::TarBuilder, *};
 
     #[derive(Default)]
     struct Recorder(Vec<(String, u64, String, Vec<u8>)>);
@@ -248,13 +222,9 @@ mod test {
 
     async fn visit(archive: Bytes) -> Vec<(String, u64, String, Vec<u8>)> {
         let mut recorder = Recorder::default();
-        extract_tar_based_stream_and_visit(
-            stream::iter([Ok(archive)]),
-            TarBasedFmt::Tar,
-            &mut recorder,
-        )
-        .await
-        .unwrap();
+        visit_tar_based_stream(stream::iter([Ok(archive)]), TarBasedFmt::Tar, &mut recorder)
+            .await
+            .unwrap();
         recorder.0
     }
 

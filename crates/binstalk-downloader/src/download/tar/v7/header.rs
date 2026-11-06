@@ -6,7 +6,7 @@ use tar_codec::{Member, MemberMetadata};
 use tar_framing::{Block, BLOCK_SIZE};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
-use super::{invalid, V7Error};
+use super::V7Error;
 
 /// A NUL or space terminated octal number field.
 ///
@@ -28,9 +28,9 @@ impl<const N: usize> Octal<N> {
 pub(super) struct NulStr<const N: usize>(pub(super) [u8; N]);
 
 impl<const N: usize> NulStr<N> {
-    fn to_string(&self) -> Result<String, ()> {
+    fn to_str(&self) -> Result<&str, ()> {
         let len = self.0.iter().position(|byte| *byte == 0).unwrap_or(N);
-        String::from_utf8(self.0[..len].to_vec()).map_err(|_| ())
+        std::str::from_utf8(&self.0[..len]).map_err(|_| ())
     }
 }
 
@@ -131,18 +131,13 @@ fn parse_octal(field: &[u8]) -> Result<Option<u64>, ()> {
 /// Parse and validate a v7 header located at byte `position`.
 pub(super) fn parse_header(position: u64, block: &Block) -> Result<Header, V7Error> {
     let header = V7Header::from_block(block);
+    let invalid = |reason| V7Error::Invalid { position, reason };
 
     if header.identity().iter().any(|byte| *byte != 0) {
-        return Err(invalid(
-            position,
-            "v7 archive must not contain ustar/pax/GNU headers",
-        ));
+        return Err(invalid("v7 archive must not contain ustar/pax/GNU headers"));
     }
     if header.rest.iter().any(|byte| *byte != 0) {
-        return Err(invalid(
-            position,
-            "non-zero bytes after the v7 header fields",
-        ));
+        return Err(invalid("non-zero bytes after the v7 header fields"));
     }
 
     let stored = header
@@ -150,31 +145,32 @@ pub(super) fn parse_header(position: u64, block: &Block) -> Result<Header, V7Err
         .get()
         .ok()
         .flatten()
-        .ok_or_else(|| invalid(position, "invalid checksum field"))?;
+        .ok_or_else(|| invalid("invalid checksum field"))?;
     if stored != header.compute_checksum(false) && stored != header.compute_checksum(true) {
-        return Err(invalid(position, "checksum mismatch"));
+        return Err(invalid("checksum mismatch"));
     }
 
-    let octal =
-        |field: Result<Option<u64>, ()>, reason| field.map_err(|_| invalid(position, reason));
+    let octal = |field: Result<Option<u64>, ()>, reason| field.map_err(|_| invalid(reason));
     let mode = octal(header.mode.get(), "invalid mode field")?;
     octal(header.uid.get(), "invalid uid field")?;
     octal(header.gid.get(), "invalid gid field")?;
     octal(header.mtime.get(), "invalid mtime field")?;
     let size = octal(header.size.get(), "invalid size field")?
-        .ok_or_else(|| invalid(position, "missing size field"))?;
+        .ok_or_else(|| invalid("missing size field"))?;
 
     let path = header
         .name
-        .to_string()
-        .map_err(|_| invalid(position, "path is not valid UTF-8"))?;
+        .to_str()
+        .map_err(|_| invalid("path is not valid UTF-8"))?
+        .to_owned();
     if path.is_empty() {
-        return Err(invalid(position, "empty path"));
+        return Err(invalid("empty path"));
     }
     let target = header
         .link_name
-        .to_string()
-        .map_err(|_| invalid(position, "link target is not valid UTF-8"))?;
+        .to_str()
+        .map_err(|_| invalid("link target is not valid UTF-8"))?
+        .to_owned();
 
     let metadata = MemberMetadata { path, position };
 
@@ -196,11 +192,11 @@ pub(super) fn parse_header(position: u64, block: &Block) -> Result<Header, V7Err
         b'2' => Member::SymbolicLink { metadata, target },
         // Not part of v7, but written by e.g. GNU tar for directories.
         b'5' => Member::Directory { metadata },
-        _ => return Err(invalid(position, "unsupported typeflag")),
+        _ => return Err(invalid("unsupported typeflag")),
     };
 
     if !matches!(member, Member::File { .. }) && size != 0 {
-        return Err(invalid(position, "non-file member with non-zero size"));
+        return Err(invalid("non-file member with non-zero size"));
     }
 
     Ok(Header { member, size })

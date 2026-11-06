@@ -14,12 +14,8 @@ use crate::remote::{Client, Error as RemoteError, Response, Url};
 mod async_extractor;
 use async_extractor::*;
 
-mod async_tar_visitor;
-use async_tar_visitor::extract_tar_based_stream_and_visit;
-pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
-
 mod tar;
-pub use tar::TarError;
+pub use tar::{TarEntriesVisitor, TarEntry, TarEntryType, TarError};
 
 mod extracted_files;
 pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
@@ -215,7 +211,7 @@ impl Download<'_> {
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let res = extract_tar_based_stream_and_visit(&mut stream, fmt, visitor).await;
+        let res = tar::visit_tar_based_stream(&mut stream, fmt, visitor).await;
 
         if has_data_verifier {
             consume_stream(&mut stream).await;
