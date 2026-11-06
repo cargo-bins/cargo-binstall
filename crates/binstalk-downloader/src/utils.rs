@@ -1,22 +1,20 @@
-use std::{
-    future::Future,
-    io::{self, BufRead, Read},
-};
+use std::{future::Future, io};
 
-use bytes::{Buf, Bytes};
-use futures_util::{FutureExt, Stream, StreamExt};
+use bytes::Bytes;
+use futures_util::{FutureExt, Stream, StreamExt, TryFutureExt};
 use tokio::{sync::mpsc, task};
 
-pub(super) fn extract_with_blocking_task<E, StreamError, S, F, T>(
+/// Run the future returned by `f`, which extracts from the [`mpsc::Receiver`]
+/// passed to it, while forwarding `stream` to it.
+pub(super) fn extract_with_task<E, StreamError, S, F, Fut, T>(
     stream: S,
     f: F,
 ) -> impl Future<Output = Result<T, E>>
 where
-    T: Send + 'static,
-    E: From<io::Error>,
     E: From<StreamError>,
     S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
-    F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
+    F: FnOnce(mpsc::Receiver<Bytes>) -> Fut,
+    Fut: Future<Output = Result<T, E>> + Send,
 {
     async fn inner<S, StreamError, Fut, T, E>(
         mut stream: S,
@@ -24,14 +22,13 @@ where
         tx: mpsc::Sender<Bytes>,
     ) -> Result<T, E>
     where
-        E: From<io::Error>,
         E: From<StreamError>,
         // We do not use trait object for S since there will only be one
         // S used with this function.
         S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
-        // asyncify would always return the same future, so no need to
-        // use trait object here.
-        Fut: Future<Output = io::Result<T>> + Send + Sync,
+        // There will only be one Fut used with this function, so no need
+        // to use trait object here.
+        Fut: Future<Output = Result<T, E>> + Send,
     {
         let read_fut = async move {
             while let Some(bytes) = stream.next().await.transpose()? {
@@ -58,8 +55,7 @@ where
         };
         tokio::pin!(read_fut);
 
-        let task_fut = async move { task.await.map_err(E::from) };
-        tokio::pin!(task_fut);
+        tokio::pin!(task);
 
         tokio::select! {
             biased;
@@ -69,9 +65,9 @@ where
                 // read task to be done.
                 res?;
 
-                task_fut.await
+                task.await
             },
-            res = &mut task_fut => {
+            res = &mut task => {
                 // The task finishes before the read task, return early
                 // after checking for errors in read_fut.
                 if let Some(Err(err)) = read_fut.now_or_never() {
@@ -86,9 +82,25 @@ where
     // Use channel size = 5 to minimize the waiting time in the extraction task
     let (tx, rx) = mpsc::channel(5);
 
-    let task = asyncify(move || f(rx));
+    let task = f(rx);
 
     inner(stream, task, tx)
+}
+
+/// Run `f`, which extracts from the [`mpsc::Receiver`] passed to it, on a
+/// blocking thread while forwarding `stream` to it.
+pub(super) fn extract_with_blocking_task<E, StreamError, S, F, T>(
+    stream: S,
+    f: F,
+) -> impl Future<Output = Result<T, E>>
+where
+    T: Send + 'static,
+    E: From<io::Error>,
+    E: From<StreamError>,
+    S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
+    F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
+{
+    extract_with_task(stream, move |rx| asyncify(move || f(rx)).map_err(E::from))
 }
 
 /// Copied from tokio https://docs.rs/tokio/latest/src/tokio/fs/mod.rs.html#132
@@ -105,65 +117,4 @@ where
     }
 
     inner(task::spawn_blocking(f))
-}
-
-/// This wraps an AsyncIterator as a `Read`able.
-/// It must be used in non-async context only,
-/// meaning you have to use it with
-/// `tokio::task::{block_in_place, spawn_blocking}` or
-/// `std::thread::spawn`.
-pub(super) struct StreamReadable {
-    rx: mpsc::Receiver<Bytes>,
-    bytes: Bytes,
-}
-
-impl StreamReadable {
-    pub(super) fn new(rx: mpsc::Receiver<Bytes>) -> Self {
-        Self {
-            rx,
-            bytes: Bytes::new(),
-        }
-    }
-}
-
-impl Read for StreamReadable {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-
-        if self.fill_buf()?.is_empty() {
-            return Ok(0);
-        }
-
-        let bytes = &mut self.bytes;
-
-        // copy_to_slice requires the bytes to have enough remaining bytes
-        // to fill buf.
-        let n = buf.len().min(bytes.remaining());
-
-        // <Bytes as Buf>::copy_to_slice copies and consumes the bytes
-        bytes.copy_to_slice(&mut buf[..n]);
-
-        Ok(n)
-    }
-}
-
-impl BufRead for StreamReadable {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        let bytes = &mut self.bytes;
-
-        if !bytes.has_remaining() {
-            if let Some(new_bytes) = self.rx.blocking_recv() {
-                // new_bytes are guaranteed to be non-empty.
-                *bytes = new_bytes;
-            }
-        }
-
-        Ok(&*bytes)
-    }
-
-    fn consume(&mut self, amt: usize) {
-        self.bytes.advance(amt);
-    }
 }

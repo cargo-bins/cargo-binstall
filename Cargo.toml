@@ -28,12 +28,6 @@ strip = "symbols"
 [profile.release.build-override]
 inherits = "dev.build-override"
 
-[profile.release.package."astral-tokio-tar"]
-opt-level = "z"
-
-[profile.release.package."binstall-tar"]
-opt-level = "z"
-
 [profile.dev]
 opt-level = 0
 debug = "line-tables-only"
@@ -45,12 +39,6 @@ codegen-units = 32
 # Set the default for dependencies on debug.
 [profile.dev.package."*"]
 opt-level = 3
-
-[profile.dev.package."astral-tokio-tar"]
-opt-level = "z"
-
-[profile.dev.package."binstall-tar"]
-opt-level = "z"
 
 [profile.dev.build-override]
 inherits = "dev"

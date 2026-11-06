@@ -14,11 +14,8 @@ use crate::remote::{Client, Error as RemoteError, Response, Url};
 mod async_extractor;
 use async_extractor::*;
 
-mod async_tar_visitor;
-use async_tar_visitor::extract_tar_based_stream_and_visit;
-pub use async_tar_visitor::{TarEntriesVisitor, TarEntry, TarEntryType};
-
-mod extractor;
+mod tar;
+pub use tar::{TarEntriesVisitor, TarEntry, TarEntryType, TarError};
 
 mod extracted_files;
 pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
@@ -33,6 +30,9 @@ pub enum DownloadError {
 
     #[error("Failed to download from remote: {0}")]
     Remote(#[from] RemoteError),
+
+    #[error("Failed to extract tar archive: {0}")]
+    Tar(#[from] TarError),
 
     /// A generic I/O error.
     ///
@@ -198,8 +198,8 @@ impl Download<'_> {
     /// This does not support verifying a checksum due to the partial extraction
     /// and will ignore one if specified.
     ///
-    /// NOTE that this API does not support gnu extension sparse file unlike
-    /// [`Download::and_extract`].
+    /// NOTE that like [`Download::and_extract`], this API does not support
+    /// GNU sparse files.
     #[instrument(skip(self, visitor))]
     pub async fn and_visit_tar(
         self,
@@ -211,7 +211,7 @@ impl Download<'_> {
 
         debug!("Downloading and extracting then in-memory processing");
 
-        let res = extract_tar_based_stream_and_visit(&mut stream, fmt, visitor).await;
+        let res = tar::visit_tar_based_stream(&mut stream, fmt, visitor).await;
 
         if has_data_verifier {
             consume_stream(&mut stream).await;
@@ -226,7 +226,8 @@ impl Download<'_> {
 
     /// Download a file from the provided URL and extract it to the provided path.
     ///
-    /// NOTE that this will only extract directory and regular files.
+    /// NOTE that this will only extract directory and regular files, and that
+    /// GNU sparse files are not supported for tar based formats.
     #[instrument(
         skip(self, path),
         fields(path = format_args!("{}", path.as_ref().display()))
@@ -248,7 +249,7 @@ impl Download<'_> {
 
             let res = match fmt.decompose() {
                 PkgFmtDecomposed::Tar(fmt) => {
-                    extract_tar_based_stream(&mut stream, path, fmt).await
+                    tar::extract_tar_based_stream(&mut stream, path, fmt).await
                 }
                 PkgFmtDecomposed::Bin => extract_bin(&mut stream, path).await,
                 PkgFmtDecomposed::Zip => extract_zip(&mut stream, path).await,

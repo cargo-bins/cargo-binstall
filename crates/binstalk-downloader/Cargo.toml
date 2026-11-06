@@ -4,7 +4,7 @@ description = "The binstall toolkit for downloading and extracting file"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-downloader"
 version = "0.14.1"
-rust-version = "1.79.0"
+rust-version = "1.88.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2021"
 license = "Apache-2.0 OR MIT"
@@ -48,11 +48,8 @@ reqwest = { version = "0.13.1", features = [
 ], default-features = false }
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 serde_json = { version = "1.0.149", optional = true }
-# Use a fork here since we need PAX support, but the upstream
-# does not hav the PR merged yet.
-#
-#tar = "0.4.38"
-tar = { package = "binstall-tar", version = "0.4.39" }
+tar-codec = "0.0.15"
+tar-framing = "0.0.15"
 tempfile = "3.5.0"
 thiserror = "2.0.11"
 tokio = { version = "1.52.3", features = [
@@ -62,7 +59,6 @@ tokio = { version = "1.52.3", features = [
     "time",
     "fs",
 ], default-features = false }
-astral-tokio-tar = "0.7.0"
 tokio-util = { version = "0.7.18", features = ["io"] }
 tracing = "0.1.43"
 hickory-resolver = { version = "0.26.1", optional = true, features = [
@@ -70,6 +66,7 @@ hickory-resolver = { version = "0.26.1", optional = true, features = [
 ] }
 once_cell = { version = "1.18.0", optional = true }
 url = "2.5.8"
+zerocopy = { version = "0.8.63", features = ["derive"] }
 
 liblzma = "0.4"
 
@@ -84,6 +81,10 @@ optional = true
 package = "native-tls"
 # The version must be kept in sync of reqwest
 version = "0.2.10"
+
+[dev-dependencies]
+# Reference implementation to test the v7 decoder against.
+tar = "0.4.46"
 
 [features]
 default = ["static", "rustls"]
