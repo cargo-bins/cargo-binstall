@@ -20,6 +20,8 @@ use crate::{
 pub struct ResolutionFetch {
     pub fetcher: Arc<dyn Fetcher>,
     pub new_version: Version,
+    /// Publish time (RFC 3339) from the registry index, if known
+    pub pubtime: Option<CompactString>,
     pub name: CompactString,
     pub version_req: CompactString,
     pub bin_files: Vec<bins::BinFile>,
@@ -29,6 +31,8 @@ pub struct ResolutionFetch {
 pub struct ResolutionSource {
     pub name: CompactString,
     pub version: CompactString,
+    /// Publish time (RFC 3339) from the registry index, if known
+    pub pubtime: Option<CompactString>,
 }
 
 pub enum Resolution {
@@ -115,6 +119,11 @@ impl ResolutionFetch {
         let name = &self.name;
         let new_version = &self.new_version;
         let target = fetcher.target();
+        let released = self
+            .pubtime
+            .as_deref()
+            .map(|pubtime| format!(", released {}", release_date(pubtime)))
+            .unwrap_or_default();
 
         debug!(
             "Found a binary install source: {} ({target})",
@@ -122,7 +131,7 @@ impl ResolutionFetch {
         );
 
         warn!(
-            "The package {name} v{new_version} ({target}) has been downloaded from {}{}",
+            "The package {name} v{new_version} ({target}{released}) has been downloaded from {}{}",
             if fetcher.is_third_party() {
                 "third-party source "
             } else {
@@ -253,11 +262,22 @@ impl ResolutionSource {
     }
 
     pub fn print(&self) {
+        let released = self
+            .pubtime
+            .as_deref()
+            .map(|pubtime| format!(" (released {})", release_date(pubtime)))
+            .unwrap_or_default();
+
         warn!(
-            "The package {} v{} will be installed from source (with cargo)",
+            "The package {} v{}{released} will be installed from source (with cargo)",
             self.name, self.version
         )
     }
+}
+
+/// An RFC 3339 timestamp starts with a fixed-width `YYYY-MM-DD` date.
+fn release_date(pubtime: &str) -> &str {
+    pubtime.get(..10).unwrap_or(pubtime)
 }
 
 fn apply_registry_selection(cmd: &mut Command, registry: Option<&str>, index: Option<&str>) {

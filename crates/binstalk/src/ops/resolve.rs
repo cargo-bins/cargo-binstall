@@ -202,6 +202,7 @@ async fn resolve_inner(
                                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                                     fetcher: fetcher.clone(),
                                     new_version: package_info.version,
+                                    pubtime: package_info.pubtime,
                                     name: package_info.name,
                                     version_req: version_req_str,
                                     source: package_info.source,
@@ -276,6 +277,7 @@ async fn resolve_inner(
     Ok(Resolution::InstallFromSource(ResolutionSource {
         name: package_info.name,
         version: package_info.version_str,
+        pubtime: package_info.pubtime,
     }))
 }
 
@@ -417,6 +419,8 @@ struct PackageInfo {
     version_str: CompactString,
     source: CrateSource,
     version: Version,
+    /// Publish time (RFC 3339) from the registry index, if known
+    pubtime: Option<CompactString>,
     repo: Option<String>,
     overrides: PkgOverrides,
 }
@@ -438,7 +442,7 @@ impl PackageInfo {
         use CargoTomlFetchOverride::*;
 
         // Fetch crate via crates.io, git, or use a local manifest path
-        let (manifest, source) = match opts.cargo_toml_fetch_override.as_ref() {
+        let (manifest, source, pubtime) = match opts.cargo_toml_fetch_override.as_ref() {
             Some(Path(manifest_path)) => (
                 spawn_blocking({
                     let manifest_path = manifest_path.clone();
@@ -454,6 +458,7 @@ impl PackageInfo {
                         manifest_path.display()
                     ))?),
                 },
+                None,
             ),
             #[cfg(feature = "git")]
             Some(Git(git_url)) => {
@@ -492,16 +497,19 @@ impl PackageInfo {
                         source_type: SourceType::Git,
                         url: MaybeOwned::Owned(Url::parse(&format!("{git_url}#{commit_hash}"))?),
                     },
+                    None,
                 )
             }
-            None => (
-                Box::pin(
-                    opts.registry
-                        .fetch_crate_matched(client, &name, version_req),
-                )
-                .await?,
-                opts.registry.crate_source()?,
-            ),
+            None => {
+                let (manifest, pubtime) = Box::pin(opts.registry.fetch_crate_matched(
+                    client,
+                    &name,
+                    version_req,
+                ))
+                .await?;
+
+                (manifest, opts.registry.crate_source()?, pubtime)
+            }
         };
 
         let Some(mut package) = manifest.package else {
@@ -568,6 +576,7 @@ impl PackageInfo {
                 source,
                 version_str: new_version_str,
                 version: new_version,
+                pubtime,
                 repo: package.repository().map(ToString::to_string),
             }))
         }

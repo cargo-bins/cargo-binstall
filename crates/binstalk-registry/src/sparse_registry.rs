@@ -119,7 +119,7 @@ impl SparseRegistry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         let crate_prefix = crate_prefix_components(crate_name)?;
         let registry_config = self.get_config(&client, auth).await?;
         let auth = if registry_config.auth_required {
@@ -149,6 +149,9 @@ impl SparseRegistry {
             &matched_version,
         )?)?;
 
-        parse_manifest(client, crate_name, dl_url, matched_version, auth).await
+        let pubtime = matched_version.pubtime.clone();
+        let manifest = parse_manifest(client, crate_name, dl_url, matched_version, auth).await?;
+
+        Ok((manifest, pubtime))
     }
 }
