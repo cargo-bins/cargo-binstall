@@ -19,17 +19,14 @@ use std::{
 
 use async_compression::tokio::bufread;
 use bytes::Bytes;
-use futures_util::stream;
+use futures_util::{Stream, TryStreamExt};
 use tar_codec::{
     Archive, DecodeError, DecodePolicy, ExtractError, Member, MemberPayload, PaxDecodePolicy,
     PaxVendorExtensionPolicy, TarArchive as CodecArchive, TarMemberPayload,
 };
 use tar_framing::{Block, FrameError, FrameErrorInner, BLOCK_SIZE};
 use thiserror::Error as ThisError;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, Chain},
-    sync::mpsc,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, Chain};
 use tokio_util::io::StreamReader;
 use tracing::debug;
 
@@ -40,6 +37,7 @@ use super::{
 
 mod extract;
 pub(super) use extract::extract_tar_based_stream;
+use extract::ExtractReader;
 
 mod v7;
 use v7::{V7Error, V7Reader};
@@ -86,43 +84,54 @@ fn decode_error(err: TarDecodeError) -> DownloadError {
 }
 
 /// Decompressed tar stream.
-type TarReader = Pin<Box<dyn AsyncRead + Send + Sync>>;
+type TarReader<'s> = Pin<Box<dyn AsyncRead + Send + Sync + 's>>;
 
 /// The reader of `tar_codec`: the first block, already read to detect the
 /// format, followed by the rest of the stream.
-type CodecReader = Chain<io::Cursor<Vec<u8>>, TarReader>;
+type CodecReader<R> = Chain<io::Cursor<Vec<u8>>, R>;
 
-enum Decoder {
-    Codec(Box<CodecArchive<CodecReader>>),
-    V7(V7Reader<TarReader>),
+enum Decoder<R> {
+    Codec(Box<CodecArchive<CodecReader<R>>>),
+    V7(V7Reader<R>),
 }
 
-/// A tar archive, decoded by `tar_codec` or by [`V7Reader`].
+/// A tar archive read from `R`, decoded by `tar_codec` or by [`V7Reader`].
 ///
-/// The archive is received from a channel, rather than decoded from the
-/// borrowed download stream, so that this type has no lifetime: otherwise
-/// rustc is currently unable to prove that futures using it through
-/// [`Archive`] are `Send` (it fails with "implementation of `Send` is not
-/// general enough", see rust-lang/rust#110338).
-struct TarArchive {
-    decoder: Decoder,
+/// In memory processing uses the inherent methods, directly on the borrowed
+/// download stream.
+///
+/// [`Archive`], needed by [`Archive::extract_in`], is only implemented for
+/// `TarArchive<ExtractReader>`: rustc is currently unable to prove that
+/// futures using an archive through [`Archive`] are `Send` when the archive
+/// type contains any lifetime, even `'static` (it fails with "implementation
+/// of `Archive` is not general enough", see rust-lang/rust#110338). So
+/// extraction decodes from a channel, through the lifetime-free
+/// [`ExtractReader`].
+struct TarArchive<R> {
+    decoder: Decoder<R>,
     /// Set when extracting, see [`extract::filter_member`].
     extracted_files: Option<Arc<Mutex<ExtractedFiles>>>,
 }
 
-enum TarPayload<'a> {
-    Codec(TarMemberPayload<'a, CodecReader>),
-    V7(&'a mut V7Reader<TarReader>),
+enum TarPayload<'a, R> {
+    Codec(TarMemberPayload<'a, CodecReader<R>>),
+    V7(&'a mut V7Reader<R>),
 }
 
-impl TarArchive {
-    /// Decompress the archive received from `rx` according to `fmt`, and
-    /// detect its format from the first block.
-    async fn open(mut rx: mpsc::Receiver<Bytes>, fmt: TarBasedFmt) -> io::Result<Self> {
-        let stream =
-            stream::poll_fn(move |cx| rx.poll_recv(cx).map(|bytes| bytes.map(Ok::<_, io::Error>)));
-        let reader = StreamReader::new(stream);
-        let mut reader: TarReader = match fmt {
+impl<R: AsyncRead + Unpin> TarArchive<R> {
+    /// Decompress `stream` according to `fmt`, and detect the format of the
+    /// archive from its first block.
+    async fn open<'s, S, E>(
+        stream: S,
+        fmt: TarBasedFmt,
+        wrap: impl FnOnce(TarReader<'s>) -> R,
+    ) -> io::Result<Self>
+    where
+        S: Stream<Item = Result<Bytes, E>> + Send + Sync + 's,
+        E: Into<io::Error> + 's,
+    {
+        let reader = StreamReader::new(stream.map_err(Into::into));
+        let reader: TarReader<'s> = match fmt {
             Tar => Box::pin(reader),
             Tbz2 => Box::pin(bufread::BzDecoder::new(reader)),
             Tgz => Box::pin(bufread::GzipDecoder::new(reader)),
@@ -130,6 +139,7 @@ impl TarArchive {
             Tzstd => Box::pin(bufread::ZstdDecoder::new(reader)),
         };
 
+        let mut reader = wrap(reader);
         let mut first: Block = [0; BLOCK_SIZE];
         let mut filled = 0;
         while filled < BLOCK_SIZE {
@@ -203,13 +213,10 @@ fn map_payload<P, Q>(member: Member<P>, f: impl FnOnce(P) -> Q) -> Member<Q> {
     }
 }
 
-impl Archive for TarArchive {
-    type Error = TarDecodeError;
-    type Payload<'a> = TarPayload<'a>;
-
-    async fn next_member<'a>(
-        &'a mut self,
-    ) -> Result<Option<Member<Self::Payload<'a>>>, Self::Error> {
+impl<R: AsyncRead + Unpin> TarArchive<R> {
+    /// Return the next member, after skipping the unread payload of the
+    /// current one.
+    async fn next_member(&mut self) -> Result<Option<Member<TarPayload<'_, R>>>, TarDecodeError> {
         let member = match &mut self.decoder {
             Decoder::Codec(archive) => archive
                 .next_member()
@@ -232,7 +239,18 @@ impl Archive for TarArchive {
     }
 }
 
-impl MemberPayload for TarPayload<'_> {
+impl Archive for TarArchive<ExtractReader> {
+    type Error = TarDecodeError;
+    type Payload<'a> = TarPayload<'a, ExtractReader>;
+
+    async fn next_member<'a>(
+        &'a mut self,
+    ) -> Result<Option<Member<Self::Payload<'a>>>, Self::Error> {
+        TarArchive::next_member(self).await
+    }
+}
+
+impl<R: AsyncRead + Unpin> MemberPayload for TarPayload<'_, R> {
     type Error = TarDecodeError;
 
     async fn next_chunk(

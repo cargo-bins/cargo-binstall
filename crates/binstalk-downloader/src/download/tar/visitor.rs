@@ -4,11 +4,10 @@ use std::{fmt::Debug, path::Path};
 
 use bytes::Bytes;
 use futures_util::Stream;
-use tar_codec::{Archive, LentPayload, Member, MemberPayload, SpecialKind};
+use tar_codec::{Member, MemberPayload, SpecialKind};
 use tracing::debug;
 
-use super::{decode_error, DownloadError, TarArchive, TarBasedFmt, TarPayload};
-use crate::utils::extract_with_task;
+use super::{decode_error, DownloadError, TarArchive, TarBasedFmt, TarPayload, TarReader};
 
 #[async_trait::async_trait]
 pub trait TarEntry: Send + Sync + Debug {
@@ -46,16 +45,14 @@ impl<T: TarEntry + ?Sized> TarEntry for &mut T {
     }
 }
 
-type Payload<'a> = LentPayload<'a, TarPayload<'a>>;
-
-struct Entry<'a> {
+struct Entry<'a, 's> {
     path: String,
     size: u64,
     entry_type: TarEntryType,
-    payload: Option<Payload<'a>>,
+    payload: Option<TarPayload<'a, TarReader<'s>>>,
 }
 
-impl Debug for Entry<'_> {
+impl Debug for Entry<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Entry")
             .field("path", &self.path)
@@ -66,7 +63,7 @@ impl Debug for Entry<'_> {
 }
 
 #[async_trait::async_trait]
-impl TarEntry for Entry<'_> {
+impl TarEntry for Entry<'_, '_> {
     fn path(&self) -> &Path {
         Path::new(&self.path)
     }
@@ -143,56 +140,53 @@ pub(in crate::download) async fn visit_tar_based_stream<S>(
     visitor: &mut dyn TarEntriesVisitor,
 ) -> Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync,
 {
     debug!("Extracting from {fmt} archive to process it in memory");
 
-    extract_with_task(stream, |rx| async move {
-        let mut members = TarArchive::open(rx, fmt).await?.members();
+    let mut archive = TarArchive::open(stream, fmt, |reader| reader).await?;
 
-        while let Some(member) = members.next().await.map_err(decode_error)? {
-            let (metadata, size, entry_type, payload) = match member {
-                Member::File {
-                    metadata,
-                    size,
-                    payload,
-                    ..
-                } => (metadata, size, TarEntryType::Regular, Some(payload)),
-                Member::HardLink {
-                    metadata,
-                    size,
-                    payload,
-                    ..
-                } => (metadata, size, TarEntryType::Link, Some(payload)),
-                Member::Directory { metadata } => (metadata, 0, TarEntryType::Directory, None),
-                Member::SymbolicLink { metadata, .. } => (metadata, 0, TarEntryType::Symlink, None),
-                Member::Special { metadata, kind } => (
-                    metadata,
-                    0,
-                    match kind {
-                        SpecialKind::CharacterDevice => TarEntryType::Char,
-                        SpecialKind::BlockDevice => TarEntryType::Block,
-                        SpecialKind::Fifo => TarEntryType::Fifo,
-                    },
-                    None,
-                ),
-            };
-
-            let mut entry = Entry {
-                path: metadata.path,
+    while let Some(member) = archive.next_member().await.map_err(decode_error)? {
+        let (metadata, size, entry_type, payload) = match member {
+            Member::File {
+                metadata,
                 size,
-                entry_type,
                 payload,
-            };
-            visitor.visit(&mut entry).await?;
+                ..
+            } => (metadata, size, TarEntryType::Regular, Some(payload)),
+            Member::HardLink {
+                metadata,
+                size,
+                payload,
+                ..
+            } => (metadata, size, TarEntryType::Link, Some(payload)),
+            Member::Directory { metadata } => (metadata, 0, TarEntryType::Directory, None),
+            Member::SymbolicLink { metadata, .. } => (metadata, 0, TarEntryType::Symlink, None),
+            Member::Special { metadata, kind } => (
+                metadata,
+                0,
+                match kind {
+                    SpecialKind::CharacterDevice => TarEntryType::Char,
+                    SpecialKind::BlockDevice => TarEntryType::Block,
+                    SpecialKind::Fifo => TarEntryType::Fifo,
+                },
+                None,
+            ),
+        };
 
-            // Any remaining content of the entry is drained and validated by
-            // `members.next()`.
-        }
+        let mut entry = Entry {
+            path: metadata.path,
+            size,
+            entry_type,
+            payload,
+        };
+        visitor.visit(&mut entry).await?;
 
-        Ok(())
-    })
-    .await
+        // Any remaining content of the entry is drained and validated by
+        // `archive.next_member()`.
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

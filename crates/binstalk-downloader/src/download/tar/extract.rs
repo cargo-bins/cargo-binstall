@@ -1,22 +1,26 @@
 //! Extraction of tar archives.
 
 use std::{
+    io,
     path::{Component, Path},
+    pin::Pin,
     sync::{Arc, Mutex, PoisonError},
+    task::{Context, Poll},
 };
 
 use bytes::Bytes;
-use futures_util::Stream;
+use futures_util::{stream, Stream};
 use normalize_path::NormalizePath;
 use tar_codec::{
     extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy},
     Archive, ExtractError, Member, MemberMetadata,
 };
+use tokio::io::{AsyncRead, ReadBuf};
 use tracing::debug;
 
 use super::{
     decode_error, DownloadError, ExtractedFiles, TarArchive, TarBasedFmt, TarDecodeError, TarError,
-    TarErrorInner,
+    TarErrorInner, TarReader,
 };
 use crate::utils::extract_with_task;
 
@@ -30,8 +34,9 @@ where
 {
     debug!("Extracting from {fmt} archive to {}", dst.display());
 
-    extract_with_task(stream, |rx| async move {
-        let mut archive = TarArchive::open(rx, fmt).await?;
+    extract_with_task(stream, |mut rx| async move {
+        let stream = stream::poll_fn(move |cx| rx.poll_recv(cx).map(|bytes| bytes.map(Ok)));
+        let mut archive = TarArchive::open::<_, io::Error>(stream, fmt, ExtractReader).await?;
 
         // `extract_in` consumes the archive, so the files are recorded in a
         // shared `ExtractedFiles`.
@@ -53,6 +58,19 @@ where
             .unwrap_or_else(PoisonError::into_inner))
     })
     .await
+}
+
+/// [`TarReader`] without lifetime, see [`TarArchive`].
+pub(super) struct ExtractReader(TarReader<'static>);
+
+impl AsyncRead for ExtractReader {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        self.get_mut().0.as_mut().poll_read(cx, buf)
+    }
 }
 
 fn extract_error(err: ExtractError<TarDecodeError>) -> DownloadError {
