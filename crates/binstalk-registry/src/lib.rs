@@ -1,4 +1,4 @@
-#![cfg_attr(docsrs, feature(doccfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use std::{fmt, io, str::FromStr, sync::Arc};
 
