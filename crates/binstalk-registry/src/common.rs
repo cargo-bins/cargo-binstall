@@ -68,7 +68,7 @@ pub(super) async fn parse_manifest(
     client: Client,
     crate_name: &str,
     crate_url: Url,
-    MatchedVersion { version, cksum }: MatchedVersion,
+    MatchedVersion { version, cksum, .. }: MatchedVersion,
     auth: Option<&RegistryAuth>,
 ) -> exn::Result<Manifest<Meta>, RegistryError> {
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
@@ -134,7 +134,7 @@ pub(super) fn render_dl_template(
     dl_template: &str,
     crate_name: &str,
     (c1, c2): &(CompactString, Option<CompactString>),
-    MatchedVersion { version, cksum }: &MatchedVersion,
+    MatchedVersion { version, cksum, .. }: &MatchedVersion,
 ) -> exn::Result<String, RegistryError> {
     let template = Template::parse(dl_template).or_raise(|| RegistryError::ParseDlConfig)?;
     if template.keys().next().is_some() {
@@ -182,12 +182,15 @@ pub(super) struct RegistryIndexEntry {
     vers: CompactString,
     yanked: bool,
     cksum: String,
+    pubtime: Option<CompactString>,
 }
 
 pub(super) struct MatchedVersion {
     pub(super) version: CompactString,
     /// sha256 checksum encoded in base16
     pub(super) cksum: String,
+    /// Publish time (RFC 3339), if the registry index records it
+    pub(super) pubtime: Option<CompactString>,
 }
 
 impl MatchedVersion {
@@ -219,6 +222,7 @@ impl MatchedVersion {
             let matched = Self {
                 version: num,
                 cksum: entry.cksum,
+                pubtime: entry.pubtime,
             };
 
             if let Some((_, max_ver)) = &ret {
@@ -234,5 +238,33 @@ impl MatchedVersion {
             .ok_or_raise(|| RegistryError::VersionMismatch {
                 req: version_req.clone(),
             })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use serde_json::Deserializer as JsonDeserializer;
+
+    use super::*;
+
+    #[test]
+    fn test_matched_version_pubtime() {
+        let index = br#"{"name":"foo","vers":"0.1.0","deps":[],"cksum":"00","features":{},"yanked":false,"pubtime":"2018-06-07T16:11:07Z"}
+{"name":"foo","vers":"0.2.0","deps":[],"cksum":"11","features":{},"yanked":false}
+"#;
+        let find = |req| {
+            MatchedVersion::find(
+                &mut JsonDeserializer::from_slice(index).into_iter(),
+                &VersionReq::parse(req).unwrap(),
+            )
+            .unwrap()
+        };
+
+        assert_eq!(
+            find("=0.1.0").pubtime.as_deref(),
+            Some("2018-06-07T16:11:07Z")
+        );
+        // Older registries may not record a publish time.
+        assert_eq!(find("=0.2.0").pubtime, None);
     }
 }

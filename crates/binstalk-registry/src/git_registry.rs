@@ -118,7 +118,7 @@ impl GitRegistry {
         auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
-    ) -> exn::Result<Manifest<Meta>, RegistryError> {
+    ) -> exn::Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
         let version_req = version_req.clone();
@@ -128,7 +128,7 @@ impl GitRegistry {
         // Cancel git operation if the future is cancelled (dropped).
         let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
-        let (matched_version, dl_url, auth_required) = spawn_blocking(move || {
+        let (mut matched_version, dl_url, auth_required) = spawn_blocking(move || {
             let GitIndex {
                 _tempdir: _,
                 repo,
@@ -169,6 +169,9 @@ impl GitRegistry {
             None
         };
 
-        parse_manifest(client, name, dl_url, matched_version, auth).await
+        let pubtime = matched_version.pubtime.take();
+        let manifest = parse_manifest(client, name, dl_url, matched_version, auth).await?;
+
+        Ok((manifest, pubtime))
     }
 }

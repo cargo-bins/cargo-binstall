@@ -133,7 +133,7 @@ impl SparseRegistry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> exn::Result<Manifest<Meta>, RegistryError> {
+    ) -> exn::Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         let crate_prefix = crate_prefix_components(crate_name)?;
         let registry_config = self.get_config(&client, auth).await?;
         let auth = if registry_config.auth_required {
@@ -147,7 +147,7 @@ impl SparseRegistry {
         } else {
             None
         };
-        let matched_version = Self::find_crate_matched_ver(
+        let mut matched_version = Self::find_crate_matched_ver(
             &client,
             self.url.clone(),
             auth,
@@ -164,6 +164,9 @@ impl SparseRegistry {
         )?)
         .or_raise(|| RegistryError::UrlParse)?;
 
-        parse_manifest(client, crate_name, dl_url, matched_version, auth).await
+        let pubtime = matched_version.pubtime.take();
+        let manifest = parse_manifest(client, crate_name, dl_url, matched_version, auth).await?;
+
+        Ok((manifest, pubtime))
     }
 }
