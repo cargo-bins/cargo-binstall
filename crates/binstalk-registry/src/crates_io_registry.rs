@@ -166,7 +166,13 @@ pub async fn fetch_crate_cratesio_api(
         client,
         name,
         crate_url,
-        MatchedVersion { version, cksum },
+        MatchedVersion {
+            version,
+            cksum,
+            // `MatchedVersion` is only used here to download and check the crate;
+            // `parse_manifest` never reads `pubtime`, so it can stay empty.
+            pubtime: None,
+        },
         None,
     )
     .await
