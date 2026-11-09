@@ -224,7 +224,7 @@ when the `quickinstall` artifact host is used. The maintainers of the
 worthwhile to build and host. The aggregated collected telemetry is publicly
 accessible at
 <https://alsuren.grafana.net/public-dashboards/12d4ec3edf2548a1850a813e00592b53>.
-Should you be interested on it, the backend code for these endpoints can be
+Should you be interested in it, the backend code for these endpoints can be
 found at
 <https://github.com/cargo-bins/cargo-quickinstall/tree/main/stats-server>.
 
@@ -235,7 +235,7 @@ of the following methods:
 - Setting the `BINSTALL_DISABLE_TELEMETRY` environment variable to `true`.
 - Disabling the `quickinstall` strategy with
   `--disable-strategies quick-install`, or if specifying a list of strategies to
-  use with `--strategies`, avoiding including `quickinstall` in that list.
+  use with `--strategies`, avoiding including `quick-install` in that list.
 - Adding `quick-install` to the `disabled-strategies` configuration key in the
   crate metadata (refer to
   [the related support documentation](SUPPORT.md#support-for-cargo-binstall) for
