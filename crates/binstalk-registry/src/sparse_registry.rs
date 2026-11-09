@@ -133,7 +133,7 @@ impl SparseRegistry {
         } else {
             None
         };
-        let matched_version = Self::find_crate_matched_ver(
+        let mut matched_version = Self::find_crate_matched_ver(
             &client,
             self.url.clone(),
             auth,
@@ -149,7 +149,7 @@ impl SparseRegistry {
             &matched_version,
         )?)?;
 
-        let pubtime = matched_version.pubtime.clone();
+        let pubtime = matched_version.pubtime.take();
         let manifest = parse_manifest(client, crate_name, dl_url, matched_version, auth).await?;
 
         Ok((manifest, pubtime))
