@@ -7,12 +7,17 @@ repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/atomic-file-install"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "Apache-2.0 OR MIT"
-rust-version = "1.65.0"
+rust-version = "1.79.0"
 
 [dependencies]
-reflink-copy = "0.1.15"
+cap-std = "4.0.3"
+fastrand = "2.0.0"
+reflink-copy = { version = "0.1.32", features = ["cap-std"] }
 tempfile = "3.5.0"
 tracing = "0.1.43"
+
+[dev-dependencies]
+tempfile = "3.5.0"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }

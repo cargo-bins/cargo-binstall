@@ -1,12 +1,21 @@
 //! Atomically install a regular file or a symlink to destination,
 //! can be either noclobber (fail if destination already exists) or
 //! replacing it atomically if it exists.
+//!
+//! The `*_in` functions take `(&Dir, &Path)` pairs instead, so that every
+//! path is bounded by a [`cap_std::fs::Dir`].
 
 use std::{fs, io, path::Path};
 
 use reflink_copy::reflink_or_copy;
 use tempfile::{NamedTempFile, TempPath};
 use tracing::{debug, warn};
+
+mod dir;
+pub use dir::{
+    atomic_install_in, atomic_install_noclobber_in, atomic_symlink_file_in,
+    atomic_symlink_file_noclobber_in,
+};
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file_inner;

@@ -5,9 +5,11 @@ use std::{
 };
 
 use atomic_file_install::{
-    atomic_install, atomic_install_noclobber, atomic_symlink_file, atomic_symlink_file_noclobber,
+    atomic_install_in, atomic_install_noclobber_in, atomic_symlink_file_in,
+    atomic_symlink_file_noclobber_in,
 };
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
+use cap_std::{ambient_authority, fs::Dir};
 use compact_str::{format_compact, CompactString};
 use leon::Template;
 use miette::Diagnostic;
@@ -124,6 +126,10 @@ pub struct BinFile {
     pub archive_source_path: PathBuf,
     pub dest: PathBuf,
     pub link: Option<PathBuf>,
+    /// The directory `archive_source_path` is relative to.
+    source_root: PathBuf,
+    /// The directory `dest` and `link` are in.
+    install_path: PathBuf,
 }
 
 impl BinFile {
@@ -155,10 +161,11 @@ impl BinFile {
             target_related_info: data.target_related_info,
         };
 
-        let (source, archive_source_path) = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
+        let (source, archive_source_path, source_root) = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
             (
                 data.bin_path.to_path_buf(),
                 data.bin_path.file_name().unwrap().into(),
+                data.bin_path.parent().unwrap().to_path_buf(),
             )
         } else {
             // Generate install paths
@@ -175,7 +182,11 @@ impl BinFile {
                 return Err(Error::InvalidSourceFilePath(path_normalized.into()));
             }
 
-            (data.bin_path.join(&path_normalized), path_normalized)
+            (
+                data.bin_path.join(&path_normalized),
+                path_normalized,
+                data.bin_path.to_path_buf(),
+            )
         };
 
         // Destination at install dir + base-name{.extension}
@@ -205,6 +216,8 @@ impl BinFile {
             archive_source_path,
             dest,
             link,
+            source_root,
+            install_path: data.install_path.to_path_buf(),
         })
     }
 
@@ -246,22 +259,25 @@ impl BinFile {
         }
     }
 
-    fn pre_install_bin(&self) -> Result<(), Error> {
-        if !self.source.try_exists()? {
+    /// Open the source and install dirs, and prepare the source bin.
+    fn pre_install_bin(&self) -> Result<(Dir, Dir), Error> {
+        let source_dir = open_dir(&self.source_root)?;
+
+        if !source_dir.try_exists(&self.archive_source_path)? {
             return Err(Error::BinFileNotFound((&*self.source).into()));
         }
 
         #[cfg(unix)]
-        std::fs::set_permissions(
-            &self.source,
-            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        source_dir.set_permissions(
+            &self.archive_source_path,
+            cap_std::fs::Permissions::from_std(std::os::unix::fs::PermissionsExt::from_mode(0o755)),
         )?;
 
-        Ok(())
+        Ok((source_dir, open_dir(&self.install_path)?))
     }
 
     pub fn install_bin(&self) -> Result<(), Error> {
-        self.pre_install_bin()?;
+        let (source_dir, install_dir) = self.pre_install_bin()?;
 
         debug!(
             "Atomically install file from '{}' to '{}'",
@@ -269,13 +285,16 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install(&self.source, &self.dest)?;
+        atomic_install_in(
+            (&source_dir, &self.archive_source_path),
+            (&install_dir, file_name(&self.dest)),
+        )?;
 
         Ok(())
     }
 
     pub fn install_bin_noclobber(&self) -> Result<(), Error> {
-        self.pre_install_bin()?;
+        let (source_dir, install_dir) = self.pre_install_bin()?;
 
         debug!(
             "Installing file from '{}' to '{}' only if dst not exists",
@@ -283,20 +302,25 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install_noclobber(&self.source, &self.dest)?;
+        atomic_install_noclobber_in(
+            (&source_dir, &self.archive_source_path),
+            (&install_dir, file_name(&self.dest)),
+        )?;
 
         Ok(())
     }
 
     pub fn install_link(&self) -> Result<(), Error> {
         if let Some(link) = &self.link {
-            let dest = self.link_dest();
             debug!(
                 "Create link '{}' pointing to '{}'",
                 link.display(),
-                dest.display()
+                self.link_dest().display()
             );
-            atomic_symlink_file(dest, link)?;
+            atomic_symlink_file_in(
+                file_name(&self.dest),
+                (&open_dir(&self.install_path)?, file_name(link)),
+            )?;
         }
 
         Ok(())
@@ -304,13 +328,15 @@ impl BinFile {
 
     pub fn install_link_noclobber(&self) -> Result<(), Error> {
         if let Some(link) = &self.link {
-            let dest = self.link_dest();
             debug!(
                 "Create link '{}' pointing to '{}' only if dst not exists",
                 link.display(),
-                dest.display()
+                self.link_dest().display()
             );
-            atomic_symlink_file_noclobber(dest, link)?;
+            atomic_symlink_file_noclobber_in(
+                file_name(&self.dest),
+                (&open_dir(&self.install_path)?, file_name(link)),
+            )?;
         }
 
         Ok(())
@@ -323,6 +349,16 @@ impl BinFile {
             &self.dest
         }
     }
+}
+
+fn open_dir(path: &Path) -> io::Result<Dir> {
+    Dir::open_ambient_dir(path, ambient_authority())
+}
+
+/// `dest` and `link` always have a file name, since they are the install
+/// dir joined with a valid bin name.
+fn file_name(path: &Path) -> &Path {
+    Path::new(path.file_name().unwrap())
 }
 
 /// Data required to get bin paths
