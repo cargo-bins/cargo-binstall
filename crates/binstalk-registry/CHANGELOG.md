@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.13](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.12...binstalk-registry-v0.12.13) - 2026-11-09
+
+### Added
+
+- print release date alongside the version ([#2740](https://github.com/cargo-bins/cargo-binstall/pull/2740))
+
+### Fixed
+
+- *(binstalk-registry)* fix `doc_cfg` feature name typo breaking docs.rs build ([#2741](https://github.com/cargo-bins/cargo-binstall/pull/2741))
+
 ## [0.12.12](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.11...binstalk-registry-v0.12.12) - 2026-10-31
 
 ### Other
