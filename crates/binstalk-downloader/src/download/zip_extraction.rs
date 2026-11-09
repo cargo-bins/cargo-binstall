@@ -12,7 +12,7 @@
 use std::{
     fs::{create_dir_all, File},
     io::{self, BufReader, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use async_zip::{base::read::seek::ZipFileReader, StoredZipEntry};
@@ -37,25 +37,11 @@ fn create_parent_dir(path: &Path) -> io::Result<()> {
     create_dir_all(parent)
 }
 
-fn invalid_data(msg: String) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, msg)
-}
-
-/// Reject traversal and absolute names, same rules as rc-zip used to apply.
-fn sanitized_name(name: &str) -> Option<&str> {
-    if name.contains("..") {
-        return None;
-    }
-
-    if cfg!(windows) {
-        if name.contains(":\\") || name.starts_with('\\') {
-            return None;
-        }
-        Some(name)
-    } else {
-        // strip absolute prefix on entries pointing to root path
-        Some(name.trim_start_matches('/'))
-    }
+/// Strip the root so `/foo` lands inside the extraction dir, then normalize,
+/// rejecting names that escape it (`..`) or carry a prefix (`C:`).
+fn sanitized_name(name: &str) -> Option<PathBuf> {
+    let path = Path::new(name);
+    path.strip_prefix("/").unwrap_or(path).try_normalize()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +72,7 @@ async fn copy_entry(
     index: usize,
     name: &str,
     writer: &mut impl Write,
+    buf: &mut [u8],
 ) -> Result<(), DownloadError> {
     let entry = &zip.file().entries()[index];
     let (crc32, size, compressed_size) = (
@@ -95,44 +82,49 @@ async fn copy_entry(
     );
 
     let mut reader = zip.reader_without_entry(index).await?;
-    let mut buf = vec![0; COPY_BUF_SIZE];
     let mut written = 0;
 
     loop {
-        let n = reader.read(&mut buf).await?;
+        let n = reader.read(buf).await?;
         if n == 0 {
             break;
         }
         written += n as u64;
         if written > size {
-            return Err(invalid_data(format!(
-                "zip entry {name} is larger than its declared size {size}"
-            ))
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("zip entry {name} is larger than its declared size {size}"),
+            )
             .into());
         }
         writer.write_all(&buf[..n])?;
     }
 
     if written != size {
-        return Err(invalid_data(format!(
-            "zip entry {name}: declared size {size}, got {written}"
-        ))
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("zip entry {name}: declared size {size}, got {written}"),
+        )
         .into());
     }
 
     let consumed = reader.bytes_read();
     if consumed != compressed_size {
-        return Err(invalid_data(format!(
-            "zip entry {name}: declared compressed size {compressed_size}, consumed {consumed}"
-        ))
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "zip entry {name}: declared compressed size {compressed_size}, consumed {consumed}"
+            ),
+        )
         .into());
     }
 
     let actual = reader.compute_hash();
     if actual != crc32 {
-        return Err(invalid_data(format!(
-            "zip entry {name}: crc32 mismatch, expected {crc32:#010x}, got {actual:#010x}"
-        ))
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("zip entry {name}: crc32 mismatch, expected {crc32:#010x}, got {actual:#010x}"),
+        )
         .into());
     }
 
@@ -147,6 +139,9 @@ async fn extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadErro
     let mut extracted_files = ExtractedFiles::new();
 
     let mut zip = ZipFileReader::new(AllowStdIo::new(BufReader::new(f))).await?;
+    // async_zip reads into `&mut [u8]`, so initialize one buffer up front and
+    // reuse it for every entry.
+    let mut buf = vec![0; COPY_BUF_SIZE];
 
     for index in 0..zip.file().entries().len() {
         let entry = &zip.file().entries()[index];
@@ -155,15 +150,11 @@ async fn extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadErro
             warn!("Skip zip entry with non-UTF-8 name, report to packager please");
             continue;
         };
-        let Some(name) = sanitized_name(raw_name) else {
+        let Some(name) = &sanitized_name(raw_name) else {
             warn!("Skip zip entry {raw_name} for suspected zip slip");
             continue;
         };
-        let kind = entry_kind(entry, name);
-        let Some(name) = &Path::new(name).try_normalize() else {
-            warn!("Skip zip entry {name} pointing outside, report to packager please");
-            continue;
-        };
+        let kind = entry_kind(entry, raw_name);
         let raw_name = raw_name.to_owned();
         let path = &dir.join(name);
 
@@ -181,7 +172,7 @@ async fn extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadErro
                 let size = entry.uncompressed_size();
                 let mut src = Vec::new();
                 if (1..=MAX_LINK_TARGET).contains(&size) {
-                    copy_entry(&mut zip, index, &raw_name, &mut src).await?;
+                    copy_entry(&mut zip, index, &raw_name, &mut src, &mut buf).await?;
                 }
                 if src.is_empty() || src.contains(&0) {
                     warn!(
@@ -221,7 +212,7 @@ async fn extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadErro
                 create_parent_dir(path)?;
 
                 let mut entry_writer = File::create_new(path)?;
-                copy_entry(&mut zip, index, &raw_name, &mut entry_writer).await?;
+                copy_entry(&mut zip, index, &raw_name, &mut entry_writer, &mut buf).await?;
 
                 extracted_files.add_file(name);
             }
@@ -459,11 +450,11 @@ mod tests {
     #[test]
     fn dotdot_inside_entry_name_never_escapes() {
         let sb = Sandbox::new();
-        // rc-zip's `sanitized_name()` drops names containing `..`, so this
-        // entry is skipped before our own normalization sees it.
+        // `..` that stays inside is normalized away.
         sb.extract(&[TestEntry::file("a/../b.txt", b"b")]).unwrap();
 
         sb.assert_root_contains_only(&["out"]);
+        assert_eq!(fs::read(sb.out().join("b.txt")).unwrap(), b"b");
     }
 
     #[test]
