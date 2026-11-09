@@ -3,13 +3,16 @@ use std::{fmt, io, path::Path};
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use bytes::Bytes;
 use futures_util::{stream::FusedStream, Stream, StreamExt};
+use exn::{ErrorExt, Exn, ResultExt};
 use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::{PkgFmt, TarBasedFmt};
 pub use rc_zip_sync::rc_zip::error::Error as ZipError;
 
-use crate::remote::{Client, Error as RemoteError, Response, Url};
+#[allow(unused_imports)] // used in docs
+use crate::remote::Error as RemoteError;
+use crate::remote::{Client, Response, Url};
 
 mod async_extractor;
 use async_extractor::*;
@@ -25,35 +28,57 @@ pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
 
 mod zip_extraction;
 
+/// Error returned by [`Download`].
+///
+/// The underlying cause (e.g. [`ZipError`], [`RemoteError`] or [`io::Error`])
+/// is attached as a child frame of the [`Exn`].
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
 pub enum DownloadError {
-    #[error("Failed to extract zipfile: {0}")]
-    Unzip(#[from] ZipError),
+    #[error("Failed to extract zipfile")]
+    Unzip,
 
-    #[error("Failed to download from remote: {0}")]
-    Remote(#[from] RemoteError),
+    #[error("Failed to download from remote")]
+    Remote,
 
     /// A generic I/O error.
     ///
     /// - Code: `binstall::io`
     /// - Exit: 74
-    #[error("I/O Error: {0}")]
-    Io(io::Error),
+    #[error("I/O Error")]
+    Io,
 }
 
-impl From<io::Error> for DownloadError {
-    fn from(err: io::Error) -> Self {
-        err.downcast::<DownloadError>()
-            .unwrap_or_else(DownloadError::Io)
+/// Carries an [`Exn<DownloadError>`] through APIs that only speak [`io::Error`],
+/// so that [`DownloadError::from_io`] can recover it with its frame tree intact.
+#[derive(Debug)]
+struct IoCarrier(Exn<DownloadError>);
+
+impl fmt::Display for IoCarrier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
-impl From<DownloadError> for io::Error {
-    fn from(e: DownloadError) -> io::Error {
-        match e {
-            DownloadError::Io(io_error) => io_error,
-            e => io::Error::other(e),
+impl std::error::Error for IoCarrier {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.frame().source()
+    }
+}
+
+impl DownloadError {
+    /// Wrap `err` in an [`io::Error`], to be recovered by [`DownloadError::from_io`].
+    pub(crate) fn into_io(err: Exn<DownloadError>) -> io::Error {
+        io::Error::other(IoCarrier(err))
+    }
+
+    /// Recover the [`Exn<DownloadError>`] carried by `err` if any, otherwise
+    /// raise `err` as a child of [`DownloadError::Io`].
+    #[track_caller]
+    pub(crate) fn from_io(err: io::Error) -> Exn<DownloadError> {
+        match err.downcast::<IoCarrier>() {
+            Ok(IoCarrier(err)) => err,
+            Err(err) => err.raise().raise(DownloadError::Io),
         }
     }
 }
@@ -85,9 +110,13 @@ enum DownloadContent {
 }
 
 impl DownloadContent {
-    async fn into_response(self) -> Result<Response, DownloadError> {
+    async fn into_response(self) -> exn::Result<Response, DownloadError> {
         Ok(match self {
-            DownloadContent::ToIssue { client, url } => client.get(url).send(true).await?,
+            DownloadContent::ToIssue { client, url } => client
+                .get(url)
+                .send(true)
+                .await
+                .or_raise(|| DownloadError::Remote)?,
             DownloadContent::Response(response) => response,
         })
     }
@@ -151,8 +180,8 @@ impl<'a> Download<'a> {
 
     async fn get_stream(
         self,
-    ) -> Result<
-        impl FusedStream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'a,
+    ) -> exn::Result<
+        impl FusedStream<Item = exn::Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'a,
         DownloadError,
     > {
         let mut data_verifier = self.data_verifier;
@@ -162,7 +191,7 @@ impl<'a> Download<'a> {
             .await?
             .bytes_stream()
             .map(move |res| {
-                let bytes = res?;
+                let bytes = res.or_raise(|| DownloadError::Remote)?;
 
                 if let Some(data_verifier) = &mut data_verifier {
                     data_verifier.update(&bytes);
@@ -182,7 +211,7 @@ impl<'a> Download<'a> {
 /// Accept `FusedStream` only since the `stream` could be already consumed.
 async fn consume_stream<S>(stream: &mut S)
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + FusedStream + Unpin,
+    S: Stream<Item = exn::Result<Bytes, DownloadError>> + FusedStream + Unpin,
 {
     while let Some(res) = stream.next().await {
         if let Err(err) = res {
@@ -205,7 +234,7 @@ impl Download<'_> {
         self,
         fmt: TarBasedFmt,
         visitor: &mut dyn TarEntriesVisitor,
-    ) -> Result<(), DownloadError> {
+    ) -> exn::Result<(), DownloadError> {
         let has_data_verifier = self.data_verifier.is_some();
         let mut stream = self.get_stream().await?;
 
@@ -235,12 +264,12 @@ impl Download<'_> {
         self,
         fmt: PkgFmt,
         path: impl AsRef<Path>,
-    ) -> Result<ExtractedFiles, DownloadError> {
+    ) -> exn::Result<ExtractedFiles, DownloadError> {
         async fn inner(
             this: Download<'_>,
             fmt: PkgFmt,
             path: &Path,
-        ) -> Result<ExtractedFiles, DownloadError> {
+        ) -> exn::Result<ExtractedFiles, DownloadError> {
             let has_data_verifier = this.data_verifier.is_some();
             let mut stream = this.get_stream().await?;
 
@@ -269,8 +298,14 @@ impl Download<'_> {
     }
 
     #[instrument(skip(self))]
-    pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
-        let bytes = self.content.into_response().await?.bytes().await?;
+    pub async fn into_bytes(self) -> exn::Result<Bytes, DownloadError> {
+        let bytes = self
+            .content
+            .into_response()
+            .await?
+            .bytes()
+            .await
+            .or_raise(|| DownloadError::Remote)?;
         if let Some(verifier) = self.data_verifier {
             verifier.update(&bytes);
         }

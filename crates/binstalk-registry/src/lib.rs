@@ -1,25 +1,18 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{fmt, io, str::FromStr, sync::Arc};
+use std::{fmt, str::FromStr, sync::Arc};
 
-use base16::DecodeError as Base16DecodeError;
-use binstalk_downloader::{
-    download::DownloadError,
-    remote::{Client, Error as RemoteError},
-};
+use binstalk_downloader::remote::Client;
 use binstalk_types::{
     cargo_toml_binstall::Meta,
     crate_info::{CrateSource, SourceType},
     maybe_owned::MaybeOwned,
 };
-use cargo_toml_workspace::cargo_toml::{Error as CargoTomlError, Manifest};
+use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
-use leon::{ParseError, RenderError};
 use miette::Diagnostic;
 use semver::VersionReq;
-use serde_json::Error as JsonError;
 use thiserror::Error as ThisError;
-use tokio::task;
 use url::{ParseError as UrlParseError, Url};
 
 mod auth;
@@ -48,12 +41,15 @@ pub use crates_io_registry::fetch_crate_cratesio_api;
 mod sparse_registry;
 pub use sparse_registry::SparseRegistry;
 
+/// Error returned by [`Registry`].
+///
+/// The underlying cause is attached as a child frame of the [`exn::Exn`].
 #[derive(Debug, ThisError, Diagnostic)]
 #[diagnostic(severity(error), code(binstall::cargo_registry))]
 #[non_exhaustive]
 pub enum RegistryError {
-    #[error(transparent)]
-    Remote(#[from] RemoteError),
+    #[error("Failed to fetch from remote")]
+    Remote,
 
     #[error("{0} is not found")]
     #[diagnostic(
@@ -61,17 +57,17 @@ pub enum RegistryError {
     )]
     NotFound(CompactString),
 
-    #[error(transparent)]
-    Json(#[from] JsonError),
+    #[error("Failed to parse json")]
+    Json,
 
-    #[error("Failed to parse dl config: {0}")]
-    ParseDlConfig(#[from] ParseError),
+    #[error("Failed to parse dl config")]
+    ParseDlConfig,
 
-    #[error("Failed to render dl config: {0}")]
-    RenderDlConfig(#[from] RenderError),
+    #[error("Failed to render dl config")]
+    RenderDlConfig,
 
-    #[error("Failed to parse checksum encoded in hex: {0}")]
-    InvalidHex(#[from] Base16DecodeError),
+    #[error("Failed to parse checksum encoded in hex")]
+    InvalidHex,
 
     #[error("Expected checksum `{expected}`, actual checksum `{actual}`")]
     UnmatchedChecksum {
@@ -82,37 +78,31 @@ pub enum RegistryError {
     #[error("no version matching requirement '{req}'")]
     VersionMismatch { req: semver::VersionReq },
 
-    #[error("Failed to parse cargo manifest: {0}")]
+    #[error("Failed to parse cargo manifest")]
     #[diagnostic(help("If you used --manifest-path, check the Cargo.toml syntax."))]
-    CargoManifest(#[from] Box<CargoTomlError>),
+    CargoManifest,
 
-    #[error("Failed to parse url: {0}")]
-    UrlParse(#[from] UrlParseError),
+    #[error("Failed to parse url")]
+    UrlParse,
 
-    #[error(transparent)]
-    Download(#[from] DownloadError),
+    #[error("Failed to download crate")]
+    Download,
 
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
+    #[error("I/O Error")]
+    Io,
 
-    #[error(transparent)]
-    TaskJoinError(#[from] task::JoinError),
+    #[error("Failed to join task")]
+    TaskJoinError,
 
     #[cfg(feature = "git")]
-    #[error("Failed to shallow clone git repository: {0}")]
-    GitError(#[from] GitError),
+    #[error("Failed to shallow clone git repository")]
+    GitError,
 
     #[error("registry requires authentication: {0}")]
     #[diagnostic(
         help("Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active.")
     )]
     AuthenticationRequired(Box<Url>),
-}
-
-impl From<CargoTomlError> for RegistryError {
-    fn from(e: CargoTomlError) -> Self {
-        Self::from(Box::new(e))
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -193,7 +183,7 @@ impl Registry {
         client: Client,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, RegistryError> {
+    ) -> exn::Result<Manifest<Meta>, RegistryError> {
         self.fetch_crate_matched_with_auth(client, None, crate_name, version_req)
             .await
     }
@@ -204,7 +194,7 @@ impl Registry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, RegistryError> {
+    ) -> exn::Result<Manifest<Meta>, RegistryError> {
         match self {
             Self::Sparse(sparse_registry) => {
                 sparse_registry

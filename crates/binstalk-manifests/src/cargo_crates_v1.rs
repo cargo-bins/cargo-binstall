@@ -7,6 +7,7 @@
 //! Binstall writes to this manifest when installing a crate, for interoperability with the Cargo
 //! ecosystem.
 
+use exn::ResultExt;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -41,32 +42,40 @@ pub struct CratesToml<'a> {
 }
 
 impl<'v1> CratesToml<'v1> {
-    pub fn default_path() -> Result<PathBuf, CratesTomlParseError> {
-        Ok(cargo_home()?.join(".crates.toml"))
+    pub fn default_path() -> exn::Result<PathBuf, CratesTomlParseError> {
+        Ok(cargo_home()
+            .or_raise(|| CratesTomlParseError::Io)?
+            .join(".crates.toml"))
     }
 
-    pub fn load() -> Result<Self, CratesTomlParseError> {
+    pub fn load() -> exn::Result<Self, CratesTomlParseError> {
         Self::load_from_path(Self::default_path()?)
     }
 
-    pub fn load_from_reader<R: io::Read>(mut reader: R) -> Result<Self, CratesTomlParseError> {
-        fn inner(reader: &mut dyn io::Read) -> Result<CratesToml<'static>, CratesTomlParseError> {
+    pub fn load_from_reader<R: io::Read>(mut reader: R) -> exn::Result<Self, CratesTomlParseError> {
+        fn inner(
+            reader: &mut dyn io::Read,
+        ) -> exn::Result<CratesToml<'static>, CratesTomlParseError> {
             let mut vec = Vec::new();
-            reader.read_to_end(&mut vec)?;
+            reader
+                .read_to_end(&mut vec)
+                .or_raise(|| CratesTomlParseError::Io)?;
 
             if vec.is_empty() {
                 Ok(CratesToml::default())
             } else {
-                toml_edit::de::from_slice(&vec).map_err(CratesTomlParseError::from)
+                toml_edit::de::from_slice(&vec).or_raise(|| CratesTomlParseError::TomlParse)
             }
         }
 
         inner(&mut reader)
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CratesTomlParseError> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> exn::Result<Self, CratesTomlParseError> {
         let path = path.as_ref();
-        let file = FileLock::new_shared(File::open(path)?)?.set_file_path(path);
+        let file = FileLock::new_shared(File::open(path).or_raise(|| CratesTomlParseError::Io)?)
+            .or_raise(|| CratesTomlParseError::Io)?
+            .set_file_path(path);
         Self::load_from_reader(file)
     }
 
@@ -83,34 +92,45 @@ impl<'v1> CratesToml<'v1> {
         });
     }
 
-    pub fn write(&self) -> Result<(), CratesTomlParseError> {
+    pub fn write(&self) -> exn::Result<(), CratesTomlParseError> {
         self.write_to_path(Self::default_path()?)
     }
 
-    pub fn write_to_writer<W: io::Write>(&self, mut writer: W) -> Result<(), CratesTomlParseError> {
+    pub fn write_to_writer<W: io::Write>(
+        &self,
+        mut writer: W,
+    ) -> exn::Result<(), CratesTomlParseError> {
         fn inner(
             this: &CratesToml<'_>,
             writer: &mut dyn io::Write,
-        ) -> Result<(), CratesTomlParseError> {
-            let data = toml_edit::ser::to_string_pretty(&this)?;
-            writer.write_all(data.as_bytes())?;
+        ) -> exn::Result<(), CratesTomlParseError> {
+            let data = toml_edit::ser::to_string_pretty(&this)
+                .or_raise(|| CratesTomlParseError::TomlWrite)?;
+            writer
+                .write_all(data.as_bytes())
+                .or_raise(|| CratesTomlParseError::Io)?;
             Ok(())
         }
 
         inner(self, &mut writer)
     }
 
-    pub fn write_to_file(&self, file: &mut File) -> Result<(), CratesTomlParseError> {
+    pub fn write_to_file(&self, file: &mut File) -> exn::Result<(), CratesTomlParseError> {
         self.write_to_writer(&mut *file)?;
-        let pos = file.stream_position()?;
-        file.set_len(pos)?;
+        let pos = file
+            .stream_position()
+            .or_raise(|| CratesTomlParseError::Io)?;
+        file.set_len(pos).or_raise(|| CratesTomlParseError::Io)?;
 
         Ok(())
     }
 
-    pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), CratesTomlParseError> {
+    pub fn write_to_path(&self, path: impl AsRef<Path>) -> exn::Result<(), CratesTomlParseError> {
         let path = path.as_ref();
-        let mut file = FileLock::new_exclusive(File::create(path)?)?.set_file_path(path);
+        let mut file =
+            FileLock::new_exclusive(File::create(path).or_raise(|| CratesTomlParseError::Io)?)
+                .or_raise(|| CratesTomlParseError::Io)?
+                .set_file_path(path);
         self.write_to_file(&mut file)
     }
 
@@ -128,7 +148,7 @@ impl<'v1> CratesToml<'v1> {
     pub fn append_to_file(
         file: &mut File,
         crates: &[CrateInfo],
-    ) -> Result<(), CratesTomlParseError> {
+    ) -> exn::Result<(), CratesTomlParseError> {
         let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
         c1.remove_all(&{
@@ -146,7 +166,7 @@ impl<'v1> CratesToml<'v1> {
             c1.add_crate(metadata);
         }
 
-        file.rewind()?;
+        file.rewind().or_raise(|| CratesTomlParseError::Io)?;
         c1.write_to_file(file)?;
 
         Ok(())
@@ -155,24 +175,25 @@ impl<'v1> CratesToml<'v1> {
     pub fn append_to_path(
         path: impl AsRef<Path>,
         crates: &[CrateInfo],
-    ) -> Result<(), CratesTomlParseError> {
-        let mut file = create_if_not_exist(path.as_ref())?;
+    ) -> exn::Result<(), CratesTomlParseError> {
+        let mut file = create_if_not_exist(path.as_ref()).or_raise(|| CratesTomlParseError::Io)?;
         Self::append_to_file(&mut file, crates)
     }
 
-    pub fn append(crates: &[CrateInfo]) -> Result<(), CratesTomlParseError> {
+    pub fn append(crates: &[CrateInfo]) -> exn::Result<(), CratesTomlParseError> {
         Self::append_to_path(Self::default_path()?, crates)
     }
 
     /// Return both crate name -> version and crate name -> (version, source, bins).
     pub fn collect_into_crates_details(
         self,
-    ) -> Result<(CratesVersionsMap, CratesDetailsMap), CratesTomlParseError> {
+    ) -> exn::Result<(CratesVersionsMap, CratesDetailsMap), CratesTomlParseError> {
         let mut versions = BTreeMap::new();
         let mut details = BTreeMap::new();
 
         for (s, bins) in self.v1 {
-            let cvs = CrateVersionSource::from_str(&s)?;
+            let cvs =
+                CrateVersionSource::from_str(&s).or_raise(|| CratesTomlParseError::CvsParse)?;
             versions.insert(cvs.name.clone(), cvs.version.clone());
             details.insert(cvs.name, (cvs.version, cvs.source, bins.into_owned()));
         }
@@ -184,44 +205,27 @@ impl<'v1> CratesToml<'v1> {
     /// as value.
     pub fn collect_into_crates_versions(
         self,
-    ) -> Result<BTreeMap<CompactString, Version>, CratesTomlParseError> {
+    ) -> exn::Result<BTreeMap<CompactString, Version>, CratesTomlParseError> {
         self.collect_into_crates_details()
             .map(|(versions, _details)| versions)
     }
 }
 
+/// The underlying cause is attached as a child frame of the [`exn::Exn`].
 #[derive(Debug, Diagnostic, Error)]
 #[non_exhaustive]
 pub enum CratesTomlParseError {
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
+    #[error("I/O Error")]
+    Io,
 
-    #[error("Failed to deserialize toml: {0}")]
-    TomlParse(Box<toml_edit::de::Error>),
+    #[error("Failed to deserialize toml")]
+    TomlParse,
 
-    #[error("Failed to serialie toml: {0}")]
-    TomlWrite(Box<toml_edit::ser::Error>),
+    #[error("Failed to serialize toml")]
+    TomlWrite,
 
-    #[error(transparent)]
-    CvsParse(Box<CvsParseError>),
-}
-
-impl From<CvsParseError> for CratesTomlParseError {
-    fn from(e: CvsParseError) -> Self {
-        CratesTomlParseError::CvsParse(Box::new(e))
-    }
-}
-
-impl From<toml_edit::ser::Error> for CratesTomlParseError {
-    fn from(e: toml_edit::ser::Error) -> Self {
-        CratesTomlParseError::TomlWrite(Box::new(e))
-    }
-}
-
-impl From<toml_edit::de::Error> for CratesTomlParseError {
-    fn from(e: toml_edit::de::Error) -> Self {
-        CratesTomlParseError::TomlParse(Box::new(e))
-    }
+    #[error("Failed to parse crate version source")]
+    CvsParse,
 }
 
 #[cfg(test)]

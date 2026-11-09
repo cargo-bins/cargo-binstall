@@ -318,6 +318,7 @@ dependencies = [
  "bzip2",
  "cfg-if",
  "compact_str",
+ "exn",
  "flate2",
  "futures-io",
  "futures-util",
@@ -372,6 +373,7 @@ version = "0.5.53"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
+ "exn",
  "once_cell",
  "percent-encoding",
  "serde",
@@ -393,6 +395,7 @@ dependencies = [
  "binstalk-types",
  "compact_str",
  "detect-targets",
+ "exn",
  "fs-lock",
  "home",
  "merge",
@@ -418,6 +421,7 @@ dependencies = [
  "binstalk-types",
  "cargo-toml-workspace",
  "compact_str",
+ "exn",
  "leon",
  "miette",
  "normalize-path",
@@ -651,6 +655,7 @@ version = "7.0.11"
 dependencies = [
  "cargo_toml",
  "compact_str",
+ "exn",
  "globwalker",
  "serde",
  "tempfile",
@@ -1356,6 +1361,12 @@ dependencies = [
  "cc",
  "libc",
 ]
+
+[[package]]
+name = "exn"
+version = "0.4.0-rc.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed5592af4187305bf22dc9aa258f98612f6aea4d86e49ea83e6fb2dbe91a5993"
 
 [[package]]
 name = "faster-hex"

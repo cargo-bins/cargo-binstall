@@ -4,31 +4,32 @@ use std::{
 };
 
 use bytes::{Buf, Bytes};
+use exn::Exn;
 use futures_util::{FutureExt, Stream, StreamExt};
 use tokio::{sync::mpsc, task};
 
-pub(super) fn extract_with_blocking_task<E, StreamError, S, F, T>(
+use crate::download::DownloadError;
+
+/// Errors returned by `f` are recovered with [`DownloadError::from_io`], so `f`
+/// may use [`DownloadError::into_io`] to propagate an [`Exn<DownloadError>`].
+pub(super) fn extract_with_blocking_task<S, F, T>(
     stream: S,
     f: F,
-) -> impl Future<Output = Result<T, E>>
+) -> impl Future<Output = exn::Result<T, DownloadError>>
 where
     T: Send + 'static,
-    E: From<io::Error>,
-    E: From<StreamError>,
-    S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
+    S: Stream<Item = exn::Result<Bytes, DownloadError>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
 {
-    async fn inner<S, StreamError, Fut, T, E>(
+    async fn inner<S, Fut, T>(
         mut stream: S,
         task: Fut,
         tx: mpsc::Sender<Bytes>,
-    ) -> Result<T, E>
+    ) -> exn::Result<T, DownloadError>
     where
-        E: From<io::Error>,
-        E: From<StreamError>,
         // We do not use trait object for S since there will only be one
         // S used with this function.
-        S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
+        S: Stream<Item = exn::Result<Bytes, DownloadError>> + Send + Sync + Unpin,
         // asyncify would always return the same future, so no need to
         // use trait object here.
         Fut: Future<Output = io::Result<T>> + Send + Sync,
@@ -54,11 +55,11 @@ where
                 }
             }
 
-            Ok::<_, E>(())
+            Ok::<_, Exn<DownloadError>>(())
         };
         tokio::pin!(read_fut);
 
-        let task_fut = async move { task.await.map_err(E::from) };
+        let task_fut = async move { task.await.map_err(|err| DownloadError::from_io(err)) };
         tokio::pin!(task_fut);
 
         tokio::select! {

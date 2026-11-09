@@ -1,17 +1,13 @@
-use std::{
-    collections::BTreeMap,
-    fs,
-    io::{self, Seek},
-    path::Path,
-};
+use std::{collections::BTreeMap, fs, io::Seek, path::Path};
 
+use exn::ResultExt;
 use fs_lock::FileLock;
 use miette::Diagnostic;
 use thiserror::Error as ThisError;
 
 use crate::{
-    binstall_crates_v1::{Error as BinstallCratesV1Error, Records as BinstallCratesV1Records},
-    cargo_crates_v1::{CratesDetailsMap, CratesToml, CratesTomlParseError, Source},
+    binstall_crates_v1::Records as BinstallCratesV1Records,
+    cargo_crates_v1::{CratesDetailsMap, CratesToml, Source},
     crate_info::CrateInfo,
     helpers::create_if_not_exist,
     CompactString, Version,
@@ -20,16 +16,14 @@ use crate::{
 #[derive(Debug, Diagnostic, ThisError)]
 #[non_exhaustive]
 pub enum ManifestsError {
-    #[error("failed to parse binstall crates-v1 manifest: {0}")]
-    #[diagnostic(transparent)]
-    BinstallCratesV1(#[from] BinstallCratesV1Error),
+    #[error("failed to parse binstall crates-v1 manifest")]
+    BinstallCratesV1,
 
-    #[error("failed to parse cargo v1 manifest: {0}")]
-    #[diagnostic(transparent)]
-    CargoManifestV1(#[from] CratesTomlParseError),
+    #[error("failed to parse cargo v1 manifest")]
+    CargoManifestV1,
 
-    #[error("I/O error: {0}")]
-    Io(#[from] io::Error),
+    #[error("I/O error")]
+    Io,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -61,23 +55,26 @@ pub struct Manifests {
 }
 
 impl Manifests {
-    pub fn open_exclusive(cargo_roots: &Path) -> Result<Self, ManifestsError> {
+    pub fn open_exclusive(cargo_roots: &Path) -> exn::Result<Self, ManifestsError> {
         // Read cargo_binstall_metadata
         let binstall_dir = cargo_roots.join("binstall");
-        fs::create_dir_all(&binstall_dir)?;
+        fs::create_dir_all(&binstall_dir).or_raise(|| ManifestsError::Io)?;
 
         let metadata_path = binstall_dir.join("crates-v1.json");
 
-        let binstall = BinstallCratesV1Records::load_from_path(&metadata_path)?;
+        let binstall = BinstallCratesV1Records::load_from_path(&metadata_path)
+            .or_raise(|| ManifestsError::BinstallCratesV1)?;
 
         // Read cargo_install_v1_metadata
         let manifest_path = cargo_roots.join(".crates.toml");
 
-        let mut cargo_crates_v1 = create_if_not_exist(&manifest_path)?;
+        let mut cargo_crates_v1 =
+            create_if_not_exist(&manifest_path).or_raise(|| ManifestsError::Io)?;
 
         let (installed_crates, installed_crates_details) =
             CratesToml::load_from_reader(&mut cargo_crates_v1)
-                .and_then(CratesToml::collect_into_crates_details)?;
+                .and_then(CratesToml::collect_into_crates_details)
+                .or_raise(|| ManifestsError::CargoManifestV1)?;
 
         Ok(Self {
             binstall,
@@ -87,8 +84,10 @@ impl Manifests {
         })
     }
 
-    fn rewind_cargo_crates_v1(&mut self) -> Result<(), ManifestsError> {
-        self.cargo_crates_v1.rewind().map_err(ManifestsError::from)
+    fn rewind_cargo_crates_v1(&mut self) -> exn::Result<(), ManifestsError> {
+        self.cargo_crates_v1
+            .rewind()
+            .or_raise(|| ManifestsError::Io)
     }
 
     /// `cargo-uninstall` can be called to uninstall crates,
@@ -130,7 +129,7 @@ impl Manifests {
             .collect()
     }
 
-    pub fn prune_stale(mut self) -> Result<Vec<CompactString>, ManifestsError> {
+    pub fn prune_stale(mut self) -> exn::Result<Vec<CompactString>, ManifestsError> {
         let mut pruned = Vec::new();
         let installed = &self.installed_crates;
 
@@ -144,16 +143,19 @@ impl Manifests {
         });
 
         if !pruned.is_empty() {
-            self.binstall.overwrite()?;
+            self.binstall
+                .overwrite()
+                .or_raise(|| ManifestsError::BinstallCratesV1)?;
         }
 
         Ok(pruned)
     }
 
-    pub fn update(mut self, metadata_vec: Vec<CrateInfo>) -> Result<(), ManifestsError> {
+    pub fn update(mut self, metadata_vec: Vec<CrateInfo>) -> exn::Result<(), ManifestsError> {
         self.rewind_cargo_crates_v1()?;
 
-        CratesToml::append_to_file(&mut self.cargo_crates_v1, &metadata_vec)?;
+        CratesToml::append_to_file(&mut self.cargo_crates_v1, &metadata_vec)
+            .or_raise(|| ManifestsError::CargoManifestV1)?;
 
         // Automatically prune uninstalled and version-drifted records
         let installed = &self.installed_crates;
@@ -164,7 +166,9 @@ impl Manifests {
         for metadata in metadata_vec {
             self.binstall.replace(metadata);
         }
-        self.binstall.overwrite()?;
+        self.binstall
+            .overwrite()
+            .or_raise(|| ManifestsError::BinstallCratesV1)?;
 
         Ok(())
     }

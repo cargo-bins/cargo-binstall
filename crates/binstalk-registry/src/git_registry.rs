@@ -1,3 +1,4 @@
+use exn::{ErrorExt, Exn, OptionExt, ResultExt};
 use std::{io, path::PathBuf, sync::Arc};
 
 use binstalk_downloader::remote::Client;
@@ -26,26 +27,29 @@ struct GitIndex {
 }
 
 impl GitIndex {
-    fn new(url: GitUrl, cancellation_token: GitCancellationToken) -> Result<Self, RegistryError> {
-        let tempdir = TempDir::new()?;
+    fn new(
+        url: GitUrl,
+        cancellation_token: GitCancellationToken,
+    ) -> exn::Result<Self, RegistryError> {
+        let tempdir = TempDir::new().or_raise(|| RegistryError::Io)?;
 
-        let repo = Repository::shallow_clone_bare(
-            url.clone(),
-            tempdir.as_ref(),
-            Some(cancellation_token),
-        )?;
+        let repo =
+            Repository::shallow_clone_bare(url.clone(), tempdir.as_ref(), Some(cancellation_token))
+                .or_raise(|| RegistryError::GitError)?;
 
         let config: RegistryConfig = {
             let config = repo
-                .get_head_commit_entry_data_by_path("config.json")?
+                .get_head_commit_entry_data_by_path("config.json")
+                .or_raise(|| RegistryError::GitError)?
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
                         format!("config.json not found in repository `{url}`"),
                     )
-                })?;
+                })
+                .or_raise(|| RegistryError::Io)?;
 
-            json_from_slice(&config).map_err(RegistryError::from)?
+            json_from_slice(&config).or_raise(|| RegistryError::Json)?
         };
 
         Ok(Self {
@@ -83,7 +87,7 @@ impl GitRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
-    ) -> Result<MatchedVersion, RegistryError> {
+    ) -> exn::Result<MatchedVersion, RegistryError> {
         let mut path = PathBuf::with_capacity(128);
         path.push(&**c1);
         if let Some(c2) = c2 {
@@ -92,8 +96,9 @@ impl GitRegistry {
 
         path.push(&*crate_name.to_lowercase());
         let crate_versions = repo
-            .get_head_commit_entry_data_by_path(path)?
-            .ok_or_else(|| RegistryError::NotFound(crate_name.into()))?;
+            .get_head_commit_entry_data_by_path(path)
+            .or_raise(|| RegistryError::GitError)?
+            .ok_or_raise(|| RegistryError::NotFound(crate_name.into()))?;
 
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&crate_versions).into_iter(),
@@ -113,7 +118,7 @@ impl GitRegistry {
         auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, RegistryError> {
+    ) -> exn::Result<Manifest<Meta>, RegistryError> {
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
         let version_req = version_req.clone();
@@ -141,20 +146,22 @@ impl GitRegistry {
                 &crate_name,
                 &crate_prefix,
                 &matched_version,
-            )?)?;
+            )?)
+            .or_raise(|| RegistryError::UrlParse)?;
 
-            Ok::<_, RegistryError>((matched_version, url, config.auth_required))
+            Ok::<_, Exn<RegistryError>>((matched_version, url, config.auth_required))
         })
-        .await??;
+        .await
+        .or_raise(|| RegistryError::TaskJoinError)??;
 
         // Git operation done, disarm it
         cancel_on_drop.disarm();
 
         let auth = if auth_required {
             let Some(auth) = auth else {
-                return Err(RegistryError::AuthenticationRequired(Box::new(
-                    dl_url.clone(),
-                )));
+                return Err(
+                    RegistryError::AuthenticationRequired(Box::new(dl_url.clone())).raise(),
+                );
             };
 
             Some(auth)

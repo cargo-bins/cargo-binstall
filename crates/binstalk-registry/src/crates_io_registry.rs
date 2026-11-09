@@ -2,6 +2,7 @@ use binstalk_downloader::remote::{Client, Error as RemoteError, Url};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
+use exn::{OptionExt, ResultExt};
 use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
 use tracing::{debug, instrument};
@@ -9,7 +10,7 @@ use tracing::{debug, instrument};
 use crate::{parse_manifest, MatchedVersion, RegistryError};
 
 /// Return `Some(checksum)` if the version is not yanked, otherwise `None`.
-async fn is_crate_yanked(client: &Client, url: Url) -> Result<Option<String>, RemoteError> {
+async fn is_crate_yanked(client: &Client, url: Url) -> exn::Result<Option<String>, RemoteError> {
     #[derive(Deserialize)]
     struct CrateInfo {
         version: Inner,
@@ -34,7 +35,7 @@ async fn fetch_crate_cratesio_version_matched(
     client: &Client,
     url: Url,
     version_req: &VersionReq,
-) -> Result<Option<(CompactString, String)>, RemoteError> {
+) -> exn::Result<Option<(CompactString, String)>, RemoteError> {
     #[derive(Deserialize)]
     struct CrateInfo {
         #[serde(rename = "crate")]
@@ -115,8 +116,9 @@ pub async fn fetch_crate_cratesio_api(
     client: Client,
     name: &str,
     version_req: &VersionReq,
-) -> Result<Manifest<Meta>, RegistryError> {
-    let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))?;
+) -> exn::Result<Manifest<Meta>, RegistryError> {
+    let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))
+        .or_raise(|| RegistryError::UrlParse)?;
 
     let (version, cksum) = match version_req.comparators.as_slice() {
         [Comparator {
@@ -144,11 +146,13 @@ pub async fn fetch_crate_cratesio_api(
         }
         _ => fetch_crate_cratesio_version_matched(&client, url.clone(), version_req).await,
     }
-    .map_err(|e| match e {
-        RemoteError::Http(e) if e.is_status() => RegistryError::NotFound(name.into()),
-        e => e.into(),
+    .map_err(|e| match &*e {
+        RemoteError::Http(http) if http.is_status() => {
+            e.raise(RegistryError::NotFound(name.into()))
+        }
+        _ => e.raise(RegistryError::Remote),
     })?
-    .ok_or_else(|| RegistryError::VersionMismatch {
+    .ok_or_raise(|| RegistryError::VersionMismatch {
         req: version_req.clone(),
     })?;
 

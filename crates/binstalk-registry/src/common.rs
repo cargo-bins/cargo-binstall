@@ -1,3 +1,4 @@
+use exn::{ErrorExt, OptionExt, ResultExt};
 use std::borrow::Cow;
 
 use base16::{decode as decode_base16, encode_lower as encode_base16};
@@ -69,26 +70,31 @@ pub(super) async fn parse_manifest(
     crate_url: Url,
     MatchedVersion { version, cksum }: MatchedVersion,
     auth: Option<&RegistryAuth>,
-) -> Result<Manifest<Meta>, RegistryError> {
+) -> exn::Result<Manifest<Meta>, RegistryError> {
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
     let mut manifest_visitor = ManifestVisitor::new(format!("{crate_name}-{version}").into());
 
-    let checksum = decode_base16(cksum.as_bytes()).map_err(RegistryError::from)?;
+    let checksum = decode_base16(cksum.as_bytes()).or_raise(|| RegistryError::InvalidHex)?;
     let mut digest = Sha256Digest::new(checksum);
 
     Download::from_response_with_data_verifier(
-        apply_auth(client.get(crate_url), auth).send(true).await?,
+        apply_auth(client.get(crate_url), auth)
+            .send(true)
+            .await
+            .or_raise(|| RegistryError::Remote)?,
         &mut digest,
     )
     .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
-    .await?;
+    .await
+    .or_raise(|| RegistryError::Download)?;
 
     if !digest.validate() {
         Err(RegistryError::UnmatchedChecksum {
             expected: encode_base16(digest.expected.as_slice()).into(),
             actual: encode_base16(digest.actual.unwrap().as_slice()).into(),
-        })
+        }
+        .raise())
     } else {
         manifest_visitor.load_manifest()
     }
@@ -105,11 +111,11 @@ pub(super) fn apply_auth(request: RequestBuilder, auth: Option<&RegistryAuth>) -
 /// Return components of crate prefix
 pub(super) fn crate_prefix_components(
     crate_name: &str,
-) -> Result<(CompactString, Option<CompactString>), RegistryError> {
+) -> exn::Result<(CompactString, Option<CompactString>), RegistryError> {
     let mut chars = crate_name.chars();
 
     match (chars.next(), chars.next(), chars.next(), chars.next()) {
-        (None, None, None, None) => Err(RegistryError::NotFound(crate_name.into())),
+        (None, None, None, None) => Err(RegistryError::NotFound(crate_name.into()).raise()),
         (Some(_), None, None, None) => Ok((CompactString::const_new("1"), None)),
         (Some(_), Some(_), None, None) => Ok((CompactString::const_new("2"), None)),
         (Some(ch), Some(_), Some(_), None) => Ok((
@@ -129,8 +135,8 @@ pub(super) fn render_dl_template(
     crate_name: &str,
     (c1, c2): &(CompactString, Option<CompactString>),
     MatchedVersion { version, cksum }: &MatchedVersion,
-) -> Result<String, RegistryError> {
-    let template = Template::parse(dl_template)?;
+) -> exn::Result<String, RegistryError> {
+    let template = Template::parse(dl_template).or_raise(|| RegistryError::ParseDlConfig)?;
     if template.keys().next().is_some() {
         let mut crate_prefix = c1.clone();
         if let Some(c2) = c2 {
@@ -157,13 +163,15 @@ pub(super) fn render_dl_template(
                 }
             }
         }
-        Ok(template.render(&Context {
-            crate_name,
-            crate_lowerprefix: crate_prefix.to_lowercase(),
-            crate_prefix,
-            version,
-            cksum,
-        })?)
+        Ok(template
+            .render(&Context {
+                crate_name,
+                crate_lowerprefix: crate_prefix.to_lowercase(),
+                crate_prefix,
+                version,
+                cksum,
+            })
+            .or_raise(|| RegistryError::RenderDlConfig)?)
     } else {
         Ok(format!("{dl_template}/{crate_name}/{version}/download"))
     }
@@ -186,11 +194,11 @@ impl MatchedVersion {
     pub(super) fn find(
         it: &mut dyn Iterator<Item = Result<RegistryIndexEntry, JsonError>>,
         version_req: &VersionReq,
-    ) -> Result<Self, RegistryError> {
+    ) -> exn::Result<Self, RegistryError> {
         let mut ret = Option::<(Self, Version)>::None;
 
         for res in it {
-            let entry = res.map_err(RegistryError::from)?;
+            let entry = res.or_raise(|| RegistryError::Json)?;
 
             if entry.yanked {
                 continue;
@@ -223,7 +231,7 @@ impl MatchedVersion {
         }
 
         ret.map(|(num, _)| num)
-            .ok_or_else(|| RegistryError::VersionMismatch {
+            .ok_or_raise(|| RegistryError::VersionMismatch {
                 req: version_req.clone(),
             })
     }

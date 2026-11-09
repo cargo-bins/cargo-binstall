@@ -1,36 +1,38 @@
-use std::{error, fmt, io, time::Duration};
+use std::{error, fmt, time::Duration};
 
+#[allow(unused_imports)] // used in docs
 use binstalk_downloader::remote;
 use compact_str::{CompactString, ToCompactString};
+use exn::{ErrorExt, Exn};
 use serde::{de::Deserializer, Deserialize};
 use thiserror::Error as ThisError;
 
-#[derive(ThisError, Debug)]
-#[error("Context: '{context}', err: '{err}'")]
-pub struct GhApiContextError {
-    context: CompactString,
-    #[source]
-    err: GhApiError,
-}
-
+/// Error returned by [`GhApiClient`](super::GhApiClient).
+///
+/// The underlying cause (e.g. [`remote::Error`] or [`GhGraphQLErrors`]) is
+/// attached as a child frame of the [`Exn`].
+///
+/// [`GhApiError::RateLimit`], [`GhApiError::NotFound`] and
+/// [`GhApiError::Unauthorized`] are always kept at the root of the [`Exn`],
+/// so callers can match on them via `Deref`.
 #[derive(ThisError, Debug)]
 #[non_exhaustive]
 pub enum GhApiError {
-    #[error("IO Error: {0}")]
-    Io(#[from] io::Error),
+    #[error("IO Error")]
+    Io,
 
-    #[error("Remote Error: {0}")]
-    Remote(#[from] remote::Error),
+    #[error("Remote Error")]
+    Remote,
 
-    #[error("Failed to parse url: {0}")]
-    InvalidUrl(#[from] url::ParseError),
+    #[error("Failed to parse url")]
+    InvalidUrl,
 
-    /// A wrapped error providing the context the error is about.
-    #[error(transparent)]
-    Context(Box<GhApiContextError>),
+    /// Context the error is about, e.g. which API was used.
+    #[error("Context: '{0}'")]
+    Context(CompactString),
 
-    #[error("Remote failed to process GraphQL query: {0}")]
-    GraphQLErrors(GhGraphQLErrors),
+    #[error("Remote failed to process GraphQL query")]
+    GraphQLErrors,
 
     #[error("Hit rate-limit, retry after {retry_after:?}")]
     RateLimit { retry_after: Option<Duration> },
@@ -43,29 +45,49 @@ pub enum GhApiError {
 }
 
 impl GhApiError {
-    /// Attach context to [`GhApiError`]
-    pub fn context(self, context: impl fmt::Display) -> Self {
+    /// Returns `Some(retry_after)` if this is [`GhApiError::RateLimit`].
+    pub fn rate_limit(&self) -> Option<Option<Duration>> {
+        match self {
+            Self::RateLimit { retry_after } => Some(*retry_after),
+            _ => None,
+        }
+    }
+
+    /// Returns true if this is [`GhApiError::NotFound`].
+    pub fn is_not_found(&self) -> bool {
+        matches!(self, Self::NotFound)
+    }
+
+    /// Returns true if this is [`GhApiError::Unauthorized`].
+    pub fn is_unauthorized(&self) -> bool {
+        matches!(self, Self::Unauthorized)
+    }
+
+    /// Attach context to `err`, unless it is one of the variants that callers
+    /// use for recovery, which must stay at the root of the [`Exn`].
+    #[track_caller]
+    pub fn context(err: Exn<Self>, context: impl fmt::Display) -> Exn<Self> {
         use GhApiError::*;
 
-        if matches!(self, RateLimit { .. } | NotFound | Unauthorized) {
-            self
+        if matches!(&*err, RateLimit { .. } | NotFound | Unauthorized) {
+            err
         } else {
-            Self::Context(Box::new(GhApiContextError {
-                context: context.to_compact_string(),
-                err: self,
-            }))
+            err.raise(Context(context.to_compact_string()))
         }
     }
 }
 
-impl From<GhGraphQLErrors> for GhApiError {
-    fn from(e: GhGraphQLErrors) -> Self {
-        if e.is_rate_limited() {
-            Self::RateLimit { retry_after: None }
-        } else if e.is_not_found_error() {
-            Self::NotFound
+impl GhGraphQLErrors {
+    /// Classify the errors into [`GhApiError`], keeping `self` as the cause
+    /// unless it is a rate-limit or not-found error.
+    #[track_caller]
+    pub(super) fn classify(self) -> Exn<GhApiError> {
+        if self.is_rate_limited() {
+            GhApiError::RateLimit { retry_after: None }.raise()
+        } else if self.is_not_found_error() {
+            GhApiError::NotFound.raise()
         } else {
-            Self::GraphQLErrors(e)
+            self.raise().raise(GhApiError::GraphQLErrors)
         }
     }
 }

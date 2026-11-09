@@ -5,13 +5,14 @@ edition = "2021"
 description = "Parse cargo workspace and load specific crate"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/cargo-toml-workspace"
-rust-version = "1.65.0"
+rust-version = "1.85.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
 cargo_toml = "1.0.0"
 compact_str = { version = "0.10.0", features = ["serde"] }
+exn = "0.4.0-rc.1"
 globwalker = "0.9.0"
 serde = "1.0.163"
 thiserror = "2.0.11"

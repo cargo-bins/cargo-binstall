@@ -48,7 +48,7 @@ impl ResolvedRegistry {
         client: binstalk_downloader::remote::Client,
         crate_name: &str,
         version_req: &semver::VersionReq,
-    ) -> Result<
+    ) -> exn::Result<
         cargo_toml_workspace::cargo_toml::Manifest<binstalk_types::cargo_toml_binstall::Meta>,
         crate::RegistryError,
     > {

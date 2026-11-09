@@ -4,6 +4,7 @@
 //!
 //! Binstall reads from them to be compatible with `cargo-install`'s behavior.
 
+use exn::{ErrorExt, ResultExt};
 use std::{
     collections::{btree_map::Entry as BTreeMapEntry, BTreeMap, HashSet, VecDeque},
     fs::File,
@@ -198,13 +199,13 @@ fn iterate_reverse_preorder(
     mut load_config: impl FnMut(
         &mut dyn io::Read,
         &Path,
-    ) -> Result<Vec<IncludedConfig>, ConfigLoadError>,
-) -> Result<(), ConfigLoadError> {
+    ) -> exn::Result<Vec<IncludedConfig>, ConfigLoadError>,
+) -> exn::Result<(), ConfigLoadError> {
     // stack invariant: higher precedence config is the first out
     let mut visited_path = HashSet::new();
 
     while let Some(config_path) = stack.pop() {
-        let Some(file) = config_path.open()? else {
+        let Some(file) = config_path.open().or_raise(|| ConfigLoadError::Io)? else {
             continue;
         };
 
@@ -219,7 +220,7 @@ fn iterate_reverse_preorder(
         // Even if one config file has two symlinks, the content might be different
         // if relative path is present.
         if !visited_path.insert((path.to_owned(), parent.normalize())) {
-            return Err(ConfigLoadError::DeadLoopInLoading {
+            exn::bail!(ConfigLoadError::DeadLoopInLoading {
                 path: path.into(),
                 parent: parent.into(),
             });
@@ -232,25 +233,30 @@ fn iterate_reverse_preorder(
 }
 
 impl Config {
-    pub fn default_path() -> Result<PathBuf, ConfigLoadError> {
-        Ok(cargo_home()?.join("config.toml"))
+    pub fn default_path() -> exn::Result<PathBuf, ConfigLoadError> {
+        Ok(cargo_home()
+            .or_raise(|| ConfigLoadError::Io)?
+            .join("config.toml"))
     }
 
-    pub fn load() -> Result<Self, ConfigLoadError> {
+    pub fn load() -> exn::Result<Self, ConfigLoadError> {
         Self::load_from_path(Self::default_path()?)
     }
 
     fn load_from_reader_inner(
         reader: &mut dyn io::Read,
         dir: &Path,
-    ) -> Result<Self, ConfigLoadError> {
+    ) -> exn::Result<Self, ConfigLoadError> {
         let mut vec = Vec::new();
-        reader.read_to_end(&mut vec)?;
+        reader
+            .read_to_end(&mut vec)
+            .or_raise(|| ConfigLoadError::Io)?;
 
         if vec.is_empty() {
             Ok(Default::default())
         } else {
-            let mut config: Config = toml_edit::de::from_slice(&vec)?;
+            let mut config: Config =
+                toml_edit::de::from_slice(&vec).or_raise(|| ConfigLoadError::TomlParse)?;
             join_if_relative(
                 config
                     .install
@@ -292,8 +298,8 @@ impl Config {
     pub fn load_from_reader<R: io::Read>(
         mut reader: R,
         dir: &Path,
-    ) -> Result<Self, ConfigLoadError> {
-        fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
+    ) -> exn::Result<Self, ConfigLoadError> {
+        fn inner(reader: &mut dyn io::Read, dir: &Path) -> exn::Result<Config, ConfigLoadError> {
             let mut root_config = Config::load_from_reader_inner(reader, dir)?;
 
             iterate_reverse_preorder(mem::take(&mut root_config.include), |file, parent| {
@@ -309,16 +315,18 @@ impl Config {
         inner(&mut reader, dir)
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, ConfigLoadError> {
-        fn inner(path: &Path) -> Result<Config, ConfigLoadError> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> exn::Result<Self, ConfigLoadError> {
+        fn inner(path: &Path) -> exn::Result<Config, ConfigLoadError> {
             match File::open(path) {
                 Ok(file) => {
-                    let file = FileLock::new_shared(file)?.set_file_path(path);
+                    let file = FileLock::new_shared(file)
+                        .or_raise(|| ConfigLoadError::Io)?
+                        .set_file_path(path);
                     // Any regular file must have a parent dir
                     Config::load_from_reader(file, path.parent().unwrap())
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Default::default()),
-                Err(err) => Err(err.into()),
+                Err(err) => Err(err.raise().raise(ConfigLoadError::Io)),
             }
         }
 
@@ -346,29 +354,18 @@ impl Config {
     }
 }
 
+/// The underlying cause is attached as a child frame of the [`exn::Exn`].
 #[derive(Debug, Diagnostic, Error)]
 #[non_exhaustive]
 pub enum ConfigLoadError {
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
+    #[error("I/O Error")]
+    Io,
 
-    #[error("Failed to deserialize toml: {0}")]
-    TomlParse(Box<toml_edit::de::Error>),
+    #[error("Failed to deserialize toml")]
+    TomlParse,
 
-    #[error("Detect deadloop in toml at `{path}` with parent `{parent}`")]
+    #[error("Detect deadloop in toml at `{}` with parent `{}`", path.display(), parent.display())]
     DeadLoopInLoading { path: Box<Path>, parent: Box<Path> },
-}
-
-impl From<toml_edit::de::Error> for ConfigLoadError {
-    fn from(e: toml_edit::de::Error) -> Self {
-        ConfigLoadError::TomlParse(Box::new(e))
-    }
-}
-
-impl From<toml_edit::TomlError> for ConfigLoadError {
-    fn from(e: toml_edit::TomlError) -> Self {
-        ConfigLoadError::TomlParse(Box::new(e.into()))
-    }
 }
 
 #[cfg(test)]

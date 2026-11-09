@@ -85,20 +85,20 @@ pub enum TarEntryType {
 #[async_trait::async_trait]
 pub trait TarEntriesVisitor: Send + Sync {
     /// Will be called once per entry
-    async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<(), DownloadError>;
+    async fn visit(&mut self, entry: &mut dyn TarEntry) -> exn::Result<(), DownloadError>;
 }
 
 pub(crate) async fn extract_tar_based_stream_and_visit<S>(
     stream: S,
     fmt: TarBasedFmt,
     visitor: &mut dyn TarEntriesVisitor,
-) -> Result<(), DownloadError>
+) -> exn::Result<(), DownloadError>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync,
+    S: Stream<Item = exn::Result<Bytes, DownloadError>> + Send + Sync,
 {
     debug!("Extracting from {fmt} archive to process it in memory");
 
-    let reader = StreamReader::new(stream);
+    let reader = StreamReader::new(stream.map(|res| res.map_err(DownloadError::into_io)));
     let decoder: Pin<Box<dyn AsyncRead + Send + Sync>> = match fmt {
         Tar => Box::pin(reader),
         Tbz2 => Box::pin(bufread::BzDecoder::new(reader)),
@@ -108,17 +108,19 @@ where
     };
 
     let mut tar = Archive::new(decoder);
-    let mut entries = tar.entries()?;
+    let mut entries = tar.entries().map_err(|err| DownloadError::from_io(err))?;
 
     let mut sink = sink();
 
     while let Some(res) = entries.next().await {
-        let mut entry = res?;
+        let mut entry = res.map_err(|err| DownloadError::from_io(err))?;
         visitor.visit(&mut entry).await?;
 
         // Consume all remaining data so that next iteration would work fine
         // instead of reading the data of previous entry.
-        copy(&mut entry, &mut sink).await?;
+        copy(&mut entry, &mut sink)
+            .await
+            .map_err(|err| DownloadError::from_io(err))?;
     }
 
     Ok(())

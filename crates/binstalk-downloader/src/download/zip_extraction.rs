@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use exn::ResultExt;
 use normalize_path::NormalizePath;
 use rc_zip_sync::{rc_zip::parse::EntryKind, ReadZip};
 use tracing::warn;
@@ -19,10 +20,13 @@ fn create_parent_dir(path: &Path) -> io::Result<()> {
     create_dir_all(parent)
 }
 
-pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadError> {
+pub(super) fn do_extract_zip(
+    f: File,
+    dir: &Path,
+) -> exn::Result<ExtractedFiles, DownloadError> {
     let mut extracted_files = ExtractedFiles::new();
 
-    for entry in f.read_zip()?.entries() {
+    for entry in f.read_zip().or_raise(|| DownloadError::Unzip)?.entries() {
         let Some(name) = entry.sanitized_name() else {
             warn!("Skip zip entry {} for suspected zip slip", entry.name);
             continue;
@@ -48,7 +52,8 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                 entry
                     .reader()
                     .take(MAX_LINK_TARGET + 1)
-                    .read_to_end(&mut src)?;
+                    .read_to_end(&mut src)
+                    .or_raise(|| DownloadError::Io)?;
                 if src.is_empty() || src.len() as u64 > MAX_LINK_TARGET || src.contains(&0) {
                     warn!(
                         "Skip zip symlink dest={} with invalid target",
@@ -74,21 +79,21 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
                     continue;
                 }
 
-                create_parent_dir(path)?;
-                symlink(src, path)?;
+                create_parent_dir(path).or_raise(|| DownloadError::Io)?;
+                symlink(src, path).or_raise(|| DownloadError::Io)?;
 
                 extracted_files.add_file(name);
             }
             EntryKind::Directory => {
-                create_dir_all(path)?;
+                create_dir_all(path).or_raise(|| DownloadError::Io)?;
             }
             #[cfg_attr(any(unix, target_os = "wasi"), allow(unreachable_patterns))]
             EntryKind::File | EntryKind::Symlink => {
-                create_parent_dir(path)?;
+                create_parent_dir(path).or_raise(|| DownloadError::Io)?;
 
-                let mut entry_writer = File::create_new(path)?;
+                let mut entry_writer = File::create_new(path).or_raise(|| DownloadError::Io)?;
                 let mut entry_reader = entry.reader();
-                io::copy(&mut entry_reader, &mut entry_writer)?;
+                io::copy(&mut entry_reader, &mut entry_writer).or_raise(|| DownloadError::Io)?;
 
                 extracted_files.add_file(name);
             }
@@ -234,7 +239,7 @@ mod tests {
             self.root.path().join("out")
         }
 
-        fn extract(&self, entries: &[TestEntry]) -> Result<ExtractedFiles, DownloadError> {
+        fn extract(&self, entries: &[TestEntry]) -> exn::Result<ExtractedFiles, DownloadError> {
             let mut f = tempfile::tempfile().unwrap();
             f.write_all(&build_zip(entries)).unwrap();
             f.rewind().unwrap();

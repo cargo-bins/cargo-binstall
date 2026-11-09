@@ -2,6 +2,7 @@ use std::{fmt::Debug, future::Future, sync::OnceLock};
 
 use binstalk_downloader::remote::{self, Response, Url};
 use compact_str::CompactString;
+use exn::{ErrorExt, ResultExt};
 use percent_encoding::percent_decode_str;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::to_string as to_json_string;
@@ -18,12 +19,16 @@ pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
     }
 }
 
-pub(super) fn check_http_status_and_header(response: Response) -> Result<Response, GhApiError> {
+pub(super) fn check_http_status_and_header(
+    response: Response,
+) -> exn::Result<Response, GhApiError> {
     match response.status() {
-        remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized),
-        remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound),
+        remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized.raise()),
+        remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound.raise()),
 
-        _ => Ok(response.error_for_status()?),
+        _ => response
+            .error_for_status()
+            .or_raise(|| GhApiError::Remote),
     }
 }
 
@@ -39,7 +44,7 @@ pub(super) fn issue_restful_api<T>(
     client: &remote::Client,
     path: &[&str],
     auth_token: Option<&str>,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
+) -> impl Future<Output = exn::Result<T, GhApiError>> + Send + 'static
 where
     T: DeserializeOwned,
 {
@@ -63,9 +68,9 @@ where
     let future = request_builder.send(false);
 
     async move {
-        let response = check_http_status_and_header(future.await?)?;
+        let response = check_http_status_and_header(future.await.or_raise(|| GhApiError::Remote)?)?;
 
-        Ok(response.json().await?)
+        response.json().await.or_raise(|| GhApiError::Remote)
     }
 }
 
@@ -95,12 +100,12 @@ pub(super) fn issue_graphql_query<T>(
     client: &remote::Client,
     query: String,
     auth_token: &str,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
+) -> impl Future<Output = exn::Result<T, GhApiError>> + Send + 'static
 where
     T: DeserializeOwned + Debug,
 {
     let res = to_json_string(&GraphQLQuery { query })
-        .map_err(remote::Error::from)
+        .or_raise(|| GhApiError::GraphQLErrors)
         .map(|graphql_query| {
             let graphql_endpoint = get_graphql_endpoint();
 
@@ -115,14 +120,15 @@ where
         });
 
     async move {
-        let response = check_http_status_and_header(res?.await?)?;
+        let response = check_http_status_and_header(res?.await.or_raise(|| GhApiError::Remote)?)?;
 
-        let mut response: GraphQLResponse<T> = response.json().await?;
+        let mut response: GraphQLResponse<T> =
+            response.json().await.or_raise(|| GhApiError::Remote)?;
 
         debug!("response = {response:?}");
 
         if let Some(error) = response.errors.take() {
-            Err(error.into())
+            Err(error.classify())
         } else {
             Ok(response.data)
         }

@@ -1,11 +1,9 @@
-use std::{
-    io,
-    path::{Component, Path},
-};
+use std::path::{Component, Path};
 
-use cargo_toml::{Error as CargoTomlError, Manifest};
+use cargo_toml::Manifest;
 use compact_str::CompactString;
-use globwalker::{FileType, GlobError, GlobWalkerBuilder, WalkError};
+use exn::{bail, ResultExt};
+use globwalker::{FileType, GlobWalkerBuilder};
 use serde::de::DeserializeOwned;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument, warn};
@@ -21,43 +19,40 @@ pub use cargo_toml;
 pub fn load_manifest_from_workspace<Metadata: DeserializeOwned>(
     workspace_path: impl AsRef<Path>,
     crate_name: impl AsRef<str>,
-) -> Result<Manifest<Metadata>, Error> {
+) -> exn::Result<Manifest<Metadata>, Error> {
     fn inner<Metadata: DeserializeOwned>(
         workspace_path: &Path,
         crate_name: &str,
-    ) -> Result<Manifest<Metadata>, Error> {
-        load_manifest_from_workspace_inner(workspace_path, crate_name).map_err(|inner| Error {
+    ) -> exn::Result<Manifest<Metadata>, Error> {
+        load_manifest_from_workspace_inner(workspace_path, crate_name).or_raise(|| Error {
             workspace_path: workspace_path.into(),
             crate_name: crate_name.into(),
-            inner,
         })
     }
 
     inner(workspace_path.as_ref(), crate_name.as_ref())
 }
 
+/// Failed to load a crate's manifest from a workspace.
+///
+/// The cause is attached as a child frame of the [`exn::Exn`].
 #[derive(Debug, ThisError)]
-#[error("Failed to load {crate_name} from {}: {inner}", workspace_path.display())]
+#[error("Failed to load {crate_name} from {}", workspace_path.display())]
 pub struct Error {
     workspace_path: Box<Path>,
     crate_name: CompactString,
-    #[source]
-    inner: ErrorInner,
 }
 
 #[derive(Debug, ThisError)]
 enum ErrorInner {
-    #[error("Invalid pattern in workspace.members or workspace.exclude: {0}")]
-    GlobError(#[from] GlobError),
+    #[error("Invalid pattern in workspace.members or workspace.exclude")]
+    InvalidPattern,
 
-    #[error("Failed to walk directory: {0}")]
-    WalkDirError(#[from] WalkError),
+    #[error("Failed to walk directory")]
+    WalkDir,
 
-    #[error("Failed to parse cargo manifest: {0}")]
-    CargoManifest(#[from] CargoTomlError),
-
-    #[error("I/O error: {0}")]
-    Io(#[from] io::Error),
+    #[error("Failed to parse cargo manifest {}", .0.display())]
+    CargoManifest(Box<Path>),
 
     #[error("Not found")]
     NotFound,
@@ -67,7 +62,7 @@ enum ErrorInner {
 fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     workspace_path: &Path,
     crate_name: &str,
-) -> Result<Manifest<Metadata>, ErrorInner> {
+) -> exn::Result<Manifest<Metadata>, ErrorInner> {
     debug!(
         "Loading manifest of crate {crate_name} from workspace: {}",
         workspace_path.display()
@@ -86,7 +81,8 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     let mut manifest_paths = vec![manifest_path];
 
     while let Some(manifest_path) = manifest_paths.pop() {
-        let manifest = Manifest::<Metadata>::from_path_with_metadata(&manifest_path)?;
+        let manifest = Manifest::<Metadata>::from_path_with_metadata(&manifest_path)
+            .or_raise(|| ErrorInner::CargoManifest(manifest_path.as_path().into()))?;
 
         let name = manifest.package.as_ref().map(|p| &*p.name);
         debug!(
@@ -119,10 +115,11 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         })
         .follow_links(true)
         .file_type(FileType::DIR)
-        .build()?;
+        .build()
+        .or_raise(|| ErrorInner::InvalidPattern)?;
 
         for res in walker {
-            let mut path = res?.into_path();
+            let mut path = res.or_raise(|| ErrorInner::WalkDir)?.into_path();
             path.push("Cargo.toml");
             if path.is_file() {
                 manifest_paths.push(path);
@@ -130,7 +127,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         }
     }
 
-    Err(ErrorInner::NotFound)
+    bail!(ErrorInner::NotFound)
 }
 
 #[cfg(test)]
@@ -157,7 +154,7 @@ mod test {
 
         let err = load_manifest_from_workspace_inner::<cargo_toml::Value>(&p, "cargo-binstall2")
             .unwrap_err();
-        assert!(matches!(err, ErrorInner::NotFound), "{:#?}", err);
+        assert!(matches!(&*err, ErrorInner::NotFound), "{err:?}");
 
         let manifest =
             load_manifest_from_workspace::<cargo_toml::Value>(&p, "cargo-watch").unwrap();
