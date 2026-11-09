@@ -2,8 +2,8 @@ use std::{fmt, io, path::Path};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use bytes::Bytes;
-use futures_util::{stream::FusedStream, Stream, StreamExt};
 use exn::{ErrorExt, Exn, ResultExt};
+use futures_util::{stream::FusedStream, Stream, StreamExt};
 use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
 

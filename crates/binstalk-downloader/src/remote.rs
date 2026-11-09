@@ -6,13 +6,13 @@ use std::{
 };
 
 use bytes::Bytes;
+use exn::{ErrorExt, Exn, ResultExt};
 use futures_util::Stream;
 use httpdate::parse_http_date;
 use reqwest::{
     header::{HeaderMap, HeaderValue, RETRY_AFTER},
     Request,
 };
-use exn::{ErrorExt, Exn, ResultExt};
 use thiserror::Error as ThisError;
 use tracing::{debug, info, instrument};
 

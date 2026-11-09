@@ -1,10 +1,10 @@
-use exn::{ErrorExt, Exn, ResultExt};
 use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_git_repo_api::gh_api_client::{GhReleaseArtifact, GhReleaseArtifactUrl};
 use binstalk_types::cargo_toml_binstall::Strategy;
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
+use exn::{ErrorExt, Exn, ResultExt};
 use leon::Template;
 use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;

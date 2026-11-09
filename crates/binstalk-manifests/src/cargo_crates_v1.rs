@@ -7,7 +7,6 @@
 //! Binstall writes to this manifest when installing a crate, for interoperability with the Cargo
 //! ecosystem.
 
-use exn::ResultExt;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -18,6 +17,7 @@ use std::{
 
 use beef::Cow;
 use compact_str::CompactString;
+use exn::ResultExt;
 use fs_lock::FileLock;
 use home::cargo_home;
 use miette::Diagnostic;

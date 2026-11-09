@@ -4,7 +4,6 @@
 //!
 //! Binstall reads from them to be compatible with `cargo-install`'s behavior.
 
-use exn::{ErrorExt, ResultExt};
 use std::{
     collections::{btree_map::Entry as BTreeMapEntry, BTreeMap, HashSet, VecDeque},
     fs::File,
@@ -13,6 +12,7 @@ use std::{
 };
 
 use compact_str::CompactString;
+use exn::{ErrorExt, ResultExt};
 use fs_lock::FileLock;
 use home::cargo_home;
 use merge::Merge;

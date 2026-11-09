@@ -20,10 +20,7 @@ fn create_parent_dir(path: &Path) -> io::Result<()> {
     create_dir_all(parent)
 }
 
-pub(super) fn do_extract_zip(
-    f: File,
-    dir: &Path,
-) -> exn::Result<ExtractedFiles, DownloadError> {
+pub(super) fn do_extract_zip(f: File, dir: &Path) -> exn::Result<ExtractedFiles, DownloadError> {
     let mut extracted_files = ExtractedFiles::new();
 
     for entry in f.read_zip().or_raise(|| DownloadError::Unzip)?.entries() {

@@ -72,9 +72,9 @@ impl Response {
         let url = Box::new(self.inner.url().clone());
         let method = self.method;
 
-        self.inner.bytes_stream().map(move |res| {
-            res.map_err(|err| Error::http(method.clone(), Url::clone(&*url), err))
-        })
+        self.inner
+            .bytes_stream()
+            .map(move |res| res.map_err(|err| Error::http(method.clone(), Url::clone(&*url), err)))
     }
 
     pub fn status(&self) -> StatusCode {

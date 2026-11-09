@@ -1,4 +1,3 @@
-use exn::{ErrorExt, ResultExt};
 use std::{
     borrow::Cow,
     fmt,
@@ -10,6 +9,7 @@ use atomic_file_install::{
 };
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 use compact_str::{format_compact, CompactString};
+use exn::{ErrorExt, ResultExt};
 use leon::Template;
 use miette::Diagnostic;
 use normalize_path::NormalizePath;

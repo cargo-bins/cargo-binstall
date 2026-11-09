@@ -6,7 +6,6 @@
 //! The format is a series of JSON object concatenated together. It is _not_ NLJSON, though writing
 //! NLJSON to the file will be understood fine.
 
-use exn::ResultExt;
 use std::{
     borrow::Borrow,
     cmp,
@@ -18,6 +17,7 @@ use std::{
 };
 
 use compact_str::CompactString;
+use exn::ResultExt;
 use fs_lock::FileLock;
 use home::cargo_home;
 use miette::Diagnostic;

@@ -26,9 +26,7 @@ pub(super) fn check_http_status_and_header(
         remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized.raise()),
         remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound.raise()),
 
-        _ => response
-            .error_for_status()
-            .or_raise(|| GhApiError::Remote),
+        _ => response.error_for_status().or_raise(|| GhApiError::Remote),
     }
 }
 

@@ -1,6 +1,5 @@
 #![allow(unused)]
 
-use exn::{ErrorExt, OptionExt, ResultExt};
 use std::{
     future::Future,
     sync::{
@@ -8,6 +7,8 @@ use std::{
         Once,
     },
 };
+
+use exn::{ErrorExt, OptionExt, ResultExt};
 
 pub(super) use binstalk_downloader::{
     download::{Download, ExtractedFiles},

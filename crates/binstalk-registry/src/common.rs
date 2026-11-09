@@ -1,4 +1,3 @@
-use exn::{ErrorExt, OptionExt, ResultExt};
 use std::borrow::Cow;
 
 use base16::{decode as decode_base16, encode_lower as encode_base16};
@@ -10,6 +9,7 @@ use binstalk_downloader::{
 use binstalk_types::cargo_toml_binstall::{Meta, TarBasedFmt};
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{format_compact, CompactString, ToCompactString};
+use exn::{ErrorExt, OptionExt, ResultExt};
 use leon::{Template, Values};
 use semver::{Version, VersionReq};
 use serde::Deserialize;

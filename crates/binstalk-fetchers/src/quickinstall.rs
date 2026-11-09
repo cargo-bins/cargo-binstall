@@ -1,4 +1,3 @@
-use exn::{ErrorExt, ResultExt};
 use std::{
     borrow::Cow,
     path::Path,
@@ -7,6 +6,7 @@ use std::{
 
 use binstalk_downloader::remote::Method;
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning, Strategy};
+use exn::{ErrorExt, ResultExt};
 use tokio::sync::OnceCell;
 use tracing::{error, info, trace};
 use url::Url;

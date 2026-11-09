@@ -1,10 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use exn::{ErrorExt, ResultExt};
 use std::{path::Path, sync::Arc, time::Duration};
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::cargo_toml_binstall::{SigningAlgorithm, Strategy};
+use exn::{ErrorExt, ResultExt};
 use thiserror::Error as ThisError;
 use tokio::{sync::OnceCell, time::sleep};
 pub use url::ParseError as UrlParseError;
@@ -42,7 +42,7 @@ pub struct InvalidPkgFmtError {
 /// Error returned by [`Fetcher`].
 ///
 /// The underlying cause (e.g. [`DownloadError`](binstalk_downloader::download::DownloadError)
-/// or [`GhApiError`](binstalk_git_repo_api::gh_api_client::GhApiError)) is attached
+/// or [`GhApiError`]) is attached
 /// as a child frame of the [`exn::Exn`].
 #[derive(Debug, ThisError, miette::Diagnostic)]
 #[non_exhaustive]

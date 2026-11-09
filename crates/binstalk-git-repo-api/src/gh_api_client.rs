@@ -239,10 +239,7 @@ impl GhApiClient {
     }
 
     #[instrument(skip(self), ret(level = Level::DEBUG))]
-    pub async fn get_repo_info(
-        &self,
-        repo: &GhRepo,
-    ) -> exn::Result<Option<RepoInfo>, GhApiError> {
+    pub async fn get_repo_info(&self, repo: &GhRepo) -> exn::Result<Option<RepoInfo>, GhApiError> {
         match self
             .do_fetch(
                 repo_info::fetch_repo_info_graphql_api,
@@ -659,8 +656,7 @@ mod test {
                 loop {
                     match client.has_release_artifact(artifact.clone()).await {
                         Err(err) if err.rate_limit().is_some() => {
-                            sleep(err.rate_limit().flatten().unwrap_or(DEFAULT_RETRY_AFTER))
-                                .await
+                            sleep(err.rate_limit().flatten().unwrap_or(DEFAULT_RETRY_AFTER)).await
                         }
                         res => break res,
                     }
