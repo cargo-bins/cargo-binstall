@@ -38,7 +38,7 @@ impl LazyGhApiClient {
         }
     }
 
-    pub async fn get(&self) -> Result<&GhApiClient, BinstallError> {
+    pub async fn get(&self) -> exn::Result<&GhApiClient, BinstallError> {
         self.inner
             .get_or_try_init(|| async {
                 let task = self.task.lock().unwrap().take();

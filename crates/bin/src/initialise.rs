@@ -1,7 +1,8 @@
 use std::{borrow::Cow, env::var_os, fs, path::PathBuf};
 
-use binstalk::errors::BinstallError;
+use binstalk::errors::{BinstallError, BinstallReport};
 use binstalk_manifests::{cargo_config::Config as CargoConfig, crates_manifests::Manifests};
+use exn::ResultExt;
 use home::cargo_home;
 use miette::{bail, Result, WrapErr};
 use tempfile::TempDir;
@@ -22,7 +23,10 @@ pub(crate) struct Init {
 pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let (cargo_config, cargo_home) = if let Ok(home) = cargo_home() {
         (
-            Some(CargoConfig::load_from_path(home.join("config.toml"))?),
+            Some(
+                CargoConfig::load_from_path(home.join("config.toml"))
+                    .map_err(BinstallReport::from)?,
+            ),
             Some(home),
         )
     } else {
@@ -55,7 +59,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let (cargo_root, cargo_config) = if let Some(config) = cargo_config {
         (cargo_root, config)
     } else {
-        let config = CargoConfig::load_from_path(cargo_root.join("config.toml"))?;
+        let config = CargoConfig::load_from_path(cargo_root.join("config.toml"))
+            .map_err(BinstallReport::from)?;
         (
             match config
                 .install
@@ -123,11 +128,15 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
 
     let settings = settings.merge_args(args);
 
-    fs::create_dir_all(&cargo_root).map_err(BinstallError::Io)?;
-    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
+    fs::create_dir_all(&cargo_root)
+        .or_raise(|| BinstallError::Io)
+        .map_err(BinstallReport::from)?;
+    fs::create_dir_all(&install_path)
+        .or_raise(|| BinstallError::Io)
+        .map_err(BinstallReport::from)?;
 
     let manifests = if settings.track_installs && !custom_install_path {
-        Some(Manifests::open_exclusive(&cargo_root)?)
+        Some(Manifests::open_exclusive(&cargo_root).map_err(BinstallReport::from)?)
     } else {
         None
     };
@@ -140,7 +149,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let temp_dir = tempfile::Builder::new()
         .prefix("cargo-binstall")
         .tempdir_in(&cargo_root)
-        .map_err(BinstallError::from)
+        .or_raise(|| BinstallError::Io)
+        .map_err(BinstallReport::from)
         .wrap_err("Creating a temporary directory failed.")?;
 
     Ok(Init {

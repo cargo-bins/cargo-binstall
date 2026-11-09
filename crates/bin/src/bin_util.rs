@@ -3,7 +3,10 @@ use std::{
     time::Duration,
 };
 
-use binstalk::{errors::BinstallError, helpers::tasks::AutoAbortJoinHandle};
+use binstalk::{
+    errors::{BinstallError, BinstallReport},
+    helpers::tasks::AutoAbortJoinHandle,
+};
 use miette::Result;
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
@@ -12,7 +15,7 @@ use crate::signal::cancel_on_user_sig_term;
 
 pub enum MainExit {
     Success(Option<Duration>),
-    Error(BinstallError),
+    Error(BinstallReport),
     Report(miette::Report),
 }
 
@@ -27,7 +30,7 @@ impl Termination for MainExit {
             }
             Self::Error(err) => {
                 let code = err.exit_code();
-                let Some(report) = err.get_report() else {
+                let Some(report) = err.into_report() else {
                     warn!("Installation cancelled");
                     return code;
                 };
@@ -46,7 +49,7 @@ impl Termination for MainExit {
 impl MainExit {
     pub fn new(res: Result<()>, done: Option<Duration>) -> Self {
         res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
-            err.downcast::<BinstallError>()
+            err.downcast::<BinstallReport>()
                 .map(MainExit::Error)
                 .unwrap_or_else(MainExit::Report)
         })
@@ -61,11 +64,14 @@ impl MainExit {
 pub fn run_tokio_main(
     f: impl FnOnce() -> Result<Option<AutoAbortJoinHandle<Result<()>>>>,
 ) -> Result<()> {
-    let rt = Runtime::new().map_err(BinstallError::from)?;
+    let rt = Runtime::new()
+        .map_err(BinstallError::from_io)
+        .map_err(BinstallReport::from)?;
     let _guard = rt.enter();
 
     if let Some(handle) = f()? {
-        rt.block_on(cancel_on_user_sig_term(handle))?
+        rt.block_on(cancel_on_user_sig_term(handle))
+            .map_err(BinstallReport::from)?
     } else {
         Ok(())
     }

@@ -1,6 +1,7 @@
 use std::io;
 
 use binstalk::{errors::BinstallError, helpers::tasks::AutoAbortJoinHandle};
+use exn::{ErrorExt, ResultExt};
 use tokio::signal;
 
 /// This function will poll the handle while listening for ctrl_c,
@@ -14,15 +15,15 @@ use tokio::signal;
 /// signal handler, so be careful when using it.
 pub async fn cancel_on_user_sig_term<T>(
     handle: AutoAbortJoinHandle<T>,
-) -> Result<T, BinstallError> {
-    ignore_signals()?;
+) -> exn::Result<T, BinstallError> {
+    ignore_signals().or_raise(|| BinstallError::Io)?;
 
     tokio::select! {
         biased;
 
         res = wait_on_cancellation_signal() => {
-            res.map_err(BinstallError::Io)
-                .and(Err(BinstallError::UserAbort))
+            res.or_raise(|| BinstallError::Io)
+                .and(Err(BinstallError::UserAbort.raise()))
         }
         res = handle => res,
     }

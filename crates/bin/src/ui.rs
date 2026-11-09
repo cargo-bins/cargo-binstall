@@ -4,6 +4,7 @@ use std::{
 };
 
 use binstalk::errors::BinstallError;
+use exn::ErrorExt;
 use tokio::sync::oneshot;
 
 fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String, prompt: &str) -> io::Result<()> {
@@ -19,7 +20,7 @@ fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String, prompt: &str) -> i
     Ok(())
 }
 
-pub async fn confirm() -> Result<(), BinstallError> {
+pub async fn confirm() -> exn::Result<(), BinstallError> {
     let (tx, rx) = oneshot::channel();
 
     thread::spawn(move || {
@@ -32,7 +33,7 @@ pub async fn confirm() -> Result<(), BinstallError> {
     if rx.await.unwrap() {
         Ok(())
     } else {
-        Err(BinstallError::UserAbort)
+        Err(BinstallError::UserAbort.raise())
     }
 }
 
