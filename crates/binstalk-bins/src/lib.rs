@@ -1,6 +1,7 @@
+use exn::{ErrorExt, ResultExt};
 use std::{
     borrow::Cow,
-    fmt, io,
+    fmt,
     path::{self, Component, Path, PathBuf},
 };
 
@@ -15,6 +16,7 @@ use normalize_path::NormalizePath;
 use thiserror::Error as ThisError;
 use tracing::debug;
 
+/// The underlying cause is attached as a child frame of the [`exn::Exn`].
 #[derive(Debug, ThisError, Diagnostic)]
 pub enum Error {
     /// bin-dir configuration provided generates source path outside
@@ -37,12 +39,11 @@ pub enum Error {
     #[error("invalid bin name {0:?}: must be a plain file name")]
     InvalidBinName(CompactString),
 
-    #[error(transparent)]
-    Io(#[from] io::Error),
+    #[error("I/O Error")]
+    Io,
 
-    #[error("Failed to render template: {0}")]
-    #[diagnostic(transparent)]
-    TemplateRender(#[from] leon::RenderError),
+    #[error("Failed to render template")]
+    TemplateRender,
 }
 
 /// Return true if the path does not look outside of current dir
@@ -133,9 +134,9 @@ impl BinFile {
         base_name: &str,
         tt: &Template<'_>,
         no_symlinks: bool,
-    ) -> Result<Self, Error> {
+    ) -> exn::Result<Self, Error> {
         if !is_valid_bin_name(base_name) {
-            return Err(Error::InvalidBinName(base_name.into()));
+            return Err(Error::InvalidBinName(base_name.into()).raise());
         }
 
         let binary_ext = if data.target.contains("windows") {
@@ -163,16 +164,16 @@ impl BinFile {
         } else {
             // Generate install paths
             // Source path is the download dir + the generated binary path
-            let path = tt.render(&ctx)?;
+            let path = tt.render(&ctx).or_raise(|| Error::TemplateRender)?;
 
             let path_normalized = Path::new(&path).normalize();
 
             if path_normalized.components().next().is_none() {
-                return Err(Error::EmptySourceFilePath);
+                return Err(Error::EmptySourceFilePath.raise());
             }
 
             if !is_valid_path(&path_normalized) {
-                return Err(Error::InvalidSourceFilePath(path_normalized.into()));
+                return Err(Error::InvalidSourceFilePath(path_normalized.into()).raise());
             }
 
             (data.bin_path.join(&path_normalized), path_normalized)
@@ -238,29 +239,30 @@ impl BinFile {
     pub fn check_source_exists(
         &self,
         has_file: &mut dyn FnMut(&Path) -> bool,
-    ) -> Result<(), Error> {
+    ) -> exn::Result<(), Error> {
         if has_file(&self.archive_source_path) {
             Ok(())
         } else {
-            Err(Error::BinFileNotFound((&*self.source).into()))
+            Err(Error::BinFileNotFound((&*self.source).into()).raise())
         }
     }
 
-    fn pre_install_bin(&self) -> Result<(), Error> {
-        if !self.source.try_exists()? {
-            return Err(Error::BinFileNotFound((&*self.source).into()));
+    fn pre_install_bin(&self) -> exn::Result<(), Error> {
+        if !self.source.try_exists().or_raise(|| Error::Io)? {
+            return Err(Error::BinFileNotFound((&*self.source).into()).raise());
         }
 
         #[cfg(unix)]
         std::fs::set_permissions(
             &self.source,
             std::os::unix::fs::PermissionsExt::from_mode(0o755),
-        )?;
+        )
+        .or_raise(|| Error::Io)?;
 
         Ok(())
     }
 
-    pub fn install_bin(&self) -> Result<(), Error> {
+    pub fn install_bin(&self) -> exn::Result<(), Error> {
         self.pre_install_bin()?;
 
         debug!(
@@ -269,12 +271,12 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install(&self.source, &self.dest)?;
+        atomic_install(&self.source, &self.dest).or_raise(|| Error::Io)?;
 
         Ok(())
     }
 
-    pub fn install_bin_noclobber(&self) -> Result<(), Error> {
+    pub fn install_bin_noclobber(&self) -> exn::Result<(), Error> {
         self.pre_install_bin()?;
 
         debug!(
@@ -283,12 +285,12 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install_noclobber(&self.source, &self.dest)?;
+        atomic_install_noclobber(&self.source, &self.dest).or_raise(|| Error::Io)?;
 
         Ok(())
     }
 
-    pub fn install_link(&self) -> Result<(), Error> {
+    pub fn install_link(&self) -> exn::Result<(), Error> {
         if let Some(link) = &self.link {
             let dest = self.link_dest();
             debug!(
@@ -296,13 +298,13 @@ impl BinFile {
                 link.display(),
                 dest.display()
             );
-            atomic_symlink_file(dest, link)?;
+            atomic_symlink_file(dest, link).or_raise(|| Error::Io)?;
         }
 
         Ok(())
     }
 
-    pub fn install_link_noclobber(&self) -> Result<(), Error> {
+    pub fn install_link_noclobber(&self) -> exn::Result<(), Error> {
         if let Some(link) = &self.link {
             let dest = self.link_dest();
             debug!(
@@ -310,7 +312,7 @@ impl BinFile {
                 link.display(),
                 dest.display()
             );
-            atomic_symlink_file_noclobber(dest, link)?;
+            atomic_symlink_file_noclobber(dest, link).or_raise(|| Error::Io)?;
         }
 
         Ok(())

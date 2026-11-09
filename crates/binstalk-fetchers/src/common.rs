@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use exn::{ErrorExt, OptionExt, ResultExt};
 use std::{
     future::Future,
     sync::{
@@ -30,30 +31,29 @@ static WARN_UNAUTHORIZED_ONCE: Once = Once::new();
 pub(super) async fn get_gh_release_artifact_url(
     gh_api_client: GhApiClient,
     artifact: GhReleaseArtifact,
-) -> Result<Option<GhReleaseArtifactUrl>, GhApiError> {
+) -> exn::Result<Option<GhReleaseArtifactUrl>, GhApiError> {
     debug!("Using GitHub API to check for existence of artifact, which will also cache the API response");
 
     // The future returned has the same size as a pointer
     match gh_api_client.has_release_artifact(artifact).await {
         Ok(ret) => Ok(ret),
-        Err(GhApiError::NotFound) => Ok(None),
+        Err(err) if err.is_not_found() => Ok(None),
 
-        Err(GhApiError::RateLimit { retry_after }) => {
-            WARN_RATE_LIMIT_ONCE.call_once(|| {
-                warn!("Your GitHub API token (if any) has reached its rate limit and cannot be used again until {retry_after:?}, so we will fallback to HEAD/GET on the url.");
-                warn!("If you did not supply a github token, consider doing so: GitHub limits unauthorized users to 60 requests per hour per origin IP address.");
-            });
-            Err(GhApiError::RateLimit { retry_after })
-        }
-        Err(GhApiError::Unauthorized) => {
-            WARN_UNAUTHORIZED_ONCE.call_once(|| {
-                warn!("GitHub API somehow requires a token for the API access, so we will fallback to HEAD/GET on the url.");
-                warn!("Please consider supplying a token to cargo-binstall to speedup resolution.");
-            });
-            Err(GhApiError::Unauthorized)
-        }
+        Err(err) => {
+            if let Some(retry_after) = err.rate_limit() {
+                WARN_RATE_LIMIT_ONCE.call_once(|| {
+                    warn!("Your GitHub API token (if any) has reached its rate limit and cannot be used again until {retry_after:?}, so we will fallback to HEAD/GET on the url.");
+                    warn!("If you did not supply a github token, consider doing so: GitHub limits unauthorized users to 60 requests per hour per origin IP address.");
+                });
+            } else if err.is_unauthorized() {
+                WARN_UNAUTHORIZED_ONCE.call_once(|| {
+                    warn!("GitHub API somehow requires a token for the API access, so we will fallback to HEAD/GET on the url.");
+                    warn!("Please consider supplying a token to cargo-binstall to speedup resolution.");
+                });
+            }
 
-        Err(err) => Err(err),
+            Err(err)
+        }
     }
 }
 
@@ -67,7 +67,7 @@ pub(super) async fn does_url_exist(
     client: Client,
     gh_api_client: GhApiClient,
     url: &Url,
-) -> Result<bool, FetchError> {
+) -> exn::Result<bool, FetchError> {
     static GH_API_CLIENT_FAILED: AtomicBool = AtomicBool::new(false);
 
     debug!("Checking for package at: '{url}'");
@@ -77,16 +77,18 @@ pub(super) async fn does_url_exist(
             match get_gh_release_artifact_url(gh_api_client, artifact).await {
                 Ok(ret) => return Ok(ret.is_some()),
 
-                Err(GhApiError::RateLimit { .. }) | Err(GhApiError::Unauthorized) => {}
+                Err(err) if err.rate_limit().is_some() || err.is_unauthorized() => {}
 
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(err.raise(FetchError::GhApi)),
             }
 
             GH_API_CLIENT_FAILED.store(true, Relaxed);
         }
     }
 
-    Ok(Box::pin(client.remote_gettable(url.clone())).await?)
+    Box::pin(client.remote_gettable(url.clone()))
+        .await
+        .or_raise(|| FetchError::Download)
 }
 
 #[derive(Debug)]
@@ -110,11 +112,8 @@ impl<T> Drop for AutoAbortJoinHandle<T> {
     }
 }
 
-impl<T, E> AutoAbortJoinHandle<Result<T, E>>
-where
-    E: Into<FetchError>,
-{
-    pub(super) async fn flattened_join(mut self) -> Result<T, FetchError> {
-        (&mut self.0).await?.map_err(Into::into)
+impl<T> AutoAbortJoinHandle<exn::Result<T, FetchError>> {
+    pub(super) async fn flattened_join(mut self) -> exn::Result<T, FetchError> {
+        (&mut self.0).await.or_raise(|| FetchError::TaskJoinError)?
     }
 }

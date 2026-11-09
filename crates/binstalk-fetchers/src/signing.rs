@@ -1,6 +1,7 @@
 use binstalk_downloader::download::DataVerifier;
 use binstalk_types::cargo_toml_binstall::{PkgSigning, SigningAlgorithm};
 use bytes::Bytes;
+use exn::ErrorExt;
 use minisign_verify::{PublicKey, Signature, StreamVerifier};
 use tracing::{error, trace};
 
@@ -12,16 +13,16 @@ pub enum SignatureVerifier {
 }
 
 impl SignatureVerifier {
-    pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self, FetchError> {
+    pub fn new(config: &PkgSigning, signature: &[u8]) -> exn::Result<Self, FetchError> {
         match config.algorithm {
             SigningAlgorithm::Minisign => MinisignVerifier::new(config, signature)
                 .map(Box::new)
                 .map(Self::Minisign),
-            algorithm => Err(FetchError::UnsupportedSigningAlgorithm(algorithm)),
+            algorithm => Err(FetchError::UnsupportedSigningAlgorithm(algorithm).raise()),
         }
     }
 
-    pub fn data_verifier(&self) -> Result<Box<dyn DataVerifier + '_>, FetchError> {
+    pub fn data_verifier(&self) -> exn::Result<Box<dyn DataVerifier + '_>, FetchError> {
         match self {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
@@ -42,7 +43,7 @@ pub struct MinisignVerifier {
 }
 
 impl MinisignVerifier {
-    pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self, FetchError> {
+    pub fn new(config: &PkgSigning, signature: &[u8]) -> exn::Result<Self, FetchError> {
         trace!(key=?config.pubkey, "parsing public key");
         let pubkey = PublicKey::from_base64(&config.pubkey).map_err(|err| {
             error!("Package public key is invalid: {err}");
@@ -62,13 +63,13 @@ impl MinisignVerifier {
         Ok(Self { pubkey, signature })
     }
 
-    pub fn data_verifier(&self) -> Result<Box<dyn DataVerifier + '_>, FetchError> {
+    pub fn data_verifier(&self) -> exn::Result<Box<dyn DataVerifier + '_>, FetchError> {
         self.pubkey
             .verify_stream(&self.signature)
             .map(|vs| Box::new(MinisignDataVerifier(vs)) as _)
             .map_err(|err| {
                 error!("Failed to setup stream verifier: {err}");
-                FetchError::InvalidSignature
+                FetchError::InvalidSignature.raise()
             })
     }
 }
