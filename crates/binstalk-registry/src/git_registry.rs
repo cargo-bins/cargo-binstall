@@ -4,7 +4,6 @@ use binstalk_downloader::remote::Client;
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
-use exn::{ErrorExt, Exn, OptionExt, ResultExt};
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
 use serde_json::{from_slice as json_from_slice, Deserializer as JsonDeserializer};
@@ -14,9 +13,14 @@ use tokio::task::spawn_blocking;
 use tracing::instrument;
 use url::Url;
 
+use binstalk_types::{
+    errors::{bail, Exn, OptionExt, Result, ResultExt},
+    message,
+};
+
 use crate::{
-    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryAuth,
-    RegistryConfig, RegistryError,
+    crate_prefix_components, not_found, parse_manifest, render_dl_template, MatchedVersion,
+    RegistryAuth, RegistryConfig,
 };
 
 #[derive(Debug)]
@@ -27,29 +31,25 @@ struct GitIndex {
 }
 
 impl GitIndex {
-    fn new(
-        url: GitUrl,
-        cancellation_token: GitCancellationToken,
-    ) -> exn::Result<Self, RegistryError> {
-        let tempdir = TempDir::new().or_raise(|| RegistryError::Io)?;
+    fn new(url: GitUrl, cancellation_token: GitCancellationToken) -> Result<Self> {
+        let tempdir = TempDir::new()?;
 
         let repo =
             Repository::shallow_clone_bare(url.clone(), tempdir.as_ref(), Some(cancellation_token))
-                .or_raise(|| RegistryError::GitError)?;
+                .or_raise(|| message!("Failed to shallow clone git repository"))?;
 
         let config: RegistryConfig = {
             let config = repo
                 .get_head_commit_entry_data_by_path("config.json")
-                .or_raise(|| RegistryError::GitError)?
+                .or_raise(|| message!("Failed to shallow clone git repository"))?
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
                         format!("config.json not found in repository `{url}`"),
                     )
-                })
-                .or_raise(|| RegistryError::Io)?;
+                })?;
 
-            json_from_slice(&config).or_raise(|| RegistryError::Json)?
+            json_from_slice(&config)?
         };
 
         Ok(Self {
@@ -87,7 +87,7 @@ impl GitRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
-    ) -> exn::Result<MatchedVersion, RegistryError> {
+    ) -> Result<MatchedVersion> {
         let mut path = PathBuf::with_capacity(128);
         path.push(&**c1);
         if let Some(c2) = c2 {
@@ -97,8 +97,8 @@ impl GitRegistry {
         path.push(&*crate_name.to_lowercase());
         let crate_versions = repo
             .get_head_commit_entry_data_by_path(path)
-            .or_raise(|| RegistryError::GitError)?
-            .ok_or_raise(|| RegistryError::NotFound(crate_name.into()))?;
+            .or_raise(|| message!("Failed to shallow clone git repository"))?
+            .ok_or_raise(|| not_found(crate_name))?;
 
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&crate_versions).into_iter(),
@@ -118,7 +118,7 @@ impl GitRegistry {
         auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
-    ) -> exn::Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>)> {
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
         let version_req = version_req.clone();
@@ -147,21 +147,18 @@ impl GitRegistry {
                 &crate_prefix,
                 &matched_version,
             )?)
-            .or_raise(|| RegistryError::UrlParse)?;
+            .or_raise(|| message!("Failed to parse url"))?;
 
-            Ok::<_, Exn<RegistryError>>((matched_version, url, config.auth_required))
+            Ok::<_, Exn>((matched_version, url, config.auth_required))
         })
-        .await
-        .or_raise(|| RegistryError::TaskJoinError)??;
+        .await??;
 
         // Git operation done, disarm it
         cancel_on_drop.disarm();
 
         let auth = if auth_required {
             let Some(auth) = auth else {
-                return Err(
-                    RegistryError::AuthenticationRequired(Box::new(dl_url.clone())).raise(),
-                );
+                bail!(crate::auth_required(&dl_url));
             };
 
             Some(auth)

@@ -9,7 +9,6 @@ use binstalk_downloader::{
 use binstalk_types::cargo_toml_binstall::{Meta, TarBasedFmt};
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{format_compact, CompactString, ToCompactString};
-use exn::{ErrorExt, OptionExt, ResultExt};
 use leon::{Template, Values};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
@@ -17,7 +16,12 @@ use serde_json::Error as JsonError;
 use sha2::{Digest, Sha256};
 use tracing::{debug, instrument};
 
-use crate::{visitor::ManifestVisitor, RegistryAuth, RegistryError};
+use binstalk_types::{
+    errors::{bail, OptionExt, Result, ResultExt},
+    message,
+};
+
+use crate::{not_found, visitor::ManifestVisitor, RegistryAuth};
 
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct RegistryConfig {
@@ -70,31 +74,29 @@ pub(super) async fn parse_manifest(
     crate_url: Url,
     MatchedVersion { version, cksum, .. }: MatchedVersion,
     auth: Option<&RegistryAuth>,
-) -> exn::Result<Manifest<Meta>, RegistryError> {
+) -> Result<Manifest<Meta>> {
     debug!("Fetching crate from: {crate_url} and extracting Cargo.toml from it");
 
     let mut manifest_visitor = ManifestVisitor::new(format!("{crate_name}-{version}").into());
 
-    let checksum = decode_base16(cksum.as_bytes()).or_raise(|| RegistryError::InvalidHex)?;
+    let checksum = decode_base16(cksum.as_bytes())
+        .or_raise(|| message!("Failed to parse checksum encoded in hex"))?;
     let mut digest = Sha256Digest::new(checksum);
 
     Download::from_response_with_data_verifier(
-        apply_auth(client.get(crate_url), auth)
-            .send(true)
-            .await
-            .or_raise(|| RegistryError::Remote)?,
+        apply_auth(client.get(crate_url), auth).send(true).await?,
         &mut digest,
     )
     .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
     .await
-    .or_raise(|| RegistryError::Download)?;
+    .or_raise(|| message!("Failed to download crate"))?;
 
     if !digest.validate() {
-        Err(RegistryError::UnmatchedChecksum {
-            expected: encode_base16(digest.expected.as_slice()).into(),
-            actual: encode_base16(digest.actual.unwrap().as_slice()).into(),
-        }
-        .raise())
+        bail!(message!(
+            "Expected checksum `{}`, actual checksum `{}`",
+            encode_base16(digest.expected.as_slice()),
+            encode_base16(digest.actual.unwrap().as_slice())
+        ))
     } else {
         manifest_visitor.load_manifest()
     }
@@ -111,11 +113,11 @@ pub(super) fn apply_auth(request: RequestBuilder, auth: Option<&RegistryAuth>) -
 /// Return components of crate prefix
 pub(super) fn crate_prefix_components(
     crate_name: &str,
-) -> exn::Result<(CompactString, Option<CompactString>), RegistryError> {
+) -> Result<(CompactString, Option<CompactString>)> {
     let mut chars = crate_name.chars();
 
     match (chars.next(), chars.next(), chars.next(), chars.next()) {
-        (None, None, None, None) => Err(RegistryError::NotFound(crate_name.into()).raise()),
+        (None, None, None, None) => bail!(not_found(crate_name)),
         (Some(_), None, None, None) => Ok((CompactString::const_new("1"), None)),
         (Some(_), Some(_), None, None) => Ok((CompactString::const_new("2"), None)),
         (Some(ch), Some(_), Some(_), None) => Ok((
@@ -135,8 +137,9 @@ pub(super) fn render_dl_template(
     crate_name: &str,
     (c1, c2): &(CompactString, Option<CompactString>),
     MatchedVersion { version, cksum, .. }: &MatchedVersion,
-) -> exn::Result<String, RegistryError> {
-    let template = Template::parse(dl_template).or_raise(|| RegistryError::ParseDlConfig)?;
+) -> Result<String> {
+    let template =
+        Template::parse(dl_template).or_raise(|| message!("Failed to parse dl config"))?;
     if template.keys().next().is_some() {
         let mut crate_prefix = c1.clone();
         if let Some(c2) = c2 {
@@ -171,7 +174,7 @@ pub(super) fn render_dl_template(
                 version,
                 cksum,
             })
-            .or_raise(|| RegistryError::RenderDlConfig)?)
+            .or_raise(|| message!("Failed to render dl config"))?)
     } else {
         Ok(format!("{dl_template}/{crate_name}/{version}/download"))
     }
@@ -197,11 +200,11 @@ impl MatchedVersion {
     pub(super) fn find(
         it: &mut dyn Iterator<Item = Result<RegistryIndexEntry, JsonError>>,
         version_req: &VersionReq,
-    ) -> exn::Result<Self, RegistryError> {
+    ) -> Result<Self> {
         let mut ret = Option::<(Self, Version)>::None;
 
         for res in it {
-            let entry = res.or_raise(|| RegistryError::Json)?;
+            let entry = res?;
 
             if entry.yanked {
                 continue;
@@ -235,9 +238,7 @@ impl MatchedVersion {
         }
 
         ret.map(|(num, _)| num)
-            .ok_or_raise(|| RegistryError::VersionMismatch {
-                req: version_req.clone(),
-            })
+            .ok_or_raise(|| message!("no version matching requirement '{version_req}'"))
     }
 }
 

@@ -1,9 +1,10 @@
 use std::{collections::BTreeMap, fs, io::Seek, path::Path};
 
-use exn::ResultExt;
+use binstalk_types::{
+    errors::{Result, ResultExt},
+    message,
+};
 use fs_lock::FileLock;
-use miette::Diagnostic;
-use thiserror::Error as ThisError;
 
 use crate::{
     binstall_crates_v1::Records as BinstallCratesV1Records,
@@ -12,19 +13,6 @@ use crate::{
     helpers::create_if_not_exist,
     CompactString, Version,
 };
-
-#[derive(Debug, Diagnostic, ThisError)]
-#[non_exhaustive]
-pub enum ManifestsError {
-    #[error("failed to parse binstall crates-v1 manifest")]
-    BinstallCratesV1,
-
-    #[error("failed to parse cargo v1 manifest")]
-    CargoManifestV1,
-
-    #[error("I/O error")]
-    Io,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InstalledMethod {
@@ -55,26 +43,25 @@ pub struct Manifests {
 }
 
 impl Manifests {
-    pub fn open_exclusive(cargo_roots: &Path) -> exn::Result<Self, ManifestsError> {
+    pub fn open_exclusive(cargo_roots: &Path) -> Result<Self> {
         // Read cargo_binstall_metadata
         let binstall_dir = cargo_roots.join("binstall");
-        fs::create_dir_all(&binstall_dir).or_raise(|| ManifestsError::Io)?;
+        fs::create_dir_all(&binstall_dir)?;
 
         let metadata_path = binstall_dir.join("crates-v1.json");
 
         let binstall = BinstallCratesV1Records::load_from_path(&metadata_path)
-            .or_raise(|| ManifestsError::BinstallCratesV1)?;
+            .or_raise(|| message!("failed to parse binstall crates-v1 manifest"))?;
 
         // Read cargo_install_v1_metadata
         let manifest_path = cargo_roots.join(".crates.toml");
 
-        let mut cargo_crates_v1 =
-            create_if_not_exist(&manifest_path).or_raise(|| ManifestsError::Io)?;
+        let mut cargo_crates_v1 = create_if_not_exist(&manifest_path)?;
 
         let (installed_crates, installed_crates_details) =
             CratesToml::load_from_reader(&mut cargo_crates_v1)
                 .and_then(CratesToml::collect_into_crates_details)
-                .or_raise(|| ManifestsError::CargoManifestV1)?;
+                .or_raise(|| message!("failed to parse cargo v1 manifest"))?;
 
         Ok(Self {
             binstall,
@@ -84,10 +71,8 @@ impl Manifests {
         })
     }
 
-    fn rewind_cargo_crates_v1(&mut self) -> exn::Result<(), ManifestsError> {
-        self.cargo_crates_v1
-            .rewind()
-            .or_raise(|| ManifestsError::Io)
+    fn rewind_cargo_crates_v1(&mut self) -> Result<()> {
+        Ok(self.cargo_crates_v1.rewind()?)
     }
 
     /// `cargo-uninstall` can be called to uninstall crates,
@@ -129,7 +114,7 @@ impl Manifests {
             .collect()
     }
 
-    pub fn prune_stale(mut self) -> exn::Result<Vec<CompactString>, ManifestsError> {
+    pub fn prune_stale(mut self) -> Result<Vec<CompactString>> {
         let mut pruned = Vec::new();
         let installed = &self.installed_crates;
 
@@ -145,17 +130,17 @@ impl Manifests {
         if !pruned.is_empty() {
             self.binstall
                 .overwrite()
-                .or_raise(|| ManifestsError::BinstallCratesV1)?;
+                .or_raise(|| message!("failed to parse binstall crates-v1 manifest"))?;
         }
 
         Ok(pruned)
     }
 
-    pub fn update(mut self, metadata_vec: Vec<CrateInfo>) -> exn::Result<(), ManifestsError> {
+    pub fn update(mut self, metadata_vec: Vec<CrateInfo>) -> Result<()> {
         self.rewind_cargo_crates_v1()?;
 
         CratesToml::append_to_file(&mut self.cargo_crates_v1, &metadata_vec)
-            .or_raise(|| ManifestsError::CargoManifestV1)?;
+            .or_raise(|| message!("failed to parse cargo v1 manifest"))?;
 
         // Automatically prune uninstalled and version-drifted records
         let installed = &self.installed_crates;
@@ -168,7 +153,7 @@ impl Manifests {
         }
         self.binstall
             .overwrite()
-            .or_raise(|| ManifestsError::BinstallCratesV1)?;
+            .or_raise(|| message!("failed to parse binstall crates-v1 manifest"))?;
 
         Ok(())
     }

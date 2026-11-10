@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fmt::Debug, io, path::Path, pin::Pin};
 
 use async_compression::tokio::bufread;
+use binstalk_types::errors::{from_io, into_io, Result};
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use tokio::io::{copy, sink, AsyncRead};
@@ -8,10 +9,7 @@ use tokio_tar::{Archive, Entry, EntryType};
 use tokio_util::io::StreamReader;
 use tracing::debug;
 
-use super::{
-    DownloadError,
-    TarBasedFmt::{self, *},
-};
+use super::TarBasedFmt::{self, *};
 
 pub trait TarEntry: AsyncRead + Send + Sync + Unpin + Debug {
     /// Returns the path name for this entry.
@@ -85,20 +83,20 @@ pub enum TarEntryType {
 #[async_trait::async_trait]
 pub trait TarEntriesVisitor: Send + Sync {
     /// Will be called once per entry
-    async fn visit(&mut self, entry: &mut dyn TarEntry) -> exn::Result<(), DownloadError>;
+    async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<()>;
 }
 
 pub(crate) async fn extract_tar_based_stream_and_visit<S>(
     stream: S,
     fmt: TarBasedFmt,
     visitor: &mut dyn TarEntriesVisitor,
-) -> exn::Result<(), DownloadError>
+) -> Result<()>
 where
-    S: Stream<Item = exn::Result<Bytes, DownloadError>> + Send + Sync,
+    S: Stream<Item = Result<Bytes>> + Send + Sync,
 {
     debug!("Extracting from {fmt} archive to process it in memory");
 
-    let reader = StreamReader::new(stream.map(|res| res.map_err(DownloadError::into_io)));
+    let reader = StreamReader::new(stream.map(|res| res.map_err(into_io)));
     let decoder: Pin<Box<dyn AsyncRead + Send + Sync>> = match fmt {
         Tar => Box::pin(reader),
         Tbz2 => Box::pin(bufread::BzDecoder::new(reader)),
@@ -108,19 +106,17 @@ where
     };
 
     let mut tar = Archive::new(decoder);
-    let mut entries = tar.entries().map_err(|err| DownloadError::from_io(err))?;
+    let mut entries = tar.entries().map_err(from_io)?;
 
     let mut sink = sink();
 
     while let Some(res) = entries.next().await {
-        let mut entry = res.map_err(|err| DownloadError::from_io(err))?;
+        let mut entry = res.map_err(from_io)?;
         visitor.visit(&mut entry).await?;
 
         // Consume all remaining data so that next iteration would work fine
         // instead of reading the data of previous entry.
-        copy(&mut entry, &mut sink)
-            .await
-            .map_err(|err| DownloadError::from_io(err))?;
+        copy(&mut entry, &mut sink).await.map_err(from_io)?;
     }
 
     Ok(())

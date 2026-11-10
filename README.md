@@ -205,7 +205,7 @@ malicious!
 ### What do the error codes mean?
 
 You can find a full description of errors including exit codes here:
-<https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
+<https://docs.rs/binstalk/latest/binstalk/errors/enum.Exit.html>
 
 ### Are debug symbols available?
 

@@ -1,39 +1,17 @@
 use std::{error, fmt, time::Duration};
 
-#[allow(unused_imports)] // used in docs
-use binstalk_downloader::remote;
-use compact_str::{CompactString, ToCompactString};
-use exn::{ErrorExt, Exn};
+use binstalk_types::errors::{find, ErrorExt, Exn};
+use compact_str::CompactString;
 use serde::{de::Deserializer, Deserialize};
 use thiserror::Error as ThisError;
 
-/// Error returned by [`GhApiClient`](super::GhApiClient).
+/// The kinds of [`GhApiClient`](super::GhApiClient) errors that callers can
+/// recover from.
 ///
-/// The underlying cause (e.g. [`remote::Error`] or [`GhGraphQLErrors`]) is
-/// attached as a child frame of the [`Exn`].
-///
-/// [`GhApiError::RateLimit`], [`GhApiError::NotFound`] and
-/// [`GhApiError::Unauthorized`] are always kept at the root of the [`Exn`],
-/// so callers can match on them via `Deref`.
+/// Find them anywhere in an error tree with [`GhApiErrorExt`].
 #[derive(ThisError, Debug)]
 #[non_exhaustive]
 pub enum GhApiError {
-    #[error("IO Error")]
-    Io,
-
-    #[error("Remote Error")]
-    Remote,
-
-    #[error("Failed to parse url")]
-    InvalidUrl,
-
-    /// Context the error is about, e.g. which API was used.
-    #[error("Context: '{0}'")]
-    Context(CompactString),
-
-    #[error("Remote failed to process GraphQL query")]
-    GraphQLErrors,
-
     #[error("Hit rate-limit, retry after {retry_after:?}")]
     RateLimit { retry_after: Option<Duration> },
 
@@ -44,50 +22,47 @@ pub enum GhApiError {
     Unauthorized,
 }
 
-impl GhApiError {
+/// Classify an error tree returned by [`GhApiClient`](super::GhApiClient).
+pub trait GhApiErrorExt {
+    /// The first [`GhApiError`] in the tree, if any.
+    fn gh_api_error(&self) -> Option<&GhApiError>;
+
     /// Returns `Some(retry_after)` if this is [`GhApiError::RateLimit`].
-    pub fn rate_limit(&self) -> Option<Option<Duration>> {
-        match self {
-            Self::RateLimit { retry_after } => Some(*retry_after),
+    fn rate_limit(&self) -> Option<Option<Duration>> {
+        match self.gh_api_error()? {
+            GhApiError::RateLimit { retry_after } => Some(*retry_after),
             _ => None,
         }
     }
 
     /// Returns true if this is [`GhApiError::NotFound`].
-    pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound)
+    fn is_not_found(&self) -> bool {
+        matches!(self.gh_api_error(), Some(GhApiError::NotFound))
     }
 
     /// Returns true if this is [`GhApiError::Unauthorized`].
-    pub fn is_unauthorized(&self) -> bool {
-        matches!(self, Self::Unauthorized)
+    fn is_unauthorized(&self) -> bool {
+        matches!(self.gh_api_error(), Some(GhApiError::Unauthorized))
     }
+}
 
-    /// Attach context to `err`, unless it is one of the variants that callers
-    /// use for recovery, which must stay at the root of the [`Exn`].
-    #[track_caller]
-    pub fn context(err: Exn<Self>, context: impl fmt::Display) -> Exn<Self> {
-        use GhApiError::*;
-
-        if matches!(&*err, RateLimit { .. } | NotFound | Unauthorized) {
-            err
-        } else {
-            err.raise(Context(context.to_compact_string()))
-        }
+impl GhApiErrorExt for Exn {
+    fn gh_api_error(&self) -> Option<&GhApiError> {
+        find(self.frame())
     }
 }
 
 impl GhGraphQLErrors {
-    /// Classify the errors into [`GhApiError`], keeping `self` as the cause
-    /// unless it is a rate-limit or not-found error.
+    /// Classify the errors, keeping `self` as the cause unless it is a
+    /// rate-limit or not-found error.
     #[track_caller]
-    pub(super) fn classify(self) -> Exn<GhApiError> {
+    pub(super) fn classify(self) -> Exn {
         if self.is_rate_limited() {
-            GhApiError::RateLimit { retry_after: None }.raise()
+            GhApiError::RateLimit { retry_after: None }.raise().into()
         } else if self.is_not_found_error() {
-            GhApiError::NotFound.raise()
+            GhApiError::NotFound.raise().into()
         } else {
-            self.raise().raise(GhApiError::GraphQLErrors)
+            self.raise().into()
         }
     }
 }

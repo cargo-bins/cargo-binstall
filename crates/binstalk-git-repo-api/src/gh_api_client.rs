@@ -10,8 +10,11 @@ use std::{
 };
 
 use binstalk_downloader::{download::Download, remote};
+use binstalk_types::{
+    errors::{bail, Result, ResultExt},
+    message,
+};
 use compact_str::{format_compact, CompactString, ToCompactString};
-use exn::ResultExt;
 use tokio::sync::OnceCell;
 use tracing::{instrument, warn, Level};
 use url::Url;
@@ -23,7 +26,7 @@ mod release_artifacts;
 mod repo_info;
 
 use common::{check_http_status_and_header, percent_decode_http_url_path};
-pub use error::{GhApiError, GhGraphQLErrors};
+pub use error::{GhApiError, GhApiErrorExt, GhGraphQLErrors};
 pub use repo_info::RepoInfo;
 
 /// default retry duration if x-ratelimit-reset is not found in response header
@@ -179,12 +182,12 @@ impl GhApiClient {
 }
 
 impl GhApiClient {
-    fn check_retry_after(&self) -> exn::Result<(), GhApiError> {
+    fn check_retry_after(&self) -> Result<()> {
         let mut guard = self.0.retry_after.lock().unwrap();
 
         if let Some(retry_after) = *guard {
             if retry_after.elapsed().is_zero() {
-                exn::bail!(GhApiError::RateLimit {
+                bail!(GhApiError::RateLimit {
                     retry_after: Some(retry_after - Instant::now()),
                 });
             } else {
@@ -213,12 +216,12 @@ impl GhApiClient {
         graphql_func: GraphQLFn,
         restful_func: RestfulFn,
         data: &T,
-    ) -> exn::Result<U, GhApiError>
+    ) -> Result<U>
     where
         GraphQLFn: Fn(&remote::Client, &T, &str) -> GraphQLFut,
         RestfulFn: Fn(&remote::Client, &T, Option<&str>) -> RestfulFut,
-        GraphQLFut: Future<Output = exn::Result<U, GhApiError>> + Send + 'static,
-        RestfulFut: Future<Output = exn::Result<U, GhApiError>> + Send + 'static,
+        GraphQLFut: Future<Output = Result<U>> + Send + 'static,
+        RestfulFut: Future<Output = Result<U>> + Send + 'static,
     {
         self.check_retry_after()?;
 
@@ -228,18 +231,18 @@ impl GhApiClient {
                     Err(err) if err.is_unauthorized() => {
                         self.0.is_auth_token_valid.store(false, Relaxed);
                     }
-                    res => return res.map_err(|err| GhApiError::context(err, "GraphQL API")),
+                    res => return res.or_raise(|| message!("GraphQL API")),
                 }
             }
         }
 
         restful_func(&self.0.client, data, self.get_auth_token())
             .await
-            .map_err(|err| GhApiError::context(err, "Restful API"))
+            .or_raise(|| message!("Restful API"))
     }
 
     #[instrument(skip(self), ret(level = Level::DEBUG))]
-    pub async fn get_repo_info(&self, repo: &GhRepo) -> exn::Result<Option<RepoInfo>, GhApiError> {
+    pub async fn get_repo_info(&self, repo: &GhRepo) -> Result<Option<RepoInfo>> {
         match self
             .do_fetch(
                 repo_info::fetch_repo_info_graphql_api,
@@ -271,7 +274,7 @@ impl GhApiClient {
             release,
             artifact_name,
         }: GhReleaseArtifact,
-    ) -> exn::Result<Option<GhReleaseArtifactUrl>, GhApiError> {
+    ) -> Result<Option<GhReleaseArtifactUrl>> {
         let once_cell = self.0.release_artifacts.get(release.clone());
         let res = once_cell
             .get_or_try_init(|| {
@@ -311,11 +314,11 @@ impl GhApiClient {
     pub async fn download_artifact(
         &self,
         artifact_url: GhReleaseArtifactUrl,
-    ) -> exn::Result<Download<'static>, GhApiError> {
+    ) -> Result<Download<'static>> {
         self.check_retry_after()?;
 
         let Some(auth_token) = self.get_auth_token() else {
-            exn::bail!(GhApiError::Unauthorized);
+            bail!(GhApiError::Unauthorized);
         };
 
         let response = self
@@ -325,8 +328,7 @@ impl GhApiClient {
             .header("Accept", "application/octet-stream")
             .bearer_auth(&auth_token)
             .send(false)
-            .await
-            .or_raise(|| GhApiError::Remote)?;
+            .await?;
 
         match check_http_status_and_header(response) {
             Err(err) if err.is_unauthorized() => {
@@ -652,7 +654,7 @@ mod test {
             async fn has_release_artifact(
                 client: &GhApiClient,
                 artifact: &GhReleaseArtifact,
-            ) -> exn::Result<Option<GhReleaseArtifactUrl>, GhApiError> {
+            ) -> Result<Option<GhReleaseArtifactUrl>> {
                 loop {
                     match client.has_release_artifact(artifact.clone()).await {
                         Err(err) if err.rate_limit().is_some() => {

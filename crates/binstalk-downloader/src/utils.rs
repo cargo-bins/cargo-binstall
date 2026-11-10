@@ -3,33 +3,27 @@ use std::{
     io::{self, BufRead, Read},
 };
 
+use binstalk_types::errors::{from_io, Exn, Result};
 use bytes::{Buf, Bytes};
-use exn::Exn;
 use futures_util::{FutureExt, Stream, StreamExt};
 use tokio::{sync::mpsc, task};
 
-use crate::download::DownloadError;
-
-/// Errors returned by `f` are recovered with [`DownloadError::from_io`], so `f`
-/// may use [`DownloadError::into_io`] to propagate an [`Exn<DownloadError>`].
+/// Errors returned by `f` are recovered with [`from_io`], so `f`
+/// may use [`into_io`] to propagate an [`Exn`].
 pub(super) fn extract_with_blocking_task<S, F, T>(
     stream: S,
     f: F,
-) -> impl Future<Output = exn::Result<T, DownloadError>>
+) -> impl Future<Output = Result<T>>
 where
     T: Send + 'static,
-    S: Stream<Item = exn::Result<Bytes, DownloadError>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
 {
-    async fn inner<S, Fut, T>(
-        mut stream: S,
-        task: Fut,
-        tx: mpsc::Sender<Bytes>,
-    ) -> exn::Result<T, DownloadError>
+    async fn inner<S, Fut, T>(mut stream: S, task: Fut, tx: mpsc::Sender<Bytes>) -> Result<T>
     where
         // We do not use trait object for S since there will only be one
         // S used with this function.
-        S: Stream<Item = exn::Result<Bytes, DownloadError>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes>> + Send + Sync + Unpin,
         // asyncify would always return the same future, so no need to
         // use trait object here.
         Fut: Future<Output = io::Result<T>> + Send + Sync,
@@ -55,11 +49,11 @@ where
                 }
             }
 
-            Ok::<_, Exn<DownloadError>>(())
+            Ok::<_, Exn>(())
         };
         tokio::pin!(read_fut);
 
-        let task_fut = async move { task.await.map_err(|err| DownloadError::from_io(err)) };
+        let task_fut = async move { task.await.map_err(from_io) };
         tokio::pin!(task_fut);
 
         tokio::select! {

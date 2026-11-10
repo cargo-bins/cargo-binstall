@@ -1,14 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use binstalk_downloader::download::{DownloadError, TarEntriesVisitor, TarEntry};
+use binstalk_downloader::download::{TarEntriesVisitor, TarEntry};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::{Manifest, Value};
-use exn::ResultExt;
 use normalize_path::NormalizePath;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
-use crate::{vfs::Vfs, RegistryError};
+use binstalk_types::errors::{Result, ResultExt};
+
+use crate::{cargo_manifest_error, vfs::Vfs};
 
 #[derive(Debug)]
 pub(super) struct ManifestVisitor {
@@ -32,8 +33,8 @@ impl ManifestVisitor {
 
 #[async_trait::async_trait]
 impl TarEntriesVisitor for ManifestVisitor {
-    async fn visit(&mut self, entry: &mut dyn TarEntry) -> exn::Result<(), DownloadError> {
-        let path = entry.path().or_raise(|| DownloadError::Io)?;
+    async fn visit(&mut self, entry: &mut dyn TarEntry) -> Result<()> {
+        let path = entry.path()?;
         let path = path.normalize();
 
         let path = if let Ok(path) = path.strip_prefix(&self.manifest_dir_path) {
@@ -56,17 +57,9 @@ impl TarEntriesVisitor for ManifestVisitor {
             // multiple times using `tar --keep-old-files`, here we
             // clear the buffer first before reading into it.
             self.cargo_toml_content.clear();
-            self.cargo_toml_content.reserve_exact(
-                entry
-                    .size()
-                    .or_raise(|| DownloadError::Io)?
-                    .try_into()
-                    .unwrap_or(usize::MAX),
-            );
-            entry
-                .read_to_end(&mut self.cargo_toml_content)
-                .await
-                .or_raise(|| DownloadError::Io)?;
+            self.cargo_toml_content
+                .reserve_exact(entry.size()?.try_into().unwrap_or(usize::MAX));
+            entry.read_to_end(&mut self.cargo_toml_content).await?;
         }
 
         Ok(())
@@ -75,17 +68,17 @@ impl TarEntriesVisitor for ManifestVisitor {
 
 impl ManifestVisitor {
     /// Load binstall metadata using the extracted information stored in memory.
-    pub(super) fn load_manifest(self) -> exn::Result<Manifest<Meta>, RegistryError> {
+    pub(super) fn load_manifest(self) -> Result<Manifest<Meta>> {
         debug!("Loading manifest directly from extracted file");
 
         // Load and parse manifest
         let mut manifest = Manifest::from_slice_with_metadata(&self.cargo_toml_content)
-            .or_raise(|| RegistryError::CargoManifest)?;
+            .or_raise(cargo_manifest_error)?;
         debug!("Manifest: {manifest:?}");
         // Checks vfs for binary output names
         manifest
             .complete_from_abstract_filesystem::<Value, _>(&self.vfs, None)
-            .or_raise(|| RegistryError::CargoManifest)?;
+            .or_raise(cargo_manifest_error)?;
 
         // Return metadata
         Ok(manifest)

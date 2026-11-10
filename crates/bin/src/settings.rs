@@ -4,8 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use binstalk::errors::{display_chain, message, Result, ResultExt};
 use fs_lock::FileLock;
-use miette::{miette, IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use tracing::{debug, warn};
@@ -94,12 +94,10 @@ impl Settings {
         };
         write_all_and_set_len(
             toml::to_string_pretty(self)
-                .into_diagnostic()
-                .wrap_err("serialise default settings")?
+                .or_raise(|| message!("serialise default settings"))?
                 .as_bytes(),
         )
-        .into_diagnostic()
-        .wrap_err("write settings")
+        .or_raise(|| message!("write settings"))
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<()> {
@@ -109,25 +107,20 @@ impl Settings {
             .append(false)
             .open(path)
             .and_then(FileLock::new_exclusive)
-            .into_diagnostic()
-            .wrap_err("open settings file")?;
+            .or_raise(|| message!("open settings file"))?;
         let mut settings = Self::read_from_file(&mut file)?;
         settings.telemetry = self.telemetry.clone();
         file.rewind()
-            .into_diagnostic()
-            .wrap_err("rewinding settings file for writing")?;
+            .or_raise(|| message!("rewinding settings file for writing"))?;
         settings.write(&mut file)
     }
 
     fn read_from_file(file: &mut File) -> Result<Self> {
         let mut contents = String::new();
         file.read_to_string(&mut contents)
-            .into_diagnostic()
-            .wrap_err("read existing settings file")?;
+            .or_raise(|| message!("read existing settings file"))?;
 
-        toml::from_str(&contents)
-            .into_diagnostic()
-            .wrap_err("parse existing settings file")
+        toml::from_str(&contents).or_raise(|| message!("parse existing settings file"))
     }
 }
 
@@ -135,24 +128,21 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
     fn inner(path: &Path) -> Result<Settings> {
         let parent = path
             .parent()
-            .ok_or_else(|| miette!("settings path has no parent"))?;
+            .ok_or_else(|| message!("settings path has no parent"))?;
 
-        create_dir_all(parent)
-            .into_diagnostic()
-            .wrap_err("create settings directory")?;
+        create_dir_all(parent).or_raise(|| message!("create settings directory"))?;
 
         debug!(?path, "checking if settings file exists");
         if !path.exists() {
             debug!(?path, "trying to create new settings file");
 
             let mut tempfile = NamedTempFile::new_in(parent)
-                .into_diagnostic()
-                .wrap_err("creating new temporary settings file")?;
+                .or_raise(|| message!("creating new temporary settings file"))?;
 
             let settings = Settings::default();
             settings
                 .write(tempfile.as_file_mut())
-                .wrap_err("for new temporary settings file")?;
+                .or_raise(|| message!("for new temporary settings file"))?;
 
             if tempfile.persist_noclobber(path).is_ok() {
                 return Ok(settings);
@@ -162,8 +152,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
         debug!(?path, "loading binstall settings");
         let mut file = File::open(path)
             .and_then(FileLock::new_shared)
-            .into_diagnostic()
-            .wrap_err("open existing settings file")?;
+            .or_raise(|| message!("open existing settings file"))?;
 
         let settings = Settings::read_from_file(&mut file)?;
 
@@ -177,7 +166,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
     } else {
         Ok(settings
             .inspect_err(|err| {
-                warn!("{err:?}");
+                warn!("{}", display_chain(err.frame()));
             })
             .unwrap_or_default())
     }

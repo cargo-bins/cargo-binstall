@@ -9,6 +9,7 @@ mod initialise;
 mod logging;
 mod main_impl;
 mod registry_auth;
+mod report;
 mod settings;
 mod signal;
 mod ui;

@@ -12,11 +12,8 @@ license = "GPL-3.0-only"
 
 [dependencies]
 atomic-file-install = { version = "1.0.14", path = "../atomic-file-install" }
-binstalk-types = { version = "0.10.8", path = "../binstalk-types" }
+binstalk-types = { version = "0.10.8", path = "../binstalk-types", features = ["exn"] }
 compact_str = { version = "0.10.0", features = ["serde"] }
-exn = "0.4.0-rc.1"
 leon = "3.0.0"
-miette = "7.0.0"
 normalize-path = { version = "0.2.2", path = "../normalize-path" }
-thiserror = "2.0.11"
 tracing = "0.1.43"

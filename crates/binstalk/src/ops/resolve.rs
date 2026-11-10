@@ -6,7 +6,6 @@ use binstalk_types::{
     crate_info::{CrateSource, SourceType},
 };
 use compact_str::{CompactString, ToCompactString};
-use exn::{ErrorExt, ResultExt};
 use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
@@ -17,7 +16,10 @@ use url::Url;
 
 use crate::{
     bins,
-    errors::BinstallError,
+    errors::{
+        bail, crate_context, display_chain, is_user_abort, message, ErrorExt, Exit, Exn, Result,
+        ResultExt,
+    },
     fetchers::{Data, Fetcher, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
@@ -45,11 +47,11 @@ pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
-) -> exn::Result<Resolution, BinstallError> {
+) -> Result<Resolution> {
     let crate_name_name = crate_name.name.clone();
     let resolution = resolve_inner(opts, crate_name, curr_version)
         .await
-        .map_err(|err| BinstallError::crate_context(err, crate_name_name))?;
+        .map_err(|err| crate_context(err, crate_name_name))?;
 
     Ok(resolution)
 }
@@ -58,7 +60,7 @@ async fn resolve_inner(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
-) -> exn::Result<Resolution, BinstallError> {
+) -> Result<Resolution> {
     info!("Resolving package: '{}'", crate_name);
 
     let version_req = crate_name.version_req.unwrap_or(VersionReq::STAR);
@@ -101,7 +103,7 @@ async fn resolve_inner(
                 target_related_info,
             }))
         })
-        .collect::<exn::Result<Vec<_>, BinstallError>>()?;
+        .collect::<Result<Vec<_>>>()?;
     let resolvers = &opts.resolvers;
 
     let binary_name = match package_info.binaries.as_slice() {
@@ -172,7 +174,7 @@ async fn resolve_inner(
         match timeout(opts.maximum_resolution_timeout, async {
             AutoAbortJoinHandle::new(fetcher.clone().find())
                 .await?
-                .or_raise(|| BinstallError::FetchError)
+                .or_raise(|| Exit::Fetch)
         })
         .await
         {
@@ -219,13 +221,13 @@ async fn resolve_inner(
                             }
                         }
                         Err(err) => {
-                            if BinstallError::is_user_abort(err.frame()) {
+                            if is_user_abort(err.frame()) {
                                 return Err(err);
                             }
                             warn!(
-                                "Error while downloading and extracting from fetcher {}: {:?}",
+                                "Error while downloading and extracting from fetcher {}: {}",
                                 fetcher.source_name(),
-                                err
+                                display_chain(err.frame())
                             );
                         }
                     }
@@ -233,9 +235,9 @@ async fn resolve_inner(
                 Ok(false) => (),
                 Err(err) => {
                     warn!(
-                        "Error while checking fetcher {}: {:?}",
+                        "Error while checking fetcher {}: {}",
                         fetcher.source_name(),
-                        err
+                        display_chain(err.frame())
                     );
                 }
             },
@@ -258,7 +260,7 @@ async fn resolve_inner(
     }
 
     if !opts.cargo_install_fallback {
-        return Err(BinstallError::NoFallbackToCargoInstall.raise());
+        bail!(Exit::NoFallbackToCargoInstall);
     }
 
     let meta = package_info
@@ -272,7 +274,7 @@ async fn resolve_inner(
 
     if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref() {
         if disabled_strategies.contains(&Strategy::Compile) {
-            return Err(BinstallError::NoFallbackToCargoInstall.raise());
+            bail!(Exit::NoFallbackToCargoInstall);
         }
     }
 
@@ -294,13 +296,13 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
-) -> exn::Result<Vec<bins::BinFile>, BinstallError> {
+) -> Result<Vec<bins::BinFile>> {
     // Download and extract it.
     // If that fails, then ignore this fetcher.
     let extracted_files = fetcher
         .fetch_and_extract(bin_path)
         .await
-        .or_raise(|| BinstallError::FetchError)?;
+        .or_raise(|| Exit::Fetch)?;
     debug!("extracted_files = {extracted_files:#?}");
 
     // Build final metadata
@@ -360,8 +362,8 @@ But since it requires features {features}, this bin is ignored."
                 }
             }
         })
-        .collect::<exn::Result<Vec<bins::BinFile>, bins::Error>>()
-        .or_raise(|| BinstallError::BinFile)
+        .collect::<Result<Vec<bins::BinFile>>>()
+        .or_raise(|| Exit::BinFile)
 }
 
 fn collect_bin_files(
@@ -372,7 +374,7 @@ fn collect_bin_files(
     install_path: &Path,
     no_symlinks: bool,
     extracted_files: &ExtractedFiles,
-) -> exn::Result<Vec<bins::BinFile>, BinstallError> {
+) -> Result<Vec<bins::BinFile>> {
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
@@ -395,24 +397,24 @@ fn collect_bin_files(
             bins::infer_bin_dir_template(&bin_data, &mut |p| extracted_files.get_dir(p).is_some())
         });
 
-    let template = Template::parse(&bin_dir).or_raise(|| BinstallError::TemplateParseError)?;
+    let template = Template::parse(&bin_dir).or_raise(|| Exit::TemplateParse)?;
 
     // Create bin_files
     let bin_files = package_info
         .binaries
         .iter()
         .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &template, no_symlinks))
-        .collect::<exn::Result<Vec<_>, bins::Error>>()
-        .or_raise(|| BinstallError::BinFile)?;
+        .collect::<Result<Vec<_>>>()
+        .or_raise(|| Exit::BinFile)?;
 
     let mut source_set = BTreeSet::new();
 
     for bin in &bin_files {
         if !source_set.insert(&bin.source) {
-            return Err(BinstallError::DuplicateSourceFilePath {
-                path: bin.source.clone(),
-            }
-            .raise());
+            return Err(Exit::DuplicateSourceFilePath.with(message!(
+                "bin-dir configuration provided generates duplicate source path: {}",
+                bin.source.display()
+            )));
         }
     }
 
@@ -445,7 +447,7 @@ impl PackageInfo {
         curr_version: Option<Version>,
         version_req: &VersionReq,
         client: Client,
-    ) -> exn::Result<Option<Self>, BinstallError> {
+    ) -> Result<Option<Self>> {
         use CargoTomlFetchOverride::*;
 
         // Fetch crate via crates.io, git, or use a local manifest path
@@ -458,12 +460,12 @@ impl PackageInfo {
                     move || load_manifest_path(manifest_path, &name)
                 })
                 .await
-                .or_raise(|| BinstallError::TaskJoinError)??,
+                .or_raise(|| Exit::TaskJoin)??,
                 CrateSource {
                     source_type: SourceType::Path,
                     url: MaybeOwned::Owned(
                         Url::parse(&format!("file://{}", manifest_path.display()))
-                            .or_raise(|| BinstallError::UrlParse)?,
+                            .or_raise(|| Exit::UrlParse)?,
                     ),
                 },
                 None,
@@ -480,24 +482,23 @@ impl PackageInfo {
                     let git_url = git_url.clone();
                     let name = name.clone();
                     move || {
-                        let dir = tempfile::TempDir::new().or_raise(|| BinstallError::Io)?;
+                        let dir = tempfile::TempDir::new().or_raise(|| Exit::Io)?;
                         let repo = GitRepository::shallow_clone(
                             git_url,
                             dir.as_ref(),
                             Some(cancellation_token),
                         )
-                        .or_raise(|| BinstallError::GitError)?;
+                        .or_raise(|| Exit::Git)?;
 
-                        Ok::<_, exn::Exn<BinstallError>>((
+                        Ok::<_, Exn>((
                             load_manifest_from_workspace(dir.as_ref(), &name)
-                                .or_raise(|| BinstallError::LoadManifestFromWSError)?,
-                            repo.get_head_commit_hash()
-                                .or_raise(|| BinstallError::GitError)?,
+                                .or_raise(|| Exit::LoadManifestFromWorkspace)?,
+                            repo.get_head_commit_hash().or_raise(|| Exit::Git)?,
                         ))
                     }
                 })
                 .await
-                .or_raise(|| BinstallError::TaskJoinError)??;
+                .or_raise(|| Exit::TaskJoin)??;
 
                 // Git operation done, disarm it
                 cancel_on_drop.disarm();
@@ -508,7 +509,7 @@ impl PackageInfo {
                         source_type: SourceType::Git,
                         url: MaybeOwned::Owned(
                             Url::parse(&format!("{git_url}#{commit_hash}"))
-                                .or_raise(|| BinstallError::UrlParse)?,
+                                .or_raise(|| Exit::UrlParse)?,
                         ),
                     },
                     None,
@@ -521,20 +522,20 @@ impl PackageInfo {
                     version_req,
                 ))
                 .await
-                .or_raise(|| BinstallError::RegistryError)?;
+                .or_raise(|| Exit::Registry)?;
 
                 (
                     manifest,
-                    opts.registry
-                        .crate_source()
-                        .or_raise(|| BinstallError::UrlParse)?,
+                    opts.registry.crate_source().or_raise(|| Exit::UrlParse)?,
                     pubtime,
                 )
             }
         };
 
         let Some(mut package) = manifest.package else {
-            return Err(BinstallError::CargoTomlMissingPackage(name).raise());
+            return Err(Exit::CargoTomlMissingPackage.with(message!(
+                "Cargo.toml of crate {name} does not have section \"Package\""
+            )));
         };
 
         let manifest_version_str = package.version().to_compact_string();
@@ -582,14 +583,15 @@ impl PackageInfo {
             .iter()
             .find(|bin| !bins::is_valid_bin_name(&bin.name))
         {
-            return Err(bins::Error::InvalidBinName(bin.name.as_str().into())
+            return Err(bins::invalid_bin_name(&bin.name)
                 .raise()
-                .raise(BinstallError::BinFile));
+                .raise(Exit::BinFile)
+                .into());
         }
 
         // Check binaries
         if binaries.is_empty() {
-            Err(BinstallError::UnspecifiedBinaries.raise())
+            Err(Exn::from(Exit::UnspecifiedBinaries))
         } else {
             Ok(Some(Self {
                 overrides: mem::take(&mut meta.overrides),
@@ -606,12 +608,14 @@ impl PackageInfo {
     }
 }
 
-fn parse_package_version(
-    version_str: CompactString,
-) -> exn::Result<(CompactString, Version), BinstallError> {
+fn parse_package_version(version_str: CompactString) -> Result<(CompactString, Version)> {
     let version = match Version::parse(&version_str) {
         Ok(version) => version,
-        Err(err) => return Err(err.raise().raise(BinstallError::VersionParse(version_str))),
+        Err(err) => {
+            return Err(Exit::VersionParse.with(message!(
+                "version string '{version_str}' is not semver: {err}"
+            )))
+        }
     };
 
     Ok((version_str, version))
@@ -642,8 +646,8 @@ fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
 pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
     manifest_path: P,
     name: N,
-) -> exn::Result<Manifest<Meta>, BinstallError> {
-    fn inner(manifest_path: &Path, crate_name: &str) -> exn::Result<Manifest<Meta>, BinstallError> {
+) -> Result<Manifest<Meta>> {
+    fn inner(manifest_path: &Path, crate_name: &str) -> Result<Manifest<Meta>> {
         debug!(
             "Reading crate {crate_name} manifest at local path: {}",
             manifest_path.display()
@@ -651,7 +655,7 @@ pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
 
         // Load and parse manifest (this checks file system for binary output names)
         let manifest = load_manifest_from_workspace(manifest_path, crate_name)
-            .or_raise(|| BinstallError::LoadManifestFromWSError)?;
+            .or_raise(|| Exit::LoadManifestFromWorkspace)?;
 
         // Return metadata
         Ok(manifest)

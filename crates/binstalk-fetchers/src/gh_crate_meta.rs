@@ -4,7 +4,6 @@ use binstalk_git_repo_api::gh_api_client::{GhReleaseArtifact, GhReleaseArtifactU
 use binstalk_types::cargo_toml_binstall::Strategy;
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
-use exn::{ErrorExt, Exn, ResultExt};
 use leon::Template;
 use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
@@ -13,8 +12,9 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
-    SignaturePolicy, SignatureVerifier, TargetDataErased, DEFAULT_GH_API_RETRY_DURATION,
+    common::*, futures_resolver::FuturesResolver, invalid_signature, missing_signature, Data,
+    InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier, TargetDataErased,
+    DEFAULT_GH_API_RETRY_DURATION,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -44,7 +44,7 @@ struct Resolved {
 impl GhCrateMeta {
     fn launch_baseline_find_tasks(
         &self,
-        futures_resolver: &FuturesResolver<Resolved, Exn<FetchError>>,
+        futures_resolver: &FuturesResolver<Resolved, Exn>,
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
         repo: Option<&str>,
@@ -127,14 +127,18 @@ impl GhCrateMeta {
                             }
                             Err(err) if err.is_unauthorized() && !is_repo_private => break,
 
-                            Err(err) => return Err(err.raise(FetchError::GhApi)),
+                            Err(err) => {
+                                return Err(err
+                                    .raise(message!("Request to GitHub API failed"))
+                                    .into())
+                            }
                         }
                     }
                 }
 
                 Ok(Box::pin(client.remote_gettable(url))
                     .await
-                    .or_raise(|| FetchError::Download)?
+                    .or_raise(|| message!("Failed to download"))?
                     .then_some(resolved))
             }
         }));
@@ -160,7 +164,7 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    fn find(self: Arc<Self>) -> JoinHandle<exn::Result<bool, FetchError>> {
+    fn find(self: Arc<Self>) -> JoinHandle<Result<bool>> {
         tokio::spawn(async move {
             let info = self.data.get_repo_info(&self.gh_api_client).await?;
 
@@ -171,7 +175,8 @@ impl super::Fetcher for GhCrateMeta {
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-                let template = Template::parse(pkg_url).or_raise(|| FetchError::TemplateParse)?;
+                let template =
+                    Template::parse(pkg_url).or_raise(|| message!("Failed to parse template"))?;
 
                 if pkg_fmt.is_none()
                     && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
@@ -190,7 +195,7 @@ impl super::Fetcher for GhCrateMeta {
                     let target = &self.target_data.target;
 
                     if pkg_fmt.is_none() {
-                        return Err(FetchError::from(InvalidPkgFmtError {
+                        bail!(InvalidPkgFmtError {
                             crate_name: crate_name.clone(),
                             version: version.clone(),
                             target: target.into(),
@@ -199,8 +204,7 @@ impl super::Fetcher for GhCrateMeta {
                                 &"pkg-fmt is not specified, yet pkg-url does not contain format, \
                                 archive-format or archive-suffix which is required for automatically \
                                 deducing pkg-fmt",
-                        })
-                        .raise());
+                        });
                     }
 
                     warn!(
@@ -298,7 +302,7 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> exn::Result<ExtractedFiles, FetchError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles> {
         let resolved = self
             .resolution
             .get()
@@ -310,11 +314,13 @@ impl super::Fetcher for GhCrateMeta {
                 SignatureVerifier::Noop
             }
             (SignaturePolicy::Require, None) => {
-                return Err(FetchError::MissingSignature.raise());
+                return Err(Exn::from(missing_signature()));
             }
             (_, Some(config)) => {
                 let template = match config.file.as_deref() {
-                    Some(file) => Template::parse(file).or_raise(|| FetchError::TemplateParse)?,
+                    Some(file) => {
+                        Template::parse(file).or_raise(|| message!("Failed to parse template"))?
+                    }
                     None => leon_macros::template!("{ url }.sig"),
                 };
                 trace!(?template, "parsed signature file template");
@@ -334,7 +340,7 @@ impl super::Fetcher for GhCrateMeta {
                 let signature = Download::new(self.client.clone(), sign_url)
                     .into_bytes()
                     .await
-                    .or_raise(|| FetchError::Download)?;
+                    .or_raise(|| message!("Failed to download"))?;
                 trace!(?signature, "got signature contents");
 
                 SignatureVerifier::new(config, &signature)?
@@ -353,7 +359,7 @@ impl super::Fetcher for GhCrateMeta {
                 .gh_api_client
                 .download_artifact(artifact_url.clone())
                 .await
-                .or_raise(|| FetchError::GhApi)?
+                .or_raise(|| message!("Request to GitHub API failed"))?
                 .with_data_verifier(data_verifier.as_mut()),
             _ => Download::new_with_data_verifier(
                 self.client.clone(),
@@ -363,7 +369,7 @@ impl super::Fetcher for GhCrateMeta {
         }
         .and_extract(resolved.pkg_fmt, dst)
         .await
-        .or_raise(|| FetchError::Download)?;
+        .or_raise(|| message!("Failed to download"))?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {
@@ -374,7 +380,7 @@ impl super::Fetcher for GhCrateMeta {
             }
             Ok(files)
         } else {
-            Err(FetchError::InvalidSignature.raise())
+            Err(Exn::from(invalid_signature()))
         }
     }
 
@@ -535,19 +541,21 @@ impl<'c> Context<'c> {
         self
     }
 
-    fn render_url_with(&self, template: &Template<'_>) -> exn::Result<Url, FetchError> {
+    fn render_url_with(&self, template: &Template<'_>) -> Result<Url> {
         debug!(?template, context=?self, "render url template");
         Url::parse(
             &template
                 .render(self)
-                .or_raise(|| FetchError::TemplateRender)?,
+                .or_raise(|| message!("Failed to render template"))?,
         )
-        .or_raise(|| FetchError::UrlParse)
+        .or_raise(|| message!("Failed to parse url"))
     }
 
     #[cfg(test)]
-    fn render_url(&self, template: &str) -> exn::Result<Url, FetchError> {
-        self.render_url_with(&Template::parse(template).or_raise(|| FetchError::TemplateParse)?)
+    fn render_url(&self, template: &str) -> Result<Url> {
+        self.render_url_with(
+            &Template::parse(template).or_raise(|| message!("Failed to parse template"))?,
+        )
     }
 }
 

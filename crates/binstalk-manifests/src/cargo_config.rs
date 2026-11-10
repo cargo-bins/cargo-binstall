@@ -11,15 +11,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use binstalk_types::{
+    errors::{bail, Result},
+    message,
+};
 use compact_str::CompactString;
-use exn::{ErrorExt, ResultExt};
 use fs_lock::FileLock;
 use home::cargo_home;
 use merge::Merge;
-use miette::Diagnostic;
 use normalize_path::NormalizePath;
 use serde::Deserialize;
-use thiserror::Error;
 
 #[derive(Clone, Debug, Deserialize, Merge)]
 pub struct Install {
@@ -196,16 +197,13 @@ fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
 
 fn iterate_reverse_preorder(
     mut stack: Vec<IncludedConfig>,
-    mut load_config: impl FnMut(
-        &mut dyn io::Read,
-        &Path,
-    ) -> exn::Result<Vec<IncludedConfig>, ConfigLoadError>,
-) -> exn::Result<(), ConfigLoadError> {
+    mut load_config: impl FnMut(&mut dyn io::Read, &Path) -> Result<Vec<IncludedConfig>>,
+) -> Result<()> {
     // stack invariant: higher precedence config is the first out
     let mut visited_path = HashSet::new();
 
     while let Some(config_path) = stack.pop() {
-        let Some(file) = config_path.open().or_raise(|| ConfigLoadError::Io)? else {
+        let Some(file) = config_path.open()? else {
             continue;
         };
 
@@ -220,10 +218,11 @@ fn iterate_reverse_preorder(
         // Even if one config file has two symlinks, the content might be different
         // if relative path is present.
         if !visited_path.insert((path.to_owned(), parent.normalize())) {
-            exn::bail!(ConfigLoadError::DeadLoopInLoading {
-                path: path.into(),
-                parent: parent.into(),
-            });
+            bail!(message!(
+                "Detect deadloop in toml at `{}` with parent `{}`",
+                path.display(),
+                parent.display()
+            ));
         }
 
         stack.extend(load_config(&mut (&file), parent)?);
@@ -233,30 +232,22 @@ fn iterate_reverse_preorder(
 }
 
 impl Config {
-    pub fn default_path() -> exn::Result<PathBuf, ConfigLoadError> {
-        Ok(cargo_home()
-            .or_raise(|| ConfigLoadError::Io)?
-            .join("config.toml"))
+    pub fn default_path() -> Result<PathBuf> {
+        Ok(cargo_home()?.join("config.toml"))
     }
 
-    pub fn load() -> exn::Result<Self, ConfigLoadError> {
+    pub fn load() -> Result<Self> {
         Self::load_from_path(Self::default_path()?)
     }
 
-    fn load_from_reader_inner(
-        reader: &mut dyn io::Read,
-        dir: &Path,
-    ) -> exn::Result<Self, ConfigLoadError> {
+    fn load_from_reader_inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Self> {
         let mut vec = Vec::new();
-        reader
-            .read_to_end(&mut vec)
-            .or_raise(|| ConfigLoadError::Io)?;
+        reader.read_to_end(&mut vec)?;
 
         if vec.is_empty() {
             Ok(Default::default())
         } else {
-            let mut config: Config =
-                toml_edit::de::from_slice(&vec).or_raise(|| ConfigLoadError::TomlParse)?;
+            let mut config: Config = toml_edit::de::from_slice(&vec)?;
             join_if_relative(
                 config
                     .install
@@ -295,11 +286,8 @@ impl Config {
     ///   For relative path in the config, `Config::load_from_reader`
     ///   will join the `dir` and the relative path to form the final
     ///   path.
-    pub fn load_from_reader<R: io::Read>(
-        mut reader: R,
-        dir: &Path,
-    ) -> exn::Result<Self, ConfigLoadError> {
-        fn inner(reader: &mut dyn io::Read, dir: &Path) -> exn::Result<Config, ConfigLoadError> {
+    pub fn load_from_reader<R: io::Read>(mut reader: R, dir: &Path) -> Result<Self> {
+        fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config> {
             let mut root_config = Config::load_from_reader_inner(reader, dir)?;
 
             iterate_reverse_preorder(mem::take(&mut root_config.include), |file, parent| {
@@ -315,18 +303,16 @@ impl Config {
         inner(&mut reader, dir)
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> exn::Result<Self, ConfigLoadError> {
-        fn inner(path: &Path) -> exn::Result<Config, ConfigLoadError> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self> {
+        fn inner(path: &Path) -> Result<Config> {
             match File::open(path) {
                 Ok(file) => {
-                    let file = FileLock::new_shared(file)
-                        .or_raise(|| ConfigLoadError::Io)?
-                        .set_file_path(path);
+                    let file = FileLock::new_shared(file)?.set_file_path(path);
                     // Any regular file must have a parent dir
                     Config::load_from_reader(file, path.parent().unwrap())
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Default::default()),
-                Err(err) => Err(err.raise().raise(ConfigLoadError::Io)),
+                Err(err) => Err(err.into()),
             }
         }
 
@@ -352,20 +338,6 @@ impl Config {
             Some(registry)
         }
     }
-}
-
-/// The underlying cause is attached as a child frame of the [`exn::Exn`].
-#[derive(Debug, Diagnostic, Error)]
-#[non_exhaustive]
-pub enum ConfigLoadError {
-    #[error("I/O Error")]
-    Io,
-
-    #[error("Failed to deserialize toml")]
-    TomlParse,
-
-    #[error("Detect deadloop in toml at `{}` with parent `{}`", path.display(), parent.display())]
-    DeadLoopInLoading { path: Box<Path>, parent: Box<Path> },
 }
 
 #[cfg(test)]

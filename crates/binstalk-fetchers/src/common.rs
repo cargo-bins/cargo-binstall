@@ -8,20 +8,20 @@ use std::{
     },
 };
 
-use exn::{ErrorExt, OptionExt, ResultExt};
-
 pub(super) use binstalk_downloader::{
     download::{Download, ExtractedFiles},
     remote::{Client, Url},
 };
-pub(super) use binstalk_git_repo_api::gh_api_client::GhApiClient;
+pub(super) use binstalk_git_repo_api::gh_api_client::{GhApiClient, GhApiErrorExt};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
-pub(super) use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
+pub(super) use binstalk_types::{
+    cargo_toml_binstall::{PkgFmt, PkgMeta},
+    errors::{bail, ErrorExt, Exn, OptionExt, Result, ResultExt},
+    message,
+};
 pub(super) use compact_str::CompactString;
 pub(super) use tokio::task::JoinHandle;
 pub(super) use tracing::{debug, instrument, warn};
-
-use crate::FetchError;
 
 static WARN_RATE_LIMIT_ONCE: Once = Once::new();
 static WARN_UNAUTHORIZED_ONCE: Once = Once::new();
@@ -32,7 +32,7 @@ static WARN_UNAUTHORIZED_ONCE: Once = Once::new();
 pub(super) async fn get_gh_release_artifact_url(
     gh_api_client: GhApiClient,
     artifact: GhReleaseArtifact,
-) -> exn::Result<Option<GhReleaseArtifactUrl>, GhApiError> {
+) -> Result<Option<GhReleaseArtifactUrl>> {
     debug!("Using GitHub API to check for existence of artifact, which will also cache the API response");
 
     // The future returned has the same size as a pointer
@@ -68,7 +68,7 @@ pub(super) async fn does_url_exist(
     client: Client,
     gh_api_client: GhApiClient,
     url: &Url,
-) -> exn::Result<bool, FetchError> {
+) -> Result<bool> {
     static GH_API_CLIENT_FAILED: AtomicBool = AtomicBool::new(false);
 
     debug!("Checking for package at: '{url}'");
@@ -80,7 +80,7 @@ pub(super) async fn does_url_exist(
 
                 Err(err) if err.rate_limit().is_some() || err.is_unauthorized() => {}
 
-                Err(err) => return Err(err.raise(FetchError::GhApi)),
+                Err(err) => return Err(err.raise(message!("Request to GitHub API failed")).into()),
             }
 
             GH_API_CLIENT_FAILED.store(true, Relaxed);
@@ -89,7 +89,7 @@ pub(super) async fn does_url_exist(
 
     Box::pin(client.remote_gettable(url.clone()))
         .await
-        .or_raise(|| FetchError::Download)
+        .or_raise(|| message!("Failed to download"))
 }
 
 #[derive(Debug)]
@@ -113,8 +113,8 @@ impl<T> Drop for AutoAbortJoinHandle<T> {
     }
 }
 
-impl<T> AutoAbortJoinHandle<exn::Result<T, FetchError>> {
-    pub(super) async fn flattened_join(mut self) -> exn::Result<T, FetchError> {
-        (&mut self.0).await.or_raise(|| FetchError::TaskJoinError)?
+impl<T> AutoAbortJoinHandle<Result<T>> {
+    pub(super) async fn flattened_join(mut self) -> Result<T> {
+        (&mut self.0).await?
     }
 }

@@ -5,13 +5,11 @@
 
 use std::{fs::File, io, path::Path};
 
+use binstalk_types::errors::Result;
 use binstalk_types::SecretString;
 use compact_str::CompactString;
-use exn::{ErrorExt, ResultExt};
 use fs_lock::FileLock;
-use miette::Diagnostic;
 use serde::{Deserialize, Deserializer};
-use thiserror::Error;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct RegistryCredential {
@@ -26,45 +24,38 @@ pub struct Credentials {
 }
 
 impl Credentials {
-    pub fn load_from_reader<R: io::Read>(reader: R) -> exn::Result<Self, CredentialsLoadError> {
+    pub fn load_from_reader<R: io::Read>(reader: R) -> Result<Self> {
         let mut reader = reader;
         let mut contents = Vec::new();
-        reader
-            .read_to_end(&mut contents)
-            .or_raise(|| CredentialsLoadError::Io)?;
-        let credentials: Credentials =
-            toml_edit::de::from_slice(&contents).or_raise(|| CredentialsLoadError::TomlParse)?;
+        reader.read_to_end(&mut contents)?;
+        let credentials: Credentials = toml_edit::de::from_slice(&contents)?;
         Ok(credentials)
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> exn::Result<Self, CredentialsLoadError> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self> {
         match File::open(path.as_ref()) {
             Ok(file) => {
-                let file = FileLock::new_shared(file)
-                    .or_raise(|| CredentialsLoadError::Io)?
-                    .set_file_path(path.as_ref());
+                let file = FileLock::new_shared(file)?.set_file_path(path.as_ref());
                 Self::load_from_reader(file)
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Default::default()),
-            Err(err) => Err(err.raise().raise(CredentialsLoadError::Io)),
+            Err(err) => Err(err.into()),
         }
     }
 
-    pub fn load_from_home(cargo_home: impl AsRef<Path>) -> exn::Result<Self, CredentialsLoadError> {
+    pub fn load_from_home(cargo_home: impl AsRef<Path>) -> Result<Self> {
         let cargo_home = cargo_home.as_ref();
         let toml_path = cargo_home.join("credentials.toml");
 
         match File::open(&toml_path) {
             Ok(file) => {
-                let file = FileLock::new_shared(file)
-                    .or_raise(|| CredentialsLoadError::Io)?
-                    .set_file_path(toml_path.as_path());
+                let file = FileLock::new_shared(file)?.set_file_path(toml_path.as_path());
                 Self::load_from_reader(file)
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 Self::load_from_path(cargo_home.join("credentials"))
             }
-            Err(err) => Err(err.raise().raise(CredentialsLoadError::Io)),
+            Err(err) => Err(err.into()),
         }
     }
 
@@ -79,17 +70,6 @@ where
 {
     Option::<Box<str>>::deserialize(deserializer)
         .map(|value| value.map(SecretString::from_boxed_str))
-}
-
-/// The underlying cause is attached as a child frame of the [`exn::Exn`].
-#[derive(Debug, Diagnostic, Error)]
-#[non_exhaustive]
-pub enum CredentialsLoadError {
-    #[error("I/O Error")]
-    Io,
-
-    #[error("Failed to deserialize toml")]
-    TomlParse,
 }
 
 #[cfg(test)]

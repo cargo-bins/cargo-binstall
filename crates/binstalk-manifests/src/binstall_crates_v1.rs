@@ -16,44 +16,31 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use binstalk_types::errors::Result;
 use compact_str::CompactString;
-use exn::ResultExt;
 use fs_lock::FileLock;
 use home::cargo_home;
-use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 use crate::{crate_info::CrateInfo, helpers::create_if_not_exist};
 
 /// Buffer size for loading and writing binstall_crates_v1 manifest.
 const BUFFER_SIZE: usize = 4096 * 5;
 
-/// The underlying cause is attached as a child frame of the [`exn::Exn`].
-#[derive(Debug, Diagnostic, Error)]
-#[non_exhaustive]
-pub enum Error {
-    #[error("I/O Error")]
-    Io,
-
-    #[error("Failed to parse json")]
-    SerdeJsonParse,
-}
-
-pub fn append_to_path<Iter, T>(path: impl AsRef<Path>, iter: Iter) -> exn::Result<(), Error>
+pub fn append_to_path<Iter, T>(path: impl AsRef<Path>, iter: Iter) -> Result<()>
 where
     Iter: IntoIterator<Item = T>,
     Data: From<T>,
 {
     let path = path.as_ref();
-    let mut file = create_if_not_exist(path).or_raise(|| Error::Io)?;
+    let mut file = create_if_not_exist(path)?;
     // Move the cursor to EOF
-    file.seek(io::SeekFrom::End(0)).or_raise(|| Error::Io)?;
+    file.seek(io::SeekFrom::End(0))?;
 
     write_to(&mut file, &mut iter.into_iter().map(Data::from))
 }
 
-pub fn append<Iter, T>(iter: Iter) -> exn::Result<(), Error>
+pub fn append<Iter, T>(iter: Iter) -> Result<()>
 where
     Iter: IntoIterator<Item = T>,
     Data: From<T>,
@@ -61,28 +48,24 @@ where
     append_to_path(default_path()?, iter)
 }
 
-pub fn write_to(
-    file: &mut FileLock,
-    iter: &mut dyn Iterator<Item = Data>,
-) -> exn::Result<(), Error> {
+pub fn write_to(file: &mut FileLock, iter: &mut dyn Iterator<Item = Data>) -> Result<()> {
     let writer = io::BufWriter::with_capacity(BUFFER_SIZE, file);
 
     let mut ser = serde_json::Serializer::new(writer);
 
     for item in iter {
-        item.serialize(&mut ser)
-            .or_raise(|| Error::SerdeJsonParse)?;
+        item.serialize(&mut ser)?;
     }
 
-    ser.into_inner().flush().or_raise(|| Error::Io)?;
+    ser.into_inner().flush()?;
 
     Ok(())
 }
 
-pub fn default_path() -> exn::Result<PathBuf, Error> {
-    let dir = cargo_home().or_raise(|| Error::Io)?.join("binstall");
+pub fn default_path() -> Result<PathBuf> {
+    let dir = cargo_home()?.join("binstall");
 
-    fs::create_dir_all(&dir).or_raise(|| Error::Io)?;
+    fs::create_dir_all(&dir)?;
 
     Ok(dir.join("crates-v1.json"))
 }
@@ -158,12 +141,12 @@ pub struct Records {
 }
 
 impl Records {
-    fn load_impl(&mut self) -> exn::Result<(), Error> {
+    fn load_impl(&mut self) -> Result<()> {
         let reader = io::BufReader::with_capacity(BUFFER_SIZE, &mut self.file);
         let stream_deser = serde_json::Deserializer::from_reader(reader).into_iter();
 
         for res in stream_deser {
-            let item = res.or_raise(|| Error::SerdeJsonParse)?;
+            let item = res?;
 
             self.data.replace(item);
         }
@@ -171,26 +154,26 @@ impl Records {
         Ok(())
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> exn::Result<Self, Error> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self> {
         let mut this = Self {
-            file: create_if_not_exist(path.as_ref()).or_raise(|| Error::Io)?,
+            file: create_if_not_exist(path.as_ref())?,
             data: BTreeSet::default(),
         };
         this.load_impl()?;
         Ok(this)
     }
 
-    pub fn load() -> exn::Result<Self, Error> {
+    pub fn load() -> Result<Self> {
         Self::load_from_path(default_path()?)
     }
 
     /// **Warning: This will overwrite all existing records!**
-    pub fn overwrite(mut self) -> exn::Result<(), Error> {
-        self.file.rewind().or_raise(|| Error::Io)?;
+    pub fn overwrite(mut self) -> Result<()> {
+        self.file.rewind()?;
         write_to(&mut self.file, &mut self.data.into_iter())?;
 
-        let len = self.file.stream_position().or_raise(|| Error::Io)?;
-        self.file.set_len(len).or_raise(|| Error::Io)?;
+        let len = self.file.stream_position()?;
+        self.file.set_len(len)?;
 
         Ok(())
     }

@@ -1,29 +1,29 @@
 use std::io;
 
-use binstalk::{errors::BinstallError, helpers::tasks::AutoAbortJoinHandle};
-use exn::{ErrorExt, ResultExt};
+use binstalk::{
+    errors::{Exit, Exn, Result, ResultExt},
+    helpers::tasks::AutoAbortJoinHandle,
+};
 use tokio::signal;
 
 /// This function will poll the handle while listening for ctrl_c,
 /// `SIGINT`, `SIGHUP`, `SIGTERM` and `SIGQUIT`.
 ///
-/// When signal is received, [`BinstallError::UserAbort`] will be returned.
+/// When signal is received, [`Exit::UserAbort`] will be returned.
 ///
 /// It would also ignore `SIGUSER1` and `SIGUSER2` on unix.
 ///
 /// This function uses [`tokio::signal`] and once exit, does not reset the default
 /// signal handler, so be careful when using it.
-pub async fn cancel_on_user_sig_term<T>(
-    handle: AutoAbortJoinHandle<T>,
-) -> exn::Result<T, BinstallError> {
-    ignore_signals().or_raise(|| BinstallError::Io)?;
+pub async fn cancel_on_user_sig_term<T>(handle: AutoAbortJoinHandle<T>) -> Result<T> {
+    ignore_signals().or_raise(|| Exit::Io)?;
 
     tokio::select! {
         biased;
 
         res = wait_on_cancellation_signal() => {
-            res.or_raise(|| BinstallError::Io)
-                .and(Err(BinstallError::UserAbort.raise()))
+            res.or_raise(|| Exit::Io)
+                .and(Err(Exn::from(Exit::UserAbort)))
         }
         res = handle => res,
     }

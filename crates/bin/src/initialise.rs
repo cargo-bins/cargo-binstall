@@ -1,10 +1,8 @@
 use std::{borrow::Cow, env::var_os, fs, path::PathBuf};
 
-use binstalk::errors::{BinstallError, BinstallReport};
+use binstalk::errors::{bail, message, Exit, Result, ResultExt};
 use binstalk_manifests::{cargo_config::Config as CargoConfig, crates_manifests::Manifests};
-use exn::ResultExt;
 use home::cargo_home;
-use miette::{bail, Result, WrapErr};
 use tempfile::TempDir;
 use tracing::{debug, info};
 
@@ -23,10 +21,7 @@ pub(crate) struct Init {
 pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let (cargo_config, cargo_home) = if let Ok(home) = cargo_home() {
         (
-            Some(
-                CargoConfig::load_from_path(home.join("config.toml"))
-                    .map_err(BinstallReport::from)?,
-            ),
+            Some(CargoConfig::load_from_path(home.join("config.toml"))?),
             Some(home),
         )
     } else {
@@ -53,14 +48,15 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         debug!(path=?p, "install root from executable dir");
         (p, false)
     } else {
-        bail!("No install root found, provide one with --root or CARGO_INSTALL_ROOT");
+        bail!(message!(
+            "No install root found, provide one with --root or CARGO_INSTALL_ROOT"
+        ));
     };
 
     let (cargo_root, cargo_config) = if let Some(config) = cargo_config {
         (cargo_root, config)
     } else {
-        let config = CargoConfig::load_from_path(cargo_root.join("config.toml"))
-            .map_err(BinstallReport::from)?;
+        let config = CargoConfig::load_from_path(cargo_root.join("config.toml"))?;
         (
             match config
                 .install
@@ -123,20 +119,18 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         debug!(path=?p, "install path from executable dir");
         (p, true)
     } else {
-        bail!("Could not determine installation path. Provide one with --install-path")
+        bail!(message!(
+            "Could not determine installation path. Provide one with --install-path"
+        ))
     };
 
     let settings = settings.merge_args(args);
 
-    fs::create_dir_all(&cargo_root)
-        .or_raise(|| BinstallError::Io)
-        .map_err(BinstallReport::from)?;
-    fs::create_dir_all(&install_path)
-        .or_raise(|| BinstallError::Io)
-        .map_err(BinstallReport::from)?;
+    fs::create_dir_all(&cargo_root).or_raise(|| Exit::Io)?;
+    fs::create_dir_all(&install_path).or_raise(|| Exit::Io)?;
 
     let manifests = if settings.track_installs && !custom_install_path {
-        Some(Manifests::open_exclusive(&cargo_root).map_err(BinstallReport::from)?)
+        Some(Manifests::open_exclusive(&cargo_root)?)
     } else {
         None
     };
@@ -149,9 +143,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let temp_dir = tempfile::Builder::new()
         .prefix("cargo-binstall")
         .tempdir_in(&cargo_root)
-        .or_raise(|| BinstallError::Io)
-        .map_err(BinstallReport::from)
-        .wrap_err("Creating a temporary directory failed.")?;
+        .or_raise(|| Exit::Io)
+        .or_raise(|| message!("Creating a temporary directory failed."))?;
 
     Ok(Init {
         cargo_config,

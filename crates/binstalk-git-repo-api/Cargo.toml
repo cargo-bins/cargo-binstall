@@ -13,8 +13,8 @@ license = "Apache-2.0 OR MIT"
 binstalk-downloader = { version = "0.14.1", path = "../binstalk-downloader", default-features = false, features = [
     "json",
 ] }
+binstalk-types = { version = "0.10.8", path = "../binstalk-types", features = ["exn"] }
 compact_str = "0.10.0"
-exn = "0.4.0-rc.1"
 percent-encoding = "2.2.0"
 serde = { version = "1.0.163", features = ["derive"] }
 serde-tuple-vec-map = "1.0.1"

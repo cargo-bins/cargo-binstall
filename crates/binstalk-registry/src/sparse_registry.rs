@@ -2,16 +2,20 @@ use binstalk_downloader::remote::{Client, StatusCode};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
-use exn::{ErrorExt, ResultExt};
 use semver::VersionReq;
 use serde_json::Deserializer as JsonDeserializer;
 use tokio::sync::OnceCell;
 use tracing::instrument;
 use url::Url;
 
+use binstalk_types::{
+    errors::{bail, Result, ResultExt},
+    message,
+};
+
 use crate::{
-    apply_auth, crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion,
-    RegistryAuth, RegistryConfig, RegistryError,
+    apply_auth, auth_required, crate_prefix_components, not_found, parse_manifest,
+    render_dl_template, MatchedVersion, RegistryAuth, RegistryConfig,
 };
 
 #[derive(Debug)]
@@ -37,37 +41,26 @@ impl SparseRegistry {
         &self,
         client: &Client,
         auth: Option<&RegistryAuth>,
-    ) -> exn::Result<&RegistryConfig, RegistryError> {
+    ) -> Result<&RegistryConfig> {
         self.config
             .get_or_try_init(|| {
                 Box::pin(async {
                     let mut url = self.url.clone();
                     url.path_segments_mut().unwrap().push("config.json");
 
-                    let response = client
-                        .get(url.clone())
-                        .send(false)
-                        .await
-                        .or_raise(|| RegistryError::Remote)?;
+                    let response = client.get(url.clone()).send(false).await?;
                     let response = match response.status() {
                         StatusCode::UNAUTHORIZED => {
                             let Some(auth) = auth else {
-                                return Err(
-                                    RegistryError::AuthenticationRequired(Box::new(url)).raise()
-                                );
+                                bail!(auth_required(&url));
                             };
 
-                            apply_auth(client.get(url), Some(auth))
-                                .send(true)
-                                .await
-                                .or_raise(|| RegistryError::Remote)?
+                            apply_auth(client.get(url), Some(auth)).send(true).await?
                         }
-                        _ => response
-                            .error_for_status()
-                            .or_raise(|| RegistryError::Remote)?,
+                        _ => response.error_for_status()?,
                     };
 
-                    response.json().await.or_raise(|| RegistryError::Remote)
+                    response.json().await
                 })
             })
             .await
@@ -81,7 +74,7 @@ impl SparseRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
-    ) -> exn::Result<MatchedVersion, RegistryError> {
+    ) -> Result<MatchedVersion> {
         {
             let mut path = url.path_segments_mut().unwrap();
 
@@ -95,24 +88,18 @@ impl SparseRegistry {
 
         let response = apply_auth(client.get(url.clone()), auth)
             .send(false)
-            .await
-            .or_raise(|| RegistryError::Remote)?;
+            .await?;
         let body = match response.status() {
-            StatusCode::OK => response.bytes().await.or_raise(|| RegistryError::Remote)?,
+            StatusCode::OK => response.bytes().await?,
             StatusCode::NOT_FOUND
             | StatusCode::GONE
             | StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS => {
-                return Err(RegistryError::NotFound(crate_name.into()).raise());
+                bail!(not_found(crate_name));
             }
             StatusCode::UNAUTHORIZED => {
-                return Err(RegistryError::AuthenticationRequired(Box::new(url)).raise());
+                bail!(auth_required(&url));
             }
-            _ => response
-                .error_for_status()
-                .or_raise(|| RegistryError::Remote)?
-                .bytes()
-                .await
-                .or_raise(|| RegistryError::Remote)?,
+            _ => response.error_for_status()?.bytes().await?,
         };
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&body).into_iter(),
@@ -133,14 +120,12 @@ impl SparseRegistry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> exn::Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>)> {
         let crate_prefix = crate_prefix_components(crate_name)?;
         let registry_config = self.get_config(&client, auth).await?;
         let auth = if registry_config.auth_required {
             let Some(auth) = auth else {
-                return Err(
-                    RegistryError::AuthenticationRequired(Box::new(self.url.clone())).raise(),
-                );
+                bail!(auth_required(&self.url));
             };
 
             Some(auth)
@@ -162,7 +147,7 @@ impl SparseRegistry {
             &crate_prefix,
             &matched_version,
         )?)
-        .or_raise(|| RegistryError::UrlParse)?;
+        .or_raise(|| message!("Failed to parse url"))?;
 
         let pubtime = matched_version.pubtime.take();
         let manifest = parse_manifest(client, crate_name, dl_url, matched_version, auth).await?;
