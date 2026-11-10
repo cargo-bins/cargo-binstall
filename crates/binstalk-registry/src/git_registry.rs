@@ -1,6 +1,6 @@
 use std::{io, path::PathBuf, sync::Arc};
 
-use binstalk_downloader::remote::Client;
+use binstalk_downloader::remote::{parse_url, Client};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
@@ -11,11 +11,15 @@ use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use tracing::instrument;
-use url::Url;
+
+use binstalk_types::{
+    errors::{bail, Exn, OptionExt, Result, ResultExt},
+    message,
+};
 
 use crate::{
-    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryAuth,
-    RegistryConfig, RegistryError,
+    crate_prefix_components, not_found, parse_manifest, render_dl_template, MatchedVersion,
+    RegistryAuth, RegistryConfig,
 };
 
 #[derive(Debug)]
@@ -26,18 +30,17 @@ struct GitIndex {
 }
 
 impl GitIndex {
-    fn new(url: GitUrl, cancellation_token: GitCancellationToken) -> Result<Self, RegistryError> {
+    fn new(url: GitUrl, cancellation_token: GitCancellationToken) -> Result<Self> {
         let tempdir = TempDir::new()?;
 
-        let repo = Repository::shallow_clone_bare(
-            url.clone(),
-            tempdir.as_ref(),
-            Some(cancellation_token),
-        )?;
+        let repo =
+            Repository::shallow_clone_bare(url.clone(), tempdir.as_ref(), Some(cancellation_token))
+                .or_raise_err(message!("Failed to shallow clone git repository"))?;
 
         let config: RegistryConfig = {
             let config = repo
-                .get_head_commit_entry_data_by_path("config.json")?
+                .get_head_commit_entry_data_by_path("config.json")
+                .or_raise_err(message!("Failed to shallow clone git repository"))?
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
@@ -45,7 +48,7 @@ impl GitIndex {
                     )
                 })?;
 
-            json_from_slice(&config).map_err(RegistryError::from)?
+            json_from_slice(&config)?
         };
 
         Ok(Self {
@@ -83,7 +86,7 @@ impl GitRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
-    ) -> Result<MatchedVersion, RegistryError> {
+    ) -> Result<MatchedVersion> {
         let mut path = PathBuf::with_capacity(128);
         path.push(&**c1);
         if let Some(c2) = c2 {
@@ -92,8 +95,9 @@ impl GitRegistry {
 
         path.push(&*crate_name.to_lowercase());
         let crate_versions = repo
-            .get_head_commit_entry_data_by_path(path)?
-            .ok_or_else(|| RegistryError::NotFound(crate_name.into()))?;
+            .get_head_commit_entry_data_by_path(path)
+            .or_raise_err(message!("Failed to shallow clone git repository"))?
+            .ok_or_raise(|| not_found(crate_name))?;
 
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&crate_versions).into_iter(),
@@ -113,7 +117,7 @@ impl GitRegistry {
         auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
-    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>)> {
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
         let version_req = version_req.clone();
@@ -136,14 +140,14 @@ impl GitRegistry {
             let matched_version =
                 Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
 
-            let url = Url::parse(&render_dl_template(
+            let url = parse_url(&render_dl_template(
                 &config.dl,
                 &crate_name,
                 &crate_prefix,
                 &matched_version,
             )?)?;
 
-            Ok::<_, RegistryError>((matched_version, url, config.auth_required))
+            Ok::<_, Exn>((matched_version, url, config.auth_required))
         })
         .await??;
 
@@ -152,9 +156,7 @@ impl GitRegistry {
 
         let auth = if auth_required {
             let Some(auth) = auth else {
-                return Err(RegistryError::AuthenticationRequired(Box::new(
-                    dl_url.clone(),
-                )));
+                bail!(crate::auth_required(&dl_url));
             };
 
             Some(auth)

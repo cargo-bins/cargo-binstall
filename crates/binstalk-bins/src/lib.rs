@@ -1,48 +1,31 @@
 use std::{
     borrow::Cow,
-    fmt, io,
+    fmt,
     path::{self, Component, Path, PathBuf},
 };
 
 use atomic_file_install::{
     atomic_install, atomic_install_noclobber, atomic_symlink_file, atomic_symlink_file_noclobber,
 };
-use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
+use binstalk_types::{
+    cargo_toml_binstall::{PkgFmt, PkgMeta},
+    errors::Message,
+    errors::{bail, Result},
+    message,
+};
 use compact_str::{format_compact, CompactString};
 use leon::Template;
-use miette::Diagnostic;
 use normalize_path::NormalizePath;
-use thiserror::Error as ThisError;
 use tracing::debug;
 
-#[derive(Debug, ThisError, Diagnostic)]
-pub enum Error {
-    /// bin-dir configuration provided generates source path outside
-    /// of the temporary dir.
-    #[error(
-        "bin-dir configuration provided generates source path outside of the temporary dir: {}", .0.display()
-    )]
-    InvalidSourceFilePath(Box<Path>),
+/// Error for a bin name from the crate manifest that is not a plain file
+/// name, so it would place the binary outside of the install dir.
+pub fn invalid_bin_name(name: &str) -> Message {
+    message!("invalid bin name {name:?}: must be a plain file name")
+}
 
-    /// bin-dir configuration provided generates empty source path.
-    #[error("bin-dir configuration provided generates empty source path")]
-    EmptySourceFilePath,
-
-    /// Bin file is not found.
-    #[error("bin file {} not found", .0.display())]
-    BinFileNotFound(Box<Path>),
-
-    /// Bin name from the crate manifest is not a plain file name, so it
-    /// would place the binary outside of the install dir.
-    #[error("invalid bin name {0:?}: must be a plain file name")]
-    InvalidBinName(CompactString),
-
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
-    #[error("Failed to render template: {0}")]
-    #[diagnostic(transparent)]
-    TemplateRender(#[from] leon::RenderError),
+fn bin_file_not_found(path: &Path) -> Message {
+    message!("bin file {} not found", path.display())
 }
 
 /// Return true if the path does not look outside of current dir
@@ -133,9 +116,9 @@ impl BinFile {
         base_name: &str,
         tt: &Template<'_>,
         no_symlinks: bool,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         if !is_valid_bin_name(base_name) {
-            return Err(Error::InvalidBinName(base_name.into()));
+            bail!(invalid_bin_name(base_name));
         }
 
         let binary_ext = if data.target.contains("windows") {
@@ -168,11 +151,16 @@ impl BinFile {
             let path_normalized = Path::new(&path).normalize();
 
             if path_normalized.components().next().is_none() {
-                return Err(Error::EmptySourceFilePath);
+                bail!(message!(
+                    "bin-dir configuration provided generates empty source path"
+                ));
             }
 
             if !is_valid_path(&path_normalized) {
-                return Err(Error::InvalidSourceFilePath(path_normalized.into()));
+                bail!(message!(
+                    "bin-dir configuration provided generates source path outside of the temporary dir: {}",
+                    path_normalized.display()
+                ));
             }
 
             (data.bin_path.join(&path_normalized), path_normalized)
@@ -235,20 +223,17 @@ impl BinFile {
     }
 
     /// Return `Ok` if the source exists, otherwise `Err`.
-    pub fn check_source_exists(
-        &self,
-        has_file: &mut dyn FnMut(&Path) -> bool,
-    ) -> Result<(), Error> {
+    pub fn check_source_exists(&self, has_file: &mut dyn FnMut(&Path) -> bool) -> Result<()> {
         if has_file(&self.archive_source_path) {
             Ok(())
         } else {
-            Err(Error::BinFileNotFound((&*self.source).into()))
+            bail!(bin_file_not_found(&self.source))
         }
     }
 
-    fn pre_install_bin(&self) -> Result<(), Error> {
+    fn pre_install_bin(&self) -> Result<()> {
         if !self.source.try_exists()? {
-            return Err(Error::BinFileNotFound((&*self.source).into()));
+            bail!(bin_file_not_found(&self.source));
         }
 
         #[cfg(unix)]
@@ -260,7 +245,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_bin(&self) -> Result<(), Error> {
+    pub fn install_bin(&self) -> Result<()> {
         self.pre_install_bin()?;
 
         debug!(
@@ -274,7 +259,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_bin_noclobber(&self) -> Result<(), Error> {
+    pub fn install_bin_noclobber(&self) -> Result<()> {
         self.pre_install_bin()?;
 
         debug!(
@@ -288,7 +273,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_link(&self) -> Result<(), Error> {
+    pub fn install_link(&self) -> Result<()> {
         if let Some(link) = &self.link {
             let dest = self.link_dest();
             debug!(
@@ -302,7 +287,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_link_noclobber(&self) -> Result<(), Error> {
+    pub fn install_link_noclobber(&self) -> Result<()> {
         if let Some(link) = &self.link {
             let dest = self.link_dest();
             debug!(

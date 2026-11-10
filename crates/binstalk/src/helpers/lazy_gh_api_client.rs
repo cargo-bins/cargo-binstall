@@ -5,7 +5,7 @@ use tokio::sync::OnceCell;
 use zeroize::Zeroizing;
 
 use crate::{
-    errors::BinstallError,
+    errors::Result,
     helpers::{remote, tasks::AutoAbortJoinHandle},
 };
 
@@ -38,7 +38,7 @@ impl LazyGhApiClient {
         }
     }
 
-    pub async fn get(&self) -> Result<&GhApiClient, BinstallError> {
+    pub async fn get(&self) -> Result<&GhApiClient> {
         self.inner
             .get_or_try_init(|| async {
                 let task = self.task.lock().unwrap().take();

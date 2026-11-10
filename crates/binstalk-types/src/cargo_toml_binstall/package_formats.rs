@@ -7,12 +7,14 @@ use strum_macros::{Display, EnumIter, EnumString};
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive)]
+#[derive(Default)]
 pub enum PkgFmt {
     /// Download format is TAR (uncompressed)
     Tar,
     /// Download format is TAR + Bzip2
     Tbz2,
     /// Download format is TGZ (TAR + GZip)
+    #[default]
     Tgz,
     /// Download format is TAR + XZ
     Txz,
@@ -22,12 +24,6 @@ pub enum PkgFmt {
     Zip,
     /// Download format is raw / binary
     Bin,
-}
-
-impl Default for PkgFmt {
-    fn default() -> Self {
-        Self::Tgz
-    }
 }
 
 impl PkgFmt {

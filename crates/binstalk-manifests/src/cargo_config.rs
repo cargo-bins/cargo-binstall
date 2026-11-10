@@ -11,14 +11,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use binstalk_types::{
+    errors::{bail, Result},
+    message,
+};
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
 use merge::Merge;
-use miette::Diagnostic;
 use normalize_path::NormalizePath;
 use serde::Deserialize;
-use thiserror::Error;
 
 #[derive(Clone, Debug, Deserialize, Merge)]
 pub struct Install {
@@ -195,11 +197,8 @@ fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
 
 fn iterate_reverse_preorder(
     mut stack: Vec<IncludedConfig>,
-    mut load_config: impl FnMut(
-        &mut dyn io::Read,
-        &Path,
-    ) -> Result<Vec<IncludedConfig>, ConfigLoadError>,
-) -> Result<(), ConfigLoadError> {
+    mut load_config: impl FnMut(&mut dyn io::Read, &Path) -> Result<Vec<IncludedConfig>>,
+) -> Result<()> {
     // stack invariant: higher precedence config is the first out
     let mut visited_path = HashSet::new();
 
@@ -219,10 +218,11 @@ fn iterate_reverse_preorder(
         // Even if one config file has two symlinks, the content might be different
         // if relative path is present.
         if !visited_path.insert((path.to_owned(), parent.normalize())) {
-            return Err(ConfigLoadError::DeadLoopInLoading {
-                path: path.into(),
-                parent: parent.into(),
-            });
+            bail!(message!(
+                "Detect deadloop in toml at `{}` with parent `{}`",
+                path.display(),
+                parent.display()
+            ));
         }
 
         stack.extend(load_config(&mut (&file), parent)?);
@@ -232,18 +232,15 @@ fn iterate_reverse_preorder(
 }
 
 impl Config {
-    pub fn default_path() -> Result<PathBuf, ConfigLoadError> {
+    pub fn default_path() -> Result<PathBuf> {
         Ok(cargo_home()?.join("config.toml"))
     }
 
-    pub fn load() -> Result<Self, ConfigLoadError> {
+    pub fn load() -> Result<Self> {
         Self::load_from_path(Self::default_path()?)
     }
 
-    fn load_from_reader_inner(
-        reader: &mut dyn io::Read,
-        dir: &Path,
-    ) -> Result<Self, ConfigLoadError> {
+    fn load_from_reader_inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Self> {
         let mut vec = Vec::new();
         reader.read_to_end(&mut vec)?;
 
@@ -289,11 +286,8 @@ impl Config {
     ///   For relative path in the config, `Config::load_from_reader`
     ///   will join the `dir` and the relative path to form the final
     ///   path.
-    pub fn load_from_reader<R: io::Read>(
-        mut reader: R,
-        dir: &Path,
-    ) -> Result<Self, ConfigLoadError> {
-        fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config, ConfigLoadError> {
+    pub fn load_from_reader<R: io::Read>(mut reader: R, dir: &Path) -> Result<Self> {
+        fn inner(reader: &mut dyn io::Read, dir: &Path) -> Result<Config> {
             let mut root_config = Config::load_from_reader_inner(reader, dir)?;
 
             iterate_reverse_preorder(mem::take(&mut root_config.include), |file, parent| {
@@ -309,8 +303,8 @@ impl Config {
         inner(&mut reader, dir)
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, ConfigLoadError> {
-        fn inner(path: &Path) -> Result<Config, ConfigLoadError> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self> {
+        fn inner(path: &Path) -> Result<Config> {
             match File::open(path) {
                 Ok(file) => {
                     let file = FileLock::new_shared(file)?.set_file_path(path);
@@ -343,31 +337,6 @@ impl Config {
         } else {
             Some(registry)
         }
-    }
-}
-
-#[derive(Debug, Diagnostic, Error)]
-#[non_exhaustive]
-pub enum ConfigLoadError {
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
-
-    #[error("Failed to deserialize toml: {0}")]
-    TomlParse(Box<toml_edit::de::Error>),
-
-    #[error("Detect deadloop in toml at `{path}` with parent `{parent}`")]
-    DeadLoopInLoading { path: Box<Path>, parent: Box<Path> },
-}
-
-impl From<toml_edit::de::Error> for ConfigLoadError {
-    fn from(e: toml_edit::de::Error) -> Self {
-        ConfigLoadError::TomlParse(Box::new(e))
-    }
-}
-
-impl From<toml_edit::TomlError> for ConfigLoadError {
-    fn from(e: toml_edit::TomlError) -> Self {
-        ConfigLoadError::TomlParse(Box::new(e.into()))
     }
 }
 

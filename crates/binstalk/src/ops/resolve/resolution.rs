@@ -11,7 +11,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     bins,
-    errors::BinstallError,
+    errors::{bail, crate_context, message, Exit, Result, ResultExt},
     fetchers::Fetcher,
     manifests::crate_info::{CrateInfo, CrateSource},
     ops::Options,
@@ -56,14 +56,14 @@ impl Resolution {
 }
 
 impl ResolutionFetch {
-    pub fn install(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
+    pub fn install(self, opts: &Options) -> Result<CrateInfo> {
         let crate_name = self.name.clone();
         self.install_inner(opts)
-            .map_err(|err| err.crate_context(crate_name))
+            .map_err(|err| crate_context(err, crate_name))
     }
 
-    fn install_inner(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
-        type InstallFp = fn(&bins::BinFile) -> Result<(), bins::Error>;
+    fn install_inner(self, opts: &Options) -> Result<CrateInfo> {
+        type InstallFp = fn(&bins::BinFile) -> Result<()>;
 
         let (install_bin, install_link): (InstallFp, InstallFp) = match (opts.no_track, opts.force)
         {
@@ -76,13 +76,13 @@ impl ResolutionFetch {
 
         info!("Installing binaries...");
         for file in &self.bin_files {
-            install_bin(file)?;
+            install_bin(file).or_raise_err(Exit::BinFile)?;
         }
 
         // Generate symlinks
         if !opts.no_symlinks {
             for file in &self.bin_files {
-                install_link(file)?;
+                install_link(file).or_raise_err(Exit::BinFile)?;
             }
         }
 
@@ -108,7 +108,7 @@ impl ResolutionFetch {
             .filter(|bin_name| {
                 user_specified_bins
                     .as_ref()
-                    .map_or(true, |bins| bins.binary_search(bin_name).is_ok())
+                    .is_none_or(|bins| bins.binary_search(bin_name).is_ok())
             })
             .collect()
     }
@@ -155,22 +155,22 @@ impl ResolutionFetch {
 }
 
 impl ResolutionSource {
-    pub async fn install(self, opts: Arc<Options>) -> Result<(), BinstallError> {
+    pub async fn install(self, opts: Arc<Options>) -> Result<()> {
         let crate_name = self.name.clone();
         self.install_inner(opts)
             .await
-            .map_err(|err| err.crate_context(crate_name))
+            .map_err(|err| crate_context(err, crate_name))
     }
 
-    async fn install_inner(self, opts: Arc<Options>) -> Result<(), BinstallError> {
+    async fn install_inner(self, opts: Arc<Options>) -> Result<()> {
         let target = if let Some(targets) = opts.desired_targets.get_initialized() {
-            Some(targets.first().ok_or(BinstallError::NoViableTargets)?)
+            Some(targets.first().ok_or(Exit::NoViableTargets)?)
         } else {
             None
         };
 
         if opts.has_overriden_install_path {
-            return Err(BinstallError::CargoInstallDoesNotSupportInstallPath);
+            bail!(Exit::CargoInstallDoesNotSupportInstallPath);
         }
 
         let name = &self.name;
@@ -240,20 +240,21 @@ impl ResolutionSource {
                 .jobserver_client
                 .get()
                 .await?
-                .configure_and_run(&mut cmd, |cmd| cmd.group_spawn())?;
+                .configure_and_run(&mut cmd, |cmd| cmd.group_spawn())
+                .or_raise_err(Exit::Io)?;
 
             debug!("Spawned command pid={:?}", child.id());
 
-            let status = child.wait().await?;
+            let status = child.wait().await.or_raise_err(Exit::Io)?;
             if status.success() {
                 info!("Cargo finished successfully");
                 Ok(())
             } else {
                 error!("Cargo errored! {status:?}");
-                Err(BinstallError::SubProcess {
-                    command: format_cmd(&cmd).to_string().into_boxed_str(),
-                    status,
-                })
+                Err(Exit::SubProcess.with(message!(
+                    "subprocess {} errored with {status}",
+                    format_cmd(&cmd)
+                )))
             }
         } else {
             info!("Dry-run: running `{}`", format_cmd(&cmd));

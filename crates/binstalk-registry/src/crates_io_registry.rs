@@ -1,4 +1,4 @@
-use binstalk_downloader::remote::{Client, Error as RemoteError, Url};
+use binstalk_downloader::remote::{parse_url, Client, HttpError, Url};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
@@ -6,10 +6,15 @@ use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
 use tracing::{debug, instrument};
 
-use crate::{parse_manifest, MatchedVersion, RegistryError};
+use binstalk_types::{
+    errors::{find, Exn, OptionExt, Result},
+    message,
+};
+
+use crate::{not_found, parse_manifest, MatchedVersion};
 
 /// Return `Some(checksum)` if the version is not yanked, otherwise `None`.
-async fn is_crate_yanked(client: &Client, url: Url) -> Result<Option<String>, RemoteError> {
+async fn is_crate_yanked(client: &Client, url: Url) -> Result<Option<String>> {
     #[derive(Deserialize)]
     struct CrateInfo {
         version: Inner,
@@ -34,7 +39,7 @@ async fn fetch_crate_cratesio_version_matched(
     client: &Client,
     url: Url,
     version_req: &VersionReq,
-) -> Result<Option<(CompactString, String)>, RemoteError> {
+) -> Result<Option<(CompactString, String)>> {
     #[derive(Deserialize)]
     struct CrateInfo {
         #[serde(rename = "crate")]
@@ -115,8 +120,8 @@ pub async fn fetch_crate_cratesio_api(
     client: Client,
     name: &str,
     version_req: &VersionReq,
-) -> Result<Manifest<Meta>, RegistryError> {
-    let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))?;
+) -> Result<Manifest<Meta>> {
+    let url = parse_url(&format!("https://crates.io/api/v1/crates/{name}"))?;
 
     let (version, cksum) = match version_req.comparators.as_slice() {
         [Comparator {
@@ -144,13 +149,14 @@ pub async fn fetch_crate_cratesio_api(
         }
         _ => fetch_crate_cratesio_version_matched(&client, url.clone(), version_req).await,
     }
-    .map_err(|e| match e {
-        RemoteError::Http(e) if e.is_status() => RegistryError::NotFound(name.into()),
-        e => e.into(),
+    .map_err(|e| -> Exn {
+        if find::<HttpError>(e.frame()).is_some_and(HttpError::is_status) {
+            e.raise(not_found(name)).into()
+        } else {
+            e
+        }
     })?
-    .ok_or_else(|| RegistryError::VersionMismatch {
-        req: version_req.clone(),
-    })?;
+    .ok_or_raise(|| message!("no version matching requirement '{version_req}'"))?;
 
     debug!("Found information for crate version: '{version}'");
 

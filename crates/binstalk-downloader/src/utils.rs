@@ -3,32 +3,27 @@ use std::{
     io::{self, BufRead, Read},
 };
 
+use binstalk_types::errors::{from_io, Exn, Result};
 use bytes::{Buf, Bytes};
 use futures_util::{FutureExt, Stream, StreamExt};
 use tokio::{sync::mpsc, task};
 
-pub(super) fn extract_with_blocking_task<E, StreamError, S, F, T>(
+/// Errors returned by `f` are recovered with [`from_io`], so `f`
+/// may use [`into_io`] to propagate an [`Exn`].
+pub(super) fn extract_with_blocking_task<S, F, T>(
     stream: S,
     f: F,
-) -> impl Future<Output = Result<T, E>>
+) -> impl Future<Output = Result<T>>
 where
     T: Send + 'static,
-    E: From<io::Error>,
-    E: From<StreamError>,
-    S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>) -> io::Result<T> + Send + Sync + 'static,
 {
-    async fn inner<S, StreamError, Fut, T, E>(
-        mut stream: S,
-        task: Fut,
-        tx: mpsc::Sender<Bytes>,
-    ) -> Result<T, E>
+    async fn inner<S, Fut, T>(mut stream: S, task: Fut, tx: mpsc::Sender<Bytes>) -> Result<T>
     where
-        E: From<io::Error>,
-        E: From<StreamError>,
         // We do not use trait object for S since there will only be one
         // S used with this function.
-        S: Stream<Item = Result<Bytes, StreamError>> + Send + Sync + Unpin,
+        S: Stream<Item = Result<Bytes>> + Send + Sync + Unpin,
         // asyncify would always return the same future, so no need to
         // use trait object here.
         Fut: Future<Output = io::Result<T>> + Send + Sync,
@@ -54,11 +49,11 @@ where
                 }
             }
 
-            Ok::<_, E>(())
+            Ok::<_, Exn>(())
         };
         tokio::pin!(read_fut);
 
-        let task_fut = async move { task.await.map_err(E::from) };
+        let task_fut = async move { task.await.map_err(from_io) };
         tokio::pin!(task_fut);
 
         tokio::select! {

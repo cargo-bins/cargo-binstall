@@ -12,15 +12,17 @@ use tempfile::tempfile as create_tmpfile;
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use super::{extractor::*, DownloadError, ExtractedFiles, TarBasedFmt};
+use binstalk_types::errors::{into_io, Result};
+
+use super::{extractor::*, ExtractedFiles, TarBasedFmt};
 use crate::{
     download::zip_extraction::do_extract_zip,
     utils::{extract_with_blocking_task, StreamReadable},
 };
 
-pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
+pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes>> + Send + Sync + Unpin,
 {
     debug!("Writing to `{}`", path.display());
 
@@ -36,16 +38,16 @@ where
     .await
 }
 
-pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
+pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<ExtractedFiles>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync,
+    S: Stream<Item = Result<Bytes>> + Unpin + Send + Sync,
 {
     debug!("Downloading from zip archive to tempfile");
 
     extract_with_blocking_decoder(stream, path, |rx, path| {
         debug!("Decompressing from zip archive to `{}`", path.display());
 
-        do_extract_zip(write_stream_to_file(rx, create_tmpfile()?)?, path).map_err(io::Error::from)
+        do_extract_zip(write_stream_to_file(rx, create_tmpfile()?)?, path).map_err(into_io)
     })
     .await
 }
@@ -54,9 +56,9 @@ pub async fn extract_tar_based_stream<S>(
     stream: S,
     dst: &Path,
     fmt: TarBasedFmt,
-) -> Result<ExtractedFiles, DownloadError>
+) -> Result<ExtractedFiles>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes>> + Send + Sync + Unpin,
 {
     debug!("Extracting from {fmt} archive to {}", dst.display());
 
@@ -135,9 +137,9 @@ fn extract_with_blocking_decoder<S, F, T>(
     stream: S,
     path: &Path,
     f: F,
-) -> impl Future<Output = Result<T, DownloadError>>
+) -> impl Future<Output = Result<T>>
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
+    S: Stream<Item = Result<Bytes>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>, &Path) -> io::Result<T> + Send + Sync + 'static,
     T: Send + 'static,
 {

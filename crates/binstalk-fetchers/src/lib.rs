@@ -2,11 +2,10 @@
 
 use std::{path::Path, sync::Arc, time::Duration};
 
-use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
-use binstalk_types::cargo_toml_binstall::{SigningAlgorithm, Strategy};
+use binstalk_types::cargo_toml_binstall::Strategy;
 use thiserror::Error as ThisError;
-use tokio::{sync::OnceCell, task::JoinError, time::sleep};
+use tokio::{sync::OnceCell, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -39,52 +38,12 @@ pub struct InvalidPkgFmtError {
     pub reason: &'static &'static str,
 }
 
-#[derive(Debug, ThisError, miette::Diagnostic)]
-#[non_exhaustive]
-pub enum FetchError {
-    #[error(transparent)]
-    Download(#[from] DownloadError),
-
-    #[error("Failed to parse template: {0}")]
-    #[diagnostic(transparent)]
-    TemplateParse(#[from] leon::ParseError),
-
-    #[error("Failed to render template: {0}")]
-    #[diagnostic(transparent)]
-    TemplateRender(#[from] leon::RenderError),
-
-    #[error("Failed to render template: {0}")]
-    GhApi(#[from] GhApiError),
-
-    #[error(transparent)]
-    InvalidPkgFmt(Box<InvalidPkgFmtError>),
-
-    #[error("Failed to parse url: {0}")]
-    UrlParse(#[from] UrlParseError),
-
-    #[error("Signing algorithm not supported: {0:?}")]
-    UnsupportedSigningAlgorithm(SigningAlgorithm),
-
-    #[error("No signature present")]
-    MissingSignature,
-
-    #[error("Failed to verify signature")]
-    InvalidSignature,
-
-    #[error("Failed to wait for task: {0}")]
-    TaskJoinError(#[from] JoinError),
+fn invalid_signature() -> binstalk_types::errors::Message {
+    message!("Failed to verify signature")
 }
 
-impl From<RemoteError> for FetchError {
-    fn from(e: RemoteError) -> Self {
-        DownloadError::from(e).into()
-    }
-}
-
-impl From<InvalidPkgFmtError> for FetchError {
-    fn from(e: InvalidPkgFmtError) -> Self {
-        Self::InvalidPkgFmt(Box::new(e))
-    }
+fn missing_signature() -> binstalk_types::errors::Message {
+    message!("No signature present")
 }
 
 #[async_trait::async_trait]
@@ -102,7 +61,7 @@ pub trait Fetcher: Send + Sync {
         Self: Sized;
 
     /// Fetch a package and extract
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError>;
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles>;
 
     /// Find the package, if it is available for download
     ///
@@ -112,7 +71,7 @@ pub trait Fetcher: Send + Sync {
     ///
     /// Must return `true` if a package is available, `false` if none is, and reserve errors to
     /// fatal conditions only.
-    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>>;
+    fn find(self: Arc<Self>) -> JoinHandle<Result<bool>>;
 
     /// Report to upstream that cargo-binstall tries to use this fetcher.
     /// Currently it is only overridden by [`quickinstall::QuickInstall`].
@@ -187,28 +146,24 @@ impl Data {
     }
 
     #[instrument(skip(client))]
-    async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
-        async fn gh_get_repo_info(
-            client: &GhApiClient,
-            gh_repo: &GhRepo,
-        ) -> Result<GhRepoInfo, GhApiError> {
+    async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>> {
+        async fn gh_get_repo_info(client: &GhApiClient, gh_repo: &GhRepo) -> Result<GhRepoInfo> {
             loop {
                 match client.get_repo_info(gh_repo).await {
                     Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
-                    Ok(None) => break Err(GhApiError::NotFound),
-                    Err(GhApiError::RateLimit { retry_after }) => {
+                    Ok(None) => break Err(GhApiError::NotFound.raise().into()),
+                    Err(err) => {
+                        let Some(retry_after) = err.rate_limit() else {
+                            break Err(err);
+                        };
                         sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await
                     }
-                    Err(err) => break Err(err),
                 }
             }
         }
 
-        async fn get_repo_info_inner(
-            repo: &str,
-            client: &GhApiClient,
-        ) -> Result<RepoInfo, FetchError> {
-            let repo = Url::parse(repo)?;
+        async fn get_repo_info_inner(repo: &str, client: &GhApiClient) -> Result<RepoInfo> {
+            let repo = parse_url(repo)?;
             let mut repo = client
                 .remote_client()
                 .get_redirected_final_url(repo.clone())
@@ -252,9 +207,10 @@ impl Data {
 
             Ok(RepoInfo {
                 is_private: match GhRepo::try_extract_from_url(&repo) {
-                    Some(gh_repo) if client.has_gh_token() => {
-                        gh_get_repo_info(client, &gh_repo).await?.is_private()
-                    }
+                    Some(gh_repo) if client.has_gh_token() => gh_get_repo_info(client, &gh_repo)
+                        .await
+                        .or_raise_err(message!("Request to GitHub API failed"))?
+                        .is_private(),
                     _ => false,
                 },
                 subcrate,

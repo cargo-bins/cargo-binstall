@@ -1,25 +1,19 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{fmt, io, str::FromStr, sync::Arc};
+use std::{fmt, str::FromStr, sync::Arc};
 
-use base16::DecodeError as Base16DecodeError;
-use binstalk_downloader::{
-    download::DownloadError,
-    remote::{Client, Error as RemoteError},
-};
+use binstalk_downloader::remote::Client;
 use binstalk_types::{
     cargo_toml_binstall::Meta,
     crate_info::{CrateSource, SourceType},
+    errors::{Message, Result},
     maybe_owned::MaybeOwned,
+    message,
 };
-use cargo_toml_workspace::cargo_toml::{Error as CargoTomlError, Manifest};
+use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
-use leon::{ParseError, RenderError};
-use miette::Diagnostic;
 use semver::VersionReq;
-use serde_json::Error as JsonError;
 use thiserror::Error as ThisError;
-use tokio::task;
 use url::{ParseError as UrlParseError, Url};
 
 mod auth;
@@ -48,71 +42,22 @@ pub use crates_io_registry::fetch_crate_cratesio_api;
 mod sparse_registry;
 pub use sparse_registry::SparseRegistry;
 
-#[derive(Debug, ThisError, Diagnostic)]
-#[diagnostic(severity(error), code(binstall::cargo_registry))]
-#[non_exhaustive]
-pub enum RegistryError {
-    #[error(transparent)]
-    Remote(#[from] RemoteError),
-
-    #[error("{0} is not found")]
-    #[diagnostic(
-        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={0}")
-    )]
-    NotFound(CompactString),
-
-    #[error(transparent)]
-    Json(#[from] JsonError),
-
-    #[error("Failed to parse dl config: {0}")]
-    ParseDlConfig(#[from] ParseError),
-
-    #[error("Failed to render dl config: {0}")]
-    RenderDlConfig(#[from] RenderError),
-
-    #[error("Failed to parse checksum encoded in hex: {0}")]
-    InvalidHex(#[from] Base16DecodeError),
-
-    #[error("Expected checksum `{expected}`, actual checksum `{actual}`")]
-    UnmatchedChecksum {
-        expected: Box<str>,
-        actual: Box<str>,
-    },
-
-    #[error("no version matching requirement '{req}'")]
-    VersionMismatch { req: semver::VersionReq },
-
-    #[error("Failed to parse cargo manifest: {0}")]
-    #[diagnostic(help("If you used --manifest-path, check the Cargo.toml syntax."))]
-    CargoManifest(#[from] Box<CargoTomlError>),
-
-    #[error("Failed to parse url: {0}")]
-    UrlParse(#[from] UrlParseError),
-
-    #[error(transparent)]
-    Download(#[from] DownloadError),
-
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
-
-    #[error(transparent)]
-    TaskJoinError(#[from] task::JoinError),
-
-    #[cfg(feature = "git")]
-    #[error("Failed to shallow clone git repository: {0}")]
-    GitError(#[from] GitError),
-
-    #[error("registry requires authentication: {0}")]
-    #[diagnostic(
-        help("Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active.")
-    )]
-    AuthenticationRequired(Box<Url>),
+fn not_found(crate_name: &str) -> Message {
+    message!("{crate_name} is not found").with_help(format!(
+        "Check that the crate name you provided is correct.
+You can also search for a matching crate at: https://lib.rs/search?q={crate_name}"
+    ))
 }
 
-impl From<CargoTomlError> for RegistryError {
-    fn from(e: CargoTomlError) -> Self {
-        Self::from(Box::new(e))
-    }
+fn auth_required(url: &Url) -> Message {
+    message!("registry requires authentication: {url}").with_help(
+        "Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active.",
+    )
+}
+
+fn cargo_manifest_error() -> Message {
+    message!("Failed to parse cargo manifest")
+        .with_help("If you used --manifest-path, check the Cargo.toml syntax.")
 }
 
 #[derive(Clone, Debug)]
@@ -196,7 +141,7 @@ impl Registry {
         client: Client,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>)> {
         self.fetch_crate_matched_with_auth(client, None, crate_name, version_req)
             .await
     }
@@ -207,7 +152,7 @@ impl Registry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>)> {
         match self {
             Self::Sparse(sparse_registry) => {
                 sparse_registry

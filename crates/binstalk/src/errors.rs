@@ -1,149 +1,42 @@
-use std::{
-    fmt, io, ops,
-    path::PathBuf,
-    process::{ExitCode, ExitStatus, Termination},
-};
+//! Error handling of cargo-binstall.
+//!
+//! Errors are type-erased trees of [`Error`]s (see [`binstalk_types::errors`]).
+//! Most of them are only reported to the user, so they carry no type
+//! information besides their message.
+//!
+//! An error that ends the program is tagged with an [`Exit`], which decides
+//! the exit code of cargo-binstall and the diagnostic code shown to the user.
 
-use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_fetchers::FetchError;
-use binstalk_types::cargo_toml_binstall::TargetTripleParseError;
+use std::process;
+
 use compact_str::CompactString;
-use itertools::Itertools;
-use miette::{Diagnostic, Report};
-use thiserror::Error;
-use tokio::task;
+use strum::EnumProperty as _;
+use strum_macros::EnumProperty;
+use thiserror::Error as ThisError;
 
-use crate::{
-    bins,
-    helpers::{
-        cargo_toml::Error as CargoTomlError,
-        cargo_toml_workspace::Error as LoadManifestFromWSError, gh_api_client::GhApiError,
-    },
-    registry::{InvalidRegistryError, RegistryError},
-};
+pub use binstalk_types::{errors::*, message};
 
-#[derive(Debug, Error)]
-#[error("version string '{v}' is not semver: {err}")]
-pub struct VersionParseError {
-    pub v: CompactString,
-    #[source]
-    pub err: semver::Error,
-}
-
-#[derive(Debug, Diagnostic, Error)]
-#[error("For crate {crate_name}: {err}")]
-pub struct CrateContextError {
-    crate_name: CompactString,
-    #[source]
-    #[diagnostic(transparent)]
-    err: BinstallError,
-}
-
-#[derive(Debug)]
-pub struct CrateErrors(Box<[Box<CrateContextError>]>);
-
-impl CrateErrors {
-    fn iter(&self) -> impl Iterator<Item = &CrateContextError> + Clone {
-        self.0.iter().map(ops::Deref::deref)
-    }
-
-    fn get_iter_for<'a, T: 'a>(
-        &'a self,
-        f: fn(&'a CrateContextError) -> Option<T>,
-    ) -> Option<impl Iterator<Item = T> + 'a> {
-        let iter = self.iter().filter_map(f);
-
-        if iter.clone().next().is_none() {
-            None
-        } else {
-            Some(iter)
-        }
-    }
-}
-
-impl fmt::Display for CrateErrors {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0.iter().format(", "), f)
-    }
-}
-
-impl std::error::Error for CrateErrors {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.first().map(|e| e as _)
-    }
-}
-
-impl miette::Diagnostic for CrateErrors {
-    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
-        Some(Box::new("binstall::many_failure"))
-    }
-
-    fn severity(&self) -> Option<miette::Severity> {
-        self.iter().filter_map(miette::Diagnostic::severity).max()
-    }
-
-    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
-        Some(Box::new(
-            self.get_iter_for(miette::Diagnostic::help)?.format("\n"),
-        ))
-    }
-
-    fn url<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
-        Some(Box::new(
-            self.get_iter_for(miette::Diagnostic::url)?.format("\n"),
-        ))
-    }
-
-    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
-        self.iter().find_map(miette::Diagnostic::source_code)
-    }
-
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
-        let get_iter = || self.iter().filter_map(miette::Diagnostic::labels).flatten();
-
-        if get_iter().next().is_none() {
-            None
-        } else {
-            Some(Box::new(get_iter()))
-        }
-    }
-
-    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn miette::Diagnostic> + 'a>> {
-        Some(Box::new(
-            self.iter().map(|e| e as _).chain(
-                self.iter()
-                    .filter_map(miette::Diagnostic::related)
-                    .flatten(),
-            ),
-        ))
-    }
-
-    fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {
-        self.0.first().map(|err| &**err as _)
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
-pub struct InvalidPkgFmtError {
-    pub crate_name: CompactString,
-    pub version: CompactString,
-    pub target: String,
-    pub pkg_url: String,
-    pub reason: &'static str,
-}
-
-/// Error kinds emitted by cargo-binstall.
-#[derive(Error, Diagnostic, Debug)]
+/// Exit codes of cargo-binstall.
+///
+/// The first [`Exit`] found in the error tree (depth-first) decides the exit
+/// code, see [`exit_code`].
+///
+/// This will never be:
+/// - 0 (success)
+/// - 1 and 2 (catchall and shell)
+/// - 16 (errors without an [`Exit`])
+/// - 64 (generic error)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ThisError, EnumProperty)]
+#[repr(u8)]
 #[non_exhaustive]
-pub enum BinstallError {
+pub enum Exit {
     /// Internal: a task could not be joined.
     ///
     /// - Code: `binstall::internal::task_join`
     /// - Exit: 17
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::internal::task_join))]
-    TaskJoinError(#[from] task::JoinError),
+    #[error("failed to join task")]
+    #[strum(props(code = "binstall::internal::task_join"))]
+    TaskJoin = 17,
 
     /// The installation was cancelled by a user at a confirmation prompt,
     /// or user send a ctrl_c on all platforms or
@@ -152,27 +45,24 @@ pub enum BinstallError {
     /// - Code: `binstall::user_abort`
     /// - Exit: 32
     #[error("installation cancelled by user")]
-    #[diagnostic(severity(info), code(binstall::user_abort))]
-    UserAbort,
+    #[strum(props(code = "binstall::user_abort"))]
+    UserAbort = 32,
 
-    /// Package is not signed and policy requires it.
+    /// Package is signed but failed verification.
     ///
     /// - Code: `binstall::signature::invalid`
     /// - Exit: 40
-    #[error("Crate {crate_name} is signed and package {package_name} failed verification")]
-    #[diagnostic(severity(error), code(binstall::signature::invalid))]
-    InvalidSignature {
-        crate_name: CompactString,
-        package_name: CompactString,
-    },
+    #[error("package failed signature verification")]
+    #[strum(props(code = "binstall::signature::invalid"))]
+    InvalidSignature = 40,
 
     /// Package is not signed and policy requires it.
     ///
     /// - Code: `binstall::signature::missing`
     /// - Exit: 41
-    #[error("Crate {0} does not have signing information")]
-    #[diagnostic(severity(error), code(binstall::signature::missing))]
-    MissingSignature(CompactString),
+    #[error("package does not have signing information")]
+    #[strum(props(code = "binstall::signature::missing"))]
+    MissingSignature = 41,
 
     /// A URL is invalid.
     ///
@@ -180,41 +70,26 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::url_parse`
     /// - Exit: 65
-    #[error("Failed to parse url: {0}")]
-    #[diagnostic(severity(error), code(binstall::url_parse))]
-    UrlParse(#[from] url::ParseError),
+    #[error("Failed to parse url")]
+    #[strum(props(code = "binstall::url_parse"))]
+    UrlParse = 65,
 
     /// Failed to parse template.
     ///
     /// - Code: `binstall::template`
     /// - Exit: 67
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::template))]
-    #[source_code(transparent)]
-    #[label(transparent)]
-    TemplateParseError(
-        #[from]
-        #[diagnostic_source]
-        leon::ParseError,
-    ),
+    #[error("Failed to parse template")]
+    #[strum(props(code = "binstall::template"))]
+    TemplateParse = 67,
 
-    /// Failed to fetch pre-built binaries.
+    /// Failed to fetch pre-built binaries, or failed to download or decode
+    /// the body.
     ///
     /// - Code: `binstall::fetch`
     /// - Exit: 68
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::fetch))]
-    #[source_code(transparent)]
-    #[label(transparent)]
-    FetchError(Box<FetchError>),
-
-    /// Failed to download or failed to decode the body.
-    ///
-    /// - Code: `binstall::download`
-    /// - Exit: 68
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::download))]
-    Download(#[from] DownloadError),
+    #[error("Failed to fetch pre-built binaries")]
+    #[strum(props(code = "binstall::fetch"))]
+    Fetch = 68,
 
     /// A subprocess failed.
     ///
@@ -222,28 +97,25 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::subprocess`
     /// - Exit: 70
-    #[error("subprocess {command} errored with {status}")]
-    #[diagnostic(severity(error), code(binstall::subprocess))]
-    SubProcess {
-        command: Box<str>,
-        status: ExitStatus,
-    },
+    #[error("subprocess failed")]
+    #[strum(props(code = "binstall::subprocess"))]
+    SubProcess = 70,
 
     /// A generic I/O error.
     ///
     /// - Code: `binstall::io`
     /// - Exit: 74
-    #[error("I/O Error: {0}")]
-    #[diagnostic(severity(error), code(binstall::io))]
-    Io(io::Error),
+    #[error("I/O Error")]
+    #[strum(props(code = "binstall::io"))]
+    Io = 74,
 
     /// Unknown registry name
     ///
     /// - Code: `binstall::cargo_registry`
     /// - Exit: 75
-    #[error("Unknown registry name {0}, env `CARGO_REGISTRIES_{0}_INDEX` nor is it in .cargo/config.toml")]
-    #[diagnostic(severity(error), code(binstall::cargo_registry))]
-    UnknownRegistryName(CompactString),
+    #[error("Unknown registry name")]
+    #[strum(props(code = "binstall::cargo_registry"))]
+    UnknownRegistryName = 75,
 
     /// An error interacting with the crates.io API.
     ///
@@ -251,17 +123,17 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::cargo_registry`
     /// - Exit: 76
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    RegistryError(#[from] Box<RegistryError>),
+    #[error("Failed to fetch crate from registry")]
+    #[strum(props(code = "binstall::cargo_registry"))]
+    Registry = 76,
 
     /// The override path to the cargo manifest is invalid or cannot be resolved.
     ///
     /// - Code: `binstall::cargo_manifest_path`
     /// - Exit: 77
     #[error("the --manifest-path is invalid or cannot be resolved")]
-    #[diagnostic(severity(error), code(binstall::cargo_manifest_path))]
-    CargoManifestPath,
+    #[strum(props(code = "binstall::cargo_manifest_path"))]
+    CargoManifestPath = 77,
 
     /// A parsing or validation error in a cargo manifest.
     ///
@@ -271,21 +143,20 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 78
-    #[error("Failed to parse cargo manifest: {0}")]
-    #[diagnostic(
-        severity(error),
-        code(binstall::cargo_manifest),
-        help("If you used --manifest-path, check the Cargo.toml syntax.")
-    )]
-    CargoManifest(Box<CargoTomlError>),
+    #[error("Failed to parse cargo manifest")]
+    #[strum(props(
+        code = "binstall::cargo_manifest",
+        help = "If you used --manifest-path, check the Cargo.toml syntax."
+    ))]
+    CargoManifest = 78,
 
     /// Failure to parse registry index url
     ///
     /// - Code: `binstall::cargo_registry`
     /// - Exit: 79
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::cargo_registry))]
-    RegistryParseError(#[from] Box<InvalidRegistryError>),
+    #[error("Failed to parse registry index url")]
+    #[strum(props(code = "binstall::cargo_registry"))]
+    RegistryParse = 79,
 
     /// A version is not valid semver.
     ///
@@ -294,9 +165,9 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::version::parse`
     /// - Exit: 80
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::version::parse))]
-    VersionParse(#[from] Box<VersionParseError>),
+    #[error("version string is not semver")]
+    #[strum(props(code = "binstall::version::parse"))]
+    VersionParse = 80,
 
     /// The crate@version syntax was used at the same time as the --version option.
     ///
@@ -305,12 +176,11 @@ pub enum BinstallError {
     /// - Code: `binstall::conflict::version`
     /// - Exit: 84
     #[error("superfluous version specification")]
-    #[diagnostic(
-        severity(error),
-        code(binstall::conflict::version),
-        help("You cannot use both crate@version and the --version option. Remove one.")
-    )]
-    SuperfluousVersionOption,
+    #[strum(props(
+        code = "binstall::conflict::version",
+        help = "You cannot use both crate@version and the --version option. Remove one."
+    ))]
+    SuperfluousVersionOption = 84,
 
     /// No binaries were found for the crate.
     ///
@@ -321,12 +191,11 @@ pub enum BinstallError {
     /// - Code: `binstall::resolve::binaries`
     /// - Exit: 86
     #[error("no binaries specified nor inferred")]
-    #[diagnostic(
-        severity(error),
-        code(binstall::resolve::binaries),
-        help("This crate doesn't specify any binaries, so there's nothing to install.")
-    )]
-    UnspecifiedBinaries,
+    #[strum(props(
+        code = "binstall::resolve::binaries",
+        help = "This crate doesn't specify any binaries, so there's nothing to install."
+    ))]
+    UnspecifiedBinaries = 86,
 
     /// No viable targets were found.
     ///
@@ -339,273 +208,180 @@ pub enum BinstallError {
     /// - Code: `binstall::targets::none_host`
     /// - Exit: 87
     #[error("failed to discovered a viable target from the host")]
-    #[diagnostic(
-        severity(error),
-        code(binstall::targets::none_host),
-        help("Try to specify --target")
-    )]
-    NoViableTargets,
+    #[strum(props(
+        code = "binstall::targets::none_host",
+        help = "Try to specify --target"
+    ))]
+    NoViableTargets = 87,
 
     /// Failed to find or install binaries.
     ///
     /// - Code: `binstall::bins`
     /// - Exit: 88
-    #[error("failed to find or install binaries: {0}")]
-    #[diagnostic(
-        severity(error),
-        code(binstall::targets::none_host),
-        help("Try to specify --target")
-    )]
-    BinFile(#[from] bins::Error),
+    #[error("failed to find or install binaries")]
+    #[strum(props(code = "binstall::bins"))]
+    BinFile = 88,
 
     /// `Cargo.toml` of the crate does not have section "Package".
     ///
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 89
-    #[error("Cargo.toml of crate {0} does not have section \"Package\"")]
-    #[diagnostic(severity(error), code(binstall::cargo_manifest))]
-    CargoTomlMissingPackage(CompactString),
+    #[error("Cargo.toml does not have section \"Package\"")]
+    #[strum(props(code = "binstall::cargo_manifest"))]
+    CargoTomlMissingPackage = 89,
 
     /// bin-dir configuration provided generates duplicate source path.
     ///
     /// - Code: `binstall::cargo_manifest`
     /// - Exit: 90
-    #[error("bin-dir configuration provided generates duplicate source path: {path}")]
-    #[diagnostic(severity(error), code(binstall::SourceFilePath))]
-    DuplicateSourceFilePath { path: PathBuf },
+    #[error("bin-dir configuration provided generates duplicate source path")]
+    #[strum(props(code = "binstall::cargo_manifest"))]
+    DuplicateSourceFilePath = 90,
 
     /// Fallback to `cargo-install` is disabled.
     ///
     /// - Code: `binstall::no_fallback_to_cargo_install`
     /// - Exit: 94
     #[error("Fallback to cargo-install is disabled")]
-    #[diagnostic(severity(error), code(binstall::no_fallback_to_cargo_install))]
-    NoFallbackToCargoInstall,
+    #[strum(props(code = "binstall::no_fallback_to_cargo_install"))]
+    NoFallbackToCargoInstall = 94,
 
-    /// Fallback to `cargo-install` is disabled.
+    /// The `pkg-url` or `pkg-fmt` is invalid.
     ///
     /// - Code: `binstall::invalid_pkg_fmt`
     /// - Exit: 95
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::invalid_pkg_fmt))]
-    InvalidPkgFmt(Box<InvalidPkgFmtError>),
+    #[error("invalid pkg-url or pkg-fmt")]
+    #[strum(props(code = "binstall::invalid_pkg_fmt"))]
+    InvalidPkgFmt = 95,
 
     /// Request to GitHub API failed
     ///
     /// - Code: `binstall::gh_api_failure`
     /// - Exit: 96
-    #[error("Request to GitHub API failed: {0}")]
-    #[diagnostic(severity(error), code(binstall::gh_api_failure))]
-    GhApiErr(#[source] Box<GhApiError>),
+    #[error("Request to GitHub API failed")]
+    #[strum(props(code = "binstall::gh_api_failure"))]
+    GhApi = 96,
 
     /// Failed to parse target triple
     ///
     /// - Code: `binstall::target_triple_parse_error`
     /// - Exit: 97
-    #[error("Failed to parse target triple: {0}")]
-    #[diagnostic(severity(error), code(binstall::target_triple_parse_error))]
-    TargetTripleParseError(#[source] Box<TargetTripleParseError>),
+    #[error("Failed to parse target triple")]
+    #[strum(props(code = "binstall::target_triple_parse_error"))]
+    TargetTripleParse = 97,
 
     /// Failed to shallow clone git repository
     ///
     /// - Code: `binstall::git`
     /// - Exit: 98
-    #[cfg(feature = "git")]
-    #[error("Failed to shallow clone git repository: {0}")]
-    #[diagnostic(severity(error), code(binstall::git))]
-    GitError(#[from] crate::helpers::git::GitError),
+    #[error("Failed to shallow clone git repository")]
+    #[strum(props(code = "binstall::git"))]
+    Git = 98,
 
     /// Failed to load manifest from workspace
     ///
     /// - Code: `binstall::load_manifest_from_workspace`
     /// - Exit: 99
-    #[error(transparent)]
-    #[diagnostic(severity(error), code(binstall::load_manifest_from_workspace))]
-    LoadManifestFromWSError(#[from] Box<LoadManifestFromWSError>),
+    #[error("Failed to load manifest from workspace")]
+    #[strum(props(code = "binstall::load_manifest_from_workspace"))]
+    LoadManifestFromWorkspace = 99,
 
     /// `cargo-install` does not support `--install-path`
     ///
     /// - Code: `binstall::cargo_install_does_not_support_install_path`
     /// - Exit: 100
     #[error("cargo-install does not support `--install-path`")]
-    #[diagnostic(
-        severity(error),
-        code(binatall::cargo_install_does_not_support_install_path)
-    )]
-    CargoInstallDoesNotSupportInstallPath,
-
-    /// A wrapped error providing the context of which crate the error is about.
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    CrateContext(Box<CrateContextError>),
-
-    /// A wrapped error for failures of multiple crates when `--continue-on-failure` is specified.
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    Errors(CrateErrors),
+    #[strum(props(code = "binstall::cargo_install_does_not_support_install_path"))]
+    CargoInstallDoesNotSupportInstallPath = 100,
 }
 
-impl BinstallError {
-    fn exit_number(&self) -> u8 {
-        use BinstallError::*;
-        let code: u8 = match self {
-            TaskJoinError(_) => 17,
-            UserAbort => 32,
-            InvalidSignature { .. } => 40,
-            MissingSignature(_) => 41,
-            UrlParse(_) => 65,
-            TemplateParseError(..) => 67,
-            FetchError(..) => 68,
-            Download(_) => 68,
-            SubProcess { .. } => 70,
-            Io(_) => 74,
-            UnknownRegistryName(_) => 75,
-            RegistryError { .. } => 76,
-            CargoManifestPath => 77,
-            CargoManifest { .. } => 78,
-            RegistryParseError(..) => 79,
-            VersionParse { .. } => 80,
-            SuperfluousVersionOption => 84,
-            UnspecifiedBinaries => 86,
-            NoViableTargets => 87,
-            BinFile(_) => 88,
-            CargoTomlMissingPackage(_) => 89,
-            DuplicateSourceFilePath { .. } => 90,
-            NoFallbackToCargoInstall => 94,
-            InvalidPkgFmt(..) => 95,
-            GhApiErr(..) => 96,
-            TargetTripleParseError(..) => 97,
-            #[cfg(feature = "git")]
-            GitError(_) => 98,
-            LoadManifestFromWSError(_) => 99,
-            CargoInstallDoesNotSupportInstallPath => 100,
-            CrateContext(context) => context.err.exit_number(),
-            Errors(errors) => (errors.0)[0].err.exit_number(),
-        };
-
-        // reserved codes
-        debug_assert!(code != 64 && code != 16 && code != 1 && code != 2 && code != 0);
-
-        code
+impl Exit {
+    /// The exit code.
+    pub fn code(self) -> u8 {
+        self as u8
     }
 
-    /// The recommended exit code for this error.
-    ///
-    /// This will never output:
-    /// - 0 (success)
-    /// - 1 and 2 (catchall and shell)
-    /// - 16 (binstall errors not handled here)
-    /// - 64 (generic error)
-    pub fn exit_code(&self) -> ExitCode {
-        self.exit_number().into()
+    /// The diagnostic code shown to the user.
+    pub fn diagnostic_code(self) -> &'static str {
+        self.get_str("code")
+            .expect("every variant has a diagnostic code")
     }
 
-    /// Add crate context to the error
-    pub fn crate_context(self, crate_name: impl Into<CompactString>) -> Self {
-        self.crate_context_inner(crate_name.into())
+    /// A hint on how to fix the error.
+    pub fn help(self) -> Option<&'static str> {
+        self.get_str("help")
     }
 
-    fn crate_context_inner(self, crate_name: CompactString) -> Self {
-        match self {
-            Self::CrateContext(mut crate_context_error) => {
-                crate_context_error.crate_name = crate_name;
-                Self::CrateContext(crate_context_error)
-            }
-            err => Self::CrateContext(Box::new(CrateContextError { err, crate_name })),
-        }
-    }
-
-    pub fn crate_errors(mut errors: Vec<Box<CrateContextError>>) -> Option<Self> {
-        if errors.is_empty() {
-            None
-        } else if errors.len() == 1 {
-            Some(Self::CrateContext(errors.pop().unwrap()))
-        } else {
-            Some(Self::Errors(CrateErrors(errors.into_boxed_slice())))
-        }
-    }
-
-    pub fn get_report(self) -> Option<Report> {
-        if let BinstallError::UserAbort = self {
-            None
-        } else {
-            Some(Report::new(self))
-        }
+    /// Create an error tagged with `self`, with `message` describing it.
+    #[track_caller]
+    pub fn with(self, message: Message) -> Error {
+        message.raise().raise(self).into()
     }
 }
 
-impl Termination for BinstallError {
-    fn report(self) -> ExitCode {
-        self.exit_code()
+impl From<Exit> for process::ExitCode {
+    fn from(exit: Exit) -> Self {
+        exit.code().into()
     }
 }
 
-impl From<io::Error> for BinstallError {
-    fn from(err: io::Error) -> Self {
-        err.downcast::<BinstallError>()
-            .unwrap_or_else(BinstallError::Io)
+/// Find the first frame in `frame`'s tree (depth-first, pre-order) whose error
+/// is a `T` and for which `f` returns `Some`.
+fn find_map<'a, T: std::error::Error + 'static, U>(
+    frame: &'a Frame,
+    f: &mut impl FnMut(&'a T) -> Option<U>,
+) -> Option<U> {
+    frame
+        .error()
+        .downcast_ref::<T>()
+        .and_then(&mut *f)
+        .or_else(|| frame.children().iter().find_map(|child| find_map(child, f)))
+}
+
+/// The exit code of `err`: the first [`Exit`] in the tree, i.e. the first
+/// crate that failed when multiple crates failed, or 16 if there is none.
+pub fn exit_code(err: &Error) -> process::ExitCode {
+    find(err.frame())
+        .map(|exit: &Exit| exit.code())
+        .unwrap_or(16)
+        .into()
+}
+
+/// Returns true if the installation was cancelled by the user, i.e. there is
+/// an [`Exit::UserAbort`] anywhere in `frame`.
+pub fn is_user_abort(frame: &Frame) -> bool {
+    find_map(frame, &mut |exit: &Exit| {
+        (*exit == Exit::UserAbort).then_some(())
+    })
+    .is_some()
+}
+
+/// Context of which crate the child error is about.
+#[derive(Debug, ThisError)]
+#[error("For crate {0}")]
+pub struct CrateContext(CompactString);
+
+/// Add crate context to `err`, unless it already has one.
+#[track_caller]
+pub fn crate_context(err: Error, crate_name: impl Into<CompactString>) -> Error {
+    if err.downcast_ref::<CrateContext>().is_some() {
+        err
+    } else {
+        err.raise(CrateContext(crate_name.into())).into()
     }
 }
 
-impl From<BinstallError> for io::Error {
-    fn from(e: BinstallError) -> io::Error {
-        match e {
-            BinstallError::Io(io_error) => io_error,
-            e => io::Error::other(e),
-        }
-    }
-}
-
-impl From<RemoteError> for BinstallError {
-    fn from(e: RemoteError) -> Self {
-        DownloadError::from(e).into()
-    }
-}
-
-impl From<CargoTomlError> for BinstallError {
-    fn from(e: CargoTomlError) -> Self {
-        BinstallError::CargoManifest(Box::new(e))
-    }
-}
-
-impl From<InvalidPkgFmtError> for BinstallError {
-    fn from(e: InvalidPkgFmtError) -> Self {
-        BinstallError::InvalidPkgFmt(Box::new(e))
-    }
-}
-
-impl From<GhApiError> for BinstallError {
-    fn from(e: GhApiError) -> Self {
-        BinstallError::GhApiErr(Box::new(e))
-    }
-}
-
-impl From<TargetTripleParseError> for BinstallError {
-    fn from(e: TargetTripleParseError) -> Self {
-        BinstallError::TargetTripleParseError(Box::new(e))
-    }
-}
-
-impl From<RegistryError> for BinstallError {
-    fn from(e: RegistryError) -> Self {
-        BinstallError::RegistryError(Box::new(e))
-    }
-}
-
-impl From<InvalidRegistryError> for BinstallError {
-    fn from(e: InvalidRegistryError) -> Self {
-        BinstallError::RegistryParseError(Box::new(e))
-    }
-}
-
-impl From<LoadManifestFromWSError> for BinstallError {
-    fn from(e: LoadManifestFromWSError) -> Self {
-        BinstallError::LoadManifestFromWSError(Box::new(e))
-    }
-}
-
-impl From<FetchError> for BinstallError {
-    fn from(e: FetchError) -> Self {
-        BinstallError::FetchError(Box::new(e))
+/// Combine errors of multiple crates, return `None` if `errors` is empty.
+#[track_caller]
+pub fn crate_errors(mut errors: Vec<Error>) -> Option<Error> {
+    match errors.len() {
+        0 => None,
+        1 => errors.pop(),
+        n => Some(
+            errors
+                .into_iter()
+                .raise(message!("Failed to install {n} crates"))
+                .into(),
+        ),
     }
 }

@@ -7,7 +7,7 @@ use std::{
 
 use atomic_file_install::atomic_install;
 use binstalk::{
-    errors::{BinstallError, CrateContextError},
+    errors::{crate_errors, message, Exit, Exn, IteratorExt, Result, ResultExt},
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
     get_desired_targets,
     helpers::{
@@ -32,7 +32,6 @@ use compact_str::{format_compact, CompactString};
 use file_format::FileFormat;
 use itertools::{repeat_n, Itertools};
 use log::LevelFilter;
-use miette::{Report, Result};
 use semver::{Version, VersionReq};
 use terminal_size::{terminal_size, Width};
 use tokio::task::block_in_place;
@@ -104,7 +103,7 @@ pub fn install_crates(
             http.as_mut().and_then(|http| http.cainfo.take()),
         ),
     )
-    .map_err(BinstallError::from)?;
+    .or_raise_err(Exit::Fetch)?;
 
     let gh_api_client = args
         .github_token
@@ -158,11 +157,15 @@ pub fn install_crates(
                     .or_else(|| cargo_config.get_registry_index(registry_name));
 
                 if let Some(index) = index {
-                    index.parse().map_err(BinstallError::from)?
+                    index
+                        .parse::<binstalk::registry::Registry>()
+                        .or_raise_err(Exit::RegistryParse)?
                 } else if registry_name.eq_ignore_ascii_case("crates-io") {
                     Default::default()
                 } else {
-                    return Err(BinstallError::UnknownRegistryName(registry_name.into()).into());
+                    return Err(Exit::UnknownRegistryName.with(message!(
+                        "Unknown registry name {registry_name}, env `CARGO_REGISTRIES_{registry_name}_INDEX` nor is it in .cargo/config.toml"
+                    )));
                 }
             } else {
                 Default::default()
@@ -256,7 +259,7 @@ pub fn install_crates(
                 ))
             })
         })
-        .collect::<Result<Vec<_>, BinstallError>>()?;
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(Some(if continue_on_failure {
         AutoAbortJoinHandle::spawn(async move {
@@ -276,14 +279,13 @@ pub fn install_crates(
                         source.print();
                         resolution_sources.push(source)
                     }
-                    Err(BinstallError::CrateContext(err)) => errors.push(err),
-                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {e}"),
+                    Err(err) => errors.push(err),
                 }
             }
 
             if resolution_fetches.is_empty() && resolution_sources.is_empty() {
-                return if let Some(err) = BinstallError::crate_errors(errors) {
-                    Err(err.into())
+                return if let Some(err) = crate_errors(errors) {
+                    Err(err)
                 } else {
                     debug!("Nothing to do");
                     Ok(())
@@ -293,11 +295,9 @@ pub fn install_crates(
             // Confirm
             if !dry_run && !no_confirm {
                 if let Err(abort_err) = confirm().await {
-                    return if let Some(err) = BinstallError::crate_errors(errors) {
-                        Err(Report::new(abort_err).wrap_err(err))
-                    } else {
-                        Err(abort_err.into())
-                    };
+                    errors.push(abort_err);
+                    let err = crate_errors(errors).expect("errors is not empty");
+                    return Err(err);
                 }
             }
 
@@ -319,18 +319,18 @@ pub fn install_crates(
             for task in tasks {
                 match task.flattened_join().await {
                     Ok(_) => (),
-                    Err(BinstallError::CrateContext(err)) => errors.push(err),
-                    Err(e) => panic!("Expected BinstallError::CrateContext(_), got {e}"),
+                    Err(err) => errors.push(err),
                 }
             }
 
-            match (BinstallError::crate_errors(errors), manifest_update_res) {
+            match (crate_errors(errors), manifest_update_res) {
                 (None, Ok(())) => Ok(()),
                 (None, Err(err)) => Err(err),
-                (Some(err), Ok(())) => Err(err.into()),
-                (Some(err), Err(manifest_update_err)) => {
-                    Err(Report::new(err).wrap_err(manifest_update_err))
-                }
+                (Some(err), Ok(())) => Err(err),
+                (Some(err), Err(manifest_update_err)) => Err([err, manifest_update_err]
+                    .into_iter()
+                    .raise(message!("Failed to install crates and update manifests"))
+                    .into()),
             }
         })
     } else {
@@ -386,11 +386,11 @@ pub fn install_crates(
     }))
 }
 
-fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> {
+fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>> {
     use std::io::{Read, Seek};
 
-    let mut file = fs::File::open(path)?;
-    let file_format = FileFormat::from_reader(&mut file)?;
+    let mut file = fs::File::open(path).or_raise_err(Exit::Io)?;
+    let file_format = FileFormat::from_reader(&mut file).or_raise_err(Exit::Io)?;
 
     let open_cert = match file_format {
         FileFormat::PemCertificate => Certificate::from_pem,
@@ -406,12 +406,12 @@ fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> 
     };
 
     // Move file back to its head
-    file.rewind()?;
+    file.rewind().or_raise_err(Exit::Io)?;
 
     let mut buffer = Vec::with_capacity(200);
-    file.read_to_end(&mut buffer)?;
+    file.read_to_end(&mut buffer).or_raise_err(Exit::Io)?;
 
-    open_cert(&buffer).map_err(From::from).map(Some)
+    open_cert(&buffer).or_raise_err(Exit::Fetch).map(Some)
 }
 
 fn read_root_certs(
@@ -439,7 +439,7 @@ fn filter_out_installed_crates<'a>(
     force: bool,
     manifests: Option<&'a Manifests>,
     version_req: Option<VersionReq>,
-) -> impl Iterator<Item = Result<(CrateName, Option<semver::Version>), BinstallError>> + 'a {
+) -> impl Iterator<Item = Result<(CrateName, Option<semver::Version>)>> + 'a {
     let installed_crates = manifests.map(|m| m.installed_crates());
 
     CrateName::dedup(crate_names)
@@ -455,7 +455,7 @@ fn filter_out_installed_crates<'a>(
 
         match (crate_name.version_req.is_some(), version_req.is_some()) {
             (false, true) => crate_name.version_req = version_req.clone(),
-            (true, true) => return Some(Err(BinstallError::SuperfluousVersionOption)),
+            (true, true) => return Some(Err(Exn::from(Exit::SuperfluousVersionOption))),
             _ => (),
         };
 
@@ -505,7 +505,7 @@ fn do_install_fetches(
         let metadata_vec = resolution_fetches
             .into_iter()
             .map(|fetch| fetch.install(binstall_opts))
-            .collect::<Result<Vec<_>, BinstallError>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         update_manifest(manifests, temp_dir, no_cleanup, metadata_vec)
     })
@@ -520,7 +520,7 @@ fn do_install_fetches_continue_on_failure(
     dry_run: bool,
     temp_dir: tempfile::TempDir,
     no_cleanup: bool,
-    errors: &mut Vec<Box<CrateContextError>>,
+    errors: &mut Vec<Exn>,
 ) -> Result<()> {
     if resolution_fetches.is_empty() {
         return Ok(());
@@ -536,11 +536,10 @@ fn do_install_fetches_continue_on_failure(
             .into_iter()
             .filter_map(|fetch| match fetch.install(binstall_opts) {
                 Ok(crate_info) => Some(crate_info),
-                Err(BinstallError::CrateContext(err)) => {
+                Err(err) => {
                     errors.push(err);
                     None
                 }
-                Err(e) => panic!("Expected BinstallError::CrateContext(_), got {e}"),
             })
             .collect::<Vec<_>>();
 
@@ -582,8 +581,8 @@ pub fn self_install(args: Args) -> Result<()> {
         assert!(dest.set_extension("exe"));
     }
 
-    atomic_install(&env::current_exe().map_err(BinstallError::from)?, &dest)
-        .map_err(BinstallError::from)?;
+    let current_exe = env::current_exe().or_raise_err(Exit::Io)?;
+    atomic_install(&current_exe, &dest).or_raise_err(Exit::Io)?;
 
     if let Some(manifests) = manifests {
         manifests.update(vec![CrateInfo {
@@ -630,7 +629,7 @@ pub fn list_crates(args: Args) -> Result<()> {
     let crates = manifests.list_crates();
 
     if args.json_output {
-        let json_str = serde_json::to_string_pretty(&crates).map_err(|e| miette::miette!("{e}"))?;
+        let json_str = serde_json::to_string_pretty(&crates)?;
         println!("{json_str}");
         return Ok(());
     }
@@ -723,8 +722,7 @@ pub fn prune_crates(args: Args) -> Result<()> {
     if args.json_output {
         let json_str = serde_json::to_string_pretty(&serde_json::json!({
             "pruned": pruned,
-        }))
-        .map_err(|e| miette::miette!("{e}"))?;
+        }))?;
         println!("{json_str}");
         return Ok(());
     }

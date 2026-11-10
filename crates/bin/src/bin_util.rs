@@ -3,53 +3,49 @@ use std::{
     time::Duration,
 };
 
-use binstalk::{errors::BinstallError, helpers::tasks::AutoAbortJoinHandle};
-use miette::Result;
+use binstalk::{
+    errors::{exit_code, Error, Exit, Result, ResultExt},
+    helpers::tasks::AutoAbortJoinHandle,
+};
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
 
-use crate::signal::cancel_on_user_sig_term;
+use crate::{report::Report, signal::cancel_on_user_sig_term};
 
 pub enum MainExit {
     Success(Option<Duration>),
-    Error(BinstallError),
-    Report(miette::Report),
+    Error(Error),
 }
 
 impl Termination for MainExit {
     fn report(self) -> ExitCode {
-        let (code, err) = match self {
+        match self {
             Self::Success(spent) => {
                 if let Some(spent) = spent {
                     info!("Done in {spent:?}");
                 }
-                return ExitCode::SUCCESS;
+                ExitCode::SUCCESS
             }
             Self::Error(err) => {
-                let code = err.exit_code();
-                let Some(report) = err.get_report() else {
+                let code = exit_code(&err);
+
+                if err.downcast_ref::<Exit>() == Some(&Exit::UserAbort) {
                     warn!("Installation cancelled");
-                    return code;
-                };
-                (code, report)
+                } else {
+                    error!("Fatal error:");
+                    println!("{:?}", miette::Report::new(Report(err)));
+                }
+
+                code
             }
-            Self::Report(err) => (ExitCode::from(16), err),
-        };
-
-        error!("Fatal error:");
-        println!("{err:?}");
-
-        code
+        }
     }
 }
 
 impl MainExit {
     pub fn new(res: Result<()>, done: Option<Duration>) -> Self {
-        res.map(|()| MainExit::Success(done)).unwrap_or_else(|err| {
-            err.downcast::<BinstallError>()
-                .map(MainExit::Error)
-                .unwrap_or_else(MainExit::Report)
-        })
+        res.map(|()| MainExit::Success(done))
+            .unwrap_or_else(MainExit::Error)
     }
 }
 
@@ -61,7 +57,7 @@ impl MainExit {
 pub fn run_tokio_main(
     f: impl FnOnce() -> Result<Option<AutoAbortJoinHandle<Result<()>>>>,
 ) -> Result<()> {
-    let rt = Runtime::new().map_err(BinstallError::from)?;
+    let rt = Runtime::new().or_raise_err(Exit::Io)?;
     let _guard = rt.enter();
 
     if let Some(handle) = f()? {

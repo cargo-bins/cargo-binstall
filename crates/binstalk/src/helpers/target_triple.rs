@@ -2,7 +2,7 @@ use std::{borrow::Cow, ops::Deref, str::FromStr};
 
 use binstalk_types::cargo_toml_binstall::{CfgOption, TargetTriple as TargetTripleInner};
 
-use crate::errors::BinstallError;
+use crate::errors::{Exit, Exn, Result, ResultExt};
 
 #[derive(Clone, Debug)]
 pub struct TargetTriple(TargetTripleInner);
@@ -16,10 +16,10 @@ impl Deref for TargetTriple {
 }
 
 impl FromStr for TargetTriple {
-    type Err = BinstallError;
+    type Err = Exn;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.parse()?))
+        s.parse().map(Self).or_raise_err(Exit::TargetTripleParse)
     }
 }
 

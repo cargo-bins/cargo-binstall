@@ -4,11 +4,15 @@ use std::{
     path::Path,
 };
 
+use binstalk_types::{
+    errors::{Result, ResultExt},
+    message,
+};
 use normalize_path::NormalizePath;
 use rc_zip_sync::{rc_zip::parse::EntryKind, ReadZip};
 use tracing::warn;
 
-use super::{DownloadError, ExtractedFiles};
+use super::ExtractedFiles;
 
 const MAX_LINK_TARGET: u64 = 4096;
 
@@ -19,10 +23,14 @@ fn create_parent_dir(path: &Path) -> io::Result<()> {
     create_dir_all(parent)
 }
 
-pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadError> {
+pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles> {
     let mut extracted_files = ExtractedFiles::new();
 
-    for entry in f.read_zip()?.entries() {
+    for entry in f
+        .read_zip()
+        .or_raise_err(message!("Failed to extract zipfile"))?
+        .entries()
+    {
         let Some(name) = entry.sanitized_name() else {
             warn!("Skip zip entry {} for suspected zip slip", entry.name);
             continue;
@@ -234,7 +242,7 @@ mod tests {
             self.root.path().join("out")
         }
 
-        fn extract(&self, entries: &[TestEntry]) -> Result<ExtractedFiles, DownloadError> {
+        fn extract(&self, entries: &[TestEntry]) -> Result<ExtractedFiles> {
             let mut f = tempfile::tempfile().unwrap();
             f.write_all(&build_zip(entries)).unwrap();
             f.rewind().unwrap();

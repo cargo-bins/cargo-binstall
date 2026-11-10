@@ -1,37 +1,17 @@
-use std::{error, fmt, io, time::Duration};
+use std::{error, fmt, time::Duration};
 
-use binstalk_downloader::remote;
-use compact_str::{CompactString, ToCompactString};
+use binstalk_types::errors::{find, ErrorExt, Exn};
+use compact_str::CompactString;
 use serde::{de::Deserializer, Deserialize};
 use thiserror::Error as ThisError;
 
-#[derive(ThisError, Debug)]
-#[error("Context: '{context}', err: '{err}'")]
-pub struct GhApiContextError {
-    context: CompactString,
-    #[source]
-    err: GhApiError,
-}
-
+/// The kinds of [`GhApiClient`](super::GhApiClient) errors that callers can
+/// recover from.
+///
+/// Find them anywhere in an error tree with [`GhApiErrorExt`].
 #[derive(ThisError, Debug)]
 #[non_exhaustive]
 pub enum GhApiError {
-    #[error("IO Error: {0}")]
-    Io(#[from] io::Error),
-
-    #[error("Remote Error: {0}")]
-    Remote(#[from] remote::Error),
-
-    #[error("Failed to parse url: {0}")]
-    InvalidUrl(#[from] url::ParseError),
-
-    /// A wrapped error providing the context the error is about.
-    #[error(transparent)]
-    Context(Box<GhApiContextError>),
-
-    #[error("Remote failed to process GraphQL query: {0}")]
-    GraphQLErrors(GhGraphQLErrors),
-
     #[error("Hit rate-limit, retry after {retry_after:?}")]
     RateLimit { retry_after: Option<Duration> },
 
@@ -42,30 +22,47 @@ pub enum GhApiError {
     Unauthorized,
 }
 
-impl GhApiError {
-    /// Attach context to [`GhApiError`]
-    pub fn context(self, context: impl fmt::Display) -> Self {
-        use GhApiError::*;
+/// Classify an error tree returned by [`GhApiClient`](super::GhApiClient).
+pub trait GhApiErrorExt {
+    /// The first [`GhApiError`] in the tree, if any.
+    fn gh_api_error(&self) -> Option<&GhApiError>;
 
-        if matches!(self, RateLimit { .. } | NotFound | Unauthorized) {
-            self
-        } else {
-            Self::Context(Box::new(GhApiContextError {
-                context: context.to_compact_string(),
-                err: self,
-            }))
+    /// Returns `Some(retry_after)` if this is [`GhApiError::RateLimit`].
+    fn rate_limit(&self) -> Option<Option<Duration>> {
+        match self.gh_api_error()? {
+            GhApiError::RateLimit { retry_after } => Some(*retry_after),
+            _ => None,
         }
+    }
+
+    /// Returns true if this is [`GhApiError::NotFound`].
+    fn is_not_found(&self) -> bool {
+        matches!(self.gh_api_error(), Some(GhApiError::NotFound))
+    }
+
+    /// Returns true if this is [`GhApiError::Unauthorized`].
+    fn is_unauthorized(&self) -> bool {
+        matches!(self.gh_api_error(), Some(GhApiError::Unauthorized))
     }
 }
 
-impl From<GhGraphQLErrors> for GhApiError {
-    fn from(e: GhGraphQLErrors) -> Self {
-        if e.is_rate_limited() {
-            Self::RateLimit { retry_after: None }
-        } else if e.is_not_found_error() {
-            Self::NotFound
+impl GhApiErrorExt for Exn {
+    fn gh_api_error(&self) -> Option<&GhApiError> {
+        find(self.frame())
+    }
+}
+
+impl GhGraphQLErrors {
+    /// Classify the errors, keeping `self` as the cause unless it is a
+    /// rate-limit or not-found error.
+    #[track_caller]
+    pub(super) fn classify(self) -> Exn {
+        if self.is_rate_limited() {
+            GhApiError::RateLimit { retry_after: None }.raise().into()
+        } else if self.is_not_found_error() {
+            GhApiError::NotFound.raise().into()
         } else {
-            Self::GraphQLErrors(e)
+            self.raise().into()
         }
     }
 }

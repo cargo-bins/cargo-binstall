@@ -1,10 +1,14 @@
 use binstalk_downloader::download::DataVerifier;
 use binstalk_types::cargo_toml_binstall::{PkgSigning, SigningAlgorithm};
+use binstalk_types::{
+    errors::{Exn, Result},
+    message,
+};
 use bytes::Bytes;
 use minisign_verify::{PublicKey, Signature, StreamVerifier};
 use tracing::{error, trace};
 
-use crate::FetchError;
+use crate::invalid_signature;
 
 pub enum SignatureVerifier {
     Noop,
@@ -12,16 +16,18 @@ pub enum SignatureVerifier {
 }
 
 impl SignatureVerifier {
-    pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self, FetchError> {
+    pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self> {
         match config.algorithm {
             SigningAlgorithm::Minisign => MinisignVerifier::new(config, signature)
                 .map(Box::new)
                 .map(Self::Minisign),
-            algorithm => Err(FetchError::UnsupportedSigningAlgorithm(algorithm)),
+            algorithm => Err(Exn::from(message!(
+                "Signing algorithm not supported: {algorithm:?}"
+            ))),
         }
     }
 
-    pub fn data_verifier(&self) -> Result<Box<dyn DataVerifier + '_>, FetchError> {
+    pub fn data_verifier(&self) -> Result<Box<dyn DataVerifier + '_>> {
         match self {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
@@ -42,33 +48,33 @@ pub struct MinisignVerifier {
 }
 
 impl MinisignVerifier {
-    pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self, FetchError> {
+    pub fn new(config: &PkgSigning, signature: &[u8]) -> Result<Self> {
         trace!(key=?config.pubkey, "parsing public key");
         let pubkey = PublicKey::from_base64(&config.pubkey).map_err(|err| {
             error!("Package public key is invalid: {err}");
-            FetchError::InvalidSignature
+            invalid_signature()
         })?;
 
         trace!(?signature, "parsing signature");
         let signature = Signature::decode(std::str::from_utf8(signature).map_err(|err| {
             error!(?signature, "Signature file is not UTF-8! {err}");
-            FetchError::InvalidSignature
+            invalid_signature()
         })?)
         .map_err(|err| {
             error!("Signature file is invalid: {err}");
-            FetchError::InvalidSignature
+            invalid_signature()
         })?;
 
         Ok(Self { pubkey, signature })
     }
 
-    pub fn data_verifier(&self) -> Result<Box<dyn DataVerifier + '_>, FetchError> {
+    pub fn data_verifier(&self) -> Result<Box<dyn DataVerifier + '_>> {
         self.pubkey
             .verify_stream(&self.signature)
             .map(|vs| Box::new(MinisignDataVerifier(vs)) as _)
             .map_err(|err| {
                 error!("Failed to setup stream verifier: {err}");
-                FetchError::InvalidSignature
+                Exn::from(invalid_signature())
             })
     }
 }

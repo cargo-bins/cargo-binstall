@@ -1,6 +1,7 @@
 use std::{fmt::Debug, future::Future, sync::OnceLock};
 
 use binstalk_downloader::remote::{self, Response, Url};
+use binstalk_types::errors::{ErrorExt, Result};
 use compact_str::CompactString;
 use percent_encoding::percent_decode_str;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -18,12 +19,12 @@ pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
     }
 }
 
-pub(super) fn check_http_status_and_header(response: Response) -> Result<Response, GhApiError> {
+pub(super) fn check_http_status_and_header(response: Response) -> Result<Response> {
     match response.status() {
-        remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized),
-        remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound),
+        remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized.raise().into()),
+        remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound.raise().into()),
 
-        _ => Ok(response.error_for_status()?),
+        _ => response.error_for_status(),
     }
 }
 
@@ -39,7 +40,7 @@ pub(super) fn issue_restful_api<T>(
     client: &remote::Client,
     path: &[&str],
     auth_token: Option<&str>,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
+) -> impl Future<Output = Result<T>> + Send + 'static
 where
     T: DeserializeOwned,
 {
@@ -65,7 +66,7 @@ where
     async move {
         let response = check_http_status_and_header(future.await?)?;
 
-        Ok(response.json().await?)
+        response.json().await
     }
 }
 
@@ -95,24 +96,22 @@ pub(super) fn issue_graphql_query<T>(
     client: &remote::Client,
     query: String,
     auth_token: &str,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
+) -> impl Future<Output = Result<T>> + Send + 'static
 where
     T: DeserializeOwned + Debug,
 {
-    let res = to_json_string(&GraphQLQuery { query })
-        .map_err(remote::Error::from)
-        .map(|graphql_query| {
-            let graphql_endpoint = get_graphql_endpoint();
+    let res = to_json_string(&GraphQLQuery { query }).map(|graphql_query| {
+        let graphql_endpoint = get_graphql_endpoint();
 
-            debug!("Sending graphql query to {graphql_endpoint}: '{graphql_query}'");
+        debug!("Sending graphql query to {graphql_endpoint}: '{graphql_query}'");
 
-            let request_builder = client
-                .post(graphql_endpoint, graphql_query)
-                .header("Accept", "application/vnd.github+json")
-                .bearer_auth(&auth_token);
+        let request_builder = client
+            .post(graphql_endpoint, graphql_query)
+            .header("Accept", "application/vnd.github+json")
+            .bearer_auth(&auth_token);
 
-            request_builder.send(false)
-        });
+        request_builder.send(false)
+    });
 
     async move {
         let response = check_http_status_and_header(res?.await?)?;
@@ -122,7 +121,7 @@ where
         debug!("response = {response:?}");
 
         if let Some(error) = response.errors.take() {
-            Err(error.into())
+            Err(error.classify())
         } else {
             Ok(response.data)
         }

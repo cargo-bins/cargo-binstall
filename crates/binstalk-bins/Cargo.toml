@@ -6,16 +6,14 @@ edition = "2021"
 description = "The binstall binaries discovery and installation crate."
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-bins"
-rust-version = "1.65.0"
+rust-version = "1.85.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "GPL-3.0-only"
 
 [dependencies]
 atomic-file-install = { version = "1.0.14", path = "../atomic-file-install" }
-binstalk-types = { version = "0.10.8", path = "../binstalk-types" }
+binstalk-types = { version = "0.10.8", path = "../binstalk-types", features = ["exn"] }
 compact_str = { version = "0.10.0", features = ["serde"] }
 leon = "3.0.0"
-miette = "7.0.0"
 normalize-path = { version = "0.2.2", path = "../normalize-path" }
-thiserror = "2.0.11"
 tracing = "0.1.43"

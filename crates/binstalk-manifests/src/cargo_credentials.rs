@@ -5,12 +5,11 @@
 
 use std::{fs::File, io, path::Path};
 
+use binstalk_types::errors::Result;
 use binstalk_types::SecretString;
 use compact_str::CompactString;
 use fs_lock::FileLock;
-use miette::Diagnostic;
 use serde::{Deserialize, Deserializer};
-use thiserror::Error;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct RegistryCredential {
@@ -25,7 +24,7 @@ pub struct Credentials {
 }
 
 impl Credentials {
-    pub fn load_from_reader<R: io::Read>(reader: R) -> Result<Self, CredentialsLoadError> {
+    pub fn load_from_reader<R: io::Read>(reader: R) -> Result<Self> {
         let mut reader = reader;
         let mut contents = Vec::new();
         reader.read_to_end(&mut contents)?;
@@ -33,7 +32,7 @@ impl Credentials {
         Ok(credentials)
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, CredentialsLoadError> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self> {
         match File::open(path.as_ref()) {
             Ok(file) => {
                 let file = FileLock::new_shared(file)?.set_file_path(path.as_ref());
@@ -44,7 +43,7 @@ impl Credentials {
         }
     }
 
-    pub fn load_from_home(cargo_home: impl AsRef<Path>) -> Result<Self, CredentialsLoadError> {
+    pub fn load_from_home(cargo_home: impl AsRef<Path>) -> Result<Self> {
         let cargo_home = cargo_home.as_ref();
         let toml_path = cargo_home.join("credentials.toml");
 
@@ -71,28 +70,6 @@ where
 {
     Option::<Box<str>>::deserialize(deserializer)
         .map(|value| value.map(SecretString::from_boxed_str))
-}
-
-#[derive(Debug, Diagnostic, Error)]
-#[non_exhaustive]
-pub enum CredentialsLoadError {
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
-
-    #[error("Failed to deserialize toml: {0}")]
-    TomlParse(Box<toml_edit::de::Error>),
-}
-
-impl From<toml_edit::de::Error> for CredentialsLoadError {
-    fn from(e: toml_edit::de::Error) -> Self {
-        CredentialsLoadError::TomlParse(Box::new(e))
-    }
-}
-
-impl From<toml_edit::TomlError> for CredentialsLoadError {
-    fn from(e: toml_edit::TomlError) -> Self {
-        CredentialsLoadError::TomlParse(Box::new(e.into()))
-    }
 }
 
 #[cfg(test)]

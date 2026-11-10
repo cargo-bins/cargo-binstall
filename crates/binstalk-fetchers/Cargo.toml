@@ -6,7 +6,7 @@ edition = "2021"
 description = "The binstall fetchers"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-fetchers"
-rust-version = "1.70.0"
+rust-version = "1.85.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "GPL-3.0-only"
 
@@ -14,14 +14,13 @@ license = "GPL-3.0-only"
 async-trait = "0.1.88"
 binstalk-downloader = { version = "0.14.1", path = "../binstalk-downloader", default-features = false }
 binstalk-git-repo-api = { version = "0.5.53", path = "../binstalk-git-repo-api" }
-binstalk-types = { version = "0.10.8", path = "../binstalk-types" }
+binstalk-types = { version = "0.10.8", path = "../binstalk-types", features = ["exn"] }
 bytes = "1.11.1"
 compact_str = { version = "0.10.0" }
 either = "1.11.0"
 itertools = "0.15.0"
 leon = "3.0.0"
 leon-macros = "1.0.1"
-miette = "7.0.0"
 minisign-verify = "0.3.0"
 once_cell = "1.18.0"
 strum = "0.28.0"

@@ -1,4 +1,4 @@
-use binstalk_downloader::remote::{Client, StatusCode};
+use binstalk_downloader::remote::{parse_url, Client, StatusCode};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
@@ -8,9 +8,11 @@ use tokio::sync::OnceCell;
 use tracing::instrument;
 use url::Url;
 
+use binstalk_types::errors::{bail, Result};
+
 use crate::{
-    apply_auth, crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion,
-    RegistryAuth, RegistryConfig, RegistryError,
+    apply_auth, auth_required, crate_prefix_components, not_found, parse_manifest,
+    render_dl_template, MatchedVersion, RegistryAuth, RegistryConfig,
 };
 
 #[derive(Debug)]
@@ -36,7 +38,7 @@ impl SparseRegistry {
         &self,
         client: &Client,
         auth: Option<&RegistryAuth>,
-    ) -> Result<&RegistryConfig, RegistryError> {
+    ) -> Result<&RegistryConfig> {
         self.config
             .get_or_try_init(|| {
                 Box::pin(async {
@@ -47,7 +49,7 @@ impl SparseRegistry {
                     let response = match response.status() {
                         StatusCode::UNAUTHORIZED => {
                             let Some(auth) = auth else {
-                                return Err(RegistryError::AuthenticationRequired(Box::new(url)));
+                                bail!(auth_required(&url));
                             };
 
                             apply_auth(client.get(url), Some(auth)).send(true).await?
@@ -55,7 +57,7 @@ impl SparseRegistry {
                         _ => response.error_for_status()?,
                     };
 
-                    response.json().await.map_err(RegistryError::from)
+                    response.json().await
                 })
             })
             .await
@@ -69,7 +71,7 @@ impl SparseRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
-    ) -> Result<MatchedVersion, RegistryError> {
+    ) -> Result<MatchedVersion> {
         {
             let mut path = url.path_segments_mut().unwrap();
 
@@ -85,20 +87,16 @@ impl SparseRegistry {
             .send(false)
             .await?;
         let body = match response.status() {
-            StatusCode::OK => response.bytes().await.map_err(RegistryError::from)?,
+            StatusCode::OK => response.bytes().await?,
             StatusCode::NOT_FOUND
             | StatusCode::GONE
             | StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS => {
-                return Err(RegistryError::NotFound(crate_name.into()));
+                bail!(not_found(crate_name));
             }
             StatusCode::UNAUTHORIZED => {
-                return Err(RegistryError::AuthenticationRequired(Box::new(url)));
+                bail!(auth_required(&url));
             }
-            _ => response
-                .error_for_status()?
-                .bytes()
-                .await
-                .map_err(RegistryError::from)?,
+            _ => response.error_for_status()?.bytes().await?,
         };
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&body).into_iter(),
@@ -119,14 +117,12 @@ impl SparseRegistry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>)> {
         let crate_prefix = crate_prefix_components(crate_name)?;
         let registry_config = self.get_config(&client, auth).await?;
         let auth = if registry_config.auth_required {
             let Some(auth) = auth else {
-                return Err(RegistryError::AuthenticationRequired(Box::new(
-                    self.url.clone(),
-                )));
+                bail!(auth_required(&self.url));
             };
 
             Some(auth)
@@ -142,7 +138,7 @@ impl SparseRegistry {
             version_req,
         )
         .await?;
-        let dl_url = Url::parse(&render_dl_template(
+        let dl_url = parse_url(&render_dl_template(
             &registry_config.dl,
             crate_name,
             &crate_prefix,
