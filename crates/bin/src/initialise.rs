@@ -126,8 +126,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
 
     let settings = settings.merge_args(args);
 
-    fs::create_dir_all(&cargo_root).or_raise(|| Exit::Io)?;
-    fs::create_dir_all(&install_path).or_raise(|| Exit::Io)?;
+    fs::create_dir_all(&cargo_root).or_raise_err(Exit::Io)?;
+    fs::create_dir_all(&install_path).or_raise_err(Exit::Io)?;
 
     let manifests = if settings.track_installs && !custom_install_path {
         Some(Manifests::open_exclusive(&cargo_root)?)
@@ -143,8 +143,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let temp_dir = tempfile::Builder::new()
         .prefix("cargo-binstall")
         .tempdir_in(&cargo_root)
-        .or_raise(|| Exit::Io)
-        .or_raise(|| message!("Creating a temporary directory failed."))?;
+        .or_raise_err(Exit::Io)
+        .or_raise_err(message!("Creating a temporary directory failed."))?;
 
     Ok(Init {
         cargo_config,

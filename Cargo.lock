@@ -282,6 +282,7 @@ dependencies = [
  "semver",
  "simple-git",
  "strum",
+ "strum_macros",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -647,11 +648,12 @@ dependencies = [
 name = "cargo-toml-workspace"
 version = "7.0.11"
 dependencies = [
- "binstalk-types",
  "cargo_toml",
+ "compact_str",
  "globwalker",
  "serde",
  "tempfile",
+ "thiserror 2.0.21",
  "tracing",
 ]
 

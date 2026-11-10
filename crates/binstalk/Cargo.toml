@@ -32,6 +32,7 @@ maybe-owned = "0.3.4"
 semver = { version = "1.0.28", features = ["serde"] }
 simple-git = { version = "0.2.18", optional = true }
 strum = "0.28.0"
+strum_macros = "0.28.0"
 tempfile = "3.5.0"
 thiserror = "2.0.11"
 tokio = { version = "1.52.3", features = [

@@ -76,13 +76,13 @@ impl ResolutionFetch {
 
         info!("Installing binaries...");
         for file in &self.bin_files {
-            install_bin(file).or_raise(|| Exit::BinFile)?;
+            install_bin(file).or_raise_err(Exit::BinFile)?;
         }
 
         // Generate symlinks
         if !opts.no_symlinks {
             for file in &self.bin_files {
-                install_link(file).or_raise(|| Exit::BinFile)?;
+                install_link(file).or_raise_err(Exit::BinFile)?;
             }
         }
 
@@ -241,11 +241,11 @@ impl ResolutionSource {
                 .get()
                 .await?
                 .configure_and_run(&mut cmd, |cmd| cmd.group_spawn())
-                .or_raise(|| Exit::Io)?;
+                .or_raise_err(Exit::Io)?;
 
             debug!("Spawned command pid={:?}", child.id());
 
-            let status = child.wait().await.or_raise(|| Exit::Io)?;
+            let status = child.wait().await.or_raise_err(Exit::Io)?;
             if status.success() {
                 info!("Cargo finished successfully");
                 Ok(())

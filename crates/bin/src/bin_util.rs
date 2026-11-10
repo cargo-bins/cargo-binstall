@@ -57,7 +57,7 @@ impl MainExit {
 pub fn run_tokio_main(
     f: impl FnOnce() -> Result<Option<AutoAbortJoinHandle<Result<()>>>>,
 ) -> Result<()> {
-    let rt = Runtime::new().or_raise(|| Exit::Io)?;
+    let rt = Runtime::new().or_raise_err(Exit::Io)?;
     let _guard = rt.enter();
 
     if let Some(handle) = f()? {

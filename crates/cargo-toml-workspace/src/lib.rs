@@ -1,12 +1,13 @@
-use std::path::{Component, Path};
-
-use binstalk_types::{
-    errors::{bail, Result, ResultExt},
-    message,
+use std::{
+    io,
+    path::{Component, Path},
 };
-use cargo_toml::Manifest;
-use globwalker::{FileType, GlobWalkerBuilder};
+
+use cargo_toml::{Error as CargoTomlError, Manifest};
+use compact_str::CompactString;
+use globwalker::{FileType, GlobError, GlobWalkerBuilder, WalkError};
 use serde::de::DeserializeOwned;
+use thiserror::Error as ThisError;
 use tracing::{debug, instrument, warn};
 
 pub use cargo_toml;
@@ -20,27 +21,53 @@ pub use cargo_toml;
 pub fn load_manifest_from_workspace<Metadata: DeserializeOwned>(
     workspace_path: impl AsRef<Path>,
     crate_name: impl AsRef<str>,
-) -> Result<Manifest<Metadata>> {
+) -> Result<Manifest<Metadata>, Error> {
     fn inner<Metadata: DeserializeOwned>(
         workspace_path: &Path,
         crate_name: &str,
-    ) -> Result<Manifest<Metadata>> {
-        load_manifest_from_workspace_inner(workspace_path, crate_name).or_raise(|| {
-            message!(
-                "Failed to load {crate_name} from {}",
-                workspace_path.display()
-            )
+    ) -> Result<Manifest<Metadata>, Error> {
+        load_manifest_from_workspace_inner(workspace_path, crate_name).map_err(|inner| Error {
+            workspace_path: workspace_path.into(),
+            crate_name: crate_name.into(),
+            inner,
         })
     }
 
     inner(workspace_path.as_ref(), crate_name.as_ref())
 }
 
+#[derive(Debug, ThisError)]
+#[error("Failed to load {crate_name} from {}", workspace_path.display())]
+pub struct Error {
+    workspace_path: Box<Path>,
+    crate_name: CompactString,
+    #[source]
+    inner: ErrorInner,
+}
+
+#[derive(Debug, ThisError)]
+enum ErrorInner {
+    #[error("Invalid pattern in workspace.members or workspace.exclude")]
+    GlobError(#[from] GlobError),
+
+    #[error("Failed to walk directory")]
+    WalkDirError(#[from] WalkError),
+
+    #[error("Failed to parse cargo manifest")]
+    CargoManifest(#[from] CargoTomlError),
+
+    #[error("I/O error")]
+    Io(#[from] io::Error),
+
+    #[error("Not found")]
+    NotFound,
+}
+
 #[instrument]
 fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     workspace_path: &Path,
     crate_name: &str,
-) -> Result<Manifest<Metadata>> {
+) -> Result<Manifest<Metadata>, ErrorInner> {
     debug!(
         "Loading manifest of crate {crate_name} from workspace: {}",
         workspace_path.display()
@@ -59,8 +86,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     let mut manifest_paths = vec![manifest_path];
 
     while let Some(manifest_path) = manifest_paths.pop() {
-        let manifest = Manifest::<Metadata>::from_path_with_metadata(&manifest_path)
-            .or_raise(|| message!("Failed to parse cargo manifest {}", manifest_path.display()))?;
+        let manifest = Manifest::<Metadata>::from_path_with_metadata(&manifest_path)?;
 
         let name = manifest.package.as_ref().map(|p| &*p.name);
         debug!(
@@ -93,8 +119,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         })
         .follow_links(true)
         .file_type(FileType::DIR)
-        .build()
-        .or_raise(|| message!("Invalid pattern in workspace.members or workspace.exclude"))?;
+        .build()?;
 
         for res in walker {
             let mut path = res?.into_path();
@@ -105,7 +130,7 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         }
     }
 
-    bail!(message!("Not found"))
+    Err(ErrorInner::NotFound)
 }
 
 #[cfg(test)]
@@ -132,7 +157,7 @@ mod test {
 
         let err = load_manifest_from_workspace_inner::<cargo_toml::Value>(&p, "cargo-binstall2")
             .unwrap_err();
-        assert_eq!(err.to_string(), "Not found", "{err:?}");
+        assert!(matches!(err, ErrorInner::NotFound), "{:#?}", err);
 
         let manifest =
             load_manifest_from_workspace::<cargo_toml::Value>(&p, "cargo-watch").unwrap();

@@ -80,7 +80,7 @@ pub(super) async fn parse_manifest(
     let mut manifest_visitor = ManifestVisitor::new(format!("{crate_name}-{version}").into());
 
     let checksum = decode_base16(cksum.as_bytes())
-        .or_raise(|| message!("Failed to parse checksum encoded in hex"))?;
+        .or_raise_err(message!("Failed to parse checksum encoded in hex"))?;
     let mut digest = Sha256Digest::new(checksum);
 
     Download::from_response_with_data_verifier(
@@ -89,7 +89,7 @@ pub(super) async fn parse_manifest(
     )
     .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
     .await
-    .or_raise(|| message!("Failed to download crate"))?;
+    .or_raise_err(message!("Failed to download crate"))?;
 
     if !digest.validate() {
         bail!(message!(
@@ -139,7 +139,7 @@ pub(super) fn render_dl_template(
     MatchedVersion { version, cksum, .. }: &MatchedVersion,
 ) -> Result<String> {
     let template =
-        Template::parse(dl_template).or_raise(|| message!("Failed to parse dl config"))?;
+        Template::parse(dl_template).or_raise_err(message!("Failed to parse dl config"))?;
     if template.keys().next().is_some() {
         let mut crate_prefix = c1.clone();
         if let Some(c2) = c2 {
@@ -174,7 +174,7 @@ pub(super) fn render_dl_template(
                 version,
                 cksum,
             })
-            .or_raise(|| message!("Failed to render dl config"))?)
+            .or_raise_err(message!("Failed to render dl config"))?)
     } else {
         Ok(format!("{dl_template}/{crate_name}/{version}/download"))
     }

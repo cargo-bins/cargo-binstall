@@ -19,7 +19,7 @@ impl FromStr for TargetTriple {
     type Err = Exn;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse().map(Self).or_raise(|| Exit::TargetTripleParse)
+        s.parse().map(Self).or_raise_err(Exit::TargetTripleParse)
     }
 }
 

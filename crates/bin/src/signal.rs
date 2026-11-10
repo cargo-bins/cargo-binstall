@@ -16,13 +16,13 @@ use tokio::signal;
 /// This function uses [`tokio::signal`] and once exit, does not reset the default
 /// signal handler, so be careful when using it.
 pub async fn cancel_on_user_sig_term<T>(handle: AutoAbortJoinHandle<T>) -> Result<T> {
-    ignore_signals().or_raise(|| Exit::Io)?;
+    ignore_signals().or_raise_err(Exit::Io)?;
 
     tokio::select! {
         biased;
 
         res = wait_on_cancellation_signal() => {
-            res.or_raise(|| Exit::Io)
+            res.or_raise_err(Exit::Io)
                 .and(Err(Exn::from(Exit::UserAbort)))
         }
         res = handle => res,

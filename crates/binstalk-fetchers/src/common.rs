@@ -10,7 +10,7 @@ use std::{
 
 pub(super) use binstalk_downloader::{
     download::{Download, ExtractedFiles},
-    remote::{Client, Url},
+    remote::{parse_url, Client, Url},
 };
 pub(super) use binstalk_git_repo_api::gh_api_client::{GhApiClient, GhApiErrorExt};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
@@ -87,9 +87,7 @@ pub(super) async fn does_url_exist(
         }
     }
 
-    Box::pin(client.remote_gettable(url.clone()))
-        .await
-        .or_raise(|| message!("Failed to download"))
+    Box::pin(client.remote_gettable(url.clone())).await
 }
 
 #[derive(Debug)]

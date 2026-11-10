@@ -26,7 +26,7 @@ impl LazyJobserverClient {
         self.0
             .get_or_try_init(|| async {
                 let ncore = available_parallelism().map(NonZeroUsize::get).unwrap_or(1);
-                Client::new(ncore).or_raise(|| Exit::Io)
+                Client::new(ncore).or_raise_err(Exit::Io)
             })
             .await
     }

@@ -152,18 +152,18 @@ impl Data {
                 match client.get_repo_info(gh_repo).await {
                     Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
                     Ok(None) => break Err(GhApiError::NotFound.raise().into()),
-                    Err(err) => match err.rate_limit() {
-                        Some(retry_after) => {
-                            sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await
-                        }
-                        None => break Err(err),
-                    },
+                    Err(err) => {
+                        let Some(retry_after) = err.rate_limit() else {
+                            break Err(err);
+                        };
+                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await
+                    }
                 }
             }
         }
 
         async fn get_repo_info_inner(repo: &str, client: &GhApiClient) -> Result<RepoInfo> {
-            let repo = Url::parse(repo).or_raise(|| message!("Failed to parse url"))?;
+            let repo = parse_url(repo)?;
             let mut repo = client
                 .remote_client()
                 .get_redirected_final_url(repo.clone())
@@ -209,7 +209,7 @@ impl Data {
                 is_private: match GhRepo::try_extract_from_url(&repo) {
                     Some(gh_repo) if client.has_gh_token() => gh_get_repo_info(client, &gh_repo)
                         .await
-                        .or_raise(|| message!("Request to GitHub API failed"))?
+                        .or_raise_err(message!("Request to GitHub API failed"))?
                         .is_private(),
                     _ => false,
                 },

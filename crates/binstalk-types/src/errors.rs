@@ -7,7 +7,9 @@
 //! Context is added with `.or_raise(|| message!(...))`; errors that callers
 //! do recover from keep their own type and are looked up with [`find`].
 
-use std::{borrow::Cow, error::Error as StdError, fmt, io};
+use std::{error::Error as StdError, fmt, io};
+
+use compact_str::{CompactString, ToCompactString};
 
 pub use exn::{self, bail, ensure, ErrorExt, Exn, Frame, IteratorExt};
 
@@ -23,13 +25,27 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// returned directly from a function returning [`Result`].
 pub trait ResultExt<T> {
     /// Raise the error of `self` as a child of `err()`.
+    ///
+    /// `err` is only called on error, use it when creating the parent error
+    /// costs something, e.g. a [`message!`](crate::message) with arguments.
     fn or_raise<A, F>(self, err: F) -> Result<T>
     where
         A: StdError + Send + Sync + 'static,
         F: FnOnce() -> A;
+
+    /// Raise the error of `self` as a child of `err`.
+    ///
+    /// Use it when `err` is free to create, e.g. an `Exit` code or a
+    /// [`message!`](crate::message) of a string literal.
+    fn or_raise_err<A>(self, err: A) -> Result<T>
+    where
+        A: StdError + Send + Sync + 'static;
 }
 
-impl<T, E: Into<Error>> ResultExt<T> for std::result::Result<T, E> {
+impl<T, E> ResultExt<T> for std::result::Result<T, E>
+where
+    Error: From<E>,
+{
     #[track_caller]
     fn or_raise<A, F>(self, err: F) -> Result<T>
     where
@@ -38,7 +54,20 @@ impl<T, E: Into<Error>> ResultExt<T> for std::result::Result<T, E> {
     {
         match self {
             Ok(v) => Ok(v),
-            Err(e) => Err(e.into().raise(err()).into()),
+            // `Error::from` (not `.into()`) so that the location of the
+            // child is the caller's too.
+            Err(e) => Err(Error::from(e).raise(err()).into()),
+        }
+    }
+
+    #[track_caller]
+    fn or_raise_err<A>(self, err: A) -> Result<T>
+    where
+        A: StdError + Send + Sync + 'static,
+    {
+        match self {
+            Ok(v) => Ok(v),
+            Err(e) => Err(Error::from(e).raise(err).into()),
         }
     }
 }
@@ -70,12 +99,12 @@ impl<T> OptionExt<T> for Option<T> {
 /// Create it with [`message!`](crate::message).
 #[derive(Clone, Debug)]
 pub struct Message {
-    message: Cow<'static, str>,
-    help: Option<Cow<'static, str>>,
+    message: CompactString,
+    help: Option<CompactString>,
 }
 
 impl Message {
-    pub fn new(message: impl Into<Cow<'static, str>>) -> Self {
+    pub fn new(message: impl Into<CompactString>) -> Self {
         Self {
             message: message.into(),
             help: None,
@@ -85,13 +114,13 @@ impl Message {
     /// Create from [`format_args!`], without allocation for a string literal.
     pub fn from_args(args: fmt::Arguments<'_>) -> Self {
         Self::new(match args.as_str() {
-            Some(s) => Cow::Borrowed(s),
-            None => Cow::Owned(args.to_string()),
+            Some(s) => CompactString::const_new(s),
+            None => args.to_compact_string(),
         })
     }
 
     /// Attach a hint on how to fix the error, shown as `help:` when rendered.
-    pub fn with_help(mut self, help: impl Into<Cow<'static, str>>) -> Self {
+    pub fn with_help(mut self, help: impl Into<CompactString>) -> Self {
         self.help = Some(help.into());
         self
     }
@@ -222,7 +251,11 @@ mod tests {
         let err: Error = Kind.raise().raise(crate::message!("context {}", 1)).into();
         assert!(find::<Kind>(from_io(into_io(err)).frame()).is_some());
 
-        let msg = crate::message!("literal");
-        assert!(matches!(msg.message, Cow::Borrowed("literal")));
+        // A long string literal is borrowed, a short one is inlined, neither allocates.
+        let msg = crate::message!("a string literal longer than 24 bytes");
+        assert_eq!(
+            msg.message.as_static_str(),
+            Some("a string literal longer than 24 bytes")
+        );
     }
 }

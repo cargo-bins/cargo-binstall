@@ -36,16 +36,11 @@ async fn get_quickinstall_supported_targets(client: &Client) -> Result<&'static 
     SUPPORTED_TARGETS
         .get_or_try_init(|| async {
             let bytes = client
-                .get(
-                    Url::parse(QUICKINSTALL_SUPPORTED_TARGETS_URL)
-                        .or_raise(|| message!("Failed to parse url"))?,
-                )
+                .get(parse_url(QUICKINSTALL_SUPPORTED_TARGETS_URL)?)
                 .send(true)
-                .await
-                .or_raise(|| message!("Failed to download"))?
+                .await?
                 .bytes()
-                .await
-                .or_raise(|| message!("Failed to download"))?;
+                .await?;
 
             let mut v: Vec<CompactString> = String::from_utf8_lossy(&bytes)
                 .split_whitespace()
@@ -261,7 +256,7 @@ by rust officially."#,
         )
         .and_extract(self.pkg_fmt(), dst)
         .await
-        .or_raise(|| message!("Failed to download"))?;
+        .or_raise_err(message!("Failed to download and extract"))?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {
@@ -335,11 +330,7 @@ impl QuickInstall {
             .append_pair("status", self.get_status().as_str());
         debug!("Sending installation report to quickinstall ({url})");
 
-        self.client
-            .request(Method::POST, url)
-            .send(true)
-            .await
-            .or_raise(|| message!("Failed to download"))?;
+        self.client.request(Method::POST, url).send(true).await?;
 
         Ok(())
     }

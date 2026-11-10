@@ -51,7 +51,7 @@ impl Manifests {
         let metadata_path = binstall_dir.join("crates-v1.json");
 
         let binstall = BinstallCratesV1Records::load_from_path(&metadata_path)
-            .or_raise(|| message!("failed to parse binstall crates-v1 manifest"))?;
+            .or_raise_err(message!("failed to parse binstall crates-v1 manifest"))?;
 
         // Read cargo_install_v1_metadata
         let manifest_path = cargo_roots.join(".crates.toml");
@@ -61,7 +61,7 @@ impl Manifests {
         let (installed_crates, installed_crates_details) =
             CratesToml::load_from_reader(&mut cargo_crates_v1)
                 .and_then(CratesToml::collect_into_crates_details)
-                .or_raise(|| message!("failed to parse cargo v1 manifest"))?;
+                .or_raise_err(message!("failed to parse cargo v1 manifest"))?;
 
         Ok(Self {
             binstall,
@@ -130,7 +130,7 @@ impl Manifests {
         if !pruned.is_empty() {
             self.binstall
                 .overwrite()
-                .or_raise(|| message!("failed to parse binstall crates-v1 manifest"))?;
+                .or_raise_err(message!("failed to parse binstall crates-v1 manifest"))?;
         }
 
         Ok(pruned)
@@ -140,7 +140,7 @@ impl Manifests {
         self.rewind_cargo_crates_v1()?;
 
         CratesToml::append_to_file(&mut self.cargo_crates_v1, &metadata_vec)
-            .or_raise(|| message!("failed to parse cargo v1 manifest"))?;
+            .or_raise_err(message!("failed to parse cargo v1 manifest"))?;
 
         // Automatically prune uninstalled and version-drifted records
         let installed = &self.installed_crates;
@@ -153,7 +153,7 @@ impl Manifests {
         }
         self.binstall
             .overwrite()
-            .or_raise(|| message!("failed to parse binstall crates-v1 manifest"))?;
+            .or_raise_err(message!("failed to parse binstall crates-v1 manifest"))?;
 
         Ok(())
     }

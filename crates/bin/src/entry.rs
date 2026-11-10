@@ -103,7 +103,7 @@ pub fn install_crates(
             http.as_mut().and_then(|http| http.cainfo.take()),
         ),
     )
-    .or_raise(|| Exit::Fetch)?;
+    .or_raise_err(Exit::Fetch)?;
 
     let gh_api_client = args
         .github_token
@@ -159,7 +159,7 @@ pub fn install_crates(
                 if let Some(index) = index {
                     index
                         .parse::<binstalk::registry::Registry>()
-                        .or_raise(|| Exit::RegistryParse)?
+                        .or_raise_err(Exit::RegistryParse)?
                 } else if registry_name.eq_ignore_ascii_case("crates-io") {
                     Default::default()
                 } else {
@@ -389,8 +389,8 @@ pub fn install_crates(
 fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>> {
     use std::io::{Read, Seek};
 
-    let mut file = fs::File::open(path).or_raise(|| Exit::Io)?;
-    let file_format = FileFormat::from_reader(&mut file).or_raise(|| Exit::Io)?;
+    let mut file = fs::File::open(path).or_raise_err(Exit::Io)?;
+    let file_format = FileFormat::from_reader(&mut file).or_raise_err(Exit::Io)?;
 
     let open_cert = match file_format {
         FileFormat::PemCertificate => Certificate::from_pem,
@@ -406,12 +406,12 @@ fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>> {
     };
 
     // Move file back to its head
-    file.rewind().or_raise(|| Exit::Io)?;
+    file.rewind().or_raise_err(Exit::Io)?;
 
     let mut buffer = Vec::with_capacity(200);
-    file.read_to_end(&mut buffer).or_raise(|| Exit::Io)?;
+    file.read_to_end(&mut buffer).or_raise_err(Exit::Io)?;
 
-    open_cert(&buffer).or_raise(|| Exit::Fetch).map(Some)
+    open_cert(&buffer).or_raise_err(Exit::Fetch).map(Some)
 }
 
 fn read_root_certs(
@@ -581,8 +581,8 @@ pub fn self_install(args: Args) -> Result<()> {
         assert!(dest.set_extension("exe"));
     }
 
-    let current_exe = env::current_exe().or_raise(|| Exit::Io)?;
-    atomic_install(&current_exe, &dest).or_raise(|| Exit::Io)?;
+    let current_exe = env::current_exe().or_raise_err(Exit::Io)?;
+    atomic_install(&current_exe, &dest).or_raise_err(Exit::Io)?;
 
     if let Some(manifests) = manifests {
         manifests.update(vec![CrateInfo {

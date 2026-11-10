@@ -1,6 +1,6 @@
 use std::{io, path::PathBuf, sync::Arc};
 
-use binstalk_downloader::remote::Client;
+use binstalk_downloader::remote::{parse_url, Client};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
@@ -11,7 +11,6 @@ use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use tracing::instrument;
-use url::Url;
 
 use binstalk_types::{
     errors::{bail, Exn, OptionExt, Result, ResultExt},
@@ -36,12 +35,12 @@ impl GitIndex {
 
         let repo =
             Repository::shallow_clone_bare(url.clone(), tempdir.as_ref(), Some(cancellation_token))
-                .or_raise(|| message!("Failed to shallow clone git repository"))?;
+                .or_raise_err(message!("Failed to shallow clone git repository"))?;
 
         let config: RegistryConfig = {
             let config = repo
                 .get_head_commit_entry_data_by_path("config.json")
-                .or_raise(|| message!("Failed to shallow clone git repository"))?
+                .or_raise_err(message!("Failed to shallow clone git repository"))?
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
@@ -97,7 +96,7 @@ impl GitRegistry {
         path.push(&*crate_name.to_lowercase());
         let crate_versions = repo
             .get_head_commit_entry_data_by_path(path)
-            .or_raise(|| message!("Failed to shallow clone git repository"))?
+            .or_raise_err(message!("Failed to shallow clone git repository"))?
             .ok_or_raise(|| not_found(crate_name))?;
 
         MatchedVersion::find(
@@ -141,13 +140,12 @@ impl GitRegistry {
             let matched_version =
                 Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
 
-            let url = Url::parse(&render_dl_template(
+            let url = parse_url(&render_dl_template(
                 &config.dl,
                 &crate_name,
                 &crate_prefix,
                 &matched_version,
-            )?)
-            .or_raise(|| message!("Failed to parse url"))?;
+            )?)?;
 
             Ok::<_, Exn>((matched_version, url, config.auth_required))
         })

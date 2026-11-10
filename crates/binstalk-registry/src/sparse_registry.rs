@@ -1,4 +1,4 @@
-use binstalk_downloader::remote::{Client, StatusCode};
+use binstalk_downloader::remote::{parse_url, Client, StatusCode};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
@@ -8,10 +8,7 @@ use tokio::sync::OnceCell;
 use tracing::instrument;
 use url::Url;
 
-use binstalk_types::{
-    errors::{bail, Result, ResultExt},
-    message,
-};
+use binstalk_types::errors::{bail, Result};
 
 use crate::{
     apply_auth, auth_required, crate_prefix_components, not_found, parse_manifest,
@@ -141,13 +138,12 @@ impl SparseRegistry {
             version_req,
         )
         .await?;
-        let dl_url = Url::parse(&render_dl_template(
+        let dl_url = parse_url(&render_dl_template(
             &registry_config.dl,
             crate_name,
             &crate_prefix,
             &matched_version,
-        )?)
-        .or_raise(|| message!("Failed to parse url"))?;
+        )?)?;
 
         let pubtime = matched_version.pubtime.take();
         let manifest = parse_manifest(client, crate_name, dl_url, matched_version, auth).await?;

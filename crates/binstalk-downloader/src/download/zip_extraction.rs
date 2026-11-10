@@ -28,7 +28,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles> {
 
     for entry in f
         .read_zip()
-        .or_raise(|| message!("Failed to extract zipfile"))?
+        .or_raise_err(message!("Failed to extract zipfile"))?
         .entries()
     {
         let Some(name) = entry.sanitized_name() else {

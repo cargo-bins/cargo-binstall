@@ -12,7 +12,8 @@ use maybe_owned::MaybeOwned;
 use semver::{Comparator, Op as ComparatorOp, Version, VersionReq};
 use tokio::{task::spawn_blocking, time::timeout};
 use tracing::{debug, error, info, instrument, warn};
-use url::Url;
+
+use crate::helpers::remote::parse_url;
 
 use crate::{
     bins,
@@ -174,7 +175,7 @@ async fn resolve_inner(
         match timeout(opts.maximum_resolution_timeout, async {
             AutoAbortJoinHandle::new(fetcher.clone().find())
                 .await?
-                .or_raise(|| Exit::Fetch)
+                .or_raise_err(Exit::Fetch)
         })
         .await
         {
@@ -302,7 +303,7 @@ async fn download_extract_and_verify(
     let extracted_files = fetcher
         .fetch_and_extract(bin_path)
         .await
-        .or_raise(|| Exit::Fetch)?;
+        .or_raise_err(Exit::Fetch)?;
     debug!("extracted_files = {extracted_files:#?}");
 
     // Build final metadata
@@ -363,7 +364,7 @@ But since it requires features {features}, this bin is ignored."
             }
         })
         .collect::<Result<Vec<bins::BinFile>>>()
-        .or_raise(|| Exit::BinFile)
+        .or_raise_err(Exit::BinFile)
 }
 
 fn collect_bin_files(
@@ -397,7 +398,7 @@ fn collect_bin_files(
             bins::infer_bin_dir_template(&bin_data, &mut |p| extracted_files.get_dir(p).is_some())
         });
 
-    let template = Template::parse(&bin_dir).or_raise(|| Exit::TemplateParse)?;
+    let template = Template::parse(&bin_dir).or_raise_err(Exit::TemplateParse)?;
 
     // Create bin_files
     let bin_files = package_info
@@ -405,7 +406,7 @@ fn collect_bin_files(
         .iter()
         .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &template, no_symlinks))
         .collect::<Result<Vec<_>>>()
-        .or_raise(|| Exit::BinFile)?;
+        .or_raise_err(Exit::BinFile)?;
 
     let mut source_set = BTreeSet::new();
 
@@ -460,12 +461,12 @@ impl PackageInfo {
                     move || load_manifest_path(manifest_path, &name)
                 })
                 .await
-                .or_raise(|| Exit::TaskJoin)??,
+                .or_raise_err(Exit::TaskJoin)??,
                 CrateSource {
                     source_type: SourceType::Path,
                     url: MaybeOwned::Owned(
-                        Url::parse(&format!("file://{}", manifest_path.display()))
-                            .or_raise(|| Exit::UrlParse)?,
+                        parse_url(&format!("file://{}", manifest_path.display()))
+                            .or_raise_err(Exit::UrlParse)?,
                     ),
                 },
                 None,
@@ -482,23 +483,23 @@ impl PackageInfo {
                     let git_url = git_url.clone();
                     let name = name.clone();
                     move || {
-                        let dir = tempfile::TempDir::new().or_raise(|| Exit::Io)?;
+                        let dir = tempfile::TempDir::new().or_raise_err(Exit::Io)?;
                         let repo = GitRepository::shallow_clone(
                             git_url,
                             dir.as_ref(),
                             Some(cancellation_token),
                         )
-                        .or_raise(|| Exit::Git)?;
+                        .or_raise_err(Exit::Git)?;
 
                         Ok::<_, Exn>((
                             load_manifest_from_workspace(dir.as_ref(), &name)
-                                .or_raise(|| Exit::LoadManifestFromWorkspace)?,
-                            repo.get_head_commit_hash().or_raise(|| Exit::Git)?,
+                                .or_raise_err(Exit::LoadManifestFromWorkspace)?,
+                            repo.get_head_commit_hash().or_raise_err(Exit::Git)?,
                         ))
                     }
                 })
                 .await
-                .or_raise(|| Exit::TaskJoin)??;
+                .or_raise_err(Exit::TaskJoin)??;
 
                 // Git operation done, disarm it
                 cancel_on_drop.disarm();
@@ -508,8 +509,8 @@ impl PackageInfo {
                     CrateSource {
                         source_type: SourceType::Git,
                         url: MaybeOwned::Owned(
-                            Url::parse(&format!("{git_url}#{commit_hash}"))
-                                .or_raise(|| Exit::UrlParse)?,
+                            parse_url(&format!("{git_url}#{commit_hash}"))
+                                .or_raise_err(Exit::UrlParse)?,
                         ),
                     },
                     None,
@@ -522,11 +523,11 @@ impl PackageInfo {
                     version_req,
                 ))
                 .await
-                .or_raise(|| Exit::Registry)?;
+                .or_raise_err(Exit::Registry)?;
 
                 (
                     manifest,
-                    opts.registry.crate_source().or_raise(|| Exit::UrlParse)?,
+                    opts.registry.crate_source().or_raise_err(Exit::UrlParse)?,
                     pubtime,
                 )
             }
@@ -655,7 +656,7 @@ pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
 
         // Load and parse manifest (this checks file system for binary output names)
         let manifest = load_manifest_from_workspace(manifest_path, crate_name)
-            .or_raise(|| Exit::LoadManifestFromWorkspace)?;
+            .or_raise_err(Exit::LoadManifestFromWorkspace)?;
 
         // Return metadata
         Ok(manifest)

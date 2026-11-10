@@ -1,4 +1,4 @@
-use binstalk_downloader::remote::{Client, HttpError, Url};
+use binstalk_downloader::remote::{parse_url, Client, HttpError, Url};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
@@ -7,7 +7,7 @@ use serde::Deserialize;
 use tracing::{debug, instrument};
 
 use binstalk_types::{
-    errors::{find, Exn, OptionExt, Result, ResultExt},
+    errors::{find, Exn, OptionExt, Result},
     message,
 };
 
@@ -121,8 +121,7 @@ pub async fn fetch_crate_cratesio_api(
     name: &str,
     version_req: &VersionReq,
 ) -> Result<Manifest<Meta>> {
-    let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))
-        .or_raise(|| message!("Failed to parse url"))?;
+    let url = parse_url(&format!("https://crates.io/api/v1/crates/{name}"))?;
 
     let (version, cksum) = match version_req.comparators.as_slice() {
         [Comparator {

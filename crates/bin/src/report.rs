@@ -258,7 +258,7 @@ mod tests {
             .raise()
             .raise(message!("Failed to open").with_help("Check the path"))
             .into();
-        let out = render(Err::<(), _>(err).or_raise(|| Exit::Io).unwrap_err());
+        let out = render(Err::<(), _>(err).or_raise_err(Exit::Io).unwrap_err());
         assert!(out.contains("binstall::io"), "{out}");
         assert!(out.contains("help: Check the path"), "{out}");
         assert!(out.contains("os error"), "{out}");
@@ -269,7 +269,7 @@ mod tests {
         let err = leon::Template::parse("{ broken").unwrap_err();
         let out = render(
             Err::<(), _>(err)
-                .or_raise(|| Exit::TemplateParse)
+                .or_raise_err(Exit::TemplateParse)
                 .unwrap_err(),
         );
         assert!(out.contains("binstall::template"), "{out}");

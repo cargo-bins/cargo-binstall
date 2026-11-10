@@ -5,7 +5,10 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use binstalk_types::errors::{find, ErrorExt, Exn, Result};
+use binstalk_types::{
+    errors::{find, ErrorExt, Exn, Result, ResultExt},
+    message,
+};
 use bytes::Bytes;
 use futures_util::Stream;
 use httpdate::parse_http_date;
@@ -18,6 +21,12 @@ use tracing::{debug, info, instrument};
 
 pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
 pub use url::Url;
+
+/// Parse `url`, with `url` in the error message on failure.
+#[track_caller]
+pub fn parse_url(url: &str) -> Result<Url> {
+    Url::parse(url).or_raise(|| message!("Failed to parse url `{url}`"))
+}
 
 mod delay_request;
 use delay_request::DelayRequest;

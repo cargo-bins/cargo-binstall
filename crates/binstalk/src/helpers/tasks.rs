@@ -57,7 +57,7 @@ impl<T> Future for AutoAbortJoinHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut Pin::into_inner(self).0)
             .poll(cx)
-            .map(|res| res.or_raise(|| Exit::TaskJoin))
+            .map(|res| res.or_raise_err(Exit::TaskJoin))
     }
 }
 

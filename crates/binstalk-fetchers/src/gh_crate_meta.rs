@@ -137,8 +137,7 @@ impl GhCrateMeta {
                 }
 
                 Ok(Box::pin(client.remote_gettable(url))
-                    .await
-                    .or_raise(|| message!("Failed to download"))?
+                    .await?
                     .then_some(resolved))
             }
         }));
@@ -176,7 +175,7 @@ impl super::Fetcher for GhCrateMeta {
 
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
                 let template =
-                    Template::parse(pkg_url).or_raise(|| message!("Failed to parse template"))?;
+                    Template::parse(pkg_url).or_raise_err(message!("Failed to parse template"))?;
 
                 if pkg_fmt.is_none()
                     && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
@@ -319,7 +318,7 @@ impl super::Fetcher for GhCrateMeta {
             (_, Some(config)) => {
                 let template = match config.file.as_deref() {
                     Some(file) => {
-                        Template::parse(file).or_raise(|| message!("Failed to parse template"))?
+                        Template::parse(file).or_raise_err(message!("Failed to parse template"))?
                     }
                     None => leon_macros::template!("{ url }.sig"),
                 };
@@ -339,8 +338,7 @@ impl super::Fetcher for GhCrateMeta {
                 debug!(?sign_url, "Downloading signature");
                 let signature = Download::new(self.client.clone(), sign_url)
                     .into_bytes()
-                    .await
-                    .or_raise(|| message!("Failed to download"))?;
+                    .await?;
                 trace!(?signature, "got signature contents");
 
                 SignatureVerifier::new(config, &signature)?
@@ -359,7 +357,7 @@ impl super::Fetcher for GhCrateMeta {
                 .gh_api_client
                 .download_artifact(artifact_url.clone())
                 .await
-                .or_raise(|| message!("Request to GitHub API failed"))?
+                .or_raise_err(message!("Request to GitHub API failed"))?
                 .with_data_verifier(data_verifier.as_mut()),
             _ => Download::new_with_data_verifier(
                 self.client.clone(),
@@ -369,7 +367,7 @@ impl super::Fetcher for GhCrateMeta {
         }
         .and_extract(resolved.pkg_fmt, dst)
         .await
-        .or_raise(|| message!("Failed to download"))?;
+        .or_raise_err(message!("Failed to download and extract"))?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {
@@ -543,18 +541,16 @@ impl<'c> Context<'c> {
 
     fn render_url_with(&self, template: &Template<'_>) -> Result<Url> {
         debug!(?template, context=?self, "render url template");
-        Url::parse(
-            &template
-                .render(self)
-                .or_raise(|| message!("Failed to render template"))?,
-        )
-        .or_raise(|| message!("Failed to parse url"))
+        let url = template
+            .render(self)
+            .or_raise_err(message!("Failed to render template"))?;
+        parse_url(&url)
     }
 
     #[cfg(test)]
     fn render_url(&self, template: &str) -> Result<Url> {
         self.render_url_with(
-            &Template::parse(template).or_raise(|| message!("Failed to parse template"))?,
+            &Template::parse(template).or_raise_err(message!("Failed to parse template"))?,
         )
     }
 }

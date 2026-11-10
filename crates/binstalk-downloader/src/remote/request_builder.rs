@@ -119,6 +119,6 @@ impl Response {
     {
         let bytes = self.error_for_status()?.bytes().await?;
         serde_json::from_slice(&bytes)
-            .or_raise(|| message!("Failed to parse http response body as Json"))
+            .or_raise_err(message!("Failed to parse http response body as Json"))
     }
 }

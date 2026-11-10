@@ -231,14 +231,14 @@ impl GhApiClient {
                     Err(err) if err.is_unauthorized() => {
                         self.0.is_auth_token_valid.store(false, Relaxed);
                     }
-                    res => return res.or_raise(|| message!("GraphQL API")),
+                    res => return res.or_raise_err(message!("GraphQL API")),
                 }
             }
         }
 
         restful_func(&self.0.client, data, self.get_auth_token())
             .await
-            .or_raise(|| message!("Restful API"))
+            .or_raise_err(message!("Restful API"))
     }
 
     #[instrument(skip(self), ret(level = Level::DEBUG))]
