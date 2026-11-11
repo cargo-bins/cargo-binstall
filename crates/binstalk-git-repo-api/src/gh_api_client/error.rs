@@ -1,6 +1,6 @@
 use std::{error, fmt, time::Duration};
 
-use binstalk_types::errors::{find, ErrorExt, Exn};
+use binstalk_types::errors::{Exn, FrameExt};
 use compact_str::CompactString;
 use serde::{de::Deserializer, Deserialize};
 use thiserror::Error as ThisError;
@@ -48,7 +48,7 @@ pub trait GhApiErrorExt {
 
 impl GhApiErrorExt for Exn {
     fn gh_api_error(&self) -> Option<&GhApiError> {
-        find(self.frame())
+        self.find()
     }
 }
 
@@ -58,11 +58,11 @@ impl GhGraphQLErrors {
     #[track_caller]
     pub(super) fn classify(self) -> Exn {
         if self.is_rate_limited() {
-            GhApiError::RateLimit { retry_after: None }.raise().into()
+            Exn::from(GhApiError::RateLimit { retry_after: None })
         } else if self.is_not_found_error() {
-            GhApiError::NotFound.raise().into()
+            Exn::from(GhApiError::NotFound)
         } else {
-            self.raise().into()
+            Exn::from(self)
         }
     }
 }

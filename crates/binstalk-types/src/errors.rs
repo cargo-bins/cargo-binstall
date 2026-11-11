@@ -5,7 +5,8 @@
 //! [`Exn<E>`] into it while recording the caller location.
 //!
 //! Context is added with `.or_raise(|| message!(...))`; errors that callers
-//! do recover from keep their own type and are looked up with [`find`].
+//! do recover from keep their own type and are looked up with
+//! [`FrameExt::find`].
 
 use std::{error::Error as StdError, fmt, io};
 
@@ -111,6 +112,14 @@ impl Message {
         }
     }
 
+    /// Create from a `&'static str`, usable in `const`.
+    pub const fn from_static(message: &'static str) -> Self {
+        Self {
+            message: CompactString::const_new(message),
+            help: None,
+        }
+    }
+
     /// Create from [`format_args!`], without allocation for a string literal.
     pub fn from_args(args: fmt::Arguments<'_>) -> Self {
         Self::new(match args.as_str() {
@@ -138,50 +147,107 @@ impl fmt::Display for Message {
 
 impl StdError for Message {}
 
+#[doc(hidden)]
+pub const fn __has_brace(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
 /// Create a [`Message`] with the syntax of [`format!`].
 #[macro_export]
 macro_rules! message {
+    // A literal without `{` has nothing to format, so the `Message` is built
+    // at compile time. With `{` it may capture variables, e.g. `"{path}"`.
+    ($msg:literal $(,)?) => {{
+        if const { $crate::errors::__has_brace($msg) } {
+            $crate::errors::Message::from_args(::std::format_args!($msg))
+        } else {
+            const { $crate::errors::Message::from_static($msg) }
+        }
+    }};
     ($($arg:tt)*) => {
         $crate::errors::Message::from_args(::std::format_args!($($arg)*))
     };
 }
 
-/// Display the error of `frame` and its causes on one line, e.g.
-/// `a: b: c`, or `a: [b; c]` if `a` has multiple children.
-///
-/// Unlike the `Debug` output of [`Exn`], it contains no source locations.
-pub fn display_chain(frame: &Frame) -> impl fmt::Display + '_ {
-    struct Chain<'a>(&'a Frame);
+/// Walk the tree of an error, implemented for [`Frame`] and [`Exn`].
+pub trait FrameExt {
+    /// The root frame of the tree.
+    fn as_frame(&self) -> &Frame;
 
-    impl fmt::Display for Chain<'_> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            fmt::Display::fmt(self.0.error(), f)?;
-            match self.0.children() {
-                [] => Ok(()),
-                [child] => write!(f, ": {}", Chain(child)),
-                children => {
-                    f.write_str(": [")?;
-                    for (i, child) in children.iter().enumerate() {
-                        if i != 0 {
-                            f.write_str("; ")?;
-                        }
-                        fmt::Display::fmt(&Chain(child), f)?;
+    /// Find the first error of type `T` in the tree, depth-first.
+    fn find<T: StdError + 'static>(&self) -> Option<&T> {
+        self.find_map(Some)
+    }
+
+    /// Find the first error of type `T` in the tree (depth-first, pre-order)
+    /// for which `f` returns `Some`.
+    fn find_map<'a, T, U>(&'a self, mut f: impl FnMut(&'a T) -> Option<U>) -> Option<U>
+    where
+        T: StdError + 'static,
+    {
+        fn inner<'a, T: StdError + 'static, U>(
+            frame: &'a Frame,
+            f: &mut dyn FnMut(&'a T) -> Option<U>,
+        ) -> Option<U> {
+            frame
+                .error()
+                .downcast_ref::<T>()
+                .and_then(&mut *f)
+                .or_else(|| frame.children().iter().find_map(|child| inner(child, f)))
+        }
+
+        inner(self.as_frame(), &mut f)
+    }
+
+    /// Display the error and its causes on one line, e.g. `a: b: c`, or
+    /// `a: [b; c]` if `a` has multiple children.
+    ///
+    /// Unlike the `Debug` output of [`Exn`], it contains no source locations.
+    fn display_chain(&self) -> impl fmt::Display + '_ {
+        DisplayChain(self.as_frame())
+    }
+}
+
+impl FrameExt for Frame {
+    fn as_frame(&self) -> &Frame {
+        self
+    }
+}
+
+impl<E: StdError + Send + Sync + 'static + ?Sized> FrameExt for Exn<E> {
+    fn as_frame(&self) -> &Frame {
+        self.frame()
+    }
+}
+
+struct DisplayChain<'a>(&'a Frame);
+
+impl fmt::Display for DisplayChain<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.0.error(), f)?;
+        match self.0.children() {
+            [] => Ok(()),
+            [child] => write!(f, ": {}", DisplayChain(child)),
+            children => {
+                f.write_str(": [")?;
+                for (i, child) in children.iter().enumerate() {
+                    if i != 0 {
+                        f.write_str("; ")?;
                     }
-                    f.write_str("]")
+                    fmt::Display::fmt(&DisplayChain(child), f)?;
                 }
+                f.write_str("]")
             }
         }
     }
-
-    Chain(frame)
-}
-
-/// Find the first error of type `T` in the tree of `frame`, depth-first.
-pub fn find<T: StdError + 'static>(frame: &Frame) -> Option<&T> {
-    frame
-        .error()
-        .downcast_ref::<T>()
-        .or_else(|| frame.children().iter().find_map(find::<T>))
 }
 
 /// Carries an [`Error`] through an [`io::Error`], e.g. through an
@@ -243,13 +309,18 @@ mod tests {
             .raise(Message::new("b"))
             .raise(Message::new("a"))
             .into();
-        assert_eq!(display_chain(err.frame()).to_string(), "a: b: c");
+        assert_eq!(err.display_chain().to_string(), "a: b: c");
     }
 
     #[test]
     fn find_and_io_round_trip() {
         let err: Error = Kind.raise().raise(crate::message!("context {}", 1)).into();
-        assert!(find::<Kind>(from_io(into_io(err)).frame()).is_some());
+        assert!(from_io(into_io(err)).find::<Kind>().is_some());
+
+        // A literal with `{` may capture variables.
+        let path = "some/path";
+        assert_eq!(crate::message!("{path}").to_string(), "some/path");
+        assert_eq!(crate::message!("{{}}").to_string(), "{}");
 
         // A long string literal is borrowed, a short one is inlined, neither allocates.
         let msg = crate::message!("a string literal longer than 24 bytes");

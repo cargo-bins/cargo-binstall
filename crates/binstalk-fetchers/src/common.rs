@@ -80,7 +80,7 @@ pub(super) async fn does_url_exist(
 
                 Err(err) if err.rate_limit().is_some() || err.is_unauthorized() => {}
 
-                Err(err) => return Err(err.raise(message!("Request to GitHub API failed")).into()),
+                Err(err) => return Err(err).or_raise_err(message!("Request to GitHub API failed")),
             }
 
             GH_API_CLIENT_FAILED.store(true, Relaxed);

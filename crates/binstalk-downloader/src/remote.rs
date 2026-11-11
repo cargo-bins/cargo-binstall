@@ -6,7 +6,7 @@ use std::{
 };
 
 use binstalk_types::{
-    errors::{find, ErrorExt, Exn, Result, ResultExt},
+    errors::{Exn, FrameExt, Result, ResultExt},
     message,
 };
 use bytes::Bytes;
@@ -60,7 +60,7 @@ const DEFAULT_MIN_TLS: TLSVersion = TLSVersion::TLS_1_2;
 
 /// A failed HTTP request, the [`ReqwestError`] is attached as its child frame.
 ///
-/// Find it in an error tree with [`find`] to
+/// Find it in an error tree with [`FrameExt::find`] to
 /// inspect the status code.
 #[derive(Debug, ThisError)]
 #[error("could not {method} {url}")]
@@ -87,7 +87,7 @@ impl HttpError {
     #[track_caller]
     pub(crate) fn raise(method: Method, url: Url, err: reqwest::Error) -> Exn {
         let status = err.status();
-        err.raise()
+        Exn::new(err)
             .raise(HttpError {
                 method,
                 url,
@@ -374,7 +374,8 @@ impl Client {
 
         match res {
             Err(err)
-                if find::<HttpError>(err.frame())
+                if err
+                    .find::<HttpError>()
                     .is_some_and(|http_error| http_error.status.is_some_and(is_retryable)) =>
             {
                 retry_with_get().await

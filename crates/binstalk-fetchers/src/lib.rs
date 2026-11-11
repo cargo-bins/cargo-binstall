@@ -151,7 +151,7 @@ impl Data {
             loop {
                 match client.get_repo_info(gh_repo).await {
                     Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
-                    Ok(None) => break Err(GhApiError::NotFound.raise().into()),
+                    Ok(None) => break Err(Exn::from(GhApiError::NotFound)),
                     Err(err) => {
                         let Some(retry_after) = err.rate_limit() else {
                             break Err(err);

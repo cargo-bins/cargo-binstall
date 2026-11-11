@@ -7,7 +7,7 @@ use serde::Deserialize;
 use tracing::{debug, instrument};
 
 use binstalk_types::{
-    errors::{find, Exn, OptionExt, Result},
+    errors::{Exn, FrameExt, OptionExt, Result},
     message,
 };
 
@@ -150,7 +150,7 @@ pub async fn fetch_crate_cratesio_api(
         _ => fetch_crate_cratesio_version_matched(&client, url.clone(), version_req).await,
     }
     .map_err(|e| -> Exn {
-        if find::<HttpError>(e.frame()).is_some_and(HttpError::is_status) {
+        if e.find::<HttpError>().is_some_and(HttpError::is_status) {
             e.raise(not_found(name)).into()
         } else {
             e

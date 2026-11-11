@@ -315,7 +315,7 @@ impl Exit {
     /// Create an error tagged with `self`, with `message` describing it.
     #[track_caller]
     pub fn with(self, message: Message) -> Error {
-        message.raise().raise(self).into()
+        Exn::new(message).raise(self).into()
     }
 }
 
@@ -325,35 +325,18 @@ impl From<Exit> for process::ExitCode {
     }
 }
 
-/// Find the first frame in `frame`'s tree (depth-first, pre-order) whose error
-/// is a `T` and for which `f` returns `Some`.
-fn find_map<'a, T: std::error::Error + 'static, U>(
-    frame: &'a Frame,
-    f: &mut impl FnMut(&'a T) -> Option<U>,
-) -> Option<U> {
-    frame
-        .error()
-        .downcast_ref::<T>()
-        .and_then(&mut *f)
-        .or_else(|| frame.children().iter().find_map(|child| find_map(child, f)))
-}
-
 /// The exit code of `err`: the first [`Exit`] in the tree, i.e. the first
 /// crate that failed when multiple crates failed, or 16 if there is none.
 pub fn exit_code(err: &Error) -> process::ExitCode {
-    find(err.frame())
-        .map(|exit: &Exit| exit.code())
-        .unwrap_or(16)
-        .into()
+    err.find::<Exit>().map_or(16, |exit| exit.code()).into()
 }
 
 /// Returns true if the installation was cancelled by the user, i.e. there is
 /// an [`Exit::UserAbort`] anywhere in `frame`.
 pub fn is_user_abort(frame: &Frame) -> bool {
-    find_map(frame, &mut |exit: &Exit| {
-        (*exit == Exit::UserAbort).then_some(())
-    })
-    .is_some()
+    frame
+        .find_map(|exit: &Exit| (*exit == Exit::UserAbort).then_some(()))
+        .is_some()
 }
 
 /// Context of which crate the child error is about.

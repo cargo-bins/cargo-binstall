@@ -1,7 +1,7 @@
 use std::{fmt::Debug, future::Future, sync::OnceLock};
 
 use binstalk_downloader::remote::{self, Response, Url};
-use binstalk_types::errors::{ErrorExt, Result};
+use binstalk_types::errors::{Exn, Result};
 use compact_str::CompactString;
 use percent_encoding::percent_decode_str;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -21,8 +21,8 @@ pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
 
 pub(super) fn check_http_status_and_header(response: Response) -> Result<Response> {
     match response.status() {
-        remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized.raise().into()),
-        remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound.raise().into()),
+        remote::StatusCode::UNAUTHORIZED => Err(Exn::from(GhApiError::Unauthorized)),
+        remote::StatusCode::NOT_FOUND => Err(Exn::from(GhApiError::NotFound)),
 
         _ => response.error_for_status(),
     }

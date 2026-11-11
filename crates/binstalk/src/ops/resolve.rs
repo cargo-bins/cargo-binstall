@@ -17,10 +17,7 @@ use crate::helpers::remote::parse_url;
 
 use crate::{
     bins,
-    errors::{
-        bail, crate_context, display_chain, is_user_abort, message, ErrorExt, Exit, Exn, Result,
-        ResultExt,
-    },
+    errors::{bail, crate_context, is_user_abort, message, Exit, Exn, FrameExt, Result, ResultExt},
     fetchers::{Data, Fetcher, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
@@ -228,7 +225,7 @@ async fn resolve_inner(
                             warn!(
                                 "Error while downloading and extracting from fetcher {}: {}",
                                 fetcher.source_name(),
-                                display_chain(err.frame())
+                                err.display_chain()
                             );
                         }
                     }
@@ -238,7 +235,7 @@ async fn resolve_inner(
                     warn!(
                         "Error while checking fetcher {}: {}",
                         fetcher.source_name(),
-                        display_chain(err.frame())
+                        err.display_chain()
                     );
                 }
             },
@@ -584,10 +581,7 @@ impl PackageInfo {
             .iter()
             .find(|bin| !bins::is_valid_bin_name(&bin.name))
         {
-            return Err(bins::invalid_bin_name(&bin.name)
-                .raise()
-                .raise(Exit::BinFile)
-                .into());
+            return Err(bins::invalid_bin_name(&bin.name)).or_raise_err(Exit::BinFile);
         }
 
         // Check binaries

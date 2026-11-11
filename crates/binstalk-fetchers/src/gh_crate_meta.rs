@@ -128,9 +128,8 @@ impl GhCrateMeta {
                             Err(err) if err.is_unauthorized() && !is_repo_private => break,
 
                             Err(err) => {
-                                return Err(err
-                                    .raise(message!("Request to GitHub API failed"))
-                                    .into())
+                                return Err(err)
+                                    .or_raise_err(message!("Request to GitHub API failed"))
                             }
                         }
                     }

@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use binstalk::errors::{display_chain, message, Result, ResultExt};
+use binstalk::errors::{message, FrameExt, Result, ResultExt};
 use fs_lock::FileLock;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
@@ -166,7 +166,7 @@ pub fn load(error_if_inaccessible: bool, path: &Path) -> Result<Settings> {
     } else {
         Ok(settings
             .inspect_err(|err| {
-                warn!("{}", display_chain(err.frame()));
+                warn!("{}", err.display_chain());
             })
             .unwrap_or_default())
     }
