@@ -174,8 +174,7 @@ impl super::Fetcher for GhCrateMeta {
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-                let template =
-                    Template::parse(pkg_url).or_raise_err(message!("Failed to parse template"))?;
+                let template = parse_template(pkg_url)?;
 
                 if pkg_fmt.is_none()
                     && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
@@ -317,9 +316,7 @@ impl super::Fetcher for GhCrateMeta {
             }
             (_, Some(config)) => {
                 let template = match config.file.as_deref() {
-                    Some(file) => {
-                        Template::parse(file).or_raise_err(message!("Failed to parse template"))?
-                    }
+                    Some(file) => parse_template(file)?,
                     None => leon_macros::template!("{ url }.sig"),
                 };
                 trace!(?template, "parsed signature file template");
@@ -468,6 +465,11 @@ impl fmt::Debug for Context<'_> {
     }
 }
 
+#[track_caller]
+fn parse_template(template: &str) -> Result<Template<'_>> {
+    Template::parse(template).or_raise_err(message!("Failed to parse template"))
+}
+
 impl leon::Values for Context<'_> {
     fn get_value<'s>(&'s self, key: &str) -> Option<Cow<'s, str>> {
         match key {
@@ -549,9 +551,7 @@ impl<'c> Context<'c> {
 
     #[cfg(test)]
     fn render_url(&self, template: &str) -> Result<Url> {
-        self.render_url_with(
-            &Template::parse(template).or_raise_err(message!("Failed to parse template"))?,
-        )
+        self.render_url_with(&parse_template(template)?)
     }
 }
 
