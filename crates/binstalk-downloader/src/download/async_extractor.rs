@@ -8,7 +8,6 @@ use std::{
 
 use bytes::Bytes;
 use futures_util::Stream;
-use tempfile::tempfile as create_tmpfile;
 use tokio::sync::mpsc;
 use tracing::debug;
 
@@ -40,12 +39,10 @@ pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<ExtractedFiles, Do
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync,
 {
-    debug!("Downloading from zip archive to tempfile");
+    debug!("Extracting from zip archive to `{}`", path.display());
 
     extract_with_blocking_decoder(stream, path, |rx, path| {
-        debug!("Decompressing from zip archive to `{}`", path.display());
-
-        do_extract_zip(write_stream_to_file(rx, create_tmpfile()?)?, path).map_err(io::Error::from)
+        do_extract_zip(rx, path).map_err(io::Error::from)
     })
     .await
 }
