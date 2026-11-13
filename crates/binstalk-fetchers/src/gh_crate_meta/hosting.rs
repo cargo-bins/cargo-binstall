@@ -37,6 +37,9 @@ const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
     // %2F is escaped form of '/'
     template!("{ repo }/releases/download/{ subcrate }%2F{ version }"),
     template!("{ repo }/releases/download/{ subcrate }%2Fv{ version }"),
+    // Default tags of workspace release tools such as release-plz and cargo-release.
+    template!("{ repo }/releases/download/{ name }-v{ version }"),
+    template!("{ repo }/releases/download/{ name }-{ version }"),
 ];
 
 const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[

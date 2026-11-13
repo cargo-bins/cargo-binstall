@@ -154,6 +154,8 @@ The paths are:
 
 - `{ repo }/releases/download/{ version }/`
 - `{ repo }/releases/download/v{ version }/`
+- `{ repo }/releases/download/{ name }-v{ version }/`
+- `{ repo }/releases/download/{ name }-{ version }/`
 
 #### for GitLab
 

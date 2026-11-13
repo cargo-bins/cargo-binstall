@@ -1,0 +1,9 @@
+[package]
+name = "release-plz"
+repository = "https://github.com/release-plz/release-plz"
+version = "0.4.3"
+edition = "2021"
+
+[[bin]]
+name = "release-plz"
+path = "src/main.rs"
