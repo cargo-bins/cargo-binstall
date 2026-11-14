@@ -14,34 +14,72 @@ use std::{
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
-use merge::Merge;
 use miette::Diagnostic;
 use normalize_path::NormalizePath;
 use serde::Deserialize;
 use thiserror::Error;
 
-#[derive(Clone, Debug, Deserialize, Merge)]
+/// Merge a lower-precedence config into `self`.
+///
+/// Values already present in `self` always win; `other` only fills in what is
+/// missing. Impls destructure `other` exhaustively so adding a field without
+/// deciding how it merges is a compile error.
+trait Merge {
+    fn merge(&mut self, other: Self);
+}
+
+fn overwrite_none<T>(left: &mut Option<T>, right: Option<T>) {
+    if left.is_none() {
+        *left = right;
+    }
+}
+
+fn merge_option<T: Merge>(left: &mut Option<T>, right: Option<T>) {
+    match (left.as_mut(), right) {
+        (None, right) => *left = right,
+        (Some(_), None) => (),
+        (Some(left), Some(right)) => left.merge(right),
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Install {
     /// `cargo install` destination directory
-    #[merge(strategy = merge::option::overwrite_none)]
     pub root: Option<PathBuf>,
 }
 
-#[derive(Clone, Debug, Deserialize, Merge)]
+impl Merge for Install {
+    fn merge(&mut self, other: Self) {
+        let Self { root } = other;
+        overwrite_none(&mut self.root, root);
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Http {
     /// HTTP proxy in libcurl format: "host:port"
     ///
     /// env: CARGO_HTTP_PROXY or HTTPS_PROXY or https_proxy or http_proxy
-    #[merge(strategy = merge::option::overwrite_none)]
     pub proxy: Option<CompactString>,
     /// timeout for each HTTP request, in seconds
     ///
     /// env: CARGO_HTTP_TIMEOUT or HTTP_TIMEOUT
-    #[merge(strategy = merge::option::overwrite_none)]
     pub timeout: Option<u64>,
     /// path to Certificate Authority (CA) bundle
-    #[merge(strategy = merge::option::overwrite_none)]
     pub cainfo: Option<PathBuf>,
+}
+
+impl Merge for Http {
+    fn merge(&mut self, other: Self) {
+        let Self {
+            proxy,
+            timeout,
+            cainfo,
+        } = other;
+        overwrite_none(&mut self.proxy, proxy);
+        overwrite_none(&mut self.timeout, timeout);
+        overwrite_none(&mut self.cainfo, cainfo);
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Deserialize)]
@@ -55,16 +93,26 @@ pub enum Env {
     },
 }
 
-#[derive(Debug, Deserialize, Merge)]
+#[derive(Debug, Deserialize)]
 pub struct Registry {
-    #[merge(strategy = merge::option::overwrite_none)]
     pub index: Option<CompactString>,
     #[serde(rename = "replace-with")]
-    #[merge(strategy = merge::option::overwrite_none)]
     pub replace_with: Option<CompactString>,
     #[serde(rename = "credential-provider")]
-    #[merge(strategy = merge::option::overwrite_none)]
     pub credential_provider: Option<CredentialProvider>,
+}
+
+impl Merge for Registry {
+    fn merge(&mut self, other: Self) {
+        let Self {
+            index,
+            replace_with,
+            credential_provider,
+        } = other;
+        overwrite_none(&mut self.index, index);
+        overwrite_none(&mut self.replace_with, replace_with);
+        overwrite_none(&mut self.credential_provider, credential_provider);
+    }
 }
 
 type GlobalCredentialProviders = Option<VecDeque<CompactString>>;
@@ -84,16 +132,29 @@ fn merge_global_credential_providers(
     }
 }
 
-#[derive(Debug, Deserialize, Merge)]
+#[derive(Debug, Deserialize)]
 pub struct DefaultRegistry {
-    #[merge(strategy = merge::option::overwrite_none)]
     pub default: Option<CompactString>,
     #[serde(rename = "credential-provider")]
-    #[merge(strategy = merge::option::overwrite_none)]
     pub credential_provider: Option<CredentialProvider>,
     #[serde(rename = "global-credential-providers")]
-    #[merge(strategy = merge_global_credential_providers)]
     pub global_credential_providers: GlobalCredentialProviders,
+}
+
+impl Merge for DefaultRegistry {
+    fn merge(&mut self, other: Self) {
+        let Self {
+            default,
+            credential_provider,
+            global_credential_providers,
+        } = other;
+        overwrite_none(&mut self.default, default);
+        overwrite_none(&mut self.credential_provider, credential_provider);
+        merge_global_credential_providers(
+            &mut self.global_credential_providers,
+            global_credential_providers,
+        );
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -163,27 +224,43 @@ fn merge_btreemap_recursive<K: Ord, V: Merge>(left: &mut BTreeMap<K, V>, right: 
     }
 }
 
-#[derive(Debug, Default, Deserialize, Merge)]
+#[derive(Debug, Default, Deserialize)]
 #[non_exhaustive]
 pub struct Config {
-    #[merge(strategy = merge::option::recurse)]
     pub install: Option<Install>,
-    #[merge(strategy = merge::option::recurse)]
     pub http: Option<Http>,
     #[serde(default)]
-    #[merge(strategy = merge_btreemap)]
     pub env: BTreeMap<CompactString, Env>,
     #[serde(default)]
-    #[merge(strategy = merge_btreemap_recursive)]
     pub registries: BTreeMap<CompactString, Registry>,
-    #[merge(strategy = merge::option::recurse)]
     pub registry: Option<DefaultRegistry>,
     #[serde(default)]
-    #[merge(skip)]
     pub include: Vec<IncludedConfig>,
     #[serde(default, rename = "credential-alias")]
-    #[merge(strategy = merge_btreemap)]
     pub credential_alias: BTreeMap<CompactString, CredentialProvider>,
+}
+
+impl Config {
+    /// Merge `other` into `self`; values already in `self` take precedence.
+    ///
+    /// `other.include` is ignored: includes are resolved by the loader.
+    pub fn merge(&mut self, other: Self) {
+        let Self {
+            install,
+            http,
+            env,
+            registries,
+            registry,
+            include: _,
+            credential_alias,
+        } = other;
+        merge_option(&mut self.install, install);
+        merge_option(&mut self.http, http);
+        merge_btreemap(&mut self.env, env);
+        merge_btreemap_recursive(&mut self.registries, registries);
+        merge_option(&mut self.registry, registry);
+        merge_btreemap(&mut self.credential_alias, credential_alias);
+    }
 }
 
 fn join_if_relative(path: Option<&mut PathBuf>, dir: &Path) {
@@ -494,10 +571,9 @@ custom = ["cargo-credential-example", "--account", "test"]
     #[test]
     fn test_merge_config() {
         let mut config = Config {
-            // Omit include and http as they use prebuilt strategy
+            // Covered by test_merge_install_http_include
             install: None,
             http: None,
-            // Skipped during merge
             include: Vec::new(),
             // Same strategy as env
             credential_alias: BTreeMap::new(),
@@ -614,6 +690,54 @@ custom = ["cargo-credential-example", "--account", "test"]
                 .into_iter()
                 .map(CompactString::new)
                 .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn test_merge_install_http_include() {
+        let mut config = Config {
+            install: None,
+            http: Some(Http {
+                proxy: Some(CompactString::new("left:1")),
+                timeout: None,
+                cainfo: None,
+            }),
+            include: vec![IncludedConfig::Path(PathBuf::from("left.toml"))],
+            ..Default::default()
+        };
+        config.merge(Config {
+            install: Some(Install {
+                root: Some(PathBuf::from("/right")),
+            }),
+            http: Some(Http {
+                proxy: Some(CompactString::new("right:2")),
+                timeout: Some(7),
+                cainfo: Some(PathBuf::from("right.pem")),
+            }),
+            include: vec![IncludedConfig::Path(PathBuf::from("right.toml"))],
+            ..Default::default()
+        });
+
+        // `None` on the left is filled in wholesale.
+        assert_eq!(
+            config.install.unwrap().root.as_deref(),
+            Some(Path::new("/right"))
+        );
+
+        // `Some` on both sides merges field by field, left winning.
+        let http = config.http.unwrap();
+        assert_eq!(http.proxy.as_deref(), Some("left:1"));
+        assert_eq!(http.timeout, Some(7));
+        assert_eq!(http.cainfo.as_deref(), Some(Path::new("right.pem")));
+
+        // `include` is never merged.
+        assert_eq!(
+            config
+                .include
+                .iter()
+                .map(IncludedConfig::path)
+                .collect::<Vec<_>>(),
+            [Path::new("left.toml")]
         );
     }
 }
