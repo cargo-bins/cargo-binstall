@@ -710,13 +710,11 @@ pub fn parse() -> (Args, PkgOverride) {
         } else if opts.manifest_path.is_some() {
             "manifest-path"
         } else {
-            #[cfg(not(feature = "git"))]
-            {
-                ""
+            // `opts.git` only exists with the `git` feature, so `cfg!` can't be used here.
+            cfg_select! {
+                feature = "git" => if opts.git.is_some() { "git" } else { "" },
+                _ => "",
             }
-
-            #[cfg(feature = "git")]
-            if opts.git.is_some() { "git" } else { "" }
         };
 
         if !option.is_empty() {
