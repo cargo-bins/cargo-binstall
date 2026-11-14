@@ -1,9 +1,7 @@
 name: Release-plz
 
 permissions:
-  pull-requests: write
-  contents: write
-  id-token: write     # Required for OIDC token exchange
+  contents: read
 
 on:
   push:
@@ -14,15 +12,19 @@ jobs:
   release-plz:
     name: Release-plz
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # open release PRs
+      contents: write # push release tags and GitHub releases
+      id-token: write # crates.io trusted publishing
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Install Rust toolchain
         run: rustup toolchain install stable --no-self-update --profile minimal
       - name: Run release-plz
-        uses: MarcoIeni/release-plz-action@v0.5
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # cargo-semver-checks builds binstalk-downloader with its `http3`
