@@ -3,16 +3,16 @@ use std::{
     future::Future,
     ops::Deref,
     sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
         Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
     time::{Duration, Instant},
 };
 
 use binstalk_downloader::{download::Download, remote};
-use compact_str::{format_compact, CompactString, ToCompactString};
+use compact_str::{CompactString, ToCompactString, format_compact};
 use tokio::sync::OnceCell;
-use tracing::{instrument, warn, Level};
+use tracing::{Level, instrument, warn};
 use url::Url;
 use zeroize::Zeroizing;
 

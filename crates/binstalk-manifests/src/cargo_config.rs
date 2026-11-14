@@ -5,7 +5,7 @@
 //! Binstall reads from them to be compatible with `cargo-install`'s behavior.
 
 use std::{
-    collections::{btree_map::Entry as BTreeMapEntry, BTreeMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque, btree_map::Entry as BTreeMapEntry},
     fs::File,
     io, mem,
     path::{Path, PathBuf},
@@ -377,7 +377,7 @@ mod tests {
 
     use std::{io::Cursor, path::MAIN_SEPARATOR};
 
-    use compact_str::{format_compact, ToCompactString};
+    use compact_str::{ToCompactString, format_compact};
 
     const CONFIG: &str = r#"
 [env]

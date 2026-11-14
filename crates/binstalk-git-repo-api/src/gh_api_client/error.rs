@@ -2,7 +2,7 @@ use std::{error, fmt, io, time::Duration};
 
 use binstalk_downloader::remote;
 use compact_str::{CompactString, ToCompactString};
-use serde::{de::Deserializer, Deserialize};
+use serde::{Deserialize, de::Deserializer};
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]

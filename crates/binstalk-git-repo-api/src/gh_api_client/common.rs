@@ -3,7 +3,7 @@ use std::{fmt::Debug, future::Future, sync::OnceLock};
 use binstalk_downloader::remote::{self, Response, Url};
 use compact_str::CompactString;
 use percent_encoding::percent_decode_str;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::to_string as to_json_string;
 use tracing::debug;
 

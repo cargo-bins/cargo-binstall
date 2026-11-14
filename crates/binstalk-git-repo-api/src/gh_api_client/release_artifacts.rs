@@ -12,8 +12,8 @@ use serde::Deserialize;
 use url::Url;
 
 use super::{
-    common::{issue_graphql_query, issue_restful_api},
     GhApiError, GhRelease, GhRepo,
+    common::{issue_graphql_query, issue_restful_api},
 };
 
 // Only include fields we do care about

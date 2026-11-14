@@ -6,7 +6,7 @@ use semver::{Comparator, Op as ComparatorOp, Version as SemVersion, VersionReq};
 use serde::Deserialize;
 use tracing::{debug, instrument};
 
-use crate::{parse_manifest, MatchedVersion, RegistryError};
+use crate::{MatchedVersion, RegistryError, parse_manifest};
 
 /// Return `Some(checksum)` if the version is not yanked, otherwise `None`.
 async fn is_crate_yanked(client: &Client, url: Url) -> Result<Option<String>, RemoteError> {
@@ -119,13 +119,15 @@ pub async fn fetch_crate_cratesio_api(
     let url = Url::parse(&format!("https://crates.io/api/v1/crates/{name}"))?;
 
     let (version, cksum) = match version_req.comparators.as_slice() {
-        [Comparator {
-            op: ComparatorOp::Exact,
-            major,
-            minor: Some(minor),
-            patch: Some(patch),
-            pre,
-        }] => {
+        [
+            Comparator {
+                op: ComparatorOp::Exact,
+                major,
+                minor: Some(minor),
+                patch: Some(patch),
+                pre,
+            },
+        ] => {
             let version = SemVersion {
                 major: *major,
                 minor: *minor,

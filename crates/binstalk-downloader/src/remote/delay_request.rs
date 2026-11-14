@@ -5,7 +5,7 @@ use std::{
 
 use compact_str::{CompactString, ToCompactString};
 use reqwest::{Request, Url};
-use tokio::time::{sleep_until, Duration, Instant};
+use tokio::time::{Duration, Instant, sleep_until};
 use tracing::debug;
 
 pub(super) type RequestResult = Result<reqwest::Response, reqwest::Error>;

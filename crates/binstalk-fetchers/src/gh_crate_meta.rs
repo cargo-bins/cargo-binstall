@@ -16,8 +16,8 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
-    SignaturePolicy, SignatureVerifier, TargetDataErased, DEFAULT_GH_API_RETRY_DURATION,
+    DEFAULT_GH_API_RETRY_DURATION, Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
+    SignatureVerifier, TargetDataErased, common::*, futures_resolver::FuturesResolver,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";

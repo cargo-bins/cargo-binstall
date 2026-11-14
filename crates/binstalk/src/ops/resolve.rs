@@ -601,13 +601,15 @@ fn parse_package_version(
 
 fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
     match version_req.comparators.as_slice() {
-        [Comparator {
-            op: ComparatorOp::Exact,
-            major,
-            minor: Some(minor),
-            patch: Some(patch),
-            pre,
-        }] => Some(Version {
+        [
+            Comparator {
+                op: ComparatorOp::Exact,
+                major,
+                minor: Some(minor),
+                patch: Some(patch),
+                pre,
+            },
+        ] => Some(Version {
             major: *major,
             minor: *minor,
             patch: *patch,

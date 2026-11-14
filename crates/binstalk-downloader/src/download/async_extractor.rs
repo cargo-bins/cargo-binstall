@@ -12,10 +12,10 @@ use tempfile::tempfile as create_tmpfile;
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use super::{extractor::*, DownloadError, ExtractedFiles, TarBasedFmt};
+use super::{DownloadError, ExtractedFiles, TarBasedFmt, extractor::*};
 use crate::{
     download::zip_extraction::do_extract_zip,
-    utils::{extract_with_blocking_task, StreamReadable},
+    utils::{StreamReadable, extract_with_blocking_task},
 };
 
 pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>

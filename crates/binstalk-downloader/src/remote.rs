@@ -1,5 +1,5 @@
 use std::{
-    num::{NonZeroU16, NonZeroU64, NonZeroU8},
+    num::{NonZeroU8, NonZeroU16, NonZeroU64},
     ops::ControlFlow,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -9,13 +9,13 @@ use bytes::Bytes;
 use futures_util::Stream;
 use httpdate::parse_http_date;
 use reqwest::{
-    header::{HeaderMap, HeaderValue, RETRY_AFTER},
     Request,
+    header::{HeaderMap, HeaderValue, RETRY_AFTER},
 };
 use thiserror::Error as ThisError;
 use tracing::{debug, info, instrument};
 
-pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
+pub use reqwest::{Error as ReqwestError, Method, StatusCode, header};
 pub use url::Url;
 
 mod delay_request;

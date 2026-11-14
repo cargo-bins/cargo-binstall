@@ -188,8 +188,8 @@ mod win {
     use std::{os::windows::ffi::OsStrExt, path::Path};
 
     use windows::{
+        Win32::Storage::FileSystem::{REPLACE_FILE_FLAGS, ReplaceFileW},
         core::{Error, PCWSTR},
-        Win32::Storage::FileSystem::{ReplaceFileW, REPLACE_FILE_FLAGS},
     };
 
     pub(super) fn replace_file(src: &Path, dst: &Path) -> Result<(), Error> {

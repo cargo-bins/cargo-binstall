@@ -4,8 +4,9 @@ use compact_str::CompactString;
 use serde::Deserialize;
 
 use super::{
+    GhApiError, GhRepo,
     common::{issue_graphql_query, issue_restful_api},
-    remote, GhApiError, GhRepo,
+    remote,
 };
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]

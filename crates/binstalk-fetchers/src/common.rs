@@ -3,8 +3,8 @@
 use std::{
     future::Future,
     sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
         Once,
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
 };
 

@@ -16,8 +16,8 @@ impl TLSVersion {
 #[cfg(feature = "__tls")]
 impl From<TLSVersion> for reqwest::tls::Version {
     fn from(ver: TLSVersion) -> reqwest::tls::Version {
-        use reqwest::tls::Version;
         use Inner::*;
+        use reqwest::tls::Version;
 
         match ver.0 {
             Tls1_2 => Version::TLS_1_2,

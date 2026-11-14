@@ -647,13 +647,10 @@ token = "secret-token"
             .parse()
             .unwrap();
 
-        assert!(resolve_registry_auth(
-            &config,
-            tempdir.path(),
-            Some("private-registry"),
-            &registry,
-        )
-        .is_none());
+        assert!(
+            resolve_registry_auth(&config, tempdir.path(), Some("private-registry"), &registry,)
+                .is_none()
+        );
 
         // SAFETY: tests are run with cargo-nextest (one process per test), so no other
         // thread reads or writes the environment concurrently.
@@ -683,13 +680,10 @@ credential-provider = "cargo:libsecret"
             .parse()
             .unwrap();
 
-        assert!(resolve_registry_auth(
-            &config,
-            tempdir.path(),
-            Some("private-registry"),
-            &registry,
-        )
-        .is_none());
+        assert!(
+            resolve_registry_auth(&config, tempdir.path(), Some("private-registry"), &registry,)
+                .is_none()
+        );
 
         // SAFETY: tests are run with cargo-nextest (one process per test), so no other
         // thread reads or writes the environment concurrently.

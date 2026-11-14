@@ -14,7 +14,7 @@ use binstalk::{
     registry::Registry,
 };
 use binstalk_manifests::cargo_toml_binstall::{PkgOverride, Strategy};
-use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum, builder::PossibleValue, error::ErrorKind};
 use clap_complete::Shell;
 use compact_str::CompactString;
 use log::LevelFilter;
@@ -716,11 +716,7 @@ pub fn parse() -> (Args, PkgOverride) {
             }
 
             #[cfg(feature = "git")]
-            if opts.git.is_some() {
-                "git"
-            } else {
-                ""
-            }
+            if opts.git.is_some() { "git" } else { "" }
         };
 
         if !option.is_empty() {

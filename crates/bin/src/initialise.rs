@@ -3,7 +3,7 @@ use std::{borrow::Cow, env::var_os, fs, path::PathBuf};
 use binstalk::errors::BinstallError;
 use binstalk_manifests::{cargo_config::Config as CargoConfig, crates_manifests::Manifests};
 use home::cargo_home;
-use miette::{bail, Result, WrapErr};
+use miette::{Result, WrapErr, bail};
 use tempfile::TempDir;
 use tracing::{debug, info};
 
