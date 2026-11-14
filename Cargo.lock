@@ -319,7 +319,6 @@ dependencies = [
  "cfg-if",
  "compact_str",
  "flate2",
- "futures-io",
  "futures-util",
  "hickory-resolver",
  "httpdate",
