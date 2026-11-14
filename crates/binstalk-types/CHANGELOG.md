@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.9](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.8...binstalk-types-v0.10.9) - 2026-11-14
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.10.8](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.7...binstalk-types-v0.10.8) - 2026-07-24
 
 ### Other

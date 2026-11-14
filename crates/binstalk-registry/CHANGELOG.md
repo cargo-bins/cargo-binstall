@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.14](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.13...binstalk-registry-v0.12.14) - 2026-11-14
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.12.13](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.12...binstalk-registry-v0.12.13) - 2026-11-09
 
 ### Added

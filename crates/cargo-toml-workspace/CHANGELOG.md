@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.12](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v7.0.11...cargo-toml-workspace-v7.0.12) - 2026-11-14
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [7.0.11](https://github.com/cargo-bins/cargo-binstall/compare/cargo-toml-workspace-v7.0.10...cargo-toml-workspace-v7.0.11) - 2026-07-24
 
 ### Other

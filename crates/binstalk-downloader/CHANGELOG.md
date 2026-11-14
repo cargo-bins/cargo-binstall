@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.14.1...binstalk-downloader-v0.14.2) - 2026-11-14
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+- Adopt std APIs available at current MSRVs and deny warnings in CI ([#2755](https://github.com/cargo-bins/cargo-binstall/pull/2755))
+
 ## [0.14.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.14.0...binstalk-downloader-v0.14.1) - 2026-10-31
 
 ### Other

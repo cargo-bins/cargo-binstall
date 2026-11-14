@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.98](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.97...detect-targets-v0.1.98) - 2026-11-14
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.1.97](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.96...detect-targets-v0.1.97) - 2026-11-09
 
 ### Other

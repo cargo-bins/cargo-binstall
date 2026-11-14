@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.61](https://github.com/cargo-bins/cargo-binstall/compare/detect-wasi-v1.0.60...detect-wasi-v1.0.61) - 2026-11-14
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [1.0.60](https://github.com/cargo-bins/cargo-binstall/compare/detect-wasi-v1.0.59...detect-wasi-v1.0.60) - 2026-10-31
 
 ### Other
