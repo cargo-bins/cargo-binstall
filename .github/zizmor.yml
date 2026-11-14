@@ -8,6 +8,3 @@ rules:
   # Local `./` references are intentional: they use the checked out commit.
   self-repository:
     disable: true
-  # svenstaro/upload-release-action is kept on purpose in release-cli.yml.
-  superfluous-actions:
-    disable: true

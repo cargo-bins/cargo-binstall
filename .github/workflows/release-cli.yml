@@ -106,29 +106,34 @@ jobs:
 
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Push cli release tag
-      uses: mathieudutour/github-tag-action@af99e60ce8132224b8e6ebab5023449fe256ed46 # v7.0.0
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        custom_tag: ${{ fromJSON(inputs.info).version }}
-        tag_prefix: v
+      # Lightweight tag on the released commit; an existing tag is left alone.
+      run: |
+        set -euo pipefail
+        if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" --silent 2>/dev/null; then
+          echo "Tag v$version already exists"
+        else
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/v$version" -f sha="$GITHUB_SHA" --silent
+        fi
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        version: ${{ fromJSON(inputs.info).version }}
 
     - if: fromJSON(inputs.info).is-release == 'true'
-      name: Create release and upload artifacts
-      uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        release_name: v${{ fromJSON(inputs.info).version }}
-        tag: v${{ fromJSON(inputs.info).version }}
-        body: ${{ fromJSON(inputs.info).notes }}
-        promote: true
-        draft: true
-        file: artifact/*
-        file_glob: true
+      name: Create draft release and upload artifacts
+      run: |
+        gh release create "v$version" --verify-tag --draft \
+          --title "v$version" --notes "$notes" artifact/*
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
+        version: ${{ fromJSON(inputs.info).version }}
+        notes: ${{ fromJSON(inputs.info).notes }}
 
     - if: fromJSON(inputs.info).is-release == 'true'
       name: Make release latest
       run: gh release edit "v$version" --latest --draft=false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
         version: ${{ fromJSON(inputs.info).version }}
-
