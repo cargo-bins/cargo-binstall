@@ -77,6 +77,25 @@ pub fn is_valid_bin_name(name: &str) -> bool {
         )
 }
 
+/// Directories in the extracted archive that may hold the binaries, tried
+/// in order by [`infer_bin_dir_template`]. SUPPORT.md documents these, see
+/// `tests::support_md`.
+///
+/// Make sure to update
+/// fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
+/// NOVERSION_FILENAMES} if you update this array.
+const GEN_POSSIBLE_DIRS: [for<'r> fn(&'r str, &'r str, &'r str) -> String; 8] = [
+    |name, target, version| format!("{name}-{target}-v{version}"),
+    |name, target, version| format!("{name}-{target}-{version}"),
+    |name, target, version| format!("{name}-{version}-{target}"),
+    |name, target, version| format!("{name}-v{version}-{target}"),
+    |name, target, _version| format!("{name}-{target}"),
+    // Ignore the following when updating hosting::{FULL_FILENAMES, NOVERSION_FILENAMES}
+    |name, _target, version| format!("{name}-{version}"),
+    |name, _target, version| format!("{name}-v{version}"),
+    |name, _target, _version| name.to_string(),
+];
+
 /// Must be called after the archive is downloaded and extracted.
 /// This function might uses blocking I/O.
 pub fn infer_bin_dir_template(
@@ -87,24 +106,9 @@ pub fn infer_bin_dir_template(
     let target = data.target;
     let version = data.version;
 
-    // Make sure to update
-    // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
-    // NOVERSION_FILENAMES} if you update this array.
-    let gen_possible_dirs: [for<'r> fn(&'r str, &'r str, &'r str) -> String; 8] = [
-        |name, target, version| format!("{name}-{target}-v{version}"),
-        |name, target, version| format!("{name}-{target}-{version}"),
-        |name, target, version| format!("{name}-{version}-{target}"),
-        |name, target, version| format!("{name}-v{version}-{target}"),
-        |name, target, _version| format!("{name}-{target}"),
-        // Ignore the following when updating hosting::{FULL_FILENAMES, NOVERSION_FILENAMES}
-        |name, _target, version| format!("{name}-{version}"),
-        |name, _target, version| format!("{name}-v{version}"),
-        |name, _target, _version| name.to_string(),
-    ];
-
     let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
 
-    gen_possible_dirs
+    GEN_POSSIBLE_DIRS
         .into_iter()
         .map(|gen_possible_dir| gen_possible_dir(name, target, version))
         .find(|dirname| has_dir(Path::new(&dirname)))
@@ -399,7 +403,60 @@ impl fmt::Display for OptionalLazyFormat<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_valid_bin_name;
+    use std::{env, fs};
+
+    use super::{is_valid_bin_name, Path, GEN_POSSIBLE_DIRS};
+
+    /// Replaces the lines between `<!-- BEGIN generated:NAME ... -->` and
+    /// `<!-- END generated:NAME -->` in the workspace document `doc`.
+    ///
+    /// Fails if a section is out of date, or rewrites it when the
+    /// `UPDATE_DOCS` env var is set (see `just update-docs`).
+    ///
+    /// Keep in sync with the copy in binstalk-fetchers.
+    fn sync_doc_sections(doc: &str, sections: &[(&str, String)]) {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // The packaged crate (crates.io, vendored sources) doesn't ship
+        // the workspace docs, so only check inside the workspace.
+        if manifest_dir.parent().and_then(Path::file_name) != Some("crates".as_ref()) {
+            return;
+        }
+        let path = manifest_dir.join("../..").join(doc);
+
+        let original = fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+        let mut updated = original.clone();
+        for (name, content) in sections {
+            let begin = format!("<!-- BEGIN generated:{name} ");
+            let end = format!("<!-- END generated:{name} -->");
+
+            let start = updated
+                .find(&begin)
+                .unwrap_or_else(|| panic!("{doc}: missing `{begin}... -->`"));
+            let start = start + updated[start..].find('\n').unwrap() + 1;
+            let len = updated[start..]
+                .find(&end)
+                .unwrap_or_else(|| panic!("{doc}: missing `{end}`"));
+            updated.replace_range(start..start + len, content);
+        }
+
+        if updated != original {
+            assert!(
+                env::var_os("UPDATE_DOCS").is_some(),
+                "{doc} is out of date, run `just update-docs` to regenerate it"
+            );
+            fs::write(&path, updated).unwrap();
+        }
+    }
+
+    #[test]
+    fn support_md() {
+        let dirs = GEN_POSSIBLE_DIRS
+            .into_iter()
+            .map(|gen_dir| format!("- `{}`\n", gen_dir("{ name }", "{ target }", "{ version }")))
+            .collect();
+
+        sync_doc_sections("SUPPORT.md", &[("default-bin-dirs", dirs)]);
+    }
 
     #[test]
     fn valid_bin_names() {

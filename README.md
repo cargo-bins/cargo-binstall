@@ -87,6 +87,7 @@ Download the relevant package for your system below, unpack it, and move the
 | Linux   | x86\_64                   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz      |
 | Linux   | armv7                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz |
 | Linux   | arm64                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz     |
+| Linux   | riscv64                   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-riscv64gc-unknown-linux-musl.tgz   |
 | Mac     | Intel                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip            |
 | Mac     | Apple Silicon             | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip           |
 | Mac     | Universal<br>(both archs) | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-universal-apple-darwin.zip         |

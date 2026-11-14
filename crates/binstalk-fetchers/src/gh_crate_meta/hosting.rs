@@ -71,41 +71,60 @@ impl RepositoryHost {
         }
     }
 
+    /// The parts that make up the default `pkg-url` templates of this host.
+    ///
+    /// SUPPORT.md documents these, see `tests::support_md`.
+    fn default_pkg_urls(self) -> Option<DefaultPkgUrls> {
+        use RepositoryHost::*;
+
+        Some(match self {
+            GitHub => DefaultPkgUrls {
+                paths: GITHUB_RELEASE_PATHS,
+                filenames: &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                suffix: "",
+            },
+            GitLab => DefaultPkgUrls {
+                paths: GITLAB_RELEASE_PATHS,
+                filenames: &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                suffix: "",
+            },
+            BitBucket => DefaultPkgUrls {
+                paths: BITBUCKET_RELEASE_PATHS,
+                filenames: &[FULL_FILENAMES],
+                suffix: "",
+            },
+            SourceForge => DefaultPkgUrls {
+                paths: SOURCEFORGE_RELEASE_PATHS,
+                filenames: &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                suffix: "/download",
+            },
+            // Codeberg (Forgejo) has the same release paths as GitHub.
+            Codeberg => DefaultPkgUrls {
+                paths: GITHUB_RELEASE_PATHS,
+                filenames: &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                suffix: "",
+            },
+            Unknown => return None,
+        })
+    }
+
     pub fn get_default_pkg_url_template(
         self,
     ) -> Option<impl Iterator<Item = Template<'static>> + Clone + 'static> {
-        use RepositoryHost::*;
-
-        match self {
-            GitHub => Some(apply_filenames_to_paths(
-                GITHUB_RELEASE_PATHS,
-                &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                "",
-            )),
-            GitLab => Some(apply_filenames_to_paths(
-                GITLAB_RELEASE_PATHS,
-                &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                "",
-            )),
-            BitBucket => Some(apply_filenames_to_paths(
-                BITBUCKET_RELEASE_PATHS,
-                &[FULL_FILENAMES],
-                "",
-            )),
-            SourceForge => Some(apply_filenames_to_paths(
-                SOURCEFORGE_RELEASE_PATHS,
-                &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                "/download",
-            )),
-            Codeberg => Some(apply_filenames_to_paths(
-                // Codeberg (Forgejo) has the same release paths as GitHub.
-                GITHUB_RELEASE_PATHS,
-                &[FULL_FILENAMES, NOVERSION_FILENAMES],
-                "",
-            )),
-            Unknown => None,
-        }
+        let DefaultPkgUrls {
+            paths,
+            filenames,
+            suffix,
+        } = self.default_pkg_urls()?;
+        Some(apply_filenames_to_paths(paths, filenames, suffix))
     }
+}
+
+/// Every filename is appended to every release path, followed by `suffix`.
+struct DefaultPkgUrls {
+    paths: &'static [Template<'static>],
+    filenames: &'static [&'static [Template<'static>]],
+    suffix: &'static str,
 }
 
 fn apply_filenames_to_paths(
@@ -122,4 +141,101 @@ fn apply_filenames_to_paths(
             template += Item::Text(suffix);
             template
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env, fs, path::Path};
+
+    use super::*;
+
+    /// Renders `template` back into the syntax used in `Cargo.toml`.
+    fn render(template: &Template<'_>) -> String {
+        template
+            .items
+            .iter()
+            .map(|item| match item {
+                Item::Text(text) => text
+                    .replace('\\', "\\\\")
+                    .replace('{', "\\{")
+                    .replace('}', "\\}"),
+                Item::Key(key) => format!("{{ {key} }}"),
+            })
+            .collect()
+    }
+
+    /// Replaces the lines between `<!-- BEGIN generated:NAME ... -->` and
+    /// `<!-- END generated:NAME -->` in the workspace document `doc`.
+    ///
+    /// Fails if a section is out of date, or rewrites it when the
+    /// `UPDATE_DOCS` env var is set (see `just update-docs`).
+    fn sync_doc_sections(doc: &str, sections: &[(&str, String)]) {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // The packaged crate (crates.io, vendored sources) doesn't ship
+        // the workspace docs, so only check inside the workspace.
+        if manifest_dir.parent().and_then(Path::file_name) != Some("crates".as_ref()) {
+            return;
+        }
+        let path = manifest_dir.join("../..").join(doc);
+
+        let original = fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+        let mut updated = original.clone();
+        for (name, content) in sections {
+            let begin = format!("<!-- BEGIN generated:{name} ");
+            let end = format!("<!-- END generated:{name} -->");
+
+            let start = updated
+                .find(&begin)
+                .unwrap_or_else(|| panic!("{doc}: missing `{begin}... -->`"));
+            let start = start + updated[start..].find('\n').unwrap() + 1;
+            let len = updated[start..]
+                .find(&end)
+                .unwrap_or_else(|| panic!("{doc}: missing `{end}`"));
+            updated.replace_range(start..start + len, content);
+        }
+
+        if updated != original {
+            assert!(
+                env::var_os("UPDATE_DOCS").is_some(),
+                "{doc} is out of date, run `just update-docs` to regenerate it"
+            );
+            fs::write(&path, updated).unwrap();
+        }
+    }
+
+    #[test]
+    fn support_md() {
+        let mut filenames = String::new();
+        for (filenames_set, note) in [
+            (FULL_FILENAMES, ""),
+            (NOVERSION_FILENAMES, r#" ("versionless")"#),
+        ] {
+            for filename in filenames_set {
+                let filename = render(filename);
+                let filename = filename.strip_prefix('/').unwrap();
+                filenames += &format!("- `{filename}`{note}\n");
+            }
+        }
+
+        let mut sections = vec![("pkg-url-filenames", filenames)];
+
+        for (host, name) in [
+            (RepositoryHost::GitHub, "pkg-url-paths-github"),
+            (RepositoryHost::GitLab, "pkg-url-paths-gitlab"),
+            (RepositoryHost::BitBucket, "pkg-url-paths-bitbucket"),
+            (RepositoryHost::SourceForge, "pkg-url-paths-sourceforge"),
+            (RepositoryHost::Codeberg, "pkg-url-paths-codeberg"),
+        ] {
+            let paths = host
+                .default_pkg_urls()
+                .unwrap()
+                .paths
+                .iter()
+                .map(|path| format!("- `{}/`\n", render(path)))
+                .collect();
+            sections.push((name, paths));
+        }
+
+        sync_doc_sections("SUPPORT.md", &sections);
+    }
 }

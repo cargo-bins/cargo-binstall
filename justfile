@@ -270,13 +270,25 @@ fmt: print-env
 
 fmt-check: fmt
 
+# Regenerate HELP.md from the clap args.
 update-help-md: print-env
     cargo run -p cargo-binstall --features clap-markdown unused-crate-name --markdown-help > HELP.md
 
-check-help-md:
-    git diff --exit-code HELP.md
+# Regenerate the `<!-- BEGIN generated:... -->` sections of SUPPORT.md from the
+# crates' source, through their `support_md` tests.
+# This uses `cargo test` rather than nextest so that the two test binaries,
+# which both write SUPPORT.md, run one after the other.
+update-support-md: print-env
+    UPDATE_DOCS=1 cargo test -p binstalk-bins -p binstalk-fetchers --lib support_md
 
-lint: clippy fmt-check doc update-help-md check-help-md
+# Regenerate every document derived from the source.
+update-docs: update-help-md update-support-md
+
+# Fail if a document derived from the source is out of date.
+check-docs: update-docs
+    git diff --exit-code
+
+lint: clippy fmt-check doc
 
 # Rm dev-dependencies for `cargo-check` and clippy to speedup compilation.
 # This is a workaround for the cargo nightly option `-Z avoid-dev-deps`

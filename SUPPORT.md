@@ -35,6 +35,7 @@ with the following variables available:
 - `name` is the name of the crate/package
 - `version` is the crate version (per `--version` and the crate manifest)
 - `repo` is the repository linked in `Cargo.toml`
+- `subcrate` is the crate's directory when `repo` points at a crate inside a repository, see [Defaults](#defaults); templates using it are skipped otherwise
 - `bin` is the name of a specific binary, inferred from the crate configuration
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required)
 - `archive-suffix` is the filename extension of the package archive format that includes the prefix `.`, e.g. `.tgz` for tgz or `.exe`/`""` for bin.
@@ -112,14 +113,16 @@ By default, `binstall` will try all supported package formats and would do the s
 It will first extract the archives, then iterate over the following list, finding the first dir
 that exists:
 
- - `{ name }-{ target }-v{ version }`
- - `{ name }-{ target }-{ version }`
- - `{ name }-{ version }-{ target }`
- - `{ name }-v{ version }-{ target }`
- - `{ name }-{ target }`
- - `{ name }-{ version }`
- - `{ name }-v{ version }`
- - `{ name }`
+<!-- BEGIN generated:default-bin-dirs from crates/binstalk-bins/src/lib.rs, run `just update-docs` to update -->
+- `{ name }-{ target }-v{ version }`
+- `{ name }-{ target }-{ version }`
+- `{ name }-{ version }-{ target }`
+- `{ name }-v{ version }-{ target }`
+- `{ name }-{ target }`
+- `{ name }-{ version }`
+- `{ name }-v{ version }`
+- `{ name }`
+<!-- END generated:default-bin-dirs -->
 
 Then it will concat the dir with `"{ bin }{ binary-ext }"` and use that as the final `bin-dir`.
 
@@ -137,28 +140,44 @@ The URLs are derived from a set of filenames and a set of paths, which are
 "multiplied together": every filename appended to every path. The filenames
 are:
 
-- `{ name }-{ target }-{ version }{ archive-suffix }`
+<!-- BEGIN generated:pkg-url-filenames from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
 - `{ name }-{ target }-v{ version }{ archive-suffix }`
+- `{ name }-{ target }-{ version }{ archive-suffix }`
 - `{ name }-{ version }-{ target }{ archive-suffix }`
 - `{ name }-v{ version }-{ target }{ archive-suffix }`
-- `{ name }_{ target }_{ version }{ archive-suffix }`
 - `{ name }_{ target }_v{ version }{ archive-suffix }`
+- `{ name }_{ target }_{ version }{ archive-suffix }`
 - `{ name }_{ version }_{ target }{ archive-suffix }`
 - `{ name }_v{ version }_{ target }{ archive-suffix }`
 - `{ name }-{ target }{ archive-suffix }` ("versionless")
 - `{ name }_{ target }{ archive-suffix }` ("versionless")
+<!-- END generated:pkg-url-filenames -->
 
-The paths are:
+The paths are listed below. Paths containing `{ subcrate }` are only tried
+when the crate's `repository` points at a crate inside a GitHub, GitLab or
+Codeberg repository, such as `https://github.com/owner/repo/tree/main/crates/foo`
+or `https://github.com/owner/repo/tree/main/foo`. `{ subcrate }` is then the
+crate's directory (`foo`) and `{ repo }` is the repository itself
+(`https://github.com/owner/repo`). The `%2F` in those paths is a URL-encoded
+`/`, which matches release tags such as `foo/v1.2.3`.
 
 #### for GitHub
 
+<!-- BEGIN generated:pkg-url-paths-github from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
 - `{ repo }/releases/download/{ version }/`
 - `{ repo }/releases/download/v{ version }/`
+- `{ repo }/releases/download/{ subcrate }%2F{ version }/`
+- `{ repo }/releases/download/{ subcrate }%2Fv{ version }/`
+<!-- END generated:pkg-url-paths-github -->
 
 #### for GitLab
 
+<!-- BEGIN generated:pkg-url-paths-gitlab from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
 - `{ repo }/-/releases/{ version }/downloads/binaries/`
 - `{ repo }/-/releases/v{ version }/downloads/binaries/`
+- `{ repo }/-/releases/{ subcrate }%2F{ version }/downloads/binaries/`
+- `{ repo }/-/releases/{ subcrate }%2Fv{ version }/downloads/binaries/`
+<!-- END generated:pkg-url-paths-gitlab -->
 
 Note that this uses the [Permanent links to release assets][gitlab-permalinks]
 feature of GitLab EE: it requires you to create an asset as a link with a
@@ -168,7 +187,9 @@ feature of GitLab EE: it requires you to create an asset as a link with a
 
 #### for BitBucket
 
+<!-- BEGIN generated:pkg-url-paths-bitbucket from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
 - `{ repo }/downloads/`
+<!-- END generated:pkg-url-paths-bitbucket -->
 
 Binaries must be uploaded to the project's "Downloads" page on BitBucket.
 
@@ -177,8 +198,12 @@ filename is not considered here.
 
 #### for SourceForge
 
-- `{ repo }/files/binaries/{ version }`
-- `{ repo }/files/binaries/v{ version }`
+<!-- BEGIN generated:pkg-url-paths-sourceforge from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
+- `{ repo }/files/binaries/{ version }/`
+- `{ repo }/files/binaries/v{ version }/`
+- `{ repo }/files/binaries/{ subcrate }%2F{ version }/`
+- `{ repo }/files/binaries/{ subcrate }%2Fv{ version }/`
+<!-- END generated:pkg-url-paths-sourceforge -->
 
 The URLs also have `/download` appended as per SourceForge's schema.
 
@@ -187,8 +212,12 @@ Binary must be uploaded to the "File" page of your project, under the directory
 
 #### for Codeberg
 
+<!-- BEGIN generated:pkg-url-paths-codeberg from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
 - `{ repo }/releases/download/{ version }/`
 - `{ repo }/releases/download/v{ version }/`
+- `{ repo }/releases/download/{ subcrate }%2F{ version }/`
+- `{ repo }/releases/download/{ subcrate }%2Fv{ version }/`
+<!-- END generated:pkg-url-paths-codeberg -->
 
 #### Others
 
