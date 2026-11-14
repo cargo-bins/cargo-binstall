@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, path::Path, sync::Arc};
+use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, mem::DropGuard, path::Path, sync::Arc};
 
 use binstalk_bins::BinFile;
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
@@ -244,7 +244,13 @@ impl ResolutionSource {
 
             debug!("Spawned command pid={:?}", child.id());
 
-            let status = KillGroupOnDrop(Some(child)).wait().await?;
+            let mut child = kill_group_on_drop(child);
+            let status = child.wait().await;
+            // The group has exited (or waiting failed), do not kill anything
+            // left behind, such as `sccache` servers on Windows (which stay in
+            // the job object).
+            DropGuard::dismiss(child);
+            let status = status?;
             if status.success() {
                 info!("Cargo finished successfully");
                 Ok(())
@@ -281,32 +287,20 @@ fn release_date(pubtime: &str) -> &str {
 }
 
 /// Kills the whole process group (unix) / job object (windows) of
-/// `cargo install` if it is dropped before the group exits, e.g. when
-/// the install task is cancelled on Ctrl-C/SIGTERM.
+/// `cargo install` if it is dropped, e.g. when the install task is
+/// cancelled on Ctrl-C/SIGTERM.
 ///
 /// `cargo` runs in its own process group, so it does not receive the
 /// terminal's SIGINT, and tokio's `kill_on_drop` only kills `cargo` itself,
 /// leaving `rustc`/build scripts running.
-struct KillGroupOnDrop(Option<AsyncGroupChild>);
-
-impl KillGroupOnDrop {
-    async fn wait(mut self) -> std::io::Result<std::process::ExitStatus> {
-        let res = self.0.as_mut().unwrap().wait().await;
-        // The group has exited (or waiting failed), do not kill anything
-        // left behind, such as daemonised `sccache` servers.
-        self.0 = None;
-        res
-    }
-}
-
-impl Drop for KillGroupOnDrop {
-    fn drop(&mut self) {
-        if let Some(child) = &mut self.0
-            && let Err(err) = child.start_kill()
-        {
+fn kill_group_on_drop(
+    child: AsyncGroupChild,
+) -> DropGuard<AsyncGroupChild, impl FnOnce(AsyncGroupChild)> {
+    DropGuard::new(child, |mut child| {
+        if let Err(err) = child.start_kill() {
             warn!("Failed to kill `cargo install` process group: {err}");
         }
-    }
+    })
 }
 
 fn apply_registry_selection(cmd: &mut Command, registry: Option<&str>, index: Option<&str>) {
@@ -389,7 +383,7 @@ mod tests {
             .arg(r#"sleep 30 & echo $! > "$0"; wait"#)
             .arg(&pid_file)
             .kill_on_drop(true);
-        let child = KillGroupOnDrop(Some(cmd.group_spawn().unwrap()));
+        let child = kill_group_on_drop(cmd.group_spawn().unwrap());
 
         let grandchild = loop {
             if let Some(pid) = fs::read_to_string(&pid_file)
