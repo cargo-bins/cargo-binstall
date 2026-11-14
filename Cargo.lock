@@ -318,7 +318,6 @@ dependencies = [
  "bzip2",
  "compact_str",
  "flate2",
- "futures-io",
  "futures-util",
  "hickory-resolver",
  "httpdate",
