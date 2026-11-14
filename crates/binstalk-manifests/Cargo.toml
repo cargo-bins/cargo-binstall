@@ -4,9 +4,9 @@ description = "The binstall toolkit for manipulating with manifest"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-manifests"
 version = "0.19.12"
-rust-version = "1.61.0"
+rust-version = "1.88.0"
 authors = ["ryan <ryan@kurte.nz>"]
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]

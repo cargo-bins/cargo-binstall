@@ -3,7 +3,7 @@ use std::{fmt::Debug, future::Future, sync::OnceLock};
 use binstalk_downloader::remote::{self, Response, Url};
 use compact_str::CompactString;
 use percent_encoding::percent_decode_str;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::to_string as to_json_string;
 use tracing::debug;
 
@@ -39,7 +39,7 @@ pub(super) fn issue_restful_api<T>(
     client: &remote::Client,
     path: &[&str],
     auth_token: Option<&str>,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
+) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static + use<T>
 where
     T: DeserializeOwned,
 {
@@ -95,7 +95,7 @@ pub(super) fn issue_graphql_query<T>(
     client: &remote::Client,
     query: String,
     auth_token: &str,
-) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static
+) -> impl Future<Output = Result<T, GhApiError>> + Send + 'static + use<T>
 where
     T: DeserializeOwned + Debug,
 {

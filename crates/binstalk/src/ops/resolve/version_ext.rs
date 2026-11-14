@@ -77,23 +77,31 @@ mod tests {
         assert!(!VersionReq::STAR.is_latest_compatible(&Version::parse("0.1.1-alpha").unwrap()));
 
         // Test ^x.y.z
-        assert!(!VersionReq::parse("^0.1")
-            .unwrap()
-            .is_latest_compatible(&Version::parse("0.1.99").unwrap()));
+        assert!(
+            !VersionReq::parse("^0.1")
+                .unwrap()
+                .is_latest_compatible(&Version::parse("0.1.99").unwrap())
+        );
 
         // Test =x.y.z
-        assert!(VersionReq::parse("=0.1.0")
-            .unwrap()
-            .is_latest_compatible(&Version::parse("0.1.0").unwrap()));
+        assert!(
+            VersionReq::parse("=0.1.0")
+                .unwrap()
+                .is_latest_compatible(&Version::parse("0.1.0").unwrap())
+        );
 
         // Test =x.y.z-alpha
-        assert!(VersionReq::parse("=0.1.0-alpha")
-            .unwrap()
-            .is_latest_compatible(&Version::parse("0.1.0-alpha").unwrap()));
+        assert!(
+            VersionReq::parse("=0.1.0-alpha")
+                .unwrap()
+                .is_latest_compatible(&Version::parse("0.1.0-alpha").unwrap())
+        );
 
         // Test >=x.y.z-alpha
-        assert!(!VersionReq::parse(">=0.1.0-alpha")
-            .unwrap()
-            .is_latest_compatible(&Version::parse("0.1.0-alpha").unwrap()));
+        assert!(
+            !VersionReq::parse(">=0.1.0-alpha")
+                .unwrap()
+                .is_latest_compatible(&Version::parse("0.1.0-alpha").unwrap())
+        );
     }
 }

@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_set::HashSet, BTreeMap},
+    collections::{BTreeMap, hash_set::HashSet},
     io,
     path::Path,
 };

@@ -1,17 +1,16 @@
 //! Common structure for crate information for post-install manifests.
 
-use std::{borrow, cmp, hash};
+use std::{borrow, cmp, hash, sync::LazyLock};
 
 use compact_str::CompactString;
 use maybe_owned::MaybeOwned;
-use once_cell::sync::Lazy;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub fn cratesio_url() -> &'static Url {
-    static CRATESIO: Lazy<Url, fn() -> Url> =
-        Lazy::new(|| Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
+    static CRATESIO: LazyLock<Url> =
+        LazyLock::new(|| Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
 
     &CRATESIO
 }

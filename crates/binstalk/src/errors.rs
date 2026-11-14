@@ -241,7 +241,9 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::cargo_registry`
     /// - Exit: 75
-    #[error("Unknown registry name {0}, env `CARGO_REGISTRIES_{0}_INDEX` nor is it in .cargo/config.toml")]
+    #[error(
+        "Unknown registry name {0}, env `CARGO_REGISTRIES_{0}_INDEX` nor is it in .cargo/config.toml"
+    )]
     #[diagnostic(severity(error), code(binstall::cargo_registry))]
     UnknownRegistryName(CompactString),
 

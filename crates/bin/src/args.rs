@@ -14,7 +14,7 @@ use binstalk::{
     registry::Registry,
 };
 use binstalk_manifests::cargo_toml_binstall::{PkgOverride, Strategy};
-use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum, builder::PossibleValue, error::ErrorKind};
 use clap_complete::Shell;
 use compact_str::CompactString;
 use log::LevelFilter;
@@ -710,16 +710,10 @@ pub fn parse() -> (Args, PkgOverride) {
         } else if opts.manifest_path.is_some() {
             "manifest-path"
         } else {
-            #[cfg(not(feature = "git"))]
-            {
-                ""
-            }
-
-            #[cfg(feature = "git")]
-            if opts.git.is_some() {
-                "git"
-            } else {
-                ""
+            // `opts.git` only exists with the `git` feature, so `cfg!` can't be used here.
+            cfg_select! {
+                feature = "git" => if opts.git.is_some() { "git" } else { "" },
+                _ => "",
             }
         };
 
@@ -820,10 +814,10 @@ You cannot use --features and specify multiple packages at the same time. Do one
             .exit()
     }
 
-    if opts.github_token.is_none() {
-        if let Ok(github_token) = env::var("GH_TOKEN") {
-            opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
-        }
+    if opts.github_token.is_none()
+        && let Ok(github_token) = env::var("GH_TOKEN")
+    {
+        opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
     }
     match opts.github_token.as_ref() {
         Some(token) if token.0.len() < 10 => opts.github_token = None,
@@ -926,9 +920,13 @@ mod test {
         // other tests in this module that also read the real `BINSTALL_DNS`.
         // clap captures the variable's value when `Arg::env` is called, so set
         // it first.
-        env::set_var("TEST_BINSTALL_DNS", "system");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::set_var("TEST_BINSTALL_DNS", "system") };
         let cmd = cmd.mut_arg("dns", |arg| arg.env("TEST_BINSTALL_DNS"));
-        env::remove_var("TEST_BINSTALL_DNS");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("TEST_BINSTALL_DNS") };
 
         let parse = |argv: &[&str]| {
             Args::from_arg_matches(&cmd.clone().try_get_matches_from(argv).unwrap()).unwrap()

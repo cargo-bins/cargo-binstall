@@ -376,9 +376,10 @@ mod tests {
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_arch" && value == "x86_64")));
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_env" && value == "gnu")));
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_vendor" && value == "unknown")));
-        assert!(cfgs
-            .iter()
-            .any(|c| matches!(c, Cfg::Name(ident) if ident.name == "unix")));
+        assert!(
+            cfgs.iter()
+                .any(|c| matches!(c, Cfg::Name(ident) if ident.name == "unix"))
+        );
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_family" && value == "unix")));
     }
 
@@ -392,9 +393,10 @@ mod tests {
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_arch" && value == "x86_64")));
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_env" && value == "msvc")));
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_vendor" && value == "pc")));
-        assert!(cfgs
-            .iter()
-            .any(|c| matches!(c, Cfg::Name(ident) if ident.name == "windows")));
+        assert!(
+            cfgs.iter()
+                .any(|c| matches!(c, Cfg::Name(ident) if ident.name == "windows"))
+        );
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_family" && value == "windows")));
     }
 
@@ -408,9 +410,10 @@ mod tests {
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_arch" && value == "universal")));
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_env" && value == "unknown")));
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_vendor" && value == "apple")));
-        assert!(cfgs
-            .iter()
-            .any(|c| matches!(c, Cfg::Name(ident) if ident.name == "unix")));
+        assert!(
+            cfgs.iter()
+                .any(|c| matches!(c, Cfg::Name(ident) if ident.name == "unix"))
+        );
         assert!(cfgs.iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_family" && value == "unix")));
     }
 }

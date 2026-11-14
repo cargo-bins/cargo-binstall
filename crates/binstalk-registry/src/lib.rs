@@ -56,9 +56,9 @@ pub enum RegistryError {
     Remote(#[from] RemoteError),
 
     #[error("{0} is not found")]
-    #[diagnostic(
-        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={0}")
-    )]
+    #[diagnostic(help(
+        "Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={0}"
+    ))]
     NotFound(CompactString),
 
     #[error(transparent)]
@@ -103,9 +103,9 @@ pub enum RegistryError {
     GitError(#[from] GitError),
 
     #[error("registry requires authentication: {0}")]
-    #[diagnostic(
-        help("Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active.")
-    )]
+    #[diagnostic(help(
+        "Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active."
+    ))]
     AuthenticationRequired(Box<Url>),
 }
 
