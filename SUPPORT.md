@@ -201,8 +201,6 @@ filename is not considered here.
 <!-- BEGIN generated:pkg-url-paths-sourceforge from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
 - `{ repo }/files/binaries/{ version }/`
 - `{ repo }/files/binaries/v{ version }/`
-- `{ repo }/files/binaries/{ subcrate }%2F{ version }/`
-- `{ repo }/files/binaries/{ subcrate }%2Fv{ version }/`
 <!-- END generated:pkg-url-paths-sourceforge -->
 
 The URLs also have `/download` appended as per SourceForge's schema.

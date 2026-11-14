@@ -49,12 +49,11 @@ const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
 
 const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template!("{ repo }/downloads")];
 
+// No `{ subcrate }` paths: `RepoInfo::detect_subcrate` never finds a subcrate
+// in a SourceForge URL, so they would always be filtered out.
 const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
-    template!("{ repo }/files/binaries/{  version }"),
+    template!("{ repo }/files/binaries/{ version }"),
     template!("{ repo }/files/binaries/v{ version }"),
-    // %2F is escaped form of '/'
-    template!("{ repo }/files/binaries/{ subcrate }%2F{  version }"),
-    template!("{ repo }/files/binaries/{ subcrate }%2Fv{ version }"),
 ];
 
 impl RepositoryHost {
