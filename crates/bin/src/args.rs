@@ -5,6 +5,7 @@ use std::{
     num::{NonZeroU16, NonZeroU64, ParseIntError},
     path::PathBuf,
     str::FromStr,
+    time::Duration,
 };
 
 use binstalk::{
@@ -343,6 +344,30 @@ pub struct Args {
         conflicts_with("index")
     )]
     pub(crate) registry: Option<CompactString>,
+
+    /// Only install a version of the crate published at least this long ago,
+    /// as a cooldown against freshly published malicious releases.
+    ///
+    /// Uses the same syntax as Cargo's `registry.global-min-publish-age`:
+    /// `0` to disable it, or an integer followed by `seconds`, `minutes`,
+    /// `hours`, `days`, `weeks` or `months`, e.g. `7 days`.
+    ///
+    /// Newer versions matching the version requirement are skipped, and it is
+    /// an error if all of them are too new. Versions without a publish time
+    /// in the registry index are not affected.
+    ///
+    /// Disabled by default, since `cargo install` does not honor Cargo's
+    /// `min-publish-age` config for the installed crate either. It does not
+    /// apply to `--manifest-path` or `--git`, nor to the dependencies built
+    /// when falling back to `cargo install`.
+    #[clap(
+        help_heading = "Options",
+        long,
+        env = "BINSTALL_MIN_PUBLISH_AGE",
+        value_name = "AGE",
+        value_parser = binstalk::registry::parse_min_publish_age,
+    )]
+    pub(crate) min_publish_age: Option<Duration>,
 
     /// This option will be passed through to all `cargo-install` invocations.
     ///

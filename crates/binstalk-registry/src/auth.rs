@@ -1,4 +1,4 @@
-use std::{fmt, sync::Arc};
+use std::{fmt, sync::Arc, time::Duration};
 
 use binstalk_types::SecretString;
 use compact_str::CompactString;
@@ -36,11 +36,27 @@ impl RegistryAuth {
 pub struct ResolvedRegistry {
     registry: Registry,
     auth: Option<RegistryAuth>,
+    min_publish_age: Option<Duration>,
 }
 
 impl ResolvedRegistry {
     pub fn new(registry: Registry, auth: Option<RegistryAuth>) -> Self {
-        Self { registry, auth }
+        Self {
+            registry,
+            auth,
+            min_publish_age: None,
+        }
+    }
+
+    /// Skip versions published less than `min_publish_age` ago, like Cargo's
+    /// `min-publish-age`. [`Duration::ZERO`] disables it.
+    ///
+    /// Versions without a publish time in the registry index are not affected.
+    pub fn with_min_publish_age(self, min_publish_age: Duration) -> Self {
+        Self {
+            min_publish_age: Some(min_publish_age),
+            ..self
+        }
     }
 
     pub async fn fetch_crate_matched(
@@ -56,7 +72,13 @@ impl ResolvedRegistry {
         crate::RegistryError,
     > {
         self.registry
-            .fetch_crate_matched_with_auth(client, self.auth.as_ref(), crate_name, version_req)
+            .fetch_crate_matched_with_auth(
+                client,
+                self.auth.as_ref(),
+                crate_name,
+                version_req,
+                self.min_publish_age,
+            )
             .await
     }
 
@@ -74,6 +96,7 @@ impl fmt::Debug for ResolvedRegistry {
         f.debug_struct("ResolvedRegistry")
             .field("registry", &self.registry)
             .field("auth", &self.auth)
+            .field("min_publish_age", &self.min_publish_age)
             .finish()
     }
 }

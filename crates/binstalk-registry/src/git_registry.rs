@@ -1,9 +1,10 @@
-use std::{io, path::PathBuf, sync::Arc};
+use std::{io, path::PathBuf, sync::Arc, time::Duration};
 
 use binstalk_downloader::remote::Client;
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
+use jiff::Timestamp;
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
 use serde_json::{from_slice as json_from_slice, Deserializer as JsonDeserializer};
@@ -14,8 +15,8 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryAuth,
-    RegistryConfig, RegistryError,
+    crate_prefix_components, parse_manifest, publish_age::publish_cutoff, render_dl_template,
+    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError,
 };
 
 #[derive(Debug)]
@@ -83,6 +84,7 @@ impl GitRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
+        cutoff: Option<Timestamp>,
     ) -> Result<MatchedVersion, RegistryError> {
         let mut path = PathBuf::with_capacity(128);
         path.push(&**c1);
@@ -98,6 +100,7 @@ impl GitRegistry {
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&crate_versions).into_iter(),
             version_req,
+            cutoff,
         )
     }
 
@@ -113,7 +116,9 @@ impl GitRegistry {
         auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
+        min_publish_age: Option<Duration>,
     ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+        let cutoff = min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age));
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
         let version_req = version_req.clone();
@@ -133,8 +138,13 @@ impl GitRegistry {
                 .git_index
                 .get_or_try_init(|| GitIndex::new(this.0.url.clone(), cancellation_token))?;
 
-            let matched_version =
-                Self::find_crate_matched_ver(repo, &crate_name, &crate_prefix, &version_req)?;
+            let matched_version = Self::find_crate_matched_ver(
+                repo,
+                &crate_name,
+                &crate_prefix,
+                &version_req,
+                cutoff,
+            )?;
 
             let url = Url::parse(&render_dl_template(
                 &config.dl,

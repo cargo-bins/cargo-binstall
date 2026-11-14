@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{fmt, io, str::FromStr, sync::Arc};
+use std::{fmt, io, str::FromStr, sync::Arc, time::Duration};
 
 use base16::DecodeError as Base16DecodeError;
 use binstalk_downloader::{
@@ -34,6 +34,9 @@ mod visitor;
 
 mod common;
 use common::*;
+
+mod publish_age;
+pub use publish_age::{parse_min_publish_age, InvalidMinPublishAge};
 
 #[cfg(feature = "git")]
 mod git_registry;
@@ -81,6 +84,14 @@ pub enum RegistryError {
 
     #[error("no version matching requirement '{req}'")]
     VersionMismatch { req: semver::VersionReq },
+
+    #[error("every version matching requirement '{req}' is newer than min-publish-age, the latest one {version} was published at {pubtime}")]
+    #[diagnostic(help("Wait until the version is old enough, or lower the min-publish-age."))]
+    TooNew {
+        req: semver::VersionReq,
+        version: CompactString,
+        pubtime: CompactString,
+    },
 
     #[error("Failed to parse cargo manifest: {0}")]
     #[diagnostic(help("If you used --manifest-path, check the Cargo.toml syntax."))]
@@ -197,7 +208,7 @@ impl Registry {
         crate_name: &str,
         version_req: &VersionReq,
     ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
-        self.fetch_crate_matched_with_auth(client, None, crate_name, version_req)
+        self.fetch_crate_matched_with_auth(client, None, crate_name, version_req, None)
             .await
     }
 
@@ -207,17 +218,18 @@ impl Registry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
+        min_publish_age: Option<Duration>,
     ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         match self {
             Self::Sparse(sparse_registry) => {
                 sparse_registry
-                    .fetch_crate_matched(client, auth, crate_name, version_req)
+                    .fetch_crate_matched(client, auth, crate_name, version_req, min_publish_age)
                     .await
             }
             #[cfg(feature = "git")]
             Self::Git(git_registry) => {
                 git_registry
-                    .fetch_crate_matched(client, auth, crate_name, version_req)
+                    .fetch_crate_matched(client, auth, crate_name, version_req, min_publish_age)
                     .await
             }
         }
@@ -337,9 +349,11 @@ mod test {
             }
         });
 
-        let manifest_from_cratesio_api = fetch_crate_cratesio_api(client, crate_name, version_req)
-            .await
-            .unwrap();
+        let (manifest_from_cratesio_api, pubtime) =
+            fetch_crate_cratesio_api(client, crate_name, version_req, None)
+                .await
+                .unwrap();
+        assert_eq!(pubtime.as_deref(), Some("2023-06-27T04:27:43Z"));
 
         let serialized_manifest_from_cratesio_api = to_string(&manifest_from_cratesio_api).unwrap();
 

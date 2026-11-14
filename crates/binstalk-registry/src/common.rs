@@ -9,14 +9,15 @@ use binstalk_downloader::{
 use binstalk_types::cargo_toml_binstall::{Meta, TarBasedFmt};
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{format_compact, CompactString, ToCompactString};
+use jiff::Timestamp;
 use leon::{Template, Values};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::Error as JsonError;
 use sha2::{Digest, Sha256};
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 
-use crate::{visitor::ManifestVisitor, RegistryAuth, RegistryError};
+use crate::{publish_age::is_too_new, visitor::ManifestVisitor, RegistryAuth, RegistryError};
 
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct RegistryConfig {
@@ -171,10 +172,10 @@ pub(super) fn render_dl_template(
 
 #[derive(Deserialize)]
 pub(super) struct RegistryIndexEntry {
-    vers: CompactString,
-    yanked: bool,
-    cksum: String,
-    pubtime: Option<CompactString>,
+    pub(super) vers: CompactString,
+    pub(super) yanked: bool,
+    pub(super) cksum: String,
+    pub(super) pubtime: Option<CompactString>,
 }
 
 pub(super) struct MatchedVersion {
@@ -186,11 +187,16 @@ pub(super) struct MatchedVersion {
 }
 
 impl MatchedVersion {
+    /// Find the highest version matching `version_req` that is not yanked
+    /// and, if `cutoff` is set, was not published after `cutoff`.
     pub(super) fn find(
         it: &mut dyn Iterator<Item = Result<RegistryIndexEntry, JsonError>>,
         version_req: &VersionReq,
+        cutoff: Option<Timestamp>,
     ) -> Result<Self, RegistryError> {
         let mut ret = Option::<(Self, Version)>::None;
+        // Highest matching version skipped for being too new
+        let mut too_new = Option::<(Self, Version)>::None;
 
         for res in it {
             let entry = res.map_err(RegistryError::from)?;
@@ -211,25 +217,43 @@ impl MatchedVersion {
                 continue;
             }
 
+            let is_too_new =
+                cutoff.is_some_and(|cutoff| is_too_new(entry.pubtime.as_deref(), cutoff));
+
             let matched = Self {
                 version: num,
                 cksum: entry.cksum,
                 pubtime: entry.pubtime,
             };
 
-            if let Some((_, max_ver)) = &ret {
-                if ver > *max_ver {
-                    ret = Some((matched, ver));
-                }
-            } else {
-                ret = Some((matched, ver));
+            let slot = if is_too_new { &mut too_new } else { &mut ret };
+            if slot.as_ref().map_or(true, |(_, max_ver)| ver > *max_ver) {
+                *slot = Some((matched, ver));
             }
         }
 
-        ret.map(|(num, _)| num)
-            .ok_or_else(|| RegistryError::VersionMismatch {
+        match (ret, too_new) {
+            (Some((matched, ver)), too_new) => {
+                if let Some((too_new, too_new_ver)) = too_new {
+                    if too_new_ver > ver {
+                        info!(
+                            "Skipping version {} published at {}, it is newer than min-publish-age",
+                            too_new.version,
+                            too_new.pubtime.as_deref().unwrap_or_default(),
+                        );
+                    }
+                }
+                Ok(matched)
+            }
+            (None, Some((too_new, _))) => Err(RegistryError::TooNew {
                 req: version_req.clone(),
-            })
+                version: too_new.version,
+                pubtime: too_new.pubtime.unwrap_or_default(),
+            }),
+            (None, None) => Err(RegistryError::VersionMismatch {
+                req: version_req.clone(),
+            }),
+        }
     }
 }
 
@@ -248,6 +272,7 @@ mod test {
             MatchedVersion::find(
                 &mut JsonDeserializer::from_slice(index).into_iter(),
                 &VersionReq::parse(req).unwrap(),
+                None,
             )
             .unwrap()
         };
@@ -258,5 +283,52 @@ mod test {
         );
         // Older registries may not record a publish time.
         assert_eq!(find("=0.2.0").pubtime, None);
+    }
+
+    #[test]
+    fn test_matched_version_min_publish_age() {
+        let index = br#"{"name":"foo","vers":"1.0.0","deps":[],"cksum":"00","features":{},"yanked":false,"pubtime":"2026-10-01T00:00:00Z"}
+{"name":"foo","vers":"1.1.0","deps":[],"cksum":"11","features":{},"yanked":false,"pubtime":"2026-11-01T00:00:00Z"}
+{"name":"foo","vers":"1.2.0","deps":[],"cksum":"22","features":{},"yanked":false,"pubtime":"2026-11-10T00:00:00Z"}
+{"name":"foo","vers":"1.3.0","deps":[],"cksum":"33","features":{},"yanked":false,"pubtime":"2026-11-13T00:00:00Z"}
+{"name":"foo","vers":"2.0.0","deps":[],"cksum":"44","features":{},"yanked":false,"pubtime":"2026-11-13T12:00:00Z"}
+{"name":"bar","vers":"0.1.0","deps":[],"cksum":"55","features":{},"yanked":false}
+"#;
+        // 7 days before 2026-11-14
+        let cutoff = Some("2026-11-07T00:00:00Z".parse().unwrap());
+        let find = |req| {
+            MatchedVersion::find(
+                &mut JsonDeserializer::from_slice(index).into_iter(),
+                &VersionReq::parse(req).unwrap(),
+                cutoff,
+            )
+        };
+
+        // Too new versions are skipped in favour of older matching ones.
+        assert_eq!(find("*").unwrap().version, "1.1.0");
+        assert_eq!(find("^1").unwrap().version, "1.1.0");
+        assert_eq!(find("=1.0.0").unwrap().version, "1.0.0");
+        // Versions without pubtime are not affected.
+        assert_eq!(find("=0.1.0").unwrap().version, "0.1.0");
+
+        // Error out when every matching version is too new, even if it is
+        // requested explicitly, reporting the latest one.
+        match find("^1.2").err().unwrap() {
+            RegistryError::TooNew {
+                version, pubtime, ..
+            } => {
+                assert_eq!(version, "1.3.0");
+                assert_eq!(pubtime, "2026-11-13T00:00:00Z");
+            }
+            err => panic!("unexpected error {err}"),
+        }
+        assert!(matches!(
+            find("=2.0.0").err().unwrap(),
+            RegistryError::TooNew { version, .. } if version == "2.0.0"
+        ));
+        assert!(matches!(
+            find("=3.0.0").err().unwrap(),
+            RegistryError::VersionMismatch { .. }
+        ));
     }
 }

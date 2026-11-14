@@ -418,6 +418,7 @@ dependencies = [
  "binstalk-types",
  "cargo-toml-workspace",
  "compact_str",
+ "jiff",
  "leon",
  "miette",
  "normalize-path",
