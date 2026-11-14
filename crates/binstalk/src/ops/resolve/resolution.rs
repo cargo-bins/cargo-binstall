@@ -108,7 +108,7 @@ impl ResolutionFetch {
             .filter(|bin_name| {
                 user_specified_bins
                     .as_ref()
-                    .map_or(true, |bins| bins.binary_search(bin_name).is_ok())
+                    .is_none_or(|bins| bins.binary_search(bin_name).is_ok())
             })
             .collect()
     }

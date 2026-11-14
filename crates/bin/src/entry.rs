@@ -291,14 +291,15 @@ pub fn install_crates(
             }
 
             // Confirm
-            if !dry_run && !no_confirm {
-                if let Err(abort_err) = confirm().await {
-                    return if let Some(err) = BinstallError::crate_errors(errors) {
-                        Err(Report::new(abort_err).wrap_err(err))
-                    } else {
-                        Err(abort_err.into())
-                    };
-                }
+            if !dry_run
+                && !no_confirm
+                && let Err(abort_err) = confirm().await
+            {
+                return if let Some(err) = BinstallError::crate_errors(errors) {
+                    Err(Report::new(abort_err).wrap_err(err))
+                } else {
+                    Err(abort_err.into())
+                };
             }
 
             let manifest_update_res = do_install_fetches_continue_on_failure(

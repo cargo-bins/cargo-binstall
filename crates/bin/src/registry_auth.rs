@@ -269,14 +269,18 @@ mod tests {
     #[test]
     fn test_get_registry_env_var_normalizes_registry_name() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN", "token");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::set_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN", "token") };
 
         assert_eq!(
             get_registry_env_var("private-registry", "TOKEN").as_deref(),
             Some("token")
         );
 
-        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN") };
     }
 
     #[test]
@@ -293,10 +297,14 @@ mod tests {
     #[test]
     fn test_registry_provider_env_takes_precedence_over_config() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var(
-            "CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER",
-            "cargo:libsecret",
-        );
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe {
+            env::set_var(
+                "CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER",
+                "cargo:libsecret",
+            )
+        };
 
         let config = CargoConfig::load_from_reader(
             Cursor::new(
@@ -312,7 +320,9 @@ credential-provider = "cargo:token"
 
         assert!(resolve_registry_credential_provider(&config, Some("private-registry")).is_none());
 
-        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER") };
     }
 
     #[test]
@@ -342,10 +352,14 @@ custom = "cargo:token"
     #[test]
     fn test_registry_provider_env_alias_enables_cargo_token() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var(
-            "CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER",
-            "custom",
-        );
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe {
+            env::set_var(
+                "CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER",
+                "custom",
+            )
+        };
 
         let config = CargoConfig::load_from_reader(
             Cursor::new(
@@ -367,7 +381,9 @@ custom = "cargo:token"
             Some(SupportedRegistryCredentialProvider::CargoToken)
         );
 
-        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_CREDENTIAL_PROVIDER") };
     }
 
     #[test]
@@ -575,7 +591,9 @@ token = "secret-token"
     #[test]
     fn test_resolve_registry_auth_uses_env_token_when_cargo_token_is_enabled() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN", "secret-token");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::set_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN", "secret-token") };
 
         let config = CargoConfig::load_from_reader(
             Cursor::new(
@@ -600,13 +618,17 @@ credential-provider = "cargo:token"
         assert_eq!(auth.token(), "secret-token");
         assert_eq!(auth.registry_name(), Some("private-registry"));
 
-        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN") };
     }
 
     #[test]
     fn test_resolve_registry_auth_ignores_config_token() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN") };
 
         let config = CargoConfig::load_from_reader(
             Cursor::new(
@@ -633,13 +655,17 @@ token = "secret-token"
         )
         .is_none());
 
-        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN") };
     }
 
     #[test]
     fn test_resolve_registry_auth_ignores_token_when_provider_is_not_cargo_token() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN", "secret-token");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::set_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN", "secret-token") };
 
         let config = CargoConfig::load_from_reader(
             Cursor::new(
@@ -665,6 +691,8 @@ credential-provider = "cargo:libsecret"
         )
         .is_none());
 
-        env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("CARGO_REGISTRIES_PRIVATE_REGISTRY_TOKEN") };
     }
 }

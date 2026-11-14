@@ -583,7 +583,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             DEFAULT_PKG_URL,
-            "https://github.com/ryankurte/cargo-binstall/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz"
+            "https://github.com/ryankurte/cargo-binstall/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz",
         );
     }
 
@@ -598,7 +598,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             &format!("https://example.com{}", &DEFAULT_PKG_URL[8..]),
-            "https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz"
+            "https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz",
         );
     }
 
@@ -613,7 +613,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }",
-            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz"
+            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz",
         );
     }
 
@@ -628,7 +628,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }",
-            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz"
+            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz",
         );
     }
 
@@ -643,7 +643,7 @@ mod test {
             "aarch64-apple-darwin",
             ".txz",
             "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz",
-            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz"
+            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz",
         );
     }
 
@@ -658,7 +658,7 @@ mod test {
             "aarch64-pc-windows-msvc",
             ".bin",
             "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }",
-            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe"
+            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe",
         );
     }
 }

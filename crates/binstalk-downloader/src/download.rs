@@ -379,8 +379,14 @@ mod test {
 
         // sccache, tgz and zip
         let sccache_config = [
-            ("https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.tar.gz", PkgFmt::Tgz),
-            ("https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.zip", PkgFmt::Zip),
+            (
+                "https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.tar.gz",
+                PkgFmt::Tgz,
+            ),
+            (
+                "https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.zip",
+                PkgFmt::Zip,
+            ),
         ];
 
         for (sccache_url, fmt) in sccache_config {

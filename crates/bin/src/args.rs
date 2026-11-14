@@ -820,10 +820,10 @@ You cannot use --features and specify multiple packages at the same time. Do one
             .exit()
     }
 
-    if opts.github_token.is_none() {
-        if let Ok(github_token) = env::var("GH_TOKEN") {
-            opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
-        }
+    if opts.github_token.is_none()
+        && let Ok(github_token) = env::var("GH_TOKEN")
+    {
+        opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
     }
     match opts.github_token.as_ref() {
         Some(token) if token.0.len() < 10 => opts.github_token = None,
@@ -926,9 +926,13 @@ mod test {
         // other tests in this module that also read the real `BINSTALL_DNS`.
         // clap captures the variable's value when `Arg::env` is called, so set
         // it first.
-        env::set_var("TEST_BINSTALL_DNS", "system");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::set_var("TEST_BINSTALL_DNS", "system") };
         let cmd = cmd.mut_arg("dns", |arg| arg.env("TEST_BINSTALL_DNS"));
-        env::remove_var("TEST_BINSTALL_DNS");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("TEST_BINSTALL_DNS") };
 
         let parse = |argv: &[&str]| {
             Args::from_arg_matches(&cmd.clone().try_get_matches_from(argv).unwrap()).unwrap()

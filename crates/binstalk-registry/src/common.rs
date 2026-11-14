@@ -43,7 +43,7 @@ impl Sha256Digest {
 
 impl DataVerifier for Sha256Digest {
     fn update(&mut self, data: &Bytes) {
-        if let Some(ref mut state) = &mut self.state {
+        if let Some(state) = &mut self.state {
             state.update(data);
         }
     }
@@ -217,11 +217,7 @@ impl MatchedVersion {
                 pubtime: entry.pubtime,
             };
 
-            if let Some((_, max_ver)) = &ret {
-                if ver > *max_ver {
-                    ret = Some((matched, ver));
-                }
-            } else {
+            if ret.as_ref().is_none_or(|(_, max_ver)| ver > *max_ver) {
                 ret = Some((matched, ver));
             }
         }

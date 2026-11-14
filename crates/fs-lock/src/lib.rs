@@ -9,10 +9,8 @@ use std::{
     path::Path,
 };
 
-use cfg_if::cfg_if;
-
-cfg_if! {
-    if #[cfg(any(target_os = "android", target_os = "illumos"))] {
+cfg_select! {
+    any(target_os = "android", target_os = "illumos") => {
         use fs4::FileExt;
 
         fn lock_exclusive(file: &File) -> io::Result<()> {
@@ -42,7 +40,8 @@ cfg_if! {
         fn unlock(file: &File) -> io::Result<()> {
             FileExt::unlock(file)
         }
-    } else {
+    }
+    _ => {
         fn lock_exclusive(file: &File) -> io::Result<()> {
             file.lock()
         }
@@ -139,12 +138,9 @@ impl FileLock {
     }
 
     pub fn get_file_path(&self) -> Option<&Path> {
-        cfg_if! {
-            if #[cfg(feature = "tracing")] {
-                self.1.as_deref()
-            } else {
-                None
-            }
+        cfg_select! {
+            feature = "tracing" => self.1.as_deref(),
+            _ => None,
         }
     }
 }

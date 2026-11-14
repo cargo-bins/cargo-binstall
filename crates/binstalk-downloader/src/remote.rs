@@ -388,7 +388,7 @@ impl Client {
     pub async fn get_stream(
         &self,
         url: Url,
-    ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
+    ) -> Result<impl Stream<Item = Result<Bytes, Error>> + use<>, Error> {
         Ok(self.get(url).send(true).await?.bytes_stream())
     }
 
