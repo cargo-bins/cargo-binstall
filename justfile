@@ -279,15 +279,15 @@ update-help-md: print-env
 update-support-md: print-env
     UPDATE_DOCS=1 cargo test -p binstalk-fetchers --lib support_md
 
-# Regenerate every document derived from the source.
-update-docs: update-help-md update-support-md
+# Regenerate the README download table from release-packages.yml.
+update-readme-download-table:
+    ./.github/scripts/gen-readme-download-table.sh
 
-# Fail if the README download table doesn't match the released packages.
-check-readme-download-table:
-    ./.github/scripts/check-readme-download-table.sh
+# Regenerate every document derived from the source.
+update-docs: update-help-md update-support-md update-readme-download-table
 
 # Fail if a document derived from the source is out of date.
-check-docs: update-docs check-readme-download-table
+check-docs: update-docs
     git diff --exit-code
 
 lint: clippy fmt-check doc

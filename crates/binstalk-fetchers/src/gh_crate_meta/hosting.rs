@@ -166,8 +166,9 @@ mod tests {
     /// Replaces the lines between `<!-- BEGIN generated:NAME ... -->` and
     /// `<!-- END generated:NAME -->` in the workspace document `doc`.
     ///
-    /// Fails if a section is out of date, or rewrites it when the
-    /// `UPDATE_DOCS` env var is set (see `just update-docs`).
+    /// Rewrites the sections that are out of date, then fails so that the
+    /// change gets noticed, unless the `UPDATE_DOCS` env var is set (see
+    /// `just update-docs`).
     fn sync_doc_sections(doc: &str, sections: &[(&str, String)]) {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         // The packaged crate (crates.io, vendored sources) doesn't ship
@@ -194,11 +195,11 @@ mod tests {
         }
 
         if updated != original {
+            fs::write(&path, updated).unwrap();
             assert!(
                 env::var_os("UPDATE_DOCS").is_some(),
-                "{doc} is out of date, run `just update-docs` to regenerate it"
+                "{doc} was out of date and has been regenerated, commit the changes"
             );
-            fs::write(&path, updated).unwrap();
         }
     }
 
