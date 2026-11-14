@@ -284,8 +284,12 @@ update-support-md: print-env
 # Regenerate every document derived from the source.
 update-docs: update-help-md update-support-md
 
+# Fail if the README download table doesn't match the released packages.
+check-readme-download-table:
+    ./.github/scripts/check-readme-download-table.sh
+
 # Fail if a document derived from the source is out of date.
-check-docs: update-docs
+check-docs: update-docs check-readme-download-table
     git diff --exit-code
 
 lint: clippy fmt-check doc
