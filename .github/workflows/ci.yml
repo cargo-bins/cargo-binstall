@@ -214,7 +214,7 @@ jobs:
     steps:
       - id: meta
         if: github.event_name == 'pull_request'
-        uses: cargo-bins/release-meta@878b404d09251e067413b4974a2f23c668fd664e # v1.0.0
+        uses: cargo-bins/release-meta@8ac87a95dfd0aa6903e06fc40fd9a7a26b766898 # v1.0.1
         with:
           event-data: ${{ toJSON(github.event) }}
           extract-notes-under: "### Release notes"
