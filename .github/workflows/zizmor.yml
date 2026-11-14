@@ -37,5 +37,6 @@ jobs:
         with:
           # Fail the job on findings instead of uploading SARIF to code scanning.
           advanced-security: false
-          # Pin zizmor itself so a new release with new audits can't break CI.
-          version: 1.32.0
+          # No `version:` here: the default `latest` resolves to the zizmor
+          # release locked by hash in this action's own tree (1.32.0 for
+          # v0.8.1), so zizmor only changes when Dependabot bumps this SHA.
