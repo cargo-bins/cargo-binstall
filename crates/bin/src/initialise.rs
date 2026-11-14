@@ -118,7 +118,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         debug!(path=?p, "install path from executable dir");
         (p, true)
     } else {
-        bail!("Could not determine installation path. Provide one with --install-path")
+        bail!("Could not determine installation path. Provide one with --install-path");
     };
 
     let settings = settings.merge_args(args);

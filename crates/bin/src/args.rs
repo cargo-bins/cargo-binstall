@@ -347,6 +347,9 @@ pub struct Args {
     /// This option will be passed through to all `cargo-install` invocations.
     ///
     /// It will require `Cargo.lock` to be up to date.
+    ///
+    /// Since Rust 1.100, `cargo install` uses the `Cargo.lock` packaged in the crate by default
+    /// and this flag no longer changes its dependency resolution.
     #[clap(help_heading = "Options", long)]
     pub(crate) locked: bool,
 

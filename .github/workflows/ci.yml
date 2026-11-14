@@ -30,6 +30,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Fail on rustc/cargo warnings from workspace crates, not just clippy lints (cargo >= 1.97).
+  CARGO_BUILD_WARNINGS: deny
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   JUST_ENABLE_H3: true
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 4
