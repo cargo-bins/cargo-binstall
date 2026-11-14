@@ -3,8 +3,8 @@
 use std::{
     future::Future,
     sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
         Once,
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
 };
 
@@ -31,7 +31,9 @@ pub(super) async fn get_gh_release_artifact_url(
     gh_api_client: GhApiClient,
     artifact: GhReleaseArtifact,
 ) -> Result<Option<GhReleaseArtifactUrl>, GhApiError> {
-    debug!("Using GitHub API to check for existence of artifact, which will also cache the API response");
+    debug!(
+        "Using GitHub API to check for existence of artifact, which will also cache the API response"
+    );
 
     // The future returned has the same size as a pointer
     match gh_api_client.has_release_artifact(artifact).await {
@@ -72,18 +74,18 @@ pub(super) async fn does_url_exist(
 
     debug!("Checking for package at: '{url}'");
 
-    if !GH_API_CLIENT_FAILED.load(Relaxed) {
-        if let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url) {
-            match get_gh_release_artifact_url(gh_api_client, artifact).await {
-                Ok(ret) => return Ok(ret.is_some()),
+    if !GH_API_CLIENT_FAILED.load(Relaxed)
+        && let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url)
+    {
+        match get_gh_release_artifact_url(gh_api_client, artifact).await {
+            Ok(ret) => return Ok(ret.is_some()),
 
-                Err(GhApiError::RateLimit { .. }) | Err(GhApiError::Unauthorized) => {}
+            Err(GhApiError::RateLimit { .. }) | Err(GhApiError::Unauthorized) => {}
 
-                Err(err) => return Err(err.into()),
-            }
-
-            GH_API_CLIENT_FAILED.store(true, Relaxed);
+            Err(err) => return Err(err.into()),
         }
+
+        GH_API_CLIENT_FAILED.store(true, Relaxed);
     }
 
     Ok(Box::pin(client.remote_gettable(url.clone())).await?)

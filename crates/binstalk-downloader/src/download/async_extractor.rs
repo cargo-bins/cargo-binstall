@@ -12,10 +12,10 @@ use tempfile::tempfile as create_tmpfile;
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use super::{extractor::*, DownloadError, ExtractedFiles, TarBasedFmt};
+use super::{DownloadError, ExtractedFiles, TarBasedFmt, extractor::*};
 use crate::{
     download::zip_extraction::do_extract_zip,
-    utils::{extract_with_blocking_task, StreamReadable},
+    utils::{StreamReadable, extract_with_blocking_task},
 };
 
 pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
@@ -101,7 +101,7 @@ where
                     for part in path.components() {
                         match part {
                             Component::Prefix(..) | Component::RootDir | Component::CurDir => {
-                                continue
+                                continue;
                             }
 
                             // unpack_in would return false if this happens.
@@ -135,7 +135,7 @@ fn extract_with_blocking_decoder<S, F, T>(
     stream: S,
     path: &Path,
     f: F,
-) -> impl Future<Output = Result<T, DownloadError>>
+) -> impl Future<Output = Result<T, DownloadError>> + use<S, F, T>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>, &Path) -> io::Result<T> + Send + Sync + 'static,

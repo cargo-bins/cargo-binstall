@@ -4,9 +4,9 @@ description = "Detect if WASI can be run"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/detect-wasi"
 version = "1.0.60"
-rust-version = "1.61.0"
+rust-version = "1.88.0"
 authors = ["Félix Saparelli <felix@passcod.name>"]
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]

@@ -1,0 +1,10 @@
+# Configuration for zizmor, see https://docs.zizmor.sh/configuration/
+rules:
+  # The workflows that check out the repository never upload `.git` as an
+  # artifact, and the jobs that push (release-plz, release-pr,
+  # upgrade-transitive-deps) rely on the persisted credentials.
+  artipacked:
+    disable: true
+  # Local `./` references are intentional: they use the checked out commit.
+  self-repository:
+    disable: true

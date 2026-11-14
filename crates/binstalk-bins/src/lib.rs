@@ -8,7 +8,7 @@ use atomic_file_install::{
     atomic_install, atomic_install_noclobber, atomic_symlink_file, atomic_symlink_file_noclobber,
 };
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, format_compact};
 use leon::Template;
 use miette::Diagnostic;
 use normalize_path::NormalizePath;

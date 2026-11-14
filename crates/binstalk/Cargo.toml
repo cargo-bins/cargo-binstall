@@ -4,9 +4,9 @@ description = "The binstall toolkit (library interface)"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk"
 version = "0.30.0"
-rust-version = "1.79.0"
+rust-version = "1.88.0"
 authors = ["ryan <ryan@kurte.nz>"]
-edition = "2021"
+edition = "2024"
 license = "GPL-3.0-only"
 
 [dependencies]

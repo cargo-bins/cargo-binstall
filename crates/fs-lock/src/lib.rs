@@ -9,11 +9,9 @@ use std::{
     path::Path,
 };
 
-use cfg_if::cfg_if;
-
-cfg_if! {
+cfg_select! {
     // std `File::lock` returns `Unsupported` on Android, so use fs4 there.
-    if #[cfg(target_os = "android")] {
+    target_os = "android" => {
         use fs4::FileExt;
 
         fn lock_exclusive(file: &File) -> io::Result<()> {
@@ -43,7 +41,8 @@ cfg_if! {
         fn unlock(file: &File) -> io::Result<()> {
             FileExt::unlock(file)
         }
-    } else {
+    }
+    _ => {
         fn lock_exclusive(file: &File) -> io::Result<()> {
             file.lock()
         }
@@ -130,6 +129,7 @@ impl FileLock {
     }
 
     /// Set path to the file for logging on unlock error, if feature tracing is enabled
+    #[cfg_attr(not(feature = "tracing"), allow(unused_mut, unused_variables))]
     pub fn set_file_path(mut self, path: impl Into<Box<Path>>) -> Self {
         #[cfg(feature = "tracing")]
         {
@@ -139,12 +139,9 @@ impl FileLock {
     }
 
     pub fn get_file_path(&self) -> Option<&Path> {
-        cfg_if! {
-            if #[cfg(feature = "tracing")] {
-                self.1.as_deref()
-            } else {
-                None
-            }
+        cfg_select! {
+            feature = "tracing" => self.1.as_deref(),
+            _ => None,
         }
     }
 }

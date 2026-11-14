@@ -12,8 +12,8 @@ use serde::Deserialize;
 use url::Url;
 
 use super::{
-    common::{issue_graphql_query, issue_restful_api},
     GhApiError, GhRelease, GhRepo,
+    common::{issue_graphql_query, issue_restful_api},
 };
 
 // Only include fields we do care about
@@ -74,7 +74,7 @@ pub(super) fn fetch_release_artifacts_restful_api(
         tag,
     }: &GhRelease,
     auth_token: Option<&str>,
-) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static {
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
     issue_restful_api(
         client,
         &["repos", owner, repo, "releases", "tags", tag],
@@ -135,7 +135,7 @@ pub(super) fn fetch_release_artifacts_graphql_api(
         tag,
     }: &GhRelease,
     auth_token: &str,
-) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static {
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
     let client = client.clone();
     let auth_token = auth_token.to_compact_string();
 

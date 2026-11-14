@@ -9,8 +9,8 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    apply_auth, crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion,
-    RegistryAuth, RegistryConfig, RegistryError,
+    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, apply_auth,
+    crate_prefix_components, parse_manifest, render_dl_template,
 };
 
 #[derive(Debug)]
