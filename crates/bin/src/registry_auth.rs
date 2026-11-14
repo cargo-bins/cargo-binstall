@@ -262,10 +262,9 @@ mod tests {
     use std::{env, io::Cursor, sync::Mutex};
 
     use super::*;
-    use once_cell::sync::Lazy;
     use tempfile::tempdir;
 
-    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_get_registry_env_var_normalizes_registry_name() {

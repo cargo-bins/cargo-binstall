@@ -129,6 +129,7 @@ impl FileLock {
     }
 
     /// Set path to the file for logging on unlock error, if feature tracing is enabled
+    #[cfg_attr(not(feature = "tracing"), allow(unused_mut, unused_variables))]
     pub fn set_file_path(mut self, path: impl Into<Box<Path>>) -> Self {
         #[cfg(feature = "tracing")]
         {

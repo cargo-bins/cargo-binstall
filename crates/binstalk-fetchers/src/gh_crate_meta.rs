@@ -1,11 +1,15 @@
-use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
+use std::{
+    borrow::Cow,
+    fmt, iter,
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
 use binstalk_types::cargo_toml_binstall::Strategy;
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use leon::Template;
-use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
 use tokio::time::sleep;
 use tracing::{debug, info, trace, warn};
@@ -26,7 +30,7 @@ pub struct GhCrateMeta {
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
     signature_policy: SignaturePolicy,
-    resolution: OnceCell<Resolved>,
+    resolution: OnceLock<Resolved>,
 }
 
 #[derive(Debug)]
@@ -149,7 +153,7 @@ impl super::Fetcher for GhCrateMeta {
             data,
             target_data,
             signature_policy,
-            resolution: OnceCell::new(),
+            resolution: OnceLock::new(),
         })
     }
 
