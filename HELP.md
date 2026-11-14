@@ -161,6 +161,8 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--locked` — This option will be passed through to all `cargo-install` invocations.
 
    It will require `Cargo.lock` to be up to date.
+
+   Since Rust 1.100, `cargo install` uses the `Cargo.lock` packaged in the crate by default and this flag no longer changes its dependency resolution.
 * `--features <FEATURES>` — Activate the specified features when installing from source.
 
    This mirrors the equivalent argument in `cargo install --features`.

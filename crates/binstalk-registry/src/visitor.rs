@@ -7,7 +7,7 @@ use normalize_path::NormalizePath;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
-use crate::{vfs::Vfs, RegistryError};
+use crate::{RegistryError, vfs::Vfs};
 
 #[derive(Debug)]
 pub(super) struct ManifestVisitor {

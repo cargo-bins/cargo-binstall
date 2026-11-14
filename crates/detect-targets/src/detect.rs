@@ -5,19 +5,21 @@ use std::{
     process::{Output, Stdio},
 };
 
-use cfg_if::cfg_if;
 use tokio::process::Command;
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
-cfg_if! {
-    if #[cfg(any(target_os = "linux",  target_os = "android"))] {
+cfg_select! {
+    any(target_os = "linux", target_os = "android") => {
         mod linux;
-    } else if #[cfg(target_os = "macos")] {
+    }
+    target_os = "macos" => {
         mod macos;
-    } else if #[cfg(target_os = "windows")] {
+    }
+    target_os = "windows" => {
         mod windows;
     }
+    _ => {}
 }
 
 /// Detect the targets supported at runtime,
@@ -44,22 +46,23 @@ pub async fn detect_targets() -> Vec<String> {
         target.unwrap_or(crate::TARGET).to_string()
     });
 
-    cfg_if! {
-        if #[cfg(target_os = "macos")] {
+    cfg_select! {
+        target_os = "macos" => {
             let mut targets = vec![target];
             targets.extend(macos::detect_alternative_targets(&targets[0]).await);
             targets
-        } else if #[cfg(target_os = "windows")] {
+        }
+        target_os = "windows" => {
             let mut targets = vec![target];
             targets.extend(windows::detect_alternative_targets(&targets[0]));
             targets
-        } else if #[cfg(any(target_os = "linux", target_os = "android"))] {
+        }
+        any(target_os = "linux", target_os = "android") => {
             // Linux is a bit special, since the result from `guess_host_triple`
             // might be wrong about whether glibc or musl is used.
             linux::detect_targets(target).await
-        } else {
-            vec![target]
         }
+        _ => vec![target],
     }
 }
 

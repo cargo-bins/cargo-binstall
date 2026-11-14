@@ -9,7 +9,7 @@ on:
         default: patch
 
 permissions:
-  pull-requests: write
+  contents: read
 
 jobs:
   make-release-pr:
@@ -19,21 +19,21 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure toolchain
         run: |
           rustup toolchain install --profile minimal --no-self-update nightly
           rustup default nightly
-      - uses: chainguard-dev/actions/setup-gitsign@main
+      - uses: chainguard-dev/actions/setup-gitsign@a25ce483d875a46f4c837e85e32e0fda602693f5 # v1.8.1
       - name: Install cargo-release
-        uses: taiki-e/install-action@v2.90.3
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-release,cargo-semver-checks
         env:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 
       - run: rustup toolchain install stable --no-self-update --profile minimal
-      - uses: cargo-bins/release-pr@v2.1.4
+      - uses: cargo-bins/release-pr@dca4a39944c532bbde5e485142fb05a8158edec1 # v2.1.4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           version: ${{ inputs.version }}

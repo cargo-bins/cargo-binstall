@@ -8,7 +8,7 @@ use binstalk_downloader::{
 };
 use binstalk_types::cargo_toml_binstall::{Meta, TarBasedFmt};
 use cargo_toml_workspace::cargo_toml::Manifest;
-use compact_str::{format_compact, CompactString, ToCompactString};
+use compact_str::{CompactString, ToCompactString, format_compact};
 use leon::{Template, Values};
 use semver::{Version, VersionReq};
 use serde::Deserialize;
@@ -16,7 +16,7 @@ use serde_json::Error as JsonError;
 use sha2::{Digest, Sha256};
 use tracing::{debug, instrument};
 
-use crate::{visitor::ManifestVisitor, RegistryAuth, RegistryError};
+use crate::{RegistryAuth, RegistryError, visitor::ManifestVisitor};
 
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct RegistryConfig {
@@ -43,7 +43,7 @@ impl Sha256Digest {
 
 impl DataVerifier for Sha256Digest {
     fn update(&mut self, data: &Bytes) {
-        if let Some(ref mut state) = &mut self.state {
+        if let Some(state) = &mut self.state {
             state.update(data);
         }
     }
@@ -217,11 +217,7 @@ impl MatchedVersion {
                 pubtime: entry.pubtime,
             };
 
-            if let Some((_, max_ver)) = &ret {
-                if ver > *max_ver {
-                    ret = Some((matched, ver));
-                }
-            } else {
+            if ret.as_ref().is_none_or(|(_, max_ver)| ver > *max_ver) {
                 ret = Some((matched, ver));
             }
         }

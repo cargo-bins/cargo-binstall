@@ -1,10 +1,9 @@
 use std::{env, fs, path::PathBuf};
 
-use dirs::home_dir;
 use zeroize::Zeroizing;
 
 pub fn try_from_home() -> Option<Zeroizing<Box<str>>> {
-    if let Some(mut home) = home_dir() {
+    if let Some(mut home) = env::home_dir() {
         home.push(".git-credentials");
         if let Some(cred) = from_file(home) {
             return Some(cred);

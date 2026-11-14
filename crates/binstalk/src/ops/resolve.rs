@@ -136,10 +136,9 @@ async fn resolve_inner(
 
                         if let Some(disabled_strategies) =
                             target_data.meta.disabled_strategies.as_deref()
+                            && disabled_strategies.contains(&fetcher.strategy())
                         {
-                            if disabled_strategies.contains(&fetcher.strategy()) {
-                                return None;
-                            }
+                            return None;
                         }
 
                         filter_fetcher_by_name_predicate(fetcher.fetcher_name()).then_some(fetcher)
@@ -268,10 +267,10 @@ async fn resolve_inner(
         .map(|target_data| &target_data.meta)
         .unwrap_or(&meta);
 
-    if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref() {
-        if disabled_strategies.contains(&Strategy::Compile) {
-            return Err(BinstallError::NoFallbackToCargoInstall);
-        }
+    if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref()
+        && disabled_strategies.contains(&Strategy::Compile)
+    {
+        return Err(BinstallError::NoFallbackToCargoInstall);
     }
 
     Ok(Resolution::InstallFromSource(ResolutionSource {
@@ -526,14 +525,14 @@ impl PackageInfo {
             parse_package_version(manifest_version_str)?
         };
 
-        if let Some(curr_version) = curr_version {
-            if new_version == curr_version {
-                info!(
-                    "{} v{curr_version} is already installed, use --force to override",
-                    name
-                );
-                return Ok(None);
-            }
+        if let Some(curr_version) = curr_version
+            && new_version == curr_version
+        {
+            info!(
+                "{} v{curr_version} is already installed, use --force to override",
+                name
+            );
+            return Ok(None);
         }
 
         let (mut meta, binaries): (_, Vec<Bin>) = (
@@ -593,7 +592,7 @@ fn parse_package_version(
                 v: version_str,
                 err,
             })
-            .into())
+            .into());
         }
     };
 
@@ -602,13 +601,15 @@ fn parse_package_version(
 
 fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
     match version_req.comparators.as_slice() {
-        [Comparator {
-            op: ComparatorOp::Exact,
-            major,
-            minor: Some(minor),
-            patch: Some(patch),
-            pre,
-        }] => Some(Version {
+        [
+            Comparator {
+                op: ComparatorOp::Exact,
+                major,
+                minor: Some(minor),
+                patch: Some(patch),
+                pre,
+            },
+        ] => Some(Version {
             major: *major,
             minor: *minor,
             patch: *patch,

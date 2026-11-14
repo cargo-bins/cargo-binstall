@@ -4,7 +4,7 @@ use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use reqwest::Method;
 
-use super::{header, Client, Error, HttpError, StatusCode, Url};
+use super::{Client, Error, HttpError, StatusCode, Url, header};
 
 pub use reqwest::Body;
 

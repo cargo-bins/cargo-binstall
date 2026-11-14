@@ -5,12 +5,18 @@ on:
   schedule:
     - cron: "0 3 * * 5"
 
+permissions:
+  contents: read
+
 jobs:
   upgrade:
     name: Upgrade & Open Pull Request
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the deps branch
+      pull-requests: write # open the PR
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true
 
