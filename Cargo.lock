@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "atomic-file-install"
-version = "1.0.14"
+version = "1.0.15"
 dependencies = [
  "reflink-copy",
  "tempfile",
@@ -253,7 +253,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "binstalk"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "binstalk-bins",
  "binstalk-downloader",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-bins"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "atomic-file-install",
  "binstalk-types",
@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-downloader"
-version = "0.14.1"
+version = "0.14.2"
 dependencies = [
  "astral-tokio-tar",
  "async-compression",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-fetchers"
-version = "0.10.53"
+version = "0.10.54"
 dependencies = [
  "async-trait",
  "binstalk-bins",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-git-repo-api"
-version = "0.5.53"
+version = "0.5.54"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
@@ -375,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-manifests"
-version = "0.19.12"
+version = "0.19.13"
 dependencies = [
  "binstalk-types",
  "compact_str",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-registry"
-version = "0.12.13"
+version = "0.12.14"
 dependencies = [
  "async-trait",
  "base16",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "binstalk-types"
-version = "0.10.8"
+version = "0.10.9"
 dependencies = [
  "cargo-platform",
  "compact_str",
@@ -630,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-toml-workspace"
-version = "7.0.11"
+version = "7.0.12"
 dependencies = [
  "cargo_toml",
  "compact_str",
@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "detect-targets"
-version = "0.1.97"
+version = "0.1.98"
 dependencies = [
  "guess_host_triple",
  "tokio",
@@ -1180,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "detect-wasi"
-version = "1.0.60"
+version = "1.0.61"
 dependencies = [
  "tempfile",
 ]
@@ -1408,7 +1408,7 @@ dependencies = [
 
 [[package]]
 name = "fs-lock"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "fs4",
  "tracing",
@@ -3614,7 +3614,7 @@ checksum = "9737e026353e5cd0736f98eddae28665118eb6f6600902a7f50db585621fecb6"
 
 [[package]]
 name = "normalize-path"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "nu-ansi-term"

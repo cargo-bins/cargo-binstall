@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.15](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.14...atomic-file-install-v1.0.15) - 2026-11-14
+
+### Other
+
+- use windows-sys instead of windows ([#2764](https://github.com/cargo-bins/cargo-binstall/pull/2764))
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [1.0.14](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.13...atomic-file-install-v1.0.14) - 2025-12-05
 
 ### Other

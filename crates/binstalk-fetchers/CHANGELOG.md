@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.54](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.53...binstalk-fetchers-v0.10.54) - 2026-11-14
+
+### Other
+
+- Check that generated docs are up to date ([#2759](https://github.com/cargo-bins/cargo-binstall/pull/2759))
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+- Adopt std APIs available at current MSRVs and deny warnings in CI ([#2755](https://github.com/cargo-bins/cargo-binstall/pull/2755))
+
 ## [0.10.53](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.52...binstalk-fetchers-v0.10.53) - 2026-10-31
 
 ### Other

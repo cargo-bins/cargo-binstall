@@ -1,6 +1,6 @@
 [package]
 name = "atomic-file-install"
-version = "1.0.14"
+version = "1.0.15"
 edition = "2024"
 description = "For atomically installing a file or a symlink."
 repository = "https://github.com/cargo-bins/cargo-binstall"

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3](https://github.com/cargo-bins/cargo-binstall/compare/normalize-path-v0.2.2...normalize-path-v0.2.3) - 2026-11-14
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.2.2](https://github.com/cargo-bins/cargo-binstall/compare/normalize-path-v0.2.1...normalize-path-v0.2.2) - 2026-10-02
 
 ### Other
