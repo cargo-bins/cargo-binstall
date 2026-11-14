@@ -1,7 +1,7 @@
-use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, path::Path, sync::Arc};
+use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, mem::DropGuard, path::Path, sync::Arc};
 
 use binstalk_bins::BinFile;
-use command_group::AsyncCommandGroup;
+use command_group::{AsyncCommandGroup, AsyncGroupChild};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use itertools::Itertools;
@@ -236,7 +236,7 @@ impl ResolutionSource {
         debug!("Running `{}`", format_cmd(&cmd));
 
         if !opts.dry_run {
-            let mut child = opts
+            let child = opts
                 .jobserver_client
                 .get()
                 .await?
@@ -244,7 +244,13 @@ impl ResolutionSource {
 
             debug!("Spawned command pid={:?}", child.id());
 
-            let status = child.wait().await?;
+            let mut child = kill_group_on_drop(child);
+            let status = child.wait().await;
+            // The group has exited (or waiting failed), do not kill anything
+            // left behind, such as `sccache` servers on Windows (which stay in
+            // the job object).
+            DropGuard::dismiss(child);
+            let status = status?;
             if status.success() {
                 info!("Cargo finished successfully");
                 Ok(())
@@ -278,6 +284,23 @@ impl ResolutionSource {
 /// An RFC 3339 timestamp starts with a fixed-width `YYYY-MM-DD` date.
 fn release_date(pubtime: &str) -> &str {
     pubtime.get(..10).unwrap_or(pubtime)
+}
+
+/// Kills the whole process group (unix) / job object (windows) of
+/// `cargo install` if it is dropped, e.g. when the install task is
+/// cancelled on Ctrl-C/SIGTERM.
+///
+/// `cargo` runs in its own process group, so it does not receive the
+/// terminal's SIGINT, and tokio's `kill_on_drop` only kills `cargo` itself,
+/// leaving `rustc`/build scripts running.
+fn kill_group_on_drop(
+    child: AsyncGroupChild,
+) -> DropGuard<AsyncGroupChild, impl FnOnce(AsyncGroupChild)> {
+    DropGuard::new(child, |mut child| {
+        if let Err(err) = child.start_kill() {
+            warn!("Failed to kill `cargo install` process group: {err}");
+        }
+    })
 }
 
 fn apply_registry_selection(cmd: &mut Command, registry: Option<&str>, index: Option<&str>) {
