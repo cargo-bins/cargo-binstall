@@ -10,6 +10,7 @@ use tracing::warn;
 
 use super::{DownloadError, ExtractedFiles};
 
+#[cfg(any(unix, target_os = "wasi"))]
 const MAX_LINK_TARGET: u64 = 4096;
 
 fn create_parent_dir(path: &Path) -> io::Result<()> {
