@@ -14,7 +14,6 @@ cargo-platform = "0.3.2"
 compact_str = { version = "0.10.0", features = ["serde"] }
 indexmap = { version = "2.13.0", features = ["serde"] }
 maybe-owned = { version = "0.3.4", features = ["serde"] }
-once_cell = "1.18.0"
 semver = { version = "1.0.28", features = ["serde"] }
 serde = { version = "1.0.163", features = ["derive"] }
 strum = "0.28.0"
