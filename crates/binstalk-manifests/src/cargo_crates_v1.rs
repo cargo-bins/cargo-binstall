@@ -8,6 +8,7 @@
 //! ecosystem.
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     fs::File,
     io::{self, Seek},
@@ -15,7 +16,6 @@ use std::{
     str::FromStr,
 };
 
-use beef::Cow;
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
@@ -121,7 +121,7 @@ impl<'v1> CratesToml<'v1> {
 
         self.v1.push((
             format!("{name} {version} ({source})").into(),
-            Cow::borrowed(&metadata.bins),
+            Cow::Borrowed(&metadata.bins),
         ));
     }
 
