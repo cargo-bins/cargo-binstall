@@ -28,6 +28,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}-${{ inputs.additional_key }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   # Fail on rustc/cargo warnings from workspace crates, not just clippy lints (cargo >= 1.97).
@@ -51,13 +54,13 @@ jobs:
       has_fs_lock_changed: ${{ steps.list-changed-files.outputs.has_fs_lock_changed }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@v47
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47.0.0
         with:
           dir_names: true
           dir_names_exclude_current_dir: true
@@ -83,7 +86,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/just-setup
         env:
           # just-setup use binstall to install sccache,
@@ -127,7 +130,7 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/just-setup
         env:
           # just-setup use binstall to install sccache,
@@ -162,7 +165,7 @@ jobs:
     env:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Enable cargo-zigbuild
         if: matrix.os == 'ubuntu-latest'
@@ -193,7 +196,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/just-setup
         env:
           # just-setup use binstall to install sccache,
@@ -213,7 +216,7 @@ jobs:
     steps:
       - id: meta
         if: github.event_name == 'pull_request'
-        uses: cargo-bins/release-meta@v1
+        uses: cargo-bins/release-meta@878b404d09251e067413b4974a2f23c668fd664e # v1.0.0
         with:
           event-data: ${{ toJSON(github.event) }}
           extract-notes-under: "### Release notes"
@@ -222,7 +225,12 @@ jobs:
     needs: pr-info
     uses: ./.github/workflows/release-cli.yml
     if: github.event_name != 'pull_request'
-    secrets: inherit
+    permissions:
+      contents: write
+      id-token: write # crates.io trusted publishing (dry-run)
+      attestations: write
+    secrets:
+      CI_RELEASE_TEST_GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
     with:
       info: |
         {
@@ -244,12 +252,12 @@ jobs:
           - x86_64
           - aarch64
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install ${{ matrix.arch }}-unknown-linux-musl target
         run: |
           rustup target add ${{ matrix.arch }}-unknown-linux-musl
           pip3 install -r zigbuild-requirements.txt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
       - name: Build detect-targets
@@ -258,7 +266,7 @@ jobs:
         # Set working directory here, otherwise `cargo-zigbuild` would download
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: detect-targets-${{ matrix.arch }}
           path: target/${{ matrix.arch }}-unknown-linux-musl/debug/detect-targets
@@ -270,9 +278,9 @@ jobs:
       - changed-files
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -287,8 +295,8 @@ jobs:
   detect-targets-ubuntu-arm-test:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
       - name: Build and run detect-targets tests
@@ -313,7 +321,7 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -339,7 +347,7 @@ jobs:
           - fedora
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -358,7 +366,7 @@ jobs:
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: detect-targets-aarch64
       - run: chmod +x detect-targets
@@ -377,7 +385,7 @@ jobs:
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -403,12 +411,12 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
       - name: Build detect-targets
@@ -432,12 +440,12 @@ jobs:
       CARGO_BUILD_TARGET: ${{ matrix.target }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Add ${{ matrix.target }}
         run: rustup target add ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
       - name: Build detect-targets

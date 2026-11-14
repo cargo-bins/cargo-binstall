@@ -1,0 +1,42 @@
+name: zizmor
+
+on:
+  merge_group:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    paths:
+      - '.github/**'
+      - action.yml
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/**'
+      - action.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: Audit GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          # Fail the job on findings instead of uploading SARIF to code scanning.
+          advanced-security: false
+          # No `version:` here: the default `latest` resolves to the zizmor
+          # release locked by hash in this action's own tree (1.32.0 for
+          # v0.8.1), so zizmor only changes when Dependabot bumps this SHA.

@@ -4,16 +4,16 @@ inputs:
     description: Extra tools
     required: false
     default: ""
+  # Composite action inputs are always strings, so these must be compared
+  # against 'true' explicitly: the string 'false' is truthy in expressions.
   indexcache:
-    description: Enable index cache
-    required: true
-    default: true
-    type: boolean
+    description: Enable index cache ('true' or 'false')
+    required: false
+    default: 'true'
   buildcache:
-    description: Enable build cache
-    required: true
-    default: true
-    type: boolean
+    description: Enable build cache ('true' or 'false')
+    required: false
+    default: 'true'
 
 runs:
   using: composite
@@ -39,15 +39,11 @@ runs:
       Add-MpPreference -ExclusionPath '${{ github.workspace }}'
     shell: pwsh
     
-  - name: Add just to tools to install
-    run: echo "tools=just" >>"$GITHUB_ENV"
-    shell: bash
-
-  - name: Add inputs.tools to tools to install
-    if: inputs.tools != ''
+  - name: Determine tools to install
+    id: tools
     env:
       inputs_tools: ${{ inputs.tools }}
-    run: echo "tools=$tools,$inputs_tools" >>"$GITHUB_ENV"
+    run: echo "tools=just${inputs_tools:+,$inputs_tools}" >>"$GITHUB_OUTPUT"
     shell: bash
 
   - name: Upgrade toolchain
@@ -58,20 +54,21 @@ runs:
     shell: bash
 
   - name: Determine native target
+    id: native-target
     run: |
       set -euxo pipefail
       DEFAULT_TOOLCHAIN="$(rustup default)"
       RUNNER_TARGET="${DEFAULT_TOOLCHAIN#"stable-"}"
       RUNNER_TARGET="${RUNNER_TARGET%" (default)"}"
-      echo "RUNNER_TARGET=$RUNNER_TARGET" >>"$GITHUB_ENV"
+      echo "target=$RUNNER_TARGET" >>"$GITHUB_OUTPUT"
     shell: bash
     
   - name: Install tools
-    uses: taiki-e/install-action@v2
+    uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
     with:
-      tool: ${{ env.tools }}
+      tool: ${{ steps.tools.outputs.tools }}
     env:
-      CARGO_BUILD_TARGET: ${{ env.RUNNER_TARGET }}
+      CARGO_BUILD_TARGET: ${{ steps.native-target.outputs.target }}
   
   - name: Install rust toolchains
     run: just toolchain
@@ -82,10 +79,12 @@ runs:
     shell: bash
 
   - name: Retrieve RUSTFLAGS for caching
-    if: inputs.indexcache || inputs.buildcache
+    if: inputs.indexcache == 'true' || inputs.buildcache == 'true'
     id: retrieve-rustflags
+    env:
+      BUILDCACHE: ${{ inputs.buildcache }}
     run: |
-      if [ -n "${{ inputs.buildcache }}" ]; then
+      if [ "$BUILDCACHE" = true ]; then
           echo RUSTFLAGS="$(just print-rustflags)" >> "$GITHUB_OUTPUT"
       else
           echo RUSTFLAGS= >> "$GITHUB_OUTPUT"
@@ -95,8 +94,8 @@ runs:
   - run: just ci-install-deps
     shell: bash
 
-  - if: inputs.indexcache || inputs.buildcache
-    uses: Swatinem/rust-cache@v2
+  - if: inputs.indexcache == 'true' || inputs.buildcache == 'true'
+    uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
     with:
       env-vars: "CARGO CC CFLAGS CXX CMAKE RUST JUST"
       cache-workspace-crates: true
@@ -111,9 +110,9 @@ runs:
     shell: bash
 
   - name: Cache make compiled
-    if: runner.os == 'macOS'
+    if: runner.os == 'macOS' && inputs.buildcache == 'true'
     id: cache-make
-    uses: actions/cache@v4
+    uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
     with:
       path: /usr/local/bin/make
       key: ${{ runner.os }}-make-4.4.1
