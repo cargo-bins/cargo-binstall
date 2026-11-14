@@ -7,7 +7,7 @@ use windows_sys::Win32::{
             IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM,
             IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
         },
-        Threading::{GetMachineTypeAttributes, UserEnabled, Wow64Container, MACHINE_ATTRIBUTES},
+        Threading::{GetMachineTypeAttributes, MACHINE_ATTRIBUTES, UserEnabled, Wow64Container},
     },
 };
 
