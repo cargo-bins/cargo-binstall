@@ -443,7 +443,7 @@ jobs:
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
 
-  fs-lock-android-check:
+  fs-lock-cross-check:
     needs: changed-files
     if: needs.changed-files.outputs.has_fs_lock_changed == 'true'
     strategy:
@@ -451,6 +451,7 @@ jobs:
       matrix:
         include:
           - target: aarch64-linux-android
+          - target: x86_64-unknown-illumos
 
     runs-on: ubuntu-latest
     env:
@@ -465,7 +466,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
-      - name: Build detect-targets
+      - name: Check fs-lock
         run: |
           cargo check --target ${{ matrix.target }}
         # Set working directory here, otherwise `cargo-check` would download

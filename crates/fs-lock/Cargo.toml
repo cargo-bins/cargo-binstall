@@ -12,5 +12,5 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 tracing = { version = "0.1", optional = true }
 
-[target.'cfg(any(target_os = "android"))'.dependencies]
+[target.'cfg(target_os = "android")'.dependencies]
 fs4 = "1.0"

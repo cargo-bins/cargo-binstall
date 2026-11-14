@@ -10,7 +10,8 @@ use std::{
 };
 
 cfg_select! {
-    any(target_os = "android", target_os = "illumos") => {
+    // std `File::lock` returns `Unsupported` on Android, so use fs4 there.
+    target_os = "android" => {
         use fs4::FileExt;
 
         fn lock_exclusive(file: &File) -> io::Result<()> {
