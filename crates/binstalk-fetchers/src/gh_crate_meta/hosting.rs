@@ -13,7 +13,7 @@ pub enum RepositoryHost {
     Unknown,
 }
 
-/// Make sure to update possible_dirs in `bins::infer_bin_dir_template`
+/// Make sure to update `binstalk_bins::possible_bin_dirs`
 /// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
 pub const FULL_FILENAMES: &[Template<'_>] = &[
     template!("/{ name }-{ target }-v{ version }{ archive-suffix }"),
@@ -55,6 +55,13 @@ const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
     template!("{ repo }/files/binaries/{ version }"),
     template!("{ repo }/files/binaries/v{ version }"),
 ];
+
+/// Every filename is appended to every release path, followed by `suffix`.
+struct DefaultPkgUrls {
+    paths: &'static [Template<'static>],
+    filenames: &'static [&'static [Template<'static>]],
+    suffix: &'static str,
+}
 
 impl RepositoryHost {
     pub fn guess_git_hosting_services(repo: &Url) -> Self {
@@ -117,13 +124,6 @@ impl RepositoryHost {
         } = self.default_pkg_urls()?;
         Some(apply_filenames_to_paths(paths, filenames, suffix))
     }
-}
-
-/// Every filename is appended to every release path, followed by `suffix`.
-struct DefaultPkgUrls {
-    paths: &'static [Template<'static>],
-    filenames: &'static [&'static [Template<'static>]],
-    suffix: &'static str,
 }
 
 fn apply_filenames_to_paths(
@@ -216,7 +216,14 @@ mod tests {
             }
         }
 
-        let mut sections = vec![("pkg-url-filenames", filenames)];
+        let bin_dirs = binstalk_bins::possible_bin_dirs("{ name }", "{ target }", "{ version }")
+            .map(|dir| format!("- `{dir}`\n"))
+            .collect();
+
+        let mut sections = vec![
+            ("default-bin-dirs", bin_dirs),
+            ("pkg-url-filenames", filenames),
+        ];
 
         for (host, name) in [
             (RepositoryHost::GitHub, "pkg-url-paths-github"),

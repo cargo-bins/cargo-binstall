@@ -275,11 +275,9 @@ update-help-md: print-env
     cargo run -p cargo-binstall --features clap-markdown unused-crate-name --markdown-help > HELP.md
 
 # Regenerate the `<!-- BEGIN generated:... -->` sections of SUPPORT.md from the
-# crates' source, through their `support_md` tests.
-# This uses `cargo test` rather than nextest so that the two test binaries,
-# which both write SUPPORT.md, run one after the other.
+# crates' source, through binstalk-fetchers' `support_md` test.
 update-support-md: print-env
-    UPDATE_DOCS=1 cargo test -p binstalk-bins -p binstalk-fetchers --lib support_md
+    UPDATE_DOCS=1 cargo test -p binstalk-fetchers --lib support_md
 
 # Regenerate every document derived from the source.
 update-docs: update-help-md update-support-md

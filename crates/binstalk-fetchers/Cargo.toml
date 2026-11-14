@@ -33,6 +33,7 @@ tracing = "0.1.43"
 url = "2.5.8"
 
 [dev-dependencies]
+binstalk-bins = { version = "0.7.0", path = "../binstalk-bins" }
 binstalk-downloader = { version = "0.14.1", path = "../binstalk-downloader" }
 
 [features]
