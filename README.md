@@ -82,16 +82,22 @@ Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://raw.githubuse
 Download the relevant package for your system below, unpack it, and move the
 `cargo-binstall` executable into `$HOME/.cargo/bin`:
 
+<!-- BEGIN generated:download-table from .github/workflows/release-packages.yml, run `just update-docs` to update -->
 | OS      | Arch                      | URL                                                                                                                     |
 | ------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Linux   | x86\_64                   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz      |
-| Linux   | armv7                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz |
-| Linux   | arm64                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz     |
+| Linux   | x86\_64 (musl)            | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz      |
+| Linux   | x86\_64 (glibc 2.17+)     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz       |
+| Linux   | armv7 (musl)              | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz |
+| Linux   | armv7 (glibc 2.17+)       | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-gnueabihf.tgz  |
+| Linux   | arm64 (musl)              | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz     |
+| Linux   | arm64 (glibc 2.17+)       | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-gnu.tgz      |
+| Linux   | riscv64 (musl)            | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-riscv64gc-unknown-linux-musl.tgz   |
 | Mac     | Intel                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip            |
 | Mac     | Apple Silicon             | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip           |
 | Mac     | Universal<br>(both archs) | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-universal-apple-darwin.zip         |
 | Windows | Intel/AMD                 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip         |
 | Windows | ARM 64                    | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-pc-windows-msvc.zip        |
+<!-- END generated:download-table -->
 
 ### From source
 

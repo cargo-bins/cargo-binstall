@@ -77,19 +77,19 @@ pub fn is_valid_bin_name(name: &str) -> bool {
         )
 }
 
-/// Must be called after the archive is downloaded and extracted.
-/// This function might uses blocking I/O.
-pub fn infer_bin_dir_template(
-    data: &Data,
-    has_dir: &mut dyn FnMut(&Path) -> bool,
-) -> Cow<'static, str> {
-    let name = data.name;
-    let target = data.target;
-    let version = data.version;
-
-    // Make sure to update
-    // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
-    // NOVERSION_FILENAMES} if you update this array.
+/// Directories in the extracted archive that may hold the binaries of
+/// `name`, in the order [`infer_bin_dir_template`] tries them.
+///
+/// SUPPORT.md lists these, see binstalk-fetchers' `support_md` test.
+///
+/// Make sure to update
+/// fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
+/// NOVERSION_FILENAMES} if you update this list.
+pub fn possible_bin_dirs<'a>(
+    name: &'a str,
+    target: &'a str,
+    version: &'a str,
+) -> impl Iterator<Item = String> + 'a {
     let gen_possible_dirs: [for<'r> fn(&'r str, &'r str, &'r str) -> String; 8] = [
         |name, target, version| format!("{name}-{target}-v{version}"),
         |name, target, version| format!("{name}-{target}-{version}"),
@@ -102,11 +102,24 @@ pub fn infer_bin_dir_template(
         |name, _target, _version| name.to_string(),
     ];
 
-    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
-
     gen_possible_dirs
         .into_iter()
-        .map(|gen_possible_dir| gen_possible_dir(name, target, version))
+        .map(move |gen_possible_dir| gen_possible_dir(name, target, version))
+}
+
+/// Must be called after the archive is downloaded and extracted.
+/// This function might uses blocking I/O.
+pub fn infer_bin_dir_template(
+    data: &Data,
+    has_dir: &mut dyn FnMut(&Path) -> bool,
+) -> Cow<'static, str> {
+    let name = data.name;
+    let target = data.target;
+    let version = data.version;
+
+    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
+
+    possible_bin_dirs(name, target, version)
         .find(|dirname| has_dir(Path::new(&dirname)))
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
