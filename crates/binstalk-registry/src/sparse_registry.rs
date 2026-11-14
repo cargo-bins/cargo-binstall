@@ -1,7 +1,10 @@
+use std::time::Duration;
+
 use binstalk_downloader::remote::{Client, StatusCode};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
+use jiff::Timestamp;
 use semver::VersionReq;
 use serde_json::Deserializer as JsonDeserializer;
 use tokio::sync::OnceCell;
@@ -9,8 +12,8 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    apply_auth, crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion,
-    RegistryAuth, RegistryConfig, RegistryError,
+    apply_auth, crate_prefix_components, parse_manifest, publish_age::publish_cutoff,
+    render_dl_template, MatchedVersion, RegistryAuth, RegistryConfig, RegistryError,
 };
 
 #[derive(Debug)]
@@ -69,6 +72,7 @@ impl SparseRegistry {
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
+        cutoff: Option<Timestamp>,
     ) -> Result<MatchedVersion, RegistryError> {
         {
             let mut path = url.path_segments_mut().unwrap();
@@ -103,6 +107,7 @@ impl SparseRegistry {
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&body).into_iter(),
             version_req,
+            cutoff,
         )
     }
 
@@ -119,7 +124,9 @@ impl SparseRegistry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
+        min_publish_age: Option<Duration>,
     ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+        let cutoff = min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age));
         let crate_prefix = crate_prefix_components(crate_name)?;
         let registry_config = self.get_config(&client, auth).await?;
         let auth = if registry_config.auth_required {
@@ -140,6 +147,7 @@ impl SparseRegistry {
             crate_name,
             &crate_prefix,
             version_req,
+            cutoff,
         )
         .await?;
         let dl_url = Url::parse(&render_dl_template(

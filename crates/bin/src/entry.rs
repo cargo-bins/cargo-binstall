@@ -182,6 +182,10 @@ pub fn install_crates(
             )
         }
     };
+    let resolved_registry = match args.min_publish_age {
+        Some(min_publish_age) => resolved_registry.with_min_publish_age(min_publish_age),
+        None => resolved_registry,
+    };
 
     // Create binstall_opts
     let binstall_opts = Arc::new(Options {
