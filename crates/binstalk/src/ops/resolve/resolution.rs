@@ -1,7 +1,7 @@
 use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_bins::BinFile;
-use command_group::AsyncCommandGroup;
+use command_group::{AsyncCommandGroup, AsyncGroupChild};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use itertools::Itertools;
@@ -236,7 +236,7 @@ impl ResolutionSource {
         debug!("Running `{}`", format_cmd(&cmd));
 
         if !opts.dry_run {
-            let mut child = opts
+            let child = opts
                 .jobserver_client
                 .get()
                 .await?
@@ -244,7 +244,7 @@ impl ResolutionSource {
 
             debug!("Spawned command pid={:?}", child.id());
 
-            let status = child.wait().await?;
+            let status = KillGroupOnDrop(Some(child)).wait().await?;
             if status.success() {
                 info!("Cargo finished successfully");
                 Ok(())
@@ -278,6 +278,35 @@ impl ResolutionSource {
 /// An RFC 3339 timestamp starts with a fixed-width `YYYY-MM-DD` date.
 fn release_date(pubtime: &str) -> &str {
     pubtime.get(..10).unwrap_or(pubtime)
+}
+
+/// Kills the whole process group (unix) / job object (windows) of
+/// `cargo install` if it is dropped before the group exits, e.g. when
+/// the install task is cancelled on Ctrl-C/SIGTERM.
+///
+/// `cargo` runs in its own process group, so it does not receive the
+/// terminal's SIGINT, and tokio's `kill_on_drop` only kills `cargo` itself,
+/// leaving `rustc`/build scripts running.
+struct KillGroupOnDrop(Option<AsyncGroupChild>);
+
+impl KillGroupOnDrop {
+    async fn wait(mut self) -> std::io::Result<std::process::ExitStatus> {
+        let res = self.0.as_mut().unwrap().wait().await;
+        // The group has exited (or waiting failed), do not kill anything
+        // left behind, such as daemonised `sccache` servers.
+        self.0 = None;
+        res
+    }
+}
+
+impl Drop for KillGroupOnDrop {
+    fn drop(&mut self) {
+        if let Some(child) = &mut self.0
+            && let Err(err) = child.start_kill()
+        {
+            warn!("Failed to kill `cargo install` process group: {err}");
+        }
+    }
 }
 
 fn apply_registry_selection(cmd: &mut Command, registry: Option<&str>, index: Option<&str>) {
@@ -338,5 +367,58 @@ mod tests {
             args,
             ["--index", "sparse+https://registry.example.com/index/"]
         );
+    }
+
+    /// Dropping the guard before `cargo` exits must also kill its children.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_kill_group_on_drop_kills_grandchildren() {
+        use std::{fs, thread::sleep, time::Duration};
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let _guard = rt.enter();
+
+        let dir = tempfile::tempdir().unwrap();
+        let pid_file = dir.path().join("pid");
+
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c")
+            .arg(r#"sleep 30 & echo $! > "$0"; wait"#)
+            .arg(&pid_file)
+            .kill_on_drop(true);
+        let child = KillGroupOnDrop(Some(cmd.group_spawn().unwrap()));
+
+        let grandchild = loop {
+            if let Some(pid) = fs::read_to_string(&pid_file)
+                .ok()
+                .filter(|s| s.ends_with('\n'))
+            {
+                break pid.trim().to_owned();
+            }
+            sleep(Duration::from_millis(10));
+        };
+
+        drop(child);
+
+        // Killed processes may stay around as zombies until reaped by init.
+        let is_dead = || match fs::read_to_string(format!("/proc/{grandchild}/stat")) {
+            Ok(stat) => stat
+                .rsplit_once(')')
+                .unwrap()
+                .1
+                .trim_start()
+                .starts_with(['Z', 'X']),
+            Err(_) => true,
+        };
+        for _ in 0..500 {
+            if is_dead() {
+                return;
+            }
+            sleep(Duration::from_millis(10));
+        }
+        panic!("grandchild {grandchild} is still running");
     }
 }
