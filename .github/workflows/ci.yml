@@ -60,7 +60,7 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47.0.0
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
         with:
           dir_names: true
           dir_names_exclude_current_dir: true
@@ -216,7 +216,7 @@ jobs:
     steps:
       - id: meta
         if: github.event_name == 'pull_request'
-        uses: cargo-bins/release-meta@878b404d09251e067413b4974a2f23c668fd664e # v1.0.0
+        uses: cargo-bins/release-meta@8ac87a95dfd0aa6903e06fc40fd9a7a26b766898 # v1.0.1
         with:
           event-data: ${{ toJSON(github.event) }}
           extract-notes-under: "### Release notes"
