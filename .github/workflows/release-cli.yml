@@ -105,24 +105,11 @@ jobs:
         subject-path: artifact/*
 
     - if: fromJSON(inputs.info).is-release == 'true'
-      name: Push cli release tag
-      # Lightweight tag on the released commit; an existing tag is left alone.
-      run: |
-        set -euo pipefail
-        if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" --silent 2>/dev/null; then
-          echo "Tag v$version already exists"
-        else
-          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f ref="refs/tags/v$version" -f sha="$GITHUB_SHA" --silent
-        fi
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        version: ${{ fromJSON(inputs.info).version }}
-
-    - if: fromJSON(inputs.info).is-release == 'true'
       name: Create draft release and upload artifacts
+      # GitHub creates the v$version tag on --target when the draft is
+      # published in the next step; an existing tag is used as is.
       run: |
-        gh release create "v$version" --verify-tag --draft \
+        gh release create "v$version" --draft --target "$GITHUB_SHA" \
           --title "v$version" --notes "$notes" artifact/*
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
