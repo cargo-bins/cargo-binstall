@@ -273,7 +273,7 @@ impl BinFile {
         let source = match fs::canonicalize(&self.source) {
             Ok(source) => source,
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(Error::BinFileNotFound((&*self.source).into()))
+                return Err(Error::BinFileNotFound((&*self.source).into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -472,7 +472,7 @@ mod tests {
     #[cfg(unix)]
     mod symlink {
         use super::*;
-        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::os::unix::fs::{PermissionsExt, symlink};
 
         fn bin_file(extracted: &Path, archive_source_path: &str, install: &Path) -> BinFile {
             BinFile {
