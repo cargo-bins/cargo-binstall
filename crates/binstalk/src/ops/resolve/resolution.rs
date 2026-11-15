@@ -1,4 +1,12 @@
-use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, mem::DropGuard, path::Path, sync::Arc};
+use std::{
+    borrow::Cow,
+    env,
+    ffi::OsStr,
+    fmt, fs, iter,
+    mem::DropGuard,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use binstalk_bins::BinFile;
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
@@ -151,7 +159,37 @@ impl ResolutionFetch {
                 info!("  - {}", file.preview_link());
             }
         }
+
+        let path = env::var_os("PATH");
+        for file in bin_files {
+            if let Some(other) =
+                shadowing_file(path.as_deref(), &opts.install_path, &file.base_name)
+            {
+                warn!(
+                    "{} is also at {}, which PATH finds before the one installed to {}",
+                    file.base_name,
+                    other.display(),
+                    opts.install_path.display(),
+                );
+            }
+        }
     }
+}
+
+/// A file named `file_name` in a dir of `path` (a `PATH`-like list) that
+/// comes before `install_path`, so it runs instead of the one installed to
+/// `install_path`.
+///
+/// If `install_path` is not in `path` at all, any such file runs instead.
+fn shadowing_file(path: Option<&OsStr>, install_path: &Path, file_name: &str) -> Option<PathBuf> {
+    let canonicalize = |dir: &Path| fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let install_path = canonicalize(install_path);
+
+    env::split_paths(path?)
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .take_while(|dir| canonicalize(dir) != install_path)
+        .map(|dir| dir.join(file_name))
+        .find(|candidate| candidate.is_file())
 }
 
 impl ResolutionSource {
@@ -361,5 +399,53 @@ mod tests {
             args,
             ["--index", "sparse+https://registry.example.com/index/"]
         );
+    }
+}
+
+#[cfg(test)]
+mod shadowing_tests {
+    use super::*;
+
+    #[test]
+    fn shadowing_file_is_found_before_the_install_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let [early, install, late] = ["early", "install", "late"].map(|dir| {
+            let dir = tmp.path().join(dir);
+            fs::create_dir(&dir).unwrap();
+            dir
+        });
+        fs::write(install.join("fnm"), b"").unwrap();
+        fs::write(late.join("fnm"), b"").unwrap();
+
+        let path = |dirs: &[&Path]| env::join_paths(dirs).unwrap();
+
+        // Nothing earlier in PATH has it, and later ones don't matter.
+        let p = path(&[&early, &install, &late]);
+        assert_eq!(shadowing_file(Some(&p), &install, "fnm"), None);
+
+        // An earlier dir has it.
+        fs::write(early.join("fnm"), b"").unwrap();
+        assert_eq!(
+            shadowing_file(Some(&p), &install, "fnm"),
+            Some(early.join("fnm"))
+        );
+
+        // The install path comes first.
+        let p = path(&[&install, &early]);
+        assert_eq!(shadowing_file(Some(&p), &install, "fnm"), None);
+
+        // The install path is not in PATH, so any match runs instead.
+        let p = path(&[&late]);
+        assert_eq!(
+            shadowing_file(Some(&p), &install, "fnm"),
+            Some(late.join("fnm"))
+        );
+
+        // A dir with that name is not a file that runs.
+        fs::create_dir(early.join("dir")).unwrap();
+        let p = path(&[&early, &install]);
+        assert_eq!(shadowing_file(Some(&p), &install, "dir"), None);
+
+        assert_eq!(shadowing_file(None, &install, "fnm"), None);
     }
 }
