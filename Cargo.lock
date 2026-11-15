@@ -289,6 +289,7 @@ dependencies = [
  "atomic-file-install",
  "binstalk-types",
  "compact_str",
+ "itertools",
  "leon",
  "miette",
  "normalize-path",

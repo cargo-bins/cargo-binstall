@@ -273,6 +273,17 @@ async fn resolve_inner(
         return Err(BinstallError::NoFallbackToCargoInstall);
     }
 
+    if target_meta
+        .binary
+        .values()
+        .any(|bin_meta| !bin_meta.aliases.is_empty())
+    {
+        warn!(
+            "Aliases of {} are not created when installing from source",
+            package_info.name
+        );
+    }
+
     Ok(Resolution::InstallFromSource(ResolutionSource {
         name: package_info.name,
         version: package_info.version_str,
@@ -391,36 +402,31 @@ fn collect_bin_files(
 
     let template = Template::parse(&bin_dir)?;
 
-    // Aliases are only meaningful for single-binary crates: with more than one
-    // binary it is ambiguous which one an alias should point at.
-    let aliases: &[CompactString] = match bin_data.meta.aliases.as_deref() {
-        Some(aliases) if !aliases.is_empty() => {
-            if package_info.binaries.len() == 1 {
-                aliases
-            } else {
-                warn!(
-                    "Ignoring `aliases` for {}: aliases are only supported for crates that \
-provide exactly one binary, but this crate provides {}",
-                    package_info.name,
-                    package_info.binaries.len()
-                );
-                &[]
-            }
+    for name in bin_data.meta.binary.keys() {
+        if !package_info
+            .binaries
+            .iter()
+            .any(|bin| bin.name == name.as_str())
+        {
+            warn!(
+                "Ignoring `binary.{name}` for {}: it has no binary named {name}",
+                package_info.name
+            );
         }
-        _ => &[],
-    };
+    }
 
     // Create bin_files
     let bin_files = package_info
         .binaries
         .iter()
         .map(|bin| {
+            let aliases = bin_aliases(&bin_data.meta, &package_info.binaries, &bin.name);
             bins::BinFile::new(
                 &bin_data,
                 bin.name.as_str(),
                 &template,
                 no_symlinks,
-                aliases,
+                &aliases,
             )
         })
         .collect::<Result<Vec<_>, bins::Error>>()?;
@@ -436,6 +442,27 @@ provide exactly one binary, but this crate provides {}",
     }
 
     Ok(bin_files)
+}
+
+/// The aliases configured for binary `name`, leaving out any that would
+/// overwrite another binary of the same package.
+fn bin_aliases(meta: &PkgMeta, binaries: &[Bin], name: &str) -> Vec<CompactString> {
+    let Some(bin_meta) = meta.binary.get(name) else {
+        return Vec::new();
+    };
+
+    bin_meta
+        .aliases
+        .iter()
+        .filter(|alias| {
+            let clashes = binaries.iter().any(|bin| bin.name == alias.as_str());
+            if clashes {
+                warn!("Ignoring alias {alias} of binary {name}: another binary has that name");
+            }
+            !clashes
+        })
+        .cloned()
+        .collect()
 }
 
 struct PackageInfo {

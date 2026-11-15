@@ -26,8 +26,7 @@ With the following configuration keys:
   for your crate (defaults to empty array).
   If `--strategies` is passed on the command line, then the `disabled-strategies` in `package.metadata` will be ignored.
   Otherwise, the `disabled-strategies` in `package.metadata` and `--disable-strategies` will be merged.
-- `aliases` is a list of extra names to symlink to the installed binary, for example `aliases = ["mcr"]` would also create an `mcr` symlink next to it.
-  This is only honoured for crates that ship a single binary, and the symlinks are skipped when `--no-symlinks` is set. Aliases are removed on uninstall just like the binary itself.
+- `binary.NAME.aliases` is a list of extra names to symlink to the installed binary `NAME`, see [Aliases](#aliases).
 
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
@@ -56,7 +55,7 @@ with the following variables available:
 [`target_lexicon::Environment`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Environment.html
 [`target_lexicon::Vendor`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Vendor.html
 
-`pkg-url`, `pkg-fmt`, `bin-dir` and `aliases` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
+`pkg-url`, `pkg-fmt`, `bin-dir` and `binary` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
 ```toml
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
@@ -107,6 +106,23 @@ pkg-fmt = "tgz"
 ```
 
 **Precedence:** Exact target names take precedence over `cfg` expressions. When multiple `cfg` expressions match, they're evaluated in the order they appear in `Cargo.toml`.
+
+
+### Aliases
+
+A binary can be given extra names, each installed as a symlink next to it:
+
+```toml
+[package.metadata.binstall.binary.my-crate-cli]
+aliases = ["mcc"]
+```
+
+Each key under `binary` is the name of one of the crate's binaries, so a crate with several binaries can give each its own aliases.
+An alias must be a plain file name, it gets the same `.exe` suffix as the binary on Windows, and one that has the name of another binary of the crate is ignored.
+Aliases are symlinks, so they are not created with `--no-symlinks`, and they are removed on uninstall like the binary itself.
+They are only created for prebuilt binaries, not when falling back to installing from source with `cargo install`.
+
+An entry under `overrides.TARGET.binary` replaces the entry for the same binary, and `--aliases BIN:ALIAS` on the command line replaces both for each `BIN` it names.
 
 ### Defaults
 

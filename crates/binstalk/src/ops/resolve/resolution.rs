@@ -112,9 +112,7 @@ impl ResolutionFetch {
                     .as_ref()
                     .is_none_or(|bins| bins.binary_search(&bin.base_name).is_ok())
             })
-            .flat_map(|bin| {
-                iter::once(bin.base_name).chain(bin.aliases.into_iter().map(|alias| alias.name))
-            })
+            .flat_map(|bin| iter::once(bin.base_name).chain(bin.aliases))
             .collect()
     }
 
