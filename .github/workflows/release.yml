@@ -4,6 +4,9 @@ on:
     types: closed
     branches: [main] # target branch of release PRs
 
+permissions:
+  contents: read
+
 jobs:
   info:
     if: github.event.pull_request.merged
@@ -17,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - id: meta
-      uses: cargo-bins/release-meta@v1
+      uses: cargo-bins/release-meta@8ac87a95dfd0aa6903e06fc40fd9a7a26b766898 # v1.0.1
       with:
         event-data: ${{ toJSON(github.event) }}
         extract-notes-under: '### Release notes'
@@ -26,7 +29,12 @@ jobs:
     if: needs.info.outputs.crate == 'cargo-binstall'
     needs: info
     uses: ./.github/workflows/release-cli.yml
-    secrets: inherit
+    permissions:
+      contents: write
+      id-token: write # crates.io trusted publishing
+      attestations: write
+    secrets:
+      CI_RELEASE_TEST_GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
     with:
       info: ${{ toJSON(needs.info.outputs) }}
 

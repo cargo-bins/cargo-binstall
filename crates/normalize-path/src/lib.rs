@@ -70,6 +70,11 @@ impl NormalizePath for Path {
             }
         }
 
+        // "." becomes empty path, so we reinsert "."
+        if ret.as_os_str().is_empty() {
+            ret.push(".")
+        }
+
         ret
     }
 
@@ -89,6 +94,11 @@ impl NormalizePath for Path {
                     ret.push(c);
                 }
             }
+        }
+
+        // "." becomes empty path, so we reinsert "."
+        if ret.as_os_str().is_empty() {
+            ret.push(".")
         }
 
         Some(ret)

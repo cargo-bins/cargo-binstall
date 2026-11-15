@@ -14,7 +14,8 @@ use binstalk::{
     registry::Registry,
 };
 use binstalk_manifests::cargo_toml_binstall::{PkgOverride, Strategy};
-use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum, builder::PossibleValue, error::ErrorKind};
+use clap_complete::Shell;
 use compact_str::CompactString;
 use log::LevelFilter;
 use semver::VersionReq;
@@ -54,7 +55,7 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         value_name = "crate[@version]",
-        required_unless_present_any = ["version", "self_install", "help"],
+        required_unless_present_any = ["version", "self_install", "help", "list", "prune", "completions"],
     )]
     pub(crate) crate_names: Vec<CrateName>,
 
@@ -346,8 +347,26 @@ pub struct Args {
     /// This option will be passed through to all `cargo-install` invocations.
     ///
     /// It will require `Cargo.lock` to be up to date.
+    ///
+    /// Since Rust 1.100, `cargo install` uses the `Cargo.lock` packaged in the crate by default
+    /// and this flag no longer changes its dependency resolution.
     #[clap(help_heading = "Options", long)]
     pub(crate) locked: bool,
+
+    /// Activate the specified features when installing from source.
+    ///
+    /// This mirrors the equivalent argument in `cargo install --features`.
+    ///
+    /// This only takes effect when falling back to `cargo install`; prebuilt binaries are
+    /// unaffected, since they are built ahead of time with a fixed set of features.
+    #[clap(
+        help_heading = "Options",
+        long,
+        value_name = "FEATURES",
+        num_args = 1..,
+        action = clap::ArgAction::Append
+    )]
+    pub(crate) features: Option<Vec<CompactString>>,
 
     /// Deprecated, here for back-compat only. Secure is now on by default.
     #[clap(hide(true), long)]
@@ -363,6 +382,36 @@ pub struct Args {
     /// version available to both this client and the remote server.
     #[clap(help_heading = "Options", long, value_enum, value_name = "VERSION")]
     pub(crate) min_tls_version: Option<TLSVersion>,
+
+    /// Allow plaintext HTTP requests to remote endpoints.
+    ///
+    /// The default is to only allow HTTPS, rejecting any plaintext HTTP url. This option relaxes
+    /// that so registries and download urls served over plain HTTP can be used, which is handy for
+    /// talking to a local registry during testing.
+    ///
+    /// Note that this is insecure and not recommended outside of testing.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) allow_insecure_http: bool,
+
+    /// Select the DNS resolver used for all network requests.
+    ///
+    /// `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself
+    /// and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`)
+    /// instead, which helps on hosts where hickory-dns cannot resolve names, for example behind
+    /// some VPNs or in containers that rely on NSS. The value can also be set with the
+    /// `BINSTALL_DNS` environment variable.
+    ///
+    /// `hickory` is only available when cargo-binstall was built with the `trust-dns` feature
+    /// (enabled by default); without it `system` is the only resolver.
+    #[clap(
+        help_heading = "Options",
+        long,
+        value_enum,
+        env = "BINSTALL_DNS",
+        value_name = "RESOLVER",
+        default_value_t
+    )]
+    pub(crate) dns: DnsResolver,
 
     /// Specify the root certificates to use for https connections,
     /// in addition to default system-wide ones.
@@ -460,6 +509,31 @@ pub struct Args {
     #[clap(long, hide(true))]
     pub(crate) self_install: bool,
 
+    /// List installed crates and their installation methods (binstall, cargo install, local path, drifted).
+    #[clap(
+        help_heading = "Package selection",
+        long = "list",
+        conflicts_with_all = ["crate_names", "prune"]
+    )]
+    pub(crate) list: bool,
+
+    /// Prune stale or drifted binstall records for uninstalled or recompiled packages.
+    #[clap(
+        help_heading = "Package selection",
+        long = "prune",
+        conflicts_with_all = ["crate_names", "list"]
+    )]
+    pub(crate) prune: bool,
+
+    /// Print shell completions for the given shell to stdout and exit.
+    #[clap(
+        help_heading = "Meta",
+        long = "completions",
+        value_name = "SHELL",
+        conflicts_with_all = ["crate_names", "list", "prune"]
+    )]
+    pub(crate) completions: Option<Shell>,
+
     #[cfg(feature = "clap-markdown")]
     #[clap(long, hide = true)]
     pub(crate) markdown_help: bool,
@@ -487,6 +561,25 @@ impl From<TLSVersion> for remote::TLSVersion {
         match ver {
             TLSVersion::Tls1_2 => remote::TLSVersion::TLS_1_2,
             TLSVersion::Tls1_3 => remote::TLSVersion::TLS_1_3,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ValueEnum)]
+pub(crate) enum DnsResolver {
+    #[cfg_attr(not(feature = "trust-dns"), default)]
+    System,
+    #[cfg(feature = "trust-dns")]
+    #[default]
+    Hickory,
+}
+
+impl From<DnsResolver> for remote::DnsResolver {
+    fn from(dns: DnsResolver) -> Self {
+        match dns {
+            DnsResolver::System => remote::DnsResolver::System,
+            #[cfg(feature = "trust-dns")]
+            DnsResolver::Hickory => remote::DnsResolver::Hickory,
         }
     }
 }
@@ -581,6 +674,16 @@ pub fn parse() -> (Args, PkgOverride) {
         std::process::exit(0);
     }
 
+    if let Some(shell) = opts.completions {
+        clap_complete::generate(
+            shell,
+            &mut Args::command(),
+            "cargo-binstall",
+            &mut std::io::stdout(),
+        );
+        std::process::exit(0);
+    }
+
     if opts.self_install {
         return (opts, Default::default());
     }
@@ -607,16 +710,10 @@ pub fn parse() -> (Args, PkgOverride) {
         } else if opts.manifest_path.is_some() {
             "manifest-path"
         } else {
-            #[cfg(not(feature = "git"))]
-            {
-                ""
-            }
-
-            #[cfg(feature = "git")]
-            if opts.git.is_some() {
-                "git"
-            } else {
-                ""
+            // `opts.git` only exists with the `git` feature, so `cfg!` can't be used here.
+            cfg_select! {
+                feature = "git" => if opts.git.is_some() { "git" } else { "" },
+                _ => "",
             }
         };
 
@@ -627,6 +724,22 @@ pub fn parse() -> (Args, PkgOverride) {
                     format_args!(
                         r#"override option used with multi package syntax.
 You cannot use --{option} and specify multiple packages at the same time. Do one or the other."#
+                    ),
+                )
+                .exit();
+        }
+
+        if opts
+            .features
+            .as_ref()
+            .is_some_and(|features| !features.is_empty())
+        {
+            command
+                .error(
+                    ErrorKind::ArgumentConflict,
+                    format_args!(
+                        r#"--features option used with multi package syntax.
+You cannot use --features and specify multiple packages at the same time. Do one or the other."#
                     ),
                 )
                 .exit();
@@ -701,10 +814,10 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
             .exit()
     }
 
-    if opts.github_token.is_none() {
-        if let Ok(github_token) = env::var("GH_TOKEN") {
-            opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
-        }
+    if opts.github_token.is_none()
+        && let Ok(github_token) = env::var("GH_TOKEN")
+    {
+        opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
     }
     match opts.github_token.as_ref() {
         Some(token) if token.0.len() < 10 => opts.github_token = None,
@@ -731,6 +844,7 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
 
 #[cfg(test)]
 mod test {
+    use clap::FromArgMatches;
     use strum::VariantArray;
 
     use super::*;
@@ -757,4 +871,73 @@ mod test {
     }
 
     const _: () = assert!(Strategy::VARIANTS.len() == StrategyWrapped::VARIANTS.len());
+
+    #[cfg(feature = "trust-dns")]
+    #[test]
+    fn dns_defaults_to_hickory() {
+        let args = Args::try_parse_from(["cargo-binstall", "ripgrep"]).unwrap();
+        assert_eq!(args.dns, DnsResolver::Hickory);
+    }
+
+    #[cfg(not(feature = "trust-dns"))]
+    #[test]
+    fn dns_defaults_to_system_without_hickory() {
+        let args = Args::try_parse_from(["cargo-binstall", "ripgrep"]).unwrap();
+        assert_eq!(args.dns, DnsResolver::System);
+
+        assert!(Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).is_err());
+    }
+
+    #[test]
+    fn dns_flag_selects_resolver() {
+        let args = Args::try_parse_from(["cargo-binstall", "--dns", "system", "ripgrep"]).unwrap();
+        assert_eq!(args.dns, DnsResolver::System);
+
+        #[cfg(feature = "trust-dns")]
+        {
+            let args =
+                Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).unwrap();
+            assert_eq!(args.dns, DnsResolver::Hickory);
+        }
+
+        assert!(
+            Args::try_parse_from(["cargo-binstall", "--dns", "getaddrinfo", "ripgrep"]).is_err()
+        );
+    }
+
+    #[test]
+    fn dns_env_var_selects_resolver() {
+        let cmd = Args::command();
+        let env_name = cmd
+            .get_arguments()
+            .find(|arg| arg.get_id() == "dns")
+            .unwrap()
+            .get_env()
+            .unwrap();
+        assert_eq!(env_name, "BINSTALL_DNS");
+
+        // Parse against a renamed variable so this test cannot race with the
+        // other tests in this module that also read the real `BINSTALL_DNS`.
+        // clap captures the variable's value when `Arg::env` is called, so set
+        // it first.
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::set_var("TEST_BINSTALL_DNS", "system") };
+        let cmd = cmd.mut_arg("dns", |arg| arg.env("TEST_BINSTALL_DNS"));
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("TEST_BINSTALL_DNS") };
+
+        let parse = |argv: &[&str]| {
+            Args::from_arg_matches(&cmd.clone().try_get_matches_from(argv).unwrap()).unwrap()
+        };
+        let from_env = parse(&["cargo-binstall", "ripgrep"]);
+        assert_eq!(from_env.dns, DnsResolver::System);
+
+        #[cfg(feature = "trust-dns")]
+        {
+            let flag_wins = parse(&["cargo-binstall", "--dns", "hickory", "ripgrep"]);
+            assert_eq!(flag_wins.dns, DnsResolver::Hickory);
+        }
+    }
 }

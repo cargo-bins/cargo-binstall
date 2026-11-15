@@ -77,11 +77,12 @@ impl FromStr for CrateVersionSource {
                     ["git", url] => Source::Git(Url::parse(url)?.into()),
                     ["path", url] => Source::Path(Url::parse(url)?.into()),
                     ["registry", url] => Source::Registry(Url::parse(url)?.into()),
+                    ["sparse", url] => Source::Sparse(Url::parse(url)?.into()),
                     [kind, arg] => {
                         return Err(CvsParseError::UnknownSourceType {
                             kind: kind.to_string().into_boxed_str(),
                             arg: arg.to_string().into_boxed_str(),
-                        })
+                        });
                     }
                     _ => return Err(CvsParseError::BadSource),
                 };

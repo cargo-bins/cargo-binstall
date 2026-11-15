@@ -6,11 +6,11 @@ use std::io;
 #[cfg(windows)]
 use hickory_resolver::config::ConnectionConfig;
 use hickory_resolver::{
-    config::{
-        LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts, ServerGroup, CLOUDFLARE,
-        GOOGLE,
-    },
     TokioResolver as TokioAsyncResolver,
+    config::{
+        CLOUDFLARE, GOOGLE, LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts,
+        ServerGroup,
+    },
 };
 
 #[cfg(any(windows, target_vendor = "apple"))]
@@ -235,7 +235,7 @@ fn new_resolver() -> Result<TokioAsyncResolver, BoxError> {
 
     debug!("Resolver configuration complete");
 
-    opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+    opts.ip_strategy = LookupIpStrategy::Ipv6AndIpv4;
 
     let mut builder = TokioAsyncResolver::builder_with_config(config, Default::default());
     *builder.options_mut() = opts;

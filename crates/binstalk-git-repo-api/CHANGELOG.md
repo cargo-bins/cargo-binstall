@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.53](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.52...binstalk-git-repo-api-v0.5.53) - 2026-10-31
+
+### Other
+
+- updated the following local packages: binstalk-downloader
+
+## [0.5.52](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.51...binstalk-git-repo-api-v0.5.52) - 2026-10-17
+
+### Added
+
+- add --dns to select the DNS resolver at runtime ([#2709](https://github.com/cargo-bins/cargo-binstall/pull/2709))
+
+## [0.5.51](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.50...binstalk-git-repo-api-v0.5.51) - 2026-10-10
+
+### Fixed
+
+- *(git-repo-api)* trim the GitHub token and ignore an invalid one ([#2706](https://github.com/cargo-bins/cargo-binstall/pull/2706))
+
+## [0.5.50](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.49...binstalk-git-repo-api-v0.5.50) - 2026-10-02
+
+### Other
+
+- updated the following local packages: binstalk-downloader
+
+## [0.5.49](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.48...binstalk-git-repo-api-v0.5.49) - 2026-09-26
+
+### Other
+
+- updated the following local packages: binstalk-downloader
+
+## [0.5.48](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.47...binstalk-git-repo-api-v0.5.48) - 2026-09-05
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader
+
+## [0.5.47](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.46...binstalk-git-repo-api-v0.5.47) - 2026-08-22
+
+### Added
+
+- add --allow-insecure-http to permit plaintext HTTP ([#2635](https://github.com/cargo-bins/cargo-binstall/pull/2635))
+
+## [0.5.46](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.45...binstalk-git-repo-api-v0.5.46) - 2026-07-24
+
+### Other
+
+- *(deps)* bump the deps group across 1 directory with 2 updates ([#2612](https://github.com/cargo-bins/cargo-binstall/pull/2612))
+
+## [0.5.45](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.44...binstalk-git-repo-api-v0.5.45) - 2026-07-11
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader
+
+## [0.5.44](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.43...binstalk-git-repo-api-v0.5.44) - 2026-06-20
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader
+
 ## [0.5.43](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.42...binstalk-git-repo-api-v0.5.43) - 2026-06-06
 
 ### Other

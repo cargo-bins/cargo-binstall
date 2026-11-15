@@ -1,12 +1,12 @@
 use std::{process::Termination, time::Instant};
 
-use binstalk::{helpers::jobserver_client::LazyJobserverClient, TARGET};
+use binstalk::{TARGET, helpers::jobserver_client::LazyJobserverClient};
 use log::LevelFilter;
 use tracing::debug;
 
 use crate::{
     args,
-    bin_util::{run_tokio_main, MainExit},
+    bin_util::{MainExit, run_tokio_main},
     entry,
     logging::logging,
 };
@@ -45,6 +45,10 @@ rustc-llvm-version: {rustc_llvm_version}"#
         MainExit::Success(None)
     } else if args.self_install {
         MainExit::new(entry::self_install(args), None)
+    } else if args.list {
+        MainExit::new(entry::list_crates(args), None)
+    } else if args.prune {
+        MainExit::new(entry::prune_crates(args), None)
     } else {
         logging(
             args.log_level.unwrap_or(LevelFilter::Info),

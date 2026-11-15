@@ -1,29 +1,28 @@
 [package]
 name = "binstalk-fetchers"
-version = "0.10.43"
-edition = "2021"
+version = "0.10.53"
+edition = "2024"
 
 description = "The binstall fetchers"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-fetchers"
-rust-version = "1.70.0"
+rust-version = "1.88.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "GPL-3.0-only"
 
 [dependencies]
 async-trait = "0.1.88"
-binstalk-downloader = { version = "0.13.41", path = "../binstalk-downloader", default-features = false }
-binstalk-git-repo-api = { version = "0.5.43", path = "../binstalk-git-repo-api" }
-binstalk-types = { version = "0.10.7", path = "../binstalk-types" }
+binstalk-downloader = { version = "0.14.1", path = "../binstalk-downloader", default-features = false }
+binstalk-git-repo-api = { version = "0.5.53", path = "../binstalk-git-repo-api" }
+binstalk-types = { version = "0.10.8", path = "../binstalk-types" }
 bytes = "1.11.1"
-compact_str = { version = "0.9.0" }
+compact_str = { version = "0.10.0" }
 either = "1.11.0"
-itertools = "0.14.0"
+itertools = "0.15.0"
 leon = "3.0.0"
 leon-macros = "1.0.1"
 miette = "7.0.0"
-minisign-verify = "0.2.1"
-once_cell = "1.18.0"
+minisign-verify = "0.3.0"
 strum = "0.28.0"
 thiserror = "2.0.11"
 tokio = { version = "1.52.3", features = [
@@ -34,7 +33,8 @@ tracing = "0.1.43"
 url = "2.5.8"
 
 [dev-dependencies]
-binstalk-downloader = { version = "0.13.41", path = "../binstalk-downloader" }
+binstalk-bins = { version = "0.7.0", path = "../binstalk-bins" }
+binstalk-downloader = { version = "0.14.1", path = "../binstalk-downloader" }
 
 [features]
 quickinstall = []

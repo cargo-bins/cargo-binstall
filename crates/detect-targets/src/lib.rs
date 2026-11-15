@@ -75,7 +75,7 @@ pub use detect::detect_targets;
 pub mod probe;
 
 mod desired_targets;
-pub use desired_targets::{get_desired_targets, DesiredTargets};
+pub use desired_targets::{DesiredTargets, get_desired_targets};
 
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");

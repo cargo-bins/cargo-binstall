@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.14.0...binstalk-downloader-v0.14.1) - 2026-10-31
+
+### Other
+
+- *(deps)* bump netdev from 0.46.3 to 0.47.0 in the deps group ([#2728](https://github.com/cargo-bins/cargo-binstall/pull/2728))
+
+## [0.14.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.48...binstalk-downloader-v0.14.0) - 2026-10-17
+
+### Added
+
+- add --dns to select the DNS resolver at runtime ([#2709](https://github.com/cargo-bins/cargo-binstall/pull/2709))
+
+## [0.13.48](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.47...binstalk-downloader-v0.13.48) - 2026-10-02
+
+### Other
+
+- Fix zip extraction to prevent absolute path ([#2685](https://github.com/cargo-bins/cargo-binstall/pull/2685))
+
+## [0.13.47](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.46...binstalk-downloader-v0.13.47) - 2026-09-26
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2662](https://github.com/cargo-bins/cargo-binstall/pull/2662))
+
+## [0.13.46](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.45...binstalk-downloader-v0.13.46) - 2026-09-05
+
+### Other
+
+- *(deps)* bump astral-tokio-tar from 0.6.4 to 0.7.0 in the deps group ([#2654](https://github.com/cargo-bins/cargo-binstall/pull/2654))
+
+## [0.13.45](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.44...binstalk-downloader-v0.13.45) - 2026-08-22
+
+### Added
+
+- add --allow-insecure-http to permit plaintext HTTP ([#2635](https://github.com/cargo-bins/cargo-binstall/pull/2635))
+
+### Other
+
+- *(deps)* bump netdev from 0.45.0 to 0.46.0 in the deps group ([#2632](https://github.com/cargo-bins/cargo-binstall/pull/2632))
+
+## [0.13.44](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.43...binstalk-downloader-v0.13.44) - 2026-07-24
+
+### Other
+
+- *(deps)* bump the deps group across 1 directory with 2 updates ([#2612](https://github.com/cargo-bins/cargo-binstall/pull/2612))
+
+## [0.13.43](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.42...binstalk-downloader-v0.13.43) - 2026-07-11
+
+### Other
+
+- Prefer ipv6 ([#2595](https://github.com/cargo-bins/cargo-binstall/pull/2595))
+
+## [0.13.42](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.41...binstalk-downloader-v0.13.42) - 2026-06-20
+
+### Other
+
+- *(deps)* bump the deps group with 2 updates ([#2589](https://github.com/cargo-bins/cargo-binstall/pull/2589))
+
 ## [0.13.41](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.13.40...binstalk-downloader-v0.13.41) - 2026-06-06
 
 ### Other

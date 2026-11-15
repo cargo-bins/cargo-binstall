@@ -1,17 +1,17 @@
 [package]
 name = "cargo-toml-workspace"
-version = "7.0.9"
-edition = "2021"
+version = "7.0.11"
+edition = "2024"
 description = "Parse cargo workspace and load specific crate"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/cargo-toml-workspace"
-rust-version = "1.65.0"
+rust-version = "1.88.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-cargo_toml = "0.22.1"
-compact_str = { version = "0.9.0", features = ["serde"] }
+cargo_toml = "1.0.0"
+compact_str = { version = "0.10.0", features = ["serde"] }
 globwalker = "0.9.0"
 serde = "1.0.163"
 thiserror = "2.0.11"

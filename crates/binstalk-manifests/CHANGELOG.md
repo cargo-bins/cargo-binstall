@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.12](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.11...binstalk-manifests-v0.19.12) - 2026-11-09
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.19.11](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.10...binstalk-manifests-v0.19.11) - 2026-10-23
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.19.10](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.9...binstalk-manifests-v0.19.10) - 2026-10-17
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.19.9](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.8...binstalk-manifests-v0.19.9) - 2026-10-06
+
+### Fixed
+
+- *(manifests)* parse sparse+ sources in .crates.toml ([#2696](https://github.com/cargo-bins/cargo-binstall/pull/2696))
+
+## [0.19.8](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.7...binstalk-manifests-v0.19.8) - 2026-10-02
+
+### Added
+
+- *(cli)* add --list and --prune to inspect and reconcile manifests ([#2677](https://github.com/cargo-bins/cargo-binstall/pull/2677))
+
+## [0.19.7](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.6...binstalk-manifests-v0.19.7) - 2026-09-26
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.19.6](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.5...binstalk-manifests-v0.19.6) - 2026-09-05
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.19.5](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.4...binstalk-manifests-v0.19.5) - 2026-08-22
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.19.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.3...binstalk-manifests-v0.19.4) - 2026-07-24
+
+### Other
+
+- *(deps)* bump the deps group across 1 directory with 2 updates ([#2612](https://github.com/cargo-bins/cargo-binstall/pull/2612))
+
+## [0.19.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.2...binstalk-manifests-v0.19.3) - 2026-07-11
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.19.2](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.1...binstalk-manifests-v0.19.2) - 2026-06-20
+
+### Other
+
+- updated the following local packages: detect-targets
+
 ## [0.19.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.0...binstalk-manifests-v0.19.1) - 2026-06-06
 
 ### Other

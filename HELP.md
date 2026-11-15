@@ -161,12 +161,34 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--locked` — This option will be passed through to all `cargo-install` invocations.
 
    It will require `Cargo.lock` to be up to date.
+
+   Since Rust 1.100, `cargo install` uses the `Cargo.lock` packaged in the crate by default and this flag no longer changes its dependency resolution.
+* `--features <FEATURES>` — Activate the specified features when installing from source.
+
+   This mirrors the equivalent argument in `cargo install --features`.
+
+   This only takes effect when falling back to `cargo install`; prebuilt binaries are unaffected, since they are built ahead of time with a fixed set of features.
 * `--force` — Force a crate to be installed even if it is already installed
 * `--min-tls-version <VERSION>` — Require a minimum TLS version from remote endpoints.
 
    The default is not to require any minimum TLS version, and use the negotiated highest version available to both this client and the remote server.
 
   Possible values: `1.2`, `1.3`
+
+* `--allow-insecure-http` — Allow plaintext HTTP requests to remote endpoints.
+
+   The default is to only allow HTTPS, rejecting any plaintext HTTP url. This option relaxes that so registries and download urls served over plain HTTP can be used, which is handy for talking to a local registry during testing.
+
+   Note that this is insecure and not recommended outside of testing.
+* `--dns <RESOLVER>` — Select the DNS resolver used for all network requests.
+
+   `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`) instead, which helps on hosts where hickory-dns cannot resolve names, for example behind some VPNs or in containers that rely on NSS. The value can also be set with the `BINSTALL_DNS` environment variable.
+
+   `hickory` is only available when cargo-binstall was built with the `trust-dns` feature (enabled by default); without it `system` is the only resolver.
+
+  Default value: `hickory`
+
+  Possible values: `system`, `hickory`
 
 * `--root-certificates <PATH>` — Specify the root certificates to use for https connections, in addition to default system-wide ones
 * `--json-output` — Print logs in json format to be parsable
@@ -208,6 +230,12 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `-q`, `--quiet` — Equivalent to setting `log_level` to `off`.
 
    This would override the `log_level`.
+* `--list` — List installed crates and their installation methods (binstall, cargo install, local path, drifted)
+* `--prune` — Prune stale or drifted binstall records for uninstalled or recompiled packages
+* `--completions <SHELL>` — Print shell completions for the given shell to stdout and exit
+
+  Possible values: `bash`, `elvish`, `fish`, `powershell`, `zsh`
+
 
 
 
