@@ -1,4 +1,8 @@
-use std::{fmt, io, path::Path, pin::Pin};
+use std::{
+    fmt, io,
+    path::Path,
+    pin::{Pin, pin},
+};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use bytes::{Bytes, BytesMut};
@@ -111,6 +115,50 @@ impl DownloadContent {
             DownloadContent::Response(response) => Box::pin(response.bytes_stream()),
         })
     }
+
+    /// The whole body in memory, continuing it with `Range` requests if it
+    /// breaks partway, as [`Self::into_byte_stream`] does.
+    async fn into_bytes(self, resume: bool) -> Result<Bytes, RemoteError> {
+        match self {
+            DownloadContent::ToIssue { client, url } if resume => {
+                let response = client.get(url.clone()).send(true).await?;
+                collect_bytes(resumable_stream(client, url, response)).await
+            }
+            DownloadContent::ToIssue { client, url } => {
+                client.get(url).send(true).await?.bytes().await
+            }
+            DownloadContent::Response(response) => response.bytes().await,
+        }
+    }
+}
+
+/// Join a body's chunks into one buffer, copying each byte at most once.
+///
+/// A body that arrived in a single chunk is returned as-is, and one that arrived
+/// in several is copied once into a buffer allocated to fit all of them, rather
+/// than into one that grows (and reallocates) as each chunk comes in.
+async fn collect_bytes(
+    stream: impl Stream<Item = Result<Bytes, RemoteError>>,
+) -> Result<Bytes, RemoteError> {
+    let mut stream = pin!(stream);
+
+    let Some(first) = stream.next().await.transpose()? else {
+        return Ok(Bytes::new());
+    };
+    let Some(second) = stream.next().await.transpose()? else {
+        return Ok(first);
+    };
+
+    let mut chunks = vec![first, second];
+    while let Some(chunk) = stream.next().await.transpose()? {
+        chunks.push(chunk);
+    }
+
+    let mut bytes = BytesMut::with_capacity(chunks.iter().map(Bytes::len).sum());
+    for chunk in chunks {
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes.freeze())
 }
 
 pub struct Download<'a> {
@@ -314,13 +362,7 @@ impl Download<'_> {
 
     #[instrument(skip(self))]
     pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
-        let mut stream = self.content.into_byte_stream(self.resume).await?;
-        let mut bytes = BytesMut::new();
-        while let Some(chunk) = stream.next().await {
-            bytes.extend_from_slice(&chunk?);
-        }
-
-        let bytes = bytes.freeze();
+        let bytes = self.content.into_bytes(self.resume).await?;
         if let Some(verifier) = self.data_verifier {
             verifier.update(&bytes);
         }
