@@ -168,6 +168,8 @@ crate's directory (`foo`) and `{ repo }` is the repository itself
 - `{ repo }/releases/download/v{ version }/`
 - `{ repo }/releases/download/{ subcrate }%2F{ version }/`
 - `{ repo }/releases/download/{ subcrate }%2Fv{ version }/`
+- `{ repo }/releases/download/{ name }-v{ version }/`
+- `{ repo }/releases/download/{ name }-{ version }/`
 <!-- END generated:pkg-url-paths-github -->
 
 #### for GitLab
@@ -215,6 +217,8 @@ Binary must be uploaded to the "File" page of your project, under the directory
 - `{ repo }/releases/download/v{ version }/`
 - `{ repo }/releases/download/{ subcrate }%2F{ version }/`
 - `{ repo }/releases/download/{ subcrate }%2Fv{ version }/`
+- `{ repo }/releases/download/{ name }-v{ version }/`
+- `{ repo }/releases/download/{ name }-{ version }/`
 <!-- END generated:pkg-url-paths-codeberg -->
 
 #### Others
