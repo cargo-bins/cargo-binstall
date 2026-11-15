@@ -18,18 +18,18 @@
 //! told it the artefact has changed since we started reading. Then the error
 //! that broke the transfer stands.
 
-use std::{pin::Pin, time::Duration};
+use std::time::Duration;
 
 use bytes::Bytes;
-use futures_util::{stream::unfold, Stream, StreamExt};
-use tracing::{debug, warn};
+use futures_util::{Stream, stream::try_unfold};
+use tracing::{debug, error, warn};
 
 use crate::remote::{
+    Client, Error as RemoteError, Response, StatusCode, Url,
     header::{
-        HeaderMap, HeaderValue, ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, IF_RANGE,
+        ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, HeaderMap, HeaderValue, IF_RANGE,
         LAST_MODIFIED, RANGE,
     },
-    Client, Error as RemoteError, Response, StatusCode, Url,
 };
 
 /// Continuations allowed before a broken download is given up on.
@@ -43,10 +43,10 @@ const MAX_RESUMES: u8 = 5;
 /// connection isn't immediately asked for another.
 const RESUME_DELAY: Duration = Duration::from_millis(500);
 
-type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, RemoteError>> + Send + Sync>>;
-
 /// Read `response`'s body, continuing it with `Range` requests to `url` when it
 /// stops before the end.
+///
+/// The stream ends after yielding its first error.
 pub(super) fn resumable_stream(
     client: Client,
     url: Url,
@@ -63,7 +63,7 @@ pub(super) fn resumable_stream(
     let state = Resumable {
         client,
         url,
-        inner: Box::pin(response.bytes_stream()),
+        inner: response,
         read: 0,
         len,
         validator,
@@ -71,15 +71,14 @@ pub(super) fn resumable_stream(
         spent_at: 0,
     };
 
-    unfold(Some(state), |state| async move {
-        let mut state = state?;
+    try_unfold(state, |mut state| async move {
         loop {
-            match state.inner.next().await {
-                Some(Ok(bytes)) => {
+            match state.inner.chunk().await {
+                Ok(Some(bytes)) => {
                     state.read += bytes.len() as u64;
-                    return Some((Ok(bytes), Some(state)));
+                    return Ok(Some((bytes, state)));
                 }
-                Some(Err(err)) => {
+                Err(err) => {
                     warn!(
                         ?err,
                         url = %state.url,
@@ -87,12 +86,12 @@ pub(super) fn resumable_stream(
                         "download broke; trying to continue it",
                     );
                     if !state.resume().await {
-                        return Some((Err(err), None));
+                        return Err(err);
                     }
                 }
                 // A body can also stop early without erroring, which the
                 // promised length gives us away to notice.
-                None if state.is_short() => {
+                Ok(None) if state.is_short() => {
                     warn!(
                         url = %state.url,
                         read = state.read,
@@ -100,10 +99,10 @@ pub(super) fn resumable_stream(
                         "download ended early; trying to continue it",
                     );
                     if !state.resume().await {
-                        return Some((Err(state.truncated()), None));
+                        return Err(state.truncated());
                     }
                 }
-                None => return None,
+                Ok(None) => return Ok(None),
             }
         }
     })
@@ -112,8 +111,8 @@ pub(super) fn resumable_stream(
 struct Resumable {
     client: Client,
     url: Url,
-    /// The body currently being read.
-    inner: ByteStream,
+    /// The response whose body is currently being read.
+    inner: Response,
     /// Bytes given to the caller, and so the offset a continuation starts at.
     read: u64,
     /// What the artefact measures in full, when the server said.
@@ -135,32 +134,29 @@ impl Resumable {
         let made_progress = self.read > self.spent_at;
         self.spent_at = self.read;
         if !spend(&mut self.budget, made_progress) {
-            warn!(url = %self.url, "download cannot be continued; out of attempts");
+            error!(url = %self.url, "download cannot be continued; out of attempts");
             return false;
         }
 
         tokio::time::sleep(RESUME_DELAY).await;
 
         let range = format!("bytes={}-", self.read);
-        let mut request = self
-            .client
-            .get(self.url.clone())
-            .header(RANGE.as_str(), &range);
+        let mut request = self.client.get(self.url.clone()).header(RANGE, &range);
         if let Some(validator) = self.validator.as_ref().and_then(|v| v.to_str().ok()) {
-            request = request.header(IF_RANGE.as_str(), validator);
+            request = request.header(IF_RANGE, validator);
         }
 
         let response = match request.send(true).await {
             Ok(response) => response,
             Err(err) => {
-                warn!(?err, url = %self.url, "download cannot be continued");
+                error!(?err, url = %self.url, "download cannot be continued");
                 return false;
             }
         };
 
         let status = response.status();
         if !continues_from(status, response.headers().get(CONTENT_RANGE), self.read) {
-            warn!(
+            error!(
                 url = %self.url,
                 %status,
                 offset = self.read,
@@ -170,7 +166,7 @@ impl Resumable {
         }
 
         debug!(url = %self.url, offset = self.read, "continuing download");
-        self.inner = Box::pin(response.bytes_stream());
+        self.inner = response;
         true
     }
 
@@ -228,8 +224,11 @@ fn continues_from(status: StatusCode, content_range: Option<&HeaderValue>, offse
 
 /// The first-byte position of a `Content-Range: bytes <start>-<end>/<total>`.
 fn content_range_start(header: Option<&HeaderValue>) -> Option<u64> {
-    let range = header?.to_str().ok()?.trim().strip_prefix("bytes ")?;
-    range.trim().split('-').next()?.trim().parse().ok()
+    let range = header?.to_str().ok()?.trim();
+    let range = range.strip_prefix("bytes ")?.trim();
+    let (start, _end_and_total) = range.split_once('-')?;
+
+    start.trim().parse().ok()
 }
 
 fn content_length(headers: &HeaderMap) -> Option<u64> {
@@ -265,6 +264,7 @@ mod tests {
             "cargo-binstall-test",
             None,
             true,
+            Default::default(),
             NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
