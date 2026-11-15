@@ -155,7 +155,9 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
         #[cfg(windows)]
         // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
         // Fallback to copy if it fails.
-        Err(_) => atomic_install(dest, link),
+        //
+        // Do not use `atomic_install`, which would move `dest` to `link`.
+        Err(_) => persist(copy_to_tempfile(dest, link)?.into_temp_path(), link),
 
         #[cfg(not(windows))]
         Err(err) => Err(err),
