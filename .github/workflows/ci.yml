@@ -409,7 +409,7 @@ jobs:
     if: needs.changed-files.outputs.has_detect_target_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: detect-targets-x86_64
       - run: chmod +x detect-targets
@@ -531,6 +531,7 @@ jobs:
       - detect-targets-ubuntu-arm-test
       - detect-targets-ubuntu-x86_64-test
       - detect-targets-more-glibc-test
+      - detect-targets-probe-multilib-test
       - detect-targets-nix-test
       - detect-targets-android-check
     if: always() # always run even if dependencies fail
