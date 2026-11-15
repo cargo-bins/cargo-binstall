@@ -33,3 +33,19 @@ if [ "$exit_code" != 2 ]; then
     echo "Expected exit code 2, but actual exit code $exit_code"
     exit 1
 fi
+
+# Verify that --no-default-features and --all-features cannot be combined with
+# multiple packages either
+for flag in --no-default-features --all-features; do
+    set +e
+
+    "$1" binstall --no-confirm cargo-binstall cargo-about --strategies compile "$flag"
+    exit_code="$?"
+
+    set -e
+
+    if [ "$exit_code" != 2 ]; then
+        echo "Expected exit code 2 for $flag, but actual exit code $exit_code"
+        exit 1
+    fi
+done

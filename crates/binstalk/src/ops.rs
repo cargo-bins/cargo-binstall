@@ -49,6 +49,12 @@ pub struct Options {
 
     /// Features to pass to `cargo install` when falling back to installing from source.
     pub features: Option<Vec<CompactString>>,
+    /// Pass `--no-default-features` to `cargo install` when falling back to
+    /// installing from source.
+    pub no_default_features: bool,
+    /// Pass `--all-features` to `cargo install` when falling back to
+    /// installing from source.
+    pub all_features: bool,
 
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,

@@ -233,6 +233,14 @@ impl ResolutionSource {
             }
         }
 
+        if opts.no_default_features {
+            cmd.arg("--no-default-features");
+        }
+
+        if opts.all_features {
+            cmd.arg("--all-features");
+        }
+
         debug!("Running `{}`", format_cmd(&cmd));
 
         if !opts.dry_run {
