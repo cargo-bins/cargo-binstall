@@ -7,7 +7,7 @@ use futures_util::Stream;
 use tar_codec::{Member, MemberPayload, SpecialKind};
 use tracing::debug;
 
-use super::{decode_error, DownloadError, TarArchive, TarBasedFmt, TarPayload, TarReader};
+use super::{DownloadError, TarArchive, TarBasedFmt, TarPayload, TarReader, decode_error};
 
 #[async_trait::async_trait]
 pub trait TarEntry: Send + Sync + Debug {

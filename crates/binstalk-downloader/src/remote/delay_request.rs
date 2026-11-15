@@ -5,7 +5,7 @@ use std::{
 
 use compact_str::{CompactString, ToCompactString};
 use reqwest::{Request, Url};
-use tokio::time::{sleep_until, Duration, Instant};
+use tokio::time::{Duration, Instant, sleep_until};
 use tracing::debug;
 
 pub(super) type RequestResult = Result<reqwest::Response, reqwest::Error>;
@@ -102,7 +102,7 @@ impl Inner {
         }
     }
 
-    fn call(&mut self, req: Request) -> impl Future<Output = RequestResult> {
+    fn call(&mut self, req: Request) -> impl Future<Output = RequestResult> + use<> {
         match &mut self.state {
             State::Ready { rem } => {
                 let now = Instant::now();
@@ -186,7 +186,7 @@ impl DelayRequest {
         &self,
         counter: &mut u32,
         req: &mut Option<Request>,
-    ) -> ControlFlow<impl Future<Output = RequestResult>, Instant> {
+    ) -> ControlFlow<impl Future<Output = RequestResult> + use<>, Instant> {
         // Wait until we are ready to send next requests
         // (client-side rate-limit throttler).
         let mut guard = self.inner.lock().unwrap();

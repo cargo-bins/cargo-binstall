@@ -2,25 +2,24 @@ use std::{
     cmp::min,
     io::{self, Write},
     iter::repeat,
+    sync::LazyLock,
 };
 
 use log::{LevelFilter, Log, STATIC_MAX_LEVEL};
-use once_cell::sync::Lazy;
-use supports_color::{on as supports_color_on_stream, Stream::Stdout};
+use supports_color::{Stream::Stdout, on as supports_color_on_stream};
 use tracing::{
+    Event, Level, Metadata,
     callsite::Callsite,
     dispatcher, field,
     subscriber::{self, set_global_default},
-    Event, Level, Metadata,
 };
 use tracing_core::{identify_callsite, metadata::Kind, subscriber::Subscriber};
 use tracing_log::AsTrace;
 use tracing_subscriber::{
     filter::targets::Targets,
     fmt::{
-        fmt,
+        FmtContext, MakeWriter, fmt,
         format::{self, FormatEvent, FormatFields, Writer},
-        FmtContext, MakeWriter,
     },
     layer::SubscriberExt,
     registry::LookupSpan,
@@ -56,7 +55,7 @@ macro_rules! log_cs {
             field::FieldSet::new(FIELD_NAMES, identify_callsite!(&$cs)),
             Kind::EVENT,
         );
-        static $fields: Lazy<Fields> = Lazy::new(|| Fields::new(&$cs));
+        static $fields: LazyLock<Fields> = LazyLock::new(|| Fields::new(&$cs));
 
         impl Callsite for $ty {
             fn set_interest(&self, _: subscriber::Interest) {}

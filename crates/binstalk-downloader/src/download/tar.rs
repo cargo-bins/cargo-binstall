@@ -24,7 +24,7 @@ use tar_codec::{
     Archive, DecodeError, DecodePolicy, ExtractError, Member, MemberPayload, PaxDecodePolicy,
     PaxVendorExtensionPolicy, TarArchive as CodecArchive, TarMemberPayload,
 };
-use tar_framing::{Block, FrameError, FrameErrorInner, BLOCK_SIZE};
+use tar_framing::{BLOCK_SIZE, Block, FrameError, FrameErrorInner};
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncReadExt, Chain};
 use tokio_util::io::StreamReader;
@@ -36,8 +36,8 @@ use super::{
 };
 
 mod extract;
-pub(super) use extract::extract_tar_based_stream;
 use extract::ExtractReader;
+pub(super) use extract::extract_tar_based_stream;
 
 mod v7;
 use v7::{V7Error, V7Reader};

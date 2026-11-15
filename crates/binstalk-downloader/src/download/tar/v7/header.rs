@@ -3,7 +3,7 @@
 use std::mem::offset_of;
 
 use tar_codec::{Member, MemberMetadata};
-use tar_framing::{Block, BLOCK_SIZE};
+use tar_framing::{BLOCK_SIZE, Block};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use super::V7Error;

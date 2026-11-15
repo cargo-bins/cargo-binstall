@@ -1,4 +1,4 @@
-#![cfg_attr(docsrs, feature(doccfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use std::{fmt, io, str::FromStr, sync::Arc};
 
@@ -56,9 +56,9 @@ pub enum RegistryError {
     Remote(#[from] RemoteError),
 
     #[error("{0} is not found")]
-    #[diagnostic(
-        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={0}")
-    )]
+    #[diagnostic(help(
+        "Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={0}"
+    ))]
     NotFound(CompactString),
 
     #[error(transparent)]
@@ -103,9 +103,9 @@ pub enum RegistryError {
     GitError(#[from] GitError),
 
     #[error("registry requires authentication: {0}")]
-    #[diagnostic(
-        help("Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active.")
-    )]
+    #[diagnostic(help(
+        "Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active."
+    ))]
     AuthenticationRequired(Box<Url>),
 }
 
@@ -188,12 +188,15 @@ impl Registry {
 
     /// Fetch the latest crate with `crate_name` and with version matching
     /// `version_req`.
+    ///
+    /// Returns the manifest along with the publish time (RFC 3339) of the
+    /// matched version, if the registry index records it.
     pub async fn fetch_crate_matched(
         &self,
         client: Client,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         self.fetch_crate_matched_with_auth(client, None, crate_name, version_req)
             .await
     }
@@ -204,7 +207,7 @@ impl Registry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         match self {
             Self::Sparse(sparse_registry) => {
                 sparse_registry
@@ -324,10 +327,11 @@ mod test {
                     sparse_registry
                 );
 
-                let manifest_from_sparse = sparse_registry
+                let (manifest_from_sparse, pubtime) = sparse_registry
                     .fetch_crate_matched(client, crate_name, &version_req)
                     .await
                     .unwrap();
+                assert_eq!(pubtime.as_deref(), Some("2023-06-27T04:27:43Z"));
 
                 to_string(&manifest_from_sparse).unwrap()
             }
@@ -367,15 +371,16 @@ mod test {
                     git_registry
                 );
 
-                let manifest_from_git = git_registry
+                let (manifest_from_git, pubtime) = git_registry
                     .fetch_crate_matched(client, crate_name, &version_req)
                     .await
                     .unwrap();
+                assert_eq!(pubtime.as_deref(), Some("2023-06-27T04:27:43Z"));
                 to_string(&manifest_from_git).unwrap()
             }
         });
 
-        let manifest_from_cratesio_api = Registry::default()
+        let (manifest_from_cratesio_api, _) = Registry::default()
             .fetch_crate_matched(client, crate_name, version_req)
             .await
             .unwrap();

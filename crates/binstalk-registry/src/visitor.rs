@@ -6,7 +6,7 @@ use cargo_toml_workspace::cargo_toml::{Manifest, Value};
 use normalize_path::NormalizePath;
 use tracing::debug;
 
-use crate::{vfs::Vfs, RegistryError};
+use crate::{RegistryError, vfs::Vfs};
 
 #[derive(Debug)]
 pub(super) struct ManifestVisitor {

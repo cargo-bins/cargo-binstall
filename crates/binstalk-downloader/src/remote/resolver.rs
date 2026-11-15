@@ -6,11 +6,11 @@ use std::io;
 #[cfg(windows)]
 use hickory_resolver::config::ConnectionConfig;
 use hickory_resolver::{
-    config::{
-        LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts, ServerGroup, CLOUDFLARE,
-        GOOGLE,
-    },
     TokioResolver as TokioAsyncResolver,
+    config::{
+        CLOUDFLARE, GOOGLE, LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts,
+        ServerGroup,
+    },
 };
 
 #[cfg(any(windows, target_vendor = "apple"))]

@@ -9,18 +9,18 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures_util::{stream, Stream};
+use futures_util::{Stream, stream};
 use normalize_path::NormalizePath;
 use tar_codec::{
-    extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy},
     Archive, ExtractError, Member, MemberMetadata,
+    extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy},
 };
 use tokio::io::{AsyncRead, ReadBuf};
 use tracing::debug;
 
 use super::{
-    decode_error, DownloadError, ExtractedFiles, TarArchive, TarBasedFmt, TarDecodeError, TarError,
-    TarErrorInner, TarReader,
+    DownloadError, ExtractedFiles, TarArchive, TarBasedFmt, TarDecodeError, TarError,
+    TarErrorInner, TarReader, decode_error,
 };
 use crate::utils::extract_with_task;
 

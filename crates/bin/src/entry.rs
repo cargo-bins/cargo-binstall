@@ -7,6 +7,7 @@ use std::{
 
 use atomic_file_install::atomic_install;
 use binstalk::{
+    TARGET,
     errors::{BinstallError, CrateContextError},
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
     get_desired_targets,
@@ -17,24 +18,22 @@ use binstalk::{
         tasks::AutoAbortJoinHandle,
     },
     ops::{
-        self,
+        self, CargoTomlFetchOverride, Options, Resolver,
         resolve::{CrateName, Resolution, ResolutionFetch, VersionReqExt},
-        CargoTomlFetchOverride, Options, Resolver,
     },
-    TARGET,
 };
 use binstalk_manifests::{
     cargo_toml_binstall::{PkgOverride, Strategy},
     crate_info::{CrateInfo, CrateSource},
     crates_manifests::Manifests,
 };
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, format_compact};
 use file_format::FileFormat;
-use itertools::{repeat_n, Itertools};
+use itertools::{Itertools, repeat_n};
 use log::LevelFilter;
 use miette::{Report, Result};
 use semver::{Version, VersionReq};
-use terminal_size::{terminal_size, Width};
+use terminal_size::{Width, terminal_size};
 use tokio::task::block_in_place;
 use tracing::{debug, info, warn};
 
@@ -291,14 +290,15 @@ pub fn install_crates(
             }
 
             // Confirm
-            if !dry_run && !no_confirm {
-                if let Err(abort_err) = confirm().await {
-                    return if let Some(err) = BinstallError::crate_errors(errors) {
-                        Err(Report::new(abort_err).wrap_err(err))
-                    } else {
-                        Err(abort_err.into())
-                    };
-                }
+            if !dry_run
+                && !no_confirm
+                && let Err(abort_err) = confirm().await
+            {
+                return if let Some(err) = BinstallError::crate_errors(errors) {
+                    Err(Report::new(abort_err).wrap_err(err))
+                } else {
+                    Err(abort_err.into())
+                };
             }
 
             let manifest_update_res = do_install_fetches_continue_on_failure(

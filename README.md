@@ -82,16 +82,22 @@ Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://raw.githubuse
 Download the relevant package for your system below, unpack it, and move the
 `cargo-binstall` executable into `$HOME/.cargo/bin`:
 
+<!-- BEGIN generated:download-table from .github/workflows/release-packages.yml, run `just update-docs` to update -->
 | OS      | Arch                      | URL                                                                                                                     |
 | ------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Linux   | x86\_64                   | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz      |
-| Linux   | armv7                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz |
-| Linux   | arm64                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz     |
+| Linux   | x86\_64 (musl)            | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz      |
+| Linux   | x86\_64 (glibc 2.17+)     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz       |
+| Linux   | armv7 (musl)              | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-musleabihf.tgz |
+| Linux   | armv7 (glibc 2.17+)       | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-armv7-unknown-linux-gnueabihf.tgz  |
+| Linux   | arm64 (musl)              | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-musl.tgz     |
+| Linux   | arm64 (glibc 2.17+)       | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-unknown-linux-gnu.tgz      |
+| Linux   | riscv64 (musl)            | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-riscv64gc-unknown-linux-musl.tgz   |
 | Mac     | Intel                     | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-apple-darwin.zip            |
 | Mac     | Apple Silicon             | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-apple-darwin.zip           |
 | Mac     | Universal<br>(both archs) | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-universal-apple-darwin.zip         |
 | Windows | Intel/AMD                 | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-pc-windows-msvc.zip         |
 | Windows | ARM 64                    | https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-aarch64-pc-windows-msvc.zip        |
+<!-- END generated:download-table -->
 
 ### From source
 
@@ -224,7 +230,7 @@ when the `quickinstall` artifact host is used. The maintainers of the
 worthwhile to build and host. The aggregated collected telemetry is publicly
 accessible at
 <https://alsuren.grafana.net/public-dashboards/12d4ec3edf2548a1850a813e00592b53>.
-Should you be interested on it, the backend code for these endpoints can be
+Should you be interested in it, the backend code for these endpoints can be
 found at
 <https://github.com/cargo-bins/cargo-quickinstall/tree/main/stats-server>.
 
@@ -235,7 +241,7 @@ of the following methods:
 - Setting the `BINSTALL_DISABLE_TELEMETRY` environment variable to `true`.
 - Disabling the `quickinstall` strategy with
   `--disable-strategies quick-install`, or if specifying a list of strategies to
-  use with `--strategies`, avoiding including `quickinstall` in that list.
+  use with `--strategies`, avoiding including `quick-install` in that list.
 - Adding `quick-install` to the `disabled-strategies` configuration key in the
   crate metadata (refer to
   [the related support documentation](SUPPORT.md#support-for-cargo-binstall) for

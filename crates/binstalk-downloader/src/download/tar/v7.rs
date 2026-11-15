@@ -25,12 +25,12 @@ use std::{
 };
 
 use tar_codec::Member;
-use tar_framing::{Block, BLOCK_SIZE};
+use tar_framing::{BLOCK_SIZE, Block};
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 mod header;
-use header::{parse_header, Header, V7Header};
+use header::{Header, V7Header, parse_header};
 
 const BLOCK_SIZE_U64: u64 = BLOCK_SIZE as u64;
 

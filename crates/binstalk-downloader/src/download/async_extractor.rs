@@ -50,7 +50,7 @@ fn extract_with_blocking_decoder<S, F, T>(
     stream: S,
     path: &Path,
     f: F,
-) -> impl Future<Output = Result<T, DownloadError>>
+) -> impl Future<Output = Result<T, DownloadError>> + use<S, F, T>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
     F: FnOnce(mpsc::Receiver<Bytes>, &Path) -> io::Result<T> + Send + Sync + 'static,

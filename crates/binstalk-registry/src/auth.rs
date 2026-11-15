@@ -49,7 +49,10 @@ impl ResolvedRegistry {
         crate_name: &str,
         version_req: &semver::VersionReq,
     ) -> Result<
-        cargo_toml_workspace::cargo_toml::Manifest<binstalk_types::cargo_toml_binstall::Meta>,
+        (
+            cargo_toml_workspace::cargo_toml::Manifest<binstalk_types::cargo_toml_binstall::Meta>,
+            Option<CompactString>,
+        ),
         crate::RegistryError,
     > {
         self.registry

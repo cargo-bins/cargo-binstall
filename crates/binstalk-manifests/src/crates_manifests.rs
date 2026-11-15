@@ -10,11 +10,11 @@ use miette::Diagnostic;
 use thiserror::Error as ThisError;
 
 use crate::{
+    CompactString, Version,
     binstall_crates_v1::{Error as BinstallCratesV1Error, Records as BinstallCratesV1Records},
     cargo_crates_v1::{CratesDetailsMap, CratesToml, CratesTomlParseError, Source},
     crate_info::CrateInfo,
     helpers::create_if_not_exist,
-    CompactString, Version,
 };
 
 #[derive(Debug, Diagnostic, ThisError)]
