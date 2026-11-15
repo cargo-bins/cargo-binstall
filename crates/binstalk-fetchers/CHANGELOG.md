@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.53](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.52...binstalk-fetchers-v0.10.53) - 2026-10-31
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-git-repo-api
+
+## [0.10.52](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.51...binstalk-fetchers-v0.10.52) - 2026-10-17
+
+### Added
+
+- add --dns to select the DNS resolver at runtime ([#2709](https://github.com/cargo-bins/cargo-binstall/pull/2709))
+
+## [0.10.51](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.50...binstalk-fetchers-v0.10.51) - 2026-10-10
+
+### Other
+
+- updated the following local packages: binstalk-git-repo-api
+
+## [0.10.50](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.49...binstalk-fetchers-v0.10.50) - 2026-10-02
+
+### Other
+
+- *(deps)* bump minisign-verify from 0.2.5 to 0.3.0 in the deps group ([#2690](https://github.com/cargo-bins/cargo-binstall/pull/2690))
+
+## [0.10.49](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.48...binstalk-fetchers-v0.10.49) - 2026-09-26
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-git-repo-api
+
+## [0.10.48](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.47...binstalk-fetchers-v0.10.48) - 2026-09-05
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader, binstalk-git-repo-api
+
 ## [0.10.47](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.46...binstalk-fetchers-v0.10.47) - 2026-08-22
 
 ### Added

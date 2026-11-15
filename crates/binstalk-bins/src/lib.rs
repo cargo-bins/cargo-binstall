@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    fmt, io,
+    fmt, fs, io,
     path::{self, Component, Path, PathBuf},
 };
 
@@ -8,7 +8,7 @@ use atomic_file_install::{
     atomic_install, atomic_install_noclobber, atomic_symlink_file, atomic_symlink_file_noclobber,
 };
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, format_compact};
 use leon::Template;
 use miette::Diagnostic;
 use normalize_path::NormalizePath;
@@ -32,6 +32,11 @@ pub enum Error {
     #[error("bin file {} not found", .0.display())]
     BinFileNotFound(Box<Path>),
 
+    /// Bin name from the crate manifest is not a plain file name, so it
+    /// would place the binary outside of the install dir.
+    #[error("invalid bin name {0:?}: must be a plain file name")]
+    InvalidBinName(CompactString),
+
     #[error(transparent)]
     Io(#[from] io::Error),
 
@@ -52,19 +57,39 @@ fn is_valid_path(path: &Path) -> bool {
     )
 }
 
-/// Must be called after the archive is downloaded and extracted.
-/// This function might uses blocking I/O.
-pub fn infer_bin_dir_template(
-    data: &Data,
-    has_dir: &mut dyn FnMut(&Path) -> bool,
-) -> Cow<'static, str> {
-    let name = data.name;
-    let target = data.target;
-    let version = data.version;
+/// Return true if `name` is safe to use as a file name inside the install dir.
+///
+/// Bin names come from the crate's `Cargo.toml`, which is controlled by the
+/// crate publisher, so they must not contain anything that lets
+/// `install_path.join(name)` escape `install_path`: path separators of any
+/// platform, `.`/`..`, drive prefixes (`C:`) or NUL.
+///
+/// The check is the same on every platform so that a name rejected on
+/// Windows is also rejected on unix and vice versa.
+pub fn is_valid_bin_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains(['/', '\\', ':', '\0'])
+        && matches!(
+            Path::new(name).components().collect::<Vec<_>>().as_slice(),
+            [Component::Normal(_)]
+        )
+}
 
-    // Make sure to update
-    // fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
-    // NOVERSION_FILENAMES} if you update this array.
+/// Directories in the extracted archive that may hold the binaries of
+/// `name`, in the order [`infer_bin_dir_template`] tries them.
+///
+/// SUPPORT.md lists these, see binstalk-fetchers' `support_md` test.
+///
+/// Make sure to update
+/// fetchers::gh_crate_meta::hosting::{FULL_FILENAMES,
+/// NOVERSION_FILENAMES} if you update this list.
+pub fn possible_bin_dirs<'a>(
+    name: &'a str,
+    target: &'a str,
+    version: &'a str,
+) -> impl Iterator<Item = String> + 'a {
     let gen_possible_dirs: [for<'r> fn(&'r str, &'r str, &'r str) -> String; 8] = [
         |name, target, version| format!("{name}-{target}-v{version}"),
         |name, target, version| format!("{name}-{target}-{version}"),
@@ -77,11 +102,24 @@ pub fn infer_bin_dir_template(
         |name, _target, _version| name.to_string(),
     ];
 
-    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
-
     gen_possible_dirs
         .into_iter()
-        .map(|gen_possible_dir| gen_possible_dir(name, target, version))
+        .map(move |gen_possible_dir| gen_possible_dir(name, target, version))
+}
+
+/// Must be called after the archive is downloaded and extracted.
+/// This function might uses blocking I/O.
+pub fn infer_bin_dir_template(
+    data: &Data,
+    has_dir: &mut dyn FnMut(&Path) -> bool,
+) -> Cow<'static, str> {
+    let name = data.name;
+    let target = data.target;
+    let version = data.version;
+
+    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
+
+    possible_bin_dirs(name, target, version)
         .find(|dirname| has_dir(Path::new(&dirname)))
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
@@ -99,6 +137,8 @@ pub struct BinFile {
     pub archive_source_path: PathBuf,
     pub dest: PathBuf,
     pub link: Option<PathBuf>,
+    /// The dir `source` must stay inside of.
+    extracted_dir: PathBuf,
 }
 
 impl BinFile {
@@ -109,6 +149,10 @@ impl BinFile {
         tt: &Template<'_>,
         no_symlinks: bool,
     ) -> Result<Self, Error> {
+        if !is_valid_bin_name(base_name) {
+            return Err(Error::InvalidBinName(base_name.into()));
+        }
+
         let binary_ext = if data.target.contains("windows") {
             ".exe"
         } else {
@@ -126,10 +170,12 @@ impl BinFile {
             target_related_info: data.target_related_info,
         };
 
-        let (source, archive_source_path) = if data.meta.pkg_fmt == Some(PkgFmt::Bin) {
+        let (source, archive_source_path, extracted_dir) = if data.meta.pkg_fmt == Some(PkgFmt::Bin)
+        {
             (
                 data.bin_path.to_path_buf(),
                 data.bin_path.file_name().unwrap().into(),
+                data.bin_path.parent().unwrap().to_path_buf(),
             )
         } else {
             // Generate install paths
@@ -146,7 +192,11 @@ impl BinFile {
                 return Err(Error::InvalidSourceFilePath(path_normalized.into()));
             }
 
-            (data.bin_path.join(&path_normalized), path_normalized)
+            (
+                data.bin_path.join(&path_normalized),
+                path_normalized,
+                data.bin_path.to_path_buf(),
+            )
         };
 
         // Destination at install dir + base-name{.extension}
@@ -176,6 +226,7 @@ impl BinFile {
             archive_source_path,
             dest,
             link,
+            extracted_dir,
         })
     }
 
@@ -217,22 +268,31 @@ impl BinFile {
         }
     }
 
-    fn pre_install_bin(&self) -> Result<(), Error> {
-        if !self.source.try_exists()? {
-            return Err(Error::BinFileNotFound((&*self.source).into()));
+    /// Return the source with symlinks resolved.
+    fn pre_install_bin(&self) -> Result<PathBuf, Error> {
+        let source = match fs::canonicalize(&self.source) {
+            Ok(source) => source,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                return Err(Error::BinFileNotFound((&*self.source).into()));
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        // The archive may contain symlinks, as the bin itself or as a dir on its path, pointing
+        // outside of the extracted dir. Following them would chmod and install a file that does
+        // not come from the archive.
+        if !source.starts_with(fs::canonicalize(&self.extracted_dir)?) {
+            return Err(Error::InvalidSourceFilePath((&*self.source).into()));
         }
 
         #[cfg(unix)]
-        std::fs::set_permissions(
-            &self.source,
-            std::os::unix::fs::PermissionsExt::from_mode(0o755),
-        )?;
+        fs::set_permissions(&source, std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
 
-        Ok(())
+        Ok(source)
     }
 
     pub fn install_bin(&self) -> Result<(), Error> {
-        self.pre_install_bin()?;
+        let source = self.pre_install_bin()?;
 
         debug!(
             "Atomically install file from '{}' to '{}'",
@@ -240,13 +300,13 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install(&self.source, &self.dest)?;
+        atomic_install(&source, &self.dest)?;
 
         Ok(())
     }
 
     pub fn install_bin_noclobber(&self) -> Result<(), Error> {
-        self.pre_install_bin()?;
+        let source = self.pre_install_bin()?;
 
         debug!(
             "Installing file from '{}' to '{}' only if dst not exists",
@@ -254,7 +314,7 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install_noclobber(&self.source, &self.dest)?;
+        atomic_install_noclobber(&source, &self.dest)?;
 
         Ok(())
     }
@@ -364,6 +424,143 @@ impl fmt::Display for OptionalLazyFormat<'_> {
             fmt::Display::fmt(lazy_format, f)
         } else {
             Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_bin_names() {
+        for name in [
+            "foo",
+            "foo-bar",
+            "foo_bar",
+            "foo.bar",
+            "cargo-binstall",
+            "..foo",
+            "foo..",
+        ] {
+            assert!(is_valid_bin_name(name), "{name:?} should be valid");
+        }
+    }
+
+    #[test]
+    fn invalid_bin_names() {
+        for name in [
+            "",
+            ".",
+            "..",
+            "../foo",
+            "../../.bashrc",
+            "foo/bar",
+            "foo/",
+            "/etc/passwd",
+            "..\\foo",
+            "foo\\bar",
+            "C:foo",
+            "C:\\Windows\\foo",
+            "\\\\server\\share\\foo",
+            "foo\0",
+        ] {
+            assert!(!is_valid_bin_name(name), "{name:?} should be invalid");
+        }
+    }
+
+    #[cfg(unix)]
+    mod symlink {
+        use super::*;
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        fn bin_file(extracted: &Path, archive_source_path: &str, install: &Path) -> BinFile {
+            BinFile {
+                base_name: "bin".into(),
+                source: extracted.join(archive_source_path),
+                archive_source_path: archive_source_path.into(),
+                dest: install.join("bin"),
+                link: None,
+                extracted_dir: extracted.to_path_buf(),
+            }
+        }
+
+        /// A tempdir with an `extracted` and an `install` dir, and a file
+        /// `outside` of the extracted dir.
+        fn setup() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+            let tmp = tempfile::tempdir().unwrap();
+            let extracted = tmp.path().join("extracted");
+            let install = tmp.path().join("install");
+            fs::create_dir(&extracted).unwrap();
+            fs::create_dir(&install).unwrap();
+
+            let outside = tmp.path().join("outside");
+            fs::write(&outside, b"outside").unwrap();
+            fs::set_permissions(&outside, fs::Permissions::from_mode(0o600)).unwrap();
+
+            (tmp, extracted, install, outside)
+        }
+
+        fn assert_untouched(outside: &Path, install: &Path) {
+            let mode = fs::metadata(outside).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+            assert_eq!(fs::read(outside).unwrap(), b"outside");
+            assert!(fs::symlink_metadata(install.join("bin")).is_err());
+        }
+
+        #[test]
+        fn bin_symlink_outside() {
+            let (_tmp, extracted, install, outside) = setup();
+            symlink(&outside, extracted.join("bin")).unwrap();
+
+            let bin_file = bin_file(&extracted, "bin", &install);
+            for res in [bin_file.install_bin(), bin_file.install_bin_noclobber()] {
+                assert!(
+                    matches!(res, Err(Error::InvalidSourceFilePath(_))),
+                    "{res:?}"
+                );
+            }
+            assert_untouched(&outside, &install);
+        }
+
+        #[test]
+        fn dir_symlink_outside() {
+            let (tmp, extracted, install, outside) = setup();
+            symlink(tmp.path(), extracted.join("dir")).unwrap();
+
+            let bin_file = bin_file(&extracted, "dir/outside", &install);
+            let res = bin_file.install_bin();
+            assert!(
+                matches!(res, Err(Error::InvalidSourceFilePath(_))),
+                "{res:?}"
+            );
+            assert_untouched(&outside, &install);
+        }
+
+        #[test]
+        fn bin_symlink_dangling() {
+            let (_tmp, extracted, install, _outside) = setup();
+            symlink("missing", extracted.join("bin")).unwrap();
+
+            let res = bin_file(&extracted, "bin", &install).install_bin();
+            assert!(matches!(res, Err(Error::BinFileNotFound(_))), "{res:?}");
+        }
+
+        /// A symlink inside of the extracted dir is fine, and its target is
+        /// installed instead of the symlink itself.
+        #[test]
+        fn bin_symlink_inside() {
+            let (_tmp, extracted, install, _outside) = setup();
+            fs::write(extracted.join("real-bin"), b"bin").unwrap();
+            symlink("real-bin", extracted.join("bin")).unwrap();
+
+            bin_file(&extracted, "bin", &install).install_bin().unwrap();
+
+            let installed = install.join("bin");
+            assert!(fs::symlink_metadata(&installed).unwrap().is_file());
+            assert_eq!(fs::read(&installed).unwrap(), b"bin");
+            let mode = fs::metadata(&installed).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o755);
         }
     }
 }

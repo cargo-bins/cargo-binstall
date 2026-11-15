@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.13](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.12...binstalk-registry-v0.12.13) - 2026-11-09
+
+### Added
+
+- print release date alongside the version ([#2740](https://github.com/cargo-bins/cargo-binstall/pull/2740))
+
+### Fixed
+
+- *(binstalk-registry)* fix `doc_cfg` feature name typo breaking docs.rs build ([#2741](https://github.com/cargo-bins/cargo-binstall/pull/2741))
+
+## [0.12.12](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.11...binstalk-registry-v0.12.12) - 2026-10-31
+
+### Other
+
+- updated the following local packages: binstalk-downloader
+
+## [0.12.11](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.10...binstalk-registry-v0.12.11) - 2026-10-17
+
+### Added
+
+- add --dns to select the DNS resolver at runtime ([#2709](https://github.com/cargo-bins/cargo-binstall/pull/2709))
+
+## [0.12.10](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.9...binstalk-registry-v0.12.10) - 2026-10-02
+
+### Other
+
+- updated the following local packages: normalize-path, binstalk-downloader
+
+## [0.12.9](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.8...binstalk-registry-v0.12.9) - 2026-09-26
+
+### Other
+
+- updated the following local packages: binstalk-downloader
+
+## [0.12.8](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.7...binstalk-registry-v0.12.8) - 2026-09-05
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-downloader
+
 ## [0.12.7](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.6...binstalk-registry-v0.12.7) - 2026-08-22
 
 ### Added

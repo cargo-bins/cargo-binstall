@@ -6,7 +6,7 @@ use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
-use serde_json::{from_slice as json_from_slice, Deserializer as JsonDeserializer};
+use serde_json::{Deserializer as JsonDeserializer, from_slice as json_from_slice};
 use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
@@ -14,8 +14,8 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    crate_prefix_components, parse_manifest, render_dl_template, MatchedVersion, RegistryAuth,
-    RegistryConfig, RegistryError,
+    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, crate_prefix_components,
+    parse_manifest, render_dl_template,
 };
 
 #[derive(Debug)]
@@ -113,7 +113,7 @@ impl GitRegistry {
         auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
-    ) -> Result<Manifest<Meta>, RegistryError> {
+    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
         let version_req = version_req.clone();
@@ -123,7 +123,7 @@ impl GitRegistry {
         // Cancel git operation if the future is cancelled (dropped).
         let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
-        let (matched_version, dl_url, auth_required) = spawn_blocking(move || {
+        let (mut matched_version, dl_url, auth_required) = spawn_blocking(move || {
             let GitIndex {
                 _tempdir: _,
                 repo,
@@ -162,6 +162,9 @@ impl GitRegistry {
             None
         };
 
-        parse_manifest(client, name, dl_url, matched_version, auth).await
+        let pubtime = matched_version.pubtime.take();
+        let manifest = parse_manifest(client, name, dl_url, matched_version, auth).await?;
+
+        Ok((manifest, pubtime))
     }
 }

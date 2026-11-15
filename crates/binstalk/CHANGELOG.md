@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.6...binstalk-v0.30.0) - 2026-11-09
+
+### Added
+
+- print release date alongside the version ([#2740](https://github.com/cargo-bins/cargo-binstall/pull/2740))
+
+## [0.29.6](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.5...binstalk-v0.29.6) - 2026-10-31
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-git-repo-api, binstalk-fetchers, binstalk-registry
+
+## [0.29.5](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.4...binstalk-v0.29.5) - 2026-10-23
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.29.4](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.3...binstalk-v0.29.4) - 2026-10-17
+
+### Fixed
+
+- *(bins)* reject bin names that escape the install dir ([#2712](https://github.com/cargo-bins/cargo-binstall/pull/2712))
+
+## [0.29.3](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.2...binstalk-v0.29.3) - 2026-10-10
+
+### Other
+
+- updated the following local packages: binstalk-git-repo-api, binstalk-fetchers
+
+## [0.29.2](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.1...binstalk-v0.29.2) - 2026-10-06
+
+### Other
+
+- updated the following local packages: detect-targets
+
+## [0.29.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.0...binstalk-v0.29.1) - 2026-10-02
+
+### Other
+
+- updated the following local packages: binstalk-downloader, binstalk-fetchers, detect-targets, binstalk-bins, binstalk-git-repo-api, binstalk-registry
+
+## [0.29.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.81...binstalk-v0.29.0) - 2026-09-26
+
+### Other
+
+- Add --feature flag for passing down into cargo when falling back to s… ([#2668](https://github.com/cargo-bins/cargo-binstall/pull/2668))
+
+## [0.28.81](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.80...binstalk-v0.28.81) - 2026-09-05
+
+### Other
+
+- updated the following local packages: binstalk-downloader, detect-targets, binstalk-git-repo-api, binstalk-fetchers, binstalk-registry
+
 ## [0.28.80](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.28.79...binstalk-v0.28.80) - 2026-08-22
 
 ### Other

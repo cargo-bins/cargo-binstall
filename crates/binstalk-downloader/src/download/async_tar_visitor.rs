@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Debug, io, path::Path, pin::Pin};
 use async_compression::tokio::bufread;
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
-use tokio::io::{copy, sink, AsyncRead};
+use tokio::io::{AsyncRead, copy, sink};
 use tokio_tar::{Archive, Entry, EntryType};
 use tokio_util::io::StreamReader;
 use tracing::debug;
@@ -48,7 +48,7 @@ impl<R: AsyncRead + Unpin + Send + Sync> TarEntry for Entry<R> {
     }
 
     fn size(&self) -> io::Result<u64> {
-        self.header().size()
+        self.header().raw_file_size()
     }
 
     fn entry_type(&self) -> TarEntryType {

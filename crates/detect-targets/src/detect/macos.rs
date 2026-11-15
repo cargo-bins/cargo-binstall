@@ -33,7 +33,9 @@ async fn is_arch_supported(arch_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub(super) async fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
+pub(super) async fn detect_alternative_targets(
+    target: &str,
+) -> impl Iterator<Item = String> + use<> {
     match target {
         AARCH64 => {
             // Spawn `arch` in parallel (probably from different threads if

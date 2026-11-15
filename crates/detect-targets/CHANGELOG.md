@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.97](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.96...detect-targets-v0.1.97) - 2026-11-09
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.96](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.95...detect-targets-v0.1.96) - 2026-10-23
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.95](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.94...detect-targets-v0.1.95) - 2026-10-17
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.94](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.93...detect-targets-v0.1.94) - 2026-10-06
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.93](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.92...detect-targets-v0.1.93) - 2026-10-02
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.92](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.91...detect-targets-v0.1.92) - 2026-09-26
+
+### Other
+
+- update Cargo.lock dependencies
+
+## [0.1.91](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.90...detect-targets-v0.1.91) - 2026-09-05
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.1.90](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.89...detect-targets-v0.1.90) - 2026-08-22
 
 ### Other

@@ -3,10 +3,10 @@ name = "binstalk-downloader"
 description = "The binstall toolkit for downloading and extracting file"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-downloader"
-version = "0.13.45"
-rust-version = "1.79.0"
+version = "0.14.1"
+rust-version = "1.88.0"
 authors = ["ryan <ryan@kurte.nz>"]
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
@@ -21,12 +21,11 @@ async-compression = { version = "0.4.29", features = [
 binstalk-types = { version = "0.10.8", path = "../binstalk-types" }
 bytes = "1.11.1"
 bzip2 = "0.6.0"
-cfg-if = "1"
 compact_str = "0.10.0"
 flate2 = { version = "1.1.8", default-features = false }
 futures-util = "0.3.30"
-futures-io = "0.3.30"
 httpdate = "1.0.2"
+normalize-path = { version = "0.2.2", path = "../normalize-path" }
 rc-zip-sync = { version = "4.3.5", features = [
     "deflate",
     "bzip2",
@@ -61,7 +60,7 @@ tokio = { version = "1.52.3", features = [
     "time",
     "fs",
 ], default-features = false }
-astral-tokio-tar = "0.6.0"
+astral-tokio-tar = "0.7.0"
 tokio-util = { version = "0.7.18", features = ["io"] }
 tracing = "0.1.43"
 hickory-resolver = { version = "0.26.1", optional = true, features = [
@@ -76,7 +75,7 @@ liblzma = "0.4"
 # Since zip 0.6.3 depends on zstd 0.11, we can use 0.12.0 here
 # because it uses the same zstd-sys version.
 # Otherwise there will be a link conflict.
-zstd = { version = "0.13.2", default-features = false }
+zstd = { version = "0.14.0", default-features = false }
 
 [target."cfg(not(target_arch = \"wasm32\"))".dependencies.native-tls-crate]
 optional = true
@@ -133,7 +132,7 @@ json = ["serde", "serde_json"]
 resolv-conf = { version = "0.7.6", optional = true }
 
 [target."cfg(windows)".dependencies]
-netdev = { version = "0.46.0", optional = true }
+netdev = { version = "0.47.0", optional = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

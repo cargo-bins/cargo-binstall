@@ -2,7 +2,7 @@ use std::{fmt, io, path::Path, pin::Pin};
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
 use bytes::{Bytes, BytesMut};
-use futures_util::{stream::FusedStream, Stream, StreamExt};
+use futures_util::{Stream, StreamExt, stream::FusedStream};
 use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
 
@@ -345,6 +345,7 @@ mod test {
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
             false,
+            Default::default(),
             NonZeroU16::new(10).unwrap(),
             1.try_into().unwrap(),
             [],
@@ -428,8 +429,14 @@ mod test {
 
         // sccache, tgz and zip
         let sccache_config = [
-            ("https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.tar.gz", PkgFmt::Tgz),
-            ("https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.zip", PkgFmt::Zip),
+            (
+                "https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.tar.gz",
+                PkgFmt::Tgz,
+            ),
+            (
+                "https://github.com/mozilla/sccache/releases/download/v0.3.3/sccache-v0.3.3-x86_64-pc-windows-msvc.zip",
+                PkgFmt::Zip,
+            ),
         ];
 
         for (sccache_url, fmt) in sccache_config {

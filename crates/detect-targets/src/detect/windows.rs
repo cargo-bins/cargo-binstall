@@ -7,7 +7,7 @@ use windows_sys::Win32::{
             IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM,
             IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
         },
-        Threading::{GetMachineTypeAttributes, UserEnabled, Wow64Container, MACHINE_ATTRIBUTES},
+        Threading::{GetMachineTypeAttributes, MACHINE_ATTRIBUTES, UserEnabled, Wow64Container},
     },
 };
 
@@ -63,7 +63,7 @@ fn is_arch_supported(arch: IMAGE_FILE_MACHINE) -> bool {
     is_arch_supported_inner(arch).unwrap_or(false)
 }
 
-pub(super) fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> {
+pub(super) fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> + use<> {
     let (prefix, abi) = target
         .rsplit_once('-')
         .expect("unwrap: target always has a -");

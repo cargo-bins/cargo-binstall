@@ -136,10 +136,9 @@ async fn resolve_inner(
 
                         if let Some(disabled_strategies) =
                             target_data.meta.disabled_strategies.as_deref()
+                            && disabled_strategies.contains(&fetcher.strategy())
                         {
-                            if disabled_strategies.contains(&fetcher.strategy()) {
-                                return None;
-                            }
+                            return None;
                         }
 
                         filter_fetcher_by_name_predicate(fetcher.fetcher_name()).then_some(fetcher)
@@ -202,6 +201,7 @@ async fn resolve_inner(
                                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                                     fetcher: fetcher.clone(),
                                     new_version: package_info.version,
+                                    pubtime: package_info.pubtime,
                                     name: package_info.name,
                                     version_req: version_req_str,
                                     source: package_info.source,
@@ -267,15 +267,16 @@ async fn resolve_inner(
         .map(|target_data| &target_data.meta)
         .unwrap_or(&meta);
 
-    if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref() {
-        if disabled_strategies.contains(&Strategy::Compile) {
-            return Err(BinstallError::NoFallbackToCargoInstall);
-        }
+    if let Some(disabled_strategies) = target_meta.disabled_strategies.as_deref()
+        && disabled_strategies.contains(&Strategy::Compile)
+    {
+        return Err(BinstallError::NoFallbackToCargoInstall);
     }
 
     Ok(Resolution::InstallFromSource(ResolutionSource {
         name: package_info.name,
         version: package_info.version_str,
+        pubtime: package_info.pubtime,
     }))
 }
 
@@ -417,6 +418,8 @@ struct PackageInfo {
     version_str: CompactString,
     source: CrateSource,
     version: Version,
+    /// Publish time (RFC 3339) from the registry index, if known
+    pubtime: Option<CompactString>,
     repo: Option<String>,
     overrides: PkgOverrides,
 }
@@ -438,7 +441,7 @@ impl PackageInfo {
         use CargoTomlFetchOverride::*;
 
         // Fetch crate via crates.io, git, or use a local manifest path
-        let (manifest, source) = match opts.cargo_toml_fetch_override.as_ref() {
+        let (manifest, source, pubtime) = match opts.cargo_toml_fetch_override.as_ref() {
             Some(Path(manifest_path)) => (
                 spawn_blocking({
                     let manifest_path = manifest_path.clone();
@@ -454,6 +457,7 @@ impl PackageInfo {
                         manifest_path.display()
                     ))?),
                 },
+                None,
             ),
             #[cfg(feature = "git")]
             Some(Git(git_url)) => {
@@ -492,16 +496,19 @@ impl PackageInfo {
                         source_type: SourceType::Git,
                         url: MaybeOwned::Owned(Url::parse(&format!("{git_url}#{commit_hash}"))?),
                     },
+                    None,
                 )
             }
-            None => (
-                Box::pin(
-                    opts.registry
-                        .fetch_crate_matched(client, &name, version_req),
-                )
-                .await?,
-                opts.registry.crate_source()?,
-            ),
+            None => {
+                let (manifest, pubtime) = Box::pin(opts.registry.fetch_crate_matched(
+                    client,
+                    &name,
+                    version_req,
+                ))
+                .await?;
+
+                (manifest, opts.registry.crate_source()?, pubtime)
+            }
         };
 
         let Some(mut package) = manifest.package else {
@@ -518,14 +525,14 @@ impl PackageInfo {
             parse_package_version(manifest_version_str)?
         };
 
-        if let Some(curr_version) = curr_version {
-            if new_version == curr_version {
-                info!(
-                    "{} v{curr_version} is already installed, use --force to override",
-                    name
-                );
-                return Ok(None);
-            }
+        if let Some(curr_version) = curr_version
+            && new_version == curr_version
+        {
+            info!(
+                "{} v{curr_version} is already installed, use --force to override",
+                name
+            );
+            return Ok(None);
         }
 
         let (mut meta, binaries): (_, Vec<Bin>) = (
@@ -546,6 +553,16 @@ impl PackageInfo {
                 .collect(),
         );
 
+        // Bin names come from the crate publisher and are later joined onto
+        // the install path, so reject anything that is not a plain file name
+        // before downloading anything.
+        if let Some(bin) = binaries
+            .iter()
+            .find(|bin| !bins::is_valid_bin_name(&bin.name))
+        {
+            return Err(bins::Error::InvalidBinName(bin.name.as_str().into()).into());
+        }
+
         // Check binaries
         if binaries.is_empty() {
             Err(BinstallError::UnspecifiedBinaries)
@@ -558,6 +575,7 @@ impl PackageInfo {
                 source,
                 version_str: new_version_str,
                 version: new_version,
+                pubtime,
                 repo: package.repository().map(ToString::to_string),
             }))
         }
@@ -574,7 +592,7 @@ fn parse_package_version(
                 v: version_str,
                 err,
             })
-            .into())
+            .into());
         }
     };
 
@@ -583,13 +601,15 @@ fn parse_package_version(
 
 fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
     match version_req.comparators.as_slice() {
-        [Comparator {
-            op: ComparatorOp::Exact,
-            major,
-            minor: Some(minor),
-            patch: Some(patch),
-            pre,
-        }] => Some(Version {
+        [
+            Comparator {
+                op: ComparatorOp::Exact,
+                major,
+                minor: Some(minor),
+                patch: Some(patch),
+                pre,
+            },
+        ] => Some(Version {
             major: *major,
             minor: *minor,
             patch: *patch,

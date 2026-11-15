@@ -1,5 +1,5 @@
 use std::{
-    num::{NonZeroU16, NonZeroU64, NonZeroU8},
+    num::{NonZeroU8, NonZeroU16, NonZeroU64},
     ops::ControlFlow,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -9,13 +9,13 @@ use bytes::Bytes;
 use futures_util::Stream;
 use httpdate::parse_http_date;
 use reqwest::{
-    header::{HeaderMap, HeaderValue, RETRY_AFTER},
     Request,
+    header::{HeaderMap, HeaderValue, RETRY_AFTER},
 };
 use thiserror::Error as ThisError;
 use tracing::{debug, info, instrument};
 
-pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
+pub use reqwest::{Error as ReqwestError, Method, StatusCode, header};
 pub use url::Url;
 
 mod delay_request;
@@ -23,6 +23,9 @@ use delay_request::DelayRequest;
 
 mod certificate;
 pub use certificate::Certificate;
+
+mod dns_resolver;
+pub use dns_resolver::DnsResolver;
 
 mod request_builder;
 pub use request_builder::{Body, RequestBuilder, Response};
@@ -93,6 +96,16 @@ struct Inner {
 #[derive(Clone, Debug)]
 pub struct Client(Arc<Inner>);
 
+/// Returns the hickory-dns resolver to install on the [`reqwest::ClientBuilder`]
+/// for `dns`, or `None` to keep reqwest's default system resolver (`getaddrinfo`).
+fn hickory_resolver(dns: DnsResolver) -> Option<Arc<dyn reqwest::dns::Resolve>> {
+    match dns {
+        DnsResolver::System => None,
+        #[cfg(feature = "hickory-dns")]
+        DnsResolver::Hickory => Some(Arc::new(TrustDnsResolver::default())),
+    }
+}
+
 #[cfg_attr(not(feature = "__tls"), allow(unused_variables, unused_mut))]
 impl Client {
     /// Construct a new downloader client
@@ -106,12 +119,14 @@ impl Client {
     /// The [`reqwest::Client`] constructed has secure defaults, such as allowing
     /// only TLS v1.2 and above, and disallowing plaintext HTTP altogether. Set
     /// `allow_insecure_http` to `true` to permit plaintext HTTP requests, which
-    /// is useful for talking to a registry served over HTTP (e.g. in tests). If
-    /// you need more control, use the `from_builder` variant.
+    /// is useful for talking to a registry served over HTTP (e.g. in tests).
+    /// `dns` selects the resolver used to look up hostnames, see [`DnsResolver`].
+    /// If you need more control, use the `from_builder` variant.
     pub fn new(
         user_agent: impl AsRef<str>,
         min_tls: Option<TLSVersion>,
         allow_insecure_http: bool,
+        dns: DnsResolver,
         per_millis: NonZeroU16,
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
@@ -121,6 +136,7 @@ impl Client {
                 user_agent.as_ref(),
                 min_tls,
                 allow_insecure_http,
+                dns,
                 &mut certificates.into_iter(),
             ),
             per_millis,
@@ -137,6 +153,7 @@ impl Client {
         user_agent: &str,
         min_tls: Option<TLSVersion>,
         allow_insecure_http: bool,
+        dns: DnsResolver,
         certificates: &mut dyn Iterator<Item = Certificate>,
     ) -> reqwest::ClientBuilder {
         let mut builder = reqwest::ClientBuilder::new()
@@ -144,9 +161,8 @@ impl Client {
             .https_only(!allow_insecure_http)
             .tcp_nodelay(false);
 
-        #[cfg(feature = "hickory-dns")]
-        {
-            builder = builder.dns_resolver(Arc::new(TrustDnsResolver::default()));
+        if let Some(resolver) = hickory_resolver(dns) {
+            builder = builder.dns_resolver(resolver);
         }
 
         #[cfg(feature = "__tls")]
@@ -381,7 +397,7 @@ impl Client {
     pub async fn get_stream(
         &self,
         url: Url,
-    ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
+    ) -> Result<impl Stream<Item = Result<Bytes, Error>> + use<>, Error> {
         Ok(self.get(url).send(true).await?.bytes_stream())
     }
 
@@ -491,11 +507,56 @@ mod tests {
             "cargo-binstall-test",
             None,
             allow_insecure_http,
+            DnsResolver::default(),
             NonZeroU16::new(10).unwrap(),
             NonZeroU64::new(1).unwrap(),
             [],
         )
         .unwrap()
+    }
+
+    #[cfg(feature = "hickory-dns")]
+    #[test]
+    fn dns_resolver_defaults_to_hickory() {
+        assert_eq!(DnsResolver::default(), DnsResolver::Hickory);
+    }
+
+    #[cfg(not(feature = "hickory-dns"))]
+    #[test]
+    fn dns_resolver_defaults_to_system_without_hickory() {
+        assert_eq!(DnsResolver::default(), DnsResolver::System);
+    }
+
+    #[test]
+    fn system_dns_keeps_reqwest_default_resolver() {
+        assert!(hickory_resolver(DnsResolver::System).is_none());
+    }
+
+    #[cfg(feature = "hickory-dns")]
+    #[test]
+    fn hickory_dns_installs_custom_resolver() {
+        assert!(hickory_resolver(DnsResolver::Hickory).is_some());
+    }
+
+    #[test]
+    fn client_builds_with_either_dns_resolver() {
+        #[cfg(feature = "hickory-dns")]
+        let resolvers = [DnsResolver::System, DnsResolver::Hickory];
+        #[cfg(not(feature = "hickory-dns"))]
+        let resolvers = [DnsResolver::System];
+
+        for dns in resolvers {
+            Client::new(
+                "cargo-binstall-test",
+                None,
+                false,
+                dns,
+                NonZeroU16::new(10).unwrap(),
+                NonZeroU64::new(1).unwrap(),
+                [],
+            )
+            .unwrap();
+        }
     }
 
     #[test]

@@ -444,6 +444,7 @@ mod test {
                 "user-agent",
                 None,
                 false,
+                Default::default(),
                 NonZeroU16::new(1000).unwrap(),
                 NonZeroU64::new(1000).unwrap(),
                 [],

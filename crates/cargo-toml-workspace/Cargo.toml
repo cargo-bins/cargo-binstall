@@ -1,11 +1,11 @@
 [package]
 name = "cargo-toml-workspace"
 version = "7.0.11"
-edition = "2021"
+edition = "2024"
 description = "Parse cargo workspace and load specific crate"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/cargo-toml-workspace"
-rust-version = "1.65.0"
+rust-version = "1.88.0"
 authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "Apache-2.0 OR MIT"
 

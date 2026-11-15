@@ -179,7 +179,8 @@ sudo networksetup -setdnsservers Wi-Fi <LAN-IPv4-resolver>
 ```
 
 **(b) Bypass hickory and use the OS resolver** (getaddrinfo handles scoped addresses
-fine). Build/install without the default `trust-dns` feature:
+fine). Pass `--dns system` (or set `BINSTALL_DNS=system`), or build/install without the
+default `trust-dns` feature:
 ```sh
 cargo install cargo-binstall --no-default-features \
   --features static,rustls,fancy-no-backtrace,zstd-thin,git
