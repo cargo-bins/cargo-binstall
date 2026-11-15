@@ -7,8 +7,9 @@
 //! to using syscalls to detect targets.
 //!
 //! On Linux, the libc (glibc/musl) is detected by executing a
-//! synthesized loader probe (see the [`probe`] module), with a
-//! fallback to probing known dynamic loader paths.
+//! synthesized loader probe (see the `probe` module, which is only
+//! available on Linux and Android), with a fallback to probing known
+//! dynamic loader paths.
 //!
 //! Example use cases:
 //!  - The binary is built with musl libc to run on anywhere, but
