@@ -29,9 +29,9 @@
 //! # }
 //! ```
 
-use std::{fs, io, os::unix::fs::PermissionsExt, process::Stdio};
+use std::{fs::Permissions, io, os::unix::fs::PermissionsExt, process::Stdio};
 
-use tokio::{process::Command, sync::Mutex};
+use tokio::{fs, process::Command, sync::Mutex};
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
@@ -125,11 +125,14 @@ impl Probe {
         let spawned = {
             let _guard = EXEC_LOCK.lock().await;
 
-            let setup = (|| {
-                fs::write(&prog, executable)?;
-                fs::set_permissions(&prog, fs::Permissions::from_mode(0o755))
-            })();
-            if let Err(err) = setup {
+            // `tokio::fs` runs these on the blocking pool, and closes the
+            // file before returning, so the spawn below can't race with
+            // our own write fd.
+            let setup = async {
+                fs::write(&prog, executable).await?;
+                fs::set_permissions(&prog, Permissions::from_mode(0o755)).await
+            };
+            if let Err(err) = setup.await {
                 return ProbeResult::Inconclusive(err);
             }
 

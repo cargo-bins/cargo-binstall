@@ -34,7 +34,7 @@ fn main() -> io::Result<()> {
 /// statically-linked ones (arch only).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn probe_all(rt: runtime::Runtime) -> io::Result<()> {
-    use detect_targets::probe::{probes, ProbeResult};
+    use detect_targets::probe::{ProbeResult, probes};
 
     fn fmt(result: ProbeResult) -> String {
         match result {

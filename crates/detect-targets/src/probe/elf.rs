@@ -18,18 +18,54 @@
 //! `ET_EXEC`. The stub contains no absolute addresses, so it needs no
 //! relocations regardless of the load base.
 
-/// ELF file class.
+/// ELF file class, `e_ident[EI_CLASS]`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub(crate) enum Class {
-    Elf32,
-    Elf64,
+    Elf32 = 1,
+    Elf64 = 2,
 }
 
-/// ELF data encoding.
+impl Class {
+    /// Size of `Elf{32,64}_Ehdr`.
+    const fn ehsize(self) -> usize {
+        match self {
+            Class::Elf32 => 52,
+            Class::Elf64 => 64,
+        }
+    }
+
+    /// Size of `Elf{32,64}_Phdr`.
+    const fn phentsize(self) -> usize {
+        match self {
+            Class::Elf32 => 32,
+            Class::Elf64 => 56,
+        }
+    }
+
+    /// Size of `Elf{32,64}_Dyn`.
+    const fn dynent(self) -> usize {
+        match self {
+            Class::Elf32 => 8,
+            Class::Elf64 => 16,
+        }
+    }
+
+    /// Size of `Elf{32,64}_Sym`.
+    const fn syment(self) -> usize {
+        match self {
+            Class::Elf32 => 16,
+            Class::Elf64 => 24,
+        }
+    }
+}
+
+/// ELF data encoding, `e_ident[EI_DATA]`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub(crate) enum Endian {
-    Little,
-    Big,
+    Little = 1,
+    Big = 2,
 }
 
 /// Everything needed to synthesize one probe executable.
@@ -43,6 +79,9 @@ pub(crate) struct ElfSpec {
     /// Machine code performing `exit_group(0)`, used as the entry point.
     pub(crate) stub: &'static [u8],
 }
+
+const EV_CURRENT: u8 = 1;
+const ELFOSABI_NONE: u8 = 0;
 
 const ET_DYN: u16 = 3;
 
@@ -62,43 +101,45 @@ const DT_SYMTAB: u64 = 6;
 const DT_STRSZ: u64 = 10;
 const DT_SYMENT: u64 = 11;
 
-/// Endian-aware output buffer.
+/// Output buffer that encodes fields for one ELF class and encoding.
 struct Out {
     buf: Vec<u8>,
-    big: bool,
+    class: Class,
+    endian: Endian,
 }
 
 impl Out {
+    fn u8(&mut self, v: u8) {
+        self.buf.push(v);
+    }
+
     fn u16(&mut self, v: u16) {
-        let b = if self.big {
-            v.to_be_bytes()
-        } else {
-            v.to_le_bytes()
+        let b = match self.endian {
+            Endian::Little => v.to_le_bytes(),
+            Endian::Big => v.to_be_bytes(),
         };
         self.buf.extend_from_slice(&b);
     }
 
     fn u32(&mut self, v: u32) {
-        let b = if self.big {
-            v.to_be_bytes()
-        } else {
-            v.to_le_bytes()
+        let b = match self.endian {
+            Endian::Little => v.to_le_bytes(),
+            Endian::Big => v.to_be_bytes(),
         };
         self.buf.extend_from_slice(&b);
     }
 
     fn u64(&mut self, v: u64) {
-        let b = if self.big {
-            v.to_be_bytes()
-        } else {
-            v.to_le_bytes()
+        let b = match self.endian {
+            Endian::Little => v.to_le_bytes(),
+            Endian::Big => v.to_be_bytes(),
         };
         self.buf.extend_from_slice(&b);
     }
 
     /// Write a native-word-sized field (`Elf32_Addr`/`Elf64_Addr` etc).
-    fn word(&mut self, class: Class, v: u64) {
-        match class {
+    fn word(&mut self, v: u64) {
+        match self.class {
             Class::Elf32 => self.u32(v as u32),
             Class::Elf64 => self.u64(v),
         }
@@ -110,8 +151,93 @@ impl Out {
     }
 }
 
-fn align(v: usize, to: usize) -> usize {
-    (v + to - 1) / to * to
+/// The parts of `Elf{32,64}_Ehdr` that vary between probes. The others are
+/// fixed: no section headers, `EV_CURRENT`, `ELFOSABI_NONE`.
+struct Ehdr {
+    e_type: u16,
+    e_machine: u16,
+    e_entry: u64,
+    e_phoff: u64,
+    e_flags: u32,
+    e_phnum: u16,
+}
+
+impl Ehdr {
+    fn write(&self, out: &mut Out) {
+        let start = out.buf.len();
+
+        // e_ident
+        out.buf.extend_from_slice(b"\x7fELF");
+        out.u8(out.class as u8);
+        out.u8(out.endian as u8);
+        out.u8(EV_CURRENT);
+        out.u8(ELFOSABI_NONE);
+        out.u8(0); // EI_ABIVERSION
+        out.buf.extend_from_slice(&[0; 7]); // EI_PAD
+
+        out.u16(self.e_type);
+        out.u16(self.e_machine);
+        out.u32(EV_CURRENT.into()); // e_version
+        out.word(self.e_entry);
+        out.word(self.e_phoff);
+        out.word(0); // e_shoff
+        out.u32(self.e_flags);
+        out.u16(out.class.ehsize() as u16);
+        out.u16(out.class.phentsize() as u16);
+        out.u16(self.e_phnum);
+        out.u16(0); // e_shentsize
+        out.u16(0); // e_shnum
+        out.u16(0); // e_shstrndx
+
+        debug_assert_eq!(out.buf.len() - start, out.class.ehsize());
+    }
+}
+
+/// `Elf{32,64}_Phdr` of a segment whose virtual address equals its file
+/// offset, and whose size in memory equals its size in the file.
+struct Phdr {
+    p_type: u32,
+    p_flags: u32,
+    offset: usize,
+    size: usize,
+    p_align: u64,
+}
+
+impl Phdr {
+    fn write(&self, out: &mut Out) {
+        let start = out.buf.len();
+
+        out.u32(self.p_type);
+        // `p_flags` comes second in Elf64_Phdr, and second to last in
+        // Elf32_Phdr.
+        if out.class == Class::Elf64 {
+            out.u32(self.p_flags);
+        }
+        out.word(self.offset as u64); // p_offset
+        out.word(self.offset as u64); // p_vaddr
+        out.word(self.offset as u64); // p_paddr
+        out.word(self.size as u64); // p_filesz
+        out.word(self.size as u64); // p_memsz
+        if out.class == Class::Elf32 {
+            out.u32(self.p_flags);
+        }
+        out.word(self.p_align);
+
+        debug_assert_eq!(out.buf.len() - start, out.class.phentsize());
+    }
+}
+
+/// `Elf{32,64}_Dyn`.
+struct Dyn {
+    d_tag: u64,
+    d_val: u64,
+}
+
+impl Dyn {
+    fn write(&self, out: &mut Out) {
+        out.word(self.d_tag);
+        out.word(self.d_val);
+    }
 }
 
 /// Synthesize the probe executable described by `spec`.
@@ -124,11 +250,6 @@ fn align(v: usize, to: usize) -> usize {
 /// handler).
 pub(crate) fn synthesize(spec: &ElfSpec, with_interp: bool) -> Vec<u8> {
     let class = spec.class;
-    let (ehsize, phentsize, dynent, syment) = match class {
-        // sizes of Ehdr, Phdr, Dyn, Sym
-        Class::Elf64 => (64usize, 56usize, 16usize, 24usize),
-        Class::Elf32 => (52, 32, 8, 16),
-    };
     // PT_PHDR, PT_LOAD, [PT_INTERP,] PT_DYNAMIC, PT_GNU_STACK
     //
     // PT_PHDR is required: it is how the dynamic loader computes the
@@ -139,88 +260,109 @@ pub(crate) fn synthesize(spec: &ElfSpec, with_interp: bool) -> Vec<u8> {
 
     // File layout. Since this is ET_DYN, virtual addresses equal file
     // offsets (single PT_LOAD mapping the whole file at base 0).
-    let phoff = ehsize;
-    let interp_off = phoff + phnum * phentsize;
+    let phoff = class.ehsize();
+    let interp_off = phoff + phnum * class.phentsize();
     let interp_size = if with_interp {
         spec.interp.len() + 1 // including NUL
     } else {
         0
     };
     // Empty DT_HASH: nbucket = 1, nchain = 1, bucket[0] = 0, chain[0] = 0.
-    let hash_off = align(interp_off + interp_size, 8);
+    let hash_off = (interp_off + interp_size).next_multiple_of(8);
     let hash_size = 4 * 4;
     // DT_SYMTAB with only the mandatory null symbol.
     let symtab_off = hash_off + hash_size;
     // DT_STRTAB with only the initial NUL.
-    let strtab_off = symtab_off + syment;
-    let dyn_off = align(strtab_off + 1, 8);
-    // DT_HASH, DT_STRTAB, DT_SYMTAB, DT_STRSZ, DT_SYMENT, DT_NULL
-    let dyn_size = 6 * dynent;
-    let stub_off = align(dyn_off + dyn_size, 16);
+    let strtab_off = symtab_off + class.syment();
+    let dyn_off = (strtab_off + 1).next_multiple_of(8);
+    let dynamic = [
+        Dyn {
+            d_tag: DT_HASH,
+            d_val: hash_off as u64,
+        },
+        Dyn {
+            d_tag: DT_STRTAB,
+            d_val: strtab_off as u64,
+        },
+        Dyn {
+            d_tag: DT_SYMTAB,
+            d_val: symtab_off as u64,
+        },
+        Dyn {
+            d_tag: DT_STRSZ,
+            d_val: 1,
+        },
+        Dyn {
+            d_tag: DT_SYMENT,
+            d_val: class.syment() as u64,
+        },
+    ];
+    // ... followed by the terminating DT_NULL
+    let dyn_size = (dynamic.len() + 1) * class.dynent();
+    let stub_off = (dyn_off + dyn_size).next_multiple_of(16);
     let total = stub_off + spec.stub.len();
 
     let mut out = Out {
         buf: Vec::with_capacity(total),
-        big: spec.endian == Endian::Big,
+        class,
+        endian: spec.endian,
     };
 
-    // ELF header
-    out.buf.extend_from_slice(b"\x7fELF");
-    out.buf.push(match class {
-        Class::Elf32 => 1,
-        Class::Elf64 => 2,
-    });
-    out.buf.push(match spec.endian {
-        Endian::Little => 1,
-        Endian::Big => 2,
-    });
-    out.buf.push(1); // EV_CURRENT
-    out.buf.push(0); // ELFOSABI_NONE
-    out.buf.push(0); // ABI version
-    out.buf.extend_from_slice(&[0; 7]); // padding
-    out.u16(ET_DYN);
-    out.u16(spec.e_machine);
-    out.u32(1); // e_version
-    out.word(class, stub_off as u64); // e_entry
-    out.word(class, phoff as u64); // e_phoff
-    out.word(class, 0); // e_shoff
-    out.u32(spec.e_flags);
-    out.u16(ehsize as u16);
-    out.u16(phentsize as u16);
-    out.u16(phnum as u16);
-    out.u16(0); // e_shentsize
-    out.u16(0); // e_shnum
-    out.u16(0); // e_shstrndx
-    debug_assert_eq!(out.buf.len(), ehsize);
-
-    let phdr = |out: &mut Out, p_type: u32, p_flags: u32, off: usize, size: usize, p_align: u64| {
-        out.u32(p_type);
-        if class == Class::Elf64 {
-            out.u32(p_flags);
-        }
-        out.word(class, off as u64); // p_offset
-        out.word(class, off as u64); // p_vaddr
-        out.word(class, off as u64); // p_paddr
-        out.word(class, size as u64); // p_filesz
-        out.word(class, size as u64); // p_memsz
-        if class == Class::Elf32 {
-            out.u32(p_flags);
-        }
-        out.word(class, p_align);
-    };
-
-    phdr(&mut out, PT_PHDR, PF_R, phoff, phnum * phentsize, 8);
-    phdr(&mut out, PT_LOAD, PF_R | PF_X, 0, total, 0x1000);
-    if with_interp {
-        phdr(&mut out, PT_INTERP, PF_R, interp_off, interp_size, 1);
+    Ehdr {
+        e_type: ET_DYN,
+        e_machine: spec.e_machine,
+        e_entry: stub_off as u64,
+        e_phoff: phoff as u64,
+        e_flags: spec.e_flags,
+        e_phnum: phnum as u16,
     }
-    phdr(&mut out, PT_DYNAMIC, PF_R, dyn_off, dyn_size, 8);
-    phdr(&mut out, PT_GNU_STACK, PF_R | PF_W, 0, 0, 0x10);
+    .write(&mut out);
+
+    let phdrs = [
+        Some(Phdr {
+            p_type: PT_PHDR,
+            p_flags: PF_R,
+            offset: phoff,
+            size: phnum * class.phentsize(),
+            p_align: 8,
+        }),
+        Some(Phdr {
+            p_type: PT_LOAD,
+            p_flags: PF_R | PF_X,
+            offset: 0,
+            size: total,
+            p_align: 0x1000,
+        }),
+        with_interp.then_some(Phdr {
+            p_type: PT_INTERP,
+            p_flags: PF_R,
+            offset: interp_off,
+            size: interp_size,
+            p_align: 1,
+        }),
+        Some(Phdr {
+            p_type: PT_DYNAMIC,
+            p_flags: PF_R,
+            offset: dyn_off,
+            size: dyn_size,
+            p_align: 8,
+        }),
+        Some(Phdr {
+            p_type: PT_GNU_STACK,
+            p_flags: PF_R | PF_W,
+            offset: 0,
+            size: 0,
+            p_align: 0x10,
+        }),
+    ];
+    for phdr in phdrs.iter().flatten() {
+        phdr.write(&mut out);
+    }
     debug_assert_eq!(out.buf.len(), interp_off);
 
     if with_interp {
         out.buf.extend_from_slice(spec.interp.as_bytes());
-        out.buf.push(0);
+        out.u8(0);
     }
 
     // Hash table: pad_to gets us there, then nbucket = nchain = 1
@@ -231,15 +373,9 @@ pub(crate) fn synthesize(spec: &ElfSpec, with_interp: bool) -> Vec<u8> {
     out.u32(1);
 
     out.pad_to(dyn_off);
-    let dyn_entry = |out: &mut Out, tag: u64, val: u64| {
-        out.word(class, tag);
-        out.word(class, val);
-    };
-    dyn_entry(&mut out, DT_HASH, hash_off as u64);
-    dyn_entry(&mut out, DT_STRTAB, strtab_off as u64);
-    dyn_entry(&mut out, DT_SYMTAB, symtab_off as u64);
-    dyn_entry(&mut out, DT_STRSZ, 1);
-    dyn_entry(&mut out, DT_SYMENT, syment as u64);
+    for entry in &dynamic {
+        entry.write(&mut out);
+    }
     // pad_to below writes the terminating all-zero DT_NULL entry.
 
     out.pad_to(stub_off);
@@ -343,9 +479,10 @@ mod tests {
         // e_phnum = 4: no PT_INTERP
         assert_eq!(&elf[56..58], 4u16.to_le_bytes());
         // and no interpreter path anywhere in the file
-        assert!(!elf
-            .windows(spec.interp.len())
-            .any(|w| w == spec.interp.as_bytes()));
+        assert!(
+            !elf.windows(spec.interp.len())
+                .any(|w| w == spec.interp.as_bytes())
+        );
 
         // entry still points at the stub at the end of the file
         let entry = u64::from_le_bytes(elf[24..32].try_into().unwrap()) as usize;

@@ -27,6 +27,8 @@ cli-logging = ["tracing", "dep:tracing-subscriber"]
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 tempfile = "3.5.0"
+tokio = { version = "1.52.3", features = ["fs", "macros"], default-features = false }
+tokio-util = { version = "0.7.18", features = ["rt"], default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61.0", features = [

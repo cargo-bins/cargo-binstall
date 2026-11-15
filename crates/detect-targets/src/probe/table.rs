@@ -6,8 +6,8 @@
 //! libc flavour. Stub encodings were produced by clang's integrated
 //! assembler and are committed as commented hex.
 
-use super::elf::{Class, ElfSpec, Endian};
 use super::Probe;
+use super::elf::{Class, ElfSpec, Endian};
 
 /// `mov eax, 231; xor edi, edi; syscall`
 const STUB_X86_64: &[u8] = &[0xb8, 0xe7, 0x00, 0x00, 0x00, 0x31, 0xff, 0x0f, 0x05];

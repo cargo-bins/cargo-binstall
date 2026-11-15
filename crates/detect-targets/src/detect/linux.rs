@@ -1,3 +1,5 @@
+use tokio_util::task::AbortOnDropHandle;
+
 use crate::probe::{self, ProbeResult};
 
 #[cfg(feature = "tracing")]
@@ -44,23 +46,28 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
         Libc::Gnu | Libc::Musl => {
             let gnu_target = format!("{cpu_arch}-unknown-linux-gnu{abi}");
 
-            let has_glibc = match probe::find(&gnu_target) {
-                Some(probe) => match probe.run().await {
-                    ProbeResult::Runnable => true,
-                    ProbeResult::NotRunnable => false,
-                    ProbeResult::Inconclusive(_err) => {
-                        #[cfg(feature = "tracing")]
-                        debug!(
-                            "glibc probe inconclusive ({_err}), \
-                             falling back to loader path detection"
-                        );
-                        fallback::has_glibc(cpu_arch, abi).await
-                    }
-                },
-                None => fallback::has_glibc(cpu_arch, abi).await,
+            let has_glibc = async {
+                match probe::find(&gnu_target) {
+                    Some(probe) => match probe.run().await {
+                        ProbeResult::Runnable => true,
+                        ProbeResult::NotRunnable => false,
+                        ProbeResult::Inconclusive(_err) => {
+                            #[cfg(feature = "tracing")]
+                            debug!(
+                                "glibc probe inconclusive ({_err}), \
+                                 falling back to loader path detection"
+                            );
+                            fallback::has_glibc(cpu_arch, abi).await
+                        }
+                    },
+                    None => fallback::has_glibc(cpu_arch, abi).await,
+                }
             };
 
-            let compat_targets = detect_extra_targets(cpu_arch, abi).await;
+            // The extra targets don't depend on the glibc probe, so run
+            // them alongside it.
+            let (has_glibc, compat_targets) =
+                tokio::join!(has_glibc, detect_extra_targets(cpu_arch, abi));
 
             [
                 has_glibc.then_some(gnu_target),
@@ -147,7 +154,8 @@ async fn detect_extra_targets(cpu_arch: &str, abi: &str) -> Vec<String> {
     // concurrently and collect the results in candidate order.
     let handles: Vec<_> = candidates
         .map(|&candidate| {
-            tokio::spawn(async move {
+            // Abort the probes still running if detection is cancelled.
+            AbortOnDropHandle::new(tokio::spawn(async move {
                 let probe = probe::find(candidate)?;
                 let result = if candidate.contains("-musl") {
                     probe.run_static().await
@@ -155,7 +163,7 @@ async fn detect_extra_targets(cpu_arch: &str, abi: &str) -> Vec<String> {
                     probe.run().await
                 };
                 matches!(result, ProbeResult::Runnable).then(|| candidate.to_string())
-            })
+            }))
         })
         .collect();
 
