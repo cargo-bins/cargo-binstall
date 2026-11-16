@@ -29,9 +29,15 @@ impl SignatureVerifier {
     }
 
     pub fn info(&self) -> Option<String> {
+        self.trusted_comment().map(Into::into)
+    }
+
+    /// The signature's trusted comment. It is only authenticated once the
+    /// data verifier has validated the data.
+    pub fn trusted_comment(&self) -> Option<&str> {
         match self {
             Self::Noop => None,
-            Self::Minisign(v) => Some(v.signature.trusted_comment().into()),
+            Self::Minisign(v) => Some(v.signature.trusted_comment()),
         }
     }
 }
