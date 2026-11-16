@@ -1173,7 +1173,9 @@ name = "detect-targets"
 version = "0.1.97"
 dependencies = [
  "guess_host_triple",
+ "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "windows-sys 0.61.2",
@@ -4898,6 +4900,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",
