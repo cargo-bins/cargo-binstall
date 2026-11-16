@@ -29,7 +29,13 @@
 //! # }
 //! ```
 
-use std::{fs::Permissions, io, os::unix::fs::PermissionsExt, path::Path, process::Stdio};
+use std::{
+    fs::Permissions,
+    io,
+    os::unix::fs::PermissionsExt,
+    path::Path,
+    process::{Output, Stdio},
+};
 
 use tokio::{
     fs,
@@ -121,35 +127,52 @@ impl Probe {
     }
 
     async fn exec(&self, executable: Vec<u8>) -> ProbeResult {
-        // Serializes the write-then-spawn sections of concurrent
-        // probes. A fork performed while another probe's file is
-        // still open for writing leaves a copy of the write fd in the
-        // forked child until its execve completes, making the exec of
-        // that other probe fail with ETXTBSY. Linux 6.18 lets a memfd
-        // run while it is open for writing, but older kernels may not,
-        // and the temporary directory fallback needs the lock anyway.
-        static EXEC_LOCK: Mutex<()> = Mutex::const_new(());
-
-        let spawned = {
-            let _guard = EXEC_LOCK.lock().await;
-
-            match self.spawn_from_memfd(&executable).await {
-                Some(spawned) => spawned,
-                None => match self.spawn_from_tempdir(executable).await {
-                    Ok(spawned) => spawned,
-                    Err(err) => return ProbeResult::Inconclusive(err),
-                },
-            }
-        };
-
-        let result = match spawned {
-            Ok(child) => child.wait_with_output().await,
-            Err(err) => Err(err),
+        let Some(result) = self.exec_from_memfd(&executable).await else {
+            return match self.exec_from_tempdir(executable).await {
+                Ok(result) => self.classify(result),
+                Err(err) => ProbeResult::Inconclusive(err),
+            };
         };
 
         match result {
-            // The stub only ever calls exit_group(0); any output or
-            // unclean exit is the loader complaining.
+            // The probe started, but the loader or binfmt handler
+            // failed. Some of them look the program up by path, which a
+            // memfd doesn't have: gcompat's `ld-linux-x86-64.so.2` shim
+            // reports "cannot load /memfd:... (deleted)", and a binfmt
+            // handler without the `O` flag is handed a `/proc/self/fd`
+            // path that is closed once the exec is done. Real binaries
+            // run from disk, so check from disk before saying no.
+            Ok(out) if !Self::exited_cleanly(&out) => {
+                #[cfg(feature = "tracing")]
+                debug!(
+                    "probe {}: failed from a memfd ({:?}, stderr={:?}), retrying from disk",
+                    self.target,
+                    out.status,
+                    String::from_utf8_lossy(&out.stderr),
+                );
+                match self.exec_from_tempdir(executable).await {
+                    Ok(result) => self.classify(result),
+                    // Nothing could be written to disk, so the memfd's
+                    // answer is the best there is.
+                    Err(_err) => {
+                        #[cfg(feature = "tracing")]
+                        debug!("probe {}: can't retry from disk: {_err}", self.target);
+                        self.classify(Ok(out))
+                    }
+                }
+            }
+            result => self.classify(result),
+        }
+    }
+
+    /// The stub only ever calls exit_group(0); any output or unclean
+    /// exit is the loader complaining.
+    fn exited_cleanly(out: &Output) -> bool {
+        out.status.success() && out.stdout.is_empty() && out.stderr.is_empty()
+    }
+
+    fn classify(&self, result: io::Result<Output>) -> ProbeResult {
+        match result {
             Ok(out) => {
                 #[cfg(feature = "tracing")]
                 debug!(
@@ -159,7 +182,7 @@ impl Probe {
                     String::from_utf8_lossy(&out.stdout),
                     String::from_utf8_lossy(&out.stderr),
                 );
-                if out.status.success() && out.stdout.is_empty() && out.stderr.is_empty() {
+                if Self::exited_cleanly(&out) {
                     ProbeResult::Runnable
                 } else {
                     ProbeResult::NotRunnable
@@ -183,19 +206,28 @@ impl Probe {
         }
     }
 
-    /// Spawn the probe from a sealed memfd, or return `None` if that
-    /// isn't possible here and a temporary directory should be tried.
-    async fn spawn_from_memfd(&self, executable: &[u8]) -> Option<io::Result<Child>> {
-        let memfd = match SealedExecutable::new(self.target, executable) {
-            Ok(memfd) => memfd,
-            Err(_err) => {
-                #[cfg(feature = "tracing")]
-                debug!("probe {}: memfd unavailable: {_err}", self.target);
-                return None;
-            }
+    /// Run the probe from a sealed memfd, or return `None` if that isn't
+    /// possible here and a temporary directory should be tried.
+    async fn exec_from_memfd(&self, executable: &[u8]) -> Option<io::Result<Output>> {
+        let spawned = {
+            let _guard = EXEC_LOCK.lock().await;
+
+            let memfd = match SealedExecutable::new(self.target, executable) {
+                Ok(memfd) => memfd,
+                Err(_err) => {
+                    #[cfg(feature = "tracing")]
+                    debug!("probe {}: memfd unavailable: {_err}", self.target);
+                    return None;
+                }
+            };
+
+            // The spawn only returns once the child has exec'd, so the
+            // memfd can be dropped afterwards.
+            spawn(memfd.path()).await
         };
 
-        match spawn(memfd.path()).await {
+        match spawned {
+            Ok(child) => Some(child.wait_with_output().await),
             // EACCES: the kernel or an LSM refused to execute a memfd,
             // but a file on disk may still be allowed.
             Err(err) if err.raw_os_error() == Some(13) => {
@@ -203,31 +235,45 @@ impl Probe {
                 debug!("probe {}: memfd not executable: {err}", self.target);
                 None
             }
-            // The spawn only returns once the child has exec'd, so the
-            // memfd can be dropped now.
-            spawned => Some(spawned),
+            Err(err) => Some(Err(err)),
         }
     }
 
-    /// Spawn the probe from a file in a fresh temporary directory.
+    /// Run the probe from a file in a fresh temporary directory.
     ///
     /// The outer error means the file could not be written, and so
     /// nothing was tested.
-    async fn spawn_from_tempdir(&self, executable: Vec<u8>) -> io::Result<io::Result<Child>> {
+    async fn exec_from_tempdir(&self, executable: Vec<u8>) -> io::Result<io::Result<Output>> {
         let progdir = tempfile::tempdir()?;
         let prog = progdir.path().join(self.target);
 
-        // `tokio::fs` runs these on the blocking pool, and closes the
-        // file before returning, so the spawn below can't race with
-        // our own write fd.
-        fs::write(&prog, executable).await?;
-        fs::set_permissions(&prog, Permissions::from_mode(0o755)).await?;
+        let spawned = {
+            let _guard = EXEC_LOCK.lock().await;
 
-        // The spawn only returns once the child has exec'd, so the
-        // directory can be removed now.
-        Ok(spawn(&prog).await)
+            // `tokio::fs` runs these on the blocking pool, and closes
+            // the file before returning, so the spawn below can't race
+            // with our own write fd.
+            fs::write(&prog, executable).await?;
+            fs::set_permissions(&prog, Permissions::from_mode(0o755)).await?;
+
+            spawn(&prog).await
+        };
+
+        Ok(match spawned {
+            Ok(child) => child.wait_with_output().await,
+            Err(err) => Err(err),
+        })
     }
 }
+
+/// Serializes the write-then-spawn sections of concurrent probes. A fork
+/// performed while another probe's file is still open for writing leaves
+/// a copy of the write fd in the forked child until its execve
+/// completes, making the exec of that other probe fail with ETXTBSY.
+/// Linux 6.18 lets a memfd run while it is open for writing, but older
+/// kernels may not, and the temporary directory fallback needs the lock
+/// anyway.
+static EXEC_LOCK: Mutex<()> = Mutex::const_new(());
 
 async fn spawn(prog: &Path) -> io::Result<Child> {
     let mut command = Command::new(prog);
