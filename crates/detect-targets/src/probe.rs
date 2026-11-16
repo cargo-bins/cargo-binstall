@@ -29,16 +29,22 @@
 //! # }
 //! ```
 
-use std::{fs::Permissions, io, os::unix::fs::PermissionsExt, process::Stdio};
+use std::{fs::Permissions, io, os::unix::fs::PermissionsExt, path::Path, process::Stdio};
 
-use tokio::{fs, process::Command, sync::Mutex};
+use tokio::{
+    fs,
+    process::{Child, Command},
+    sync::Mutex,
+};
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
 mod elf;
+mod memfd;
 mod table;
 
 use elf::ElfSpec;
+use memfd::SealedExecutable;
 
 /// A loader probe attesting one Rust target triple.
 pub struct Probe {
@@ -58,7 +64,8 @@ pub enum ProbeResult {
     /// binaries for this target do not run here.
     NotRunnable,
     /// The environment prevented the test from happening at all, e.g.
-    /// a `noexec` temporary directory, SELinux, or seccomp. Nothing
+    /// memfds are disabled and the temporary directory is `noexec`, or
+    /// SELinux or seccomp blocked the exec. Nothing
     /// can be concluded about the target; callers should fall back to
     /// other detection methods.
     Inconclusive(io::Error),
@@ -85,8 +92,9 @@ impl Probe {
         elf::synthesize(&self.spec, false)
     }
 
-    /// Write the dynamically-linked probe executable to a temporary
-    /// directory and run it.
+    /// Run the dynamically-linked probe executable.
+    ///
+    /// See [`Self::run_static`] for where the executable is stored.
     ///
     /// [`ProbeResult::Runnable`] proves both that the kernel can
     /// execute this architecture and that the dynamic loader of this
@@ -96,8 +104,12 @@ impl Probe {
         self.exec(self.synthesize()).await
     }
 
-    /// Write the static probe executable to a temporary directory and
-    /// run it.
+    /// Run the static probe executable.
+    ///
+    /// The executable is written to a sealed `memfd` and run through
+    /// `/proc/self/fd`. If memfds are unavailable, can't be executed, or
+    /// `/proc` isn't mounted, it is written to a temporary directory
+    /// instead.
     ///
     /// [`ProbeResult::Runnable`] proves only that the kernel can
     /// execute binaries of this architecture — natively, via compat
@@ -113,49 +125,20 @@ impl Probe {
         // probes. A fork performed while another probe's file is
         // still open for writing leaves a copy of the write fd in the
         // forked child until its execve completes, making the exec of
-        // that other probe fail with ETXTBSY.
+        // that other probe fail with ETXTBSY. Linux 6.18 lets a memfd
+        // run while it is open for writing, but older kernels may not,
+        // and the temporary directory fallback needs the lock anyway.
         static EXEC_LOCK: Mutex<()> = Mutex::const_new(());
-
-        let progdir = match tempfile::tempdir() {
-            Ok(dir) => dir,
-            Err(err) => return ProbeResult::Inconclusive(err),
-        };
-        let prog = progdir.path().join(self.target);
 
         let spawned = {
             let _guard = EXEC_LOCK.lock().await;
 
-            // `tokio::fs` runs these on the blocking pool, and closes the
-            // file before returning, so the spawn below can't race with
-            // our own write fd.
-            let setup = async {
-                fs::write(&prog, executable).await?;
-                fs::set_permissions(&prog, Permissions::from_mode(0o755)).await
-            };
-            if let Err(err) = setup.await {
-                return ProbeResult::Inconclusive(err);
-            }
-
-            let mut command = Command::new(&prog);
-            command
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-
-            // The lock does not cover forks performed elsewhere in
-            // the process, so a residual ETXTBSY is still possible;
-            // it resolves as soon as the offending child execs, so
-            // retry after yielding.
-            let mut attempts = 0;
-            loop {
-                match command.spawn() {
-                    // ETXTBSY
-                    Err(err) if err.raw_os_error() == Some(26) && attempts < 10 => {
-                        attempts += 1;
-                        tokio::task::yield_now().await;
-                    }
-                    spawned => break spawned,
-                }
+            match self.spawn_from_memfd(&executable).await {
+                Some(spawned) => spawned,
+                None => match self.spawn_from_tempdir(executable).await {
+                    Ok(spawned) => spawned,
+                    Err(err) => return ProbeResult::Inconclusive(err),
+                },
             }
         };
 
@@ -186,8 +169,9 @@ impl Probe {
                 #[cfg(feature = "tracing")]
                 debug!("probe {}: exec failed: {err:?}", self.target);
                 match err.raw_os_error() {
-                    // ENOENT: we just wrote the file, so the missing
-                    // thing is the PT_INTERP loader.
+                    // ENOENT: we just wrote the file (and checked that
+                    // its `/proc` path resolves), so the missing thing
+                    // is the PT_INTERP loader.
                     Some(2) => ProbeResult::NotRunnable,
                     // ENOEXEC: no binfmt handler for this architecture.
                     Some(8) => ProbeResult::NotRunnable,
@@ -196,6 +180,74 @@ impl Probe {
                     _ => ProbeResult::Inconclusive(err),
                 }
             }
+        }
+    }
+
+    /// Spawn the probe from a sealed memfd, or return `None` if that
+    /// isn't possible here and a temporary directory should be tried.
+    async fn spawn_from_memfd(&self, executable: &[u8]) -> Option<io::Result<Child>> {
+        let memfd = match SealedExecutable::new(self.target, executable) {
+            Ok(memfd) => memfd,
+            Err(_err) => {
+                #[cfg(feature = "tracing")]
+                debug!("probe {}: memfd unavailable: {_err}", self.target);
+                return None;
+            }
+        };
+
+        match spawn(memfd.path()).await {
+            // EACCES: the kernel or an LSM refused to execute a memfd,
+            // but a file on disk may still be allowed.
+            Err(err) if err.raw_os_error() == Some(13) => {
+                #[cfg(feature = "tracing")]
+                debug!("probe {}: memfd not executable: {err}", self.target);
+                None
+            }
+            // The spawn only returns once the child has exec'd, so the
+            // memfd can be dropped now.
+            spawned => Some(spawned),
+        }
+    }
+
+    /// Spawn the probe from a file in a fresh temporary directory.
+    ///
+    /// The outer error means the file could not be written, and so
+    /// nothing was tested.
+    async fn spawn_from_tempdir(&self, executable: Vec<u8>) -> io::Result<io::Result<Child>> {
+        let progdir = tempfile::tempdir()?;
+        let prog = progdir.path().join(self.target);
+
+        // `tokio::fs` runs these on the blocking pool, and closes the
+        // file before returning, so the spawn below can't race with
+        // our own write fd.
+        fs::write(&prog, executable).await?;
+        fs::set_permissions(&prog, Permissions::from_mode(0o755)).await?;
+
+        // The spawn only returns once the child has exec'd, so the
+        // directory can be removed now.
+        Ok(spawn(&prog).await)
+    }
+}
+
+async fn spawn(prog: &Path) -> io::Result<Child> {
+    let mut command = Command::new(prog);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // The lock does not cover forks performed elsewhere in the
+    // process, so a residual ETXTBSY is still possible; it resolves
+    // as soon as the offending child execs, so retry after yielding.
+    let mut attempts = 0;
+    loop {
+        match command.spawn() {
+            // ETXTBSY
+            Err(err) if err.raw_os_error() == Some(26) && attempts < 10 => {
+                attempts += 1;
+                tokio::task::yield_now().await;
+            }
+            spawned => break spawned,
         }
     }
 }
