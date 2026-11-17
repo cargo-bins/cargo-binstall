@@ -40,7 +40,7 @@ use std::{
 use tokio::{
     fs,
     process::{Child, Command},
-    sync::Mutex,
+    sync::RwLock,
 };
 #[cfg(feature = "tracing")]
 use tracing::debug;
@@ -127,8 +127,8 @@ impl Probe {
     }
 
     async fn exec(&self, executable: Vec<u8>) -> ProbeResult {
-        let Some(result) = self.exec_from_memfd(&executable).await else {
-            return match self.exec_from_tempdir(executable).await {
+        let Some(result) = exec_from_memfd(self.target, &executable).await else {
+            return match exec_from_tempdir(self.target, executable).await {
                 Ok(result) => self.classify(result),
                 Err(err) => ProbeResult::Inconclusive(err),
             };
@@ -150,7 +150,7 @@ impl Probe {
                     out.status,
                     String::from_utf8_lossy(&out.stderr),
                 );
-                match self.exec_from_tempdir(executable).await {
+                match exec_from_tempdir(self.target, executable).await {
                     Ok(result) => self.classify(result),
                     // Nothing could be written to disk, so the memfd's
                     // answer is the best there is.
@@ -205,75 +205,81 @@ impl Probe {
             }
         }
     }
+}
 
-    /// Run the probe from a sealed memfd, or return `None` if that isn't
-    /// possible here and a temporary directory should be tried.
-    async fn exec_from_memfd(&self, executable: &[u8]) -> Option<io::Result<Output>> {
-        let spawned = {
-            let _guard = EXEC_LOCK.lock().await;
+/// Serializes writing a probe to disk against every probe's spawn.
+///
+/// A fork performed while a probe file is still open for writing leaves
+/// a copy of the write fd in the forked child until its execve
+/// completes, making the exec of that file fail with ETXTBSY. `CLOEXEC`
+/// can't prevent this: it closes the copy at the child's exec, not at
+/// its fork.
+///
+/// A memfd doesn't have this problem. The kernel only takes write access
+/// to an inode when it is opened through `open(2)`, and `memfd_create`
+/// doesn't go through it, so a copy of a memfd's fd never makes an exec
+/// fail. Memfd probes therefore take the lock shared, just so their
+/// forks stay out of a temporary-directory probe's write window, while
+/// temporary-directory probes take it exclusively.
+static EXEC_LOCK: RwLock<()> = RwLock::const_new(());
 
-            let memfd = match SealedExecutable::new(self.target, executable) {
-                Ok(memfd) => memfd,
-                Err(_err) => {
-                    #[cfg(feature = "tracing")]
-                    debug!("probe {}: memfd unavailable: {_err}", self.target);
-                    return None;
-                }
-            };
-
-            // The spawn only returns once the child has exec'd, so the
-            // memfd can be dropped afterwards.
-            spawn(memfd.path()).await
-        };
-
-        match spawned {
-            Ok(child) => Some(child.wait_with_output().await),
-            // EACCES: the kernel or an LSM refused to execute a memfd,
-            // but a file on disk may still be allowed.
-            Err(err) if err.raw_os_error() == Some(13) => {
-                #[cfg(feature = "tracing")]
-                debug!("probe {}: memfd not executable: {err}", self.target);
-                None
-            }
-            Err(err) => Some(Err(err)),
+/// Run the probe from a sealed memfd, or return `None` if that isn't
+/// possible here and a temporary directory should be tried.
+async fn exec_from_memfd(target: &str, executable: &[u8]) -> Option<io::Result<Output>> {
+    let memfd = match SealedExecutable::new(target, executable) {
+        Ok(memfd) => memfd,
+        Err(_err) => {
+            #[cfg(feature = "tracing")]
+            debug!("probe {target}: memfd unavailable: {_err}");
+            return None;
         }
-    }
+    };
 
-    /// Run the probe from a file in a fresh temporary directory.
-    ///
-    /// The outer error means the file could not be written, and so
-    /// nothing was tested.
-    async fn exec_from_tempdir(&self, executable: Vec<u8>) -> io::Result<io::Result<Output>> {
-        let progdir = tempfile::tempdir()?;
-        let prog = progdir.path().join(self.target);
+    let spawned = {
+        let _guard = EXEC_LOCK.read().await;
+        spawn(memfd.path()).await
+    };
+    // The spawn only returns once the child has exec'd.
+    drop(memfd);
 
-        let spawned = {
-            let _guard = EXEC_LOCK.lock().await;
-
-            // `tokio::fs` runs these on the blocking pool, and closes
-            // the file before returning, so the spawn below can't race
-            // with our own write fd.
-            fs::write(&prog, executable).await?;
-            fs::set_permissions(&prog, Permissions::from_mode(0o755)).await?;
-
-            spawn(&prog).await
-        };
-
-        Ok(match spawned {
-            Ok(child) => child.wait_with_output().await,
-            Err(err) => Err(err),
-        })
+    match spawned {
+        Ok(child) => Some(child.wait_with_output().await),
+        // EACCES: the kernel or an LSM refused to execute a memfd, but a
+        // file on disk may still be allowed.
+        Err(err) if err.raw_os_error() == Some(13) => {
+            #[cfg(feature = "tracing")]
+            debug!("probe {target}: memfd not executable: {err}");
+            None
+        }
+        Err(err) => Some(Err(err)),
     }
 }
 
-/// Serializes the write-then-spawn sections of concurrent probes. A fork
-/// performed while another probe's file is still open for writing leaves
-/// a copy of the write fd in the forked child until its execve
-/// completes, making the exec of that other probe fail with ETXTBSY.
-/// Linux 6.18 lets a memfd run while it is open for writing, but older
-/// kernels may not, and the temporary directory fallback needs the lock
-/// anyway.
-static EXEC_LOCK: Mutex<()> = Mutex::const_new(());
+/// Run the probe from a file in a fresh temporary directory.
+///
+/// The outer error means the file could not be written, and so nothing
+/// was tested.
+async fn exec_from_tempdir(target: &str, executable: Vec<u8>) -> io::Result<io::Result<Output>> {
+    let progdir = tempfile::tempdir()?;
+    let prog = progdir.path().join(target);
+
+    let spawned = {
+        let _guard = EXEC_LOCK.write().await;
+
+        // `tokio::fs` runs these on the blocking pool, and closes the
+        // file before returning, so the spawn below can't race with our
+        // own write fd.
+        fs::write(&prog, executable).await?;
+        fs::set_permissions(&prog, Permissions::from_mode(0o755)).await?;
+
+        spawn(&prog).await
+    };
+
+    Ok(match spawned {
+        Ok(child) => child.wait_with_output().await,
+        Err(err) => Err(err),
+    })
+}
 
 async fn spawn(prog: &Path) -> io::Result<Child> {
     let mut command = Command::new(prog);
@@ -283,8 +289,9 @@ async fn spawn(prog: &Path) -> io::Result<Child> {
         .stderr(Stdio::piped());
 
     // The lock does not cover forks performed elsewhere in the
-    // process, so a residual ETXTBSY is still possible; it resolves
-    // as soon as the offending child execs, so retry after yielding.
+    // process, so a residual ETXTBSY is still possible for a probe on
+    // disk; it resolves as soon as the offending child execs, so retry
+    // after yielding.
     let mut attempts = 0;
     loop {
         match command.spawn() {

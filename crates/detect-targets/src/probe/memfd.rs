@@ -8,7 +8,7 @@ use std::{
 };
 
 use rustix::{
-    fs::{MemfdFlags, Mode, OFlags, SealFlags, fcntl_add_seals, memfd_create, open},
+    fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create},
     io::Errno,
 };
 
@@ -50,22 +50,15 @@ impl SealedExecutable {
             res => res,
         }?;
 
-        // Reopen read-only and close the writable fd: some kernels refuse
-        // to execute a file that is open for writing (ETXTBSY). The probe
-        // runs through this same `/proc` path, so this also checks that
-        // `/proc` is mounted, and a later ENOENT can only mean a missing
-        // loader.
-        let fd = open(
-            fd_path(&file),
-            OFlags::RDONLY | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?;
-        drop(file);
+        // The probe runs through this `/proc` path, so check that it
+        // resolves: then a later ENOENT can only mean a missing loader.
+        // The writable fd itself doesn't stop the exec, as `EXEC_LOCK`
+        // explains.
+        let fd = OwnedFd::from(file);
+        let path = fd_path(&fd);
+        std::fs::metadata(&path)?;
 
-        Ok(Self {
-            path: fd_path(&fd),
-            _fd: fd,
-        })
+        Ok(Self { path, _fd: fd })
     }
 
     pub(super) fn path(&self) -> &Path {
@@ -95,5 +88,33 @@ mod tests {
 
         let err = file.set_len(0).unwrap_err();
         assert_eq!(err.raw_os_error(), Some(Errno::PERM.raw_os_error()));
+    }
+
+    /// A child holding a copy of the memfd's writable fd, as a concurrent
+    /// fork would, must not make the exec fail with ETXTBSY. This is why
+    /// memfd probes only take `EXEC_LOCK` shared.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    #[test]
+    fn inherited_writable_fd_does_not_block_exec() {
+        #[cfg(target_arch = "x86_64")]
+        let target = "x86_64-unknown-linux-musl";
+        #[cfg(target_arch = "aarch64")]
+        let target = "aarch64-unknown-linux-musl";
+
+        let probe = super::super::find(target).unwrap();
+        let exe = SealedExecutable::new(target, &probe.synthesize_static()).unwrap();
+
+        // `dup` drops `CLOEXEC`, so `sleep` keeps the copy across its exec.
+        let copy = rustix::io::dup(&exe._fd).unwrap();
+        let mut holder = std::process::Command::new("sleep")
+            .arg("10")
+            .spawn()
+            .unwrap();
+        drop(copy);
+
+        let status = std::process::Command::new(exe.path()).status();
+        holder.kill().unwrap();
+        holder.wait().unwrap();
+        assert!(status.unwrap().success());
     }
 }
