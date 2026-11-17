@@ -237,7 +237,7 @@ async fn exec_from_memfd(target: &str, executable: &[u8]) -> Option<io::Result<O
 
     let spawned = {
         let _guard = EXEC_LOCK.read().await;
-        spawn(memfd.path()).await
+        spawn(memfd.path())
     };
     // The spawn only returns once the child has exec'd.
     drop(memfd);
@@ -272,7 +272,21 @@ async fn exec_from_tempdir(target: &str, executable: Vec<u8>) -> io::Result<io::
         fs::write(&prog, executable).await?;
         fs::set_permissions(&prog, Permissions::from_mode(0o755)).await?;
 
-        spawn(&prog).await
+        // The lock does not cover forks performed elsewhere in the
+        // process, so a residual ETXTBSY is still possible; it resolves
+        // as soon as the offending child execs, so retry after yielding.
+        // Memfd probes don't need this, as `EXEC_LOCK` explains.
+        let mut attempts = 0;
+        loop {
+            match spawn(&prog) {
+                // ETXTBSY
+                Err(err) if err.raw_os_error() == Some(26) && attempts < 10 => {
+                    attempts += 1;
+                    tokio::task::yield_now().await;
+                }
+                spawned => break spawned,
+            }
+        }
     };
 
     Ok(match spawned {
@@ -281,28 +295,12 @@ async fn exec_from_tempdir(target: &str, executable: Vec<u8>) -> io::Result<io::
     })
 }
 
-async fn spawn(prog: &Path) -> io::Result<Child> {
-    let mut command = Command::new(prog);
-    command
+fn spawn(prog: &Path) -> io::Result<Child> {
+    Command::new(prog)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    // The lock does not cover forks performed elsewhere in the
-    // process, so a residual ETXTBSY is still possible for a probe on
-    // disk; it resolves as soon as the offending child execs, so retry
-    // after yielding.
-    let mut attempts = 0;
-    loop {
-        match command.spawn() {
-            // ETXTBSY
-            Err(err) if err.raw_os_error() == Some(26) && attempts < 10 => {
-                attempts += 1;
-                tokio::task::yield_now().await;
-            }
-            spawned => break spawned,
-        }
-    }
+        .stderr(Stdio::piped())
+        .spawn()
 }
 
 #[cfg(test)]

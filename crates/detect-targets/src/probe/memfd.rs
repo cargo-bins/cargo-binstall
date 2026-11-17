@@ -5,6 +5,7 @@ use std::{
     io::{self, Write},
     os::fd::{AsRawFd, OwnedFd},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering::Relaxed},
 };
 
 use rustix::{
@@ -34,21 +35,28 @@ impl SealedExecutable {
         // and reject it with EINVAL, but their memfds are always
         // executable. With `vm.memfd_noexec = 2` both calls fail, and the
         // caller falls back to a temporary directory.
-        let fd = match memfd_create(name, flags | MemfdFlags::EXEC) {
-            Err(Errno::INVAL) => memfd_create(name, flags),
-            res => res,
-        }?;
+        //
+        // Whether the kernel knows the flag is remembered, so only the
+        // first probe pays for the rejected call.
+        static MFD_EXEC_KNOWN: AtomicBool = AtomicBool::new(true);
+        let fd = with_flag_fallback(
+            &MFD_EXEC_KNOWN,
+            || memfd_create(name, flags | MemfdFlags::EXEC),
+            || memfd_create(name, flags),
+        )?;
         let mut file = File::from(fd);
         file.write_all(contents)?;
 
         // From here on the contents and size can't change. `F_SEAL_EXEC`
         // (Linux 6.3) also freezes the mode bits; older kernels reject it
         // with EINVAL.
+        static F_SEAL_EXEC_KNOWN: AtomicBool = AtomicBool::new(true);
         let seals = SealFlags::SEAL | SealFlags::SHRINK | SealFlags::GROW | SealFlags::WRITE;
-        match fcntl_add_seals(&file, seals | SealFlags::EXEC) {
-            Err(Errno::INVAL) => fcntl_add_seals(&file, seals),
-            res => res,
-        }?;
+        with_flag_fallback(
+            &F_SEAL_EXEC_KNOWN,
+            || fcntl_add_seals(&file, seals | SealFlags::EXEC),
+            || fcntl_add_seals(&file, seals),
+        )?;
 
         // The probe runs through this `/proc` path, so check that it
         // resolves: then a later ENOENT can only mean a missing loader.
@@ -66,6 +74,23 @@ impl SealedExecutable {
     }
 }
 
+/// Call `with_flag` while `known` says the kernel accepts the flag.
+/// Once it is rejected with EINVAL, record that and call `without_flag`
+/// from then on.
+fn with_flag_fallback<T>(
+    known: &AtomicBool,
+    with_flag: impl FnOnce() -> rustix::io::Result<T>,
+    without_flag: impl FnOnce() -> rustix::io::Result<T>,
+) -> rustix::io::Result<T> {
+    if known.load(Relaxed) {
+        match with_flag() {
+            Err(Errno::INVAL) => known.store(false, Relaxed),
+            res => return res,
+        }
+    }
+    without_flag()
+}
+
 fn fd_path(fd: &impl AsRawFd) -> PathBuf {
     format!("/proc/self/fd/{}", fd.as_raw_fd()).into()
 }
@@ -75,6 +100,25 @@ mod tests {
     use std::fs::OpenOptions;
 
     use super::*;
+
+    #[test]
+    fn rejected_flag_is_remembered() {
+        let known = AtomicBool::new(true);
+
+        let res = with_flag_fallback(&known, || Err::<u8, _>(Errno::INVAL), || Ok(1));
+        assert_eq!(res, Ok(1));
+        assert!(!known.load(Relaxed));
+
+        // Not tried again once it has been rejected.
+        let res = with_flag_fallback(&known, || unreachable!(), || Ok(2));
+        assert_eq!(res, Ok(2));
+
+        // Other errors are returned as-is, and don't change the cache.
+        let known = AtomicBool::new(true);
+        let res = with_flag_fallback(&known, || Err::<u8, _>(Errno::ACCESS), || unreachable!());
+        assert_eq!(res, Err(Errno::ACCESS));
+        assert!(known.load(Relaxed));
+    }
 
     #[test]
     fn sealed_executable_cannot_be_modified() {
