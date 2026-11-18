@@ -1173,6 +1173,7 @@ name = "detect-targets"
 version = "0.1.97"
 dependencies = [
  "guess_host_triple",
+ "rustix",
  "tempfile",
  "tokio",
  "tokio-util",

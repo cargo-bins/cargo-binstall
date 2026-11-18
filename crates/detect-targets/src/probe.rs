@@ -29,16 +29,28 @@
 //! # }
 //! ```
 
-use std::{fs::Permissions, io, os::unix::fs::PermissionsExt, process::Stdio};
+use std::{
+    fs::Permissions,
+    io,
+    os::unix::fs::PermissionsExt,
+    path::Path,
+    process::{Output, Stdio},
+};
 
-use tokio::{fs, process::Command, sync::Mutex};
+use tokio::{
+    fs,
+    process::{Child, Command},
+    sync::RwLock,
+};
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
 mod elf;
+mod memfd;
 mod table;
 
 use elf::ElfSpec;
+use memfd::SealedExecutable;
 
 /// A loader probe attesting one Rust target triple.
 pub struct Probe {
@@ -58,7 +70,8 @@ pub enum ProbeResult {
     /// binaries for this target do not run here.
     NotRunnable,
     /// The environment prevented the test from happening at all, e.g.
-    /// a `noexec` temporary directory, SELinux, or seccomp. Nothing
+    /// memfds are disabled and the temporary directory is `noexec`, or
+    /// SELinux or seccomp blocked the exec. Nothing
     /// can be concluded about the target; callers should fall back to
     /// other detection methods.
     Inconclusive(io::Error),
@@ -85,8 +98,9 @@ impl Probe {
         elf::synthesize(&self.spec, false)
     }
 
-    /// Write the dynamically-linked probe executable to a temporary
-    /// directory and run it.
+    /// Run the dynamically-linked probe executable.
+    ///
+    /// See [`Self::run_static`] for where the executable is stored.
     ///
     /// [`ProbeResult::Runnable`] proves both that the kernel can
     /// execute this architecture and that the dynamic loader of this
@@ -96,8 +110,12 @@ impl Probe {
         self.exec(self.synthesize()).await
     }
 
-    /// Write the static probe executable to a temporary directory and
-    /// run it.
+    /// Run the static probe executable.
+    ///
+    /// The executable is written to a sealed `memfd` and run through
+    /// `/proc/self/fd`. If memfds are unavailable, can't be executed, or
+    /// `/proc` isn't mounted, it is written to a temporary directory
+    /// instead.
     ///
     /// [`ProbeResult::Runnable`] proves only that the kernel can
     /// execute binaries of this architecture — natively, via compat
@@ -109,64 +127,52 @@ impl Probe {
     }
 
     async fn exec(&self, executable: Vec<u8>) -> ProbeResult {
-        // Serializes the write-then-spawn sections of concurrent
-        // probes. A fork performed while another probe's file is
-        // still open for writing leaves a copy of the write fd in the
-        // forked child until its execve completes, making the exec of
-        // that other probe fail with ETXTBSY.
-        static EXEC_LOCK: Mutex<()> = Mutex::const_new(());
-
-        let progdir = match tempfile::tempdir() {
-            Ok(dir) => dir,
-            Err(err) => return ProbeResult::Inconclusive(err),
-        };
-        let prog = progdir.path().join(self.target);
-
-        let spawned = {
-            let _guard = EXEC_LOCK.lock().await;
-
-            // `tokio::fs` runs these on the blocking pool, and closes the
-            // file before returning, so the spawn below can't race with
-            // our own write fd.
-            let setup = async {
-                fs::write(&prog, executable).await?;
-                fs::set_permissions(&prog, Permissions::from_mode(0o755)).await
+        let Some(result) = exec_from_memfd(self.target, &executable).await else {
+            return match exec_from_tempdir(self.target, executable).await {
+                Ok(result) => self.classify(result),
+                Err(err) => ProbeResult::Inconclusive(err),
             };
-            if let Err(err) = setup.await {
-                return ProbeResult::Inconclusive(err);
-            }
-
-            let mut command = Command::new(&prog);
-            command
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-
-            // The lock does not cover forks performed elsewhere in
-            // the process, so a residual ETXTBSY is still possible;
-            // it resolves as soon as the offending child execs, so
-            // retry after yielding.
-            let mut attempts = 0;
-            loop {
-                match command.spawn() {
-                    // ETXTBSY
-                    Err(err) if err.raw_os_error() == Some(26) && attempts < 10 => {
-                        attempts += 1;
-                        tokio::task::yield_now().await;
-                    }
-                    spawned => break spawned,
-                }
-            }
-        };
-
-        let result = match spawned {
-            Ok(child) => child.wait_with_output().await,
-            Err(err) => Err(err),
         };
 
         match result {
-            // The stub only ever calls exit_group(0); any output or
-            // unclean exit is the loader complaining.
+            // The probe started, but the loader or binfmt handler
+            // failed. Some of them look the program up by path, which a
+            // memfd doesn't have: gcompat's `ld-linux-x86-64.so.2` shim
+            // reports "cannot load /memfd:... (deleted)", and a binfmt
+            // handler without the `O` flag is handed a `/proc/self/fd`
+            // path that is closed once the exec is done. Real binaries
+            // run from disk, so check from disk before saying no.
+            Ok(out) if !Self::exited_cleanly(&out) => {
+                #[cfg(feature = "tracing")]
+                debug!(
+                    "probe {}: failed from a memfd ({:?}, stderr={:?}), retrying from disk",
+                    self.target,
+                    out.status,
+                    String::from_utf8_lossy(&out.stderr),
+                );
+                match exec_from_tempdir(self.target, executable).await {
+                    Ok(result) => self.classify(result),
+                    // Nothing could be written to disk, so the memfd's
+                    // answer is the best there is.
+                    Err(_err) => {
+                        #[cfg(feature = "tracing")]
+                        debug!("probe {}: can't retry from disk: {_err}", self.target);
+                        self.classify(Ok(out))
+                    }
+                }
+            }
+            result => self.classify(result),
+        }
+    }
+
+    /// The stub only ever calls exit_group(0); any output or unclean
+    /// exit is the loader complaining.
+    fn exited_cleanly(out: &Output) -> bool {
+        out.status.success() && out.stdout.is_empty() && out.stderr.is_empty()
+    }
+
+    fn classify(&self, result: io::Result<Output>) -> ProbeResult {
+        match result {
             Ok(out) => {
                 #[cfg(feature = "tracing")]
                 debug!(
@@ -176,7 +182,7 @@ impl Probe {
                     String::from_utf8_lossy(&out.stdout),
                     String::from_utf8_lossy(&out.stderr),
                 );
-                if out.status.success() && out.stdout.is_empty() && out.stderr.is_empty() {
+                if Self::exited_cleanly(&out) {
                     ProbeResult::Runnable
                 } else {
                     ProbeResult::NotRunnable
@@ -186,8 +192,9 @@ impl Probe {
                 #[cfg(feature = "tracing")]
                 debug!("probe {}: exec failed: {err:?}", self.target);
                 match err.raw_os_error() {
-                    // ENOENT: we just wrote the file, so the missing
-                    // thing is the PT_INTERP loader.
+                    // ENOENT: we just wrote the file (and checked that
+                    // its `/proc` path resolves), so the missing thing
+                    // is the PT_INTERP loader.
                     Some(2) => ProbeResult::NotRunnable,
                     // ENOEXEC: no binfmt handler for this architecture.
                     Some(8) => ProbeResult::NotRunnable,
@@ -198,6 +205,102 @@ impl Probe {
             }
         }
     }
+}
+
+/// Serializes writing a probe to disk against every probe's spawn.
+///
+/// A fork performed while a probe file is still open for writing leaves
+/// a copy of the write fd in the forked child until its execve
+/// completes, making the exec of that file fail with ETXTBSY. `CLOEXEC`
+/// can't prevent this: it closes the copy at the child's exec, not at
+/// its fork.
+///
+/// A memfd doesn't have this problem. The kernel only takes write access
+/// to an inode when it is opened through `open(2)`, and `memfd_create`
+/// doesn't go through it, so a copy of a memfd's fd never makes an exec
+/// fail. Memfd probes therefore take the lock shared, just so their
+/// forks stay out of a temporary-directory probe's write window, while
+/// temporary-directory probes take it exclusively.
+static EXEC_LOCK: RwLock<()> = RwLock::const_new(());
+
+/// Run the probe from a sealed memfd, or return `None` if that isn't
+/// possible here and a temporary directory should be tried.
+async fn exec_from_memfd(target: &str, executable: &[u8]) -> Option<io::Result<Output>> {
+    let memfd = match SealedExecutable::new(target, executable) {
+        Ok(memfd) => memfd,
+        Err(_err) => {
+            #[cfg(feature = "tracing")]
+            debug!("probe {target}: memfd unavailable: {_err}");
+            return None;
+        }
+    };
+
+    let spawned = {
+        let _guard = EXEC_LOCK.read().await;
+        spawn(memfd.path())
+    };
+    // The spawn only returns once the child has exec'd.
+    drop(memfd);
+
+    match spawned {
+        Ok(child) => Some(child.wait_with_output().await),
+        // EACCES: the kernel or an LSM refused to execute a memfd, but a
+        // file on disk may still be allowed.
+        Err(err) if err.raw_os_error() == Some(13) => {
+            #[cfg(feature = "tracing")]
+            debug!("probe {target}: memfd not executable: {err}");
+            None
+        }
+        Err(err) => Some(Err(err)),
+    }
+}
+
+/// Run the probe from a file in a fresh temporary directory.
+///
+/// The outer error means the file could not be written, and so nothing
+/// was tested.
+async fn exec_from_tempdir(target: &str, executable: Vec<u8>) -> io::Result<io::Result<Output>> {
+    let progdir = tempfile::tempdir()?;
+    let prog = progdir.path().join(target);
+
+    let spawned = {
+        let _guard = EXEC_LOCK.write().await;
+
+        // `tokio::fs` runs these on the blocking pool, and closes the
+        // file before returning, so the spawn below can't race with our
+        // own write fd.
+        fs::write(&prog, executable).await?;
+        fs::set_permissions(&prog, Permissions::from_mode(0o755)).await?;
+
+        // The lock does not cover forks performed elsewhere in the
+        // process, so a residual ETXTBSY is still possible; it resolves
+        // as soon as the offending child execs, so retry after yielding.
+        // Memfd probes don't need this, as `EXEC_LOCK` explains.
+        let mut attempts = 0;
+        loop {
+            match spawn(&prog) {
+                // ETXTBSY
+                Err(err) if err.raw_os_error() == Some(26) && attempts < 10 => {
+                    attempts += 1;
+                    tokio::task::yield_now().await;
+                }
+                spawned => break spawned,
+            }
+        }
+    };
+
+    Ok(match spawned {
+        Ok(child) => child.wait_with_output().await,
+        Err(err) => Err(err),
+    })
+}
+
+fn spawn(prog: &Path) -> io::Result<Child> {
+    Command::new(prog)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
 }
 
 #[cfg(test)]
