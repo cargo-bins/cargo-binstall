@@ -65,31 +65,24 @@ impl ResolutionFetch {
     fn install_inner(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
         type InstallFp = fn(&bins::BinFile) -> Result<(), bins::Error>;
 
-        let (install_bin, install_aliases, install_link): (InstallFp, InstallFp, InstallFp) =
-            match (opts.no_track, opts.force) {
-                (true, true) | (false, _) => (
-                    bins::BinFile::install_bin,
-                    bins::BinFile::install_aliases,
-                    bins::BinFile::install_link,
-                ),
-                (true, false) => (
-                    bins::BinFile::install_bin_noclobber,
-                    bins::BinFile::install_aliases_noclobber,
-                    bins::BinFile::install_link_noclobber,
-                ),
-            };
+        let (install_bin, install_link): (InstallFp, InstallFp) = match (opts.no_track, opts.force)
+        {
+            (true, true) | (false, _) => (bins::BinFile::install_bin, bins::BinFile::install_link),
+            (true, false) => (
+                bins::BinFile::install_bin_noclobber,
+                bins::BinFile::install_link_noclobber,
+            ),
+        };
 
         info!("Installing binaries...");
         for file in &self.bin_files {
             install_bin(file)?;
-            install_aliases(file)?;
         }
 
-        // Generate symlinks
-        if !opts.no_symlinks {
-            for file in &self.bin_files {
-                install_link(file)?;
-            }
+        // Generate symlinks: `link` is only set without `--no-symlinks`, but
+        // the aliases are always created.
+        for file in &self.bin_files {
+            install_link(file)?;
         }
 
         Ok(CrateInfo {
@@ -118,7 +111,16 @@ impl ResolutionFetch {
                     .as_ref()
                     .is_none_or(|bins| bins.binary_search(&bin.base_name).is_ok())
             })
-            .flat_map(|bin| iter::once(bin.base_name).chain(bin.aliases))
+            .flat_map(
+                |BinFile {
+                     base_name, aliases, ..
+                 }| {
+                    let aliases = aliases
+                        .into_iter()
+                        .map(|alias| alias.file_name().unwrap().to_string_lossy().into());
+                    iter::once(base_name).chain(aliases)
+                },
+            )
             .collect()
     }
 

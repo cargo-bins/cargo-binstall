@@ -119,10 +119,10 @@ aliases = ["mcc"]
 
 Each key under `binary` is the name of one of the crate's binaries, so a crate with several binaries can give each its own aliases.
 An alias must be a plain file name and it gets the same `.exe` suffix as the binary on Windows.
-It is an error for an alias to have the name of one of the crate's binaries, or of another alias.
+It is an error for an alias to have the name of a file installed for one of the crate's binaries, or of another alias, and for `binary.NAME` to name a binary the crate doesn't have.
 On Windows, a copy of the binary is made if the symlink can't be created.
 Aliases are removed on uninstall like the binary itself.
-They are only created for prebuilt binaries, not when falling back to installing from source with `cargo install`.
+They are only created for prebuilt binaries, not when falling back to installing from source with `cargo install`, which warns about it. With `--aliases` on the command line, that fallback is an error instead.
 
 An entry under `overrides.TARGET.binary` replaces the entry for the same binary, and `--aliases BIN:ALIAS` on the command line replaces both for each `BIN` it names.
 

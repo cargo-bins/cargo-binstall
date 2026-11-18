@@ -175,6 +175,8 @@ pub struct Args {
     /// BIN named here.
     ///
     /// Multiple aliases are separated by commas, e.g. `--aliases bin-a:a,bin-b:b`.
+    /// `cargo install` can't create aliases, so it is an error if the crate has
+    /// to be installed from source.
     ///
     /// Only valid when installing a single crate.
     #[clap(

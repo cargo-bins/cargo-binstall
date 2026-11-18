@@ -49,3 +49,17 @@ if [ "$exit_code" != 2 ]; then
     echo "Expected exit code 2, but actual exit code $exit_code"
     exit 1
 fi
+
+# `cargo install` can't create aliases, so asking for them on the command
+# line when installing from source is an error.
+set +e
+
+cargo binstall --no-confirm --strategies compile --aliases cargo-watch:cw cargo-watch@8.4.0
+exit_code="$?"
+
+set -e
+
+if [ "$exit_code" != 101 ]; then
+    echo "Expected exit code 101, but actual exit code $exit_code"
+    exit 1
+fi

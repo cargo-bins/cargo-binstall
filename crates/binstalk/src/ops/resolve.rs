@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromSt
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
-    cargo_toml_binstall::Strategy,
+    cargo_toml_binstall::{BinaryMeta, Strategy},
     crate_info::{CrateSource, SourceType},
 };
 use compact_str::{CompactString, ToCompactString};
@@ -273,11 +273,18 @@ async fn resolve_inner(
         return Err(BinstallError::NoFallbackToCargoInstall);
     }
 
-    if target_meta
-        .binary
-        .values()
-        .any(|bin_meta| !bin_meta.aliases.is_empty())
-    {
+    fn has_aliases<'a>(mut binary: impl Iterator<Item = &'a BinaryMeta>) -> bool {
+        binary.any(|bin_meta| !bin_meta.aliases.is_empty())
+    }
+
+    // `cargo install` installs and records the binaries itself, so aliases
+    // created next to them would not be removed by `cargo uninstall`.
+    if has_aliases(opts.cli_overrides.binary.values()) {
+        // The user asked for them explicitly with `--aliases`.
+        return Err(BinstallError::CargoInstallDoesNotSupportAliases);
+    } else if has_aliases(target_meta.binary.values()) {
+        // Set by the crate publisher: erroring would leave targets without a
+        // prebuilt binary unable to install the crate at all.
         warn!(
             "Aliases of {} are not created when installing from source",
             package_info.name
@@ -402,17 +409,13 @@ fn collect_bin_files(
 
     let template = Template::parse(&bin_dir)?;
 
-    for name in bin_data.meta.binary.keys() {
-        if !package_info
+    if let Some(name) = bin_data.meta.binary.keys().find(|name| {
+        !package_info
             .binaries
             .iter()
             .any(|bin| bin.name == name.as_str())
-        {
-            warn!(
-                "Ignoring `binary.{name}` for {}: it has no binary named {name}",
-                package_info.name
-            );
-        }
+    }) {
+        return Err(bins::Error::UnknownBinary(name.clone()).into());
     }
 
     // Create bin_files
