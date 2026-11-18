@@ -65,18 +65,24 @@ impl ResolutionFetch {
     fn install_inner(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
         type InstallFp = fn(&bins::BinFile) -> Result<(), bins::Error>;
 
-        let (install_bin, install_link): (InstallFp, InstallFp) = match (opts.no_track, opts.force)
-        {
-            (true, true) | (false, _) => (bins::BinFile::install_bin, bins::BinFile::install_link),
-            (true, false) => (
-                bins::BinFile::install_bin_noclobber,
-                bins::BinFile::install_link_noclobber,
-            ),
-        };
+        let (install_bin, install_aliases, install_link): (InstallFp, InstallFp, InstallFp) =
+            match (opts.no_track, opts.force) {
+                (true, true) | (false, _) => (
+                    bins::BinFile::install_bin,
+                    bins::BinFile::install_aliases,
+                    bins::BinFile::install_link,
+                ),
+                (true, false) => (
+                    bins::BinFile::install_bin_noclobber,
+                    bins::BinFile::install_aliases_noclobber,
+                    bins::BinFile::install_link_noclobber,
+                ),
+            };
 
         info!("Installing binaries...");
         for file in &self.bin_files {
             install_bin(file)?;
+            install_aliases(file)?;
         }
 
         // Generate symlinks

@@ -86,7 +86,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    Overrides the Cargo.toml package manifest `binary.BIN.aliases` of each BIN named here.
 
-   Multiple aliases are separated by commas, e.g. `--aliases bin-a:a,bin-b:b`. Aliases are symlinks, so they are not created with `--no-symlinks`.
+   Multiple aliases are separated by commas, e.g. `--aliases bin-a:a,bin-b:b`.
 
    Only valid when installing a single crate.
 * `--rate-limit <LIMIT>` — Override the rate limit duration.

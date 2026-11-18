@@ -420,16 +420,23 @@ fn collect_bin_files(
         .binaries
         .iter()
         .map(|bin| {
-            let aliases = bin_aliases(&bin_data.meta, &package_info.binaries, &bin.name);
+            let aliases = bin_data
+                .meta
+                .binary
+                .get(bin.name.as_str())
+                .map(|bin_meta| &*bin_meta.aliases)
+                .unwrap_or_default();
             bins::BinFile::new(
                 &bin_data,
                 bin.name.as_str(),
                 &template,
                 no_symlinks,
-                &aliases,
+                aliases,
             )
         })
         .collect::<Result<Vec<_>, bins::Error>>()?;
+
+    bins::check_aliases_unique(&bin_files)?;
 
     let mut source_set = BTreeSet::new();
 
@@ -442,27 +449,6 @@ fn collect_bin_files(
     }
 
     Ok(bin_files)
-}
-
-/// The aliases configured for binary `name`, leaving out any that would
-/// overwrite another binary of the same package.
-fn bin_aliases(meta: &PkgMeta, binaries: &[Bin], name: &str) -> Vec<CompactString> {
-    let Some(bin_meta) = meta.binary.get(name) else {
-        return Vec::new();
-    };
-
-    bin_meta
-        .aliases
-        .iter()
-        .filter(|alias| {
-            let clashes = binaries.iter().any(|bin| bin.name == alias.as_str());
-            if clashes {
-                warn!("Ignoring alias {alias} of binary {name}: another binary has that name");
-            }
-            !clashes
-        })
-        .cloned()
-        .collect()
 }
 
 struct PackageInfo {

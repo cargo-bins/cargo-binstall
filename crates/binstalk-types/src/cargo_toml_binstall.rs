@@ -148,14 +148,19 @@ impl PkgMeta {
                 .or_else(|| self.signing.clone()),
 
             binary: {
-                // Apply the least preferred override first, so that a more
-                // preferred one replaces its entry for the same binary.
-                let mut binary = self.binary.clone();
-                let pkg_overrides: Vec<_> = pkg_overrides.clone().into_iter().collect();
-                for pkg_override in pkg_overrides.into_iter().rev() {
-                    for (name, bin_meta) in &pkg_override.binary {
-                        binary.insert(name.clone(), bin_meta.clone());
-                    }
+                // Like the fields above, the first override (the most
+                // preferred one) to set a binary's entry wins, and the
+                // manifest's own entry is the fallback.
+                let mut binary = BTreeMap::new();
+                for (name, bin_meta) in pkg_overrides
+                    .clone()
+                    .into_iter()
+                    .flat_map(|pkg_override| &pkg_override.binary)
+                    .chain(&self.binary)
+                {
+                    binary
+                        .entry(name.clone())
+                        .or_insert_with(|| bin_meta.clone());
                 }
                 binary
             },

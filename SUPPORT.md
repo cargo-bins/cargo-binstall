@@ -55,7 +55,7 @@ with the following variables available:
 [`target_lexicon::Environment`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Environment.html
 [`target_lexicon::Vendor`]: https://docs.rs/target-lexicon/latest/target_lexicon/enum.Vendor.html
 
-`pkg-url`, `pkg-fmt`, `bin-dir` and `binary` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
+`pkg-url`, `pkg-fmt` and `bin-dir` can be overridden on a per-target basis if required, for example, if your `x86_64-pc-windows-msvc` builds use `zip` archives this could be set via:
 
 ```toml
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
@@ -118,8 +118,10 @@ aliases = ["mcc"]
 ```
 
 Each key under `binary` is the name of one of the crate's binaries, so a crate with several binaries can give each its own aliases.
-An alias must be a plain file name, it gets the same `.exe` suffix as the binary on Windows, and one that has the name of another binary of the crate is ignored.
-Aliases are symlinks, so they are not created with `--no-symlinks`, and they are removed on uninstall like the binary itself.
+An alias must be a plain file name and it gets the same `.exe` suffix as the binary on Windows.
+It is an error for an alias to have the name of one of the crate's binaries, or of another alias.
+On Windows, a copy of the binary is made if the symlink can't be created.
+Aliases are removed on uninstall like the binary itself.
 They are only created for prebuilt binaries, not when falling back to installing from source with `cargo install`.
 
 An entry under `overrides.TARGET.binary` replaces the entry for the same binary, and `--aliases BIN:ALIAS` on the command line replaces both for each `BIN` it names.
