@@ -14,6 +14,8 @@ cw --version
 # Uninstalling removes the alias along with the binary
 cargo uninstall cargo-watch
 
+# bash remembers where it found `cw` above, so forget it before checking.
+hash -r
 if command -v cw >/dev/null 2>&1; then
     echo "cw is still installed after uninstalling cargo-watch"
     exit 1
