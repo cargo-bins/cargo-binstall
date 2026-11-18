@@ -82,6 +82,13 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--pkg-url <TEMPLATE>` — URL template for package downloads
 
    Overrides the Cargo.toml package manifest pkg-url.
+* `--aliases <BIN:ALIAS>` — Extra names to symlink to an installed binary, as `BIN:ALIAS`
+
+   Overrides the Cargo.toml package manifest `binary.BIN.aliases` of each BIN named here.
+
+   Multiple aliases are separated by commas, e.g. `--aliases bin-a:a,bin-b:b`. `cargo install` can't create aliases, so it is an error if the crate has to be installed from source.
+
+   Only valid when installing a single crate.
 * `--rate-limit <LIMIT>` — Override the rate limit duration.
 
    By default, cargo-binstall allows one request per 10 ms.
