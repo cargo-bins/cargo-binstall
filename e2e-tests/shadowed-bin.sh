@@ -5,7 +5,7 @@ set -euxo pipefail
 if [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; then
     ext=.exe
 else
-    ext=
+    ext=""
 fi
 
 early="$(mktemp -d 2>/dev/null || mktemp -d -t 'early')"

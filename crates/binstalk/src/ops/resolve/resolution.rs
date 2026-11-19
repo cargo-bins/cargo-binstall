@@ -171,11 +171,11 @@ impl ResolutionFetch {
             }
         }
 
-        let path = env::var_os("PATH");
+        let Some(path) = env::var_os("PATH") else {
+            return;
+        };
         for file in bin_files {
-            if let Some(other) =
-                shadowing_file(path.as_deref(), &opts.install_path, &file.base_name)
-            {
+            if let Some(other) = shadowing_file(&path, &opts.install_path, &file.base_name) {
                 warn!(
                     "{} is also at {}, which PATH finds before the one installed to {}",
                     file.base_name,
@@ -192,17 +192,18 @@ impl ResolutionFetch {
 /// to `install_path`.
 ///
 /// If `install_path` is not in `path` at all, any such executable runs instead.
-fn shadowing_file(path: Option<&OsStr>, install_path: &Path, file_name: &str) -> Option<PathBuf> {
+fn shadowing_file(path: &OsStr, install_path: &Path, file_name: &str) -> Option<PathBuf> {
     // A closure can't tie the returned `Cow` to its argument's lifetime.
     fn canonicalize(dir: &Path) -> Cow<'_, Path> {
         fs::canonicalize(dir).map(Cow::Owned).unwrap_or(dir.into())
     }
 
-    let install_path = canonicalize(install_path);
+    let canonical_install_path = canonicalize(install_path);
 
-    env::split_paths(path?)
+    env::split_paths(path)
         .filter(|dir| !dir.as_os_str().is_empty())
-        .take_while(|dir| canonicalize(dir) != install_path)
+        // Compare as is first, to skip `canonicalize` in the common case.
+        .take_while(|dir| dir != install_path && canonicalize(dir) != canonical_install_path)
         .flat_map(|dir| executable_candidates(&dir, file_name))
         .find(|candidate| is_executable(candidate))
 }
@@ -212,22 +213,26 @@ fn shadowing_file(path: Option<&OsStr>, install_path: &Path, file_name: &str) ->
 /// On Windows, `fnm.exe` is run by typing `fnm`, which also picks `fnm.cmd`
 /// or any other extension listed in `PATHEXT`.
 fn executable_candidates(dir: &Path, file_name: &str) -> Vec<PathBuf> {
+    let file = Path::new(file_name);
+
     if cfg!(windows)
-        && let Some(stem) = file_name
-            .len()
-            .checked_sub(4)
-            .filter(|&i| file_name.is_char_boundary(i))
-            .filter(|&i| file_name[i..].eq_ignore_ascii_case(".exe"))
-            .map(|i| &file_name[..i])
+        && file
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+        && let Some(stem) = file.file_stem()
     {
         let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
         pathext
             .split(';')
             .filter(|ext| !ext.is_empty())
-            .map(|ext| dir.join(format!("{stem}{ext}")))
+            .map(|ext| {
+                let mut name = stem.to_os_string();
+                name.push(ext);
+                dir.join(name)
+            })
             .collect()
     } else {
-        vec![dir.join(file_name)]
+        vec![dir.join(file)]
     }
 }
 
@@ -481,32 +486,24 @@ mod shadowing_tests {
 
         // Nothing earlier in PATH has it, and later ones don't matter.
         let p = path(&[&early, &install, &late]);
-        assert_eq!(shadowing_file(Some(&p), &install, "fnm"), None);
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
 
         // An earlier dir has it.
         write_exe(early.join("fnm"));
-        assert_eq!(
-            shadowing_file(Some(&p), &install, "fnm"),
-            Some(early.join("fnm"))
-        );
+        assert_eq!(shadowing_file(&p, &install, "fnm"), Some(early.join("fnm")));
 
         // The install path comes first.
         let p = path(&[&install, &early]);
-        assert_eq!(shadowing_file(Some(&p), &install, "fnm"), None);
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
 
         // The install path is not in PATH, so any match runs instead.
         let p = path(&[&late]);
-        assert_eq!(
-            shadowing_file(Some(&p), &install, "fnm"),
-            Some(late.join("fnm"))
-        );
+        assert_eq!(shadowing_file(&p, &install, "fnm"), Some(late.join("fnm")));
 
         // A dir with that name is not a file that runs.
         fs::create_dir(early.join("dir")).unwrap();
         let p = path(&[&early, &install]);
-        assert_eq!(shadowing_file(Some(&p), &install, "dir"), None);
-
-        assert_eq!(shadowing_file(None, &install, "fnm"), None);
+        assert_eq!(shadowing_file(&p, &install, "dir"), None);
     }
 
     /// A file without an execute bit can't run, so it doesn't shadow anything.
@@ -527,7 +524,7 @@ mod shadowing_tests {
         .unwrap();
 
         let p = env::join_paths([&early, &install]).unwrap();
-        assert_eq!(shadowing_file(Some(&p), &install, "fnm"), None);
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
     }
 
     #[cfg(windows)]
@@ -542,7 +539,7 @@ mod shadowing_tests {
         fs::write(early.join("fnm.cmd"), b"").unwrap();
 
         let p = env::join_paths([&early, &install]).unwrap();
-        let found = shadowing_file(Some(&p), &install, "fnm.exe").unwrap();
+        let found = shadowing_file(&p, &install, "fnm.exe").unwrap();
         assert!(
             found.file_name().unwrap().eq_ignore_ascii_case("fnm.cmd"),
             "{found:?}"
