@@ -560,10 +560,20 @@ impl PackageInfo {
 
         let manifest_version_str = package.version().to_compact_string();
         let (new_version_str, new_version) = if opts.cargo_toml_fetch_override.is_some() {
-            exact_version_req(version_req).map_or_else(
-                || parse_package_version(manifest_version_str),
-                |version| Ok((version.to_compact_string(), version)),
-            )?
+            if let Some(version) = exact_version_req(version_req) {
+                (version.to_compact_string(), version)
+            } else {
+                let (version_str, version) = parse_package_version(manifest_version_str)?;
+                // `--git` and `--manifest-path` give one manifest, so there is
+                // no other version to pick.
+                if !version_req.matches(&version) {
+                    warn!(
+                        "{name}: ignoring version requirement {version_req}, \
+                         the manifest found has version {version}"
+                    );
+                }
+                (version_str, version)
+            }
         } else {
             parse_package_version(manifest_version_str)?
         };
