@@ -187,20 +187,63 @@ impl ResolutionFetch {
     }
 }
 
-/// A file named `file_name` in a dir of `path` (a `PATH`-like list) that
-/// comes before `install_path`, so it runs instead of the one installed to
-/// `install_path`.
+/// An executable named `file_name` in a dir of `path` (a `PATH`-like list)
+/// that comes before `install_path`, so it runs instead of the one installed
+/// to `install_path`.
 ///
-/// If `install_path` is not in `path` at all, any such file runs instead.
+/// If `install_path` is not in `path` at all, any such executable runs instead.
 fn shadowing_file(path: Option<&OsStr>, install_path: &Path, file_name: &str) -> Option<PathBuf> {
-    let canonicalize = |dir: &Path| fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    // A closure can't tie the returned `Cow` to its argument's lifetime.
+    fn canonicalize(dir: &Path) -> Cow<'_, Path> {
+        fs::canonicalize(dir).map(Cow::Owned).unwrap_or(dir.into())
+    }
+
     let install_path = canonicalize(install_path);
 
     env::split_paths(path?)
         .filter(|dir| !dir.as_os_str().is_empty())
         .take_while(|dir| canonicalize(dir) != install_path)
-        .map(|dir| dir.join(file_name))
-        .find(|candidate| candidate.is_file())
+        .flat_map(|dir| executable_candidates(&dir, file_name))
+        .find(|candidate| is_executable(candidate))
+}
+
+/// The files in `dir` that running `file_name` from `PATH` would pick.
+///
+/// On Windows, `fnm.exe` is run by typing `fnm`, which also picks `fnm.cmd`
+/// or any other extension listed in `PATHEXT`.
+fn executable_candidates(dir: &Path, file_name: &str) -> Vec<PathBuf> {
+    if cfg!(windows)
+        && let Some(stem) = file_name
+            .len()
+            .checked_sub(4)
+            .filter(|&i| file_name.is_char_boundary(i))
+            .filter(|&i| file_name[i..].eq_ignore_ascii_case(".exe"))
+            .map(|i| &file_name[..i])
+    {
+        let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
+        pathext
+            .split(';')
+            .filter(|ext| !ext.is_empty())
+            .map(|ext| dir.join(format!("{stem}{ext}")))
+            .collect()
+    } else {
+        vec![dir.join(file_name)]
+    }
+}
+
+/// `path` is a file (following symlinks) that can be run: on unix one with an
+/// execute bit set, on Windows any file, since it is picked by its extension.
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+
+    #[cfg(unix)]
+    let executable = std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o111 != 0;
+    #[cfg(not(unix))]
+    let executable = true;
+
+    metadata.is_file() && executable
 }
 
 impl ResolutionSource {
@@ -425,8 +468,14 @@ mod shadowing_tests {
             fs::create_dir(&dir).unwrap();
             dir
         });
-        fs::write(install.join("fnm"), b"").unwrap();
-        fs::write(late.join("fnm"), b"").unwrap();
+        let write_exe = |path: PathBuf| {
+            fs::write(&path, b"").unwrap();
+            #[cfg(unix)]
+            fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+                .unwrap();
+        };
+        write_exe(install.join("fnm"));
+        write_exe(late.join("fnm"));
 
         let path = |dirs: &[&Path]| env::join_paths(dirs).unwrap();
 
@@ -435,7 +484,7 @@ mod shadowing_tests {
         assert_eq!(shadowing_file(Some(&p), &install, "fnm"), None);
 
         // An earlier dir has it.
-        fs::write(early.join("fnm"), b"").unwrap();
+        write_exe(early.join("fnm"));
         assert_eq!(
             shadowing_file(Some(&p), &install, "fnm"),
             Some(early.join("fnm"))
@@ -458,5 +507,45 @@ mod shadowing_tests {
         assert_eq!(shadowing_file(Some(&p), &install, "dir"), None);
 
         assert_eq!(shadowing_file(None, &install, "fnm"), None);
+    }
+
+    /// A file without an execute bit can't run, so it doesn't shadow anything.
+    #[cfg(unix)]
+    #[test]
+    fn non_executable_file_does_not_shadow() {
+        let tmp = tempfile::tempdir().unwrap();
+        let [early, install] = ["early", "install"].map(|dir| {
+            let dir = tmp.path().join(dir);
+            fs::create_dir(&dir).unwrap();
+            dir
+        });
+        fs::write(early.join("fnm"), b"").unwrap();
+        fs::set_permissions(
+            early.join("fnm"),
+            std::os::unix::fs::PermissionsExt::from_mode(0o644),
+        )
+        .unwrap();
+
+        let p = env::join_paths([&early, &install]).unwrap();
+        assert_eq!(shadowing_file(Some(&p), &install, "fnm"), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn other_pathext_extensions_shadow() {
+        let tmp = tempfile::tempdir().unwrap();
+        let [early, install] = ["early", "install"].map(|dir| {
+            let dir = tmp.path().join(dir);
+            fs::create_dir(&dir).unwrap();
+            dir
+        });
+        fs::write(early.join("fnm.cmd"), b"").unwrap();
+
+        let p = env::join_paths([&early, &install]).unwrap();
+        let found = shadowing_file(Some(&p), &install, "fnm.exe").unwrap();
+        assert!(
+            found.file_name().unwrap().eq_ignore_ascii_case("fnm.cmd"),
+            "{found:?}"
+        );
     }
 }
