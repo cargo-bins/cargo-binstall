@@ -84,7 +84,11 @@ runs:
   # ~25% faster (208 s -> 155 s on 4 cores).
   # Profiles in cargo config take precedence over Cargo.toml.
   - name: Build dependencies at opt-level 1 in dev builds
-    run: printf '[profile.dev.package."*"]\nopt-level = 1\n' >> "${CARGO_HOME:-$HOME/.cargo}/config.toml"
+    run: |
+      # macOS runners don't create the default CARGO_HOME up front.
+      cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+      mkdir -p "$cargo_home"
+      printf '[profile.dev.package."*"]\nopt-level = 1\n' >> "$cargo_home/config.toml"
     shell: bash
 
   - name: Retrieve RUSTFLAGS for caching
