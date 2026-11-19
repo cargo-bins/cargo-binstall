@@ -175,14 +175,15 @@ impl ResolutionFetch {
             return;
         };
         for file in bin_files {
-            if let Some(other) = shadowing_file(&path, &opts.install_path, &file.base_name) {
-                warn!(
-                    "{} is also at {}, which PATH finds before the one installed to {}",
-                    file.base_name,
-                    other.display(),
-                    opts.install_path.display(),
-                );
-            }
+            let Some(other) = shadowing_file(&path, &opts.install_path, &file.base_name) else {
+                continue;
+            };
+            warn!(
+                "{} is also at {}, which PATH finds before the one installed to {}",
+                file.base_name,
+                other.display(),
+                opts.install_path.display(),
+            );
         }
     }
 }
@@ -199,41 +200,50 @@ fn shadowing_file(path: &OsStr, install_path: &Path, file_name: &str) -> Option<
     }
 
     let canonical_install_path = canonicalize(install_path);
+    let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
 
     env::split_paths(path)
         .filter(|dir| !dir.as_os_str().is_empty())
         // Compare as is first, to skip `canonicalize` in the common case.
         .take_while(|dir| dir != install_path && canonicalize(dir) != canonical_install_path)
-        .flat_map(|dir| executable_candidates(&dir, file_name))
+        .flat_map(|dir| executable_candidates(dir, file_name, &pathext))
         .find(|candidate| is_executable(candidate))
 }
 
 /// The files in `dir` that running `file_name` from `PATH` would pick.
 ///
 /// On Windows, `fnm.exe` is run by typing `fnm`, which also picks `fnm.cmd`
-/// or any other extension listed in `PATHEXT`.
-fn executable_candidates(dir: &Path, file_name: &str) -> Vec<PathBuf> {
+/// or any other extension listed in `pathext` (the value of `PATHEXT`).
+fn executable_candidates<'a>(
+    dir: PathBuf,
+    file_name: &'a str,
+    pathext: &'a str,
+) -> impl Iterator<Item = PathBuf> + 'a {
     let file = Path::new(file_name);
+    let exact = dir.join(file);
 
-    if cfg!(windows)
-        && file
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
-        && let Some(stem) = file.file_stem()
-    {
-        let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
-        pathext
-            .split(';')
-            .filter(|ext| !ext.is_empty())
-            .map(|ext| {
-                let mut name = stem.to_os_string();
-                name.push(ext);
-                dir.join(name)
-            })
-            .collect()
-    } else {
-        vec![dir.join(file)]
-    }
+    let other_exts = match file.file_stem() {
+        Some(stem)
+            if cfg!(windows)
+                && file
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe")) =>
+        {
+            Either::Left(
+                pathext
+                    .split(';')
+                    .filter(|ext| !ext.is_empty())
+                    .map(move |ext| {
+                        let mut name = stem.to_os_string();
+                        name.push(ext);
+                        dir.join(name)
+                    }),
+            )
+        }
+        _ => Either::Right(iter::empty()),
+    };
+
+    iter::once(exact).chain(other_exts)
 }
 
 /// `path` is a file (following symlinks) that can be run: on unix one with an
