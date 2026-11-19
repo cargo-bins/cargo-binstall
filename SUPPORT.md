@@ -26,6 +26,7 @@ With the following configuration keys:
   for your crate (defaults to empty array).
   If `--strategies` is passed on the command line, then the `disabled-strategies` in `package.metadata` will be ignored.
   Otherwise, the `disabled-strategies` in `package.metadata` and `--disable-strategies` will be merged.
+- `binary.NAME.aliases` is a list of extra names to symlink to the installed binary `NAME`, see [Aliases](#aliases).
 
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
@@ -105,6 +106,25 @@ pkg-fmt = "tgz"
 ```
 
 **Precedence:** Exact target names take precedence over `cfg` expressions. When multiple `cfg` expressions match, they're evaluated in the order they appear in `Cargo.toml`.
+
+
+### Aliases
+
+A binary can be given extra names, each installed as a symlink next to it:
+
+```toml
+[package.metadata.binstall.binary.my-crate-cli]
+aliases = ["mcc"]
+```
+
+Each key under `binary` is the name of one of the crate's binaries, so a crate with several binaries can give each its own aliases.
+An alias must be a plain file name and it gets the same `.exe` suffix as the binary on Windows.
+It is an error for an alias to have the name of a file installed for one of the crate's binaries, or of another alias, and for `binary.NAME` to name a binary the crate doesn't have.
+On Windows, a copy of the binary is made if the symlink can't be created.
+Aliases are removed on uninstall like the binary itself.
+They are only created for prebuilt binaries, not when falling back to installing from source with `cargo install`, which warns about it. With `--aliases` on the command line, that fallback is an error instead.
+
+An entry under `overrides.TARGET.binary` replaces the entry for the same binary, and `--aliases BIN:ALIAS` on the command line replaces both for each `BIN` it names.
 
 ### Defaults
 

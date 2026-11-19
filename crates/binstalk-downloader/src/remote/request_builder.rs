@@ -25,10 +25,10 @@ impl RequestBuilder {
         }
     }
 
-    pub fn header(self, key: &str, value: &str) -> Self {
+    pub fn header(self, key: impl AsRef<str>, value: &str) -> Self {
         Self {
             client: self.client,
-            inner: self.inner.header(key, value),
+            inner: self.inner.header(key.as_ref(), value),
         }
     }
 
@@ -58,6 +58,17 @@ pub struct Response {
 impl Response {
     pub async fn bytes(self) -> Result<Bytes, Error> {
         self.inner.bytes().await.map_err(Error::from)
+    }
+
+    /// The next chunk of the body, or `None` once it has all been read.
+    pub async fn chunk(&mut self) -> Result<Option<Bytes>, Error> {
+        self.inner.chunk().await.map_err(|err| {
+            Error::Http(Box::new(HttpError {
+                method: self.method.clone(),
+                url: self.inner.url().clone(),
+                err,
+            }))
+        })
     }
 
     pub fn bytes_stream(self) -> impl Stream<Item = Result<Bytes, Error>> {
