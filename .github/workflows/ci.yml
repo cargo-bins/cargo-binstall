@@ -2,6 +2,12 @@ name: CI
 
 on:
   workflow_dispatch:
+  # Jobs that only run in the merge queue (e2e-tests, release-dry-run)
+  # restore their caches from main, and main only runs them when Cargo
+  # files change. Run weekly too, so that those caches exist after a new
+  # Rust release and don't expire after 7 days without a dependency bump.
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_call:
     inputs:
       additional_key:
@@ -277,6 +283,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build detect-targets
         run: |
           cargo zigbuild --features cli-logging --target ${{ matrix.arch }}-unknown-linux-musl
@@ -316,6 +323,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build and run detect-targets tests
         run: |
           set -euxo pipefail
@@ -478,6 +486,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build detect-targets
         run: |
           cargo check --target ${{ matrix.target }}
@@ -508,6 +517,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Check fs-lock
         run: |
           cargo check --target ${{ matrix.target }}
