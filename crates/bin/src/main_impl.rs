@@ -17,16 +17,16 @@ pub fn do_main() -> impl Termination {
     if args.version {
         let cargo_binstall_version = env!("CARGO_PKG_VERSION");
         if args.verbose {
-            let build_date = env!("VERGEN_BUILD_DATE");
+            let build_date = env!("BUILD_INFO_DATE");
 
-            let features = env!("VERGEN_CARGO_FEATURES");
+            let features = env!("BUILD_INFO_FEATURES");
 
-            let git_sha = option_env!("VERGEN_GIT_SHA").unwrap_or("UNKNOWN");
-            let git_commit_date = option_env!("VERGEN_GIT_COMMIT_DATE").unwrap_or("UNKNOWN");
+            let git_sha = option_env!("BUILD_INFO_GIT_SHA").unwrap_or("UNKNOWN");
+            let git_commit_date = option_env!("BUILD_INFO_GIT_COMMIT_DATE").unwrap_or("UNKNOWN");
 
-            let rustc_semver = env!("VERGEN_RUSTC_SEMVER");
-            let rustc_commit_hash = env!("VERGEN_RUSTC_COMMIT_HASH");
-            let rustc_llvm_version = env!("VERGEN_RUSTC_LLVM_VERSION");
+            let rustc_semver = env!("BUILD_INFO_RUSTC_SEMVER");
+            let rustc_commit_hash = env!("BUILD_INFO_RUSTC_COMMIT_HASH");
+            let rustc_llvm_version = env!("BUILD_INFO_RUSTC_LLVM_VERSION");
 
             println!(
                 r#"cargo-binstall: {cargo_binstall_version}
