@@ -212,33 +212,40 @@ fn shadowing_file(path: &OsStr, install_path: &Path, file_name: &str) -> Option<
 
 /// The file in `dir` that running `file_name` from `PATH` would pick, if any.
 ///
-/// On Windows, `fnm.exe` is run by typing `fnm`, which also picks `fnm.cmd`
-/// or any other extension listed in `pathext` (the value of `PATHEXT`).
-///
 /// Each candidate is tried in the `dir` buffer itself, so it needs no other.
 fn find_executable(dir: PathBuf, file_name: &str, pathext: &str) -> Option<PathBuf> {
     let mut path = dir;
     path.push(file_name);
-    if is_executable(&path) {
-        return Some(path);
+
+    if !cfg!(windows) {
+        return is_executable(&path).then_some(path);
     }
 
-    let is_exe = path
+    // On Windows only a file with an extension listed in `PATHEXT` runs from
+    // `PATH`, and typing `fnm` picks `fnm` with the first of them that exists,
+    // so an earlier `fnm.cmd` also shadows `fnm.exe`.
+    let exts = || {
+        pathext
+            .split(';')
+            .filter_map(|ext| ext.strip_prefix('.'))
+            .filter(|ext| !ext.is_empty())
+    };
+    let runs = path
         .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"));
-    if !(cfg!(windows) && is_exe) {
+        .is_some_and(|ext| exts().any(|runnable| ext.eq_ignore_ascii_case(runnable)));
+    if !runs {
+        // The installed file can't be run by its name either.
         return None;
     }
 
-    pathext
-        .split(';')
-        .filter_map(|ext| ext.strip_prefix('.'))
-        .filter(|ext| !ext.is_empty())
-        .any(|ext| {
-            path.set_extension(ext);
-            is_executable(&path)
-        })
-        .then_some(path)
+    for ext in exts() {
+        path.set_extension(ext);
+        if is_executable(&path) {
+            return Some(path);
+        }
+    }
+
+    None
 }
 
 /// `path` is a file (following symlinks) that can be run: on unix one with an
@@ -549,5 +556,9 @@ mod shadowing_tests {
             found.file_name().unwrap().eq_ignore_ascii_case("fnm.cmd"),
             "{found:?}"
         );
+
+        // A file without an extension listed in `PATHEXT` doesn't run.
+        fs::write(early.join("fnm"), b"").unwrap();
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
     }
 }
