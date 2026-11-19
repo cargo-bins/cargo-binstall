@@ -76,7 +76,7 @@ brew install cargo-binstall
 #### Windows
 
 ```
-Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
+Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr -UseBasicParsing "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
 ```
 
 ### Manually
