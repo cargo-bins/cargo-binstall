@@ -200,50 +200,45 @@ fn shadowing_file(path: &OsStr, install_path: &Path, file_name: &str) -> Option<
     }
 
     let canonical_install_path = canonicalize(install_path);
-    let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
+    // Not set outside of Windows, so the default doesn't allocate there.
+    let pathext = env::var("PATHEXT").map_or(Cow::Borrowed(".COM;.EXE;.BAT;.CMD"), Cow::Owned);
 
     env::split_paths(path)
         .filter(|dir| !dir.as_os_str().is_empty())
         // Compare as is first, to skip `canonicalize` in the common case.
         .take_while(|dir| dir != install_path && canonicalize(dir) != canonical_install_path)
-        .flat_map(|dir| executable_candidates(dir, file_name, &pathext))
-        .find(|candidate| is_executable(candidate))
+        .find_map(|dir| find_executable(dir, file_name, &pathext))
 }
 
-/// The files in `dir` that running `file_name` from `PATH` would pick.
+/// The file in `dir` that running `file_name` from `PATH` would pick, if any.
 ///
 /// On Windows, `fnm.exe` is run by typing `fnm`, which also picks `fnm.cmd`
 /// or any other extension listed in `pathext` (the value of `PATHEXT`).
-fn executable_candidates<'a>(
-    dir: PathBuf,
-    file_name: &'a str,
-    pathext: &'a str,
-) -> impl Iterator<Item = PathBuf> + 'a {
-    let file = Path::new(file_name);
-    let exact = dir.join(file);
+///
+/// Each candidate is tried in the `dir` buffer itself, so it needs no other.
+fn find_executable(dir: PathBuf, file_name: &str, pathext: &str) -> Option<PathBuf> {
+    let mut path = dir;
+    path.push(file_name);
+    if is_executable(&path) {
+        return Some(path);
+    }
 
-    let other_exts = match file.file_stem() {
-        Some(stem)
-            if cfg!(windows)
-                && file
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("exe")) =>
-        {
-            Either::Left(
-                pathext
-                    .split(';')
-                    .filter(|ext| !ext.is_empty())
-                    .map(move |ext| {
-                        let mut name = stem.to_os_string();
-                        name.push(ext);
-                        dir.join(name)
-                    }),
-            )
-        }
-        _ => Either::Right(iter::empty()),
-    };
+    let is_exe = path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"));
+    if !(cfg!(windows) && is_exe) {
+        return None;
+    }
 
-    iter::once(exact).chain(other_exts)
+    pathext
+        .split(';')
+        .filter_map(|ext| ext.strip_prefix('.'))
+        .filter(|ext| !ext.is_empty())
+        .any(|ext| {
+            path.set_extension(ext);
+            is_executable(&path)
+        })
+        .then_some(path)
 }
 
 /// `path` is a file (following symlinks) that can be run: on unix one with an
