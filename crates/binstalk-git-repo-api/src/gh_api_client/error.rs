@@ -2,7 +2,7 @@ use std::{error, fmt, time::Duration};
 
 use binstalk_types::errors::{Exn, FrameExt};
 use compact_str::CompactString;
-use serde::{de::Deserializer, Deserialize};
+use serde::{Deserialize, de::Deserializer};
 use thiserror::Error as ThisError;
 
 /// The kinds of [`GhApiClient`](super::GhApiClient) errors that callers can

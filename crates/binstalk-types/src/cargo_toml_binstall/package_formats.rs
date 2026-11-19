@@ -88,11 +88,7 @@ impl PkgFmt {
             _ => None,
         };
 
-        if it.next().is_some() {
-            guess
-        } else {
-            None
-        }
+        if it.next().is_some() { guess } else { None }
     }
 }
 

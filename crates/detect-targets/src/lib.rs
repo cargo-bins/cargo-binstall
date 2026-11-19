@@ -3,8 +3,13 @@
 //! It runs `$CARGO -vV` if environment variable `CARGO` is present
 //! for cargo subcommands, otherwise it would try running `rustc -vV`.
 //!
-//! If both `rustc` isn't present on the system, it will fallback
-//! to using syscalls plus `ldd` on Linux to detect targets.
+//! If `rustc` isn't present on the system, it will fallback
+//! to using syscalls to detect targets.
+//!
+//! On Linux, the libc (glibc/musl) is detected by executing a
+//! synthesized loader probe (see the `probe` module, which is only
+//! available on Linux and Android), with a fallback to probing known
+//! dynamic loader paths.
 //!
 //! Example use cases:
 //!  - The binary is built with musl libc to run on anywhere, but
@@ -67,8 +72,11 @@
 mod detect;
 pub use detect::detect_targets;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod probe;
+
 mod desired_targets;
-pub use desired_targets::{get_desired_targets, DesiredTargets};
+pub use desired_targets::{DesiredTargets, get_desired_targets};
 
 /// Compiled target triple, used as default for binary fetching
 pub const TARGET: &str = env!("TARGET");

@@ -1,4 +1,4 @@
-use binstalk_downloader::remote::{parse_url, Client, HttpError, Url};
+use binstalk_downloader::remote::{Client, HttpError, Url, parse_url};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
@@ -11,7 +11,7 @@ use binstalk_types::{
     message,
 };
 
-use crate::{not_found, parse_manifest, MatchedVersion};
+use crate::{MatchedVersion, not_found, parse_manifest};
 
 /// Return `Some(checksum)` if the version is not yanked, otherwise `None`.
 async fn is_crate_yanked(client: &Client, url: Url) -> Result<Option<String>> {
@@ -124,13 +124,15 @@ pub async fn fetch_crate_cratesio_api(
     let url = parse_url(&format!("https://crates.io/api/v1/crates/{name}"))?;
 
     let (version, cksum) = match version_req.comparators.as_slice() {
-        [Comparator {
-            op: ComparatorOp::Exact,
-            major,
-            minor: Some(minor),
-            patch: Some(patch),
-            pre,
-        }] => {
+        [
+            Comparator {
+                op: ComparatorOp::Exact,
+                major,
+                minor: Some(minor),
+                patch: Some(patch),
+                pre,
+            },
+        ] => {
             let version = SemVersion {
                 major: *major,
                 minor: *minor,

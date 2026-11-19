@@ -1,5 +1,5 @@
 use std::{
-    fs::{create_dir_all, File},
+    fs::{File, create_dir_all},
     io,
     path::Path,
 };
@@ -9,11 +9,12 @@ use binstalk_types::{
     message,
 };
 use normalize_path::NormalizePath;
-use rc_zip_sync::{rc_zip::parse::EntryKind, ReadZip};
+use rc_zip_sync::{ReadZip, rc_zip::parse::EntryKind};
 use tracing::warn;
 
 use super::ExtractedFiles;
 
+#[cfg(any(unix, target_os = "wasi"))]
 const MAX_LINK_TARGET: u64 = 4096;
 
 fn create_parent_dir(path: &Path) -> io::Result<()> {

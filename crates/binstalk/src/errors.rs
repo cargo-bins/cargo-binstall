@@ -293,6 +293,15 @@ pub enum Exit {
     #[error("cargo-install does not support `--install-path`")]
     #[strum(props(code = "binstall::cargo_install_does_not_support_install_path"))]
     CargoInstallDoesNotSupportInstallPath = 100,
+
+    /// `--aliases` is used, but the crate has to be installed from source,
+    /// and `cargo install` can't create aliases.
+    ///
+    /// - Code: `binstall::cargo_install_does_not_support_aliases`
+    /// - Exit: 101
+    #[error("cargo-install does not support `--aliases`")]
+    #[strum(props(code = "binstall::cargo_install_does_not_support_aliases"))]
+    CargoInstallDoesNotSupportAliases = 101,
 }
 
 impl Exit {

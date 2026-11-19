@@ -12,7 +12,7 @@ use std::{error::Error as StdError, fmt, io};
 
 use compact_str::{CompactString, ToCompactString};
 
-pub use exn::{self, bail, ensure, ErrorExt, Exn, Frame, IteratorExt};
+pub use exn::{self, ErrorExt, Exn, Frame, IteratorExt, bail, ensure};
 
 /// A type-erased tree of errors.
 pub type Error = Exn;

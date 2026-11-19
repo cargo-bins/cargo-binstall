@@ -1,10 +1,10 @@
 use std::{
-    fs::{create_dir_all, File},
+    fs::{File, create_dir_all},
     io::{Read, Seek as _, Write as _},
     path::{Path, PathBuf},
 };
 
-use binstalk::errors::{message, FrameExt, Result, ResultExt};
+use binstalk::errors::{FrameExt, Result, ResultExt, message};
 use fs_lock::FileLock;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;

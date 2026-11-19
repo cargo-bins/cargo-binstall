@@ -4,7 +4,7 @@ use std::{
 };
 
 use binstalk::{
-    errors::{exit_code, Error, Exit, Result, ResultExt},
+    errors::{Error, Exit, Result, ResultExt, exit_code},
     helpers::tasks::AutoAbortJoinHandle,
 };
 use tokio::runtime::Runtime;

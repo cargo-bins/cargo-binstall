@@ -5,8 +5,8 @@
 
 use std::{fs::File, io, path::Path};
 
-use binstalk_types::errors::Result;
 use binstalk_types::SecretString;
+use binstalk_types::errors::Result;
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use serde::{Deserialize, Deserializer};

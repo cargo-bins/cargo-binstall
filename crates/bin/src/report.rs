@@ -89,12 +89,12 @@ impl FrameDiagnostic {
 
     /// The frame whose error describes this frame.
     fn describing(&self) -> &Frame {
-        if self.exit().is_some() {
-            if let [child] = self.0.children() {
-                if child.error().is::<Message>() && child.children().is_empty() {
-                    return child;
-                }
-            }
+        if self.exit().is_some()
+            && let [child] = self.0.children()
+            && child.error().is::<Message>()
+            && child.children().is_empty()
+        {
+            return child;
         }
         &self.0
     }
@@ -230,7 +230,7 @@ impl Diagnostic for FrameDiagnostic {
 
 #[cfg(test)]
 mod tests {
-    use binstalk::errors::{message, ErrorExt, ResultExt};
+    use binstalk::errors::{ErrorExt, ResultExt, message};
     use miette::{GraphicalReportHandler, GraphicalTheme};
 
     use super::*;

@@ -3,20 +3,20 @@ use std::{
     future::Future,
     ops::Deref,
     sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
         Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
     time::{Duration, Instant},
 };
 
 use binstalk_downloader::{download::Download, remote};
 use binstalk_types::{
-    errors::{bail, Result, ResultExt},
+    errors::{Result, ResultExt, bail},
     message,
 };
-use compact_str::{format_compact, CompactString, ToCompactString};
+use compact_str::{CompactString, ToCompactString, format_compact};
 use tokio::sync::OnceCell;
-use tracing::{instrument, warn, Level};
+use tracing::{Level, instrument, warn};
 use url::Url;
 use zeroize::Zeroizing;
 
@@ -225,14 +225,14 @@ impl GhApiClient {
     {
         self.check_retry_after()?;
 
-        if !self.0.only_use_restful_api.load(Relaxed) {
-            if let Some(auth_token) = self.get_auth_token() {
-                match graphql_func(&self.0.client, data, auth_token).await {
-                    Err(err) if err.is_unauthorized() => {
-                        self.0.is_auth_token_valid.store(false, Relaxed);
-                    }
-                    res => return res.or_raise_err(message!("GraphQL API")),
+        if !self.0.only_use_restful_api.load(Relaxed)
+            && let Some(auth_token) = self.get_auth_token()
+        {
+            match graphql_func(&self.0.client, data, auth_token).await {
+                Err(err) if err.is_unauthorized() => {
+                    self.0.is_auth_token_valid.store(false, Relaxed);
                 }
+                res => return res.or_raise_err(message!("GraphQL API")),
             }
         }
 

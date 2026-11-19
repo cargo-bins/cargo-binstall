@@ -7,11 +7,11 @@ use binstalk_types::{
 use fs_lock::FileLock;
 
 use crate::{
+    CompactString, Version,
     binstall_crates_v1::Records as BinstallCratesV1Records,
     cargo_crates_v1::{CratesDetailsMap, CratesToml, Source},
     crate_info::CrateInfo,
     helpers::create_if_not_exist,
-    CompactString, Version,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

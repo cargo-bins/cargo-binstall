@@ -155,7 +155,9 @@ pub fn atomic_symlink_file(dest: &Path, link: &Path) -> io::Result<()> {
         #[cfg(windows)]
         // Symlinks on Windows are disabled in some editions, so creating one is unreliable.
         // Fallback to copy if it fails.
-        Err(_) => atomic_install(dest, link),
+        //
+        // Do not use `atomic_install`, which would move `dest` to `link`.
+        Err(_) => persist(copy_to_tempfile(dest, link)?.into_temp_path(), link),
 
         #[cfg(not(windows))]
         Err(err) => Err(err),
@@ -176,7 +178,7 @@ fn persist(temp_path: TempPath, to: &Path) -> io::Result<()> {
                 temp_path.display(),
                 to.display(),
             );
-            win::replace_file(&temp_path, to).map_err(io::Error::from)
+            win::replace_file(&temp_path, to)
         }
         #[cfg(not(windows))]
         Err(err) => Err(err.into()),
@@ -185,14 +187,11 @@ fn persist(temp_path: TempPath, to: &Path) -> io::Result<()> {
 
 #[cfg(windows)]
 mod win {
-    use std::{os::windows::ffi::OsStrExt, path::Path};
+    use std::{io, os::windows::ffi::OsStrExt, path::Path, ptr};
 
-    use windows::{
-        core::{Error, PCWSTR},
-        Win32::Storage::FileSystem::{ReplaceFileW, REPLACE_FILE_FLAGS},
-    };
+    use windows_sys::Win32::Storage::FileSystem::ReplaceFileW;
 
-    pub(super) fn replace_file(src: &Path, dst: &Path) -> Result<(), Error> {
+    pub(super) fn replace_file(src: &Path, dst: &Path) -> io::Result<()> {
         let mut src: Vec<_> = src.as_os_str().encode_wide().collect();
         let mut dst: Vec<_> = dst.as_os_str().encode_wide().collect();
 
@@ -205,15 +204,21 @@ mod win {
         //
         // NOTE that this function is available since windows XP, so we don't need to
         // lazily load this function.
-        unsafe {
+        let ret = unsafe {
             ReplaceFileW(
-                PCWSTR::from_raw(dst.as_ptr()), // lpreplacedfilename
-                PCWSTR::from_raw(src.as_ptr()), // lpreplacementfilename
-                PCWSTR::null(),                 // lpbackupfilename, null for no backup file
-                REPLACE_FILE_FLAGS(0),          // dwreplaceflags
-                None,                           // lpexclude, unused
-                None,                           // lpreserved, unused
+                dst.as_ptr(), // lpreplacedfilename
+                src.as_ptr(), // lpreplacementfilename
+                ptr::null(),  // lpbackupfilename, null for no backup file
+                0,            // dwreplaceflags
+                ptr::null(),  // lpexclude, unused
+                ptr::null(),  // lpreserved, unused
             )
+        };
+
+        if ret == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
         }
     }
 }

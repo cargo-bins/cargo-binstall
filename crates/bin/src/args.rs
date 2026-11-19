@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     env,
     ffi::OsString,
     fmt, mem,
@@ -13,8 +14,8 @@ use binstalk::{
     ops::resolve::{CrateName, VersionReqExt},
     registry::Registry,
 };
-use binstalk_manifests::cargo_toml_binstall::{PkgOverride, Strategy};
-use clap::{builder::PossibleValue, error::ErrorKind, CommandFactory, Parser, ValueEnum};
+use binstalk_manifests::cargo_toml_binstall::{BinaryMeta, PkgOverride, Strategy};
+use clap::{CommandFactory, Parser, ValueEnum, builder::PossibleValue, error::ErrorKind};
 use clap_complete::Shell;
 use compact_str::CompactString;
 use log::LevelFilter;
@@ -167,6 +168,24 @@ pub struct Args {
     /// Overrides the Cargo.toml package manifest pkg-url.
     #[clap(help_heading = "Overrides", long, value_name = "TEMPLATE")]
     pub(crate) pkg_url: Option<String>,
+
+    /// Extra names to symlink to an installed binary, as `BIN:ALIAS`
+    ///
+    /// Overrides the Cargo.toml package manifest `binary.BIN.aliases` of each
+    /// BIN named here.
+    ///
+    /// Multiple aliases are separated by commas, e.g. `--aliases bin-a:a,bin-b:b`.
+    /// `cargo install` can't create aliases, so it is an error if the crate has
+    /// to be installed from source.
+    ///
+    /// Only valid when installing a single crate.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        value_name = "BIN:ALIAS",
+        value_delimiter = ','
+    )]
+    pub(crate) aliases: Vec<BinAlias>,
 
     /// Override the rate limit duration.
     ///
@@ -347,6 +366,9 @@ pub struct Args {
     /// This option will be passed through to all `cargo-install` invocations.
     ///
     /// It will require `Cargo.lock` to be up to date.
+    ///
+    /// Since Rust 1.100, `cargo install` uses the `Cargo.lock` packaged in the crate by default
+    /// and this flag no longer changes its dependency resolution.
     #[clap(help_heading = "Options", long)]
     pub(crate) locked: bool,
 
@@ -581,6 +603,27 @@ impl From<DnsResolver> for remote::DnsResolver {
     }
 }
 
+/// An alias for a binary, given on the command line as `BIN:ALIAS`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct BinAlias {
+    pub(crate) bin: CompactString,
+    pub(crate) alias: CompactString,
+}
+
+impl FromStr for BinAlias {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split_once(':') {
+            Some((bin, alias)) if !bin.is_empty() && !alias.is_empty() => Ok(Self {
+                bin: bin.into(),
+                alias: alias.into(),
+            }),
+            _ => Err("expected `BIN:ALIAS`"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct RateLimit {
     pub(crate) duration: NonZeroU16,
@@ -706,17 +749,13 @@ pub fn parse() -> (Args, PkgOverride) {
             "version"
         } else if opts.manifest_path.is_some() {
             "manifest-path"
+        } else if !opts.aliases.is_empty() {
+            "aliases"
         } else {
-            #[cfg(not(feature = "git"))]
-            {
-                ""
-            }
-
-            #[cfg(feature = "git")]
-            if opts.git.is_some() {
-                "git"
-            } else {
-                ""
+            // `opts.git` only exists with the `git` feature, so `cfg!` can't be used here.
+            cfg_select! {
+                feature = "git" => if opts.git.is_some() { "git" } else { "" },
+                _ => "",
             }
         };
 
@@ -817,10 +856,10 @@ You cannot use --features and specify multiple packages at the same time. Do one
             .exit()
     }
 
-    if opts.github_token.is_none() {
-        if let Ok(github_token) = env::var("GH_TOKEN") {
-            opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
-        }
+    if opts.github_token.is_none()
+        && let Ok(github_token) = env::var("GH_TOKEN")
+    {
+        opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
     }
     match opts.github_token.as_ref() {
         Some(token) if token.0.len() < 10 => opts.github_token = None,
@@ -840,6 +879,13 @@ You cannot use --features and specify multiple packages at the same time. Do one
         ),
         ignore_disabled_strategies,
         signing: None,
+        binary: {
+            let mut binary = BTreeMap::<CompactString, BinaryMeta>::new();
+            for BinAlias { bin, alias } in mem::take(&mut opts.aliases) {
+                binary.entry(bin).or_default().aliases.push(alias);
+            }
+            binary
+        },
     };
 
     (opts, cli_overrides)
@@ -874,6 +920,39 @@ mod test {
     }
 
     const _: () = assert!(Strategy::VARIANTS.len() == StrategyWrapped::VARIANTS.len());
+
+    #[test]
+    fn aliases_are_parsed_as_bin_alias_pairs() {
+        let alias = |bin: &str, alias: &str| BinAlias {
+            bin: bin.into(),
+            alias: alias.into(),
+        };
+
+        let args = Args::try_parse_from([
+            "cargo-binstall",
+            "--aliases",
+            "bin-a:a,bin-b:b",
+            "--aliases",
+            "bin-a:aa",
+            "mycrate",
+        ])
+        .unwrap();
+        assert_eq!(
+            args.aliases,
+            [
+                alias("bin-a", "a"),
+                alias("bin-b", "b"),
+                alias("bin-a", "aa")
+            ]
+        );
+
+        for bad in ["a", ":a", "bin-a:", ""] {
+            assert!(
+                Args::try_parse_from(["cargo-binstall", "--aliases", bad, "mycrate"]).is_err(),
+                "{bad:?}"
+            );
+        }
+    }
 
     #[cfg(feature = "trust-dns")]
     #[test]
@@ -923,9 +1002,13 @@ mod test {
         // other tests in this module that also read the real `BINSTALL_DNS`.
         // clap captures the variable's value when `Arg::env` is called, so set
         // it first.
-        env::set_var("TEST_BINSTALL_DNS", "system");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::set_var("TEST_BINSTALL_DNS", "system") };
         let cmd = cmd.mut_arg("dns", |arg| arg.env("TEST_BINSTALL_DNS"));
-        env::remove_var("TEST_BINSTALL_DNS");
+        // SAFETY: tests are run with cargo-nextest (one process per test), so no other
+        // thread reads or writes the environment concurrently.
+        unsafe { env::remove_var("TEST_BINSTALL_DNS") };
 
         let parse = |argv: &[&str]| {
             Args::from_arg_matches(&cmd.clone().try_get_matches_from(argv).unwrap()).unwrap()

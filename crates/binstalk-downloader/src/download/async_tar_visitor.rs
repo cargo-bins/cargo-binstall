@@ -1,10 +1,10 @@
 use std::{borrow::Cow, fmt::Debug, io, path::Path, pin::Pin};
 
 use async_compression::tokio::bufread;
-use binstalk_types::errors::{from_io, into_io, Result};
+use binstalk_types::errors::{Result, from_io, into_io};
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
-use tokio::io::{copy, sink, AsyncRead};
+use tokio::io::{AsyncRead, copy, sink};
 use tokio_tar::{Archive, Entry, EntryType};
 use tokio_util::io::StreamReader;
 use tracing::debug;

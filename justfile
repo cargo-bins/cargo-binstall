@@ -235,6 +235,8 @@ e2e-test-skipping-required-bin: (e2e-test "skipping-required-bin")
 e2e-test-telemetry-confirm: (e2e-test "telemetry-confirm")
 e2e-test-list-and-prune: (e2e-test "list-and-prune")
 e2e-test-auto-prune: (e2e-test "auto-prune")
+e2e-test-aliases: (e2e-test "aliases")
+e2e-test-shadowed-bin: (e2e-test "shadowed-bin")
 
 # WinTLS (Windows in CI) does not have TLS 1.3 support
 [windows]
@@ -250,7 +252,7 @@ e2e-test-signing: (e2e-test "signing")
 e2e-test-signing:
 
 [parallel]
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune e2e-test-aliases e2e-test-shadowed-bin
 
 unit-tests: print-env
     cargo test --no-run --target {{target}}
@@ -270,13 +272,27 @@ fmt: print-env
 
 fmt-check: fmt
 
+# Regenerate HELP.md from the clap args.
 update-help-md: print-env
     cargo run -p cargo-binstall --features clap-markdown unused-crate-name --markdown-help > HELP.md
 
-check-help-md:
-    git diff --exit-code HELP.md
+# Regenerate the `<!-- BEGIN generated:... -->` sections of SUPPORT.md from the
+# crates' source, through binstalk-fetchers' `support_md` test.
+update-support-md: print-env
+    UPDATE_DOCS=1 cargo test -p binstalk-fetchers --lib support_md
 
-lint: clippy fmt-check doc update-help-md check-help-md
+# Regenerate the README download table from release-packages.yml.
+update-readme-download-table:
+    ./.github/scripts/gen-readme-download-table.sh
+
+# Regenerate every document derived from the source.
+update-docs: update-help-md update-support-md update-readme-download-table
+
+# Fail if a document derived from the source is out of date.
+check-docs: update-docs
+    git diff --exit-code
+
+lint: clippy fmt-check doc
 
 # Rm dev-dependencies for `cargo-check` and clippy to speedup compilation.
 # This is a workaround for the cargo nightly option `-Z avoid-dev-deps`

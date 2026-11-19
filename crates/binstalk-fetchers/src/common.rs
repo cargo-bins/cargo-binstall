@@ -3,20 +3,20 @@
 use std::{
     future::Future,
     sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
         Once,
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
 };
 
 pub(super) use binstalk_downloader::{
     download::{Download, ExtractedFiles},
-    remote::{parse_url, Client, Url},
+    remote::{Client, Url, parse_url},
 };
 pub(super) use binstalk_git_repo_api::gh_api_client::{GhApiClient, GhApiErrorExt};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
 pub(super) use binstalk_types::{
     cargo_toml_binstall::{PkgFmt, PkgMeta},
-    errors::{bail, ErrorExt, Exn, OptionExt, Result, ResultExt},
+    errors::{ErrorExt, Exn, OptionExt, Result, ResultExt, bail},
     message,
 };
 pub(super) use compact_str::CompactString;
@@ -33,7 +33,9 @@ pub(super) async fn get_gh_release_artifact_url(
     gh_api_client: GhApiClient,
     artifact: GhReleaseArtifact,
 ) -> Result<Option<GhReleaseArtifactUrl>> {
-    debug!("Using GitHub API to check for existence of artifact, which will also cache the API response");
+    debug!(
+        "Using GitHub API to check for existence of artifact, which will also cache the API response"
+    );
 
     // The future returned has the same size as a pointer
     match gh_api_client.has_release_artifact(artifact).await {
@@ -73,18 +75,18 @@ pub(super) async fn does_url_exist(
 
     debug!("Checking for package at: '{url}'");
 
-    if !GH_API_CLIENT_FAILED.load(Relaxed) {
-        if let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url) {
-            match get_gh_release_artifact_url(gh_api_client, artifact).await {
-                Ok(ret) => return Ok(ret.is_some()),
+    if !GH_API_CLIENT_FAILED.load(Relaxed)
+        && let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url)
+    {
+        match get_gh_release_artifact_url(gh_api_client, artifact).await {
+            Ok(ret) => return Ok(ret.is_some()),
 
-                Err(err) if err.rate_limit().is_some() || err.is_unauthorized() => {}
+            Err(err) if err.rate_limit().is_some() || err.is_unauthorized() => {}
 
-                Err(err) => return Err(err).or_raise_err(message!("Request to GitHub API failed")),
-            }
-
-            GH_API_CLIENT_FAILED.store(true, Relaxed);
+            Err(err) => return Err(err).or_raise_err(message!("Request to GitHub API failed")),
         }
+
+        GH_API_CLIENT_FAILED.store(true, Relaxed);
     }
 
     Box::pin(client.remote_gettable(url.clone())).await

@@ -3,10 +3,10 @@ name = "cargo-binstall"
 description = "Binary installation for rust projects"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/cargo-binstall"
-version = "1.26.2"
-rust-version = "1.96.1"
+version = "1.27.0"
+rust-version = "1.100.0"
 authors = ["ryan <ryan@kurte.nz>"]
-edition = "2021"
+edition = "2024"
 license = "GPL-3.0-only"
 readme = "../../README.md"
 
@@ -33,15 +33,14 @@ pkg-fmt = "zip"
 
 [dependencies]
 atomic-file-install = { version = "1.0.14", path = "../atomic-file-install" }
-binstalk = { path = "../binstalk", version = "0.29.6", default-features = false }
-binstalk-manifests = { path = "../binstalk-manifests", version = "0.19.11" }
+binstalk = { path = "../binstalk", version = "0.30.0", default-features = false }
+binstalk-manifests = { path = "../binstalk-manifests", version = "0.19.12" }
 binstalk-types = { path = "../binstalk-types", version = "0.10.8" }
 clap = { version = "4.5.54", features = ["derive", "env", "wrap_help"] }
 clap-cargo = "0.19.0"
 clap_complete = "4.5.54"
 clap-markdown = { version = "0.1.5", optional = true }
 compact_str = "0.10.0"
-dirs = "7.0.0"
 file-format = { version = "0.29.0", default-features = false }
 fs-lock = { version = "0.1.16", path = "../fs-lock", features = ["tracing"] }
 home = "0.5.9"
@@ -50,7 +49,6 @@ leon = "3.0.0"
 log = { version = "0.4.22", features = ["std"] }
 miette = "7.0.0"
 mimalloc = { version = "0.1.39", default-features = false, optional = true, features = ["v3", "override"] }
-once_cell = "1.18.0"
 ref-cast = "1.0.0"
 semver = "1.0.28"
 serde = { version = "1.0.219", features = ["derive"] }

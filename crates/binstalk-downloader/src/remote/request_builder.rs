@@ -7,7 +7,7 @@ use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use reqwest::Method;
 
-use super::{header, Client, HttpError, StatusCode, Url};
+use super::{Client, HttpError, StatusCode, Url, header};
 
 pub use reqwest::Body;
 
@@ -28,10 +28,10 @@ impl RequestBuilder {
         }
     }
 
-    pub fn header(self, key: &str, value: &str) -> Self {
+    pub fn header(self, key: impl AsRef<str>, value: &str) -> Self {
         Self {
             client: self.client,
-            inner: self.inner.header(key, value),
+            inner: self.inner.header(key.as_ref(), value),
         }
     }
 
@@ -67,6 +67,18 @@ impl Response {
             .bytes()
             .await
             .map_err(|err| HttpError::raise(method, url, err))
+    }
+
+    /// The next chunk of the body, or `None` once it has all been read.
+    pub async fn chunk(&mut self) -> Result<Option<Bytes>> {
+        match self.inner.chunk().await {
+            Ok(chunk) => Ok(chunk),
+            Err(err) => Err(HttpError::raise(
+                self.method.clone(),
+                self.inner.url().clone(),
+                err,
+            )),
+        }
     }
 
     pub fn bytes_stream(self) -> impl Stream<Item = Result<Bytes>> {

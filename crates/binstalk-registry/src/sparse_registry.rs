@@ -1,4 +1,4 @@
-use binstalk_downloader::remote::{parse_url, Client, StatusCode};
+use binstalk_downloader::remote::{Client, StatusCode, parse_url};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
@@ -8,11 +8,11 @@ use tokio::sync::OnceCell;
 use tracing::instrument;
 use url::Url;
 
-use binstalk_types::errors::{bail, Result};
+use binstalk_types::errors::{Result, bail};
 
 use crate::{
-    apply_auth, auth_required, crate_prefix_components, not_found, parse_manifest,
-    render_dl_template, MatchedVersion, RegistryAuth, RegistryConfig,
+    MatchedVersion, RegistryAuth, RegistryConfig, apply_auth, auth_required,
+    crate_prefix_components, not_found, parse_manifest, render_dl_template,
 };
 
 #[derive(Debug)]

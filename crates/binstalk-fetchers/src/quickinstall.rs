@@ -13,8 +13,8 @@ use tracing::{error, info, trace};
 use url::Url;
 
 use crate::{
-    common::*, invalid_signature, missing_signature, Data, SignaturePolicy, SignatureVerifier,
-    TargetDataErased,
+    Data, SignaturePolicy, SignatureVerifier, TargetDataErased, common::*, invalid_signature,
+    missing_signature,
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
@@ -338,7 +338,7 @@ impl QuickInstall {
 
 #[cfg(test)]
 mod test {
-    use super::{get_quickinstall_supported_targets, Client, CompactString};
+    use super::{Client, CompactString, get_quickinstall_supported_targets};
     use std::num::NonZeroU16;
 
     /// Mark this as an async fn so that you won't accidentally use it in

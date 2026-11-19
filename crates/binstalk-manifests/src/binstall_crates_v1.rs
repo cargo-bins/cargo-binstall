@@ -9,7 +9,7 @@
 use std::{
     borrow::Borrow,
     cmp,
-    collections::{btree_set, BTreeSet},
+    collections::{BTreeSet, btree_set},
     fs,
     io::{self, Seek, Write},
     iter::{IntoIterator, Iterator},

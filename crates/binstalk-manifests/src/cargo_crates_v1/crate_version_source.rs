@@ -81,7 +81,7 @@ impl FromStr for CrateVersionSource {
                         return Err(CvsParseError::UnknownSourceType {
                             kind: kind.to_string().into_boxed_str(),
                             arg: arg.to_string().into_boxed_str(),
-                        })
+                        });
                     }
                     _ => return Err(CvsParseError::BadSource),
                 };

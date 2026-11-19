@@ -1,25 +1,25 @@
 use std::{io, path::PathBuf, sync::Arc};
 
-use binstalk_downloader::remote::{parse_url, Client};
+use binstalk_downloader::remote::{Client, parse_url};
 use binstalk_types::cargo_toml_binstall::Meta;
 use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
-use serde_json::{from_slice as json_from_slice, Deserializer as JsonDeserializer};
+use serde_json::{Deserializer as JsonDeserializer, from_slice as json_from_slice};
 use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
 use tracing::instrument;
 
 use binstalk_types::{
-    errors::{bail, Exn, OptionExt, Result, ResultExt},
+    errors::{Exn, OptionExt, Result, ResultExt, bail},
     message,
 };
 
 use crate::{
-    crate_prefix_components, not_found, parse_manifest, render_dl_template, MatchedVersion,
-    RegistryAuth, RegistryConfig,
+    MatchedVersion, RegistryAuth, RegistryConfig, crate_prefix_components, not_found,
+    parse_manifest, render_dl_template,
 };
 
 #[derive(Debug)]
