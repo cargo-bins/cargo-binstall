@@ -1,4 +1,12 @@
-use std::{borrow::Cow, env, ffi::OsStr, fmt, iter, mem::DropGuard, path::Path, sync::Arc};
+use std::{
+    borrow::Cow,
+    env,
+    ffi::OsStr,
+    fmt, fs, iter,
+    mem::DropGuard,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use binstalk_bins::BinFile;
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
@@ -79,11 +87,10 @@ impl ResolutionFetch {
             install_bin(file)?;
         }
 
-        // Generate symlinks
-        if !opts.no_symlinks {
-            for file in &self.bin_files {
-                install_link(file)?;
-            }
+        // Generate symlinks: `link` is only set without `--no-symlinks`, but
+        // the aliases are always created.
+        for file in &self.bin_files {
+            install_link(file)?;
         }
 
         Ok(CrateInfo {
@@ -102,14 +109,26 @@ impl ResolutionFetch {
     ) -> Vec<CompactString> {
         // We need to filter crate_bin_files by user_specified_bins in case the prebuilt doesn't
         // have featured-gated (optional) binary (gated behind feature).
+        //
+        // Aliases follow their parent binary: they are recorded (so uninstall
+        // removes them) whenever the binary they point at is installed.
         crate_bin_files
             .into_iter()
-            .map(|bin| bin.base_name)
-            .filter(|bin_name| {
+            .filter(|bin| {
                 user_specified_bins
                     .as_ref()
-                    .is_none_or(|bins| bins.binary_search(bin_name).is_ok())
+                    .is_none_or(|bins| bins.binary_search(&bin.base_name).is_ok())
             })
+            .flat_map(
+                |BinFile {
+                     base_name, aliases, ..
+                 }| {
+                    let aliases = aliases
+                        .into_iter()
+                        .map(|alias| alias.file_name().unwrap().to_string_lossy().into());
+                    iter::once(base_name).chain(aliases)
+                },
+            )
             .collect()
     }
 
@@ -151,7 +170,97 @@ impl ResolutionFetch {
                 info!("  - {}", file.preview_link());
             }
         }
+
+        let Some(path) = env::var_os("PATH") else {
+            return;
+        };
+        for file in bin_files {
+            let Some(other) = shadowing_file(&path, &opts.install_path, &file.base_name) else {
+                continue;
+            };
+            warn!(
+                "{} is also at {}, which PATH finds before the one installed to {}",
+                file.base_name,
+                other.display(),
+                opts.install_path.display(),
+            );
+        }
     }
+}
+
+/// An executable named `file_name` in a dir of `path` (a `PATH`-like list)
+/// that comes before `install_path`, so it runs instead of the one installed
+/// to `install_path`.
+///
+/// If `install_path` is not in `path` at all, any such executable runs instead.
+fn shadowing_file(path: &OsStr, install_path: &Path, file_name: &str) -> Option<PathBuf> {
+    // A closure can't tie the returned `Cow` to its argument's lifetime.
+    fn canonicalize(dir: &Path) -> Cow<'_, Path> {
+        fs::canonicalize(dir).map(Cow::Owned).unwrap_or(dir.into())
+    }
+
+    let canonical_install_path = canonicalize(install_path);
+    // Not set outside of Windows, so the default doesn't allocate there.
+    let pathext = env::var("PATHEXT").map_or(Cow::Borrowed(".COM;.EXE;.BAT;.CMD"), Cow::Owned);
+
+    env::split_paths(path)
+        .filter(|dir| !dir.as_os_str().is_empty())
+        // Compare as is first, to skip `canonicalize` in the common case.
+        .take_while(|dir| dir != install_path && canonicalize(dir) != canonical_install_path)
+        .find_map(|dir| find_executable(dir, file_name, &pathext))
+}
+
+/// The file in `dir` that running `file_name` from `PATH` would pick, if any.
+///
+/// Each candidate is tried in the `dir` buffer itself, so it needs no other.
+fn find_executable(dir: PathBuf, file_name: &str, pathext: &str) -> Option<PathBuf> {
+    let mut path = dir;
+    path.push(file_name);
+
+    if !cfg!(windows) {
+        return is_executable(&path).then_some(path);
+    }
+
+    // On Windows only a file with an extension listed in `PATHEXT` runs from
+    // `PATH`, and typing `fnm` picks `fnm` with the first of them that exists,
+    // so an earlier `fnm.cmd` also shadows `fnm.exe`.
+    let exts = || {
+        pathext
+            .split(';')
+            .filter_map(|ext| ext.strip_prefix('.'))
+            .filter(|ext| !ext.is_empty())
+    };
+    let runs = path
+        .extension()
+        .is_some_and(|ext| exts().any(|runnable| ext.eq_ignore_ascii_case(runnable)));
+    if !runs {
+        // The installed file can't be run by its name either.
+        return None;
+    }
+
+    for ext in exts() {
+        path.set_extension(ext);
+        if is_executable(&path) {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
+/// `path` is a file (following symlinks) that can be run: on unix one with an
+/// execute bit set, on Windows any file, since it is picked by its extension.
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+
+    #[cfg(unix)]
+    let executable = std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o111 != 0;
+    #[cfg(not(unix))]
+    let executable = true;
+
+    metadata.is_file() && executable
 }
 
 impl ResolutionSource {
@@ -369,5 +478,95 @@ mod tests {
             args,
             ["--index", "sparse+https://registry.example.com/index/"]
         );
+    }
+}
+
+#[cfg(test)]
+mod shadowing_tests {
+    use super::*;
+
+    #[test]
+    fn shadowing_file_is_found_before_the_install_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let [early, install, late] = ["early", "install", "late"].map(|dir| {
+            let dir = tmp.path().join(dir);
+            fs::create_dir(&dir).unwrap();
+            dir
+        });
+        let write_exe = |path: PathBuf| {
+            fs::write(&path, b"").unwrap();
+            #[cfg(unix)]
+            fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+                .unwrap();
+        };
+        write_exe(install.join("fnm"));
+        write_exe(late.join("fnm"));
+
+        let path = |dirs: &[&Path]| env::join_paths(dirs).unwrap();
+
+        // Nothing earlier in PATH has it, and later ones don't matter.
+        let p = path(&[&early, &install, &late]);
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
+
+        // An earlier dir has it.
+        write_exe(early.join("fnm"));
+        assert_eq!(shadowing_file(&p, &install, "fnm"), Some(early.join("fnm")));
+
+        // The install path comes first.
+        let p = path(&[&install, &early]);
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
+
+        // The install path is not in PATH, so any match runs instead.
+        let p = path(&[&late]);
+        assert_eq!(shadowing_file(&p, &install, "fnm"), Some(late.join("fnm")));
+
+        // A dir with that name is not a file that runs.
+        fs::create_dir(early.join("dir")).unwrap();
+        let p = path(&[&early, &install]);
+        assert_eq!(shadowing_file(&p, &install, "dir"), None);
+    }
+
+    /// A file without an execute bit can't run, so it doesn't shadow anything.
+    #[cfg(unix)]
+    #[test]
+    fn non_executable_file_does_not_shadow() {
+        let tmp = tempfile::tempdir().unwrap();
+        let [early, install] = ["early", "install"].map(|dir| {
+            let dir = tmp.path().join(dir);
+            fs::create_dir(&dir).unwrap();
+            dir
+        });
+        fs::write(early.join("fnm"), b"").unwrap();
+        fs::set_permissions(
+            early.join("fnm"),
+            std::os::unix::fs::PermissionsExt::from_mode(0o644),
+        )
+        .unwrap();
+
+        let p = env::join_paths([&early, &install]).unwrap();
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn other_pathext_extensions_shadow() {
+        let tmp = tempfile::tempdir().unwrap();
+        let [early, install] = ["early", "install"].map(|dir| {
+            let dir = tmp.path().join(dir);
+            fs::create_dir(&dir).unwrap();
+            dir
+        });
+        fs::write(early.join("fnm.cmd"), b"").unwrap();
+
+        let p = env::join_paths([&early, &install]).unwrap();
+        let found = shadowing_file(&p, &install, "fnm.exe").unwrap();
+        assert!(
+            found.file_name().unwrap().eq_ignore_ascii_case("fnm.cmd"),
+            "{found:?}"
+        );
+
+        // A file without an extension listed in `PATHEXT` doesn't run.
+        fs::write(early.join("fnm"), b"").unwrap();
+        assert_eq!(shadowing_file(&p, &install, "fnm"), None);
     }
 }

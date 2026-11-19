@@ -1,6 +1,13 @@
 #!/bin/sh
 
-set -eux
+set -eu
+
+# Trace every command in CI, where the output is a log that gets read when an
+# install fails, or when asked to with `BINSTALL_DEBUG`. An interactive install
+# stays quiet.
+if [ -n "${CI:-}" ] || [ -n "${BINSTALL_DEBUG:-}" ]; then
+    set -x
+fi
 
 do_curl() {
     curl --retry 10 -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -L --proto '=https' --tlsv1.2 -sSf "$@"

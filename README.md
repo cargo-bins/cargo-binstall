@@ -65,6 +65,8 @@ Here are one-liners for downloading and installing a pre-compiled
 curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 ```
 
+The script prints each command it runs when `CI` or `BINSTALL_DEBUG` is set, which helps when an install fails.
+
 or if you have [homebrew](https://brew.sh/) installed:
 
 ```
@@ -74,7 +76,7 @@ brew install cargo-binstall
 #### Windows
 
 ```
-Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
+Set-ExecutionPolicy Unrestricted -Scope Process; iex (iwr -UseBasicParsing "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.ps1").Content
 ```
 
 ### Manually

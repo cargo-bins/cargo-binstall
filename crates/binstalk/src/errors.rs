@@ -436,6 +436,18 @@ pub enum BinstallError {
     )]
     CargoInstallDoesNotSupportInstallPath,
 
+    /// `--aliases` is used, but the crate has to be installed from source,
+    /// and `cargo install` can't create aliases.
+    ///
+    /// - Code: `binstall::cargo_install_does_not_support_aliases`
+    /// - Exit: 101
+    #[error("cargo-install does not support `--aliases`")]
+    #[diagnostic(
+        severity(error),
+        code(binstall::cargo_install_does_not_support_aliases)
+    )]
+    CargoInstallDoesNotSupportAliases,
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -481,6 +493,7 @@ impl BinstallError {
             GitError(_) => 98,
             LoadManifestFromWSError(_) => 99,
             CargoInstallDoesNotSupportInstallPath => 100,
+            CargoInstallDoesNotSupportAliases => 101,
             CrateContext(context) => context.err.exit_number(),
             Errors(errors) => (errors.0)[0].err.exit_number(),
         };

@@ -289,6 +289,7 @@ dependencies = [
  "atomic-file-install",
  "binstalk-types",
  "compact_str",
+ "itertools",
  "leon",
  "miette",
  "normalize-path",
@@ -1173,7 +1174,10 @@ name = "detect-targets"
 version = "0.1.97"
 dependencies = [
  "guess_host_triple",
+ "rustix",
+ "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "windows-sys 0.61.2",
@@ -4898,6 +4902,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",

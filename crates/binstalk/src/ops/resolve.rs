@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromSt
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
-    cargo_toml_binstall::Strategy,
+    cargo_toml_binstall::{BinaryMeta, Strategy},
     crate_info::{CrateSource, SourceType},
 };
 use compact_str::{CompactString, ToCompactString};
@@ -273,6 +273,24 @@ async fn resolve_inner(
         return Err(BinstallError::NoFallbackToCargoInstall);
     }
 
+    fn has_aliases<'a>(mut binary: impl Iterator<Item = &'a BinaryMeta>) -> bool {
+        binary.any(|bin_meta| !bin_meta.aliases.is_empty())
+    }
+
+    // `cargo install` installs and records the binaries itself, so aliases
+    // created next to them would not be removed by `cargo uninstall`.
+    if has_aliases(opts.cli_overrides.binary.values()) {
+        // The user asked for them explicitly with `--aliases`.
+        return Err(BinstallError::CargoInstallDoesNotSupportAliases);
+    } else if has_aliases(target_meta.binary.values()) {
+        // Set by the crate publisher: erroring would leave targets without a
+        // prebuilt binary unable to install the crate at all.
+        warn!(
+            "Aliases of {} are not created when installing from source",
+            package_info.name
+        );
+    }
+
     Ok(Resolution::InstallFromSource(ResolutionSource {
         name: package_info.name,
         version: package_info.version_str,
@@ -391,12 +409,37 @@ fn collect_bin_files(
 
     let template = Template::parse(&bin_dir)?;
 
+    if let Some(name) = bin_data.meta.binary.keys().find(|name| {
+        !package_info
+            .binaries
+            .iter()
+            .any(|bin| bin.name == name.as_str())
+    }) {
+        return Err(bins::Error::UnknownBinary(name.clone()).into());
+    }
+
     // Create bin_files
     let bin_files = package_info
         .binaries
         .iter()
-        .map(|bin| bins::BinFile::new(&bin_data, bin.name.as_str(), &template, no_symlinks))
+        .map(|bin| {
+            let aliases = bin_data
+                .meta
+                .binary
+                .get(bin.name.as_str())
+                .map(|bin_meta| &*bin_meta.aliases)
+                .unwrap_or_default();
+            bins::BinFile::new(
+                &bin_data,
+                bin.name.as_str(),
+                &template,
+                no_symlinks,
+                aliases,
+            )
+        })
         .collect::<Result<Vec<_>, bins::Error>>()?;
+
+    bins::check_aliases_unique(&bin_files)?;
 
     let mut source_set = BTreeSet::new();
 
@@ -517,10 +560,20 @@ impl PackageInfo {
 
         let manifest_version_str = package.version().to_compact_string();
         let (new_version_str, new_version) = if opts.cargo_toml_fetch_override.is_some() {
-            exact_version_req(version_req).map_or_else(
-                || parse_package_version(manifest_version_str),
-                |version| Ok((version.to_compact_string(), version)),
-            )?
+            if let Some(version) = exact_version_req(version_req) {
+                (version.to_compact_string(), version)
+            } else {
+                let (version_str, version) = parse_package_version(manifest_version_str)?;
+                // `--git` and `--manifest-path` give one manifest, so there is
+                // no other version to pick.
+                if !version_req.matches(&version) {
+                    warn!(
+                        "{name}: ignoring version requirement {version_req}, \
+                         the manifest found has version {version}"
+                    );
+                }
+                (version_str, version)
+            }
         } else {
             parse_package_version(manifest_version_str)?
         };
