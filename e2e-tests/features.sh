@@ -4,27 +4,27 @@ set -euxo pipefail
 
 # Test for the features flag
 #
-# cargo-about's `cargo-about` binary is gated behind the `cli` feature, so
-# compiling it from source without passing `--features=cli` through to
-# `cargo install` silently produces a package with no binaries.
+# cargo-lock's `cargo-lock` binary is gated behind the `cli` feature, so
+# compiling it from source fails unless `--features=cli` is passed through
+# to `cargo install`. It has few dependencies, so it builds quickly.
 "$1" binstall --no-confirm \
-    cargo-about --version 0.9.2 --locked --force \
+    cargo-lock --version 11.1.0 --locked --force \
     --strategies compile \
     --features cli
 
 # Verify that the binary was installed and is executable
-if ! command -v cargo-about >/dev/null 2>&1; then
-  echo "cargo-about was not installed"
+if ! command -v cargo-lock >/dev/null 2>&1; then
+  echo "cargo-lock was not installed"
   exit 1
 fi
 
 # Run the binary to check it works
-cargo-about --version
+cargo-lock --help
 
 # Verify that --features cannot be combined with multiple packages
 set +e
 
-"$1" binstall --no-confirm cargo-binstall cargo-about --strategies compile --features cli
+"$1" binstall --no-confirm cargo-binstall cargo-lock --strategies compile --features cli
 exit_code="$?"
 
 set -e
