@@ -5,6 +5,7 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 use compact_str::CompactString;
 
 use crate::{
+    DesiredTargets,
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
     helpers::{
         gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient,
@@ -12,7 +13,6 @@ use crate::{
     },
     manifests::cargo_toml_binstall::PkgOverride,
     registry::ResolvedRegistry,
-    DesiredTargets,
 };
 
 pub mod resolve;
@@ -49,6 +49,12 @@ pub struct Options {
 
     /// Features to pass to `cargo install` when falling back to installing from source.
     pub features: Option<Vec<CompactString>>,
+    /// Pass `--no-default-features` to `cargo install` when falling back to
+    /// installing from source.
+    pub no_default_features: bool,
+    /// Pass `--all-features` to `cargo install` when falling back to
+    /// installing from source.
+    pub all_features: bool,
 
     pub temp_dir: PathBuf,
     pub install_path: PathBuf,

@@ -1,5 +1,5 @@
 use std::{
-    num::{NonZeroU16, NonZeroU64, NonZeroU8},
+    num::{NonZeroU8, NonZeroU16, NonZeroU64},
     ops::ControlFlow,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -9,13 +9,13 @@ use bytes::Bytes;
 use futures_util::Stream;
 use httpdate::parse_http_date;
 use reqwest::{
-    header::{HeaderMap, HeaderValue, RETRY_AFTER},
     Request,
+    header::{HeaderMap, HeaderValue, RETRY_AFTER},
 };
 use thiserror::Error as ThisError;
 use tracing::{debug, info, instrument};
 
-pub use reqwest::{header, Error as ReqwestError, Method, StatusCode};
+pub use reqwest::{Error as ReqwestError, Method, StatusCode, header};
 pub use url::Url;
 
 mod delay_request;
@@ -56,6 +56,15 @@ pub enum Error {
 
     #[error(transparent)]
     Http(Box<HttpError>),
+
+    /// A response body ended before the length its headers promised, and the
+    /// remainder could not be fetched.
+    #[error("{url} ended after {read} of {expected} bytes")]
+    Truncated {
+        url: Box<url::Url>,
+        read: u64,
+        expected: u64,
+    },
 
     #[cfg(feature = "json")]
     #[error("Failed to parse http response body as Json: {0}")]
@@ -388,7 +397,7 @@ impl Client {
     pub async fn get_stream(
         &self,
         url: Url,
-    ) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
+    ) -> Result<impl Stream<Item = Result<Bytes, Error>> + use<>, Error> {
         Ok(self.get(url).send(true).await?.bytes_stream())
     }
 

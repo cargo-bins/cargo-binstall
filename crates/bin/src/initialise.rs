@@ -1,9 +1,14 @@
-use std::{borrow::Cow, env::var_os, fs, path::PathBuf};
+use std::{
+    borrow::Cow,
+    env::{self, var_os},
+    fs,
+    path::PathBuf,
+};
 
 use binstalk::errors::BinstallError;
 use binstalk_manifests::{cargo_config::Config as CargoConfig, crates_manifests::Manifests};
 use home::cargo_home;
-use miette::{bail, Result, WrapErr};
+use miette::{Result, WrapErr, bail};
 use tempfile::TempDir;
 use tracing::{debug, info};
 
@@ -45,7 +50,7 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     } else if let Some(p) = &cargo_home {
         debug!(path=?p, "install root from cargo home");
         (p.into(), false)
-    } else if let Some(p) = dirs::executable_dir() {
+    } else if let Some(p) = executable_dir() {
         debug!(path=?p, "install root from executable dir");
         (p, false)
     } else {
@@ -114,11 +119,11 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         let p = cargo_root.join("bin");
         debug!(path=?p, "install path from cargo root");
         (p, false)
-    } else if let Some(p) = dirs::executable_dir() {
+    } else if let Some(p) = executable_dir() {
         debug!(path=?p, "install path from executable dir");
         (p, true)
     } else {
-        bail!("Could not determine installation path. Provide one with --install-path")
+        bail!("Could not determine installation path. Provide one with --install-path");
     };
 
     let settings = settings.merge_args(args);
@@ -152,4 +157,22 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         manifests,
         temp_dir,
     })
+}
+
+/// Same as `dirs::executable_dir()`: `$XDG_BIN_HOME` (if absolute) or
+/// `$HOME/.local/bin` on unix-likes, `None` on Windows, macOS, iOS and wasm32.
+fn executable_dir() -> Option<PathBuf> {
+    if cfg!(any(
+        windows,
+        target_os = "macos",
+        target_os = "ios",
+        target_arch = "wasm32"
+    )) {
+        return None;
+    }
+
+    var_os("XDG_BIN_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| env::home_dir().map(|home| home.join(".local/bin")))
 }

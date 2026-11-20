@@ -8,6 +8,10 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    # Give the ecosystem time to notice a compromised release before we
+    # pick it up.
+    cooldown:
+      default-days: 7
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
@@ -15,6 +19,8 @@ updates:
       # are done to reduce amount of PRs opened.
       interval: "weekly"
       day: "saturday"
+    cooldown:
+      default-days: 7
     groups:
       deps:
         patterns:

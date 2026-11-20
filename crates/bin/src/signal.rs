@@ -50,7 +50,7 @@ async fn wait_on_cancellation_signal() -> Result<(), io::Error> {
 #[cfg(unix)]
 mod unix {
     use super::*;
-    use signal::unix::{signal, SignalKind};
+    use signal::unix::{SignalKind, signal};
 
     /// Same as [`wait_on_cancellation_signal`] but is only available on unix.
     pub async fn wait_on_cancellation_signal_unix() -> Result<(), io::Error> {

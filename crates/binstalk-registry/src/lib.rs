@@ -36,7 +36,7 @@ mod common;
 use common::*;
 
 mod publish_age;
-pub use publish_age::{parse_min_publish_age, InvalidMinPublishAge};
+pub use publish_age::{InvalidMinPublishAge, parse_min_publish_age};
 
 #[cfg(feature = "git")]
 mod git_registry;
@@ -59,9 +59,9 @@ pub enum RegistryError {
     Remote(#[from] RemoteError),
 
     #[error("{0} is not found")]
-    #[diagnostic(
-        help("Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={0}")
-    )]
+    #[diagnostic(help(
+        "Check that the crate name you provided is correct.\nYou can also search for a matching crate at: https://lib.rs/search?q={0}"
+    ))]
     NotFound(CompactString),
 
     #[error(transparent)]
@@ -85,7 +85,9 @@ pub enum RegistryError {
     #[error("no version matching requirement '{req}'")]
     VersionMismatch { req: semver::VersionReq },
 
-    #[error("every version matching requirement '{req}' is newer than min-publish-age, the latest one {version} was published at {pubtime}")]
+    #[error(
+        "every version matching requirement '{req}' is newer than min-publish-age, the latest one {version} was published at {pubtime}"
+    )]
     #[diagnostic(help("Wait until the version is old enough, or lower the min-publish-age."))]
     TooNew {
         req: semver::VersionReq,
@@ -114,9 +116,9 @@ pub enum RegistryError {
     GitError(#[from] GitError),
 
     #[error("registry requires authentication: {0}")]
-    #[diagnostic(
-        help("Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active.")
-    )]
+    #[diagnostic(help(
+        "Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active."
+    ))]
     AuthenticationRequired(Box<Url>),
 }
 

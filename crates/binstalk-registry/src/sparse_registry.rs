@@ -12,8 +12,8 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    apply_auth, crate_prefix_components, parse_manifest, publish_age::publish_cutoff,
-    render_dl_template, MatchedVersion, RegistryAuth, RegistryConfig, RegistryError,
+    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, apply_auth,
+    crate_prefix_components, parse_manifest, publish_age::publish_cutoff, render_dl_template,
 };
 
 #[derive(Debug)]

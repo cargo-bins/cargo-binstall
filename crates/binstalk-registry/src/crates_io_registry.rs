@@ -10,7 +10,7 @@ use serde::Deserialize;
 use tracing::{debug, instrument};
 
 use crate::{
-    parse_manifest, publish_age::publish_cutoff, MatchedVersion, RegistryError, RegistryIndexEntry,
+    MatchedVersion, RegistryError, RegistryIndexEntry, parse_manifest, publish_age::publish_cutoff,
 };
 
 #[derive(Deserialize)]
@@ -64,13 +64,15 @@ async fn fetch_crate_cratesio_versions(
     debug!("Looking up crate information");
 
     match version_req.comparators.as_slice() {
-        [Comparator {
-            op: ComparatorOp::Exact,
-            major,
-            minor: Some(minor),
-            patch: Some(patch),
-            pre,
-        }] => {
+        [
+            Comparator {
+                op: ComparatorOp::Exact,
+                major,
+                minor: Some(minor),
+                patch: Some(patch),
+                pre,
+            },
+        ] => {
             let version = SemVersion {
                 major: *major,
                 minor: *minor,

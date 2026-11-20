@@ -11,6 +11,17 @@ on:
         description: "Used to speed up CI"
         required: false
         type: string
+      cache:
+        description: "Restore and save build caches; must be false for real releases"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      CI_RELEASE_TEST_GITHUB_TOKEN:
+        required: false
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -48,7 +59,7 @@ jobs:
     name: ${{ matrix.t }}
     runs-on: ${{ matrix.o }}
     permissions:
-      contents: write
+      contents: read
     env:
       CARGO_BUILD_TARGET: ${{ matrix.t }}
       GLIBC_VERSION: ${{ matrix.g }}
@@ -57,19 +68,26 @@ jobs:
       JUST_ENABLE_H3: true
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Override release profile lto settings
         if: inputs.CARGO_PROFILE_RELEASE_LTO
-        run: echo "CARGO_PROFILE_RELEASE_LTO=${{ inputs.CARGO_PROFILE_RELEASE_LTO }}" >> "$GITHUB_ENV"
+        run: echo "CARGO_PROFILE_RELEASE_LTO=$LTO" >> "$GITHUB_ENV"
         shell: bash
+        env:
+          LTO: ${{ inputs.CARGO_PROFILE_RELEASE_LTO }}
 
       - name: Override release profile codegen-units settings
         if: inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS
-        run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}" >> "$GITHUB_ENV"
+        run: echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=$CODEGEN_UNITS" >> "$GITHUB_ENV"
         shell: bash
+        env:
+          CODEGEN_UNITS: ${{ inputs.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}
 
       - uses: ./.github/actions/just-setup
+        with:
+          indexcache: ${{ inputs.cache }}
+          buildcache: ${{ inputs.cache }}
         env:
           # just-setup use binstall to install sccache,
           # which works better when we provide it with GITHUB_TOKEN.
@@ -90,14 +108,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package-${{ matrix.t }}
           path: packages/cargo-binstall-*
           retention-days: 1
 
       - name: Upload timings
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.t }}-cargo-timings
           path: target/cargo-timings
@@ -107,25 +125,25 @@ jobs:
     needs: build
     name: universal-apple-darwin
     permissions:
-      contents: write
+      contents: read
     runs-on: macos-latest
     env:
       JUST_FOR_RELEASE: true
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: taiki-e/install-action@v2.90.3
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: package-x86_64-apple-darwin
           path: packages/
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: package-aarch64-apple-darwin
           path: packages/
@@ -135,7 +153,7 @@ jobs:
       - run: ls -shal packages/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package-universal-apple-darwin
           path: packages/cargo-binstall-universal-*

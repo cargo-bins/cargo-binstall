@@ -2,9 +2,10 @@
 //!
 //! This manifest defines how a particular binary crate may be installed by Binstall.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use cargo_platform::{Cfg, Platform};
+use compact_str::CompactString;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, VariantArray};
@@ -82,6 +83,12 @@ pub struct PkgMeta {
     /// Strategies to disable
     pub disabled_strategies: Option<Box<[Strategy]>>,
 
+    /// Per-binary configuration, keyed by binary name.
+    ///
+    /// Exposed via `[package.metadata.binstall.binary.NAME]` in `Cargo.toml`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub binary: BTreeMap<CompactString, BinaryMeta>,
+
     /// Target specific overrides
     pub overrides: PkgOverrides,
 }
@@ -97,6 +104,9 @@ impl PkgMeta {
         }
         if let Some(o) = &pkg_override.bin_dir {
             self.bin_dir = Some(o.clone());
+        }
+        for (name, bin_meta) in &pkg_override.binary {
+            self.binary.insert(name.clone(), bin_meta.clone());
         }
     }
 
@@ -136,6 +146,24 @@ impl PkgMeta {
                 .into_iter()
                 .find_map(|pkg_override| pkg_override.signing.clone())
                 .or_else(|| self.signing.clone()),
+
+            binary: {
+                // Like the fields above, the first override (the most
+                // preferred one) to set a binary's entry wins, and the
+                // manifest's own entry is the fallback.
+                let mut binary = BTreeMap::new();
+                for (name, bin_meta) in pkg_overrides
+                    .clone()
+                    .into_iter()
+                    .flat_map(|pkg_override| &pkg_override.binary)
+                    .chain(&self.binary)
+                {
+                    binary
+                        .entry(name.clone())
+                        .or_insert_with(|| bin_meta.clone());
+                }
+                binary
+            },
 
             disabled_strategies: if ignore_disabled_strategies {
                 None
@@ -180,8 +208,28 @@ pub struct PkgOverride {
     /// Package signing configuration
     pub signing: Option<PkgSigning>,
 
+    /// Per-binary configuration override, keyed by binary name.
+    ///
+    /// An entry here replaces the entry for the same binary in
+    /// [`PkgMeta::binary`].
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub binary: BTreeMap<CompactString, BinaryMeta>,
+
     #[serde(skip)]
     pub ignore_disabled_strategies: bool,
+}
+
+/// Configuration for one binary of the package.
+///
+/// Exposed via `[package.metadata.binstall.binary.NAME]` in `Cargo.toml`.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default)]
+pub struct BinaryMeta {
+    /// Extra names to symlink to the installed binary, in the same dir.
+    ///
+    /// Only created when symlinks are (i.e. not with `--no-symlinks`), and
+    /// recorded like the binary itself so that uninstalling removes them.
+    pub aliases: Vec<CompactString>,
 }
 
 /// An ordered map of target-specific overrides.
@@ -356,6 +404,58 @@ mod tests {
         assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].pkg_fmt, Some(PkgFmt::Tgz)); // Unix.
         assert_eq!(matches[1].pkg_fmt, Some(PkgFmt::Tar)); // Linux.
+    }
+
+    #[test]
+    fn test_binary_aliases_parse_and_override() {
+        let base: PkgMeta = serde_json::from_value(json!({
+            "binary": {
+                "mycrate": { "aliases": ["mcr"] },
+                "other": { "aliases": ["oth"] },
+            },
+        }))
+        .unwrap();
+        assert_eq!(base.binary["mycrate"].aliases, ["mcr"]);
+        assert_eq!(base.binary["other"].aliases, ["oth"]);
+
+        let bin_meta = |aliases: &[&str]| BinaryMeta {
+            aliases: aliases.iter().copied().map(CompactString::from).collect(),
+        };
+        let pkg_override = |name: &str, aliases: &[&str]| PkgOverride {
+            binary: BTreeMap::from([(name.into(), bin_meta(aliases))]),
+            ..Default::default()
+        };
+
+        // An override replaces the entry of the binary it names, and leaves
+        // the others alone.
+        let win = pkg_override("mycrate", &["mcr", "mycrate-win"]);
+        let merged = base.merge_overrides([&win]);
+        assert_eq!(merged.binary["mycrate"].aliases, ["mcr", "mycrate-win"]);
+        assert_eq!(merged.binary["other"].aliases, ["oth"]);
+
+        // The most preferred override wins.
+        let cli = pkg_override("mycrate", &["cli"]);
+        let merged = base.merge_overrides([&cli, &win]);
+        assert_eq!(merged.binary["mycrate"].aliases, ["cli"]);
+
+        // An empty list removes the aliases.
+        let none = pkg_override("other", &[]);
+        assert!(
+            base.merge_overrides([&none]).binary["other"]
+                .aliases
+                .is_empty()
+        );
+
+        let mut merged = base.clone();
+        merged.merge(&cli);
+        assert_eq!(merged.binary["mycrate"].aliases, ["cli"]);
+        assert_eq!(merged.binary["other"].aliases, ["oth"]);
+
+        // Without an override the base is kept.
+        assert_eq!(
+            base.merge_overrides([&PkgOverride::default()]).binary,
+            base.binary
+        );
     }
 
     #[test]

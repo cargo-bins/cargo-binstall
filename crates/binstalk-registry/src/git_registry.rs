@@ -7,7 +7,7 @@ use compact_str::{CompactString, ToCompactString};
 use jiff::Timestamp;
 use once_cell::sync::OnceCell;
 use semver::VersionReq;
-use serde_json::{from_slice as json_from_slice, Deserializer as JsonDeserializer};
+use serde_json::{Deserializer as JsonDeserializer, from_slice as json_from_slice};
 use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
@@ -15,8 +15,8 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    crate_prefix_components, parse_manifest, publish_age::publish_cutoff, render_dl_template,
-    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError,
+    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, crate_prefix_components,
+    parse_manifest, publish_age::publish_cutoff, render_dl_template,
 };
 
 #[derive(Debug)]

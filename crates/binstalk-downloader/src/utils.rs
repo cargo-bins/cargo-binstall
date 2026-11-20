@@ -153,11 +153,11 @@ impl BufRead for StreamReadable {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         let bytes = &mut self.bytes;
 
-        if !bytes.has_remaining() {
-            if let Some(new_bytes) = self.rx.blocking_recv() {
-                // new_bytes are guaranteed to be non-empty.
-                *bytes = new_bytes;
-            }
+        if !bytes.has_remaining()
+            && let Some(new_bytes) = self.rx.blocking_recv()
+        {
+            // new_bytes are guaranteed to be non-empty.
+            *bytes = new_bytes;
         }
 
         Ok(&*bytes)

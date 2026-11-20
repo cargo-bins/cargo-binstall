@@ -1,19 +1,23 @@
-use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
+use std::{
+    borrow::Cow,
+    fmt, iter,
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
 use binstalk_types::cargo_toml_binstall::Strategy;
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use leon::Template;
-use once_cell::sync::OnceCell;
 use strum::IntoEnumIterator;
 use tokio::time::sleep;
 use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    common::*, futures_resolver::FuturesResolver, Data, FetchError, InvalidPkgFmtError, RepoInfo,
-    SignaturePolicy, SignatureVerifier, TargetDataErased, DEFAULT_GH_API_RETRY_DURATION,
+    DEFAULT_GH_API_RETRY_DURATION, Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
+    SignatureVerifier, TargetDataErased, common::*, futures_resolver::FuturesResolver,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -26,7 +30,7 @@ pub struct GhCrateMeta {
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
     signature_policy: SignaturePolicy,
-    resolution: OnceCell<Resolved>,
+    resolution: OnceLock<Resolved>,
 }
 
 #[derive(Debug)]
@@ -149,7 +153,7 @@ impl super::Fetcher for GhCrateMeta {
             data,
             target_data,
             signature_policy,
-            resolution: OnceCell::new(),
+            resolution: OnceLock::new(),
         })
     }
 
@@ -579,7 +583,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             DEFAULT_PKG_URL,
-            "https://github.com/ryankurte/cargo-binstall/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz"
+            "https://github.com/ryankurte/cargo-binstall/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz",
         );
     }
 
@@ -594,7 +598,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             &format!("https://example.com{}", &DEFAULT_PKG_URL[8..]),
-            "https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz"
+            "https://example.com/releases/download/v1.2.3/cargo-binstall-x86_64-unknown-linux-gnu-v1.2.3.tgz",
         );
     }
 
@@ -609,7 +613,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ archive-format }",
-            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz"
+            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz",
         );
     }
 
@@ -624,7 +628,7 @@ mod test {
             "x86_64-unknown-linux-gnu",
             ".tgz",
             "{ repo }/releases/download/v{ version }/sx128x-util-{ target }-v{ version }.{ format }",
-            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz"
+            "https://github.com/rust-iot/rust-radio-sx128x/releases/download/v0.14.1-alpha.5/sx128x-util-x86_64-unknown-linux-gnu-v0.14.1-alpha.5.tgz",
         );
     }
 
@@ -639,7 +643,7 @@ mod test {
             "aarch64-apple-darwin",
             ".txz",
             "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz",
-            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz"
+            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz",
         );
     }
 
@@ -654,7 +658,7 @@ mod test {
             "aarch64-pc-windows-msvc",
             ".bin",
             "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }",
-            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe"
+            "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe",
         );
     }
 }
