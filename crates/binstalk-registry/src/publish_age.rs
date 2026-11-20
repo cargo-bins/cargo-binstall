@@ -33,14 +33,22 @@ pub fn parse_min_publish_age(s: &str) -> Result<Duration, InvalidMinPublishAge> 
     let (count, unit) = s.split_at(unit_start);
     let unit = unit.strip_prefix(' ').unwrap_or(unit);
 
+    const SECOND: u64 = 1;
+    const MINUTE: u64 = SECOND * 60;
+    const HOUR: u64 = MINUTE * 60;
+    const DAY: u64 = HOUR * 24;
+    const WEEK: u64 = DAY * 7;
+    /// Average Gregorian month: 365.2425 days / 12, i.e. 2_629_746 seconds
+    const MONTH: u64 = DAY * 3_652_425 / 120_000;
+
     let count: u64 = count.parse().map_err(|_| err())?;
     let factor = match unit {
-        "second" | "seconds" => 1,
-        "minute" | "minutes" => 60,
-        "hour" | "hours" => 60 * 60,
-        "day" | "days" => 24 * 60 * 60,
-        "week" | "weeks" => 7 * 24 * 60 * 60,
-        "month" | "months" => 2_629_746,
+        "second" | "seconds" => SECOND,
+        "minute" | "minutes" => MINUTE,
+        "hour" | "hours" => HOUR,
+        "day" | "days" => DAY,
+        "week" | "weeks" => WEEK,
+        "month" | "months" => MONTH,
         _ => return Err(err()),
     };
 
