@@ -72,6 +72,10 @@ jobs:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           set -euxo pipefail
+          # A manually dispatched run tests every crate.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+              ALL_CHANGED_FILES="$(ls -d crates/*/)"
+          fi
           crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 | sed 's/^bin$/cargo-binstall/' || echo)"
           has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true || echo false)"
           has_fs_lock_changed="$(echo "$crates_changed" | grep -q fs-lock && echo true || echo false)"
@@ -111,67 +115,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
-
-  # Runs the e2e tests against the binaries release-dry-run has already
-  # built, instead of building another (dev) binary for the same targets.
-  # This is a separate job, so that a flaky e2e test fails CI without
-  # blocking real releases, which reuse release-packages.yml.
-  e2e-tests:
-    needs: release-dry-run
-    if: github.event_name != 'pull_request' && github.repository_owner == 'cargo-bins'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            os: macos-latest
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-
-    runs-on: ${{ matrix.os }}
-    env:
-      CARGO_BUILD_TARGET: ${{ matrix.target }}
-      # `just e2e-tests` then tests target/$CARGO_BUILD_TARGET/release/cargo-binstall
-      JUST_FOR_RELEASE: true
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/just-setup
-        with:
-          # Nothing is built here: the tests that install from source use
-          # a temporary CARGO_HOME and target dir.
-          indexcache: 'false'
-          buildcache: 'false'
-        env:
-          # just-setup use binstall to install sccache,
-          # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: package-${{ matrix.target }}
-          path: packages/
-
-      - name: Extract cargo-binstall from the release package
-        shell: bash
-        run: |
-          set -euxo pipefail
-          dir="target/$CARGO_BUILD_TARGET/release"
-          mkdir -p "$dir"
-          case "$RUNNER_OS" in
-            Linux) tar -xzf "packages/cargo-binstall-$CARGO_BUILD_TARGET.tgz" -C "$dir" cargo-binstall ;;
-            macOS) unzip -o "packages/cargo-binstall-$CARGO_BUILD_TARGET.zip" cargo-binstall -d "$dir" ;;
-            Windows) 7z x -y "-o$dir" "packages/cargo-binstall-$CARGO_BUILD_TARGET.zip" cargo-binstall.exe ;;
-          esac
-          "$dir/cargo-binstall" -V
-
-      - run: just e2e-tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
 
   cross-check:
     strategy:
@@ -279,7 +222,13 @@ jobs:
       attestations: write
     secrets:
       CI_RELEASE_TEST_GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
+      CI_TEST_GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
     with:
+      # Run the e2e tests on the packages built here, right after each one
+      # is built, instead of building another (dev) binary in a separate
+      # job. Real releases never set this, so a flaky e2e test fails CI
+      # without blocking a release.
+      e2e-tests: ${{ github.repository_owner == 'cargo-bins' }}
       info: |
         {
           "is-release": false,
@@ -552,7 +501,6 @@ jobs:
     name: Tests pass
     needs:
       - unit-tests
-      - e2e-tests
       - cross-check
       - lint
       - docs
