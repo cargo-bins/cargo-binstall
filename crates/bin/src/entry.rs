@@ -211,6 +211,8 @@ pub fn install_crates(
             bins
         }),
         features: args.features,
+        no_default_features: args.no_default_features,
+        all_features: args.all_features,
 
         temp_dir: temp_dir.path().to_owned(),
         install_path,

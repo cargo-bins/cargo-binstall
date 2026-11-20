@@ -175,6 +175,16 @@ Some crate installation strategies may collect anonymized usage statistics by de
    This mirrors the equivalent argument in `cargo install --features`.
 
    This only takes effect when falling back to `cargo install`; prebuilt binaries are unaffected, since they are built ahead of time with a fixed set of features.
+* `--no-default-features` — Do not activate the `default` feature when installing from source.
+
+   This mirrors the equivalent argument in `cargo install --no-default-features`.
+
+   Like `--features`, this only takes effect when falling back to `cargo install`; prebuilt binaries are unaffected.
+* `--all-features` — Activate all available features when installing from source.
+
+   This mirrors the equivalent argument in `cargo install --all-features`.
+
+   Like `--features`, this only takes effect when falling back to `cargo install`; prebuilt binaries are unaffected.
 * `--force` — Force a crate to be installed even if it is already installed
 * `--min-tls-version <VERSION>` — Require a minimum TLS version from remote endpoints.
 

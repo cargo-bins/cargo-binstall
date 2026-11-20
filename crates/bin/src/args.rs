@@ -387,6 +387,24 @@ pub struct Args {
     )]
     pub(crate) features: Option<Vec<CompactString>>,
 
+    /// Do not activate the `default` feature when installing from source.
+    ///
+    /// This mirrors the equivalent argument in `cargo install --no-default-features`.
+    ///
+    /// Like `--features`, this only takes effect when falling back to `cargo install`;
+    /// prebuilt binaries are unaffected.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) no_default_features: bool,
+
+    /// Activate all available features when installing from source.
+    ///
+    /// This mirrors the equivalent argument in `cargo install --all-features`.
+    ///
+    /// Like `--features`, this only takes effect when falling back to `cargo install`;
+    /// prebuilt binaries are unaffected.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) all_features: bool,
+
     /// Deprecated, here for back-compat only. Secure is now on by default.
     #[clap(hide(true), long)]
     pub(crate) secure: bool,
@@ -771,17 +789,27 @@ You cannot use --{option} and specify multiple packages at the same time. Do one
                 .exit();
         }
 
-        if opts
+        let feature_option = if opts
             .features
             .as_ref()
             .is_some_and(|features| !features.is_empty())
         {
+            "features"
+        } else if opts.no_default_features {
+            "no-default-features"
+        } else if opts.all_features {
+            "all-features"
+        } else {
+            ""
+        };
+
+        if !feature_option.is_empty() {
             command
                 .error(
                     ErrorKind::ArgumentConflict,
                     format_args!(
-                        r#"--features option used with multi package syntax.
-You cannot use --features and specify multiple packages at the same time. Do one or the other."#
+                        r#"--{feature_option} option used with multi package syntax.
+You cannot use --{feature_option} and specify multiple packages at the same time. Do one or the other."#
                     ),
                 )
                 .exit();
@@ -920,6 +948,23 @@ mod test {
     }
 
     const _: () = assert!(Strategy::VARIANTS.len() == StrategyWrapped::VARIANTS.len());
+
+    #[test]
+    fn feature_selection_flags_are_parsed() {
+        let args = Args::try_parse_from(["cargo-binstall", "ripgrep"]).unwrap();
+        assert!(!args.no_default_features);
+        assert!(!args.all_features);
+
+        let args = Args::try_parse_from([
+            "cargo-binstall",
+            "--no-default-features",
+            "--all-features",
+            "ripgrep",
+        ])
+        .unwrap();
+        assert!(args.no_default_features);
+        assert!(args.all_features);
+    }
 
     #[test]
     fn aliases_are_parsed_as_bin_alias_pairs() {
