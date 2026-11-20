@@ -234,9 +234,7 @@ impl MatchedVersion {
 
         match (ret, too_new) {
             (Some((matched, ver)), too_new) => {
-                if let Some((too_new, too_new_ver)) = too_new
-                    && too_new_ver > ver
-                {
+                if let Some((too_new, _)) = too_new.filter(|(_, too_new_ver)| *too_new_ver > ver) {
                     info!(
                         "Skipping version {} published at {}, it is newer than min-publish-age",
                         too_new.version,

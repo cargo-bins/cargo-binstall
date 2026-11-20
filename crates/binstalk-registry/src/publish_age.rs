@@ -19,6 +19,9 @@ pub struct InvalidMinPublishAge(CompactString);
 /// - an integer followed by an optional space and one of `second(s)`,
 ///   `minute(s)`, `hour(s)`, `day(s)`, `week(s)` or `month(s)`,
 ///   where a month is 30.436875 days.
+///
+/// This mirrors Cargo's `maybe_parse_time_span` in `src/util/time_span.rs`,
+/// except that an overflowing value is rejected instead of wrapping around.
 pub fn parse_min_publish_age(s: &str) -> Result<Duration, InvalidMinPublishAge> {
     if s == "0" {
         return Ok(Duration::ZERO);
