@@ -99,6 +99,10 @@ runs:
     with:
       env-vars: "CARGO CC CFLAGS CXX CMAKE RUST JUST"
       cache-workspace-crates: true
+      # A merge queue ref is never checked out again, so a cache saved
+      # there can't be restored by any later run, and it pushes the
+      # caches of main out of the 10 GB quota.
+      save-if: ${{ github.event_name != 'merge_group' }}
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
 

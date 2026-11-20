@@ -277,6 +277,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build detect-targets
         run: |
           cargo zigbuild --features cli-logging --target ${{ matrix.arch }}-unknown-linux-musl
@@ -316,6 +317,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build and run detect-targets tests
         run: |
           set -euxo pipefail
@@ -478,6 +480,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build detect-targets
         run: |
           cargo check --target ${{ matrix.target }}
@@ -508,6 +511,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Check fs-lock
         run: |
           cargo check --target ${{ matrix.target }}
