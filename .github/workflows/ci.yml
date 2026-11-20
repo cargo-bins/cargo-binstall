@@ -2,12 +2,6 @@ name: CI
 
 on:
   workflow_dispatch:
-  # Jobs that only run in the merge queue (e2e-tests, release-dry-run)
-  # restore their caches from main, and main only runs them when Cargo
-  # files change. Run weekly too, so that those caches exist after a new
-  # Rust release and don't expire after 7 days without a dependency bump.
-  schedule:
-    - cron: "0 3 * * 1"
   workflow_call:
     inputs:
       additional_key:
