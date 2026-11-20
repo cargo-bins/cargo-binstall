@@ -170,6 +170,16 @@ impl super::Fetcher for GhCrateMeta {
             let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
                 let template = Template::parse(pkg_url)?;
 
+                if template.has_key("bin") && self.data.bin.is_none() {
+                    // Each binary is in its own package, the caller is
+                    // expected to create one fetcher per binary with
+                    // `Data::with_bin`.
+                    debug!(
+                        "pkg-url {pkg_url} contains key bin, but no binary is specified, skipping"
+                    );
+                    return Ok(false);
+                }
+
                 if pkg_fmt.is_none()
                     && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
                 {
@@ -426,6 +436,9 @@ struct Context<'c> {
     target: &'c str,
     version: &'c str,
 
+    /// Name of the binary, only set when each binary is in its own package.
+    bin: Option<&'c str>,
+
     /// Archive format e.g. tar.gz, zip
     archive_format: Option<&'c str>,
 
@@ -450,6 +463,7 @@ impl fmt::Debug for Context<'_> {
             .field("repo", &self.repo)
             .field("target", &self.target)
             .field("version", &self.version)
+            .field("bin", &self.bin)
             .field("archive_format", &self.archive_format)
             .field("binary_ext", &self.binary_ext)
             .field("subcrate", &self.subcrate)
@@ -465,6 +479,7 @@ impl leon::Values for Context<'_> {
             "repo" => self.repo.map(Cow::Borrowed),
             "target" => Some(Cow::Borrowed(self.target)),
             "version" => Some(Cow::Borrowed(self.version)),
+            "bin" => self.bin.map(Cow::Borrowed),
 
             "archive-format" => self.archive_format.map(Cow::Borrowed),
 
@@ -510,6 +525,7 @@ impl<'c> Context<'c> {
             target,
 
             version: &data.version,
+            bin: data.bin.as_deref(),
             archive_format,
             archive_suffix,
             binary_ext: if target.contains("windows") {
@@ -645,6 +661,43 @@ mod test {
             "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz",
             "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-apple-darwin.tar.xz",
         );
+    }
+
+    #[test]
+    fn bin() {
+        assert_context_rendering(
+            &Data::new(
+                "flowr".to_compact_string(),
+                "0.142.0".to_compact_string(),
+                Some("https://github.com/andrewdavidmackenzie/flow".to_string()),
+            )
+            .with_bin("flowrcli".to_compact_string()),
+            "x86_64-unknown-linux-gnu",
+            ".tgz",
+            "{ repo }/releases/download/v{ version }/{ bin }-{ target }.{ archive-format }",
+            "https://github.com/andrewdavidmackenzie/flow/releases/download/v0.142.0/flowrcli-x86_64-unknown-linux-gnu.tgz",
+        );
+    }
+
+    #[test]
+    fn bin_without_binary() {
+        let data = Data::new(
+            "flowr".to_compact_string(),
+            "0.142.0".to_compact_string(),
+            Some("https://github.com/andrewdavidmackenzie/flow".to_string()),
+        );
+        let target_info = leon::vals(|_| None);
+        let ctx = Context::from_data_with_repo(
+            &data,
+            "x86_64-unknown-linux-gnu",
+            &target_info,
+            Some(".tgz"),
+            data.repo.as_deref(),
+            None,
+        );
+
+        ctx.render_url("{ repo }/releases/download/v{ version }/{ bin }.tgz")
+            .unwrap_err();
     }
 
     #[test]

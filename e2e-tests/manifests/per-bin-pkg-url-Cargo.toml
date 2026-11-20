@@ -1,0 +1,27 @@
+[package]
+name = "per-bin-test"
+description = "Each binary is downloaded from its own package"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+
+[features]
+extra = []
+
+[[bin]]
+name = "per-bin-a"
+path = "src/a.rs"
+
+[[bin]]
+name = "per-bin-b"
+path = "src/b.rs"
+
+# Optional: its package is never published, so it is skipped.
+[[bin]]
+name = "per-bin-extra"
+path = "src/extra.rs"
+required-features = ["extra"]
+
+[package.metadata.binstall]
+pkg-url = "https://localhost:4444/bin/{ bin }"
+pkg-fmt = "bin"

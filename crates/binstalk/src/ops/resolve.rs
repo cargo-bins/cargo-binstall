@@ -1,4 +1,7 @@
-use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromStr, sync::Arc};
+use std::{
+    borrow::Cow, collections::BTreeSet, future::Future, iter, mem, path::Path, str::FromStr,
+    sync::Arc, time::Duration,
+};
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
@@ -6,11 +9,15 @@ use binstalk_types::{
     crate_info::{CrateSource, SourceType},
 };
 use compact_str::{CompactString, ToCompactString};
+use either::Either;
 use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Comparator, Op as ComparatorOp, Version, VersionReq};
-use tokio::{task::spawn_blocking, time::timeout};
+use tokio::{
+    task::spawn_blocking,
+    time::{Instant, error::Elapsed, timeout, timeout_at},
+};
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 
@@ -108,7 +115,21 @@ async fn resolve_inner(
         _ => None,
     };
 
-    let mut handles: Vec<Arc<dyn Fetcher>> = Vec::with_capacity(
+    // Indices of the binaries the user asked for, used when each binary is
+    // downloaded from its own package.
+    let selected_bins: Vec<usize> = package_info
+        .binaries
+        .iter()
+        .enumerate()
+        .filter(|(_, bin)| {
+            opts.bins
+                .as_ref()
+                .is_none_or(|bins| bins.iter().any(|b| b == bin.name))
+        })
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut candidates: Vec<Candidate> = Vec::with_capacity(
         desired_targets.len() * resolvers.len()
             + if binary_name.is_some() {
                 desired_targets.len()
@@ -119,127 +140,138 @@ async fn resolve_inner(
 
     let gh_api_client = opts.gh_api_client.get().await?;
 
-    let mut handles_fn =
-        |data: Arc<Data>, filter_fetcher_by_name_predicate: fn(&'static str) -> bool| {
-            handles.extend(
-                resolvers
-                    .iter()
-                    .cartesian_product(&desired_targets)
-                    .filter_map(|(f, target_data)| {
-                        let fetcher = f(
-                            opts.client.clone(),
-                            gh_api_client.clone(),
-                            data.clone(),
-                            target_data.clone(),
-                            opts.signature_policy,
-                        );
+    let mut candidates_fn = |data: Arc<Data>,
+                             filter_fetcher_by_name_predicate: fn(&'static str) -> bool,
+                             skip_per_bin: bool| {
+        for (f, target_data) in resolvers.iter().cartesian_product(&desired_targets) {
+            let new_fetcher = |data: Arc<Data>| {
+                f(
+                    opts.client.clone(),
+                    gh_api_client.clone(),
+                    data,
+                    target_data.clone(),
+                    opts.signature_policy,
+                )
+            };
+            let fetcher = new_fetcher(data.clone());
 
-                        if let Some(disabled_strategies) =
-                            target_data.meta.disabled_strategies.as_deref()
-                            && disabled_strategies.contains(&fetcher.strategy())
-                        {
-                            return None;
-                        }
+            if let Some(disabled_strategies) = target_data.meta.disabled_strategies.as_deref()
+                && disabled_strategies.contains(&fetcher.strategy())
+            {
+                continue;
+            }
 
-                        filter_fetcher_by_name_predicate(fetcher.fetcher_name()).then_some(fetcher)
-                    }),
-            )
-        };
+            if !filter_fetcher_by_name_predicate(fetcher.fetcher_name()) {
+                continue;
+            }
 
-    handles_fn(
+            if fetcher.fetcher_name() == FETCHER_GH_CRATE_META && is_pkg_url_per_bin(target_data) {
+                if skip_per_bin {
+                    continue;
+                }
+                candidates.push(Candidate::PerBin(
+                    selected_bins
+                        .iter()
+                        .map(|&i| {
+                            let bin = package_info.binaries[i].name.as_str();
+                            (i, new_fetcher(Arc::new(data.with_bin(bin.into()))))
+                        })
+                        .collect(),
+                ));
+            } else {
+                candidates.push(Candidate::Package(fetcher));
+            }
+        }
+    };
+
+    candidates_fn(
         Arc::new(Data::new(
             package_info.name.clone(),
             package_info.version_str.clone(),
             package_info.repo.clone(),
         )),
         |_| true,
+        false,
     );
 
     if let Some(binary_name) = binary_name {
-        handles_fn(
+        // `{ bin }` already names the binary, so there is no need to try the
+        // binary name as `{ name }` for a pkg-url that has it.
+        candidates_fn(
             Arc::new(Data::new(
                 binary_name,
                 package_info.version_str.clone(),
                 package_info.repo.clone(),
             )),
             |name| name == FETCHER_GH_CRATE_META,
+            true,
         );
     }
 
-    for fetcher in &handles {
-        match timeout(
-            opts.maximum_resolution_timeout,
-            AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join(),
-        )
-        .await
-        {
-            Ok(ret) => match ret {
-                Ok(true) => {
-                    // Generate temporary binary path
-                    let bin_path = opts.temp_dir.join(format!(
-                        "bin-{}-{}-{}",
-                        package_info.name,
-                        fetcher.target(),
-                        fetcher.fetcher_name()
-                    ));
-
-                    match download_extract_and_verify(
-                        fetcher.as_ref(),
-                        &bin_path,
-                        &package_info,
-                        &opts.install_path,
-                        opts.no_symlinks,
-                        &opts.bins,
-                    )
-                    .await
-                    {
-                        Ok(bin_files) => {
-                            if !bin_files.is_empty() {
-                                if !opts.disable_telemetry {
-                                    fetcher.clone().report_to_upstream();
-                                }
-                                return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
-                                    fetcher: fetcher.clone(),
-                                    new_version: package_info.version,
-                                    pubtime: package_info.pubtime,
-                                    name: package_info.name,
-                                    version_req: version_req_str,
-                                    source: package_info.source,
-                                    bin_files,
-                                })));
-                            } else {
-                                warn!(
-                                    "Error when checking binaries provided by fetcher {}: \
-                                The fetcher does not provide any optional binary",
-                                    fetcher.source_name(),
-                                );
-                            }
-                        }
-                        Err(err) => {
-                            if let BinstallError::UserAbort = err {
-                                return Err(err);
-                            }
-                            warn!(
-                                "Error while downloading and extracting from fetcher {}: {}",
-                                fetcher.source_name(),
-                                err
-                            );
-                        }
-                    }
+    for candidate in &candidates {
+        let ret = match candidate {
+            Candidate::Package(fetcher) => {
+                if !find(fetcher.clone(), opts.maximum_resolution_timeout).await {
+                    continue;
                 }
-                Ok(false) => (),
-                Err(err) => {
+
+                // Generate temporary binary path
+                let bin_path = opts.temp_dir.join(format!(
+                    "bin-{}-{}-{}",
+                    package_info.name,
+                    fetcher.target(),
+                    fetcher.fetcher_name()
+                ));
+
+                download_extract_and_verify(
+                    fetcher.as_ref(),
+                    &bin_path,
+                    &package_info,
+                    &package_info.binaries.iter().collect::<Vec<_>>(),
+                    false,
+                    &opts.install_path,
+                    opts.no_symlinks,
+                    &opts.bins,
+                )
+                .await
+                .map(|bin_files| Some((fetcher.clone(), bin_files)))
+            }
+            Candidate::PerBin(fetchers) => {
+                download_extract_and_verify_per_bin(fetchers, &package_info, &opts).await
+            }
+        };
+
+        match ret {
+            Ok(Some((fetcher, bin_files))) => {
+                if !bin_files.is_empty() {
+                    if !opts.disable_telemetry {
+                        candidate.report_to_upstream();
+                    }
+                    return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
+                        fetcher,
+                        new_version: package_info.version,
+                        pubtime: package_info.pubtime,
+                        name: package_info.name,
+                        version_req: version_req_str,
+                        source: package_info.source,
+                        bin_files,
+                    })));
+                } else {
                     warn!(
-                        "Error while checking fetcher {}: {}",
+                        "Error when checking binaries provided by fetcher {}: \
+                    The fetcher does not provide any optional binary",
                         fetcher.source_name(),
-                        err
                     );
                 }
-            },
+            }
+            Ok(None) => (),
             Err(err) => {
+                if let BinstallError::UserAbort = err {
+                    return Err(err);
+                }
                 warn!(
-                    "Timeout reached while checking fetcher {}: {}",
-                    fetcher.source_name(),
+                    "Error while downloading and extracting from fetcher {}: {}",
+                    candidate.source_name(),
                     err
                 );
             }
@@ -249,8 +281,8 @@ async fn resolve_inner(
     // At this point, we don't know whether fallback to cargo install is allowed, or whether it will
     // succeed, but things start to get convoluted when try to include that data, so this will do.
     if !opts.disable_telemetry {
-        for fetcher in handles {
-            fetcher.report_to_upstream();
+        for candidate in &candidates {
+            candidate.report_to_upstream();
         }
     }
 
@@ -298,14 +330,193 @@ async fn resolve_inner(
     }))
 }
 
+/// A way to get the binaries of a crate for one target.
+enum Candidate {
+    /// One package that provides all the binaries.
+    Package(Arc<dyn Fetcher>),
+    /// One package per binary, from the same fetcher and target, keyed by
+    /// the index of the binary in [`PackageInfo::binaries`].
+    ///
+    /// Used when `pkg-url` contains key `bin`.
+    PerBin(Vec<(usize, Arc<dyn Fetcher>)>),
+}
+
+impl Candidate {
+    fn fetchers(&self) -> impl Iterator<Item = &Arc<dyn Fetcher>> {
+        match self {
+            Candidate::Package(fetcher) => Either::Left(iter::once(fetcher)),
+            Candidate::PerBin(fetchers) => Either::Right(fetchers.iter().map(|(_, f)| f)),
+        }
+    }
+
+    fn report_to_upstream(&self) {
+        for fetcher in self.fetchers() {
+            fetcher.clone().report_to_upstream();
+        }
+    }
+
+    fn source_name(&self) -> CompactString {
+        self.fetchers()
+            .map(|fetcher| fetcher.source_name())
+            .unique()
+            .join(", ")
+            .into()
+    }
+}
+
+/// Whether each binary is downloaded from its own package, which is the case
+/// when `pkg-url` contains key `bin`.
+fn is_pkg_url_per_bin<T: leon::Values + ?Sized>(target_data: &TargetData<T>) -> bool {
+    target_data
+        .meta
+        .pkg_url
+        .as_deref()
+        .and_then(|pkg_url| Template::parse(pkg_url).ok())
+        .is_some_and(|template| template.has_key("bin"))
+}
+
+/// Returns whether `fetcher.find()` found a package, logging errors and
+/// timeouts.
+async fn log_find_result(
+    fetcher: &dyn Fetcher,
+    ret: impl Future<Output = Result<Result<bool, BinstallError>, Elapsed>>,
+) -> bool {
+    match ret.await {
+        Ok(Ok(found)) => found,
+        Ok(Err(err)) => {
+            warn!(
+                "Error while checking fetcher {}: {}",
+                fetcher.source_name(),
+                err
+            );
+            false
+        }
+        Err(err) => {
+            warn!(
+                "Timeout reached while checking fetcher {}: {}",
+                fetcher.source_name(),
+                err
+            );
+            false
+        }
+    }
+}
+
+async fn find(fetcher: Arc<dyn Fetcher>, maximum_resolution_timeout: Duration) -> bool {
+    log_find_result(
+        fetcher.as_ref(),
+        timeout(
+            maximum_resolution_timeout,
+            AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join(),
+        ),
+    )
+    .await
+}
+
+/// Find, download and extract the package of each binary in `fetchers`.
+///
+/// Returns `None` if the package of a binary that is not optional cannot be
+/// found, or if no package is found at all.
+///
+/// Otherwise, returns one of the fetchers, for its target and source name,
+/// and the binaries found.
+async fn download_extract_and_verify_per_bin(
+    fetchers: &[(usize, Arc<dyn Fetcher>)],
+    package_info: &PackageInfo,
+    opts: &Options,
+) -> Result<Option<(Arc<dyn Fetcher>, Vec<bins::BinFile>)>, BinstallError> {
+    let name = &package_info.name;
+    let deadline = Instant::now() + opts.maximum_resolution_timeout;
+
+    // Start all of them first, so that they run concurrently.
+    let handles = fetchers
+        .iter()
+        .map(|(i, fetcher)| {
+            (
+                &package_info.binaries[*i],
+                fetcher,
+                AutoAbortJoinHandle::new(fetcher.clone().find()),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let mut found = Vec::with_capacity(handles.len());
+    for (bin, fetcher, handle) in handles {
+        let bin_name = bin.name.as_str();
+
+        if log_find_result(
+            fetcher.as_ref(),
+            timeout_at(deadline, handle.flattened_join()),
+        )
+        .await
+        {
+            found.push((bin, fetcher));
+        } else if bin.required_features.is_empty() {
+            debug!(
+                "The package of {name} bin {bin_name} is not found on target {}",
+                fetcher.target()
+            );
+            return Ok(None);
+        } else {
+            let features = bin.required_features.iter().format(",");
+            warn!(
+                "The package of {name} bin {bin_name} is not found. \
+But since it requires features {features}, this bin is ignored."
+            );
+        }
+    }
+
+    let Some((_, first_fetcher)) = found.first() else {
+        return Ok(None);
+    };
+    let first_fetcher = Arc::clone(first_fetcher);
+
+    let mut bin_files = Vec::with_capacity(found.len());
+    for (bin, fetcher) in found {
+        // Generate temporary binary path
+        let bin_path = opts.temp_dir.join(format!(
+            "bin-{}-{}-{}-{}",
+            package_info.name,
+            fetcher.target(),
+            fetcher.fetcher_name(),
+            bin.name,
+        ));
+
+        bin_files.extend(
+            download_extract_and_verify(
+                fetcher.as_ref(),
+                &bin_path,
+                package_info,
+                &[bin],
+                true,
+                &opts.install_path,
+                opts.no_symlinks,
+                &opts.bins,
+            )
+            .await?,
+        );
+    }
+
+    bins::check_aliases_unique(&bin_files)?;
+
+    Ok(Some((first_fetcher, bin_files)))
+}
+
 ///  * `fetcher` - `fetcher.find()` must have returned `Ok(true)`.
+///
+///  * `binaries` - the binaries the package provides.
+///  * `per_bin` - whether the package only provides the binary in `binaries`,
+///    i.e. pkg-url contains key `bin`.
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
+#[allow(clippy::too_many_arguments)]
 async fn download_extract_and_verify(
     fetcher: &dyn Fetcher,
     bin_path: &Path,
     package_info: &PackageInfo,
+    binaries: &[&Bin],
+    per_bin: bool,
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
@@ -322,6 +533,8 @@ async fn download_extract_and_verify(
     let bin_files = collect_bin_files(
         fetcher,
         package_info,
+        binaries,
+        per_bin,
         meta,
         bin_path,
         install_path,
@@ -331,8 +544,7 @@ async fn download_extract_and_verify(
 
     let name = &package_info.name;
 
-    package_info
-        .binaries
+    binaries
         .iter()
         .zip(bin_files)
         .filter_map(|(bin, bin_file)| {
@@ -376,9 +588,12 @@ But since it requires features {features}, this bin is ignored."
         .map_err(BinstallError::from)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_bin_files(
     fetcher: &dyn Fetcher,
     package_info: &PackageInfo,
+    binaries: &[&Bin],
+    per_bin: bool,
     meta: PkgMeta,
     bin_path: &Path,
     install_path: &Path,
@@ -404,7 +619,25 @@ fn collect_bin_files(
         .as_deref()
         .map(Cow::Borrowed)
         .unwrap_or_else(|| {
-            bins::infer_bin_dir_template(&bin_data, &mut |p| extracted_files.get_dir(p).is_some())
+            let mut has_dir = |p: &Path| extracted_files.get_dir(p).is_some();
+
+            // The package of one binary is likely to be named after it,
+            // e.g. `{ bin }-{ target }`, so try that first.
+            if let (true, [bin]) = (per_bin, binaries) {
+                let template = bins::infer_bin_dir_template(
+                    &bins::Data {
+                        name: &bin.name,
+                        meta: PkgMeta::default(),
+                        ..bin_data
+                    },
+                    &mut has_dir,
+                );
+                if template != bins::DEFAULT_BIN_DIR_TEMPLATE {
+                    return template;
+                }
+            }
+
+            bins::infer_bin_dir_template(&bin_data, &mut has_dir)
         });
 
     let template = Template::parse(&bin_dir)?;
@@ -419,8 +652,7 @@ fn collect_bin_files(
     }
 
     // Create bin_files
-    let bin_files = package_info
-        .binaries
+    let bin_files = binaries
         .iter()
         .map(|bin| {
             let aliases = bin_data

@@ -173,7 +173,12 @@ pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
-    repo_info: OnceCell<Option<RepoInfo>>,
+    /// The binary this package provides, when each binary of the crate is
+    /// downloaded from its own `pkg-url`.
+    bin: Option<CompactString>,
+    /// Shared with the copies made by [`Data::with_bin`], so that the repo is
+    /// only resolved once for all of them.
+    repo_info: Arc<OnceCell<Option<RepoInfo>>>,
 }
 
 impl Data {
@@ -182,7 +187,17 @@ impl Data {
             name,
             version,
             repo,
-            repo_info: OnceCell::new(),
+            bin: None,
+            repo_info: Arc::default(),
+        }
+    }
+
+    /// Returns a copy of `self` for the package of one binary, which provides
+    /// the `{ bin }` key when rendering `pkg-url`.
+    pub fn with_bin(&self, bin: CompactString) -> Self {
+        Self {
+            bin: Some(bin),
+            ..self.clone()
         }
     }
 
