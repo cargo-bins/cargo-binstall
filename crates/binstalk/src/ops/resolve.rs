@@ -84,13 +84,14 @@ async fn resolve_inner(
         .map(|target| {
             debug!("Building metadata for target: {target}");
 
-            let target_related_info = TargetTriple::from_str(target)?;
+            let mut target_related_info = TargetTriple::from_str(target)?;
 
             let cfgs = target_related_info.cfgs();
             let meta = package_info.meta.merge_overrides(
                 iter::once(&opts.cli_overrides)
                     .chain(package_info.overrides.get_matching(target, &cfgs)),
             );
+            target_related_info.set_arch_alias(&meta.target_arch_alias);
 
             debug!("Found metadata: {meta:?}");
 

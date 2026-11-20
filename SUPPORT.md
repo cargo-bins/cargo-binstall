@@ -27,6 +27,7 @@ With the following configuration keys:
   If `--strategies` is passed on the command line, then the `disabled-strategies` in `package.metadata` will be ignored.
   Otherwise, the `disabled-strategies` in `package.metadata` and `--disable-strategies` will be merged.
 - `binary.NAME.aliases` is a list of extra names to symlink to the installed binary `NAME`, see [Aliases](#aliases).
+- `target-arch-alias` maps architecture names to the ones your release assets use in `{ target-arch }`, see [Architecture names that differ from Rust's](#architecture-names-that-differ-from-rusts).
 
 
 `pkg-url` and `bin-dir` are templated to support different names for different versions / architectures / etc.
@@ -46,7 +47,7 @@ with the following variables available:
 - `target-family`: Operating system of the target from [`target_lexicon::OperatingSystem`]
 - `os-name`: `rustc`-style operating system name of the target, e.g. `windows`, `macos` or `linux`
 - `target-arch`: Architecture of the target, `universal` on `{universal, universal2}-apple-darwin`,
-  otherwise from [`target_lexicon::Architecture`]
+  otherwise from [`target_lexicon::Architecture`], unless `target-arch-alias` renames it
 - `target-libc`: ABI environment of the target from [`target_lexicon::Environment`]
 - `target-vendor`: Vendor of the target from [`target_lexicon::Vendor`]
 
@@ -110,18 +111,21 @@ pkg-fmt = "tgz"
 #### Architecture names that differ from Rust's
 
 `{ target-arch }` uses Rust's architecture names, e.g. `aarch64` and `x86_64`.
-If your release assets use other names, such as `arm64` or `amd64`, override `pkg-url` with a `cfg(target_arch = ...)` expression and write the name into it.
-One override covers every operating system with that architecture:
+If your release assets use other names, such as `arm64` or `amd64`, map them with `target-arch-alias`:
 
 ```toml
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target-family }-{ target-arch }{ archive-suffix }"
 
 # Assets are named e.g. `my-crate-1.0.0-darwin-arm64.tgz` rather than `...-darwin-aarch64.tgz`.
-[package.metadata.binstall.overrides.'cfg(target_arch = "aarch64")']
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target-family }-arm64{ archive-suffix }"
+[package.metadata.binstall.target-arch-alias]
+aarch64 = "arm64"
 ```
 
+Each key is a name `{ target-arch }` would otherwise give, and its value is used in its place in `pkg-url`, `bin-dir` and the signature `file`.
+Architectures without an entry keep their own name.
+`target-arch-alias` can also be set in an override, where its entries replace the entries for the same architectures.
+It does not change `cfg(target_arch = ...)`, which always uses Rust's names.
 
 ### Aliases
 
