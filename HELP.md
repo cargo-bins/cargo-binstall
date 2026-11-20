@@ -171,7 +171,9 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    Newer versions matching the version requirement are skipped, and it is an error if all of them are too new. Versions without a publish time in the registry index are not affected.
 
-   Disabled by default, since `cargo install` does not honor Cargo's `min-publish-age` config for the installed crate either. It does not apply to `--manifest-path` or `--git`, nor to the dependencies built when falling back to `cargo install`.
+   Disabled by default, since `cargo install` does not honor Cargo's `min-publish-age` config for the installed crate either. It does not apply to `--manifest-path` or `--git`.
+
+   It is forwarded to the `cargo install` fallback via `--config`, but cargo 1.100 ignores it there, so the dependencies built by the fallback are not filtered.
 * `--locked` — This option will be passed through to all `cargo-install` invocations.
 
    It will require `Cargo.lock` to be up to date.

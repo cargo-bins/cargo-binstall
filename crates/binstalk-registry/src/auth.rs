@@ -82,6 +82,11 @@ impl ResolvedRegistry {
             .await
     }
 
+    /// Return the min-publish-age set by [`ResolvedRegistry::with_min_publish_age`].
+    pub fn min_publish_age(&self) -> Option<Duration> {
+        self.min_publish_age
+    }
+
     pub fn crate_source(&self) -> Result<binstalk_types::crate_info::CrateSource, url::ParseError> {
         self.registry.crate_source()
     }

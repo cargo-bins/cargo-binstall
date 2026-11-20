@@ -377,8 +377,11 @@ pub struct Args {
     ///
     /// Disabled by default, since `cargo install` does not honor Cargo's
     /// `min-publish-age` config for the installed crate either. It does not
-    /// apply to `--manifest-path` or `--git`, nor to the dependencies built
-    /// when falling back to `cargo install`.
+    /// apply to `--manifest-path` or `--git`.
+    ///
+    /// It is forwarded to the `cargo install` fallback via `--config`, but
+    /// cargo 1.100 ignores it there, so the dependencies built by the
+    /// fallback are not filtered.
     #[clap(
         help_heading = "Options",
         long,
