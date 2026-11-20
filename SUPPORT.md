@@ -107,6 +107,21 @@ pkg-fmt = "tgz"
 
 **Precedence:** Exact target names take precedence over `cfg` expressions. When multiple `cfg` expressions match, they're evaluated in the order they appear in `Cargo.toml`.
 
+#### Architecture names that differ from Rust's
+
+`{ target-arch }` uses Rust's architecture names, e.g. `aarch64` and `x86_64`.
+If your release assets use other names, such as `arm64` or `amd64`, override `pkg-url` with a `cfg(target_arch = ...)` expression and write the name into it.
+One override covers every operating system with that architecture:
+
+```toml
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target-family }-{ target-arch }{ archive-suffix }"
+
+# Assets are named e.g. `my-crate-1.0.0-darwin-arm64.tgz` rather than `...-darwin-aarch64.tgz`.
+[package.metadata.binstall.overrides.'cfg(target_arch = "aarch64")']
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target-family }-arm64{ archive-suffix }"
+```
+
 
 ### Aliases
 
