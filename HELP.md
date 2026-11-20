@@ -59,6 +59,8 @@ Some crate installation strategies may collect anonymized usage statistics by de
    This option cannot be used with `--manifest-path`.
 * `--bin-dir <BIN_DIR>` — Path template for binary files in packages
 
+   It is the path of the binary inside of the package, or of the dir holding it, not where it is installed: that is `--install-path`.
+
    Overrides the Cargo.toml package manifest bin-dir.
 * `--pkg-fmt <PKG_FMT>` — Format for package downloads
 
