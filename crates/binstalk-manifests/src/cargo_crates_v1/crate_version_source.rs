@@ -6,7 +6,6 @@ use std::{
 
 use binstalk_types::maybe_owned::MaybeOwned;
 use compact_str::CompactString;
-use miette::Diagnostic;
 use semver::Version;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
@@ -97,7 +96,7 @@ impl FromStr for CrateVersionSource {
     }
 }
 
-#[derive(Debug, Diagnostic, Error)]
+#[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum CvsParseError {
     #[error("Failed to parse url in cvs: {0}")]

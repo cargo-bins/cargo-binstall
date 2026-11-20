@@ -18,7 +18,7 @@ async-compression = { version = "0.4.29", features = [
     "bzip2",
     "tokio",
 ] }
-binstalk-types = { version = "0.10.8", path = "../binstalk-types" }
+binstalk-types = { version = "0.10.8", path = "../binstalk-types", features = ["exn"] }
 bytes = "1.11.1"
 bzip2 = "0.6.0"
 compact_str = "0.10.0"

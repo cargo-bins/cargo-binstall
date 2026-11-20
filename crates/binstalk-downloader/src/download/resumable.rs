@@ -20,12 +20,16 @@
 
 use std::time::Duration;
 
+use binstalk_types::{
+    errors::{Error, Exn, Result},
+    message,
+};
 use bytes::Bytes;
 use futures_util::{Stream, stream::try_unfold};
 use tracing::{debug, error, warn};
 
 use crate::remote::{
-    Client, Error as RemoteError, Response, StatusCode, Url,
+    Client, Response, StatusCode, Url,
     header::{
         ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, ETAG, HeaderMap, HeaderValue, IF_RANGE,
         LAST_MODIFIED, RANGE,
@@ -51,7 +55,7 @@ pub(super) fn resumable_stream(
     client: Client,
     url: Url,
     response: Response,
-) -> impl Stream<Item = Result<Bytes, RemoteError>> + Send + Sync {
+) -> impl Stream<Item = Result<Bytes>> + Send + Sync {
     let headers = response.headers();
     let len = content_length(headers);
     let validator = headers
@@ -175,12 +179,14 @@ impl Resumable {
         matches!(self.len, Some(len) if self.read < len)
     }
 
-    fn truncated(&self) -> RemoteError {
-        RemoteError::Truncated {
-            url: Box::new(self.url.clone()),
-            read: self.read,
-            expected: self.len.unwrap_or(self.read),
-        }
+    #[track_caller]
+    fn truncated(&self) -> Error {
+        Exn::from(message!(
+            "{} ended after {} of {} bytes",
+            self.url,
+            self.read,
+            self.len.unwrap_or(self.read)
+        ))
     }
 }
 

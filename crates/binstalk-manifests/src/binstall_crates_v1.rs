@@ -16,29 +16,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use binstalk_types::errors::Result;
 use compact_str::CompactString;
 use fs_lock::FileLock;
 use home::cargo_home;
-use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 use crate::{crate_info::CrateInfo, helpers::create_if_not_exist};
 
 /// Buffer size for loading and writing binstall_crates_v1 manifest.
 const BUFFER_SIZE: usize = 4096 * 5;
 
-#[derive(Debug, Diagnostic, Error)]
-#[non_exhaustive]
-pub enum Error {
-    #[error("I/O Error: {0}")]
-    Io(#[from] io::Error),
-
-    #[error("Failed to parse json: {0}")]
-    SerdeJsonParse(#[from] serde_json::Error),
-}
-
-pub fn append_to_path<Iter, T>(path: impl AsRef<Path>, iter: Iter) -> Result<(), Error>
+pub fn append_to_path<Iter, T>(path: impl AsRef<Path>, iter: Iter) -> Result<()>
 where
     Iter: IntoIterator<Item = T>,
     Data: From<T>,
@@ -51,7 +40,7 @@ where
     write_to(&mut file, &mut iter.into_iter().map(Data::from))
 }
 
-pub fn append<Iter, T>(iter: Iter) -> Result<(), Error>
+pub fn append<Iter, T>(iter: Iter) -> Result<()>
 where
     Iter: IntoIterator<Item = T>,
     Data: From<T>,
@@ -59,7 +48,7 @@ where
     append_to_path(default_path()?, iter)
 }
 
-pub fn write_to(file: &mut FileLock, iter: &mut dyn Iterator<Item = Data>) -> Result<(), Error> {
+pub fn write_to(file: &mut FileLock, iter: &mut dyn Iterator<Item = Data>) -> Result<()> {
     let writer = io::BufWriter::with_capacity(BUFFER_SIZE, file);
 
     let mut ser = serde_json::Serializer::new(writer);
@@ -73,7 +62,7 @@ pub fn write_to(file: &mut FileLock, iter: &mut dyn Iterator<Item = Data>) -> Re
     Ok(())
 }
 
-pub fn default_path() -> Result<PathBuf, Error> {
+pub fn default_path() -> Result<PathBuf> {
     let dir = cargo_home()?.join("binstall");
 
     fs::create_dir_all(&dir)?;
@@ -152,7 +141,7 @@ pub struct Records {
 }
 
 impl Records {
-    fn load_impl(&mut self) -> Result<(), Error> {
+    fn load_impl(&mut self) -> Result<()> {
         let reader = io::BufReader::with_capacity(BUFFER_SIZE, &mut self.file);
         let stream_deser = serde_json::Deserializer::from_reader(reader).into_iter();
 
@@ -165,7 +154,7 @@ impl Records {
         Ok(())
     }
 
-    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self> {
         let mut this = Self {
             file: create_if_not_exist(path.as_ref())?,
             data: BTreeSet::default(),
@@ -174,12 +163,12 @@ impl Records {
         Ok(this)
     }
 
-    pub fn load() -> Result<Self, Error> {
+    pub fn load() -> Result<Self> {
         Self::load_from_path(default_path()?)
     }
 
     /// **Warning: This will overwrite all existing records!**
-    pub fn overwrite(mut self) -> Result<(), Error> {
+    pub fn overwrite(mut self) -> Result<()> {
         self.file.rewind()?;
         write_to(&mut self.file, &mut self.data.into_iter())?;
 

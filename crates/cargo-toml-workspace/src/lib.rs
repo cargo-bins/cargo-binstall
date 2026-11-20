@@ -37,7 +37,7 @@ pub fn load_manifest_from_workspace<Metadata: DeserializeOwned>(
 }
 
 #[derive(Debug, ThisError)]
-#[error("Failed to load {crate_name} from {}: {inner}", workspace_path.display())]
+#[error("Failed to load {crate_name} from {}", workspace_path.display())]
 pub struct Error {
     workspace_path: Box<Path>,
     crate_name: CompactString,
@@ -47,16 +47,16 @@ pub struct Error {
 
 #[derive(Debug, ThisError)]
 enum ErrorInner {
-    #[error("Invalid pattern in workspace.members or workspace.exclude: {0}")]
+    #[error("Invalid pattern in workspace.members or workspace.exclude")]
     GlobError(#[from] GlobError),
 
-    #[error("Failed to walk directory: {0}")]
+    #[error("Failed to walk directory")]
     WalkDirError(#[from] WalkError),
 
-    #[error("Failed to parse cargo manifest: {0}")]
+    #[error("Failed to parse cargo manifest")]
     CargoManifest(#[from] CargoTomlError),
 
-    #[error("I/O error: {0}")]
+    #[error("I/O error")]
     Io(#[from] io::Error),
 
     #[error("Not found")]

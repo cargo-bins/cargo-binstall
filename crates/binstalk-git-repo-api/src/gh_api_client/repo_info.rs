@@ -1,10 +1,11 @@
 use std::{fmt, future::Future};
 
+use binstalk_types::errors::Result;
 use compact_str::CompactString;
 use serde::Deserialize;
 
 use super::{
-    GhApiError, GhRepo,
+    GhRepo,
     common::{issue_graphql_query, issue_restful_api},
     remote,
 };
@@ -56,7 +57,7 @@ pub(super) fn fetch_repo_info_restful_api(
     client: &remote::Client,
     GhRepo { owner, repo }: &GhRepo,
     auth_token: Option<&str>,
-) -> impl Future<Output = Result<Option<RepoInfo>, GhApiError>> + Send + 'static + use<> {
+) -> impl Future<Output = Result<Option<RepoInfo>>> + Send + 'static + use<> {
     issue_restful_api(client, &["repos", owner, repo], auth_token)
 }
 
@@ -69,7 +70,7 @@ pub(super) fn fetch_repo_info_graphql_api(
     client: &remote::Client,
     GhRepo { owner, repo }: &GhRepo,
     auth_token: &str,
-) -> impl Future<Output = Result<Option<RepoInfo>, GhApiError>> + Send + 'static + use<> {
+) -> impl Future<Output = Result<Option<RepoInfo>>> + Send + 'static + use<> {
     let query = format!(
         r#"
 query {{

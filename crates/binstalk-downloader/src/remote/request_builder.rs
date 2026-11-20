@@ -1,10 +1,13 @@
 use std::fmt;
 
+use binstalk_types::errors::Result;
+#[cfg(feature = "json")]
+use binstalk_types::{errors::ResultExt, message};
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use reqwest::Method;
 
-use super::{Client, Error, HttpError, StatusCode, Url, header};
+use super::{Client, HttpError, StatusCode, Url, header};
 
 pub use reqwest::Body;
 
@@ -39,7 +42,7 @@ impl RequestBuilder {
         }
     }
 
-    pub async fn send(self, error_for_status: bool) -> Result<Response, Error> {
+    pub async fn send(self, error_for_status: bool) -> Result<Response> {
         let request = self.inner.build()?;
         let method = request.method().clone();
         Ok(Response {
@@ -56,33 +59,34 @@ pub struct Response {
 }
 
 impl Response {
-    pub async fn bytes(self) -> Result<Bytes, Error> {
-        self.inner.bytes().await.map_err(Error::from)
+    pub async fn bytes(self) -> Result<Bytes> {
+        let url = self.inner.url().clone();
+        let method = self.method;
+
+        self.inner
+            .bytes()
+            .await
+            .map_err(|err| HttpError::raise(method, url, err))
     }
 
     /// The next chunk of the body, or `None` once it has all been read.
-    pub async fn chunk(&mut self) -> Result<Option<Bytes>, Error> {
-        self.inner.chunk().await.map_err(|err| {
-            Error::Http(Box::new(HttpError {
-                method: self.method.clone(),
-                url: self.inner.url().clone(),
+    pub async fn chunk(&mut self) -> Result<Option<Bytes>> {
+        match self.inner.chunk().await {
+            Ok(chunk) => Ok(chunk),
+            Err(err) => Err(HttpError::raise(
+                self.method.clone(),
+                self.inner.url().clone(),
                 err,
-            }))
-        })
+            )),
+        }
     }
 
-    pub fn bytes_stream(self) -> impl Stream<Item = Result<Bytes, Error>> {
+    pub fn bytes_stream(self) -> impl Stream<Item = Result<Bytes>> {
         let url = Box::new(self.inner.url().clone());
         let method = self.method;
 
         self.inner.bytes_stream().map(move |res| {
-            res.map_err(|err| {
-                Error::Http(Box::new(HttpError {
-                    method: method.clone(),
-                    url: Url::clone(&*url),
-                    err,
-                }))
-            })
+            res.map_err(|err| HttpError::raise(method.clone(), Url::clone(&*url), err))
         })
     }
 
@@ -98,18 +102,18 @@ impl Response {
         &self.method
     }
 
-    pub fn error_for_status_ref(&self) -> Result<&Self, Error> {
+    pub fn error_for_status_ref(&self) -> Result<&Self> {
         match self.inner.error_for_status_ref() {
             Ok(_) => Ok(self),
-            Err(err) => Err(Error::Http(Box::new(HttpError {
-                method: self.method().clone(),
-                url: self.url().clone(),
+            Err(err) => Err(HttpError::raise(
+                self.method().clone(),
+                self.url().clone(),
                 err,
-            }))),
+            )),
         }
     }
 
-    pub fn error_for_status(self) -> Result<Self, Error> {
+    pub fn error_for_status(self) -> Result<Self> {
         match self.error_for_status_ref() {
             Ok(_) => Ok(self),
             Err(err) => Err(err),
@@ -121,11 +125,12 @@ impl Response {
     }
 
     #[cfg(feature = "json")]
-    pub async fn json<T>(self) -> Result<T, Error>
+    pub async fn json<T>(self) -> Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
         let bytes = self.error_for_status()?.bytes().await?;
-        Ok(serde_json::from_slice(&bytes)?)
+        serde_json::from_slice(&bytes)
+            .or_raise_err(message!("Failed to parse http response body as Json"))
     }
 }

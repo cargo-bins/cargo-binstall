@@ -7,7 +7,7 @@ use std::{
 
 use tokio::task::JoinHandle;
 
-use crate::errors::BinstallError;
+use crate::errors::{Exit, Exn, Result, ResultExt};
 
 #[derive(Debug)]
 pub struct AutoAbortJoinHandle<T>(JoinHandle<T>);
@@ -51,20 +51,18 @@ impl<T> DerefMut for AutoAbortJoinHandle<T> {
 }
 
 impl<T> Future for AutoAbortJoinHandle<T> {
-    type Output = Result<T, BinstallError>;
+    type Output = Result<T>;
 
+    #[track_caller]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut Pin::into_inner(self).0)
             .poll(cx)
-            .map_err(BinstallError::TaskJoinError)
+            .map(|res| res.or_raise_err(Exit::TaskJoin))
     }
 }
 
-impl<T, E> AutoAbortJoinHandle<Result<T, E>>
-where
-    E: Into<BinstallError>,
-{
-    pub async fn flattened_join(self) -> Result<T, BinstallError> {
-        self.await?.map_err(Into::into)
+impl<T> AutoAbortJoinHandle<Result<T, Exn>> {
+    pub async fn flattened_join(self) -> Result<T> {
+        self.await?
     }
 }

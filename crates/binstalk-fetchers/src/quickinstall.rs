@@ -5,14 +5,16 @@ use std::{
 };
 
 use binstalk_downloader::remote::Method;
-use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning, Strategy};
+use binstalk_types::cargo_toml_binstall::{
+    PkgFmt, PkgMeta, PkgSigning, SigningAlgorithm, Strategy,
+};
 use tokio::sync::OnceCell;
 use tracing::{error, info, trace};
 use url::Url;
 
 use crate::{
-    Data, FetchError, SignaturePolicy, SignatureVerifier, SigningAlgorithm, TargetDataErased,
-    common::*,
+    Data, SignaturePolicy, SignatureVerifier, TargetDataErased, common::*, invalid_signature,
+    missing_signature,
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
@@ -28,15 +30,13 @@ fn is_universal_macos(target: &str) -> bool {
     ["universal-apple-darwin", "universal2-apple-darwin"].contains(&target)
 }
 
-async fn get_quickinstall_supported_targets(
-    client: &Client,
-) -> Result<&'static [CompactString], FetchError> {
+async fn get_quickinstall_supported_targets(client: &Client) -> Result<&'static [CompactString]> {
     static SUPPORTED_TARGETS: OnceCell<Box<[CompactString]>> = OnceCell::const_new();
 
     SUPPORTED_TARGETS
         .get_or_try_init(|| async {
             let bytes = client
-                .get(Url::parse(QUICKINSTALL_SUPPORTED_TARGETS_URL)?)
+                .get(parse_url(QUICKINSTALL_SUPPORTED_TARGETS_URL)?)
                 .send(true)
                 .await?
                 .bytes()
@@ -95,7 +95,7 @@ impl Status {
 }
 
 impl QuickInstall {
-    async fn is_supported(&self) -> Result<bool, FetchError> {
+    async fn is_supported(&self) -> Result<bool> {
         self.is_supported_v
             .get_or_try_init(|| async {
                 Ok(get_quickinstall_supported_targets(&self.client)
@@ -107,9 +107,7 @@ impl QuickInstall {
             .copied()
     }
 
-    fn download_signature(
-        self: Arc<Self>,
-    ) -> AutoAbortJoinHandle<Result<SignatureVerifier, FetchError>> {
+    fn download_signature(self: Arc<Self>) -> AutoAbortJoinHandle<Result<SignatureVerifier>> {
         AutoAbortJoinHandle::spawn(async move {
             if self.signature_policy == SignaturePolicy::Ignore {
                 Ok(SignatureVerifier::Noop)
@@ -133,7 +131,7 @@ impl QuickInstall {
                     Err(err) => {
                         if self.signature_policy == SignaturePolicy::Require {
                             error!("Failed to download signature: {err}");
-                            Err(FetchError::MissingSignature)
+                            Err(Exn::from(missing_signature()))
                         } else {
                             debug!("Failed to download signature, skipping verification: {err}");
                             Ok(SignatureVerifier::Noop)
@@ -214,7 +212,7 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
+    fn find(self: Arc<Self>) -> JoinHandle<Result<bool>> {
         tokio::spawn(async move {
             if !self.is_supported().await? {
                 return Ok(false);
@@ -269,7 +267,7 @@ by rust officially."#,
         }
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles> {
         self.set_status(Status::AttemptingInstall);
         let Some(verifier) = self.signature_verifier.get() else {
             panic!("<QuickInstall as Fetcher>::find has not been called yet!")
@@ -283,7 +281,8 @@ by rust officially."#,
             data_verifier.as_mut(),
         )
         .and_extract(self.pkg_fmt(), dst)
-        .await?;
+        .await
+        .or_raise_err(message!("Failed to download and extract"))?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {
@@ -293,7 +292,7 @@ by rust officially."#,
             Ok(files)
         } else {
             self.set_status(Status::InvalidSignature);
-            Err(FetchError::InvalidSignature)
+            Err(Exn::from(invalid_signature()))
         }
     }
 
@@ -334,7 +333,7 @@ by rust officially."#,
 }
 
 impl QuickInstall {
-    pub async fn report(&self) -> Result<(), FetchError> {
+    pub async fn report(&self) -> Result<()> {
         if !self.is_supported().await? {
             debug!(
                 "Not sending quickinstall report for {} since Quickinstall does not support these targets.",

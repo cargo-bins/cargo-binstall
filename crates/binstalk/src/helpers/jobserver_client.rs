@@ -3,7 +3,7 @@ use std::{num::NonZeroUsize, thread::available_parallelism};
 use jobslot::Client;
 use tokio::sync::OnceCell;
 
-use crate::errors::BinstallError;
+use crate::errors::{Exit, Result, ResultExt};
 
 #[derive(Debug)]
 pub struct LazyJobserverClient(OnceCell<Client>);
@@ -22,11 +22,11 @@ impl LazyJobserverClient {
         Self(OnceCell::new_with(opt))
     }
 
-    pub async fn get(&self) -> Result<&Client, BinstallError> {
+    pub async fn get(&self) -> Result<&Client> {
         self.0
             .get_or_try_init(|| async {
                 let ncore = available_parallelism().map(NonZeroUsize::get).unwrap_or(1);
-                Ok(Client::new(ncore)?)
+                Client::new(ncore).or_raise_err(Exit::Io)
             })
             .await
     }

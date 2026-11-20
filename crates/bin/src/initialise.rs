@@ -5,10 +5,9 @@ use std::{
     path::PathBuf,
 };
 
-use binstalk::errors::BinstallError;
+use binstalk::errors::{Exit, Result, ResultExt, bail, message};
 use binstalk_manifests::{cargo_config::Config as CargoConfig, crates_manifests::Manifests};
 use home::cargo_home;
-use miette::{Result, WrapErr, bail};
 use tempfile::TempDir;
 use tracing::{debug, info};
 
@@ -54,7 +53,9 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         debug!(path=?p, "install root from executable dir");
         (p, false)
     } else {
-        bail!("No install root found, provide one with --root or CARGO_INSTALL_ROOT");
+        bail!(message!(
+            "No install root found, provide one with --root or CARGO_INSTALL_ROOT"
+        ));
     };
 
     let (cargo_root, cargo_config) = if let Some(config) = cargo_config {
@@ -123,13 +124,15 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
         debug!(path=?p, "install path from executable dir");
         (p, true)
     } else {
-        bail!("Could not determine installation path. Provide one with --install-path");
+        bail!(message!(
+            "Could not determine installation path. Provide one with --install-path"
+        ))
     };
 
     let settings = settings.merge_args(args);
 
-    fs::create_dir_all(&cargo_root).map_err(BinstallError::Io)?;
-    fs::create_dir_all(&install_path).map_err(BinstallError::Io)?;
+    fs::create_dir_all(&cargo_root).or_raise_err(Exit::Io)?;
+    fs::create_dir_all(&install_path).or_raise_err(Exit::Io)?;
 
     let manifests = if settings.track_installs && !custom_install_path {
         Some(Manifests::open_exclusive(&cargo_root)?)
@@ -145,8 +148,8 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
     let temp_dir = tempfile::Builder::new()
         .prefix("cargo-binstall")
         .tempdir_in(&cargo_root)
-        .map_err(BinstallError::from)
-        .wrap_err("Creating a temporary directory failed.")?;
+        .or_raise_err(Exit::Io)
+        .or_raise_err(message!("Creating a temporary directory failed."))?;
 
     Ok(Init {
         cargo_config,

@@ -270,10 +270,10 @@ dependencies = [
  "jobslot",
  "leon",
  "maybe-owned",
- "miette",
  "semver",
  "simple-git",
  "strum",
+ "strum_macros",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -291,7 +291,6 @@ dependencies = [
  "compact_str",
  "itertools",
  "leon",
- "miette",
  "normalize-path",
  "tempfile",
  "thiserror 2.0.21",
@@ -348,7 +347,6 @@ dependencies = [
  "itertools",
  "leon",
  "leon-macros",
- "miette",
  "minisign-verify",
  "strum",
  "thiserror 2.0.21",
@@ -362,6 +360,7 @@ name = "binstalk-git-repo-api"
 version = "0.5.53"
 dependencies = [
  "binstalk-downloader",
+ "binstalk-types",
  "compact_str",
  "percent-encoding",
  "serde",
@@ -384,7 +383,6 @@ dependencies = [
  "detect-targets",
  "fs-lock",
  "home",
- "miette",
  "normalize-path",
  "semver",
  "serde",
@@ -407,7 +405,6 @@ dependencies = [
  "cargo-toml-workspace",
  "compact_str",
  "leon",
- "miette",
  "normalize-path",
  "once_cell",
  "semver",
@@ -429,6 +426,7 @@ version = "0.10.8"
 dependencies = [
  "cargo-platform",
  "compact_str",
+ "exn",
  "indexmap",
  "maybe-owned",
  "semver",
@@ -599,9 +597,11 @@ dependencies = [
  "fs-lock",
  "home",
  "itertools",
+ "leon",
  "log",
  "miette",
  "mimalloc",
+ "ref-cast",
  "semver",
  "serde",
  "serde_json",
@@ -1322,6 +1322,12 @@ dependencies = [
  "cc",
  "libc",
 ]
+
+[[package]]
+name = "exn"
+version = "0.4.0-rc.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed5592af4187305bf22dc9aa258f98612f6aea4d86e49ea83e6fb2dbe91a5993"
 
 [[package]]
 name = "faster-hex"
@@ -4117,6 +4123,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
  "bitflags 2.13.2",
+]
+
+[[package]]
+name = "ref-cast"
+version = "1.0.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e440fb4e4b4147295338efb76001ab9e4efc0e5839df2c47fc5ac2381d365c3"
+dependencies = [
+ "ref-cast-impl",
+]
+
+[[package]]
+name = "ref-cast-impl"
+version = "1.0.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ecd8964f8453721699a1ed72037b0db49ce2f5a5138486ee89bed6f67cdf3a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
 ]
 
 [[package]]

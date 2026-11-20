@@ -9,18 +9,23 @@ use std::{
 use atomic_file_install::{
     atomic_install, atomic_install_noclobber, atomic_symlink_file, atomic_symlink_file_noclobber,
 };
-use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
+use binstalk_types::{
+    cargo_toml_binstall::{PkgFmt, PkgMeta},
+    errors::{Exn, Result, bail},
+};
 use compact_str::{CompactString, format_compact};
 use itertools::Itertools;
 use leon::Template;
-use miette::Diagnostic;
 use normalize_path::NormalizePath;
 use thiserror::Error as ThisError;
 use tracing::debug;
 
 type SymlinkFp = fn(&Path, &Path) -> io::Result<()>;
 
-#[derive(Debug, ThisError, Diagnostic)]
+/// Kinds of errors raised by this crate, found in an error tree with
+/// [`FrameExt::find`](binstalk_types::errors::FrameExt::find).
+#[derive(Debug, ThisError)]
+#[non_exhaustive]
 pub enum Error {
     /// bin-dir configuration provided generates source path outside
     /// of the temporary dir.
@@ -50,13 +55,6 @@ pub enum Error {
     /// so installing it would replace that file.
     #[error("alias {0:?} clashes with a binary or another alias of the same name")]
     AliasClash(CompactString),
-
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
-    #[error("Failed to render template: {0}")]
-    #[diagnostic(transparent)]
-    TemplateRender(#[from] leon::RenderError),
 }
 
 /// Return true if the path does not look outside of current dir
@@ -94,7 +92,7 @@ pub fn is_valid_bin_name(name: &str) -> bool {
 /// Return `Err` if an alias of any of `bin_files` has the same file name as
 /// a file installed for one of the binaries (`dest` or `link`), or as
 /// another alias.
-pub fn check_aliases_unique(bin_files: &[BinFile]) -> Result<(), Error> {
+pub fn check_aliases_unique(bin_files: &[BinFile]) -> Result<()> {
     let mut names: BTreeSet<&OsStr> = bin_files
         .iter()
         .flat_map(|bin| iter::once(&bin.dest).chain(&bin.link))
@@ -109,7 +107,7 @@ pub fn check_aliases_unique(bin_files: &[BinFile]) -> Result<(), Error> {
             if names.insert(name) {
                 Ok(())
             } else {
-                Err(Error::AliasClash(name.to_string_lossy().into()))
+                Err(Exn::from(Error::AliasClash(name.to_string_lossy().into())))
             }
         })
 }
@@ -202,13 +200,13 @@ impl BinFile {
         tt: &Template<'_>,
         no_symlinks: bool,
         aliases: &[CompactString],
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         if !is_valid_bin_name(base_name) {
-            return Err(Error::InvalidBinName(base_name.into()));
+            bail!(Error::InvalidBinName(base_name.into()));
         }
         // An alias becomes a file name in the install dir, just like a bin name.
         if let Some(alias) = aliases.iter().find(|alias| !is_valid_bin_name(alias)) {
-            return Err(Error::InvalidBinName(alias.clone()));
+            bail!(Error::InvalidBinName(alias.clone()));
         }
 
         let binary_ext = if data.target.contains("windows") {
@@ -243,11 +241,11 @@ impl BinFile {
             let path_normalized = Path::new(&path).normalize();
 
             if path_normalized.components().next().is_none() {
-                return Err(Error::EmptySourceFilePath);
+                bail!(Error::EmptySourceFilePath);
             }
 
             if !is_valid_path(&path_normalized) {
-                return Err(Error::InvalidSourceFilePath(path_normalized.into()));
+                bail!(Error::InvalidSourceFilePath(path_normalized.into()));
             }
 
             (
@@ -323,32 +321,29 @@ impl BinFile {
     }
 
     /// Return `Ok` if the source exists, otherwise `Err`.
-    pub fn check_source_exists(
-        &self,
-        has_file: &mut dyn FnMut(&Path) -> bool,
-    ) -> Result<(), Error> {
+    pub fn check_source_exists(&self, has_file: &mut dyn FnMut(&Path) -> bool) -> Result<()> {
         if has_file(&self.archive_source_path) {
             Ok(())
         } else {
-            Err(Error::BinFileNotFound((&*self.source).into()))
+            bail!(Error::BinFileNotFound((&*self.source).into()))
         }
     }
 
     /// Return the source with symlinks resolved.
-    fn pre_install_bin(&self) -> Result<PathBuf, Error> {
+    fn pre_install_bin(&self) -> Result<PathBuf> {
         let source = match fs::canonicalize(&self.source) {
             Ok(source) => source,
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(Error::BinFileNotFound((&*self.source).into()));
+                bail!(Error::BinFileNotFound((&*self.source).into()));
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(Exn::from(err)),
         };
 
         // The archive may contain symlinks, as the bin itself or as a dir on its path, pointing
         // outside of the extracted dir. Following them would chmod and install a file that does
         // not come from the archive.
         if !source.starts_with(fs::canonicalize(&self.extracted_dir)?) {
-            return Err(Error::InvalidSourceFilePath((&*self.source).into()));
+            bail!(Error::InvalidSourceFilePath((&*self.source).into()));
         }
 
         #[cfg(unix)]
@@ -357,7 +352,7 @@ impl BinFile {
         Ok(source)
     }
 
-    pub fn install_bin(&self) -> Result<(), Error> {
+    pub fn install_bin(&self) -> Result<()> {
         let source = self.pre_install_bin()?;
 
         debug!(
@@ -371,7 +366,7 @@ impl BinFile {
         Ok(())
     }
 
-    pub fn install_bin_noclobber(&self) -> Result<(), Error> {
+    pub fn install_bin_noclobber(&self) -> Result<()> {
         let source = self.pre_install_bin()?;
 
         debug!(
@@ -388,15 +383,15 @@ impl BinFile {
     /// Create `link` (if any) and the aliases, pointing at `dest`.
     ///
     /// On Windows, a copy of `dest` is made if creating a symlink fails.
-    pub fn install_link(&self) -> Result<(), Error> {
+    pub fn install_link(&self) -> Result<()> {
         self.install_link_with(atomic_symlink_file, "")
     }
 
-    pub fn install_link_noclobber(&self) -> Result<(), Error> {
+    pub fn install_link_noclobber(&self) -> Result<()> {
         self.install_link_with(atomic_symlink_file_noclobber, " only if dst not exists")
     }
 
-    fn install_link_with(&self, symlink: SymlinkFp, extra_msg: &str) -> Result<(), Error> {
+    fn install_link_with(&self, symlink: SymlinkFp, extra_msg: &str) -> Result<()> {
         let dest = self.link_dest();
 
         for link in self.link.iter().chain(&self.aliases) {
@@ -497,6 +492,13 @@ impl fmt::Display for OptionalLazyFormat<'_> {
 mod tests {
     use super::*;
 
+    use binstalk_types::errors::FrameExt;
+
+    /// The [`Error`] kind `res` failed with, if any.
+    fn kind<T>(res: &Result<T>) -> Option<&Error> {
+        res.as_ref().err()?.find()
+    }
+
     #[test]
     fn valid_bin_names() {
         for name in [
@@ -582,7 +584,7 @@ mod tests {
             let bin_file = bin_file(&extracted, "bin", &install);
             for res in [bin_file.install_bin(), bin_file.install_bin_noclobber()] {
                 assert!(
-                    matches!(res, Err(Error::InvalidSourceFilePath(_))),
+                    matches!(kind(&res), Some(Error::InvalidSourceFilePath(_))),
                     "{res:?}"
                 );
             }
@@ -597,7 +599,7 @@ mod tests {
             let bin_file = bin_file(&extracted, "dir/outside", &install);
             let res = bin_file.install_bin();
             assert!(
-                matches!(res, Err(Error::InvalidSourceFilePath(_))),
+                matches!(kind(&res), Some(Error::InvalidSourceFilePath(_))),
                 "{res:?}"
             );
             assert_untouched(&outside, &install);
@@ -609,7 +611,10 @@ mod tests {
             symlink("missing", extracted.join("bin")).unwrap();
 
             let res = bin_file(&extracted, "bin", &install).install_bin();
-            assert!(matches!(res, Err(Error::BinFileNotFound(_))), "{res:?}");
+            assert!(
+                matches!(kind(&res), Some(Error::BinFileNotFound(_))),
+                "{res:?}"
+            );
         }
 
         /// A symlink inside of the extracted dir is fine, and its target is
@@ -647,7 +652,7 @@ mod tests {
             target: &str,
             no_symlinks: bool,
             aliases: &[&str],
-        ) -> Result<BinFile, Error> {
+        ) -> Result<BinFile> {
             let data = Data {
                 name: "mycrate",
                 target,
@@ -763,8 +768,8 @@ mod tests {
                 [new("a", &["x"]), new("b", &["x"])],
             ] {
                 assert!(matches!(
-                    check_aliases_unique(&bin_files),
-                    Err(Error::AliasClash(_))
+                    kind(&check_aliases_unique(&bin_files)),
+                    Some(Error::AliasClash(_))
                 ));
             }
         }
@@ -780,7 +785,7 @@ mod tests {
                     &["mcr", alias],
                 );
                 assert!(
-                    matches!(&res, Err(Error::InvalidBinName(name)) if name == alias),
+                    matches!(kind(&res), Some(Error::InvalidBinName(name)) if name == alias),
                     "{alias:?}: {:?}",
                     res.map(|bin| bin.aliases)
                 );

@@ -12,6 +12,7 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 cargo-platform = "0.3.2"
 compact_str = { version = "0.10.0", features = ["serde"] }
+exn = { version = "0.4.0-rc.1", optional = true }
 indexmap = { version = "2.13.0", features = ["serde"] }
 maybe-owned = { version = "0.3.4", features = ["serde"] }
 semver = { version = "1.0.28", features = ["serde"] }
@@ -21,6 +22,10 @@ strum_macros = "0.28.0"
 target-lexicon = { version = "0.13.0", features = ["std"] }
 url = { version = "2.5.8", features = ["serde"] }
 zeroize = "1.8.1"
+
+[features]
+# Error handling helpers built on `exn`, see `binstalk_types::errors`.
+exn = ["dep:exn"]
 
 [dev-dependencies]
 serde_json = "1"

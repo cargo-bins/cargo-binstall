@@ -1,19 +1,19 @@
 use std::{
-    fmt, io,
+    fmt,
     path::Path,
     pin::{Pin, pin},
 };
 
 use binstalk_types::cargo_toml_binstall::PkgFmtDecomposed;
+use binstalk_types::errors::Result;
 use bytes::{Bytes, BytesMut};
 use futures_util::{Stream, StreamExt, stream::FusedStream};
-use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::{PkgFmt, TarBasedFmt};
 pub use rc_zip_sync::rc_zip::error::Error as ZipError;
 
-use crate::remote::{Client, Error as RemoteError, Response, Url};
+use crate::remote::{Client, Response, Url};
 
 mod async_extractor;
 use async_extractor::*;
@@ -31,39 +31,6 @@ mod zip_extraction;
 
 mod resumable;
 use resumable::resumable_stream;
-
-#[derive(Debug, ThisError)]
-#[non_exhaustive]
-pub enum DownloadError {
-    #[error("Failed to extract zipfile: {0}")]
-    Unzip(#[from] ZipError),
-
-    #[error("Failed to download from remote: {0}")]
-    Remote(#[from] RemoteError),
-
-    /// A generic I/O error.
-    ///
-    /// - Code: `binstall::io`
-    /// - Exit: 74
-    #[error("I/O Error: {0}")]
-    Io(io::Error),
-}
-
-impl From<io::Error> for DownloadError {
-    fn from(err: io::Error) -> Self {
-        err.downcast::<DownloadError>()
-            .unwrap_or_else(DownloadError::Io)
-    }
-}
-
-impl From<DownloadError> for io::Error {
-    fn from(e: DownloadError) -> io::Error {
-        match e {
-            DownloadError::Io(io_error) => io_error,
-            e => io::Error::other(e),
-        }
-    }
-}
 
 pub trait DataVerifier: Send + Sync {
     /// Digest input data.
@@ -102,8 +69,7 @@ impl DownloadContent {
     async fn into_byte_stream(
         self,
         resume: bool,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, RemoteError>> + Send + Sync>>, DownloadError>
-    {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes>> + Send + Sync>>> {
         Ok(match self {
             DownloadContent::ToIssue { client, url } if resume => {
                 let response = client.get(url.clone()).send(true).await?;
@@ -118,7 +84,7 @@ impl DownloadContent {
 
     /// The whole body in memory, continuing it with `Range` requests if it
     /// breaks partway, as [`Self::into_byte_stream`] does.
-    async fn into_bytes(self, resume: bool) -> Result<Bytes, RemoteError> {
+    async fn into_bytes(self, resume: bool) -> Result<Bytes> {
         match self {
             DownloadContent::ToIssue { client, url } if resume => {
                 let response = client.get(url.clone()).send(true).await?;
@@ -137,9 +103,7 @@ impl DownloadContent {
 /// A body that arrived in a single chunk is returned as-is, and one that arrived
 /// in several is copied once into a buffer allocated to fit all of them, rather
 /// than into one that grows (and reallocates) as each chunk comes in.
-async fn collect_bytes(
-    stream: impl Stream<Item = Result<Bytes, RemoteError>>,
-) -> Result<Bytes, RemoteError> {
+async fn collect_bytes(stream: impl Stream<Item = Result<Bytes>>) -> Result<Bytes> {
     let mut stream = pin!(stream);
 
     let Some(first) = stream.next().await.transpose()? else {
@@ -244,10 +208,7 @@ impl<'a> Download<'a> {
 
     async fn get_stream(
         self,
-    ) -> Result<
-        impl FusedStream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'a,
-        DownloadError,
-    > {
+    ) -> Result<impl FusedStream<Item = Result<Bytes>> + Send + Sync + Unpin + 'a> {
         let mut data_verifier = self.data_verifier;
         Ok(self
             .content
@@ -274,7 +235,7 @@ impl<'a> Download<'a> {
 /// Accept `FusedStream` only since the `stream` could be already consumed.
 async fn consume_stream<S>(stream: &mut S)
 where
-    S: Stream<Item = Result<Bytes, DownloadError>> + FusedStream + Unpin,
+    S: Stream<Item = Result<Bytes>> + FusedStream + Unpin,
 {
     while let Some(res) = stream.next().await {
         if let Err(err) = res {
@@ -297,7 +258,7 @@ impl Download<'_> {
         self,
         fmt: TarBasedFmt,
         visitor: &mut dyn TarEntriesVisitor,
-    ) -> Result<(), DownloadError> {
+    ) -> Result<()> {
         let has_data_verifier = self.data_verifier.is_some();
         let mut stream = self.get_stream().await?;
 
@@ -323,16 +284,8 @@ impl Download<'_> {
         skip(self, path),
         fields(path = format_args!("{}", path.as_ref().display()))
     )]
-    pub async fn and_extract(
-        self,
-        fmt: PkgFmt,
-        path: impl AsRef<Path>,
-    ) -> Result<ExtractedFiles, DownloadError> {
-        async fn inner(
-            this: Download<'_>,
-            fmt: PkgFmt,
-            path: &Path,
-        ) -> Result<ExtractedFiles, DownloadError> {
+    pub async fn and_extract(self, fmt: PkgFmt, path: impl AsRef<Path>) -> Result<ExtractedFiles> {
+        async fn inner(this: Download<'_>, fmt: PkgFmt, path: &Path) -> Result<ExtractedFiles> {
             let has_data_verifier = this.data_verifier.is_some();
             let mut stream = this.get_stream().await?;
 
@@ -361,7 +314,7 @@ impl Download<'_> {
     }
 
     #[instrument(skip(self))]
-    pub async fn into_bytes(self) -> Result<Bytes, DownloadError> {
+    pub async fn into_bytes(self) -> Result<Bytes> {
         let bytes = self.content.into_bytes(self.resume).await?;
         if let Some(verifier) = self.data_verifier {
             verifier.update(&bytes);

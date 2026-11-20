@@ -5,6 +5,10 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use binstalk_types::{
+    errors::{Exn, FrameExt, Result, ResultExt},
+    message,
+};
 use bytes::Bytes;
 use futures_util::Stream;
 use httpdate::parse_http_date;
@@ -17,6 +21,12 @@ use tracing::{debug, info, instrument};
 
 pub use reqwest::{Error as ReqwestError, Method, StatusCode, header};
 pub use url::Url;
+
+/// Parse `url`, with `url` in the error message on failure.
+#[track_caller]
+pub fn parse_url(url: &str) -> Result<Url> {
+    Url::parse(url).or_raise(|| message!("Failed to parse url `{url}`"))
+}
 
 mod delay_request;
 use delay_request::DelayRequest;
@@ -48,42 +58,42 @@ const RETRY_DURATION_FOR_TIMEOUT: Duration = Duration::from_millis(200);
 #[allow(dead_code)]
 const DEFAULT_MIN_TLS: TLSVersion = TLSVersion::TLS_1_2;
 
+/// A failed HTTP request, the [`ReqwestError`] is attached as its child frame.
+///
+/// Find it in an error tree with [`FrameExt::find`] to
+/// inspect the status code.
 #[derive(Debug, ThisError)]
-#[non_exhaustive]
-pub enum Error {
-    #[error("Reqwest error: {0}")]
-    Reqwest(#[from] reqwest::Error),
-
-    #[error(transparent)]
-    Http(Box<HttpError>),
-
-    /// A response body ended before the length its headers promised, and the
-    /// remainder could not be fetched.
-    #[error("{url} ended after {read} of {expected} bytes")]
-    Truncated {
-        url: Box<url::Url>,
-        read: u64,
-        expected: u64,
-    },
-
-    #[cfg(feature = "json")]
-    #[error("Failed to parse http response body as Json: {0}")]
-    Json(#[from] JsonError),
-}
-
-#[derive(Debug, ThisError)]
-#[error("could not {method} {url}: {err}")]
+#[error("could not {method} {url}")]
 pub struct HttpError {
     method: reqwest::Method,
     url: url::Url,
-    #[source]
-    err: reqwest::Error,
+    status: Option<StatusCode>,
 }
 
 impl HttpError {
     /// Returns true if the error is from [`Response::error_for_status`].
     pub fn is_status(&self) -> bool {
-        self.err.is_status()
+        self.status.is_some()
+    }
+
+    /// Returns the status code if the error is from [`Response::error_for_status`].
+    pub fn status(&self) -> Option<StatusCode> {
+        self.status
+    }
+}
+
+impl HttpError {
+    /// Raise `err` as a child of an [`HttpError`] for `method` on `url`.
+    #[track_caller]
+    pub(crate) fn raise(method: Method, url: Url, err: reqwest::Error) -> Exn {
+        let status = err.status();
+        Exn::new(err)
+            .raise(HttpError {
+                method,
+                url,
+                status,
+            })
+            .into()
     }
 }
 
@@ -130,7 +140,7 @@ impl Client {
         per_millis: NonZeroU16,
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         Self::from_builder(
             Self::default_builder(
                 user_agent.as_ref(),
@@ -191,7 +201,7 @@ impl Client {
         builder: reqwest::ClientBuilder,
         per_millis: NonZeroU16,
         num_request: NonZeroU64,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let client = builder.build()?;
 
         Ok(Client(Arc::new(Inner {
@@ -319,7 +329,7 @@ impl Client {
         &self,
         request: Request,
         error_for_status: bool,
-    ) -> Result<reqwest::Response, Error> {
+    ) -> Result<reqwest::Response> {
         debug!("Downloading from: '{}'", request.url());
 
         self.send_request_inner(&request)
@@ -331,20 +341,14 @@ impl Client {
                     Ok(response)
                 }
             })
-            .map_err(|err| {
-                Error::Http(Box::new(HttpError {
-                    method: request.method().clone(),
-                    url: request.url().clone(),
-                    err,
-                }))
-            })
+            .map_err(|err| HttpError::raise(request.method().clone(), request.url().clone(), err))
     }
 
     async fn head_or_fallback_to_get(
         &self,
         url: Url,
         error_for_status: bool,
-    ) -> Result<reqwest::Response, Error> {
+    ) -> Result<reqwest::Response> {
         let res = self
             .send_request(Request::new(Method::HEAD, url.clone()), error_for_status)
             .await;
@@ -369,8 +373,10 @@ impl Client {
         };
 
         match res {
-            Err(Error::Http(http_error))
-                if http_error.err.status().map(is_retryable).unwrap_or(false) =>
+            Err(err)
+                if err
+                    .find::<HttpError>()
+                    .is_some_and(|http_error| http_error.status.is_some_and(is_retryable)) =>
             {
                 retry_with_get().await
             }
@@ -380,13 +386,13 @@ impl Client {
     }
 
     /// Check if remote exists using `Method::GET`.
-    pub async fn remote_gettable(&self, url: Url) -> Result<bool, Error> {
+    pub async fn remote_gettable(&self, url: Url) -> Result<bool> {
         Ok(self.get(url).send(false).await?.status().is_success())
     }
 
     /// Attempt to get final redirected url using `Method::HEAD` or fallback
     /// to `Method::GET`.
-    pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
+    pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url> {
         self.head_or_fallback_to_get(url, true)
             .await
             .map(|response| response.url().clone())
@@ -394,10 +400,7 @@ impl Client {
 
     /// Create `GET` request to `url` and return a stream of the response data.
     /// On status code other than 200, it will return an error.
-    pub async fn get_stream(
-        &self,
-        url: Url,
-    ) -> Result<impl Stream<Item = Result<Bytes, Error>> + use<>, Error> {
+    pub async fn get_stream(&self, url: Url) -> Result<impl Stream<Item = Result<Bytes>> + use<>> {
         Ok(self.get(url).send(true).await?.bytes_stream())
     }
 

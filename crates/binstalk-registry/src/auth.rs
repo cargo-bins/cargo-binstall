@@ -48,13 +48,10 @@ impl ResolvedRegistry {
         client: binstalk_downloader::remote::Client,
         crate_name: &str,
         version_req: &semver::VersionReq,
-    ) -> Result<
-        (
-            cargo_toml_workspace::cargo_toml::Manifest<binstalk_types::cargo_toml_binstall::Meta>,
-            Option<CompactString>,
-        ),
-        crate::RegistryError,
-    > {
+    ) -> binstalk_types::errors::Result<(
+        cargo_toml_workspace::cargo_toml::Manifest<binstalk_types::cargo_toml_binstall::Meta>,
+        Option<CompactString>,
+    )> {
         self.registry
             .fetch_crate_matched_with_auth(client, self.auth.as_ref(), crate_name, version_req)
             .await
