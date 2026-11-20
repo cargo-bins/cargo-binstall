@@ -79,6 +79,14 @@ Some crate installation strategies may collect anonymized usage statistics by de
    - zip: Download format is Zip
 
    - bin: Download format is raw / binary
+
+   - gz: Download format is a single binary compressed with GZip, not a TAR
+
+   - bz2: Download format is a single binary compressed with Bzip2, not a TAR
+
+   - xz: Download format is a single binary compressed with XZ, not a TAR
+
+   - zst: Download format is a single binary compressed with Zstd, not a TAR
 * `--pkg-url <TEMPLATE>` — URL template for package downloads
 
    Overrides the Cargo.toml package manifest pkg-url.

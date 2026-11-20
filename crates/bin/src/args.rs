@@ -160,6 +160,14 @@ pub struct Args {
     /// - zip: Download format is Zip
     ///
     /// - bin: Download format is raw / binary
+    ///
+    /// - gz: Download format is a single binary compressed with GZip, not a TAR
+    ///
+    /// - bz2: Download format is a single binary compressed with Bzip2, not a TAR
+    ///
+    /// - xz: Download format is a single binary compressed with XZ, not a TAR
+    ///
+    /// - zst: Download format is a single binary compressed with Zstd, not a TAR
     #[clap(help_heading = "Overrides", long, value_name = "PKG_FMT")]
     pub(crate) pkg_fmt: Option<PkgFmt>,
 
