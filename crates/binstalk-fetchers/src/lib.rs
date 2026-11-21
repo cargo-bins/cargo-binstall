@@ -29,6 +29,21 @@ use gh_crate_meta::hosting::RepositoryHost;
 
 static DEFAULT_GH_API_RETRY_DURATION: Duration = Duration::from_secs(1);
 
+/// Longest GitHub API rate-limit wait worth sleeping through.
+///
+/// A primary rate limit resets at most hourly, far beyond
+/// `--maximum-resolution-timeout`, so sleeping through it only stalls the
+/// resolution until it is timed out. Short waits, e.g. a secondary rate
+/// limit's `Retry-After`, are still honoured.
+const MAX_GH_API_RATE_LIMIT_WAIT: Duration = Duration::from_secs(5);
+
+/// How long to sleep before retrying a rate-limited GitHub API call, or `None`
+/// if the wait is too long and the caller should give up on the API instead.
+fn gh_api_rate_limit_wait(retry_after: Option<Duration>) -> Option<Duration> {
+    let wait = retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION);
+    (wait <= MAX_GH_API_RATE_LIMIT_WAIT).then_some(wait)
+}
+
 #[derive(Debug, ThisError)]
 #[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
 pub struct InvalidPkgFmtError {
@@ -224,7 +239,10 @@ impl Data {
                     Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
                     Ok(None) => break Err(GhApiError::NotFound),
                     Err(GhApiError::RateLimit { retry_after }) => {
-                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await
+                        match gh_api_rate_limit_wait(retry_after) {
+                            Some(wait) => sleep(wait).await,
+                            None => break Err(GhApiError::RateLimit { retry_after }),
+                        }
                     }
                     Err(err) => break Err(err),
                 }
@@ -483,5 +501,24 @@ mod test {
         let repo_info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
 
         assert_eq!(url_without_git, repo_info.repo.as_str());
+    }
+
+    #[test]
+    fn test_gh_api_rate_limit_wait() {
+        assert_eq!(
+            gh_api_rate_limit_wait(None),
+            Some(DEFAULT_GH_API_RETRY_DURATION)
+        );
+        assert_eq!(
+            gh_api_rate_limit_wait(Some(Duration::from_secs(2))),
+            Some(Duration::from_secs(2))
+        );
+        assert_eq!(
+            gh_api_rate_limit_wait(Some(MAX_GH_API_RATE_LIMIT_WAIT)),
+            Some(MAX_GH_API_RATE_LIMIT_WAIT)
+        );
+        // A primary rate limit's reset, e.g. the 10 minutes `GhApiClient`
+        // assumes when GraphQL reports `RATE_LIMITED`, is not worth waiting.
+        assert_eq!(gh_api_rate_limit_wait(Some(Duration::from_secs(600))), None);
     }
 }
