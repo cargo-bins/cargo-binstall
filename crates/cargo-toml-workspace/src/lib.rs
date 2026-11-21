@@ -5,7 +5,7 @@ use std::{
 
 use cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
-use glob::{MatchOptions, Pattern, PatternError};
+use glob::{Pattern, PatternError};
 use serde::de::DeserializeOwned;
 use thiserror::Error as ThisError;
 use tracing::{debug, instrument, warn};
@@ -111,42 +111,28 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
 
         // As in cargo, an exclude entry excludes everything under that path,
         // unless it is also under a path listed in members.
-        // Unlike cargo, and for backwards compatibility, an exclude entry may
-        // also be a glob pattern. It is matched the same way as members, one
-        // path component at a time, against each ancestor of the path.
-        let exclude_patterns = ws
-            .exclude
-            .iter()
-            .map(|exclude| Pattern::new(exclude))
-            .collect::<Result<Vec<_>, PatternError>>()?;
         let is_excluded = |path: &Path| {
             let Ok(relative) = path.strip_prefix(root) else {
                 return false;
             };
-            let excluded = ws
-                .exclude
+            ws.exclude
                 .iter()
                 .any(|exclude| relative.starts_with(exclude))
-                || relative.ancestors().any(|ancestor| {
-                    exclude_patterns
-                        .iter()
-                        .any(|pattern| pattern.matches_path_with(ancestor, COMPONENT_WISE))
-                });
-            let explicit_member = ws.members.iter().any(|member| relative.starts_with(member));
-
-            excluded && !explicit_member
+                && !ws.members.iter().any(|member| relative.starts_with(member))
         };
 
         for member in &ws.members {
-            let mut paths = expand_member(root, member)?;
-            // As in cargo, if the glob matches nothing, use the member as a
-            // literal path.
-            if paths.is_empty() {
-                paths.push(root.join(member));
-            }
+            let (paths, exact) = match expand_member(root, member)? {
+                // As in cargo, if the glob matches nothing, use the member as
+                // a literal path.
+                Expanded::Glob(paths) if paths.is_empty() => (vec![root.join(member)], true),
+                Expanded::Glob(paths) => (paths, false),
+                Expanded::Exact(path) => (path.into_iter().collect(), true),
+            };
 
             for mut path in paths {
-                if !path.is_dir() || is_excluded(&path) {
+                // A path that is a member exactly is never excluded.
+                if !path.is_dir() || (!exact && is_excluded(&path)) {
                     continue;
                 }
                 path.push("Cargo.toml");
@@ -160,82 +146,85 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     Err(ErrorInner::NotFound)
 }
 
-/// `require_literal_separator`, so that `*` does not match across `/`, as when
-/// a pattern is expanded one path component at a time.
-const COMPONENT_WISE: MatchOptions = MatchOptions {
-    case_sensitive: true,
-    require_literal_separator: true,
-    require_literal_leading_dot: false,
-};
+enum Expanded {
+    /// `pattern` has no wildcard: the path it names, if it is a directory.
+    Exact(Option<PathBuf>),
+    /// The directories that `pattern` matched.
+    Glob(Vec<PathBuf>),
+}
 
 /// Expand `pattern` relative to `root` into the directories it matches.
 ///
 /// This gives the same result as `glob::glob(root.join(pattern))`, which is
 /// what cargo uses, but `root` is never interpreted as a pattern and need not
 /// be UTF-8.
-fn expand_member(root: &Path, pattern: &str) -> Result<Vec<PathBuf>, ErrorInner> {
+fn expand_member(root: &Path, pattern: &str) -> Result<Expanded, ErrorInner> {
     let mut dirs = vec![root.to_owned()];
+    let mut exact = true;
 
     let mut components = Path::new(pattern).components().peekable();
     while let Some(component) = components.next() {
         let Component::Normal(component) = component else {
             // `/`, `..`, `.` and Windows prefixes are taken literally.
-            dirs = dirs.into_iter().map(|dir| dir.join(component)).collect();
+            dirs.iter_mut().for_each(|dir| dir.push(component));
             continue;
         };
         // `pattern` is a `str`, so all of its components are too.
         let component = component.to_str().unwrap();
 
-        let mut next = Vec::new();
+        // The matches for each of the current `dirs` are appended to `dirs`,
+        // then the current ones are removed.
+        let current = dirs.len();
         if component == "**" {
-            // Zero or more directories, but like `glob`, a trailing `**`
-            // matches only what is below the directory, not the directory
+            exact = false;
+            // Zero or more directories: every directory below, found by
+            // reading each appended directory in turn. Like `glob`, a
+            // trailing `**` matches only what is below, not the directory
             // itself.
-            let include_self = components.peek().is_some();
-            let mut todo = Vec::new();
-            for dir in dirs.drain(..) {
-                push_subdirs(&dir, None, &mut todo)?;
-                if include_self {
-                    next.push(dir);
-                }
+            let mut i = 0;
+            while i < dirs.len() {
+                push_subdirs(fs::read_dir(&dirs[i])?, None, &mut dirs)?;
+                i += 1;
             }
-            while let Some(dir) = todo.pop() {
-                push_subdirs(&dir, None, &mut todo)?;
-                next.push(dir);
+            if components.peek().is_none() {
+                dirs.drain(..current);
             }
         } else if component.contains(['*', '?', '[']) {
+            exact = false;
             let pattern = Pattern::new(component)?;
-            for dir in &dirs {
-                push_subdirs(dir, Some(&pattern), &mut next)?;
+            for i in 0..current {
+                push_subdirs(fs::read_dir(&dirs[i])?, Some(&pattern), &mut dirs)?;
             }
+            dirs.drain(..current);
         } else {
-            next.extend(
-                dirs.iter()
-                    .map(|dir| dir.join(component))
-                    .filter(|dir| dir.is_dir()),
-            );
+            dirs.retain_mut(|dir| {
+                dir.push(component);
+                dir.is_dir()
+            });
         }
-        dirs = next;
+    }
+
+    if exact {
+        // No wildcard, so there is at most the one path.
+        debug_assert!(dirs.len() <= 1);
+        return Ok(Expanded::Exact(dirs.pop()));
     }
 
     dirs.sort_unstable();
     dirs.dedup();
-    Ok(dirs)
+    Ok(Expanded::Glob(dirs))
 }
 
-/// Push the subdirectories of `dir` whose name matches `pattern`, following
-/// symlinks like `glob` does. Names that are not UTF-8 never match a pattern.
+/// Push the subdirectories in `entries` whose name matches `pattern`,
+/// following symlinks like `glob` does. Names that are not UTF-8 never match
+/// a pattern.
 fn push_subdirs(
-    dir: &Path,
+    entries: fs::ReadDir,
     pattern: Option<&Pattern>,
     out: &mut Vec<PathBuf>,
 ) -> Result<(), ErrorInner> {
-    for entry in fs::read_dir(dir)? {
+    for entry in entries {
         let entry = entry?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
         let matches = match pattern {
             None => true,
             Some(pattern) => entry
@@ -243,7 +232,11 @@ fn push_subdirs(
                 .to_str()
                 .is_some_and(|name| pattern.matches_with(name, glob::MatchOptions::new())),
         };
-        if matches {
+        if !matches {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
             out.push(path);
         }
     }
@@ -415,11 +408,11 @@ exclude = ["excluded"]
                 .collect::<Vec<_>>();
             expected.sort_unstable();
 
-            assert_eq!(
-                expand_member(root, pattern).unwrap(),
-                expected,
-                "pattern {pattern}"
-            );
+            let actual = match expand_member(root, pattern).unwrap() {
+                Expanded::Exact(path) => path.into_iter().collect(),
+                Expanded::Glob(paths) => paths,
+            };
+            assert_eq!(actual, expected, "pattern {pattern}");
         }
     }
 
