@@ -184,6 +184,16 @@ pub trait Fetcher: Send + Sync {
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
         None
     }
+
+    /// Whether each binary is in its own package, so that instead of this
+    /// fetcher, one has to be created per binary, with `bin` set in
+    /// [`Fetcher::new`].
+    ///
+    /// Only called on a fetcher created with `bin` set to `None`, whose
+    /// [`Fetcher::find`] then never finds anything.
+    fn is_package_per_bin(&self) -> bool {
+        false
+    }
 }
 
 /// [`leon::Values`] that gives `target-arch` from

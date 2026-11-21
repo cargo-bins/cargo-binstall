@@ -175,7 +175,7 @@ async fn resolve_inner(
                 continue;
             }
 
-            if fetcher.fetcher_name() == FETCHER_GH_CRATE_META && is_pkg_url_per_bin(target_data) {
+            if fetcher.is_package_per_bin() {
                 if skip_per_bin {
                     continue;
                 }
@@ -372,17 +372,6 @@ impl Candidate {
             .join(", ")
             .into()
     }
-}
-
-/// Whether each binary is downloaded from its own package, which is the case
-/// when `pkg-url` contains key `bin`.
-fn is_pkg_url_per_bin<T: leon::Values + ?Sized>(target_data: &TargetData<T>) -> bool {
-    target_data
-        .meta
-        .pkg_url
-        .as_deref()
-        .and_then(|pkg_url| Template::parse(pkg_url).ok())
-        .is_some_and(|template| template.has_key("bin"))
 }
 
 /// Returns whether `fetcher.find()` found a package, logging errors and

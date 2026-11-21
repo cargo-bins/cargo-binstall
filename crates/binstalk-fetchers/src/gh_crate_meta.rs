@@ -557,6 +557,16 @@ impl super::Fetcher for GhCrateMeta {
         self.resolution.get()?.target_arch
     }
 
+    fn is_package_per_bin(&self) -> bool {
+        // An invalid template is reported by `find`.
+        self.target_data
+            .meta
+            .pkg_url
+            .as_deref()
+            .and_then(|pkg_url| Template::parse(pkg_url).ok())
+            .is_some_and(|template| template.has_key("bin"))
+    }
+
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
         let resolved = self.resolution.get()?;
         Some(PkgUrlHint {
