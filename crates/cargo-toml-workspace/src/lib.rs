@@ -448,4 +448,28 @@ exclude = ["excluded"]
             .unwrap_err();
         assert!(matches!(err, ErrorInner::NotFound), "{:#?}", err);
     }
+
+    /// Non-glob members are joined onto a non-UTF-8 root as paths.
+    #[cfg(unix)]
+    #[test]
+    fn test_literal_members_non_utf8_root() {
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join(OsStr::from_bytes(b"ws\xff"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"a/b\", \"lit[1]\", \"./c/../d\"]\n",
+        )
+        .unwrap();
+        write_package(&root.join("a/b"), "ab");
+        write_package(&root.join("lit[1]"), "literal");
+        write_package(&root.join("d"), "d");
+        std::fs::create_dir_all(root.join("c")).unwrap();
+
+        assert!(find(&root, "ab"));
+        assert!(find(&root, "literal"));
+        assert!(find(&root, "d"));
+    }
 }
