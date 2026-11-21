@@ -19,7 +19,9 @@ members = [
 ]
 
 [profile.release]
-opt-level = 3
+# cargo-binstall is network-bound, so optimise for size: this makes the
+# release binary ~36% smaller than opt-level 3 with no measurable slowdown.
+opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"
@@ -28,11 +30,13 @@ strip = "symbols"
 [profile.release.build-override]
 inherits = "dev.build-override"
 
-[profile.release.package."astral-tokio-tar"]
-opt-level = "z"
+# Pure-Rust inflate (tgz via zlib-rs, zip deflate via miniz_oxide) is the only
+# hot path that gets noticeably slower (13-22% CPU) at opt-level "z".
+[profile.release.package."zlib-rs"]
+opt-level = 3
 
-[profile.release.package."binstall-tar"]
-opt-level = "z"
+[profile.release.package."miniz_oxide"]
+opt-level = 3
 
 [profile.dev]
 opt-level = 0
