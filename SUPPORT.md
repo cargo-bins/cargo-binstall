@@ -19,8 +19,12 @@ disabled-strategies = ["quick-install", "compile"]
 With the following configuration keys:
 
 - `pkg-url` specifies the package download URL for a given target/version, templated
-- `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
+- `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows).
+  It may also be the dir holding the binaries, see [If the package structure differs from the default](#if-the-package-structure-differs-from-the-default).
+  Despite the name, it is a path inside of the package, not where the binaries are installed (that is `--install-path`).
 - `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`), check [the documentation](https://docs.rs/binstalk-types/latest/binstalk_types/cargo_toml_binstall/enum.PkgFmt.html) for all supported formats.
+  `bin` is for a download that is the binary itself, and `gz`, `bz2`, `xz` and `zst` for a binary compressed on its own, without a TAR around it (e.g. `{ name }-{ target }.gz`).
+  These hold a single file with no name inside, so it is installed as the binary named in `Cargo.toml` and `bin-dir` is not used.
 - `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository,
   `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`)
   for your crate (defaults to empty array).
@@ -283,3 +287,13 @@ bin-dir = "{ bin }-{ target }{ binary-ext }"
 ```
 
 Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so as long as cargo builds them this _should_ just work.
+
+If `bin-dir` renders to a dir in the package, the binary is looked up in it as `{ bin }{ binary-ext }`, so these two are the same:
+
+```toml
+[package.metadata.binstall]
+bin-dir = "{ name }-{ target }/bin"
+# bin-dir = "{ name }-{ target }/bin/{ bin }{ binary-ext }"
+```
+
+Versions of cargo-binstall up to v1.27.0 do not support this and fail to find the binary, so use the full path if users may be on those.
