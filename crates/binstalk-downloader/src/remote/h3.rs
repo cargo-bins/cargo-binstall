@@ -11,8 +11,8 @@
 //!   lost the race is not tried again for a while, with exponential backoff.
 //! - Requests that would go through a proxy stay on TCP, since reqwest's
 //!   HTTP/3 client does not support proxies.
-//! - Redirects are only followed over HTTP/3 to origins known to support it,
-//!   otherwise the whole request is sent again over TCP.
+//! - Each hop of a redirect chain picks its transport by itself, so e.g. a
+//!   TCP-only origin redirecting to an HTTP/3 CDN uses HTTP/3 for the CDN.
 
 use std::{
     collections::HashMap,
@@ -25,8 +25,11 @@ use std::{
 use compact_str::{CompactString, ToCompactString};
 use hyper_util::client::proxy::matcher::Matcher;
 use reqwest::{
-    Method, Request, Response, Version,
-    header::{ALT_SVC, HeaderMap, LOCATION},
+    Method, Request, Response, StatusCode, Version,
+    header::{
+        ALT_SVC, AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, HeaderMap,
+        LOCATION, PROXY_AUTHORIZATION, WWW_AUTHENTICATE,
+    },
     redirect,
 };
 use tokio::time::{Duration, Instant, sleep};
@@ -135,7 +138,6 @@ impl Origins {
 }
 
 pub(super) struct H3 {
-    client: reqwest::Client,
     origins: Arc<Origins>,
     proxy: Matcher,
 }
@@ -143,54 +145,53 @@ pub(super) struct H3 {
 impl fmt::Debug for H3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("H3")
-            .field("client", &self.client)
             .field("origins", &self.origins)
             .finish_non_exhaustive()
     }
 }
 
 impl H3 {
-    /// `builder` should be configured like the TCP client (user agent, TLS,
-    /// DNS resolver, ...).
-    pub(super) fn new(builder: reqwest::ClientBuilder) -> Result<Self, reqwest::Error> {
+    /// Set `builder` up for opportunistic HTTP/3.
+    pub(super) fn configure(builder: reqwest::ClientBuilder) -> (reqwest::ClientBuilder, Self) {
         let origins = Arc::<Origins>::default();
 
+        // The policy cannot tell whether a chain is going over HTTP/3 or TCP,
+        // so stop wherever the transport might have to change and let
+        // `H3::execute` follow that hop.
         let redirect_policy = {
             let origins = origins.clone();
             redirect::Policy::custom(move |attempt| {
+                let switches_transport = attempt.previous().last().is_some_and(|previous| {
+                    origins.supports_h3(previous) != origins.supports_h3(attempt.url())
+                });
+
                 if attempt.previous().len() >= MAX_REDIRECTS {
                     attempt.error("too many redirects")
-                } else if origins.supports_h3(attempt.url()) {
-                    attempt.follow()
-                } else {
-                    // Hand the redirect back, see `H3::outcome`.
+                } else if switches_transport {
                     attempt.stop()
+                } else {
+                    attempt.follow()
                 }
             })
         };
 
         let mut builder = builder
-            .http3_prior_knowledge()
             .http3_congestion_bbr()
             .tls_early_data(true)
             .redirect(redirect_policy);
 
-        // reqwest binds the QUIC endpoint to `[::]:0`, which fails outright
-        // where IPv6 is disabled.
+        // reqwest binds the QUIC endpoint to `[::]:0`, and silently goes
+        // without HTTP/3 where that fails because IPv6 is disabled. TCP can't
+        // use IPv6 there either, so binding everything to IPv4 costs nothing.
         if UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0)).is_err() {
             builder = builder.local_address(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
         }
 
-        Ok(Self {
-            client: builder.build()?,
+        let h3 = Self {
             origins,
             proxy: Matcher::from_system(),
-        })
-    }
-
-    /// Record the `Alt-Svc` advertised by `response`.
-    pub(super) fn learn(&self, response: &Response) {
-        self.origins.learn(response.url(), response.headers())
+        };
+        (builder, h3)
     }
 
     /// The body of an HTTP/3 response from `url` broke off.
@@ -199,8 +200,37 @@ impl H3 {
         self.origins.mark_broken(url);
     }
 
+    /// Send `request`, over HTTP/3 to origins known to support it, and follow
+    /// the redirects the policy set up in [`H3::configure`] stopped at.
+    pub(super) async fn execute(
+        &self,
+        service: &DelayRequest,
+        mut request: Request,
+    ) -> RequestResult {
+        let mut hops = 0;
+
+        loop {
+            let next = request.try_clone();
+
+            let response = if self.should_try(&request) {
+                self.race(service, request).await?
+            } else {
+                service.call(request).await?
+            };
+            self.origins.learn(response.url(), response.headers());
+
+            match next.and_then(|next| redirect(next, &response)) {
+                Some(next) if hops < MAX_REDIRECTS => {
+                    hops += 1;
+                    request = next;
+                }
+                _ => break Ok(response),
+            }
+        }
+    }
+
     /// Whether `request` should be tried over HTTP/3.
-    pub(super) fn should_try(&self, request: &Request) -> bool {
+    fn should_try(&self, request: &Request) -> bool {
         // Racing sends the request twice, only do that when it is idempotent.
         matches!(*request.method(), Method::GET | Method::HEAD)
             && self.origins.supports_h3(request.url())
@@ -213,22 +243,17 @@ impl H3 {
             .map_or(true, |uri| self.proxy.intercept(&uri).is_some())
     }
 
-    /// Send `request` over HTTP/3, racing it against `tcp` once
-    /// [`HEAD_START`] has passed.
-    pub(super) async fn race(
-        &self,
-        service: &DelayRequest,
-        tcp: &reqwest::Client,
-        request: Request,
-    ) -> RequestResult {
+    /// Send `request` over HTTP/3, racing it against TCP once [`HEAD_START`]
+    /// has passed.
+    async fn race(&self, service: &DelayRequest, request: Request) -> RequestResult {
         let Some(tcp_request) = request.try_clone() else {
-            return service.call(tcp, request).await;
+            return service.call(request).await;
         };
         let url = request.url().clone();
 
         let mut h3_request = request;
         *h3_request.version_mut() = Version::HTTP_3;
-        let mut h3 = pin!(service.call(&self.client, h3_request));
+        let mut h3 = pin!(service.call(h3_request));
 
         let res = tokio::select! {
             biased;
@@ -238,12 +263,12 @@ impl H3 {
         if let Some(res) = res {
             return match self.outcome(&url, res) {
                 Some(response) => Ok(response),
-                None => service.call(tcp, tcp_request).await,
+                None => service.call(tcp_request).await,
             };
         }
 
         debug!("HTTP/3 to {url} is taking a while, racing it against TCP");
-        let mut tcp = pin!(service.call(tcp, tcp_request));
+        let mut tcp = pin!(service.call(tcp_request));
 
         tokio::select! {
             biased;
@@ -262,21 +287,9 @@ impl H3 {
         }
     }
 
-    /// The response to use, or `None` to (keep) using TCP instead.
+    /// The HTTP/3 response to use, or `None` to (keep) using TCP instead.
     fn outcome(&self, url: &Url, res: RequestResult) -> Option<Response> {
         match res {
-            Ok(response)
-                if response.status().is_redirection()
-                    && response.headers().contains_key(LOCATION) =>
-            {
-                debug!(
-                    "{url} redirects to {} without known HTTP/3 support, retrying over TCP",
-                    response.headers()[LOCATION]
-                        .to_str()
-                        .unwrap_or("<non-ascii>"),
-                );
-                None
-            }
             Ok(response) => {
                 debug!("Used HTTP/3 for {url}");
                 self.origins.mark_working(url);
@@ -289,6 +302,46 @@ impl H3 {
             }
         }
     }
+}
+
+/// The request following `response`, if it is a redirect that the policy
+/// stopped at, built from `request` the way reqwest would.
+fn redirect(mut request: Request, response: &Response) -> Option<Request> {
+    let status = response.status();
+    let to_get = match status {
+        StatusCode::MOVED_PERMANENTLY | StatusCode::FOUND => *request.method() == Method::POST,
+        StatusCode::SEE_OTHER => *request.method() != Method::HEAD,
+        StatusCode::TEMPORARY_REDIRECT | StatusCode::PERMANENT_REDIRECT => false,
+        _ => return None,
+    };
+
+    let location = response.headers().get(LOCATION)?.to_str().ok()?;
+    let next = response.url().join(location).ok()?;
+    debug!("Following redirect from {} to {next}", response.url());
+
+    if to_get {
+        *request.method_mut() = Method::GET;
+        *request.body_mut() = None;
+        let headers = request.headers_mut();
+        for header in [CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE] {
+            headers.remove(header);
+        }
+    }
+
+    let previous = response.url();
+    if next.host_str() != previous.host_str()
+        || next.port_or_known_default() != previous.port_or_known_default()
+        || next.scheme() != previous.scheme()
+    {
+        let headers = request.headers_mut();
+        for header in [AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE] {
+            headers.remove(header);
+        }
+        headers.remove("cookie2");
+    }
+
+    *request.url_mut() = next;
+    Some(request)
 }
 
 #[cfg(test)]
@@ -334,6 +387,74 @@ mod tests {
         assert!(origins.supports_h3(&u));
         origins.learn(&u, &alt_svc("clear"));
         assert!(!origins.supports_h3(&u));
+    }
+
+    fn redirect_response(status: u16, from: &str, location: &str) -> Response {
+        use reqwest::ResponseBuilderExt;
+
+        http::Response::builder()
+            .status(status)
+            .url(url(from))
+            .header(LOCATION, location)
+            .body("")
+            .unwrap()
+            .into()
+    }
+
+    fn request(method: Method, to: &str) -> Request {
+        let mut request = Request::new(method, url(to));
+        let headers = request.headers_mut();
+        headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer t"));
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+        *request.body_mut() = Some("body".into());
+        request
+    }
+
+    #[test]
+    fn redirect_follows_reqwest_semantics() {
+        let next = redirect(
+            request(Method::GET, "https://a.example/x"),
+            &redirect_response(302, "https://a.example/x", "/y"),
+        )
+        .unwrap();
+        assert_eq!(next.url().as_str(), "https://a.example/y");
+        assert_eq!(next.method(), Method::GET);
+        assert!(next.headers().contains_key(AUTHORIZATION), "same origin");
+
+        let next = redirect(
+            request(Method::HEAD, "https://a.example/x"),
+            &redirect_response(303, "https://a.example/x", "https://b.example/y"),
+        )
+        .unwrap();
+        assert_eq!(next.method(), Method::HEAD);
+        assert!(!next.headers().contains_key(AUTHORIZATION), "cross origin");
+
+        let next = redirect(
+            request(Method::POST, "https://a.example/x"),
+            &redirect_response(301, "https://a.example/x", "/y"),
+        )
+        .unwrap();
+        assert_eq!(next.method(), Method::GET);
+        assert!(next.body().is_none());
+        assert!(!next.headers().contains_key(CONTENT_TYPE));
+
+        let next = redirect(
+            request(Method::POST, "https://a.example/x"),
+            &redirect_response(307, "https://a.example/x", "https://a.example:8443/y"),
+        )
+        .unwrap();
+        assert_eq!(next.method(), Method::POST);
+        assert!(next.body().is_some());
+        assert!(!next.headers().contains_key(AUTHORIZATION), "other port");
+
+        // Not a redirect reqwest would follow.
+        assert!(
+            redirect(
+                request(Method::GET, "https://a.example/x"),
+                &redirect_response(304, "https://a.example/x", "/y"),
+            )
+            .is_none()
+        );
     }
 
     #[test]

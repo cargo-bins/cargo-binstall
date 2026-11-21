@@ -344,3 +344,33 @@ async fn redirect_to_origin_without_h3_goes_over_tcp() {
     // The origin's HTTP/3 itself is fine and still used.
     assert_eq!(get(&client, origin.url("/")).await, "origin over h3");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn redirect_from_tcp_origin_to_h3_origin_uses_h3() {
+    let cert = test_cert();
+    let cdn = spawn_origin(
+        &cert,
+        |_, port| ok("cdn over tcp", port),
+        Some(Arc::new(|_| Reply {
+            status: 200,
+            headers: vec![],
+            body: "cdn over h3",
+        })),
+    )
+    .await;
+    let location = cdn.url("/asset").to_string();
+    let origin = spawn_origin(
+        &cert,
+        move |_, _| Reply {
+            status: 302,
+            headers: vec![("location", location.clone())],
+            body: "",
+        },
+        None,
+    )
+    .await;
+    let client = client(&cert);
+
+    assert_eq!(get(&client, cdn.url("/")).await, "cdn over tcp");
+    assert_eq!(get(&client, origin.url("/")).await, "cdn over h3");
+}

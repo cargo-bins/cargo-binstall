@@ -43,6 +43,7 @@ where
 
 #[derive(Debug)]
 struct Inner {
+    client: reqwest::Client,
     num_request: NonZeroU64,
     per: Duration,
     until: Instant,
@@ -56,8 +57,9 @@ enum State {
 }
 
 impl Inner {
-    fn new(num_request: NonZeroU64, per: Duration) -> Self {
+    fn new(num_request: NonZeroU64, per: Duration, client: reqwest::Client) -> Self {
         Inner {
+            client,
             per,
             num_request,
             until: Instant::now() + per,
@@ -100,11 +102,7 @@ impl Inner {
         }
     }
 
-    fn call(
-        &mut self,
-        client: &reqwest::Client,
-        req: Request,
-    ) -> impl Future<Output = RequestResult> + use<> {
+    fn call(&mut self, req: Request) -> impl Future<Output = RequestResult> + use<> {
         match &mut self.state {
             State::Ready { rem } => {
                 let now = Instant::now();
@@ -123,7 +121,7 @@ impl Inner {
                 }
 
                 // Call the inner future
-                client.execute(req)
+                self.client.execute(req)
             }
             State::Limited => panic!("service not ready; poll_ready must be called first"),
         }
@@ -142,9 +140,9 @@ pub(super) struct DelayRequest {
 }
 
 impl DelayRequest {
-    pub(super) fn new(num_request: NonZeroU64, per: Duration) -> Self {
+    pub(super) fn new(num_request: NonZeroU64, per: Duration, client: reqwest::Client) -> Self {
         Self {
-            inner: Mutex::new(Inner::new(num_request, per)),
+            inner: Mutex::new(Inner::new(num_request, per, client)),
             hosts_to_delay: Default::default(),
         }
     }
@@ -186,7 +184,6 @@ impl DelayRequest {
     // included in the future.
     fn call_inner(
         &self,
-        client: &reqwest::Client,
         counter: &mut u32,
         req: &mut Option<Request>,
     ) -> ControlFlow<impl Future<Output = RequestResult> + use<>, Instant> {
@@ -218,11 +215,11 @@ impl DelayRequest {
             debug!("server-side rate limit exceeded; sleeping.");
             ControlFlow::Continue(until + additional_delay)
         } else {
-            ControlFlow::Break(guard.call(client, req.take().unwrap()))
+            ControlFlow::Break(guard.call(req.take().unwrap()))
         }
     }
 
-    pub(super) async fn call(&self, client: &reqwest::Client, req: Request) -> RequestResult {
+    pub(super) async fn call(&self, req: Request) -> RequestResult {
         // Put all variables in a block so that will be dropped before polling
         // the future returned by reqwest.
         {
@@ -237,7 +234,7 @@ impl DelayRequest {
             let mut req = Some(req);
 
             loop {
-                match self.call_inner(client, &mut counter, &mut req) {
+                match self.call_inner(&mut counter, &mut req) {
                     ControlFlow::Continue(until) => sleep_until(until).await,
                     ControlFlow::Break(future) => break future,
                 }

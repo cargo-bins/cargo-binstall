@@ -136,28 +136,21 @@ impl Client {
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
     ) -> Result<Self, Error> {
-        let certificates: Vec<_> = certificates.into_iter().collect();
-        // Shared so that both clients use the same DNS cache.
-        let resolver = hickory_resolver(dns);
-        let builder = || {
-            Self::builder(
-                user_agent.as_ref(),
-                min_tls,
-                allow_insecure_http,
-                resolver.clone(),
-                &mut certificates.iter().cloned(),
-            )
-        };
+        let builder = Self::default_builder(
+            user_agent.as_ref(),
+            min_tls,
+            allow_insecure_http,
+            dns,
+            &mut certificates.into_iter(),
+        );
 
         #[cfg(all(reqwest_unstable, feature = "http3"))]
-        let h3 = h3::H3::new(builder())
-            .inspect_err(|err| debug!("HTTP/3 is unavailable: {err}"))
-            .ok();
+        let (builder, h3) = h3::H3::configure(builder);
 
         Ok(Self::from_parts(
-            builder().build()?,
+            builder.build()?,
             #[cfg(all(reqwest_unstable, feature = "http3"))]
-            h3,
+            Some(h3),
             per_millis,
             num_request,
         ))
@@ -175,28 +168,12 @@ impl Client {
         dns: DnsResolver,
         certificates: &mut dyn Iterator<Item = Certificate>,
     ) -> reqwest::ClientBuilder {
-        Self::builder(
-            user_agent,
-            min_tls,
-            allow_insecure_http,
-            hickory_resolver(dns),
-            certificates,
-        )
-    }
-
-    fn builder(
-        user_agent: &str,
-        min_tls: Option<TLSVersion>,
-        allow_insecure_http: bool,
-        resolver: Option<Arc<dyn reqwest::dns::Resolve>>,
-        certificates: &mut dyn Iterator<Item = Certificate>,
-    ) -> reqwest::ClientBuilder {
         let mut builder = reqwest::ClientBuilder::new()
             .user_agent(user_agent)
             .https_only(!allow_insecure_http)
             .tcp_nodelay(false);
 
-        if let Some(resolver) = resolver {
+        if let Some(resolver) = hickory_resolver(dns) {
             builder = builder.dns_resolver(resolver);
         }
 
@@ -238,8 +215,12 @@ impl Client {
         num_request: NonZeroU64,
     ) -> Self {
         Client(Arc::new(Inner {
-            client,
-            service: DelayRequest::new(num_request, Duration::from_millis(per_millis.get() as u64)),
+            client: client.clone(),
+            service: DelayRequest::new(
+                num_request,
+                Duration::from_millis(per_millis.get() as u64),
+                client,
+            ),
             #[cfg(all(reqwest_unstable, feature = "http3"))]
             h3,
         }))
@@ -333,18 +314,10 @@ impl Client {
     async fn execute(&self, request: Request) -> RequestResult {
         #[cfg(all(reqwest_unstable, feature = "http3"))]
         if let Some(h3) = &self.0.h3 {
-            let res = if h3.should_try(&request) {
-                h3.race(&self.0.service, &self.0.client, request).await
-            } else {
-                self.0.service.call(&self.0.client, request).await
-            };
-            if let Ok(response) = &res {
-                h3.learn(response);
-            }
-            return res;
+            return h3.execute(&self.0.service, request).await;
         }
 
-        self.0.service.call(&self.0.client, request).await
+        self.0.service.call(request).await
     }
 
     /// Tell the client that the body of `response` broke off, so that a retry
