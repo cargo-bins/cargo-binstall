@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsStr,
     fs, io,
     path::{Component, Path, PathBuf},
 };
@@ -122,15 +123,18 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         };
 
         for member in &ws.members {
-            let (paths, exact) = match expand_member(root, member)? {
+            // At most one of `exact_path` and `glob_paths` is non-empty, so
+            // neither needs an allocation for the other case.
+            let (exact_path, glob_paths) = match expand_member(root, member)? {
                 // As in cargo, if the glob matches nothing, use the member as
                 // a literal path.
-                Expanded::Glob(paths) if paths.is_empty() => (vec![root.join(member)], true),
-                Expanded::Glob(paths) => (paths, false),
-                Expanded::Exact(path) => (path.into_iter().collect(), true),
+                Expanded::Glob(paths) if paths.is_empty() => (Some(root.join(member)), Vec::new()),
+                Expanded::Glob(paths) => (None, paths),
+                Expanded::Exact(path) => (path, Vec::new()),
             };
+            let exact = exact_path.is_some();
 
-            for mut path in paths {
+            for mut path in exact_path.into_iter().chain(glob_paths) {
                 // A path that is a member exactly is never excluded.
                 if !path.is_dir() || (!exact && is_excluded(&path)) {
                     continue;
@@ -144,6 +148,30 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
     }
 
     Err(ErrorInner::NotFound)
+}
+
+enum ComponentKind<'a> {
+    /// A name without wildcards, or `/`, `.`, `..` or a Windows prefix, which
+    /// are all taken literally.
+    Literal(&'a OsStr),
+    /// `**`: zero or more directories.
+    AnyDirs,
+    /// A name containing `*`, `?` or `[`.
+    Wildcard(&'a str),
+}
+
+impl<'a> ComponentKind<'a> {
+    fn new(component: Component<'a>) -> Self {
+        let Component::Normal(name) = component else {
+            return Self::Literal(component.as_os_str());
+        };
+        // The pattern is a `str`, so all of its components are too.
+        match name.to_str().unwrap() {
+            "**" => Self::AnyDirs,
+            name if name.contains(['*', '?', '[']) => Self::Wildcard(name),
+            _ => Self::Literal(name),
+        }
+    }
 }
 
 enum Expanded {
@@ -162,45 +190,49 @@ fn expand_member(root: &Path, pattern: &str) -> Result<Expanded, ErrorInner> {
     let mut dirs = vec![root.to_owned()];
     let mut exact = true;
 
-    let mut components = Path::new(pattern).components().peekable();
+    let mut components = Path::new(pattern)
+        .components()
+        .map(ComponentKind::new)
+        .peekable();
     while let Some(component) = components.next() {
-        let Component::Normal(component) = component else {
-            // `/`, `..`, `.` and Windows prefixes are taken literally.
-            dirs.iter_mut().for_each(|dir| dir.push(component));
-            continue;
-        };
-        // `pattern` is a `str`, so all of its components are too.
-        let component = component.to_str().unwrap();
-
         // The matches for each of the current `dirs` are appended to `dirs`,
         // then the current ones are removed.
         let current = dirs.len();
-        if component == "**" {
-            exact = false;
-            // Zero or more directories: every directory below, found by
-            // reading each appended directory in turn. Like `glob`, a
-            // trailing `**` matches only what is below, not the directory
-            // itself.
-            let mut i = 0;
-            while i < dirs.len() {
-                push_subdirs(fs::read_dir(&dirs[i])?, None, &mut dirs)?;
-                i += 1;
+        match component {
+            ComponentKind::Literal(component) => {
+                // Push this and all following literal components, then check
+                // only the full path.
+                dirs.iter_mut().for_each(|dir| dir.push(component));
+                while let Some(ComponentKind::Literal(component)) =
+                    components.next_if(|c| matches!(c, ComponentKind::Literal(_)))
+                {
+                    dirs.iter_mut().for_each(|dir| dir.push(component));
+                }
+                dirs.retain(|dir| dir.is_dir());
             }
-            if components.peek().is_none() {
+            ComponentKind::AnyDirs => {
+                exact = false;
+                // Zero or more directories: every directory below, found by
+                // reading each appended directory in turn. Like `glob`, a
+                // trailing `**` matches only what is below, not the directory
+                // itself.
+                let mut i = 0;
+                while i < dirs.len() {
+                    push_subdirs(fs::read_dir(&dirs[i])?, None, &mut dirs)?;
+                    i += 1;
+                }
+                if components.peek().is_none() {
+                    dirs.drain(..current);
+                }
+            }
+            ComponentKind::Wildcard(component) => {
+                exact = false;
+                let pattern = Pattern::new(component)?;
+                for i in 0..current {
+                    push_subdirs(fs::read_dir(&dirs[i])?, Some(&pattern), &mut dirs)?;
+                }
                 dirs.drain(..current);
             }
-        } else if component.contains(['*', '?', '[']) {
-            exact = false;
-            let pattern = Pattern::new(component)?;
-            for i in 0..current {
-                push_subdirs(fs::read_dir(&dirs[i])?, Some(&pattern), &mut dirs)?;
-            }
-            dirs.drain(..current);
-        } else {
-            dirs.retain_mut(|dir| {
-                dir.push(component);
-                dir.is_dir()
-            });
         }
     }
 
