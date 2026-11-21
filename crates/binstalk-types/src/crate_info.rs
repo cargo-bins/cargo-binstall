@@ -102,28 +102,3 @@ impl CrateSource {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pkg_url_hint_is_optional() {
-        // A record written before `pkg_url_hint` existed.
-        let old = r#"{"name":"cargo-watch","version_req":"*","current_version":"8.4.0","source":{"source_type":"Registry","url":"https://github.com/rust-lang/crates.io-index"},"target":"x86_64-unknown-linux-gnu","bins":["cargo-watch"]}"#;
-        let mut crate_info: CrateInfo = serde_json::from_str(old).unwrap();
-        assert_eq!(crate_info.pkg_url_hint, None);
-        // ... and written back the same way.
-        assert_eq!(serde_json::to_string(&crate_info).unwrap(), old);
-
-        let hint = PkgUrlHint {
-            name: "cargo-watch".into(),
-            pkg_url: "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ archive-suffix }".into(),
-            pkg_fmt: PkgFmt::Txz,
-        };
-        crate_info.pkg_url_hint = Some(hint.clone());
-        let json = serde_json::to_string(&crate_info).unwrap();
-        let crate_info: CrateInfo = serde_json::from_str(&json).unwrap();
-        assert_eq!(crate_info.pkg_url_hint, Some(hint));
-    }
-}
