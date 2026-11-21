@@ -238,8 +238,10 @@ impl BinFile {
             target_related_info: data.target_related_info,
         };
 
-        let (source, archive_source_path, extracted_dir) = if data.meta.pkg_fmt == Some(PkgFmt::Bin)
-        {
+        // The download is the binary itself, raw or compressed on its own.
+        let is_single_file = data.meta.pkg_fmt.is_some_and(PkgFmt::is_single_file);
+
+        let (source, archive_source_path, extracted_dir) = if is_single_file {
             (
                 data.bin_path.to_path_buf(),
                 data.bin_path.file_name().unwrap().into(),
@@ -713,6 +715,50 @@ mod tests {
             assert_eq!(
                 bin.preview_bin().to_string(),
                 "mycrate => /home/user/.cargo/bin/mycrate (aliases: mcr, myc)"
+            );
+        }
+
+        #[test]
+        fn single_file_formats_install_the_download_itself() {
+            let source = |pkg_fmt| {
+                let data = Data {
+                    name: "mycrate",
+                    target: "x86_64-unknown-linux-gnu",
+                    version: "1.2.3",
+                    repo: None,
+                    meta: PkgMeta {
+                        pkg_fmt: Some(pkg_fmt),
+                        ..Default::default()
+                    },
+                    bin_path: Path::new("/tmp/pkg/bin-mycrate"),
+                    install_path: Path::new("/home/user/.cargo/bin"),
+                    target_related_info: &NoValues,
+                };
+                let tt = Template::parse("mycrate-dir/{ bin }{ binary-ext }").unwrap();
+                BinFile::new(&data, "mycrate", &tt, &mut |_| false, true, &[])
+                    .unwrap()
+                    .source
+            };
+
+            // The file the download was decompressed to is the binary, and
+            // `bin-dir` is not used, since there is no archive to look in.
+            for pkg_fmt in [
+                PkgFmt::Bin,
+                PkgFmt::Gz,
+                PkgFmt::Bz2,
+                PkgFmt::Xz,
+                PkgFmt::Zst,
+            ] {
+                assert_eq!(
+                    source(pkg_fmt),
+                    Path::new("/tmp/pkg/bin-mycrate"),
+                    "{pkg_fmt}"
+                );
+            }
+
+            assert_eq!(
+                source(PkgFmt::Tgz),
+                Path::new("/tmp/pkg/bin-mycrate/mycrate-dir/mycrate")
             );
         }
 

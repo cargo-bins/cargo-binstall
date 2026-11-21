@@ -23,6 +23,8 @@ With the following configuration keys:
   It may also be the dir holding the binaries, see [If the package structure differs from the default](#if-the-package-structure-differs-from-the-default).
   Despite the name, it is a path inside of the package, not where the binaries are installed (that is `--install-path`).
 - `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`), check [the documentation](https://docs.rs/binstalk-types/latest/binstalk_types/cargo_toml_binstall/enum.PkgFmt.html) for all supported formats.
+  `bin` is for a download that is the binary itself, and `gz`, `bz2`, `xz` and `zst` for a binary compressed on its own, without a TAR around it (e.g. `{ name }-{ target }.gz`).
+  These hold a single file with no name inside, so it is installed as the binary named in `Cargo.toml` and `bin-dir` is not used.
 - `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository,
   `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`)
   for your crate (defaults to empty array).
