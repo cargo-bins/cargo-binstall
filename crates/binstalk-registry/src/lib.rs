@@ -253,13 +253,15 @@ impl Registry {
         let registry = self.url()?;
         let source_type = match self {
             #[cfg(feature = "git")]
-            Registry::Git(_) => SourceType::Git,
+            // A git index is a registry, recorded by cargo as `registry+<url>`.
+            // `SourceType::Git` is for crates installed with `--git`.
+            Registry::Git(_) => SourceType::Registry,
             Registry::Sparse(_) => SourceType::Sparse,
         };
 
         Ok(match (registry.as_str(), source_type) {
             ("https://index.crates.io/", SourceType::Sparse)
-            | ("https://github.com/rust-lang/crates.io-index", SourceType::Git) => {
+            | ("https://github.com/rust-lang/crates.io-index", SourceType::Registry) => {
                 CrateSource::cratesio_registry()
             }
             _ => CrateSource {
@@ -406,6 +408,31 @@ mod test {
         assert_eq!(
             serialized_manifest_from_git_task.await.unwrap(),
             serialized_manifest_from_cratesio_api
+        );
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
+    fn test_git_registry_crate_source() {
+        let registry: Registry = "file:///tmp/index".parse().unwrap();
+        let source = registry.crate_source().unwrap();
+        assert!(
+            matches!(source.source_type, SourceType::Registry),
+            "{source:?}"
+        );
+        assert_eq!(source.url.as_str(), "file:///tmp/index");
+
+        let registry: Registry = "https://github.com/rust-lang/crates.io-index"
+            .parse()
+            .unwrap();
+        let source = registry.crate_source().unwrap();
+        assert!(
+            matches!(source.source_type, SourceType::Registry),
+            "{source:?}"
+        );
+        assert_eq!(
+            source.url.as_str(),
+            CrateSource::cratesio_registry().url.as_str()
         );
     }
 }
