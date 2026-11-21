@@ -46,7 +46,9 @@ with the following variables available:
 - `target-family`: Operating system of the target from [`target_lexicon::OperatingSystem`]
 - `os-name`: `rustc`-style operating system name of the target, e.g. `windows`, `macos` or `linux`
 - `target-arch`: Architecture of the target, `universal` on `{universal, universal2}-apple-darwin`,
-  otherwise from [`target_lexicon::Architecture`]
+  otherwise from [`target_lexicon::Architecture`].
+  When `pkg-url` uses it, binstall also tries the common aliases `arm64` for `aarch64` and `amd64` for `x86_64`,
+  after Rust's name, and the alias that is found is also used for `bin-dir` and the signature `file`
 - `target-libc`: ABI environment of the target from [`target_lexicon::Environment`]
 - `target-vendor`: Vendor of the target from [`target_lexicon::Vendor`]
 
