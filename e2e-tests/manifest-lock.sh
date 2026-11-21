@@ -15,9 +15,14 @@ unset CARGO_INSTALL_ROOT
 
 crates_toml="$CARGO_HOME/.crates.toml"
 log="$(mktemp)"
+fifo="$(mktemp -u)"
+mkfifo "$fifo"
 
-"$1" binstall -y cargo-binstall@0.20.1 >"$log" 2>&1 &
+# Run interactively: binstall stops at the confirmation prompt once resolution
+# is done, which is where the lock must be free.
+"$1" binstall --disable-telemetry cargo-binstall@0.20.1 <"$fifo" >"$log" 2>&1 &
 pid="$!"
+exec 8>"$fifo"
 
 wait_for() {
     for _ in $(seq 1200); do
@@ -29,17 +34,18 @@ wait_for() {
         fi
         sleep 0.1
     done
+    cat "$log"
     grep -q "$1" "$log"
 }
 
-wait_for "Resolving package"
+wait_for "Do you wish to continue"
 
-# Resolution has started, so the lock must be free: take it as another process
-# about to install would.
+# Take the lock as another process about to install would.
 exec 9>>"$crates_toml"
-flock -w 10 9
+flock -n 9
 
 # binstall now has to wait for us before installing.
+echo yes >&8
 wait_for "Blocking waiting for file lock"
 if grep -q "Installing binaries" "$log"; then
     cat "$log"
@@ -51,6 +57,7 @@ flock -u 9
 exec 9>&-
 
 wait "$pid"
+exec 8>&-
 cat "$log"
 
 grep -q "Installing binaries" "$log"
