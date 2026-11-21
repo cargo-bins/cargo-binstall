@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.13](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.12...binstalk-manifests-v0.19.13) - 2026-11-21
+
+### Added
+
+- try the pkg-url of the last install first when updating ([#2800](https://github.com/cargo-bins/cargo-binstall/pull/2800))
+- *(manifests)* keep .crates2.json in sync with .crates.toml ([#2786](https://github.com/cargo-bins/cargo-binstall/pull/2786))
+
+### Fixed
+
+- only hold the manifest lock while installing ([#2799](https://github.com/cargo-bins/cargo-binstall/pull/2799))
+
+### Other
+
+- Replace beef::Cow with std::borrow::Cow ([#2763](https://github.com/cargo-bins/cargo-binstall/pull/2763))
+- Replace merge derive with hand-written impls ([#2754](https://github.com/cargo-bins/cargo-binstall/pull/2754))
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.19.12](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-manifests-v0.19.11...binstalk-manifests-v0.19.12) - 2026-11-09
 
 ### Other

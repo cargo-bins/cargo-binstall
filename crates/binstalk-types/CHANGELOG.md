@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.8...binstalk-types-v0.11.0) - 2026-11-21
+
+### Added
+
+- try the pkg-url of the last install first when updating ([#2800](https://github.com/cargo-bins/cargo-binstall/pull/2800))
+- Support single binaries compressed without a tar (gz/bz2/xz/zst) ([#2785](https://github.com/cargo-bins/cargo-binstall/pull/2785))
+- Let `bin-dir` name the dir holding the binaries ([#2783](https://github.com/cargo-bins/cargo-binstall/pull/2783))
+- symlink aliases for installed binaries ([#2767](https://github.com/cargo-bins/cargo-binstall/pull/2767))
+
+### Other
+
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.10.8](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-types-v0.10.7...binstalk-types-v0.10.8) - 2026-07-24
 
 ### Other
