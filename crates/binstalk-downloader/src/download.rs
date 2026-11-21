@@ -10,7 +10,7 @@ use futures_util::{Stream, StreamExt, stream::FusedStream};
 use thiserror::Error as ThisError;
 use tracing::{debug, error, instrument};
 
-pub use binstalk_types::cargo_toml_binstall::{PkgFmt, TarBasedFmt};
+pub use binstalk_types::cargo_toml_binstall::{CompressionFmt, PkgFmt, TarBasedFmt};
 pub use rc_zip_sync::rc_zip::error::Error as ZipError;
 
 use crate::remote::{Client, Error as RemoteError, Response, Url};
@@ -343,6 +343,9 @@ impl Download<'_> {
                     extract_tar_based_stream(&mut stream, path, fmt).await
                 }
                 PkgFmtDecomposed::Bin => extract_bin(&mut stream, path).await,
+                PkgFmtDecomposed::CompressedBin(fmt) => {
+                    extract_compressed_bin(&mut stream, path, fmt).await
+                }
                 PkgFmtDecomposed::Zip => extract_zip(&mut stream, path).await,
             };
 

@@ -4,15 +4,18 @@ use std::{
     future::Future,
     io::{self, Write},
     path::{Component, Path, PathBuf},
+    pin::Pin,
 };
 
+use async_compression::tokio::bufread;
 use bytes::Bytes;
-use futures_util::Stream;
+use futures_util::{Stream, StreamExt};
 use tempfile::tempfile as create_tmpfile;
-use tokio::sync::mpsc;
+use tokio::{io::AsyncRead, sync::mpsc};
+use tokio_util::io::{ReaderStream, StreamReader};
 use tracing::debug;
 
-use super::{DownloadError, ExtractedFiles, TarBasedFmt, extractor::*};
+use super::{CompressionFmt, DownloadError, ExtractedFiles, TarBasedFmt, extractor::*};
 use crate::{
     download::zip_extraction::do_extract_zip,
     utils::{StreamReadable, extract_with_blocking_task},
@@ -33,6 +36,45 @@ where
 
         Ok(extracted_files)
     })
+    .await
+}
+
+/// Decompress a single binary that was compressed without an archive around
+/// it, and write it to `path` as [`extract_bin`] does.
+pub async fn extract_compressed_bin<S>(
+    stream: S,
+    path: &Path,
+    fmt: CompressionFmt,
+) -> Result<ExtractedFiles, DownloadError>
+where
+    S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
+{
+    debug!("Decompressing {fmt} stream");
+
+    let reader = StreamReader::new(stream);
+
+    // A file made by concatenating compressed streams, which `cat a.gz b.gz`
+    // gives and parallel compressors such as pigz and pbzip2 write, is still
+    // one valid file, so read past the end of the first stream.
+    macro_rules! decoder {
+        ($decoder:ident) => {{
+            let mut decoder = bufread::$decoder::new(reader);
+            decoder.multiple_members(true);
+            Box::pin(decoder) as Pin<Box<dyn AsyncRead + Send + Sync + '_>>
+        }};
+    }
+
+    let decoder = match fmt {
+        CompressionFmt::Gz => decoder!(GzipDecoder),
+        CompressionFmt::Bz2 => decoder!(BzDecoder),
+        CompressionFmt::Xz => decoder!(XzDecoder),
+        CompressionFmt::Zst => decoder!(ZstdDecoder),
+    };
+
+    extract_bin(
+        ReaderStream::new(decoder).map(|res| res.map_err(DownloadError::from)),
+        path,
+    )
     .await
 }
 
@@ -162,4 +204,113 @@ fn write_stream_to_file(mut rx: mpsc::Receiver<Bytes>, f: fs::File) -> io::Resul
     f.flush()?;
 
     f.into_inner().map_err(io::IntoInnerError::into_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::io::Write;
+
+    use futures_util::stream;
+
+    fn compress(fmt: CompressionFmt, data: &[u8]) -> Vec<u8> {
+        match fmt {
+            CompressionFmt::Gz => {
+                let mut e =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                e.write_all(data).unwrap();
+                e.finish().unwrap()
+            }
+            CompressionFmt::Bz2 => {
+                let mut e = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::default());
+                e.write_all(data).unwrap();
+                e.finish().unwrap()
+            }
+            CompressionFmt::Xz => {
+                let mut e = liblzma::write::XzEncoder::new(Vec::new(), 6);
+                e.write_all(data).unwrap();
+                e.finish().unwrap()
+            }
+            CompressionFmt::Zst => zstd::stream::encode_all(data, 0).unwrap(),
+        }
+    }
+
+    /// Feed `data` to the extractor a few bytes at a time, so that the
+    /// decoders see stream boundaries in the middle of their headers.
+    fn chunked(data: Vec<u8>) -> impl Stream<Item = Result<Bytes, DownloadError>> + Unpin {
+        let chunks: Vec<_> = data
+            .chunks(7)
+            .map(|chunk| Ok(Bytes::copy_from_slice(chunk)))
+            .collect();
+        stream::iter(chunks)
+    }
+
+    const FMTS: [CompressionFmt; 4] = [
+        CompressionFmt::Gz,
+        CompressionFmt::Bz2,
+        CompressionFmt::Xz,
+        CompressionFmt::Zst,
+    ];
+
+    #[tokio::test]
+    async fn compressed_bin_is_decompressed_to_path() {
+        let content: Vec<u8> = (0..100_000u32).flat_map(u32::to_le_bytes).collect();
+
+        for fmt in FMTS {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("bin-mycrate");
+
+            let extracted = extract_compressed_bin(chunked(compress(fmt, &content)), &path, fmt)
+                .await
+                .unwrap();
+
+            assert_eq!(fs::read(&path).unwrap(), content, "{fmt}");
+            assert!(extracted.has_file(Path::new("bin-mycrate")), "{fmt}");
+        }
+    }
+
+    #[tokio::test]
+    async fn concatenated_streams_are_one_file() {
+        for fmt in FMTS {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("bin");
+
+            let mut data = compress(fmt, b"hello, ");
+            data.extend(compress(fmt, b"world"));
+
+            extract_compressed_bin(chunked(data), &path, fmt)
+                .await
+                .unwrap();
+
+            assert_eq!(fs::read(&path).unwrap(), b"hello, world", "{fmt}");
+        }
+    }
+
+    #[tokio::test]
+    async fn truncated_stream_is_an_error() {
+        for fmt in FMTS {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("bin");
+
+            let mut data = compress(fmt, &[0x42; 4096]);
+            data.truncate(data.len() / 2);
+
+            extract_compressed_bin(chunked(data), &path, fmt)
+                .await
+                .unwrap_err();
+        }
+    }
+
+    #[tokio::test]
+    async fn uncompressed_data_is_an_error() {
+        for fmt in FMTS {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("bin");
+
+            extract_compressed_bin(chunked(b"\x7fELF not compressed".to_vec()), &path, fmt)
+                .await
+                .unwrap_err();
+        }
+    }
 }

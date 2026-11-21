@@ -119,10 +119,15 @@ pub fn check_aliases_unique(bin_files: &[BinFile]) -> Result<(), Error> {
 /// The extension is appended rather than set with [`PathBuf::set_extension`],
 /// which would replace the part of `name` after a dot.
 fn install_file_path(install_path: &Path, name: &str, binary_ext: &str) -> PathBuf {
+    install_path.join(bin_file_name(name, binary_ext))
+}
+
+/// `name` with `binary_ext` appended.
+fn bin_file_name(name: &str, binary_ext: &str) -> OsString {
     let mut file_name = OsString::with_capacity(name.len() + binary_ext.len());
     file_name.push(name);
     file_name.push(binary_ext);
-    install_path.join(file_name)
+    file_name
 }
 
 /// Directories in the extracted archive that may hold the binaries of
@@ -195,11 +200,16 @@ pub struct BinFile {
 }
 
 impl BinFile {
-    /// * `tt` - must have a template with name "bin_dir"
+    /// * `tt` - the `bin-dir` template, rendering to the path of the binary
+    ///   in the extracted archive, or to the dir holding it.
+    /// * `has_dir` - returns true if the path is a dir in the extracted
+    ///   archive. If the rendered `tt` is one, the binary is looked up in
+    ///   it as `{ bin }{ binary-ext }`.
     pub fn new(
         data: &Data<'_>,
         base_name: &str,
         tt: &Template<'_>,
+        has_dir: &mut dyn FnMut(&Path) -> bool,
         no_symlinks: bool,
         aliases: &[CompactString],
     ) -> Result<Self, Error> {
@@ -228,8 +238,10 @@ impl BinFile {
             target_related_info: data.target_related_info,
         };
 
-        let (source, archive_source_path, extracted_dir) = if data.meta.pkg_fmt == Some(PkgFmt::Bin)
-        {
+        // The download is the binary itself, raw or compressed on its own.
+        let is_single_file = data.meta.pkg_fmt.is_some_and(PkgFmt::is_single_file);
+
+        let (source, archive_source_path, extracted_dir) = if is_single_file {
             (
                 data.bin_path.to_path_buf(),
                 data.bin_path.file_name().unwrap().into(),
@@ -240,7 +252,7 @@ impl BinFile {
             // Source path is the download dir + the generated binary path
             let path = tt.render(&ctx)?;
 
-            let path_normalized = Path::new(&path).normalize();
+            let mut path_normalized = Path::new(&path).normalize();
 
             if path_normalized.components().next().is_none() {
                 return Err(Error::EmptySourceFilePath);
@@ -248,6 +260,13 @@ impl BinFile {
 
             if !is_valid_path(&path_normalized) {
                 return Err(Error::InvalidSourceFilePath(path_normalized.into()));
+            }
+
+            // `bin-dir` may name the dir holding the binary instead of the
+            // binary itself. `base_name` is a plain file name, so this
+            // cannot leave the dir.
+            if has_dir(&path_normalized) {
+                path_normalized.push(bin_file_name(base_name, binary_ext));
             }
 
             (
@@ -666,7 +685,7 @@ mod tests {
             // With `PkgFmt::Bin` the template is never rendered, but `new` still
             // requires one.
             let tt = Template::parse("{ bin }{ binary-ext }").unwrap();
-            BinFile::new(&data, "mycrate", &tt, no_symlinks, &aliases)
+            BinFile::new(&data, "mycrate", &tt, &mut |_| false, no_symlinks, &aliases)
         }
 
         fn bin_file(target: &str, no_symlinks: bool, aliases: &[&str]) -> BinFile {
@@ -696,6 +715,50 @@ mod tests {
             assert_eq!(
                 bin.preview_bin().to_string(),
                 "mycrate => /home/user/.cargo/bin/mycrate (aliases: mcr, myc)"
+            );
+        }
+
+        #[test]
+        fn single_file_formats_install_the_download_itself() {
+            let source = |pkg_fmt| {
+                let data = Data {
+                    name: "mycrate",
+                    target: "x86_64-unknown-linux-gnu",
+                    version: "1.2.3",
+                    repo: None,
+                    meta: PkgMeta {
+                        pkg_fmt: Some(pkg_fmt),
+                        ..Default::default()
+                    },
+                    bin_path: Path::new("/tmp/pkg/bin-mycrate"),
+                    install_path: Path::new("/home/user/.cargo/bin"),
+                    target_related_info: &NoValues,
+                };
+                let tt = Template::parse("mycrate-dir/{ bin }{ binary-ext }").unwrap();
+                BinFile::new(&data, "mycrate", &tt, &mut |_| false, true, &[])
+                    .unwrap()
+                    .source
+            };
+
+            // The file the download was decompressed to is the binary, and
+            // `bin-dir` is not used, since there is no archive to look in.
+            for pkg_fmt in [
+                PkgFmt::Bin,
+                PkgFmt::Gz,
+                PkgFmt::Bz2,
+                PkgFmt::Xz,
+                PkgFmt::Zst,
+            ] {
+                assert_eq!(
+                    source(pkg_fmt),
+                    Path::new("/tmp/pkg/bin-mycrate"),
+                    "{pkg_fmt}"
+                );
+            }
+
+            assert_eq!(
+                source(PkgFmt::Tgz),
+                Path::new("/tmp/pkg/bin-mycrate/mycrate-dir/mycrate")
             );
         }
 
@@ -744,7 +807,7 @@ mod tests {
                     target_related_info: &NoValues,
                 };
                 let tt = Template::parse("{ bin }{ binary-ext }").unwrap();
-                BinFile::new(&data, name, &tt, no_symlinks, &aliases).unwrap()
+                BinFile::new(&data, name, &tt, &mut |_| false, no_symlinks, &aliases).unwrap()
             };
             let new = |name: &str, aliases: &[&str]| new_with(name, true, aliases);
 
@@ -828,6 +891,91 @@ mod tests {
                 // But not without clobbering.
                 bin.install_link_noclobber().unwrap_err();
             }
+        }
+    }
+
+    mod bin_dir {
+        use super::*;
+        use binstalk_types::cargo_toml_binstall::PkgMeta;
+
+        struct NoValues;
+        impl leon::Values for NoValues {
+            fn get_value(&self, _key: &str) -> Option<Cow<'_, str>> {
+                None
+            }
+        }
+
+        /// The archive source path of binary `mybin` with `bin-dir` set to
+        /// `bin_dir`, in an archive whose only dirs are `dirs`.
+        fn source_path(bin_dir: &str, target: &str, dirs: &[&str]) -> PathBuf {
+            let data = Data {
+                name: "mycrate",
+                target,
+                version: "1.2.3",
+                repo: None,
+                meta: PkgMeta::default(),
+                bin_path: Path::new("/tmp/pkg"),
+                install_path: Path::new("/home/user/.cargo/bin"),
+                target_related_info: &NoValues,
+            };
+            let tt = Template::parse(bin_dir).unwrap();
+            let mut has_dir = |p: &Path| dirs.iter().any(|dir| p == Path::new(dir));
+            let bin = BinFile::new(&data, "mybin", &tt, &mut has_dir, true, &[]).unwrap();
+            assert_eq!(
+                bin.source,
+                Path::new("/tmp/pkg").join(&bin.archive_source_path)
+            );
+            bin.archive_source_path
+        }
+
+        const LINUX: &str = "x86_64-unknown-linux-gnu";
+        const WINDOWS: &str = "x86_64-pc-windows-msvc";
+
+        #[test]
+        fn file_path_is_used_as_is() {
+            assert_eq!(
+                source_path(
+                    "{ name }-{ target }/{ bin }{ binary-ext }",
+                    LINUX,
+                    &["mycrate-x86_64-unknown-linux-gnu"]
+                ),
+                Path::new("mycrate-x86_64-unknown-linux-gnu/mybin")
+            );
+            assert_eq!(
+                source_path("{ bin }-{ target }{ binary-ext }", WINDOWS, &[]),
+                Path::new("mybin-x86_64-pc-windows-msvc.exe")
+            );
+        }
+
+        #[test]
+        fn dir_path_gets_the_bin_file_name() {
+            for bin_dir in ["{ name }-{ target }", "{ name }-{ target }/"] {
+                assert_eq!(
+                    source_path(bin_dir, LINUX, &["mycrate-x86_64-unknown-linux-gnu"]),
+                    Path::new("mycrate-x86_64-unknown-linux-gnu/mybin")
+                );
+            }
+            assert_eq!(
+                source_path("{ name }/bin", WINDOWS, &["mycrate", "mycrate/bin"]),
+                Path::new("mycrate/bin/mybin.exe")
+            );
+        }
+
+        /// A binary in a dir of the same name, e.g. `mybin/mybin`.
+        #[test]
+        fn dir_named_like_the_bin() {
+            assert_eq!(
+                source_path("{ bin }", LINUX, &["mybin"]),
+                Path::new("mybin/mybin")
+            );
+        }
+
+        #[test]
+        fn missing_path_is_used_as_is() {
+            assert_eq!(
+                source_path("{ name }-{ target }", LINUX, &[]),
+                Path::new("mycrate-x86_64-unknown-linux-gnu")
+            );
         }
     }
 }

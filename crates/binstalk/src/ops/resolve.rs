@@ -440,6 +440,7 @@ fn collect_bin_files(
                 &bin_data,
                 bin.name.as_str(),
                 &template,
+                &mut |p| extracted_files.get_dir(p).is_some(),
                 no_symlinks,
                 aliases,
             )
