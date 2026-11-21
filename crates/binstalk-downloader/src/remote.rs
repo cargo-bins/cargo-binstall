@@ -15,11 +15,14 @@ use reqwest::{
 use thiserror::Error as ThisError;
 use tracing::{debug, info, instrument};
 
-pub use reqwest::{Error as ReqwestError, Method, StatusCode, header};
+pub use reqwest::{Error as ReqwestError, Method, StatusCode, Version, header};
 pub use url::Url;
 
 mod delay_request;
-use delay_request::DelayRequest;
+use delay_request::{DelayRequest, RequestResult};
+
+#[cfg(all(reqwest_unstable, feature = "http3"))]
+mod h3;
 
 mod certificate;
 pub use certificate::Certificate;
@@ -91,6 +94,8 @@ impl HttpError {
 struct Inner {
     client: reqwest::Client,
     service: DelayRequest,
+    #[cfg(all(reqwest_unstable, feature = "http3"))]
+    h3: Option<h3::H3>,
 }
 
 #[derive(Clone, Debug)]
@@ -131,17 +136,31 @@ impl Client {
         num_request: NonZeroU64,
         certificates: impl IntoIterator<Item = Certificate>,
     ) -> Result<Self, Error> {
-        Self::from_builder(
-            Self::default_builder(
+        let certificates: Vec<_> = certificates.into_iter().collect();
+        // Shared so that both clients use the same DNS cache.
+        let resolver = hickory_resolver(dns);
+        let builder = || {
+            Self::builder(
                 user_agent.as_ref(),
                 min_tls,
                 allow_insecure_http,
-                dns,
-                &mut certificates.into_iter(),
-            ),
+                resolver.clone(),
+                &mut certificates.iter().cloned(),
+            )
+        };
+
+        #[cfg(all(reqwest_unstable, feature = "http3"))]
+        let h3 = h3::H3::new(builder())
+            .inspect_err(|err| debug!("HTTP/3 is unavailable: {err}"))
+            .ok();
+
+        Ok(Self::from_parts(
+            builder().build()?,
+            #[cfg(all(reqwest_unstable, feature = "http3"))]
+            h3,
             per_millis,
             num_request,
-        )
+        ))
     }
 
     /// Constructs a default [`reqwest::ClientBuilder`].
@@ -156,12 +175,28 @@ impl Client {
         dns: DnsResolver,
         certificates: &mut dyn Iterator<Item = Certificate>,
     ) -> reqwest::ClientBuilder {
+        Self::builder(
+            user_agent,
+            min_tls,
+            allow_insecure_http,
+            hickory_resolver(dns),
+            certificates,
+        )
+    }
+
+    fn builder(
+        user_agent: &str,
+        min_tls: Option<TLSVersion>,
+        allow_insecure_http: bool,
+        resolver: Option<Arc<dyn reqwest::dns::Resolve>>,
+        certificates: &mut dyn Iterator<Item = Certificate>,
+    ) -> reqwest::ClientBuilder {
         let mut builder = reqwest::ClientBuilder::new()
             .user_agent(user_agent)
             .https_only(!allow_insecure_http)
             .tcp_nodelay(false);
 
-        if let Some(resolver) = hickory_resolver(dns) {
+        if let Some(resolver) = resolver {
             builder = builder.dns_resolver(resolver);
         }
 
@@ -176,11 +211,6 @@ impl Client {
                 .tls_certs_merge(certificates.map(|cert| cert.0));
         }
 
-        #[cfg(all(reqwest_unstable, feature = "http3"))]
-        {
-            builder = builder.http3_congestion_bbr().tls_early_data(true);
-        }
-
         builder
     }
 
@@ -192,16 +222,27 @@ impl Client {
         per_millis: NonZeroU16,
         num_request: NonZeroU64,
     ) -> Result<Self, Error> {
-        let client = builder.build()?;
+        Ok(Self::from_parts(
+            builder.build()?,
+            #[cfg(all(reqwest_unstable, feature = "http3"))]
+            None,
+            per_millis,
+            num_request,
+        ))
+    }
 
-        Ok(Client(Arc::new(Inner {
-            client: client.clone(),
-            service: DelayRequest::new(
-                num_request,
-                Duration::from_millis(per_millis.get() as u64),
-                client,
-            ),
-        })))
+    fn from_parts(
+        client: reqwest::Client,
+        #[cfg(all(reqwest_unstable, feature = "http3"))] h3: Option<h3::H3>,
+        per_millis: NonZeroU16,
+        num_request: NonZeroU64,
+    ) -> Self {
+        Client(Arc::new(Inner {
+            client,
+            service: DelayRequest::new(num_request, Duration::from_millis(per_millis.get() as u64)),
+            #[cfg(all(reqwest_unstable, feature = "http3"))]
+            h3,
+        }))
     }
 
     /// Return inner reqwest client.
@@ -232,7 +273,7 @@ impl Client {
     {
         static HEADER_VALUE_0: HeaderValue = HeaderValue::from_static("0");
 
-        let response = match self.0.service.call(request).await {
+        let response = match self.execute(request).await {
             Err(err) if err.is_timeout() || err.is_connect() => {
                 let duration = RETRY_DURATION_FOR_TIMEOUT;
 
@@ -286,6 +327,37 @@ impl Client {
                 _ => Ok(ControlFlow::Break(response)),
             }
         }
+    }
+
+    /// Send `request` once, over HTTP/3 when the origin is known to support it.
+    async fn execute(&self, request: Request) -> RequestResult {
+        #[cfg(all(reqwest_unstable, feature = "http3"))]
+        if let Some(h3) = &self.0.h3 {
+            let res = if h3.should_try(&request) {
+                h3.race(&self.0.service, &self.0.client, request).await
+            } else {
+                self.0.service.call(&self.0.client, request).await
+            };
+            if let Ok(response) = &res {
+                h3.learn(response);
+            }
+            return res;
+        }
+
+        self.0.service.call(&self.0.client, request).await
+    }
+
+    /// Tell the client that the body of `response` broke off, so that a retry
+    /// does not use HTTP/3 again if that is what it came over.
+    pub(crate) fn body_broke(&self, response: &Response) {
+        #[cfg(all(reqwest_unstable, feature = "http3"))]
+        if let Some(h3) = &self.0.h3
+            && response.version() == Version::HTTP_3
+        {
+            h3.body_broke(response.url());
+        }
+        #[cfg(not(all(reqwest_unstable, feature = "http3")))]
+        let _ = response;
     }
 
     /// * `request` - `Request::try_clone` must always return `Some`.

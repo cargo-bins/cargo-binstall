@@ -68,6 +68,12 @@ hickory-resolver = { version = "0.26.1", optional = true, features = [
 ] }
 once_cell = { version = "1.18.0", optional = true }
 url = "2.5.8"
+# Same proxy rules as reqwest's `system-proxy`, to keep proxied requests off
+# HTTP/3 (which reqwest cannot send through a proxy).
+hyper-util = { version = "0.1.21", optional = true, default-features = false, features = [
+    "client-proxy",
+    "client-proxy-system",
+] }
 
 liblzma = "0.4"
 
@@ -116,17 +122,42 @@ hickory-dns = ["hickory-resolver", "netdev", "once_cell", "resolv-conf"]
 # Deprecated alias for hickory-dns, since trust-dns is renamed to hickory-dns
 trust-dns = ["hickory-dns"]
 
-# HTTP3 is temporarily disabled by reqwest.
-#
 # Experimental HTTP/3 client, this would require `--cfg reqwest_unstable`
 # to be passed to `rustc`.
-http3 = ["reqwest/http3"]
+#
+# Origins advertising `h3` via `Alt-Svc` are then reached over HTTP/3, with a
+# fallback to TCP.
+http3 = ["reqwest/http3", "dep:hyper-util"]
 
 zstd-thin = ["zstd/thin"]
 
 cross-lang-fat-lto = ["zstd/fat-lto"]
 
 json = ["serde", "serde_json"]
+
+[dev-dependencies]
+tokio = { version = "1.52.3", features = ["test-util"] }
+
+# Local HTTPS + HTTP/3 servers for tests/http3.rs
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http = "1.4.0"
+quinn = { version = "0.11.12", default-features = false, features = [
+    "runtime-tokio",
+    "rustls-aws-lc-rs",
+] }
+rcgen = { version = "0.14.10", default-features = false, features = [
+    "aws_lc_rs",
+    "crypto",
+    "pem",
+] }
+rustls = { version = "0.23.46", default-features = false, features = [
+    "aws_lc_rs",
+    "std",
+] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = [
+    "aws_lc_rs",
+] }
 
 [target."cfg(unix)".dependencies]
 resolv-conf = { version = "0.7.6", optional = true }

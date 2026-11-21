@@ -2,7 +2,7 @@ use std::fmt;
 
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
-use reqwest::Method;
+use reqwest::{Method, Version};
 
 use super::{Client, Error, HttpError, StatusCode, Url, header};
 
@@ -96,6 +96,11 @@ impl Response {
 
     pub fn method(&self) -> &Method {
         &self.method
+    }
+
+    /// The HTTP version the response came over.
+    pub fn version(&self) -> Version {
+        self.inner.version()
     }
 
     pub fn error_for_status_ref(&self) -> Result<&Self, Error> {

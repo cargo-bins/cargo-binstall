@@ -85,6 +85,7 @@ pub(super) fn resumable_stream(
                         offset = state.read,
                         "download broke; trying to continue it",
                     );
+                    state.client.body_broke(&state.inner);
                     if !state.resume().await {
                         return Err(err);
                     }
@@ -98,6 +99,7 @@ pub(super) fn resumable_stream(
                         expected = ?state.len,
                         "download ended early; trying to continue it",
                     );
+                    state.client.body_broke(&state.inner);
                     if !state.resume().await {
                         return Err(state.truncated());
                     }
