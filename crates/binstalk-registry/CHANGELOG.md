@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.13...binstalk-registry-v0.13.0) - 2026-11-21
+
+### Added
+
+- Add opt-in `--min-publish-age` cooldown ([#2757](https://github.com/cargo-bins/cargo-binstall/pull/2757))
+
+### Other
+
+- Use a local git index in binstalk-registry's git registry test ([#2793](https://github.com/cargo-bins/cargo-binstall/pull/2793))
+- Use a local git index in registries.sh, record git registries as registry+ ([#2789](https://github.com/cargo-bins/cargo-binstall/pull/2789))
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.12.13](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.12...binstalk-registry-v0.12.13) - 2026-11-09
 
 ### Added

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.14.1...binstalk-downloader-v0.14.2) - 2026-11-21
+
+### Added
+
+- Support single binaries compressed without a tar (gz/bz2/xz/zst) ([#2785](https://github.com/cargo-bins/cargo-binstall/pull/2785))
+- *(binstalk-downloader)* continue downloads whose body stops early ([#2641](https://github.com/cargo-bins/cargo-binstall/pull/2641))
+
+### Fixed
+
+- stop waiting on GitHub API rate limits ([#2798](https://github.com/cargo-bins/cargo-binstall/pull/2798))
+- Retry 500 and 502 responses like other transient server errors ([#2796](https://github.com/cargo-bins/cargo-binstall/pull/2796))
+
+### Other
+
+- use aws-lc-rs for hickory-resolver instead of ring ([#2777](https://github.com/cargo-bins/cargo-binstall/pull/2777))
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+- Adopt std APIs available at current MSRVs and deny warnings in CI ([#2755](https://github.com/cargo-bins/cargo-binstall/pull/2755))
+
 ## [0.14.1](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-downloader-v0.14.0...binstalk-downloader-v0.14.1) - 2026-10-31
 
 ### Other

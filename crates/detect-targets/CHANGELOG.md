@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.98](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.97...detect-targets-v0.1.98) - 2026-11-21
+
+### Added
+
+- *(libc)* replace version string matching with ELF exec probes ([#2582](https://github.com/cargo-bins/cargo-binstall/pull/2582))
+
+### Other
+
+- run probes from a sealed memfd ([#2772](https://github.com/cargo-bins/cargo-binstall/pull/2772))
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.1.97](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.96...detect-targets-v0.1.97) - 2026-11-09
 
 ### Other

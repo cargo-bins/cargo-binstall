@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.30.0...binstalk-v0.31.0) - 2026-11-21
+
+### Added
+
+- try the pkg-url of the last install first when updating ([#2800](https://github.com/cargo-bins/cargo-binstall/pull/2800))
+- Let `bin-dir` name the dir holding the binaries ([#2783](https://github.com/cargo-bins/cargo-binstall/pull/2783))
+- Also try arm64/amd64 for { target-arch } in pkg-url ([#2782](https://github.com/cargo-bins/cargo-binstall/pull/2782))
+- Add opt-in `--min-publish-age` cooldown ([#2757](https://github.com/cargo-bins/cargo-binstall/pull/2757))
+- add --no-default-features and --all-features for the cargo install fallback ([#2768](https://github.com/cargo-bins/cargo-binstall/pull/2768))
+- warn when an installed binary is shadowed in PATH ([#2771](https://github.com/cargo-bins/cargo-binstall/pull/2771))
+- symlink aliases for installed binaries ([#2767](https://github.com/cargo-bins/cargo-binstall/pull/2767))
+
+### Fixed
+
+- warn when --git/--manifest-path ignore the version requirement ([#2770](https://github.com/cargo-bins/cargo-binstall/pull/2770))
+
+### Other
+
+- Kill the whole cargo install process tree when binstall is cancelled ([#2765](https://github.com/cargo-bins/cargo-binstall/pull/2765))
+- Migrate to edition 2024 and raise library MSRVs ([#2756](https://github.com/cargo-bins/cargo-binstall/pull/2756))
+
 ## [0.30.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.29.6...binstalk-v0.30.0) - 2026-11-09
 
 ### Added
