@@ -330,6 +330,7 @@ name = "binstalk-fetchers"
 version = "0.10.53"
 dependencies = [
  "async-trait",
+ "base16",
  "binstalk-bins",
  "binstalk-downloader",
  "binstalk-git-repo-api",
@@ -342,6 +343,9 @@ dependencies = [
  "leon-macros",
  "miette",
  "minisign-verify",
+ "serde",
+ "serde_json",
+ "sha2",
  "strum",
  "thiserror 2.0.21",
  "tokio",

@@ -89,6 +89,16 @@ pub enum FetchError {
     #[error("Failed to verify signature")]
     InvalidSignature,
 
+    #[error("Invalid dist-manifest.json: {0}")]
+    DistManifest(Cow<'static, str>),
+
+    #[error("sha256 checksum of {url} is {actual}, expected {expected}")]
+    ChecksumMismatch {
+        url: Box<Url>,
+        expected: CompactString,
+        actual: CompactString,
+    },
+
     #[error("Failed to wait for task: {0}")]
     TaskJoinError(#[from] JoinError),
 }

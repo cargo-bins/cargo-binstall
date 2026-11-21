@@ -198,6 +198,18 @@ crate's directory (`foo`) and `{ repo }` is the repository itself
 - `{ repo }/releases/download/{ name }-{ version }/`
 <!-- END generated:pkg-url-paths-github -->
 
+##### Releases made by dist
+
+If a release made by [dist](https://github.com/axodotdev/cargo-dist) has the
+`dist-manifest.json` that dist uploads to it, under any of the paths above,
+`binstall` takes the archive for the target from it, instead of trying every
+filename above. The archive is then also checked against the sha256 checksum
+the manifest lists for it.
+
+This is only done when the crate doesn't set `pkg-url`: dist's default archive
+names and layout already match the defaults above, so nothing needs to be set
+for such a release.
+
 #### for GitLab
 
 <!-- BEGIN generated:pkg-url-paths-gitlab from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
