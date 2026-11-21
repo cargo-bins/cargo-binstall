@@ -6,7 +6,7 @@ use std::{
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
     cargo_toml_binstall::{BinaryMeta, Strategy},
-    crate_info::{CrateSource, SourceType},
+    crate_info::{CrateSource, PkgUrlHint, SourceType},
 };
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -24,7 +24,7 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, TargetData},
+    fetchers::{Data, Fetcher, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -46,14 +46,17 @@ mod resolution;
 #[doc(inline)]
 pub use resolution::{Resolution, ResolutionFetch, ResolutionSource};
 
+/// * `pkg_url_hint` - the target and [`PkgUrlHint`] the installed version was
+///   found with, if any, see [`Data::with_pkg_url_hint`].
 #[instrument(skip_all)]
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
+    pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 ) -> Result<Resolution, BinstallError> {
     let crate_name_name = crate_name.name.clone();
-    let resolution = resolve_inner(opts, crate_name, curr_version)
+    let resolution = resolve_inner(opts, crate_name, curr_version, pkg_url_hint)
         .await
         .map_err(|err| err.crate_context(crate_name_name))?;
 
@@ -64,6 +67,7 @@ async fn resolve_inner(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
+    pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 ) -> Result<Resolution, BinstallError> {
     info!("Resolving package: '{}'", crate_name);
 
@@ -140,20 +144,26 @@ async fn resolve_inner(
 
     let gh_api_client = opts.gh_api_client.get().await?;
 
+    let with_pkg_url_hint = |data: Data| match pkg_url_hint.clone() {
+        Some((target, hint)) => data.with_pkg_url_hint(target, hint),
+        None => data,
+    };
+
     let mut candidates_fn = |data: Arc<Data>,
                              filter_fetcher_by_name_predicate: fn(&'static str) -> bool,
                              skip_per_bin: bool| {
         for (f, target_data) in resolvers.iter().cartesian_product(&desired_targets) {
-            let new_fetcher = |data: Arc<Data>| {
+            let new_fetcher = |bin: Option<CompactString>| {
                 f(
                     opts.client.clone(),
                     gh_api_client.clone(),
-                    data,
+                    data.clone(),
                     target_data.clone(),
                     opts.signature_policy,
+                    bin,
                 )
             };
-            let fetcher = new_fetcher(data.clone());
+            let fetcher = new_fetcher(None);
 
             if let Some(disabled_strategies) = target_data.meta.disabled_strategies.as_deref()
                 && disabled_strategies.contains(&fetcher.strategy())
@@ -174,7 +184,7 @@ async fn resolve_inner(
                         .iter()
                         .map(|&i| {
                             let bin = package_info.binaries[i].name.as_str();
-                            (i, new_fetcher(Arc::new(data.with_bin(bin.into()))))
+                            (i, new_fetcher(Some(bin.into())))
                         })
                         .collect(),
                 ));
@@ -185,11 +195,11 @@ async fn resolve_inner(
     };
 
     candidates_fn(
-        Arc::new(Data::new(
+        Arc::new(with_pkg_url_hint(Data::new(
             package_info.name.clone(),
             package_info.version_str.clone(),
             package_info.repo.clone(),
-        )),
+        ))),
         |_| true,
         false,
     );
@@ -198,11 +208,11 @@ async fn resolve_inner(
         // `{ bin }` already names the binary, so there is no need to try the
         // binary name as `{ name }` for a pkg-url that has it.
         candidates_fn(
-            Arc::new(Data::new(
+            Arc::new(with_pkg_url_hint(Data::new(
                 binary_name,
                 package_info.version_str.clone(),
                 package_info.repo.clone(),
-            )),
+            ))),
             |name| name == FETCHER_GH_CRATE_META,
             true,
         );
@@ -600,6 +610,13 @@ fn collect_bin_files(
     no_symlinks: bool,
     extracted_files: &ExtractedFiles,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
+    // `bin-dir` must use the same `{ target-arch }` as the URL the package
+    // was found at.
+    let target_related_info = TargetArchOverride {
+        values: &fetcher.target_data().target_related_info,
+        target_arch: fetcher.resolved_target_arch(),
+    };
+
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
@@ -610,7 +627,7 @@ fn collect_bin_files(
         meta,
         bin_path,
         install_path,
-        target_related_info: &fetcher.target_data().target_related_info,
+        target_related_info: &target_related_info,
     };
 
     let bin_dir = bin_data
@@ -665,6 +682,7 @@ fn collect_bin_files(
                 &bin_data,
                 bin.name.as_str(),
                 &template,
+                &mut |p| extracted_files.get_dir(p).is_some(),
                 no_symlinks,
                 aliases,
             )

@@ -6,6 +6,7 @@ use std::{
     mem::DropGuard,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use binstalk_bins::BinFile;
@@ -100,6 +101,7 @@ impl ResolutionFetch {
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
             bins: Self::resolve_bins(&opts.bins, self.bin_files),
+            pkg_url_hint: self.fetcher.pkg_url_hint(),
         })
     }
 
@@ -304,6 +306,7 @@ impl ResolutionSource {
             &mut cmd,
             opts.cargo_install_registry.as_deref(),
             opts.cargo_install_index.as_deref(),
+            opts.registry.min_publish_age(),
         );
 
         if let Some(target) = target {
@@ -420,11 +423,32 @@ fn kill_group_on_drop(
     })
 }
 
-fn apply_registry_selection(cmd: &mut Command, registry: Option<&str>, index: Option<&str>) {
+fn apply_registry_selection(
+    cmd: &mut Command,
+    registry: Option<&str>,
+    index: Option<&str>,
+    min_publish_age: Option<Duration>,
+) {
     if let Some(registry) = registry {
         cmd.arg("--registry").arg(registry);
     } else if let Some(index) = index {
         cmd.arg("--index").arg(index);
+    }
+
+    // Forward `--min-publish-age`, overriding any per-registry config of the
+    // selected registry. cargo 1.100 `cargo install` ignores it, this is for
+    // when cargo starts honoring it.
+    if let Some(min_publish_age) = min_publish_age {
+        let key = match (registry, index) {
+            (Some(registry), _) => format!("registries.{registry}.min-publish-age"),
+            (None, Some(_)) => "registry.global-min-publish-age".to_owned(),
+            (None, None) => "registries.crates-io.min-publish-age".to_owned(),
+        };
+        let value = match min_publish_age.as_secs() {
+            0 => "0".to_owned(),
+            secs => format!("{secs} seconds"),
+        };
+        cmd.arg("--config").arg(format!("{key}=\"{value}\""));
     }
 }
 
@@ -449,7 +473,7 @@ mod tests {
     fn test_apply_registry_selection_uses_registry_name() {
         let mut cmd = Command::new("cargo");
 
-        apply_registry_selection(&mut cmd, Some("private-test"), None);
+        apply_registry_selection(&mut cmd, Some("private-test"), None, None);
 
         let args: Vec<_> = cmd
             .as_std()
@@ -467,6 +491,7 @@ mod tests {
             &mut cmd,
             None,
             Some("sparse+https://registry.example.com/index/"),
+            None,
         );
 
         let args: Vec<_> = cmd
@@ -478,6 +503,47 @@ mod tests {
             args,
             ["--index", "sparse+https://registry.example.com/index/"]
         );
+    }
+
+    #[test]
+    fn test_apply_registry_selection_forwards_min_publish_age() {
+        let args = |registry, index, min_publish_age| {
+            let mut cmd = Command::new("cargo");
+            apply_registry_selection(&mut cmd, registry, index, min_publish_age);
+            cmd.as_std()
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+        let week = Some(Duration::from_secs(7 * 24 * 60 * 60));
+
+        assert_eq!(
+            args(Some("private-test"), None, week),
+            [
+                "--registry",
+                "private-test",
+                "--config",
+                "registries.private-test.min-publish-age=\"604800 seconds\"",
+            ]
+        );
+        assert_eq!(
+            args(
+                None,
+                Some("sparse+https://registry.example.com/index/"),
+                week
+            ),
+            [
+                "--index",
+                "sparse+https://registry.example.com/index/",
+                "--config",
+                "registry.global-min-publish-age=\"604800 seconds\"",
+            ]
+        );
+        assert_eq!(
+            args(None, None, Some(Duration::ZERO)),
+            ["--config", "registries.crates-io.min-publish-age=\"0\""]
+        );
+        assert!(args(None, None, None).is_empty());
     }
 }
 

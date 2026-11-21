@@ -115,20 +115,23 @@ impl<'v1> CratesToml<'v1> {
     }
 
     pub fn add_crate(&mut self, metadata: &'v1 CrateInfo) {
-        let name = &metadata.name;
-        let version = &metadata.current_version;
-        let source = Source::from(&metadata.source);
-
-        self.v1.push((
-            format!("{name} {version} ({source})").into(),
-            Cow::Borrowed(&metadata.bins),
-        ));
+        self.v1
+            .push((package_id(metadata).into(), Cow::Borrowed(&metadata.bins)));
     }
 
     pub fn append_to_file(
         file: &mut File,
         crates: &[CrateInfo],
     ) -> Result<(), CratesTomlParseError> {
+        Self::append_to_file_and_get(file, crates).map(drop)
+    }
+
+    /// Same as [`CratesToml::append_to_file`], but returns the manifest as
+    /// written, so that `.crates2.json` can be synchronised with it.
+    pub(crate) fn append_to_file_and_get<'a>(
+        file: &mut File,
+        crates: &'a [CrateInfo],
+    ) -> Result<CratesToml<'a>, CratesTomlParseError> {
         let mut c1 = CratesToml::load_from_reader(&mut *file)?;
 
         c1.remove_all(&{
@@ -149,7 +152,13 @@ impl<'v1> CratesToml<'v1> {
         file.rewind()?;
         c1.write_to_file(file)?;
 
-        Ok(())
+        Ok(c1)
+    }
+
+    /// Iterate over the package ids (`"{name} {version} ({source})"`) and
+    /// the binaries installed by each of them.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, &[CompactString])> {
+        self.v1.iter().map(|(id, bins)| (&**id, &**bins))
     }
 
     pub fn append_to_path(
@@ -188,6 +197,16 @@ impl<'v1> CratesToml<'v1> {
         self.collect_into_crates_details()
             .map(|(versions, _details)| versions)
     }
+}
+
+/// The key cargo uses for a package in both `.crates.toml` and
+/// `.crates2.json`, i.e. its serialised `PackageId`.
+pub(crate) fn package_id(metadata: &CrateInfo) -> String {
+    let name = &metadata.name;
+    let version = &metadata.current_version;
+    let source = Source::from(&metadata.source);
+
+    format!("{name} {version} ({source})")
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -247,6 +266,7 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
+                pkg_url_hint: None,
             }],
         )
         .unwrap();
@@ -273,6 +293,7 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
+                pkg_url_hint: None,
             }],
         )
         .unwrap();

@@ -8,6 +8,8 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::cargo_toml_binstall::PkgFmt;
+
 pub fn cratesio_url() -> &'static Url {
     static CRATESIO: LazyLock<Url> =
         LazyLock::new(|| Url::parse("https://github.com/rust-lang/crates.io-index").unwrap());
@@ -23,6 +25,25 @@ pub struct CrateInfo {
     pub source: CrateSource,
     pub target: CompactString,
     pub bins: Vec<CompactString>,
+    /// How the package was found on `target`, when it came from a default
+    /// `pkg-url`, so that updating it can try that first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pkg_url_hint: Option<PkgUrlHint>,
+}
+
+/// A default `pkg-url` that a crate's package was found with.
+///
+/// Binstall otherwise probes every default `pkg-url` x `pkg-fmt` combination
+/// on each install, which is a lot of requests and GitHub API usage for an
+/// update whose asset naming almost never changes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PkgUrlHint {
+    /// The name `{ name }` was rendered with: the crate's, or its only
+    /// binary's.
+    pub name: CompactString,
+    /// The template, in the same syntax as `pkg-url` in `Cargo.toml`.
+    pub pkg_url: CompactString,
+    pub pkg_fmt: PkgFmt,
 }
 
 impl borrow::Borrow<str> for CrateInfo {

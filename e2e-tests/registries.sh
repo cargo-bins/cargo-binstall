@@ -25,9 +25,28 @@ if [ "$exit_code" != 2 ]; then
     exit 1
 fi
 
+# A local git index, so that the git registry code path is tested without
+# cloning github.com/rust-lang/crates.io-index, which is slow and was the
+# only source of network flakes in this test. It holds just the
+# cargo-binstall 0.12.0 entry copied from crates.io, and its `dl` still points
+# to static.crates.io.
+INDEX="$(mktemp -d 2>/dev/null || mktemp -d -t 'index')"
+cp -R registry-index/. "$INDEX"
+(
+  cd "$INDEX"
+  git init
+  git config user.email 'test@example.com'
+  git config user.name 'test'
+  git add .
+  git commit -m "Add index"
+)
+if [ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]; then
+    INDEX="$(cygpath -w "$INDEX")"
+fi
+
 cat >"$CARGO_HOME/config.toml" << EOF
 [registries]
-t1 = { index = "https://github.com/rust-lang/crates.io-index" }
+t1 = { index = 'file://$INDEX' }
 t2 = { index = "sparse+https://index.crates.io/" }
 t4 = { replace-with = "t2" }
 
@@ -38,7 +57,7 @@ EOF
 # Install binaries using default registry in config
 "$1" binstall --force -y cargo-binstall@0.12.0
 
-grep -F "cargo-binstall 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" <"$CARGO_HOME/.crates.toml"
+grep -F "cargo-binstall 0.12.0 (registry+file:" <"$CARGO_HOME/.crates.toml"
 
 test_cargo_binstall_install
 

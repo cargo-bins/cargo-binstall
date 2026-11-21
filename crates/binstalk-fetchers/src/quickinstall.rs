@@ -185,6 +185,7 @@ impl super::Fetcher for QuickInstall {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        _bin: Option<CompactString>,
     ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;

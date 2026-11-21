@@ -1,10 +1,13 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
-use binstalk_types::cargo_toml_binstall::{SigningAlgorithm, Strategy};
+use binstalk_types::{
+    cargo_toml_binstall::{SigningAlgorithm, Strategy},
+    crate_info::PkgUrlHint,
+};
 use thiserror::Error as ThisError;
 use tokio::{sync::OnceCell, task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
@@ -28,6 +31,21 @@ mod futures_resolver;
 use gh_crate_meta::hosting::RepositoryHost;
 
 static DEFAULT_GH_API_RETRY_DURATION: Duration = Duration::from_secs(1);
+
+/// Longest GitHub API rate-limit wait worth sleeping through.
+///
+/// A primary rate limit resets at most hourly, far beyond
+/// `--maximum-resolution-timeout`, so sleeping through it only stalls the
+/// resolution until it is timed out. Short waits, e.g. a secondary rate
+/// limit's `Retry-After`, are still honoured.
+const MAX_GH_API_RATE_LIMIT_WAIT: Duration = Duration::from_secs(5);
+
+/// How long to sleep before retrying a rate-limited GitHub API call, or `None`
+/// if the wait is too long and the caller should give up on the API instead.
+fn gh_api_rate_limit_wait(retry_after: Option<Duration>) -> Option<Duration> {
+    let wait = retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION);
+    (wait <= MAX_GH_API_RATE_LIMIT_WAIT).then_some(wait)
+}
 
 #[derive(Debug, ThisError)]
 #[error("Invalid pkg-url {pkg_url} for {crate_name}@{version} on {target}: {reason}")]
@@ -90,6 +108,11 @@ impl From<InvalidPkgFmtError> for FetchError {
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
+    ///
+    ///  * `bin` - the binary to fetch, when each binary of the crate is in its
+    ///    own package. It is rendered as `{ bin }` in `pkg-url`, and the
+    ///    package only needs to provide that binary.
+    ///    `None` for the package providing all binaries.
     #[allow(clippy::new_ret_no_self)]
     fn new(
         client: Client,
@@ -97,6 +120,7 @@ pub trait Fetcher: Send + Sync {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        bin: Option<CompactString>,
     ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
@@ -144,6 +168,39 @@ pub trait Fetcher: Send + Sync {
     fn target(&self) -> &str;
 
     fn target_data(&self) -> &Arc<TargetDataErased>;
+
+    /// The name `{ target-arch }` was rendered as in the found package's
+    /// URL, if [`Fetcher::find`] picked an alias rather than the name from
+    /// [`TargetData::target_related_info`].
+    ///
+    /// Templates rendered for the found package, such as `bin-dir`, should
+    /// use it too, see [`TargetArchOverride`].
+    fn resolved_target_arch(&self) -> Option<&str> {
+        None
+    }
+
+    /// How [`Fetcher::find`] found the package, worth trying first next time,
+    /// see [`Data::with_pkg_url_hint`].
+    fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
+        None
+    }
+}
+
+/// [`leon::Values`] that gives `target-arch` from
+/// [`Fetcher::resolved_target_arch`] when it is set, and everything else
+/// from `values`.
+pub struct TargetArchOverride<'a> {
+    pub values: &'a dyn leon::Values,
+    pub target_arch: Option<&'a str>,
+}
+
+impl leon::Values for TargetArchOverride<'_> {
+    fn get_value<'s>(&'s self, key: &str) -> Option<Cow<'s, str>> {
+        match (key, self.target_arch) {
+            ("target-arch", Some(target_arch)) => Some(Cow::Borrowed(target_arch)),
+            _ => self.values.get_value(key),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -173,12 +230,9 @@ pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
-    /// The binary this package provides, when each binary of the crate is
-    /// downloaded from its own `pkg-url`.
-    bin: Option<CompactString>,
-    /// Shared with the copies made by [`Data::with_bin`], so that the repo is
-    /// only resolved once for all of them.
-    repo_info: Arc<OnceCell<Option<RepoInfo>>>,
+    repo_info: OnceCell<Option<RepoInfo>>,
+    /// The target the hint was found for, and the hint.
+    pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
 
 impl Data {
@@ -187,18 +241,27 @@ impl Data {
             name,
             version,
             repo,
-            bin: None,
-            repo_info: Arc::default(),
+            repo_info: OnceCell::new(),
+            pkg_url_hint: None,
         }
     }
 
-    /// Returns a copy of `self` for the package of one binary, which provides
-    /// the `{ bin }` key when rendering `pkg-url`.
-    pub fn with_bin(&self, bin: CompactString) -> Self {
-        Self {
-            bin: Some(bin),
-            ..self.clone()
+    /// Have fetchers try how a previous version was found on `target` first,
+    /// before probing everything else.
+    ///
+    /// It is ignored unless it was found with this [`Data`]'s name.
+    pub fn with_pkg_url_hint(mut self, target: CompactString, hint: PkgUrlHint) -> Self {
+        if hint.name == self.name {
+            self.pkg_url_hint = Some((target, hint));
         }
+        self
+    }
+
+    fn pkg_url_hint(&self, target: &str) -> Option<&PkgUrlHint> {
+        self.pkg_url_hint
+            .as_ref()
+            .filter(|(hint_target, _)| hint_target == target)
+            .map(|(_, hint)| hint)
     }
 
     #[instrument(skip(client))]
@@ -212,7 +275,10 @@ impl Data {
                     Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
                     Ok(None) => break Err(GhApiError::NotFound),
                     Err(GhApiError::RateLimit { retry_after }) => {
-                        sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await
+                        match gh_api_rate_limit_wait(retry_after) {
+                            Some(wait) => sleep(wait).await,
+                            None => break Err(GhApiError::RateLimit { retry_after }),
+                        }
                     }
                     Err(err) => break Err(err),
                 }
@@ -471,5 +537,24 @@ mod test {
         let repo_info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
 
         assert_eq!(url_without_git, repo_info.repo.as_str());
+    }
+
+    #[test]
+    fn test_gh_api_rate_limit_wait() {
+        assert_eq!(
+            gh_api_rate_limit_wait(None),
+            Some(DEFAULT_GH_API_RETRY_DURATION)
+        );
+        assert_eq!(
+            gh_api_rate_limit_wait(Some(Duration::from_secs(2))),
+            Some(Duration::from_secs(2))
+        );
+        assert_eq!(
+            gh_api_rate_limit_wait(Some(MAX_GH_API_RATE_LIMIT_WAIT)),
+            Some(MAX_GH_API_RATE_LIMIT_WAIT)
+        );
+        // A primary rate limit's reset, e.g. the 10 minutes `GhApiClient`
+        // assumes when GraphQL reports `RATE_LIMITED`, is not worth waiting.
+        assert_eq!(gh_api_rate_limit_wait(Some(Duration::from_secs(600))), None);
     }
 }

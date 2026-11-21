@@ -6,9 +6,10 @@ use std::{
 };
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
-use binstalk_types::cargo_toml_binstall::Strategy;
+use binstalk_types::{cargo_toml_binstall::Strategy, crate_info::PkgUrlHint};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
+use itertools::Itertools;
 use leon::Template;
 use strum::IntoEnumIterator;
 use tokio::time::sleep;
@@ -16,8 +17,8 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    DEFAULT_GH_API_RETRY_DURATION, Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
-    SignatureVerifier, TargetDataErased, common::*, futures_resolver::FuturesResolver,
+    Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
+    TargetDataErased, common::*, futures_resolver::FuturesResolver, gh_api_rate_limit_wait,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -30,6 +31,9 @@ pub struct GhCrateMeta {
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
     signature_policy: SignaturePolicy,
+    /// The binary to find the package of, when each binary of the crate is
+    /// in its own package, see [`super::Fetcher::new`].
+    bin: Option<CompactString>,
     resolution: OnceLock<Resolved>,
 }
 
@@ -42,6 +46,106 @@ struct Resolved {
     subcrate: Option<String>,
     gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
     is_repo_private: bool,
+    /// The alias from [`target_arch_aliases`] that `{ target-arch }` was
+    /// rendered as in `url`, if not the architecture's own name.
+    target_arch: Option<&'static str>,
+    /// The default `pkg-url` that `url` was rendered from, see
+    /// [`PkgUrlHint::pkg_url`]. `None` if the crate specified `pkg-url`.
+    default_pkg_url: Option<CompactString>,
+}
+
+/// Write `template` back in the syntax [`Template::parse`] reads.
+fn template_to_string(template: &Template<'_>) -> CompactString {
+    let mut s = CompactString::default();
+    for item in template.items.iter() {
+        match item {
+            leon::Item::Text(text) => {
+                for c in text.chars() {
+                    if matches!(c, '\\' | '{' | '}') {
+                        s.push('\\');
+                    }
+                    s.push(c);
+                }
+            }
+            leon::Item::Key(key) => {
+                s.push_str("{ ");
+                s.push_str(key);
+                s.push_str(" }");
+            }
+        }
+    }
+    s
+}
+
+/// Other names commonly used for an architecture in release assets, tried
+/// after the architecture's own name when `pkg-url` uses `{ target-arch }`.
+///
+/// Keep this short: each alias is one more request per `pkg-url` candidate.
+pub(crate) fn target_arch_aliases(target_arch: &str) -> &'static [&'static str] {
+    match target_arch {
+        "aarch64" => &["arm64"],
+        "x86_64" => &["amd64"],
+        _ => &[],
+    }
+}
+
+/// All URLs `pkg_url` may render to for this target, with the archive suffix
+/// and the `{ target-arch }` alias each was rendered with.
+#[allow(clippy::too_many_arguments)]
+fn candidate_urls(
+    data: &Data,
+    bin: Option<&str>,
+    target: &str,
+    target_related_info: &dyn leon::Values,
+    pkg_fmt: PkgFmt,
+    pkg_url: &Template<'_>,
+    repo: Option<&str>,
+    subcrate: Option<&str>,
+) -> Vec<(Url, Option<&'static str>, Option<&'static str>)> {
+    let render_url = |ext, target_arch| {
+        let mut ctx =
+            Context::from_data_with_repo(data, target, target_related_info, ext, repo, subcrate);
+        ctx.target_arch = target_arch;
+        ctx.bin = bin;
+        match ctx.render_url_with(pkg_url) {
+            Ok(url) => Some((url, ext, target_arch)),
+            Err(err) => {
+                warn!("Failed to render url for {ctx:#?}: {err}");
+                None
+            }
+        }
+    };
+
+    // `None` renders the architecture's own name, which is tried first.
+    let target_arches = iter::once(None).chain(
+        pkg_url
+            .has_key("target-arch")
+            .then(|| target_related_info.get_value("target-arch"))
+            .flatten()
+            .map(|target_arch| target_arch_aliases(&target_arch))
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .map(Some),
+    );
+
+    let exts = if pkg_url.has_any_of_keys(&["format", "archive-format", "archive-suffix"]) {
+        // build up list of potential URLs
+        Either::Left(
+            pkg_fmt
+                .extensions(target.contains("windows"))
+                .iter()
+                .copied()
+                .map(Some),
+        )
+    } else {
+        Either::Right(iter::once(None))
+    };
+
+    target_arches
+        .cartesian_product(exts)
+        .filter_map(|(target_arch, ext)| render_url(ext, target_arch))
+        .collect()
 }
 
 impl GhCrateMeta {
@@ -54,40 +158,27 @@ impl GhCrateMeta {
         subcrate: Option<&str>,
         is_repo_private: bool,
     ) {
-        let render_url = |ext| {
-            let ctx = Context::from_data_with_repo(
-                &self.data,
-                &self.target_data.target,
-                &self.target_data.target_related_info,
-                ext,
-                repo,
-                subcrate,
-            );
-            match ctx.render_url_with(pkg_url) {
-                Ok(url) => Some(url),
-                Err(err) => {
-                    warn!("Failed to render url for {ctx:#?}: {err}");
-                    None
-                }
-            }
-        };
+        // `pkg_url` is one of the defaults unless the crate specified it.
+        let default_pkg_url = self
+            .target_data
+            .meta
+            .pkg_url
+            .is_none()
+            .then(|| template_to_string(pkg_url));
 
-        let is_windows = self.target_data.target.contains("windows");
-
-        let urls = if pkg_url.has_any_of_keys(&["format", "archive-format", "archive-suffix"]) {
-            // build up list of potential URLs
-            Either::Left(
-                pkg_fmt
-                    .extensions(is_windows)
-                    .iter()
-                    .filter_map(|ext| render_url(Some(ext)).map(|url| (url, Some(ext)))),
-            )
-        } else {
-            Either::Right(render_url(None).map(|url| (url, None)).into_iter())
-        };
+        let urls = candidate_urls(
+            &self.data,
+            self.bin.as_deref(),
+            &self.target_data.target,
+            &self.target_data.target_related_info,
+            pkg_fmt,
+            pkg_url,
+            repo,
+            subcrate,
+        );
 
         // go check all potential URLs at once
-        futures_resolver.extend(urls.map(move |(url, ext)| {
+        futures_resolver.extend(urls.into_iter().map(move |(url, ext, target_arch)| {
             let client = self.client.clone();
             let gh_api_client = self.gh_api_client.clone();
 
@@ -95,6 +186,7 @@ impl GhCrateMeta {
             let subcrate = subcrate.map(ToString::to_string);
             let archive_suffix = ext.map(ToString::to_string);
             let gh_release_artifact = GhReleaseArtifact::try_extract_from_url(&url);
+            let default_pkg_url = default_pkg_url.clone();
 
             async move {
                 debug!("Checking for package at: '{url}'");
@@ -107,6 +199,8 @@ impl GhCrateMeta {
                     archive_suffix,
                     is_repo_private,
                     gh_release_artifact_url: None,
+                    target_arch,
+                    default_pkg_url,
                 };
 
                 if let Some(artifact) = gh_release_artifact {
@@ -120,10 +214,21 @@ impl GhCrateMeta {
                             }
                             Ok(None) => return Ok(None),
 
-                            Err(GhApiError::RateLimit { retry_after }) => {
-                                sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await;
+                            // A public release asset can be checked with
+                            // HEAD/GET instead, as `does_url_exist` does.
+                            Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
+                                if !is_repo_private =>
+                            {
+                                break;
                             }
-                            Err(GhApiError::Unauthorized) if !is_repo_private => break,
+                            Err(GhApiError::RateLimit { retry_after }) => {
+                                match gh_api_rate_limit_wait(retry_after) {
+                                    Some(wait) => sleep(wait).await,
+                                    None => {
+                                        return Err(GhApiError::RateLimit { retry_after }.into());
+                                    }
+                                }
+                            }
 
                             Err(err) => return Err(err.into()),
                         }
@@ -146,6 +251,7 @@ impl super::Fetcher for GhCrateMeta {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        bin: Option<CompactString>,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
@@ -153,6 +259,7 @@ impl super::Fetcher for GhCrateMeta {
             data,
             target_data,
             signature_policy,
+            bin,
             resolution: OnceLock::new(),
         })
     }
@@ -167,13 +274,15 @@ impl super::Fetcher for GhCrateMeta {
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-            let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+            let (pkg_urls, is_default_pkg_url) = if let Some(pkg_url) =
+                self.target_data.meta.pkg_url.as_deref()
+            {
                 let template = Template::parse(pkg_url)?;
 
-                if template.has_key("bin") && self.data.bin.is_none() {
+                if template.has_key("bin") && self.bin.is_none() {
                     // Each binary is in its own package, the caller is
                     // expected to create one fetcher per binary with
-                    // `Data::with_bin`.
+                    // its name.
                     debug!(
                         "pkg-url {pkg_url} contains key bin, but no binary is specified, skipping"
                     );
@@ -219,7 +328,7 @@ impl super::Fetcher for GhCrateMeta {
                     );
                 }
 
-                Either::Left(iter::once(template))
+                (Either::Left(iter::once(template)), false)
             } else if let Some(RepoInfo {
                 repo,
                 repository_host,
@@ -229,13 +338,18 @@ impl super::Fetcher for GhCrateMeta {
                 if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
                     let has_subcrate = subcrate.is_some();
 
-                    Either::Right(
-                        pkg_urls
-                            .map(Template::cast)
-                            // If subcrate is Some, then all templates will be included.
-                            // Otherwise, only templates without key "subcrate" will be
-                            // included.
-                            .filter(move |template| has_subcrate || !template.has_key("subcrate")),
+                    (
+                        Either::Right(
+                            pkg_urls
+                                .map(Template::cast)
+                                // If subcrate is Some, then all templates will be included.
+                                // Otherwise, only templates without key "subcrate" will be
+                                // included.
+                                .filter(move |template| {
+                                    has_subcrate || !template.has_key("subcrate")
+                                }),
+                        ),
+                        true,
                     )
                 } else {
                     warn!(
@@ -272,6 +386,50 @@ impl super::Fetcher for GhCrateMeta {
             } else {
                 Either::Right(PkgFmt::iter())
             };
+
+            // Try how a previous version was found first: it is one template
+            // instead of all of them, times every pkg-fmt.
+            //
+            // Only a hint that is still one of the default templates is used,
+            // and only if it agrees with the crate's pkg-fmt, if any.
+            if is_default_pkg_url
+                && let Some(PkgUrlHint {
+                    pkg_url: hint_pkg_url,
+                    pkg_fmt: hint_pkg_fmt,
+                    ..
+                }) = self.data.pkg_url_hint(&self.target_data.target)
+                && pkg_fmt.is_none_or(|pkg_fmt| pkg_fmt == *hint_pkg_fmt)
+            {
+                if let Some(pkg_url) = pkg_urls
+                    .clone()
+                    .find(|pkg_url| template_to_string(pkg_url) == *hint_pkg_url)
+                {
+                    let resolver = FuturesResolver::default();
+                    this.launch_baseline_find_tasks(
+                        &resolver,
+                        *hint_pkg_fmt,
+                        &pkg_url,
+                        repo,
+                        subcrate,
+                        is_repo_private,
+                    );
+
+                    if let Some(resolved) = resolver.resolve().await {
+                        debug!(
+                            ?resolved,
+                            "Found package with the pkg-url of the last install"
+                        );
+                        self.resolution
+                            .set(resolved)
+                            .expect("find() should be only called once");
+                        return Ok(true);
+                    }
+                }
+
+                debug!(
+                    "pkg-url {hint_pkg_url} of the last install did not match, trying all default pkg-url"
+                );
+            }
 
             let resolver = FuturesResolver::default();
 
@@ -326,16 +484,19 @@ impl super::Fetcher for GhCrateMeta {
                 };
                 trace!(?template, "parsed signature file template");
 
-                let sign_url = Context::from_data_with_repo(
-                    &self.data,
-                    &self.target_data.target,
-                    &self.target_data.target_related_info,
-                    resolved.archive_suffix.as_deref(),
-                    resolved.repo.as_deref(),
-                    resolved.subcrate.as_deref(),
-                )
-                .with_url(&resolved.url)
-                .render_url_with(&template)?;
+                let sign_url = {
+                    let mut ctx = Context::from_data_with_repo(
+                        &self.data,
+                        &self.target_data.target,
+                        &self.target_data.target_related_info,
+                        resolved.archive_suffix.as_deref(),
+                        resolved.repo.as_deref(),
+                        resolved.subcrate.as_deref(),
+                    );
+                    ctx.target_arch = resolved.target_arch;
+                    ctx.bin = self.bin.as_deref();
+                    ctx.with_url(&resolved.url).render_url_with(&template)?
+                };
 
                 debug!(?sign_url, "Downloading signature");
                 let signature = Download::new(self.client.clone(), sign_url)
@@ -390,6 +551,19 @@ impl super::Fetcher for GhCrateMeta {
         let mut meta = self.target_data.meta.clone();
         meta.pkg_fmt = Some(self.pkg_fmt());
         meta
+    }
+
+    fn resolved_target_arch(&self) -> Option<&str> {
+        self.resolution.get()?.target_arch
+    }
+
+    fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
+        let resolved = self.resolution.get()?;
+        Some(PkgUrlHint {
+            name: self.data.name.clone(),
+            pkg_url: resolved.default_pkg_url.clone()?,
+            pkg_fmt: resolved.pkg_fmt,
+        })
     }
 
     fn source_name(&self) -> CompactString {
@@ -453,6 +627,9 @@ struct Context<'c> {
     /// Url of the file being downloaded (only for signing.file)
     url: Option<&'c Url>,
 
+    /// Replaces `target-arch` from `target_related_info`.
+    target_arch: Option<&'c str>,
+
     target_related_info: &'c dyn leon::Values,
 }
 
@@ -494,6 +671,8 @@ impl leon::Values for Context<'_> {
 
             "url" => self.url.map(|url| Cow::Borrowed(url.as_str())),
 
+            "target-arch" if self.target_arch.is_some() => self.target_arch.map(Cow::Borrowed),
+
             key => self.target_related_info.get_value(key),
         }
     }
@@ -525,7 +704,7 @@ impl<'c> Context<'c> {
             target,
 
             version: &data.version,
-            bin: data.bin.as_deref(),
+            bin: None,
             archive_format,
             archive_suffix,
             binary_ext: if target.contains("windows") {
@@ -535,6 +714,7 @@ impl<'c> Context<'c> {
             },
             subcrate,
             url: None,
+            target_arch: None,
 
             target_related_info,
         }
@@ -558,8 +738,10 @@ impl<'c> Context<'c> {
 
 #[cfg(test)]
 mod test {
-    use super::{super::Data, Context};
+    use super::{super::Data, Context, candidate_urls};
+    use binstalk_types::cargo_toml_binstall::PkgFmt;
     use compact_str::ToCompactString;
+    use leon::Template;
     use url::Url;
 
     const DEFAULT_PKG_URL: &str = "{ repo }/releases/download/v{ version }/{ name }-{ target }-v{ version }.{ archive-format }";
@@ -586,6 +768,56 @@ mod test {
 
         let expected_url = Url::parse(expected_url).unwrap();
         assert_eq!(ctx.render_url(template).unwrap(), expected_url);
+    }
+
+    #[test]
+    fn target_arch_aliases_are_tried_after_own_name() {
+        let data = Data::new(
+            "redu".to_compact_string(),
+            "0.2.12".to_compact_string(),
+            Some("https://github.com/drdo/redu".to_string()),
+        );
+        let target_info = leon::vals(|key| match key {
+            "target-family" => Some("darwin".into()),
+            "target-arch" => Some("aarch64".into()),
+            _ => None,
+        });
+        let urls = |template: &str| {
+            candidate_urls(
+                &data,
+                None,
+                "aarch64-apple-darwin",
+                &target_info,
+                PkgFmt::Bin,
+                &Template::parse(template).unwrap(),
+                data.repo.as_deref(),
+                None,
+            )
+            .into_iter()
+            .map(|(url, _, target_arch)| (url.to_string(), target_arch))
+            .collect::<Vec<_>>()
+        };
+
+        let base = "https://github.com/drdo/redu/releases/download/v0.2.12/redu-0.2.12-darwin";
+        assert_eq!(
+            urls(
+                "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target-family }-{ target-arch }"
+            ),
+            [
+                (format!("{base}-aarch64"), None),
+                (format!("{base}-arm64"), Some("arm64")),
+            ]
+        );
+
+        // Templates without `{ target-arch }` make no extra requests.
+        assert_eq!(
+            urls("{ repo }/releases/download/v{ version }/{ name }-{ target }"),
+            [(
+                "https://github.com/drdo/redu/releases/download/v0.2.12/redu-aarch64-apple-darwin"
+                    .to_string(),
+                None
+            )]
+        );
     }
 
     #[test]
@@ -665,16 +897,28 @@ mod test {
 
     #[test]
     fn bin() {
-        assert_context_rendering(
-            &Data::new(
-                "flowr".to_compact_string(),
-                "0.142.0".to_compact_string(),
-                Some("https://github.com/andrewdavidmackenzie/flow".to_string()),
-            )
-            .with_bin("flowrcli".to_compact_string()),
+        let data = Data::new(
+            "flowr".to_compact_string(),
+            "0.142.0".to_compact_string(),
+            Some("https://github.com/andrewdavidmackenzie/flow".to_string()),
+        );
+        let target_info = leon::vals(|_| None);
+        let mut ctx = Context::from_data_with_repo(
+            &data,
             "x86_64-unknown-linux-gnu",
-            ".tgz",
-            "{ repo }/releases/download/v{ version }/{ bin }-{ target }.{ archive-format }",
+            &target_info,
+            Some(".tgz"),
+            data.repo.as_deref(),
+            None,
+        );
+        ctx.bin = Some("flowrcli");
+
+        assert_eq!(
+            ctx.render_url(
+                "{ repo }/releases/download/v{ version }/{ bin }-{ target }.{ archive-format }"
+            )
+            .unwrap()
+            .as_str(),
             "https://github.com/andrewdavidmackenzie/flow/releases/download/v0.142.0/flowrcli-x86_64-unknown-linux-gnu.tgz",
         );
     }
@@ -712,6 +956,44 @@ mod test {
             ".bin",
             "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }",
             "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe",
+        );
+    }
+
+    #[test]
+    fn template_to_string_round_trips() {
+        use super::{hosting::RepositoryHost, template_to_string};
+
+        let hosts = [
+            RepositoryHost::GitHub,
+            RepositoryHost::GitLab,
+            RepositoryHost::BitBucket,
+            RepositoryHost::SourceForge,
+            RepositoryHost::Codeberg,
+        ];
+        let mut count = 0;
+        for template in hosts
+            .into_iter()
+            .flat_map(|host| host.get_default_pkg_url_template().unwrap())
+        {
+            let s = template_to_string(&template);
+            assert_eq!(
+                template_to_string(&Template::parse(&s).unwrap()),
+                s,
+                "{template:?}"
+            );
+            count += 1;
+        }
+        assert!(count > 0);
+
+        let template = Template::parse(r"\{ { name } \} \\").unwrap();
+        let s = template_to_string(&template);
+        assert_eq!(s, r"\{ { name } \} \\");
+        assert_eq!(
+            Template::parse(&s)
+                .unwrap()
+                .render(&[("name", "a")])
+                .unwrap(),
+            r"{ a } \"
         );
     }
 }

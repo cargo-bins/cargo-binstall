@@ -19,8 +19,12 @@ disabled-strategies = ["quick-install", "compile"]
 With the following configuration keys:
 
 - `pkg-url` specifies the package download URL for a given target/version, templated
-- `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows)
+- `bin-dir` specifies the binary path within the package, templated (with an `.exe` suffix on windows).
+  It may also be the dir holding the binaries, see [If the package structure differs from the default](#if-the-package-structure-differs-from-the-default).
+  Despite the name, it is a path inside of the package, not where the binaries are installed (that is `--install-path`).
 - `pkg-fmt` overrides the package format for download/extraction (defaults to: `tgz`), check [the documentation](https://docs.rs/binstalk-types/latest/binstalk_types/cargo_toml_binstall/enum.PkgFmt.html) for all supported formats.
+  `bin` is for a download that is the binary itself, and `gz`, `bz2`, `xz` and `zst` for a binary compressed on its own, without a TAR around it (e.g. `{ name }-{ target }.gz`).
+  These hold a single file with no name inside, so it is installed as the binary named in `Cargo.toml` and `bin-dir` is not used.
 - `disabled-strategies` to disable specific strategies (e.g. `crate-meta-data` for trying to find pre-built on your repository,
   `quick-install` for pre-built from third-party cargo-bins/cargo-quickinstall, `compile` for falling back to `cargo-install`)
   for your crate (defaults to empty array).
@@ -47,7 +51,9 @@ with the following variables available:
 - `target-family`: Operating system of the target from [`target_lexicon::OperatingSystem`]
 - `os-name`: `rustc`-style operating system name of the target, e.g. `windows`, `macos` or `linux`
 - `target-arch`: Architecture of the target, `universal` on `{universal, universal2}-apple-darwin`,
-  otherwise from [`target_lexicon::Architecture`]
+  otherwise from [`target_lexicon::Architecture`].
+  When `pkg-url` uses it, binstall also tries the common aliases `arm64` for `aarch64` and `amd64` for `x86_64`,
+  after Rust's name, and the alias that is found is also used for `bin-dir` and the signature `file`
 - `target-libc`: ABI environment of the target from [`target_lexicon::Environment`]
 - `target-vendor`: Vendor of the target from [`target_lexicon::Vendor`]
 
@@ -136,10 +142,14 @@ If each binary of the crate is released in its own package, use `{ bin }` in `pk
 pkg-url = "{ repo }/releases/download/v{ version }/{ bin }-{ target }{ archive-suffix }"
 ```
 
-`binstall` then downloads one package per binary (only the ones passed to `--bin`, if any), each from `pkg-url` rendered with that binary's name,
-and finds the binary in it with `bin-dir`.
-If `bin-dir` is not set, the dirs listed in [Defaults](#defaults) are tried with the binary's name in place of `{ name }` first, then with the crate name.
-`signing.file` is rendered for each package.
+`binstall` then downloads one package per binary (only the ones passed to `--bin`, if any), each from `pkg-url` rendered with that binary's name.
+Each package only has to provide its own binary, and any `pkg-fmt` works:
+
+- with `bin`, or a single binary compressed without an archive (`gz`, `bz2`, `xz` or `zst`), the downloaded file is the binary and `bin-dir` is not used;
+- with an archive, the binary is found in it with `bin-dir`.
+  If `bin-dir` is not set, the dirs listed in [Defaults](#defaults) are tried with the binary's name in place of `{ name }` first, then with the crate name.
+
+`signing.file` is rendered for each package, so the default `{ url }.sig` gives each package its own signature.
 
 All the packages must be found for the same target, except those of binaries with `required-features`, which are skipped with a warning if missing.
 
@@ -298,3 +308,13 @@ bin-dir = "{ bin }-{ target }{ binary-ext }"
 ```
 
 Which provides a binary path of: `sx128x-util-x86_64-unknown-linux-gnu[.exe]`. It is worth noting that binary names are inferred from the crate, so as long as cargo builds them this _should_ just work.
+
+If `bin-dir` renders to a dir in the package, the binary is looked up in it as `{ bin }{ binary-ext }`, so these two are the same:
+
+```toml
+[package.metadata.binstall]
+bin-dir = "{ name }-{ target }/bin"
+# bin-dir = "{ name }-{ target }/bin/{ bin }{ binary-ext }"
+```
+
+Versions of cargo-binstall up to v1.27.0 do not support this and fail to find the binary, so use the full path if users may be on those.
