@@ -75,6 +75,9 @@ pub struct PkgMeta {
     pub pkg_fmt: Option<PkgFmt>,
 
     /// Path template for binary files in packages
+    ///
+    /// Renders to the path of the binary in the package, or to the dir
+    /// holding it, in which case `{ bin }{ binary-ext }` is appended.
     pub bin_dir: Option<String>,
 
     /// Package signing configuration
