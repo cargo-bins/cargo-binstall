@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromSt
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
     cargo_toml_binstall::{BinaryMeta, Strategy},
-    crate_info::{CrateSource, SourceType},
+    crate_info::{CrateSource, PkgUrlHint, SourceType},
 };
 use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
@@ -39,14 +39,17 @@ mod resolution;
 #[doc(inline)]
 pub use resolution::{Resolution, ResolutionFetch, ResolutionSource};
 
+/// * `pkg_url_hint` - the target and [`PkgUrlHint`] the installed version was
+///   found with, if any, see [`Data::with_pkg_url_hint`].
 #[instrument(skip_all)]
 pub async fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
+    pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 ) -> Result<Resolution, BinstallError> {
     let crate_name_name = crate_name.name.clone();
-    let resolution = resolve_inner(opts, crate_name, curr_version)
+    let resolution = resolve_inner(opts, crate_name, curr_version, pkg_url_hint)
         .await
         .map_err(|err| err.crate_context(crate_name_name))?;
 
@@ -57,6 +60,7 @@ async fn resolve_inner(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
+    pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 ) -> Result<Resolution, BinstallError> {
     info!("Resolving package: '{}'", crate_name);
 
@@ -119,6 +123,11 @@ async fn resolve_inner(
 
     let gh_api_client = opts.gh_api_client.get().await?;
 
+    let with_pkg_url_hint = |data: Data| match pkg_url_hint.clone() {
+        Some((target, hint)) => data.with_pkg_url_hint(target, hint),
+        None => data,
+    };
+
     let mut handles_fn =
         |data: Arc<Data>, filter_fetcher_by_name_predicate: fn(&'static str) -> bool| {
             handles.extend(
@@ -147,21 +156,21 @@ async fn resolve_inner(
         };
 
     handles_fn(
-        Arc::new(Data::new(
+        Arc::new(with_pkg_url_hint(Data::new(
             package_info.name.clone(),
             package_info.version_str.clone(),
             package_info.repo.clone(),
-        )),
+        ))),
         |_| true,
     );
 
     if let Some(binary_name) = binary_name {
         handles_fn(
-            Arc::new(Data::new(
+            Arc::new(with_pkg_url_hint(Data::new(
                 binary_name,
                 package_info.version_str.clone(),
                 package_info.repo.clone(),
-            )),
+            ))),
             |name| name == FETCHER_GH_CRATE_META,
         );
     }
