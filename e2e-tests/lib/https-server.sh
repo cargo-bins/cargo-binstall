@@ -6,8 +6,12 @@
 # Usage, from a test script (whose cwd is e2e-tests):
 #
 #     source lib/https-server.sh
-#     start_https_server some/dir
+#     start_https_server some/dir [routes.json]
 #     "$1" binstall ... --pkg-url "$HTTPS_SERVER_URL/some-file.tar"
+#
+# routes.json, if given, lists responses to give for a path before serving
+# it normally: error statuses, redirects or truncated bodies. See
+# lib/https_server.py for its format.
 #
 # start_https_server makes a throwaway CA and a localhost leaf certificate
 # signed by it (rustls rejects a CA certificate used as the server's own),
@@ -16,6 +20,9 @@
 # - HTTPS_SERVER_URL, like https://localhost:12345 (no trailing slash)
 # - BINSTALL_HTTPS_ROOT_CERTS, so cargo-binstall trusts the CA
 # - NO_PROXY/no_proxy, so a proxy from the environment is bypassed
+# - HTTPS_SERVER_LOG, a file the server appends `METHOD PATH` (and
+#   ` Range: ...`, if any) to for every request, so that a test can check
+#   what was requested, and how often
 #
 # The server is stopped when the test script exits.
 
@@ -79,14 +86,18 @@ CNF
 
 start_https_server() {
     local serve_dir="$1"
+    local routes="${2:-}"
     local cert_dir
     cert_dir="$(mktemp -d 2>/dev/null || mktemp -d -t 'https-server')"
 
     _https_server_make_certs "$cert_dir"
 
     local port_file="$cert_dir/port"
+    HTTPS_SERVER_LOG="$cert_dir/requests.log"
+    : >"$HTTPS_SERVER_LOG"
     "$(_https_server_python)" lib/https_server.py \
-        "$serve_dir" "$cert_dir/server.pem" "$cert_dir/server.key" "$port_file" &
+        "$serve_dir" "$cert_dir/server.pem" "$cert_dir/server.key" "$port_file" \
+        "$HTTPS_SERVER_LOG" ${routes:+"$routes"} &
     HTTPS_SERVER_PID=$!
     # shellcheck disable=SC2064
     trap "kill $HTTPS_SERVER_PID 2>/dev/null || true" EXIT

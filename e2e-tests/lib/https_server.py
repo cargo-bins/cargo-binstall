@@ -1,18 +1,43 @@
 """Serve a directory over HTTPS on localhost, for e2e tests.
 
-Usage: https_server.py DIR CERT KEY PORT_FILE
+Usage: https_server.py DIR CERT KEY PORT_FILE REQUEST_LOG [ROUTES]
 
 Listens on an OS-chosen port, on both ::1 and 127.0.0.1 where the OS allows
 it, so that `localhost` works whichever address it resolves to first.
 The port is written to PORT_FILE once the socket is listening.
+
+Every request is appended to REQUEST_LOG as `METHOD PATH`, followed by
+` Range: ...` when it asks for a range.
+
+ROUTES, if given, is a JSON file mapping a path to a list of responses to
+give, in order, to the requests for that path (HEAD and GET alike); once the
+list is used up, the path is served from DIR as usual. Each response is one
+of:
+
+    {"status": 503, "headers": {"Retry-After": "1"}}
+        that status, with those headers and an empty body
+    {"redirect": "/other", "status": 302}
+        a redirect; status defaults to 302
+    {"truncate": 100}
+        the file from DIR with its full Content-Length, but only the first
+        100 bytes of it before the connection is closed
+    {"ignore_range": true}
+        the whole file from DIR with a 200, even if a range was asked for
+
+Otherwise a `Range: bytes=N-` request for a file is answered with a 206 and
+the rest of the file from byte N, unless an `If-Range` doesn't match the
+file's `Last-Modified`.
 """
 
 import functools
 import http.server
+import json
 import os
 import socket
 import ssl
 import sys
+import threading
+from email.utils import formatdate
 
 
 class DualStackServer(http.server.ThreadingHTTPServer):
@@ -30,11 +55,113 @@ def make_server(handler):
         return http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
 
 
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, routes, lock, request_log, **kwargs):
+        self.routes = routes
+        self.lock = lock
+        self.request_log = request_log
+        super().__init__(*args, **kwargs)
+
+    def next_action(self):
+        path = self.path.split("?", 1)[0]
+        with self.lock:
+            with open(self.request_log, "a", newline="\n") as f:
+                range_header = self.headers.get("Range")
+                suffix = f" Range: {range_header}" if range_header else ""
+                f.write(f"{self.command} {path}{suffix}\n")
+            actions = self.routes.get(path)
+            return actions.pop(0) if actions else None
+
+    def handle_action(self, action):
+        if action is None:
+            return False
+
+        if "redirect" in action:
+            self.send_response(action.get("status", 302))
+            self.send_header("Location", action["redirect"])
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        elif action.get("ignore_range"):
+            del self.headers["Range"]
+            return False
+        elif "truncate" in action:
+            path = self.translate_path(self.path)
+            with open(path, "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header(
+                "Last-Modified", formatdate(os.path.getmtime(path), usegmt=True)
+            )
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data[: action["truncate"]])
+                self.wfile.flush()
+            self.close_connection = True
+        else:
+            self.send_response(action["status"])
+            for name, value in action.get("headers", {}).items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        return True
+
+    def serve_range(self):
+        """Answer `Range: bytes=N-` with a 206, returning whether it did."""
+        range_header = self.headers.get("Range", "")
+        if not range_header.startswith("bytes=") or not range_header.endswith("-"):
+            return False
+        path = self.translate_path(self.path)
+        if not os.path.isfile(path):
+            return False
+
+        last_modified = formatdate(os.path.getmtime(path), usegmt=True)
+        if_range = self.headers.get("If-Range")
+        if if_range is not None and if_range != last_modified:
+            return False
+
+        with open(path, "rb") as f:
+            data = f.read()
+        start = int(range_header[len("bytes=") : -1])
+        if start >= len(data):
+            return False
+
+        self.send_response(206)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Range", f"bytes {start}-{len(data) - 1}/{len(data)}")
+        self.send_header("Content-Length", str(len(data) - start))
+        self.send_header("Last-Modified", last_modified)
+        self.end_headers()
+        self.wfile.write(data[start:])
+        return True
+
+    def do_GET(self):
+        if self.handle_action(self.next_action()):
+            return
+        if not self.serve_range():
+            super().do_GET()
+
+    def do_HEAD(self):
+        if not self.handle_action(self.next_action()):
+            super().do_HEAD()
+
+
 def main():
-    directory, cert, key, port_file = sys.argv[1:]
+    directory, cert, key, port_file, request_log = sys.argv[1:6]
+
+    routes = {}
+    if len(sys.argv) > 6:
+        with open(sys.argv[6]) as f:
+            routes = json.load(f)
 
     handler = functools.partial(
-        http.server.SimpleHTTPRequestHandler, directory=directory
+        Handler,
+        directory=directory,
+        routes=routes,
+        lock=threading.Lock(),
+        request_log=request_log,
     )
     httpd = make_server(handler)
 
