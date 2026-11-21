@@ -70,15 +70,21 @@ pub fn install_crates(
         .collect();
 
     // Remove installed crates
-    let mut crate_names = filter_out_installed_crates(
+    let crate_names: Vec<_> = filter_out_installed_crates(
         args.crate_names,
         args.force,
         manifests.as_ref(),
         args.version_req,
     )
-    .peekable();
+    .collect();
 
-    if crate_names.peek().is_none() {
+    // Release the manifest locks while resolving, which can take a while
+    // (GitHub API, timeouts, ...), so that concurrent `cargo-binstall`
+    // processes (e.g. spawned by cargo-update) don't queue behind each other.
+    // The manifests are opened, and locked, again right before installing.
+    let manifests_root = manifests.map(|_| cargo_root.clone());
+
+    if crate_names.is_empty() {
         debug!("Nothing to do");
         return Ok(None);
     }
@@ -252,6 +258,7 @@ pub fn install_crates(
 
     // Resolve crates
     let tasks = crate_names
+        .into_iter()
         .map(|res| {
             res.map(|(crate_name, current_version)| {
                 AutoAbortJoinHandle::spawn(ops::resolve::resolve(
@@ -309,7 +316,7 @@ pub fn install_crates(
 
             let manifest_update_res = do_install_fetches_continue_on_failure(
                 resolution_fetches,
-                manifests,
+                manifests_root.as_deref(),
                 &binstall_opts,
                 dry_run,
                 temp_dir,
@@ -371,7 +378,7 @@ pub fn install_crates(
 
             do_install_fetches(
                 resolution_fetches,
-                manifests,
+                manifests_root.as_deref(),
                 &binstall_opts,
                 dry_run,
                 temp_dir,
@@ -491,8 +498,7 @@ fn filter_out_installed_crates<'a>(
 #[allow(clippy::vec_box)]
 fn do_install_fetches(
     resolution_fetches: Vec<Box<ResolutionFetch>>,
-    // Take manifests by value to drop the `FileLock`.
-    manifests: Option<Manifests>,
+    manifests_root: Option<&Path>,
     binstall_opts: &Options,
     dry_run: bool,
     temp_dir: tempfile::TempDir,
@@ -508,6 +514,9 @@ fn do_install_fetches(
     }
 
     block_in_place(|| {
+        // Hold the manifest locks while replacing binaries and recording them.
+        let manifests = open_manifests(manifests_root)?;
+
         let metadata_vec = resolution_fetches
             .into_iter()
             .map(|fetch| fetch.install(binstall_opts))
@@ -520,8 +529,7 @@ fn do_install_fetches(
 #[allow(clippy::vec_box)]
 fn do_install_fetches_continue_on_failure(
     resolution_fetches: Vec<Box<ResolutionFetch>>,
-    // Take manifests by value to drop the `FileLock`.
-    manifests: Option<Manifests>,
+    manifests_root: Option<&Path>,
     binstall_opts: &Options,
     dry_run: bool,
     temp_dir: tempfile::TempDir,
@@ -538,6 +546,9 @@ fn do_install_fetches_continue_on_failure(
     }
 
     block_in_place(|| {
+        // Hold the manifest locks while replacing binaries and recording them.
+        let manifests = open_manifests(manifests_root)?;
+
         let metadata_vec = resolution_fetches
             .into_iter()
             .filter_map(|fetch| match fetch.install(binstall_opts) {
@@ -552,6 +563,10 @@ fn do_install_fetches_continue_on_failure(
 
         update_manifest(manifests, temp_dir, no_cleanup, metadata_vec)
     })
+}
+
+fn open_manifests(manifests_root: Option<&Path>) -> Result<Option<Manifests>> {
+    Ok(manifests_root.map(Manifests::open_exclusive).transpose()?)
 }
 
 fn update_manifest(
