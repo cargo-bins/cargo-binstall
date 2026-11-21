@@ -12,6 +12,7 @@ use binstalk::{
     fetchers::{Fetcher, GhCrateMeta, QuickInstall, SignaturePolicy},
     get_desired_targets,
     helpers::{
+        UnpackLimit,
         jobserver_client::LazyJobserverClient,
         lazy_gh_api_client::LazyGhApiClient,
         remote::{Certificate, Client},
@@ -187,6 +188,11 @@ pub fn install_crates(
             )
         }
     };
+    let unpack_limit = UnpackLimit::new(
+        args.max_unpack_size.unwrap_or(UnpackLimit::DEFAULT.min()),
+        args.max_unpack_ratio
+            .unwrap_or(UnpackLimit::DEFAULT.ratio()),
+    );
     let resolved_registry = match args.min_publish_age {
         Some(min_publish_age) => resolved_registry.with_min_publish_age(min_publish_age),
         None => resolved_registry,
@@ -243,6 +249,7 @@ pub fn install_crates(
         } else {
             SignaturePolicy::IfPresent
         },
+        unpack_limit,
         disable_telemetry: !settings.telemetry.enabled,
 
         maximum_resolution_timeout: Duration::from_secs(

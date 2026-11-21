@@ -2,7 +2,10 @@
 
 use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
-use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
+use binstalk_downloader::{
+    download::{DownloadError, UnpackLimit},
+    remote::Error as RemoteError,
+};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
@@ -227,6 +230,7 @@ pub struct Data {
     repo_info: OnceCell<Option<RepoInfo>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
+    unpack_limit: UnpackLimit,
 }
 
 impl Data {
@@ -237,6 +241,16 @@ impl Data {
             repo,
             repo_info: OnceCell::new(),
             pkg_url_hint: None,
+            unpack_limit: UnpackLimit::DEFAULT,
+        }
+    }
+
+    /// Cap how much a package may unpack to, [`UnpackLimit::DEFAULT`] unless
+    /// set.
+    pub fn with_unpack_limit(self, unpack_limit: UnpackLimit) -> Self {
+        Self {
+            unpack_limit,
+            ..self
         }
     }
 

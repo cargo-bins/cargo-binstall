@@ -123,9 +123,12 @@ async fn resolve_inner(
 
     let gh_api_client = opts.gh_api_client.get().await?;
 
-    let with_pkg_url_hint = |data: Data| match pkg_url_hint.clone() {
-        Some((target, hint)) => data.with_pkg_url_hint(target, hint),
-        None => data,
+    let prepare_data = |data: Data| {
+        let data = data.with_unpack_limit(opts.unpack_limit);
+        match pkg_url_hint.clone() {
+            Some((target, hint)) => data.with_pkg_url_hint(target, hint),
+            None => data,
+        }
     };
 
     let mut handles_fn =
@@ -156,7 +159,7 @@ async fn resolve_inner(
         };
 
     handles_fn(
-        Arc::new(with_pkg_url_hint(Data::new(
+        Arc::new(prepare_data(Data::new(
             package_info.name.clone(),
             package_info.version_str.clone(),
             package_info.repo.clone(),
@@ -166,7 +169,7 @@ async fn resolve_inner(
 
     if let Some(binary_name) = binary_name {
         handles_fn(
-            Arc::new(with_pkg_url_hint(Data::new(
+            Arc::new(prepare_data(Data::new(
                 binary_name,
                 package_info.version_str.clone(),
                 package_info.repo.clone(),

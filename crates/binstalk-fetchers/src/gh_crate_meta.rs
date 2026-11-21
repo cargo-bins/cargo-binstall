@@ -507,6 +507,7 @@ impl super::Fetcher for GhCrateMeta {
                 data_verifier.as_mut(),
             ),
         }
+        .with_unpack_limit(self.data.unpack_limit)
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
         trace!("validating signature (if any)");
