@@ -89,13 +89,6 @@ pub struct PkgMeta {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub binary: BTreeMap<CompactString, BinaryMeta>,
 
-    /// Names to use for `{ target-arch }` in templates, keyed by the
-    /// architecture name binstall would otherwise use (e.g. `aarch64`).
-    ///
-    /// Exposed via `[package.metadata.binstall.target-arch-alias]` in `Cargo.toml`.
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub target_arch_alias: BTreeMap<CompactString, CompactString>,
-
     /// Target specific overrides
     pub overrides: PkgOverrides,
 }
@@ -114,9 +107,6 @@ impl PkgMeta {
         }
         for (name, bin_meta) in &pkg_override.binary {
             self.binary.insert(name.clone(), bin_meta.clone());
-        }
-        for (arch, alias) in &pkg_override.target_arch_alias {
-            self.target_arch_alias.insert(arch.clone(), alias.clone());
         }
     }
 
@@ -175,23 +165,6 @@ impl PkgMeta {
                 binary
             },
 
-            target_arch_alias: {
-                // Same as `binary`: per architecture, the most preferred
-                // override wins, and the manifest's own entry is the fallback.
-                let mut target_arch_alias = BTreeMap::new();
-                for (arch, alias) in pkg_overrides
-                    .clone()
-                    .into_iter()
-                    .flat_map(|pkg_override| &pkg_override.target_arch_alias)
-                    .chain(&self.target_arch_alias)
-                {
-                    target_arch_alias
-                        .entry(arch.clone())
-                        .or_insert_with(|| alias.clone());
-                }
-                target_arch_alias
-            },
-
             disabled_strategies: if ignore_disabled_strategies {
                 None
             } else {
@@ -241,13 +214,6 @@ pub struct PkgOverride {
     /// [`PkgMeta::binary`].
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub binary: BTreeMap<CompactString, BinaryMeta>,
-
-    /// `{ target-arch }` alias override, keyed by architecture.
-    ///
-    /// An entry here replaces the entry for the same architecture in
-    /// [`PkgMeta::target_arch_alias`].
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub target_arch_alias: BTreeMap<CompactString, CompactString>,
 
     #[serde(skip)]
     pub ignore_disabled_strategies: bool,
@@ -438,33 +404,6 @@ mod tests {
         assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].pkg_fmt, Some(PkgFmt::Tgz)); // Unix.
         assert_eq!(matches[1].pkg_fmt, Some(PkgFmt::Tar)); // Linux.
-    }
-
-    #[test]
-    fn test_target_arch_alias_parse_and_override() {
-        let base: PkgMeta = serde_json::from_value(json!({
-            "target-arch-alias": { "aarch64": "arm64", "x86_64": "amd64" },
-            "overrides": {
-                r#"cfg(target_os = "windows")"#: {
-                    "target-arch-alias": { "x86_64": "x64" },
-                },
-            },
-        }))
-        .unwrap();
-        assert_eq!(base.target_arch_alias["aarch64"], "arm64");
-        assert_eq!(base.target_arch_alias["x86_64"], "amd64");
-
-        let cfgs = vec![
-            Cfg::from_str(r#"target_os="windows""#).unwrap(),
-            Cfg::from_str(r#"target_arch="x86_64""#).unwrap(),
-        ];
-        let merged =
-            base.merge_overrides(base.overrides.get_matching("x86_64-pc-windows-msvc", &cfgs));
-
-        // An override replaces the entry of the architecture it names, and
-        // leaves the others alone.
-        assert_eq!(merged.target_arch_alias["x86_64"], "x64");
-        assert_eq!(merged.target_arch_alias["aarch64"], "arm64");
     }
 
     #[test]

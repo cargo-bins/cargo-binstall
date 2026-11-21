@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
@@ -144,6 +144,33 @@ pub trait Fetcher: Send + Sync {
     fn target(&self) -> &str;
 
     fn target_data(&self) -> &Arc<TargetDataErased>;
+
+    /// The name `{ target-arch }` was rendered as in the found package's
+    /// URL, if [`Fetcher::find`] picked an alias rather than the name from
+    /// [`TargetData::target_related_info`].
+    ///
+    /// Templates rendered for the found package, such as `bin-dir`, should
+    /// use it too, see [`TargetArchOverride`].
+    fn resolved_target_arch(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// [`leon::Values`] that gives `target-arch` from
+/// [`Fetcher::resolved_target_arch`] when it is set, and everything else
+/// from `values`.
+pub struct TargetArchOverride<'a> {
+    pub values: &'a dyn leon::Values,
+    pub target_arch: Option<&'a str>,
+}
+
+impl leon::Values for TargetArchOverride<'_> {
+    fn get_value<'s>(&'s self, key: &str) -> Option<Cow<'s, str>> {
+        match (key, self.target_arch) {
+            ("target-arch", Some(target_arch)) => Some(Cow::Borrowed(target_arch)),
+            _ => self.values.get_value(key),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

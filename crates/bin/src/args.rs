@@ -914,7 +914,6 @@ You cannot use --{feature_option} and specify multiple packages at the same time
             }
             binary
         },
-        target_arch_alias: BTreeMap::new(),
     };
 
     (opts, cli_overrides)
