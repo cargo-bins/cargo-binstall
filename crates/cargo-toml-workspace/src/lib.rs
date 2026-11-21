@@ -196,7 +196,7 @@ fn expand_member(root: &Path, pattern: &str) -> Result<Expanded, ErrorInner> {
         .peekable();
     while let Some(component) = components.next() {
         // The matches for each of the current `dirs` are appended to `dirs`,
-        // then the current ones are removed.
+        // and the current ones are removed.
         let current = dirs.len();
         match component {
             ComponentKind::Literal(component) => {
@@ -222,16 +222,23 @@ fn expand_member(root: &Path, pattern: &str) -> Result<Expanded, ErrorInner> {
                     i += 1;
                 }
                 if components.peek().is_none() {
-                    dirs.drain(..current);
+                    // Order does not matter, `dirs` is sorted at the end.
+                    // Going down from `current`, the element swapped into
+                    // `i` is never one of the current dirs.
+                    for i in (0..current).rev() {
+                        dirs.swap_remove(i);
+                    }
                 }
             }
             ComponentKind::Wildcard(component) => {
                 exact = false;
                 let pattern = Pattern::new(component)?;
-                for i in 0..current {
-                    push_subdirs(fs::read_dir(&dirs[i])?, Some(&pattern), &mut dirs)?;
+                // As above, remove each current dir with `swap_remove`
+                // instead of shifting everything appended after it.
+                for i in (0..current).rev() {
+                    let dir = dirs.swap_remove(i);
+                    push_subdirs(fs::read_dir(&dir)?, Some(&pattern), &mut dirs)?;
                 }
-                dirs.drain(..current);
             }
         }
     }
