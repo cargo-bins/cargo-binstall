@@ -735,7 +735,7 @@ mod tests {
                     target_related_info: &NoValues,
                 };
                 let tt = Template::parse("mycrate-dir/{ bin }{ binary-ext }").unwrap();
-                BinFile::new(&data, "mycrate", &tt, true, &[])
+                BinFile::new(&data, "mycrate", &tt, &mut |_| false, true, &[])
                     .unwrap()
                     .source
             };
