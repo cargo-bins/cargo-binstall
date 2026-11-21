@@ -99,7 +99,7 @@ impl CratesV2 {
         Ok(())
     }
 
-    /// Record `crates` as freshly installed by binstall, then bring the rest
+    /// Record `crates` as freshly installed by binstall, and bring the rest
     /// of the manifest in line with `v1`, the `.crates.toml` that was just
     /// written.
     ///
@@ -107,11 +107,10 @@ impl CratesV2 {
     /// that options recorded by an earlier `cargo install` of the same package
     /// id are dropped: they describe a binary binstall just replaced.
     pub(crate) fn update(&mut self, crates: &[CrateInfo], v1: &CratesToml<'_>) {
+        // Forget what is recorded for these package ids, so `sync_v1` gives
+        // them the defaults.
         for metadata in crates {
-            self.installs.insert(
-                package_id(metadata),
-                InstallInfo::from_v1(metadata.bins.iter().map(|bin| bin.as_str())),
-            );
+            self.installs.remove(&package_id(metadata));
         }
         self.sync_v1(v1);
     }
