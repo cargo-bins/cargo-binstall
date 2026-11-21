@@ -72,6 +72,10 @@ jobs:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           set -euxo pipefail
+          # A manually dispatched run tests every crate.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+              ALL_CHANGED_FILES="$(ls -d crates/*/)"
+          fi
           crates_changed="$(for file in $ALL_CHANGED_FILES; do echo $file; done | grep crates | cut -d / -f 2 | sed 's/^bin$/cargo-binstall/' || echo)"
           has_detect_target_changed="$(echo "$crates_changed" | grep -q detect-targets && echo true || echo false)"
           has_fs_lock_changed="$(echo "$crates_changed" | grep -q fs-lock && echo true || echo false)"
@@ -111,36 +115,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
-
-  e2e-tests:
-    if: github.event_name != 'pull_request' && github.repository_owner == 'cargo-bins'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            os: macos-latest
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-
-    runs-on: ${{ matrix.os }}
-    env:
-      CARGO_BUILD_TARGET: ${{ matrix.target }}
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/just-setup
-        env:
-          # just-setup use binstall to install sccache,
-          # which works better when we provide it with GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
-
-      - run: just build
-      - run: just e2e-tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
 
   cross-check:
     strategy:
@@ -248,7 +222,13 @@ jobs:
       attestations: write
     secrets:
       CI_RELEASE_TEST_GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
+      CI_TEST_GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
     with:
+      # Run the e2e tests on the packages built here, right after each one
+      # is built, instead of building another (dev) binary in a separate
+      # job. Real releases never set this, so a flaky e2e test fails CI
+      # without blocking a release.
+      e2e-tests: ${{ github.repository_owner == 'cargo-bins' }}
       info: |
         {
           "is-release": false,
@@ -277,6 +257,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build detect-targets
         run: |
           cargo zigbuild --features cli-logging --target ${{ matrix.arch }}-unknown-linux-musl
@@ -316,6 +297,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build and run detect-targets tests
         run: |
           set -euxo pipefail
@@ -478,6 +460,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Build detect-targets
         run: |
           cargo check --target ${{ matrix.target }}
@@ -508,6 +491,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
       - name: Check fs-lock
         run: |
           cargo check --target ${{ matrix.target }}
@@ -521,7 +505,6 @@ jobs:
     name: Tests pass
     needs:
       - unit-tests
-      - e2e-tests
       - cross-check
       - lint
       - docs

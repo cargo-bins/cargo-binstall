@@ -78,6 +78,19 @@ runs:
     run: rustc -vV
     shell: bash
 
+  # Cargo.toml builds dependencies at opt-level 3 in dev builds, which also
+  # applies to proc-macros and build scripts. CI spends far more time
+  # compiling them than running them, and opt-level 1 makes a cold dev build
+  # ~25% faster (208 s -> 155 s on 4 cores).
+  # Profiles in cargo config take precedence over Cargo.toml.
+  - name: Build dependencies at opt-level 1 in dev builds
+    run: |
+      # macOS runners don't create the default CARGO_HOME up front.
+      cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+      mkdir -p "$cargo_home"
+      printf '[profile.dev.package."*"]\nopt-level = 1\n' >> "$cargo_home/config.toml"
+    shell: bash
+
   - name: Retrieve RUSTFLAGS for caching
     if: inputs.indexcache == 'true' || inputs.buildcache == 'true'
     id: retrieve-rustflags
@@ -98,7 +111,14 @@ runs:
     uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
     with:
       env-vars: "CARGO CC CFLAGS CXX CMAKE RUST JUST"
+      # Bump when changing the cargo config written above: it isn't part of
+      # the automatic key, and an exact key hit is never saved again.
+      key: dev-deps-opt-level-1
       cache-workspace-crates: true
+      # A merge queue ref is never checked out again, so a cache saved
+      # there can't be restored by any later run, and it pushes the
+      # caches of main out of the 10 GB quota.
+      save-if: ${{ github.event_name != 'merge_group' }}
     env:
       RUSTFLAGS: ${{ steps.retrieve-rustflags.outputs.RUSTFLAGS }}
 

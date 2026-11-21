@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{fmt, io, str::FromStr, sync::Arc};
+use std::{fmt, io, str::FromStr, sync::Arc, time::Duration};
 
 use base16::DecodeError as Base16DecodeError;
 use binstalk_downloader::{
@@ -34,6 +34,9 @@ mod visitor;
 
 mod common;
 use common::*;
+
+mod publish_age;
+pub use publish_age::{InvalidMinPublishAge, parse_min_publish_age};
 
 #[cfg(feature = "git")]
 mod git_registry;
@@ -81,6 +84,16 @@ pub enum RegistryError {
 
     #[error("no version matching requirement '{req}'")]
     VersionMismatch { req: semver::VersionReq },
+
+    #[error(
+        "every version matching requirement '{req}' is newer than min-publish-age, the latest one {version} was published at {pubtime}"
+    )]
+    #[diagnostic(help("Wait until the version is old enough, or lower the min-publish-age."))]
+    TooNew {
+        req: semver::VersionReq,
+        version: CompactString,
+        pubtime: CompactString,
+    },
 
     #[error("Failed to parse cargo manifest: {0}")]
     #[diagnostic(help("If you used --manifest-path, check the Cargo.toml syntax."))]
@@ -197,7 +210,7 @@ impl Registry {
         crate_name: &str,
         version_req: &VersionReq,
     ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
-        self.fetch_crate_matched_with_auth(client, None, crate_name, version_req)
+        self.fetch_crate_matched_with_auth(client, None, crate_name, version_req, None)
             .await
     }
 
@@ -207,17 +220,18 @@ impl Registry {
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
+        min_publish_age: Option<Duration>,
     ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
         match self {
             Self::Sparse(sparse_registry) => {
                 sparse_registry
-                    .fetch_crate_matched(client, auth, crate_name, version_req)
+                    .fetch_crate_matched(client, auth, crate_name, version_req, min_publish_age)
                     .await
             }
             #[cfg(feature = "git")]
             Self::Git(git_registry) => {
                 git_registry
-                    .fetch_crate_matched(client, auth, crate_name, version_req)
+                    .fetch_crate_matched(client, auth, crate_name, version_req, min_publish_age)
                     .await
             }
         }
@@ -239,13 +253,15 @@ impl Registry {
         let registry = self.url()?;
         let source_type = match self {
             #[cfg(feature = "git")]
-            Registry::Git(_) => SourceType::Git,
+            // A git index is a registry, recorded by cargo as `registry+<url>`.
+            // `SourceType::Git` is for crates installed with `--git`.
+            Registry::Git(_) => SourceType::Registry,
             Registry::Sparse(_) => SourceType::Sparse,
         };
 
         Ok(match (registry.as_str(), source_type) {
             ("https://index.crates.io/", SourceType::Sparse)
-            | ("https://github.com/rust-lang/crates.io-index", SourceType::Git) => {
+            | ("https://github.com/rust-lang/crates.io-index", SourceType::Registry) => {
                 CrateSource::cratesio_registry()
             }
             _ => CrateSource {
@@ -337,9 +353,11 @@ mod test {
             }
         });
 
-        let manifest_from_cratesio_api = fetch_crate_cratesio_api(client, crate_name, version_req)
-            .await
-            .unwrap();
+        let (manifest_from_cratesio_api, pubtime) =
+            fetch_crate_cratesio_api(client, crate_name, version_req, None)
+                .await
+                .unwrap();
+        assert_eq!(pubtime.as_deref(), Some("2023-06-27T04:27:43Z"));
 
         let serialized_manifest_from_cratesio_api = to_string(&manifest_from_cratesio_api).unwrap();
 
@@ -349,22 +367,72 @@ mod test {
         );
     }
 
+    /// Make a git index holding just the crates.io entry for
+    /// cargo-binstall 1.0.0, with `dl` pointing to crates.io.
+    ///
+    /// Cloning the real github.com/rust-lang/crates.io-index took about 50s
+    /// in CI, nearly all of the unit tests' time, and is a network flake
+    /// risk; the git registry code path is the same for a local index.
+    #[cfg(feature = "git")]
+    fn create_local_git_index() -> tempfile::TempDir {
+        use std::{fs, process::Command};
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path();
+
+        fs::write(
+            path.join("config.json"),
+            r#"{"dl": "https://static.crates.io/crates"}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(path.join("ca/rg")).unwrap();
+        fs::write(
+            path.join("ca/rg/cargo-binstall"),
+            include_str!("../tests/fixtures/cargo-binstall-1.0.0.json"),
+        )
+        .unwrap();
+
+        let git = |args: &[&str]| {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(path)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?} failed: {status}");
+        };
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "Add index",
+        ]);
+
+        dir
+    }
+
     #[cfg(feature = "git")]
     #[tokio::test]
-    async fn test_crates_io_git_registry() {
+    async fn test_git_registry() {
         let client = create_client();
 
         let crate_name = "cargo-binstall";
         let version_req = &VersionReq::parse("=1.0.0").unwrap();
+
+        let index = create_local_git_index();
+        let index_url = Url::from_directory_path(index.path()).unwrap();
 
         let serialized_manifest_from_git_task = tokio::spawn({
             let version_req = version_req.clone();
             let client = client.clone();
 
             async move {
-                let git_registry: Registry = "https://github.com/rust-lang/crates.io-index"
-                    .parse()
-                    .unwrap();
+                let git_registry: Registry = index_url.as_str().parse().unwrap();
                 assert!(
                     matches!(git_registry, Registry::Git(_)),
                     "{:?}",
@@ -390,6 +458,31 @@ mod test {
         assert_eq!(
             serialized_manifest_from_git_task.await.unwrap(),
             serialized_manifest_from_cratesio_api
+        );
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
+    fn test_git_registry_crate_source() {
+        let registry: Registry = "file:///tmp/index".parse().unwrap();
+        let source = registry.crate_source().unwrap();
+        assert!(
+            matches!(source.source_type, SourceType::Registry),
+            "{source:?}"
+        );
+        assert_eq!(source.url.as_str(), "file:///tmp/index");
+
+        let registry: Registry = "https://github.com/rust-lang/crates.io-index"
+            .parse()
+            .unwrap();
+        let source = registry.crate_source().unwrap();
+        assert!(
+            matches!(source.source_type, SourceType::Registry),
+            "{source:?}"
+        );
+        assert_eq!(
+            source.url.as_str(),
+            CrateSource::cratesio_registry().url.as_str()
         );
     }
 }

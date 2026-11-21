@@ -59,6 +59,8 @@ Some crate installation strategies may collect anonymized usage statistics by de
    This option cannot be used with `--manifest-path`.
 * `--bin-dir <BIN_DIR>` — Path template for binary files in packages
 
+   It is the path of the binary inside of the package, or of the dir holding it, not where it is installed: that is `--install-path`.
+
    Overrides the Cargo.toml package manifest bin-dir.
 * `--pkg-fmt <PKG_FMT>` — Format for package downloads
 
@@ -79,6 +81,14 @@ Some crate installation strategies may collect anonymized usage statistics by de
    - zip: Download format is Zip
 
    - bin: Download format is raw / binary
+
+   - gz: Download format is a single binary compressed with GZip, not a TAR
+
+   - bz2: Download format is a single binary compressed with Bzip2, not a TAR
+
+   - xz: Download format is a single binary compressed with XZ, not a TAR
+
+   - zst: Download format is a single binary compressed with Zstd, not a TAR
 * `--pkg-url <TEMPLATE>` — URL template for package downloads
 
    Overrides the Cargo.toml package manifest pkg-url.
@@ -165,6 +175,15 @@ Some crate installation strategies may collect anonymized usage statistics by de
    If a registry name is provided, Cargo first checks the environment variable `CARGO_REGISTRIES_{registry_name}_INDEX` for the index URL. If that is not set, it falls back to the `registries.<name>.index` key in `.cargo/config.toml`.
 
    Cannot be combined with `--index`.
+* `--min-publish-age <AGE>` — Only install a version of the crate published at least this long ago, as a cooldown against freshly published malicious releases.
+
+   Uses the same syntax as Cargo's `registry.global-min-publish-age`: `0` to disable it, or an integer followed by `seconds`, `minutes`, `hours`, `days`, `weeks` or `months`, e.g. `7 days`.
+
+   Newer versions matching the version requirement are skipped, and it is an error if all of them are too new. Versions without a publish time in the registry index are not affected.
+
+   Disabled by default, since `cargo install` does not honor Cargo's `min-publish-age` config for the installed crate either. It does not apply to `--manifest-path` or `--git`.
+
+   It is forwarded to the `cargo install` fallback via `--config`, but cargo 1.100 ignores it there, so the dependencies built by the fallback are not filtered.
 * `--locked` — This option will be passed through to all `cargo-install` invocations.
 
    It will require `Cargo.lock` to be up to date.

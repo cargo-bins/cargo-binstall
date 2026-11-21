@@ -11,7 +11,7 @@ name = "signing-test"
 path = "src/main.rs"
 
 [package.metadata.binstall]
-pkg-url = "https://localhost:4443/signing-test.tar"
+# pkg-url is passed by signing.sh, since the local server picks its port.
 pkg-fmt = "tar"
 
 [package.metadata.binstall.signing]
