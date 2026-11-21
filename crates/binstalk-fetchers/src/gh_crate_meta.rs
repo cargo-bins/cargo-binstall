@@ -17,8 +17,8 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    DEFAULT_GH_API_RETRY_DURATION, Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
-    SignatureVerifier, TargetDataErased, common::*, futures_resolver::FuturesResolver,
+    Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
+    TargetDataErased, common::*, futures_resolver::FuturesResolver, gh_api_rate_limit_wait,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -171,10 +171,21 @@ impl GhCrateMeta {
                             }
                             Ok(None) => return Ok(None),
 
-                            Err(GhApiError::RateLimit { retry_after }) => {
-                                sleep(retry_after.unwrap_or(DEFAULT_GH_API_RETRY_DURATION)).await;
+                            // A public release asset can be checked with
+                            // HEAD/GET instead, as `does_url_exist` does.
+                            Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
+                                if !is_repo_private =>
+                            {
+                                break;
                             }
-                            Err(GhApiError::Unauthorized) if !is_repo_private => break,
+                            Err(GhApiError::RateLimit { retry_after }) => {
+                                match gh_api_rate_limit_wait(retry_after) {
+                                    Some(wait) => sleep(wait).await,
+                                    None => {
+                                        return Err(GhApiError::RateLimit { retry_after }.into());
+                                    }
+                                }
+                            }
 
                             Err(err) => return Err(err.into()),
                         }
