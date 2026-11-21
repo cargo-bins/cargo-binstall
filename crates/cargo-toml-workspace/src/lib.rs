@@ -1,6 +1,6 @@
 use std::{
     io,
-    path::{Component, Path, PathBuf},
+    path::{Component, Path},
 };
 
 use cargo_toml::{Error as CargoTomlError, Manifest};
@@ -52,9 +52,6 @@ enum ErrorInner {
 
     #[error("Failed to walk directory: {0}")]
     Walk(#[from] GlobError),
-
-    #[error("Workspace path {} is not valid UTF-8", .0.display())]
-    NonUtf8Path(PathBuf),
 
     #[error("Failed to parse cargo manifest: {0}")]
     CargoManifest(#[from] CargoTomlError),
@@ -110,31 +107,56 @@ fn load_manifest_from_workspace_inner<Metadata: DeserializeOwned>(
         }
 
         let root = manifest_path.parent().unwrap();
-        // Patterns are matched against full paths, so escape the root in case
-        // it contains glob metacharacters such as `[`.
-        let escaped_root = Pattern::escape(
-            root.to_str()
-                .ok_or_else(|| ErrorInner::NonUtf8Path(root.to_owned()))?,
-        );
-        let pattern_at_root = |pattern: &str| format!("{escaped_root}/{pattern}");
+        // This follows `members_paths` and `is_excluded` in cargo's
+        // `core/workspace.rs`, except that the root is escaped, so that glob
+        // metacharacters in its path are matched literally.
+        let escaped_root = root.to_str().map(Pattern::escape);
+        let pattern_at_root = |pattern: &str| {
+            escaped_root
+                .as_ref()
+                .map(|escaped_root| format!("{escaped_root}/{pattern}"))
+        };
 
-        // Like cargo, an exclude entry excludes everything under that path.
-        // For backwards compatibility, it may also be a glob pattern.
-        let excludes = ws
+        // As in cargo, an exclude entry excludes everything under that path,
+        // unless it is also under a path listed in members.
+        // Unlike cargo, and for backwards compatibility, an exclude entry may
+        // also be a glob pattern.
+        let exclude_patterns = ws
             .exclude
             .iter()
-            .map(|exclude| Ok((root.join(exclude), Pattern::new(&pattern_at_root(exclude))?)))
+            .filter_map(|exclude| pattern_at_root(exclude))
+            .map(|pattern| Pattern::new(&pattern))
             .collect::<Result<Vec<_>, PatternError>>()?;
         let is_excluded = |path: &Path| {
-            excludes
+            let excluded = ws
+                .exclude
                 .iter()
-                .any(|(prefix, pattern)| path.starts_with(prefix) || pattern.matches_path(path))
+                .any(|exclude| path.starts_with(root.join(exclude)))
+                || exclude_patterns
+                    .iter()
+                    .any(|pattern| pattern.matches_path(path));
+            let explicit_member = ws
+                .members
+                .iter()
+                .any(|member| path.starts_with(root.join(member)));
+
+            excluded && !explicit_member
         };
 
         for member in &ws.members {
-            for res in glob::glob(&pattern_at_root(member))? {
-                let mut path = res?;
-                if is_excluded(&path) {
+            let mut paths = match pattern_at_root(member) {
+                Some(pattern) => glob::glob(&pattern)?.collect::<Result<Vec<_>, _>>()?,
+                // cargo does not expand globs for a non-UTF-8 root.
+                None => Vec::new(),
+            };
+            // As in cargo, if the glob matches nothing, use the member as a
+            // literal path.
+            if paths.is_empty() {
+                paths.push(root.join(member));
+            }
+
+            for mut path in paths {
+                if !path.is_dir() || is_excluded(&path) {
                     continue;
                 }
                 path.push("Cargo.toml");
@@ -217,5 +239,58 @@ mod test {
         let err = load_manifest_from_workspace_inner::<cargo_toml::Value>(&p, "cargo-binstall2")
             .unwrap_err();
         assert!(matches!(err, ErrorInner::NotFound), "{:#?}", err);
+    }
+
+    fn write_package(dir: &Path, name: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n"),
+        )
+        .unwrap();
+    }
+
+    fn find(root: &Path, name: &str) -> bool {
+        match load_manifest_from_workspace_inner::<cargo_toml::Value>(root, name) {
+            Ok(manifest) => {
+                assert_eq!(manifest.package.unwrap().name, name);
+                true
+            }
+            Err(ErrorInner::NotFound) => false,
+            Err(err) => panic!("{err:#?}"),
+        }
+    }
+
+    /// Cases where cargo's `members_paths` and `is_excluded` behave
+    /// differently from a gitignore-style walk.
+    #[test]
+    fn test_cargo_member_semantics() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            r#"[workspace]
+members = ["top", "excluded/explicit", "excluded/*", "lit[1]"]
+exclude = ["excluded"]
+"#,
+        )
+        .unwrap();
+
+        write_package(&root.join("top"), "top");
+        // A member without a slash is relative to the root, it does not
+        // match a directory of the same name further down.
+        write_package(&root.join("nested/top"), "nested-top");
+        // Members listed explicitly win over exclude...
+        write_package(&root.join("excluded/explicit"), "explicit");
+        // ...but globs do not.
+        write_package(&root.join("excluded/globbed"), "globbed");
+        // A member that matches nothing as a glob is used as a literal path.
+        write_package(&root.join("lit[1]"), "literal");
+
+        assert!(find(root, "top"));
+        assert!(!find(root, "nested-top"));
+        assert!(find(root, "explicit"));
+        assert!(!find(root, "globbed"));
+        assert!(find(root, "literal"));
     }
 }
