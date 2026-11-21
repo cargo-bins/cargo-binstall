@@ -95,16 +95,19 @@ start_https_server() {
     local port_file="$cert_dir/port"
     HTTPS_SERVER_LOG="$cert_dir/requests.log"
     : >"$HTTPS_SERVER_LOG"
-    "$(_https_server_python)" lib/https_server.py \
+    # -I -S: skip the environment, user site and site-packages, which the
+    # server doesn't need, to start faster.
+    "$(_https_server_python)" -I -S lib/https_server.py \
         "$serve_dir" "$cert_dir/server.pem" "$cert_dir/server.key" "$port_file" \
         "$HTTPS_SERVER_LOG" ${routes:+"$routes"} &
     HTTPS_SERVER_PID=$!
     # shellcheck disable=SC2064
     trap "kill $HTTPS_SERVER_PID 2>/dev/null || true" EXIT
 
-    # Python can take several seconds just to start on a CI runner busy with
-    # the other e2e tests (on macOS, signing.sh's server once took over 2s and
-    # http-faults.sh's over 10s), so allow a minute.
+    # The server writes its port as soon as it listens, before importing
+    # http.server and ssl, which usually takes well under 100ms. But on a CI
+    # runner busy with the other e2e tests, starting Python alone has taken
+    # over 10s (macOS), so allow up to a minute; this only bounds a hang.
     local _
     for _ in $(seq 1 600); do
         [ -s "$port_file" ] && break
