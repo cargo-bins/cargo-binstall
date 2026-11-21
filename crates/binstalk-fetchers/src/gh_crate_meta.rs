@@ -1,10 +1,12 @@
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     fmt, iter,
     path::Path,
     sync::{Arc, OnceLock},
 };
 
+use binstalk_downloader::download::DownloadError;
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
 use binstalk_types::{cargo_toml_binstall::Strategy, crate_info::PkgUrlHint};
 use compact_str::{CompactString, ToCompactString};
@@ -17,8 +19,9 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
-    TargetDataErased, common::*, futures_resolver::FuturesResolver, gh_api_rate_limit_wait,
+    BinPackage, Data, Extracted, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
+    SignatureVerifier, TargetDataErased, common::*, futures_resolver::FuturesResolver,
+    gh_api_rate_limit_wait,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -31,15 +34,32 @@ pub struct GhCrateMeta {
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
     signature_policy: SignaturePolicy,
-    /// The binary to find the package of, when each binary of the crate is
-    /// in its own package, see [`super::Fetcher::new`].
-    bin: Option<CompactString>,
-    resolution: OnceLock<Resolved>,
+    resolution: OnceLock<Resolution>,
+}
+
+#[derive(Debug)]
+enum Resolution {
+    /// One package providing all the binaries.
+    Package(Box<Resolved>),
+    /// One package per binary, when `pkg-url` contains key `bin`, see
+    /// [`Extracted::PerBin`].
+    PerBin(Vec<Resolved>),
+}
+
+impl Resolution {
+    fn first(&self) -> &Resolved {
+        match self {
+            Resolution::Package(resolved) => resolved,
+            Resolution::PerBin(resolved) => &resolved[0],
+        }
+    }
 }
 
 #[derive(Debug)]
 struct Resolved {
     url: Url,
+    /// The binary this package is for, see [`Resolution::PerBin`].
+    bin: Option<CompactString>,
     pkg_fmt: PkgFmt,
     archive_suffix: Option<String>,
     repo: Option<String>,
@@ -149,11 +169,15 @@ fn candidate_urls(
 }
 
 impl GhCrateMeta {
+    /// * `bin` - the binary to look for the package of, if `pkg-url`
+    ///   contains key `bin`.
+    #[allow(clippy::too_many_arguments)]
     fn launch_baseline_find_tasks(
         &self,
         futures_resolver: &FuturesResolver<Resolved, FetchError>,
         pkg_fmt: PkgFmt,
         pkg_url: &Template<'_>,
+        bin: Option<&str>,
         repo: Option<&str>,
         subcrate: Option<&str>,
         is_repo_private: bool,
@@ -168,7 +192,7 @@ impl GhCrateMeta {
 
         let urls = candidate_urls(
             &self.data,
-            self.bin.as_deref(),
+            bin,
             &self.target_data.target,
             &self.target_data.target_related_info,
             pkg_fmt,
@@ -187,12 +211,14 @@ impl GhCrateMeta {
             let archive_suffix = ext.map(ToString::to_string);
             let gh_release_artifact = GhReleaseArtifact::try_extract_from_url(&url);
             let default_pkg_url = default_pkg_url.clone();
+            let bin = bin.map(CompactString::from);
 
             async move {
                 debug!("Checking for package at: '{url}'");
 
                 let mut resolved = Resolved {
                     url: url.clone(),
+                    bin,
                     pkg_fmt,
                     repo,
                     subcrate,
@@ -243,6 +269,167 @@ impl GhCrateMeta {
     }
 }
 
+impl GhCrateMeta {
+    /// Find the package of each binary in [`Data::with_bins`], for a
+    /// `pkg-url` that contains key `bin`.
+    async fn find_per_bin(
+        &self,
+        pkg_url: &Template<'_>,
+        pkg_fmts: impl Iterator<Item = PkgFmt> + Clone,
+        repo: Option<&str>,
+        subcrate: Option<&str>,
+        is_repo_private: bool,
+    ) -> Result<bool, FetchError> {
+        let bins = &self.data.bins;
+        let target = &self.target_data.target;
+
+        if bins.is_empty() {
+            debug!("pkg-url contains key bin, but no binary is specified, skipping");
+            return Ok(false);
+        }
+
+        // Look for the packages of all binaries at once.
+        let resolvers = bins
+            .iter()
+            .map(|bin| {
+                let resolver = FuturesResolver::default();
+                for pkg_fmt in pkg_fmts.clone() {
+                    self.launch_baseline_find_tasks(
+                        &resolver,
+                        pkg_fmt,
+                        pkg_url,
+                        Some(&bin.name),
+                        repo,
+                        subcrate,
+                        is_repo_private,
+                    );
+                }
+                (bin, resolver)
+            })
+            .collect::<Vec<_>>();
+
+        let mut found = Vec::with_capacity(resolvers.len());
+        let mut missing_optional = Vec::new();
+
+        for (bin, resolver) in resolvers {
+            if let Some(resolved) = resolver.resolve().await {
+                debug!(?resolved, "Found the package of bin {}", bin.name);
+                found.push(resolved);
+            } else if bin.optional {
+                missing_optional.push(&bin.name);
+            } else {
+                debug!(
+                    "The package of {} bin {} is not found on target {target}",
+                    self.data.name, bin.name
+                );
+                return Ok(false);
+            }
+        }
+
+        if found.is_empty() {
+            return Ok(false);
+        }
+
+        for bin in missing_optional {
+            warn!(
+                "The package of {} bin {bin} is not found on target {target}. \
+But since the bin is optional, it is ignored.",
+                self.data.name,
+            );
+        }
+
+        self.resolution
+            .set(Resolution::PerBin(found))
+            .expect("find() should be only called once");
+        Ok(true)
+    }
+
+    async fn fetch_one(
+        &self,
+        resolved: &Resolved,
+        dst: &Path,
+    ) -> Result<ExtractedFiles, FetchError> {
+        trace!(?resolved, "preparing to fetch");
+        let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
+            (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
+                SignatureVerifier::Noop
+            }
+            (SignaturePolicy::Require, None) => {
+                return Err(FetchError::MissingSignature);
+            }
+            (_, Some(config)) => {
+                let template = match config.file.as_deref() {
+                    Some(file) => Template::parse(file)?,
+                    None => leon_macros::template!("{ url }.sig"),
+                };
+                trace!(?template, "parsed signature file template");
+
+                let sign_url = {
+                    let mut ctx = Context::from_data_with_repo(
+                        &self.data,
+                        &self.target_data.target,
+                        &self.target_data.target_related_info,
+                        resolved.archive_suffix.as_deref(),
+                        resolved.repo.as_deref(),
+                        resolved.subcrate.as_deref(),
+                    );
+                    ctx.target_arch = resolved.target_arch;
+                    ctx.bin = resolved.bin.as_deref();
+                    ctx.with_url(&resolved.url).render_url_with(&template)?
+                };
+
+                debug!(?sign_url, "Downloading signature");
+                let signature = Download::new(self.client.clone(), sign_url)
+                    .into_bytes()
+                    .await?;
+                trace!(?signature, "got signature contents");
+
+                SignatureVerifier::new(config, &signature)?
+            }
+        };
+
+        debug!(
+            url=%resolved.url,
+            dst=%dst.display(),
+            fmt=?resolved.pkg_fmt,
+            "Downloading package",
+        );
+        let mut data_verifier = verifier.data_verifier()?;
+        let files = match resolved.gh_release_artifact_url.as_ref() {
+            Some(artifact_url) if resolved.is_repo_private => self
+                .gh_api_client
+                .download_artifact(artifact_url.clone())
+                .await?
+                .with_data_verifier(data_verifier.as_mut()),
+            _ => Download::new_with_data_verifier(
+                self.client.clone(),
+                resolved.url.clone(),
+                data_verifier.as_mut(),
+            ),
+        }
+        .and_extract(resolved.pkg_fmt, dst)
+        .await?;
+        trace!("validating signature (if any)");
+        if data_verifier.validate() {
+            if let Some(info) = verifier.info() {
+                match &resolved.bin {
+                    Some(bin) => info!(
+                        "Verified signature for package of '{}' bin '{bin}': {info}",
+                        self.data.name
+                    ),
+                    None => info!(
+                        "Verified signature for package '{}': {info}",
+                        self.data.name
+                    ),
+                }
+            }
+            Ok(files)
+        } else {
+            Err(FetchError::InvalidSignature)
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
     fn new(
@@ -251,7 +438,6 @@ impl super::Fetcher for GhCrateMeta {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
-        bin: Option<CompactString>,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
@@ -259,7 +445,6 @@ impl super::Fetcher for GhCrateMeta {
             data,
             target_data,
             signature_policy,
-            bin,
             resolution: OnceLock::new(),
         })
     }
@@ -274,20 +459,11 @@ impl super::Fetcher for GhCrateMeta {
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-            let (pkg_urls, is_default_pkg_url) = if let Some(pkg_url) =
+            let (pkg_urls, is_default_pkg_url, is_per_bin) = if let Some(pkg_url) =
                 self.target_data.meta.pkg_url.as_deref()
             {
                 let template = Template::parse(pkg_url)?;
-
-                if template.has_key("bin") && self.bin.is_none() {
-                    // Each binary is in its own package, the caller is
-                    // expected to create one fetcher per binary with
-                    // its name.
-                    debug!(
-                        "pkg-url {pkg_url} contains key bin, but no binary is specified, skipping"
-                    );
-                    return Ok(false);
-                }
+                let is_per_bin = template.has_key("bin");
 
                 if pkg_fmt.is_none()
                     && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
@@ -328,7 +504,7 @@ impl super::Fetcher for GhCrateMeta {
                     );
                 }
 
-                (Either::Left(iter::once(template)), false)
+                (Either::Left(iter::once(template)), false, is_per_bin)
             } else if let Some(RepoInfo {
                 repo,
                 repository_host,
@@ -350,6 +526,7 @@ impl super::Fetcher for GhCrateMeta {
                                 }),
                         ),
                         true,
+                        false,
                     )
                 } else {
                     warn!(
@@ -387,6 +564,13 @@ impl super::Fetcher for GhCrateMeta {
                 Either::Right(PkgFmt::iter())
             };
 
+            if is_per_bin {
+                let pkg_url = pkg_urls.clone().next().expect("pkg-url is specified");
+                return this
+                    .find_per_bin(&pkg_url, pkg_fmts, repo, subcrate, is_repo_private)
+                    .await;
+            }
+
             // Try how a previous version was found first: it is one template
             // instead of all of them, times every pkg-fmt.
             //
@@ -409,6 +593,7 @@ impl super::Fetcher for GhCrateMeta {
                         &resolver,
                         *hint_pkg_fmt,
                         &pkg_url,
+                        None,
                         repo,
                         subcrate,
                         is_repo_private,
@@ -420,7 +605,7 @@ impl super::Fetcher for GhCrateMeta {
                             "Found package with the pkg-url of the last install"
                         );
                         self.resolution
-                            .set(resolved)
+                            .set(Resolution::Package(Box::new(resolved)))
                             .expect("find() should be only called once");
                         return Ok(true);
                     }
@@ -444,6 +629,7 @@ impl super::Fetcher for GhCrateMeta {
                         &resolver,
                         pkg_fmt,
                         &pkg_url,
+                        None,
                         repo,
                         subcrate,
                         is_repo_private,
@@ -454,7 +640,7 @@ impl super::Fetcher for GhCrateMeta {
             if let Some(resolved) = resolver.resolve().await {
                 debug!(?resolved, "Winning URL found!");
                 self.resolution
-                    .set(resolved)
+                    .set(Resolution::Package(Box::new(resolved)))
                     .expect("find() should be only called once");
                 Ok(true)
             } else {
@@ -463,88 +649,40 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let resolved = self
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<Extracted, FetchError> {
+        match self
             .resolution
             .get()
-            .expect("find() should be called once before fetch_and_extract()");
-        trace!(?resolved, "preparing to fetch");
-
-        let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
-            (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
-                SignatureVerifier::Noop
+            .expect("find() should be called once before fetch_and_extract()")
+        {
+            Resolution::Package(resolved) => {
+                self.fetch_one(resolved, dst).await.map(Extracted::Package)
             }
-            (SignaturePolicy::Require, None) => {
-                return Err(FetchError::MissingSignature);
-            }
-            (_, Some(config)) => {
-                let template = match config.file.as_deref() {
-                    Some(file) => Template::parse(file)?,
-                    None => leon_macros::template!("{ url }.sig"),
-                };
-                trace!(?template, "parsed signature file template");
+            Resolution::PerBin(resolved) => {
+                std::fs::create_dir_all(dst).map_err(DownloadError::from)?;
 
-                let sign_url = {
-                    let mut ctx = Context::from_data_with_repo(
-                        &self.data,
-                        &self.target_data.target,
-                        &self.target_data.target_related_info,
-                        resolved.archive_suffix.as_deref(),
-                        resolved.repo.as_deref(),
-                        resolved.subcrate.as_deref(),
+                let mut packages = BTreeMap::new();
+                for resolved in resolved {
+                    let bin = resolved
+                        .bin
+                        .clone()
+                        .expect("Resolution::PerBin is only made of resolved with bin");
+                    let extracted_files = self.fetch_one(resolved, &dst.join(&*bin)).await?;
+                    packages.insert(
+                        bin,
+                        BinPackage {
+                            pkg_fmt: resolved.pkg_fmt,
+                            extracted_files,
+                        },
                     );
-                    ctx.target_arch = resolved.target_arch;
-                    ctx.bin = self.bin.as_deref();
-                    ctx.with_url(&resolved.url).render_url_with(&template)?
-                };
-
-                debug!(?sign_url, "Downloading signature");
-                let signature = Download::new(self.client.clone(), sign_url)
-                    .into_bytes()
-                    .await?;
-                trace!(?signature, "got signature contents");
-
-                SignatureVerifier::new(config, &signature)?
+                }
+                Ok(Extracted::PerBin(packages))
             }
-        };
-
-        debug!(
-            url=%resolved.url,
-            dst=%dst.display(),
-            fmt=?resolved.pkg_fmt,
-            "Downloading package",
-        );
-        let mut data_verifier = verifier.data_verifier()?;
-        let files = match resolved.gh_release_artifact_url.as_ref() {
-            Some(artifact_url) if resolved.is_repo_private => self
-                .gh_api_client
-                .download_artifact(artifact_url.clone())
-                .await?
-                .with_data_verifier(data_verifier.as_mut()),
-            _ => Download::new_with_data_verifier(
-                self.client.clone(),
-                resolved.url.clone(),
-                data_verifier.as_mut(),
-            ),
-        }
-        .and_extract(resolved.pkg_fmt, dst)
-        .await?;
-        trace!("validating signature (if any)");
-        if data_verifier.validate() {
-            if let Some(info) = verifier.info() {
-                info!(
-                    "Verified signature for package '{}': {info}",
-                    self.data.name
-                );
-            }
-            Ok(files)
-        } else {
-            Err(FetchError::InvalidSignature)
         }
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
-        self.resolution.get().unwrap().pkg_fmt
+        self.resolution.get().unwrap().first().pkg_fmt
     }
 
     fn target_meta(&self) -> PkgMeta {
@@ -554,21 +692,13 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     fn resolved_target_arch(&self) -> Option<&str> {
-        self.resolution.get()?.target_arch
-    }
-
-    fn is_package_per_bin(&self) -> bool {
-        // An invalid template is reported by `find`.
-        self.target_data
-            .meta
-            .pkg_url
-            .as_deref()
-            .and_then(|pkg_url| Template::parse(pkg_url).ok())
-            .is_some_and(|template| template.has_key("bin"))
+        self.resolution.get()?.first().target_arch
     }
 
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
-        let resolved = self.resolution.get()?;
+        let Resolution::Package(resolved) = self.resolution.get()? else {
+            return None;
+        };
         Some(PkgUrlHint {
             name: self.data.name.clone(),
             pkg_url: resolved.default_pkg_url.clone()?,
@@ -579,6 +709,7 @@ impl super::Fetcher for GhCrateMeta {
     fn source_name(&self) -> CompactString {
         self.resolution
             .get()
+            .map(Resolution::first)
             .map(|resolved| {
                 if let Some(domain) = resolved.url.domain() {
                     domain.to_compact_string()

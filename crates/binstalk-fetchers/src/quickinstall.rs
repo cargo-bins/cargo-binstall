@@ -11,8 +11,8 @@ use tracing::{error, info, trace};
 use url::Url;
 
 use crate::{
-    Data, FetchError, SignaturePolicy, SignatureVerifier, SigningAlgorithm, TargetDataErased,
-    common::*,
+    Data, Extracted, FetchError, SignaturePolicy, SignatureVerifier, SigningAlgorithm,
+    TargetDataErased, common::*,
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
@@ -185,7 +185,6 @@ impl super::Fetcher for QuickInstall {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
-        _bin: Option<CompactString>,
     ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
@@ -270,7 +269,7 @@ by rust officially."#,
         }
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<Extracted, FetchError> {
         self.set_status(Status::AttemptingInstall);
         let Some(verifier) = self.signature_verifier.get() else {
             panic!("<QuickInstall as Fetcher>::find has not been called yet!")
@@ -291,7 +290,7 @@ by rust officially."#,
                 info!("Verified signature for package '{}': {info}", self.package);
             }
             self.set_status(Status::InstalledFromTarball);
-            Ok(files)
+            Ok(Extracted::Package(files))
         } else {
             self.set_status(Status::InvalidSignature);
             Err(FetchError::InvalidSignature)

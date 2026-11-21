@@ -17,15 +17,8 @@ use crate::{
 
 pub mod resolve;
 
-/// See [`Fetcher::new`].
-pub type Resolver = fn(
-    Client,
-    GhApiClient,
-    Arc<Data>,
-    Arc<TargetDataErased>,
-    SignaturePolicy,
-    Option<CompactString>,
-) -> Arc<dyn Fetcher>;
+pub type Resolver =
+    fn(Client, GhApiClient, Arc<Data>, Arc<TargetDataErased>, SignaturePolicy) -> Arc<dyn Fetcher>;
 
 #[derive(Debug)]
 #[non_exhaustive]
