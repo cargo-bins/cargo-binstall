@@ -76,7 +76,7 @@ fn candidate_urls(
             Context::from_data_with_repo(data, target, target_related_info, ext, repo, subcrate);
         ctx.target_arch = target_arch;
         match ctx.render_url_with(pkg_url) {
-            Ok(url) => Some(url),
+            Ok(url) => Some((url, ext, target_arch)),
             Err(err) => {
                 warn!("Failed to render url for {ctx:#?}: {err}");
                 None
@@ -112,9 +112,7 @@ fn candidate_urls(
 
     target_arches
         .cartesian_product(exts)
-        .filter_map(|(target_arch, ext)| {
-            render_url(ext, target_arch).map(|url| (url, ext, target_arch))
-        })
+        .filter_map(|(target_arch, ext)| render_url(ext, target_arch))
         .collect()
 }
 
