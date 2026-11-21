@@ -149,6 +149,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main():
+    # So a slow start shows in the test's output as Python's, not ours.
+    print("https_server.py: starting", file=sys.stderr, flush=True)
+
     directory, cert, key, port_file, request_log = sys.argv[1:6]
 
     routes = {}
@@ -169,10 +172,12 @@ def main():
     ctx.load_cert_chain(certfile=cert, keyfile=key)
     httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
 
+    port = httpd.server_address[1]
     tmp = port_file + ".tmp"
     with open(tmp, "w") as f:
-        f.write(str(httpd.server_address[1]))
+        f.write(str(port))
     os.replace(tmp, port_file)
+    print(f"https_server.py: listening on port {port}", file=sys.stderr, flush=True)
 
     httpd.serve_forever()
 

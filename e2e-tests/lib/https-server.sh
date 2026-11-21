@@ -102,8 +102,11 @@ start_https_server() {
     # shellcheck disable=SC2064
     trap "kill $HTTPS_SERVER_PID 2>/dev/null || true" EXIT
 
+    # Python can take several seconds just to start on a CI runner busy with
+    # the other e2e tests (on macOS, signing.sh's server once took over 2s and
+    # http-faults.sh's over 10s), so allow a minute.
     local _
-    for _ in $(seq 1 100); do
+    for _ in $(seq 1 600); do
         [ -s "$port_file" ] && break
         if ! kill -0 "$HTTPS_SERVER_PID" 2>/dev/null; then
             echo "HTTPS server exited before it started listening"
@@ -112,7 +115,7 @@ start_https_server() {
         sleep 0.1
     done
     if [ ! -s "$port_file" ]; then
-        echo "HTTPS server did not start listening in time"
+        echo "HTTPS server did not start listening within a minute"
         return 1
     fi
 
