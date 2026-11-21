@@ -230,8 +230,6 @@ impl Client {
         url: &Url,
     ) -> Result<ControlFlow<reqwest::Response, Result<reqwest::Response, ReqwestError>>, ReqwestError>
     {
-        static HEADER_VALUE_0: HeaderValue = HeaderValue::from_static("0");
-
         let response = match self.0.service.call(request).await {
             Err(err) if err.is_timeout() || err.is_connect() => {
                 let duration = RETRY_DURATION_FOR_TIMEOUT;
@@ -257,20 +255,27 @@ impl Client {
             Ok(ControlFlow::Continue(Ok(response)))
         };
 
-        let headers = response.headers();
-
         // Some server (looking at you, github GraphQL API) may returns a rate limit
         // even when OK is returned or on other status code (e.g. 453 forbidden).
-        if let Some(duration) = parse_header_retry_after(headers) {
-            add_delay_and_continue(response, duration.min(MAX_RETRY_DURATION))
-        } else if headers.get("x-ratelimit-remaining") == Some(&HEADER_VALUE_0) {
-            let duration = headers
-                .get("x-ratelimit-reset")
-                .and_then(parse_header_ratelimit_reset)
-                .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT)
-                .min(MAX_RETRY_DURATION);
-
-            add_delay_and_continue(response, duration)
+        if let Some(duration) = rate_limit_retry_after(response.headers()) {
+            if duration > MAX_RETRY_DURATION {
+                // The limit won't be lifted within our retries (e.g. GitHub's
+                // hourly API rate limit), so waiting would only stall the
+                // caller: hand the response back and let it decide.
+                info!(
+                    "Received status code {status}, rate-limited for {duration:#?}, will not retry"
+                );
+                Ok(ControlFlow::Break(response))
+            } else if status.is_success() {
+                // E.g. the last request GitHub allows before the reset: the
+                // response is fine, only further requests have to wait.
+                self.0
+                    .service
+                    .add_urls_to_delay(&[url, response.url()], duration);
+                Ok(ControlFlow::Break(response))
+            } else {
+                add_delay_and_continue(response, duration)
+            }
         } else {
             match status {
                 // Delay further request on rate limit
@@ -424,6 +429,26 @@ impl Client {
     /// Create a new POST request.
     pub fn post(&self, url: Url, body: impl Into<Body>) -> RequestBuilder {
         self.request(Method::POST, url).body(body.into())
+    }
+}
+
+/// How long `headers` asks to wait before the next request, if they signal a
+/// rate limit: a `Retry-After`, or `x-ratelimit-remaining: 0` with the
+/// `x-ratelimit-reset` time.
+pub fn rate_limit_retry_after(headers: &HeaderMap) -> Option<Duration> {
+    static HEADER_VALUE_0: HeaderValue = HeaderValue::from_static("0");
+
+    if let Some(duration) = parse_header_retry_after(headers) {
+        Some(duration)
+    } else if headers.get("x-ratelimit-remaining") == Some(&HEADER_VALUE_0) {
+        Some(
+            headers
+                .get("x-ratelimit-reset")
+                .and_then(parse_header_ratelimit_reset)
+                .unwrap_or(DEFAULT_RETRY_DURATION_FOR_RATE_LIMIT),
+        )
+    } else {
+        None
     }
 }
 
@@ -690,5 +715,78 @@ mod tests {
             res.is_err(),
             "plaintext http should be rejected unless allow_insecure_http is set"
         );
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_long_rate_limits() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // Like GitHub's REST API once the hourly limit is used up.
+        let server = serve_responses(
+            listener,
+            &[b"HTTP/1.1 403 Forbidden\r\nx-ratelimit-remaining: 0\r\nx-ratelimit-reset: 3600\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"],
+        );
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let start = std::time::Instant::now();
+        let response = test_client(true).get(url).send(false).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            rate_limit_retry_after(response.headers()),
+            Some(Duration::from_secs(3600))
+        );
+        assert!(start.elapsed() < Duration::from_secs(10));
+        assert_eq!(server.join().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn keeps_successful_response_with_rate_limit_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // The last request allowed before the limit resets.
+        let server = serve_responses(
+            listener,
+            &[b"HTTP/1.1 200 OK\r\nx-ratelimit-remaining: 0\r\nx-ratelimit-reset: 1\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"],
+        );
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let body = test_client(true)
+            .get(url)
+            .send(true)
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"ok");
+        assert_eq!(server.join().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn retries_short_rate_limits() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let server = serve_responses(
+            listener,
+            &[
+                b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+            ],
+        );
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let body = test_client(true)
+            .get(url)
+            .send(true)
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"ok");
+        assert_eq!(server.join().unwrap(), 2);
     }
 }

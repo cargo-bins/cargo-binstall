@@ -23,6 +23,17 @@ pub(super) fn check_http_status_and_header(response: Response) -> Result<Respons
         remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized),
         remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound),
 
+        // GitHub answers an exceeded primary or secondary rate limit with
+        // 403 or 429 and rate-limit headers.
+        remote::StatusCode::FORBIDDEN | remote::StatusCode::TOO_MANY_REQUESTS => {
+            match remote::rate_limit_retry_after(response.headers()) {
+                Some(retry_after) => Err(GhApiError::RateLimit {
+                    retry_after: Some(retry_after),
+                }),
+                None => Ok(response.error_for_status()?),
+            }
+        }
+
         _ => Ok(response.error_for_status()?),
     }
 }
@@ -116,13 +127,21 @@ where
 
     async move {
         let response = check_http_status_and_header(res?.await?)?;
+        let rate_limit_retry_after = remote::rate_limit_retry_after(response.headers());
 
         let mut response: GraphQLResponse<T> = response.json().await?;
 
         debug!("response = {response:?}");
 
         if let Some(error) = response.errors.take() {
-            Err(error.into())
+            Err(match GhApiError::from(error) {
+                // GraphQL reports an exceeded rate limit in the body, keep
+                // the reset time from the headers.
+                GhApiError::RateLimit { retry_after: None } => GhApiError::RateLimit {
+                    retry_after: rate_limit_retry_after,
+                },
+                err => err,
+            })
         } else {
             Ok(response.data)
         }
