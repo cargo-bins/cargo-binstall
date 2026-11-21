@@ -24,7 +24,7 @@ use binstalk::{
 };
 use binstalk_manifests::{
     cargo_toml_binstall::{PkgOverride, Strategy},
-    crate_info::{CrateInfo, CrateSource},
+    crate_info::{CrateInfo, CrateSource, PkgUrlHint},
     crates_manifests::Manifests,
 };
 use compact_str::{CompactString, format_compact};
@@ -253,11 +253,12 @@ pub fn install_crates(
     // Resolve crates
     let tasks = crate_names
         .map(|res| {
-            res.map(|(crate_name, current_version)| {
+            res.map(|(crate_name, current_version, pkg_url_hint)| {
                 AutoAbortJoinHandle::spawn(ops::resolve::resolve(
                     binstall_opts.clone(),
                     crate_name,
                     current_version,
+                    pkg_url_hint,
                 ))
             })
         })
@@ -439,13 +440,24 @@ fn read_root_certs(
         })
 }
 
-/// Return vec of (crate_name, current_version)
+type PkgUrlHintForTarget = (CompactString, PkgUrlHint);
+
+/// Return vec of (crate_name, current_version, pkg_url_hint)
 fn filter_out_installed_crates<'a>(
     crate_names: Vec<CrateName>,
     force: bool,
     manifests: Option<&'a Manifests>,
     version_req: Option<VersionReq>,
-) -> impl Iterator<Item = Result<(CrateName, Option<semver::Version>), BinstallError>> + 'a {
+) -> impl Iterator<
+    Item = Result<
+        (
+            CrateName,
+            Option<semver::Version>,
+            Option<PkgUrlHintForTarget>,
+        ),
+        BinstallError,
+    >,
+> + 'a {
     let installed_crates = manifests.map(|m| m.installed_crates());
 
     CrateName::dedup(crate_names)
@@ -480,12 +492,22 @@ fn filter_out_installed_crates<'a>(
 
             // The version req is "*" thus a remote upgraded version could exist
             (false, Some(curr_version), None) => {
-                Some(Ok((crate_name, Some(curr_version.clone()))))
+                let pkg_url_hint = pkg_url_hint(manifests, name);
+                Some(Ok((crate_name, Some(curr_version.clone()), pkg_url_hint)))
             }
 
-            _ => Some(Ok((crate_name, None))),
+            _ => {
+                let pkg_url_hint = pkg_url_hint(manifests, name);
+                Some(Ok((crate_name, None, pkg_url_hint)))
+            }
         }
     })
+}
+
+/// How binstall found the installed version, to try first when updating.
+fn pkg_url_hint(manifests: Option<&Manifests>, name: &str) -> Option<PkgUrlHintForTarget> {
+    let record = manifests?.binstall_record(name)?;
+    Some((record.target.clone(), record.pkg_url_hint.clone()?))
 }
 
 #[allow(clippy::vec_box)]
@@ -603,6 +625,7 @@ pub fn self_install(args: Args) -> Result<()> {
             source: CrateSource::cratesio_registry(),
             target: CompactString::const_new(TARGET),
             bins: vec![CompactString::const_new("cargo-binstall")],
+            pkg_url_hint: None,
         }])?;
     }
 

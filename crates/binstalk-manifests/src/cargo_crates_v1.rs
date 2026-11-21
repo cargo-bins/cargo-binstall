@@ -247,6 +247,7 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
+                pkg_url_hint: None,
             }],
         )
         .unwrap();
@@ -273,6 +274,7 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
+                pkg_url_hint: None,
             }],
         )
         .unwrap();

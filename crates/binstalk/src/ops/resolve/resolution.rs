@@ -101,6 +101,7 @@ impl ResolutionFetch {
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
             bins: Self::resolve_bins(&opts.bins, self.bin_files),
+            pkg_url_hint: self.fetcher.pkg_url_hint(),
         })
     }
 

@@ -99,6 +99,12 @@ impl Manifests {
         &self.installed_crates
     }
 
+    /// The binstall record of an installed crate, if it was installed by
+    /// binstall.
+    pub fn binstall_record(&self, name: &str) -> Option<&CrateInfo> {
+        self.binstall.get(name)
+    }
+
     pub fn list_crates(&self) -> Vec<InstalledCrateInfo> {
         self.installed_crates_details
             .iter()
@@ -212,6 +218,7 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: "x86_64-unknown-linux-gnu".into(),
                 bins: vec!["cargo-watch".into()],
+                pkg_url_hint: None,
             },
             // sccache drifted: binstall has 0.17.0, cargo has 0.18.0
             CrateInfo {
@@ -221,6 +228,7 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: "x86_64-unknown-linux-gnu".into(),
                 bins: vec!["sccache".into()],
+                pkg_url_hint: None,
             },
             // uninstalled-crate: in binstall manifest, but absent from .crates.toml
             CrateInfo {
@@ -230,6 +238,7 @@ mod tests {
                 source: CrateSource::cratesio_registry(),
                 target: "x86_64-unknown-linux-gnu".into(),
                 bins: vec!["uninstalled-crate".into()],
+                pkg_url_hint: None,
             },
         ];
         append_to_path(&binstall_json_path, binstall_data).unwrap();
@@ -316,6 +325,7 @@ mod tests {
             source: CrateSource::cratesio_registry(),
             target: "x86_64-unknown-linux-gnu".into(),
             bins: vec!["sccache".into()],
+            pkg_url_hint: None,
         }];
         append_to_path(&binstall_json_path, binstall_data).unwrap();
 
@@ -327,6 +337,7 @@ mod tests {
             source: CrateSource::cratesio_registry(),
             target: "x86_64-unknown-linux-gnu".into(),
             bins: vec!["new-tool".into()],
+            pkg_url_hint: None,
         };
         manifests.update(vec![new_crate]).unwrap();
 
