@@ -164,6 +164,7 @@ mod tests {
             source: CrateSource::cratesio_registry(),
             target: "x86_64-unknown-linux-musl".into(),
             bins: bins.iter().map(|bin| (*bin).into()).collect(),
+            pkg_url_hint: None,
         }
     }
 

@@ -4,7 +4,10 @@ use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
-use binstalk_types::cargo_toml_binstall::{SigningAlgorithm, Strategy};
+use binstalk_types::{
+    cargo_toml_binstall::{SigningAlgorithm, Strategy},
+    crate_info::PkgUrlHint,
+};
 use thiserror::Error as ThisError;
 use tokio::{sync::OnceCell, task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
@@ -169,6 +172,12 @@ pub trait Fetcher: Send + Sync {
     fn resolved_target_arch(&self) -> Option<&str> {
         None
     }
+
+    /// How [`Fetcher::find`] found the package, worth trying first next time,
+    /// see [`Data::with_pkg_url_hint`].
+    fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
+        None
+    }
 }
 
 /// [`leon::Values`] that gives `target-arch` from
@@ -216,6 +225,8 @@ pub struct Data {
     version: CompactString,
     repo: Option<String>,
     repo_info: OnceCell<Option<RepoInfo>>,
+    /// The target the hint was found for, and the hint.
+    pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
 
 impl Data {
@@ -225,7 +236,26 @@ impl Data {
             version,
             repo,
             repo_info: OnceCell::new(),
+            pkg_url_hint: None,
         }
+    }
+
+    /// Have fetchers try how a previous version was found on `target` first,
+    /// before probing everything else.
+    ///
+    /// It is ignored unless it was found with this [`Data`]'s name.
+    pub fn with_pkg_url_hint(mut self, target: CompactString, hint: PkgUrlHint) -> Self {
+        if hint.name == self.name {
+            self.pkg_url_hint = Some((target, hint));
+        }
+        self
+    }
+
+    fn pkg_url_hint(&self, target: &str) -> Option<&PkgUrlHint> {
+        self.pkg_url_hint
+            .as_ref()
+            .filter(|(hint_target, _)| hint_target == target)
+            .map(|(_, hint)| hint)
     }
 
     #[instrument(skip(client))]

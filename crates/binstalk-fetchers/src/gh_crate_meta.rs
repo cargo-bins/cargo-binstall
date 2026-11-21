@@ -6,7 +6,7 @@ use std::{
 };
 
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
-use binstalk_types::cargo_toml_binstall::Strategy;
+use binstalk_types::{cargo_toml_binstall::Strategy, crate_info::PkgUrlHint};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use itertools::Itertools;
@@ -46,6 +46,32 @@ struct Resolved {
     /// The alias from [`target_arch_aliases`] that `{ target-arch }` was
     /// rendered as in `url`, if not the architecture's own name.
     target_arch: Option<&'static str>,
+    /// The default `pkg-url` that `url` was rendered from, see
+    /// [`PkgUrlHint::pkg_url`]. `None` if the crate specified `pkg-url`.
+    default_pkg_url: Option<CompactString>,
+}
+
+/// Write `template` back in the syntax [`Template::parse`] reads.
+fn template_to_string(template: &Template<'_>) -> CompactString {
+    let mut s = CompactString::default();
+    for item in template.items.iter() {
+        match item {
+            leon::Item::Text(text) => {
+                for c in text.chars() {
+                    if matches!(c, '\\' | '{' | '}') {
+                        s.push('\\');
+                    }
+                    s.push(c);
+                }
+            }
+            leon::Item::Key(key) => {
+                s.push_str("{ ");
+                s.push_str(key);
+                s.push_str(" }");
+            }
+        }
+    }
+    s
 }
 
 /// Other names commonly used for an architecture in release assets, tried
@@ -126,6 +152,14 @@ impl GhCrateMeta {
         subcrate: Option<&str>,
         is_repo_private: bool,
     ) {
+        // `pkg_url` is one of the defaults unless the crate specified it.
+        let default_pkg_url = self
+            .target_data
+            .meta
+            .pkg_url
+            .is_none()
+            .then(|| template_to_string(pkg_url));
+
         let urls = candidate_urls(
             &self.data,
             &self.target_data.target,
@@ -145,6 +179,7 @@ impl GhCrateMeta {
             let subcrate = subcrate.map(ToString::to_string);
             let archive_suffix = ext.map(ToString::to_string);
             let gh_release_artifact = GhReleaseArtifact::try_extract_from_url(&url);
+            let default_pkg_url = default_pkg_url.clone();
 
             async move {
                 debug!("Checking for package at: '{url}'");
@@ -158,6 +193,7 @@ impl GhCrateMeta {
                     is_repo_private,
                     gh_release_artifact_url: None,
                     target_arch,
+                    default_pkg_url,
                 };
 
                 if let Some(artifact) = gh_release_artifact {
@@ -229,7 +265,9 @@ impl super::Fetcher for GhCrateMeta {
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-            let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+            let (pkg_urls, is_default_pkg_url) = if let Some(pkg_url) =
+                self.target_data.meta.pkg_url.as_deref()
+            {
                 let template = Template::parse(pkg_url)?;
 
                 if pkg_fmt.is_none()
@@ -271,7 +309,7 @@ impl super::Fetcher for GhCrateMeta {
                     );
                 }
 
-                Either::Left(iter::once(template))
+                (Either::Left(iter::once(template)), false)
             } else if let Some(RepoInfo {
                 repo,
                 repository_host,
@@ -281,13 +319,18 @@ impl super::Fetcher for GhCrateMeta {
                 if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
                     let has_subcrate = subcrate.is_some();
 
-                    Either::Right(
-                        pkg_urls
-                            .map(Template::cast)
-                            // If subcrate is Some, then all templates will be included.
-                            // Otherwise, only templates without key "subcrate" will be
-                            // included.
-                            .filter(move |template| has_subcrate || !template.has_key("subcrate")),
+                    (
+                        Either::Right(
+                            pkg_urls
+                                .map(Template::cast)
+                                // If subcrate is Some, then all templates will be included.
+                                // Otherwise, only templates without key "subcrate" will be
+                                // included.
+                                .filter(move |template| {
+                                    has_subcrate || !template.has_key("subcrate")
+                                }),
+                        ),
+                        true,
                     )
                 } else {
                     warn!(
@@ -324,6 +367,50 @@ impl super::Fetcher for GhCrateMeta {
             } else {
                 Either::Right(PkgFmt::iter())
             };
+
+            // Try how a previous version was found first: it is one template
+            // instead of all of them, times every pkg-fmt.
+            //
+            // Only a hint that is still one of the default templates is used,
+            // and only if it agrees with the crate's pkg-fmt, if any.
+            if is_default_pkg_url
+                && let Some(PkgUrlHint {
+                    pkg_url: hint_pkg_url,
+                    pkg_fmt: hint_pkg_fmt,
+                    ..
+                }) = self.data.pkg_url_hint(&self.target_data.target)
+                && pkg_fmt.is_none_or(|pkg_fmt| pkg_fmt == *hint_pkg_fmt)
+            {
+                if let Some(pkg_url) = pkg_urls
+                    .clone()
+                    .find(|pkg_url| template_to_string(pkg_url) == *hint_pkg_url)
+                {
+                    let resolver = FuturesResolver::default();
+                    this.launch_baseline_find_tasks(
+                        &resolver,
+                        *hint_pkg_fmt,
+                        &pkg_url,
+                        repo,
+                        subcrate,
+                        is_repo_private,
+                    );
+
+                    if let Some(resolved) = resolver.resolve().await {
+                        debug!(
+                            ?resolved,
+                            "Found package with the pkg-url of the last install"
+                        );
+                        self.resolution
+                            .set(resolved)
+                            .expect("find() should be only called once");
+                        return Ok(true);
+                    }
+                }
+
+                debug!(
+                    "pkg-url {hint_pkg_url} of the last install did not match, trying all default pkg-url"
+                );
+            }
 
             let resolver = FuturesResolver::default();
 
@@ -448,6 +535,15 @@ impl super::Fetcher for GhCrateMeta {
 
     fn resolved_target_arch(&self) -> Option<&str> {
         self.resolution.get()?.target_arch
+    }
+
+    fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
+        let resolved = self.resolution.get()?;
+        Some(PkgUrlHint {
+            name: self.data.name.clone(),
+            pkg_url: resolved.default_pkg_url.clone()?,
+            pkg_fmt: resolved.pkg_fmt,
+        })
     }
 
     fn source_name(&self) -> CompactString {
@@ -784,6 +880,44 @@ mod test {
             ".bin",
             "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ binary-ext }",
             "https://github.com/watchexec/cargo-watch/releases/download/v9.0.0/cargo-watch-v9.0.0-aarch64-pc-windows-msvc.exe",
+        );
+    }
+
+    #[test]
+    fn template_to_string_round_trips() {
+        use super::{hosting::RepositoryHost, template_to_string};
+
+        let hosts = [
+            RepositoryHost::GitHub,
+            RepositoryHost::GitLab,
+            RepositoryHost::BitBucket,
+            RepositoryHost::SourceForge,
+            RepositoryHost::Codeberg,
+        ];
+        let mut count = 0;
+        for template in hosts
+            .into_iter()
+            .flat_map(|host| host.get_default_pkg_url_template().unwrap())
+        {
+            let s = template_to_string(&template);
+            assert_eq!(
+                template_to_string(&Template::parse(&s).unwrap()),
+                s,
+                "{template:?}"
+            );
+            count += 1;
+        }
+        assert!(count > 0);
+
+        let template = Template::parse(r"\{ { name } \} \\").unwrap();
+        let s = template_to_string(&template);
+        assert_eq!(s, r"\{ { name } \} \\");
+        assert_eq!(
+            Template::parse(&s)
+                .unwrap()
+                .render(&[("name", "a")])
+                .unwrap(),
+            r"{ a } \"
         );
     }
 }
