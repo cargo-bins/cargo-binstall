@@ -276,6 +276,7 @@ by rust officially."#,
             self.package_url.clone(),
             data_verifier.as_mut(),
         )
+        .with_unpack_limit(self.data.unpack_limit)
         .and_extract(self.pkg_fmt(), dst)
         .await?;
         trace!("validating signature (if any)");

@@ -123,9 +123,12 @@ async fn resolve_inner(
 
     let gh_api_client = opts.gh_api_client.get().await?;
 
-    let with_pkg_url_hint = |data: Data| match pkg_url_hint.clone() {
-        Some((target, hint)) => data.with_pkg_url_hint(target, hint),
-        None => data,
+    let prepare_data = |data: Data| {
+        let data = data.with_unpack_limit(opts.unpack_limit);
+        match pkg_url_hint.clone() {
+            Some((target, hint)) => data.with_pkg_url_hint(target, hint),
+            None => data,
+        }
     };
 
     let mut handles_fn =
@@ -163,10 +166,10 @@ async fn resolve_inner(
     // Shares what is known about the repository with `data`.
     let binary_data = binary_name.map(|binary_name| data.with_name(binary_name));
 
-    handles_fn(Arc::new(with_pkg_url_hint(data)), |_| true);
+    handles_fn(Arc::new(prepare_data(data)), |_| true);
 
     if let Some(binary_data) = binary_data {
-        handles_fn(Arc::new(with_pkg_url_hint(binary_data)), |name| {
+        handles_fn(Arc::new(prepare_data(binary_data)), |name| {
             name == FETCHER_GH_CRATE_META
         });
     }
