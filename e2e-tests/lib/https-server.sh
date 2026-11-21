@@ -91,8 +91,10 @@ start_https_server() {
     # shellcheck disable=SC2064
     trap "kill $HTTPS_SERVER_PID 2>/dev/null || true" EXIT
 
+    # Up to 60s: on a loaded macOS runner, with the other e2e tests running in
+    # parallel, a cold python3 start has taken longer than 10s.
     local _
-    for _ in $(seq 1 100); do
+    for _ in $(seq 1 600); do
         [ -s "$port_file" ] && break
         if ! kill -0 "$HTTPS_SERVER_PID" 2>/dev/null; then
             echo "HTTPS server exited before it started listening"
