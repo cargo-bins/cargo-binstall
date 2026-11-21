@@ -184,6 +184,16 @@ Some crate installation strategies may collect anonymized usage statistics by de
    Disabled by default, since `cargo install` does not honor Cargo's `min-publish-age` config for the installed crate either. It does not apply to `--manifest-path` or `--git`.
 
    It is forwarded to the `cargo install` fallback via `--config`, but cargo 1.100 ignores it there, so the dependencies built by the fallback are not filtered.
+* `--max-unpack-size <SIZE>` — The most a package may always unpack to, against decompression bombs.
+
+   Extraction stops with an error once an archive has unpacked to more than both this and `--max-unpack-ratio` times its compressed size.
+
+   A number of bytes, optionally followed by `KiB`, `MiB`, `GiB` or `TiB` (or `K`, `M`, `G`, `T`), e.g. `2GiB`, or `unlimited` to never stop.
+
+   Default is 512MiB.
+* `--max-unpack-ratio <RATIO>` — How many times its compressed size an archive may unpack to once it is past `--max-unpack-size`.
+
+   Default is 20.
 * `--locked` — This option will be passed through to all `cargo-install` invocations.
 
    It will require `Cargo.lock` to be up to date.

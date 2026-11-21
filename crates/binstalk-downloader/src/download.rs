@@ -32,6 +32,10 @@ mod zip_extraction;
 mod resumable;
 use resumable::resumable_stream;
 
+mod unpack_limit;
+use unpack_limit::UnpackBudget;
+pub use unpack_limit::UnpackLimit;
+
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
 pub enum DownloadError {
@@ -40,6 +44,13 @@ pub enum DownloadError {
 
     #[error("Failed to download from remote: {0}")]
     Remote(#[from] RemoteError),
+
+    /// The archive unpacked to more than its [`UnpackLimit`] allows, which
+    /// is most likely a decompression bomb.
+    #[error(
+        "Archive unpacks to more than {allowed} bytes after {compressed} bytes of it were downloaded, refusing to extract further (possible decompression bomb)"
+    )]
+    UnpackLimitExceeded { compressed: u64, allowed: u64 },
 
     /// A generic I/O error.
     ///
@@ -165,6 +176,7 @@ pub struct Download<'a> {
     content: DownloadContent,
     data_verifier: Option<&'a mut dyn DataVerifier>,
     resume: bool,
+    unpack_limit: UnpackLimit,
 }
 
 impl fmt::Debug for Download<'_> {
@@ -179,6 +191,7 @@ impl Download<'static> {
             content: DownloadContent::ToIssue { client, url },
             data_verifier: None,
             resume: true,
+            unpack_limit: UnpackLimit::DEFAULT,
         }
     }
 
@@ -187,6 +200,7 @@ impl Download<'static> {
             content: DownloadContent::Response(response),
             data_verifier: None,
             resume: true,
+            unpack_limit: UnpackLimit::DEFAULT,
         }
     }
 }
@@ -201,6 +215,7 @@ impl<'a> Download<'a> {
             content: DownloadContent::ToIssue { client, url },
             data_verifier: Some(data_verifier),
             resume: true,
+            unpack_limit: UnpackLimit::DEFAULT,
         }
     }
 
@@ -212,6 +227,7 @@ impl<'a> Download<'a> {
             content: DownloadContent::Response(response),
             data_verifier: Some(data_verifier),
             resume: true,
+            unpack_limit: UnpackLimit::DEFAULT,
         }
     }
 
@@ -220,6 +236,7 @@ impl<'a> Download<'a> {
             content: self.content,
             data_verifier: Some(data_verifier),
             resume: self.resume,
+            unpack_limit: self.unpack_limit,
         }
     }
 
@@ -242,20 +259,42 @@ impl<'a> Download<'a> {
         }
     }
 
+    /// Cap how much [`Download::and_extract`] may unpack the download to,
+    /// [`UnpackLimit::DEFAULT`] unless set.
+    ///
+    /// Extraction fails with [`DownloadError::UnpackLimitExceeded`] once the
+    /// download goes over it. It counts the bytes extraction writes to disk,
+    /// at the places that write them, so a format whose extractor does not
+    /// count them yet (tar) is not capped.
+    pub fn with_unpack_limit(self, unpack_limit: UnpackLimit) -> Self {
+        Self {
+            unpack_limit,
+            ..self
+        }
+    }
+
+    /// The body as a stream, along with the [`UnpackBudget`] it records its
+    /// bytes in for the extractor to draw from.
     async fn get_stream(
         self,
     ) -> Result<
-        impl FusedStream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'a,
+        (
+            impl FusedStream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin + 'a,
+            UnpackBudget,
+        ),
         DownloadError,
     > {
         let mut data_verifier = self.data_verifier;
-        Ok(self
+        let budget = UnpackBudget::new(self.unpack_limit);
+        let compressed = budget.clone();
+        let stream = self
             .content
             .into_byte_stream(self.resume)
             .await?
             .map(move |res| {
                 let bytes = res?;
 
+                compressed.add_compressed(bytes.len());
                 if let Some(data_verifier) = &mut data_verifier {
                     data_verifier.update(&bytes);
                 }
@@ -264,7 +303,9 @@ impl<'a> Download<'a> {
             })
             // Call `fuse` at the end to make sure `data_verifier` is only
             // called when the stream still has elements left.
-            .fuse())
+            .fuse();
+
+        Ok((stream, budget))
     }
 }
 
@@ -299,7 +340,7 @@ impl Download<'_> {
         visitor: &mut dyn TarEntriesVisitor,
     ) -> Result<(), DownloadError> {
         let has_data_verifier = self.data_verifier.is_some();
-        let mut stream = self.get_stream().await?;
+        let (mut stream, _) = self.get_stream().await?;
 
         debug!("Downloading and extracting then in-memory processing");
 
@@ -334,7 +375,7 @@ impl Download<'_> {
             path: &Path,
         ) -> Result<ExtractedFiles, DownloadError> {
             let has_data_verifier = this.data_verifier.is_some();
-            let mut stream = this.get_stream().await?;
+            let (mut stream, budget) = this.get_stream().await?;
 
             debug!("Downloading and extracting to: '{}'", path.display());
 
@@ -342,11 +383,11 @@ impl Download<'_> {
                 PkgFmtDecomposed::Tar(fmt) => {
                     extract_tar_based_stream(&mut stream, path, fmt).await
                 }
-                PkgFmtDecomposed::Bin => extract_bin(&mut stream, path).await,
+                PkgFmtDecomposed::Bin => extract_bin(&mut stream, path, budget).await,
                 PkgFmtDecomposed::CompressedBin(fmt) => {
-                    extract_compressed_bin(&mut stream, path, fmt).await
+                    extract_compressed_bin(&mut stream, path, fmt, budget).await
                 }
-                PkgFmtDecomposed::Zip => extract_zip(&mut stream, path).await,
+                PkgFmtDecomposed::Zip => extract_zip(&mut stream, path, budget).await,
             };
 
             if has_data_verifier {

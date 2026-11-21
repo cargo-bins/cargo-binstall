@@ -8,7 +8,7 @@ use crate::{
     DesiredTargets,
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
     helpers::{
-        gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient,
+        UnpackLimit, gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient,
         lazy_gh_api_client::LazyGhApiClient, remote::Client,
     },
     manifests::cargo_toml_binstall::PkgOverride,
@@ -69,6 +69,8 @@ pub struct Options {
     pub registry: ResolvedRegistry,
 
     pub signature_policy: SignaturePolicy,
+    /// How much a package may unpack to.
+    pub unpack_limit: UnpackLimit,
     pub disable_telemetry: bool,
 
     pub maximum_resolution_timeout: Duration,

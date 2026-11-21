@@ -402,6 +402,37 @@ pub struct Args {
     )]
     pub(crate) min_publish_age: Option<Duration>,
 
+    /// The most a package may always unpack to, against decompression
+    /// bombs.
+    ///
+    /// Extraction stops with an error once an archive has unpacked to more
+    /// than both this and `--max-unpack-ratio` times its compressed size.
+    ///
+    /// A number of bytes, optionally followed by `KiB`, `MiB`, `GiB` or `TiB`
+    /// (or `K`, `M`, `G`, `T`), e.g. `2GiB`, or `unlimited` to never stop.
+    ///
+    /// Default is 512MiB.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        env = "BINSTALL_MAX_UNPACK_SIZE",
+        value_name = "SIZE",
+        value_parser = parse_unpack_size,
+    )]
+    pub(crate) max_unpack_size: Option<u64>,
+
+    /// How many times its compressed size an archive may unpack to once it is
+    /// past `--max-unpack-size`.
+    ///
+    /// Default is 20.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        env = "BINSTALL_MAX_UNPACK_RATIO",
+        value_name = "RATIO"
+    )]
+    pub(crate) max_unpack_ratio: Option<u64>,
+
     /// This option will be passed through to all `cargo-install` invocations.
     ///
     /// It will require `Cargo.lock` to be up to date.
@@ -613,6 +644,36 @@ pub struct Args {
     #[cfg(feature = "clap-markdown")]
     #[clap(long, hide = true)]
     pub(crate) markdown_help: bool,
+}
+
+/// Parse `--max-unpack-size`: bytes with an optional binary unit, or
+/// `unlimited`.
+fn parse_unpack_size(s: &str) -> Result<u64, String> {
+    let s = s.trim();
+    if s.eq_ignore_ascii_case("unlimited") {
+        return Ok(u64::MAX);
+    }
+
+    let split = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    let (num, unit) = s.split_at(split);
+    let shift = match unit.trim().to_ascii_lowercase().as_str() {
+        "" | "b" => 0,
+        "k" | "kib" => 10,
+        "m" | "mib" => 20,
+        "g" | "gib" => 30,
+        "t" | "tib" => 40,
+        unit => {
+            return Err(format!(
+                "unknown unit `{unit}`, expected KiB, MiB, GiB or TiB"
+            ));
+        }
+    };
+    let num: u64 = num
+        .parse()
+        .map_err(|_| format!("`{s}` is not a size, such as `512MiB`"))?;
+
+    num.checked_mul(1 << shift)
+        .ok_or_else(|| format!("`{s}` is too large"))
 }
 
 #[derive(Debug, Clone)]
@@ -968,6 +1029,21 @@ mod test {
     #[test]
     fn verify_cli() {
         Args::command().debug_assert()
+    }
+
+    #[test]
+    fn test_parse_unpack_size() {
+        assert_eq!(parse_unpack_size("0"), Ok(0));
+        assert_eq!(parse_unpack_size("1234"), Ok(1234));
+        assert_eq!(parse_unpack_size("512MiB"), Ok(512 << 20));
+        assert_eq!(parse_unpack_size("2 GiB"), Ok(2 << 30));
+        assert_eq!(parse_unpack_size("3g"), Ok(3 << 30));
+        assert_eq!(parse_unpack_size("1T"), Ok(1 << 40));
+        assert_eq!(parse_unpack_size("Unlimited"), Ok(u64::MAX));
+
+        for bad in ["", "MiB", "1.5GiB", "-1", "1PiB", "99999999999TiB"] {
+            assert!(parse_unpack_size(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

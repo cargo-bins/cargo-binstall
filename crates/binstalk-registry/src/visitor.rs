@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use binstalk_downloader::download::{DownloadError, TarEntriesVisitor, TarEntry};
 use binstalk_types::cargo_toml_binstall::Meta;
@@ -8,6 +11,14 @@ use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use crate::{RegistryError, vfs::Vfs};
+
+/// The most of a crate's `Cargo.toml` that is read into memory.
+///
+/// A normalised `Cargo.toml` is kilobytes even for crates with thousands of
+/// features, and the tarball's checksum is only checked once all of it has
+/// been read, so the size in its tar header can't be trusted to size the
+/// buffer by.
+const MAX_CARGO_TOML_SIZE: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug)]
 pub(super) struct ManifestVisitor {
@@ -55,9 +66,24 @@ impl TarEntriesVisitor for ManifestVisitor {
             // multiple times using `tar --keep-old-files`, here we
             // clear the buffer first before reading into it.
             self.cargo_toml_content.clear();
-            self.cargo_toml_content
-                .reserve_exact(entry.size()?.try_into().unwrap_or(usize::MAX));
-            entry.read_to_end(&mut self.cargo_toml_content).await?;
+            self.cargo_toml_content.reserve_exact(
+                entry
+                    .size()?
+                    .min(MAX_CARGO_TOML_SIZE)
+                    .try_into()
+                    .unwrap_or(usize::MAX),
+            );
+            entry
+                .take(MAX_CARGO_TOML_SIZE + 1)
+                .read_to_end(&mut self.cargo_toml_content)
+                .await?;
+            if self.cargo_toml_content.len() as u64 > MAX_CARGO_TOML_SIZE {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Cargo.toml is larger than {MAX_CARGO_TOML_SIZE} bytes"),
+                )
+                .into());
+            }
         }
 
         Ok(())
@@ -77,5 +103,78 @@ impl ManifestVisitor {
 
         // Return metadata
         Ok(manifest)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        borrow::Cow,
+        pin::Pin,
+        task::{Context, Poll},
+    };
+
+    use binstalk_downloader::download::TarEntryType;
+    use tokio::io::{AsyncRead, ReadBuf};
+
+    use super::*;
+
+    /// A `Cargo.toml` entry whose header claims `size` bytes and whose body
+    /// is `left` bytes of `#`, a TOML comment.
+    #[derive(Debug)]
+    struct Entry {
+        size: u64,
+        left: u64,
+    }
+
+    impl AsyncRead for Entry {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            let n = buf
+                .remaining()
+                .min(self.left.try_into().unwrap_or(usize::MAX));
+            buf.put_slice(&vec![b'#'; n]);
+            self.left -= n as u64;
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    impl TarEntry for Entry {
+        fn path(&self) -> io::Result<Cow<'_, Path>> {
+            Ok(Path::new("krate-1.0.0/Cargo.toml").into())
+        }
+
+        fn size(&self) -> io::Result<u64> {
+            Ok(self.size)
+        }
+
+        fn entry_type(&self) -> TarEntryType {
+            TarEntryType::Regular
+        }
+    }
+
+    async fn visit(size: u64, len: u64) -> Result<usize, DownloadError> {
+        let mut visitor = ManifestVisitor::new("krate-1.0.0".into());
+        visitor.visit(&mut Entry { size, left: len }).await?;
+        Ok(visitor.cargo_toml_content.len())
+    }
+
+    #[tokio::test]
+    async fn header_size_is_not_trusted() {
+        // Reserving this much up front would abort the process.
+        assert_eq!(visit(u64::MAX, 10).await.unwrap(), 10);
+    }
+
+    #[tokio::test]
+    async fn oversized_cargo_toml_is_rejected() {
+        assert_eq!(
+            visit(0, MAX_CARGO_TOML_SIZE).await.unwrap() as u64,
+            MAX_CARGO_TOML_SIZE
+        );
+        visit(0, MAX_CARGO_TOML_SIZE + 1).await.unwrap_err();
+        visit(0, u64::MAX).await.unwrap_err();
     }
 }
