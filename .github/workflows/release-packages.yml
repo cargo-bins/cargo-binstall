@@ -16,8 +16,15 @@ on:
         required: false
         type: boolean
         default: false
+      e2e-tests:
+        description: "Run the e2e tests on the packages of matrix entries with r set; must be false for real releases"
+        required: false
+        type: boolean
+        default: false
     secrets:
       CI_RELEASE_TEST_GITHUB_TOKEN:
+        required: false
+      CI_TEST_GITHUB_TOKEN:
         required: false
 
 permissions:
@@ -35,12 +42,13 @@ jobs:
       matrix:
         include:
           - { o: macos-latest, t: x86_64-apple-darwin }
-          - { o: macos-latest, t: aarch64-apple-darwin }
+          - { o: macos-latest, t: aarch64-apple-darwin, r: true }
           - {
               o: ubuntu-latest,
               t: x86_64-unknown-linux-gnu,
               g: 2.17,
               c: true,
+              r: true,
             }
           - {
               o: ubuntu-latest,
@@ -52,7 +60,7 @@ jobs:
           - { o: ubuntu-latest, t: x86_64-unknown-linux-musl, c: true }
           - { o: ubuntu-latest, t: armv7-unknown-linux-musleabihf, c: true }
           - { o: ubuntu-latest, t: aarch64-unknown-linux-musl, c: true }
-          - { o: windows-latest, t: x86_64-pc-windows-msvc }
+          - { o: windows-latest, t: x86_64-pc-windows-msvc, r: true }
           - { o: windows-11-arm, t: aarch64-pc-windows-msvc }
           - { o: ubuntu-latest, t: riscv64gc-unknown-linux-musl, c: true }
 
@@ -101,12 +109,6 @@ jobs:
       - if: runner.os != 'Windows'
         run: ls -shal packages/
 
-      - name: Ensure release binary is runnable
-        if: "matrix.r"
-        run: just e2e-tests
-        env:
-          GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN }}
-
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -120,6 +122,14 @@ jobs:
           name: ${{ matrix.t }}-cargo-timings
           path: target/cargo-timings
           retention-days: 1
+
+      # After the uploads, so that a failing e2e test still leaves the
+      # package and timings to look at.
+      - name: Run e2e tests on the release binary
+        if: inputs.e2e-tests && matrix.r
+        run: just e2e-tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN }}
 
   lipo:
     needs: build
