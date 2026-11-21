@@ -1,0 +1,15 @@
+[package]
+name = "unpack-limit-test"
+description = "Rust binary package installer for CI integration"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+
+[[bin]]
+name = "unpack-limit-test"
+path = "src/main.rs"
+
+[package.metadata.binstall]
+# pkg-url and pkg-fmt are passed by unpack-limit.sh, since the local server
+# picks its port. bin-dir is where the zip holds the binary.
+bin-dir = "payload"
