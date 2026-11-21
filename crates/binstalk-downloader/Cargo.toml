@@ -64,7 +64,7 @@ astral-tokio-tar = "0.7.0"
 tokio-util = { version = "0.7.18", features = ["io"] }
 tracing = "0.1.43"
 hickory-resolver = { version = "0.26.1", optional = true, features = [
-    "dnssec-ring",
+    "dnssec-aws-lc-rs",
 ] }
 once_cell = { version = "1.18.0", optional = true }
 url = "2.5.8"
@@ -102,11 +102,11 @@ rustls = [
     "reqwest/rustls",
 
     # Enable the following features only if hickory-resolver is enabled.
-    "hickory-resolver?/tls-ring",
+    "hickory-resolver?/tls-aws-lc-rs",
     # hickory-resolver currently supports https with rustls
-    "hickory-resolver?/https-ring",
-    "hickory-resolver?/quic-ring",
-    "hickory-resolver?/h3-ring",
+    "hickory-resolver?/https-aws-lc-rs",
+    "hickory-resolver?/quic-aws-lc-rs",
+    "hickory-resolver?/h3-aws-lc-rs",
 ]
 native-tls = ["__tls", "native-tls-crate", "reqwest/native-tls"]
 

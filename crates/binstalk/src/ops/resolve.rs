@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, TargetData},
+    fetchers::{Data, Fetcher, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -385,6 +385,13 @@ fn collect_bin_files(
     no_symlinks: bool,
     extracted_files: &ExtractedFiles,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
+    // `bin-dir` must use the same `{ target-arch }` as the URL the package
+    // was found at.
+    let target_related_info = TargetArchOverride {
+        values: &fetcher.target_data().target_related_info,
+        target_arch: fetcher.resolved_target_arch(),
+    };
+
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
@@ -395,7 +402,7 @@ fn collect_bin_files(
         meta,
         bin_path,
         install_path,
-        target_related_info: &fetcher.target_data().target_related_info,
+        target_related_info: &target_related_info,
     };
 
     let bin_dir = bin_data
@@ -433,6 +440,7 @@ fn collect_bin_files(
                 &bin_data,
                 bin.name.as_str(),
                 &template,
+                &mut |p| extracted_files.get_dir(p).is_some(),
                 no_symlinks,
                 aliases,
             )

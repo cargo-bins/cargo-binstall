@@ -2,28 +2,57 @@
 
 set -euxo pipefail
 
-echo Generate tls cert
+# shellcheck disable=SC1091
+source lib/https-server.sh
 
-CERT_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'cert-dir')
-export CERT_DIR
+# signing/signing-test.tar, signed by signing/minisign.key, plus two broken
+# copies of it: one whose signature no longer matches, one without a
+# signature at all.
+serve_dir="$(mktemp -d 2>/dev/null || mktemp -d -t 'signing-serve')"
+cp signing/signing-test.tar signing/signing-test.tar.sig "$serve_dir/"
+cp signing/signing-test.tar "$serve_dir/tampered.tar"
+printf 'tampered' >>"$serve_dir/tampered.tar"
+cp signing/signing-test.tar.sig "$serve_dir/tampered.tar.sig"
+cp signing/signing-test.tar "$serve_dir/unsigned.tar"
 
-openssl req -newkey rsa:4096 -x509 -sha256 -days 1 -nodes -out "$CERT_DIR/"ca.pem -keyout "$CERT_DIR/"ca.key -subj '//C=UT/CN=ca.localhost'
-openssl req -new -newkey rsa:4096 -sha256 -nodes -out "$CERT_DIR/"server.csr -keyout "$CERT_DIR/"server.key -subj '//C=UT/CN=localhost'
-openssl x509 -req -in "$CERT_DIR/"server.csr -CA "$CERT_DIR/"ca.pem -CAkey "$CERT_DIR/"ca.key -CAcreateserial -out "$CERT_DIR/"server.pem -days 1 -sha256 -extfile signing/server.ext
+start_https_server "$serve_dir"
 
-python3 signing/server.py &
-server_pid=$!
-trap 'kill $server_pid' ERR INT TERM
+install() {
+    "$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm \
+        --strategies crate-meta-data \
+        --pkg-url "$HTTPS_SERVER_URL/$2" "${@:3}" signing-test
+}
 
-export BINSTALL_HTTPS_ROOT_CERTS="$CERT_DIR/ca.pem"
+log="$serve_dir/log"
 
-signing/wait-for-server.sh
+# expect_failure EXE REASON PKG ARGS...: the install must fail, because of
+# REASON rather than anything else.
+expect_failure() {
+    set +e
+    install "$1" "${@:3}" 2>&1 | tee "$log"
+    exit_code="${PIPESTATUS[0]}"
+    set -e
 
-"$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm signing-test
-"$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --only-signed signing-test
-"$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm --skip-signatures signing-test
+    if [ "$exit_code" != 94 ]; then
+        echo "Expected installing $3 with ${*:4} to fail with exit code 94, got $exit_code"
+        exit 1
+    fi
+    grep -F "$2" "$log"
+}
+
+install "$1" signing-test.tar
+install "$1" signing-test.tar --only-signed
+install "$1" signing-test.tar --skip-signatures
+
+# The manifest has a signing section, so a bad signature is an error whether
+# or not --only-signed is passed.
+expect_failure "$1" "Failed to verify signature" tampered.tar
+expect_failure "$1" "Failed to verify signature" tampered.tar --only-signed
+install "$1" tampered.tar --skip-signatures
+
+expect_failure "$1" "unsigned.tar.sig: HTTP status client error (404" unsigned.tar
+expect_failure "$1" "unsigned.tar.sig: HTTP status client error (404" unsigned.tar --only-signed
+install "$1" unsigned.tar --skip-signatures
 
 # from quick-install
 #"$1" binstall --force --strategies quick-install --no-confirm --only-signed --target x86_64-unknown-linux-musl zellij@0.38.2
-
-kill $server_pid || true
