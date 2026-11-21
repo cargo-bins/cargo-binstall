@@ -367,22 +367,72 @@ mod test {
         );
     }
 
+    /// Make a git index holding just the crates.io entry for
+    /// cargo-binstall 1.0.0, with `dl` pointing to crates.io.
+    ///
+    /// Cloning the real github.com/rust-lang/crates.io-index took about 50s
+    /// in CI, nearly all of the unit tests' time, and is a network flake
+    /// risk; the git registry code path is the same for a local index.
+    #[cfg(feature = "git")]
+    fn create_local_git_index() -> tempfile::TempDir {
+        use std::{fs, process::Command};
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path();
+
+        fs::write(
+            path.join("config.json"),
+            r#"{"dl": "https://static.crates.io/crates"}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(path.join("ca/rg")).unwrap();
+        fs::write(
+            path.join("ca/rg/cargo-binstall"),
+            include_str!("../tests/fixtures/cargo-binstall-1.0.0.json"),
+        )
+        .unwrap();
+
+        let git = |args: &[&str]| {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(path)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?} failed: {status}");
+        };
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "Add index",
+        ]);
+
+        dir
+    }
+
     #[cfg(feature = "git")]
     #[tokio::test]
-    async fn test_crates_io_git_registry() {
+    async fn test_git_registry() {
         let client = create_client();
 
         let crate_name = "cargo-binstall";
         let version_req = &VersionReq::parse("=1.0.0").unwrap();
+
+        let index = create_local_git_index();
+        let index_url = Url::from_directory_path(index.path()).unwrap();
 
         let serialized_manifest_from_git_task = tokio::spawn({
             let version_req = version_req.clone();
             let client = client.clone();
 
             async move {
-                let git_registry: Registry = "https://github.com/rust-lang/crates.io-index"
-                    .parse()
-                    .unwrap();
+                let git_registry: Registry = index_url.as_str().parse().unwrap();
                 assert!(
                     matches!(git_registry, Registry::Git(_)),
                     "{:?}",
