@@ -160,6 +160,10 @@ pub fn possible_bin_dirs<'a>(
         .map(move |gen_possible_dir| gen_possible_dir(name, target, version))
 }
 
+/// The `bin-dir` used when no dir matching the package is found by
+/// [`infer_bin_dir_template`].
+pub const DEFAULT_BIN_DIR_TEMPLATE: &str = "{ bin }{ binary-ext }";
+
 /// Must be called after the archive is downloaded and extracted.
 /// This function might uses blocking I/O.
 pub fn infer_bin_dir_template(
@@ -170,7 +174,7 @@ pub fn infer_bin_dir_template(
     let target = data.target;
     let version = data.version;
 
-    let default_bin_dir_template = Cow::Borrowed("{ bin }{ binary-ext }");
+    let default_bin_dir_template = Cow::Borrowed(DEFAULT_BIN_DIR_TEMPLATE);
 
     possible_bin_dirs(name, target, version)
         .find(|dirname| has_dir(Path::new(&dirname)))

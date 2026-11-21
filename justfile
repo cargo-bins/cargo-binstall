@@ -259,8 +259,10 @@ e2e-test-compressed-bin: (e2e-test "compressed-bin")
 [windows]
 e2e-test-compressed-bin:
 
+e2e-test-per-bin-pkg-url: (e2e-test "per-bin-pkg-url")
+
 [parallel]
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-crates2-json e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune e2e-test-aliases e2e-test-shadowed-bin e2e-test-http-faults e2e-test-target-arch e2e-test-compressed-bin e2e-test-pkg-url-hint e2e-test-manifest-lock
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-crates2-json e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune e2e-test-aliases e2e-test-shadowed-bin e2e-test-http-faults e2e-test-target-arch e2e-test-compressed-bin e2e-test-pkg-url-hint e2e-test-manifest-lock e2e-test-per-bin-pkg-url
 
 unit-tests: print-env
     cargo test --no-run --target {{target}}

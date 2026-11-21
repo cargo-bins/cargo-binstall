@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
+use std::{borrow::Cow, collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
@@ -120,7 +120,7 @@ pub trait Fetcher: Send + Sync {
         Self: Sized;
 
     /// Fetch a package and extract
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError>;
+    async fn fetch_and_extract(&self, dst: &Path) -> Result<Extracted, FetchError>;
 
     /// Find the package, if it is available for download
     ///
@@ -218,6 +218,34 @@ pub enum SignaturePolicy {
     Require,
 }
 
+/// What [`Fetcher::fetch_and_extract`] extracted into its `dst`.
+#[derive(Debug)]
+pub enum Extracted {
+    /// One package providing all the binaries, extracted to `dst`.
+    Package(ExtractedFiles),
+    /// One package per binary, keyed by binary name, each extracted to
+    /// `dst/NAME`.
+    ///
+    /// Optional binaries whose package was not found are left out, see
+    /// [`Data::with_bins`].
+    PerBin(BTreeMap<CompactString, BinPackage>),
+}
+
+/// The package of one binary, see [`Extracted::PerBin`].
+#[derive(Debug)]
+pub struct BinPackage {
+    pub pkg_fmt: PkgFmt,
+    pub extracted_files: ExtractedFiles,
+}
+
+/// A binary to install, see [`Data::with_bins`].
+#[derive(Clone, Debug)]
+pub struct BinInfo {
+    pub name: CompactString,
+    /// Whether the binary may be missing, e.g. if it has `required-features`.
+    pub optional: bool,
+}
+
 /// Data required to fetch a package
 #[derive(Clone, Debug)]
 pub struct Data {
@@ -227,6 +255,7 @@ pub struct Data {
     repo_info: OnceCell<Option<RepoInfo>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
+    bins: Vec<BinInfo>,
 }
 
 impl Data {
@@ -237,7 +266,18 @@ impl Data {
             repo,
             repo_info: OnceCell::new(),
             pkg_url_hint: None,
+            bins: Vec::new(),
         }
+    }
+
+    /// The binaries to install.
+    ///
+    /// Fetchers that find one package per binary, like [`GhCrateMeta`] with
+    /// `{ bin }` in `pkg-url`, need them to know which packages to look for,
+    /// and find nothing without them.
+    pub fn with_bins(mut self, bins: Vec<BinInfo>) -> Self {
+        self.bins = bins;
+        self
     }
 
     /// Have fetchers try how a previous version was found on `target` first,
