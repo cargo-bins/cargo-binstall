@@ -283,6 +283,13 @@ impl Client {
                     add_delay_and_continue(response, RETRY_DURATION_FOR_TIMEOUT)
                 }
 
+                // Transient server errors, e.g. a CDN in front of GitHub
+                // releases answering 502 now and then; retried like a timeout,
+                // still bounded by MAX_RETRY_COUNT.
+                StatusCode::INTERNAL_SERVER_ERROR | StatusCode::BAD_GATEWAY => {
+                    add_delay_and_continue(response, RETRY_DURATION_FOR_TIMEOUT)
+                }
+
                 _ => Ok(ControlFlow::Break(response)),
             }
         }
@@ -620,6 +627,57 @@ mod tests {
         assert_eq!(&body[..], b"ok");
 
         server.join().unwrap();
+    }
+
+    /// Serve each of `responses` to one connection, in order, returning how
+    /// many requests were answered.
+    fn serve_responses(
+        listener: TcpListener,
+        responses: &'static [&'static [u8]],
+    ) -> thread::JoinHandle<usize> {
+        thread::spawn(move || {
+            for (i, response) in responses.iter().enumerate() {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return i;
+                };
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf).unwrap();
+                stream.write_all(response).unwrap();
+                stream.flush().unwrap();
+            }
+            responses.len()
+        })
+    }
+
+    #[tokio::test]
+    async fn retries_transient_server_errors() {
+        for status in ["500 Internal Server Error", "502 Bad Gateway"] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+
+            let error: &'static [u8] =
+                format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    .into_bytes()
+                    .leak();
+            let responses: &'static [&'static [u8]] = vec![
+                error,
+                b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+            ]
+            .leak();
+            let server = serve_responses(listener, responses);
+
+            let url = Url::parse(&format!("http://{addr}/")).unwrap();
+            let body = test_client(true)
+                .get(url)
+                .send(true)
+                .await
+                .unwrap()
+                .bytes()
+                .await
+                .unwrap();
+            assert_eq!(&body[..], b"ok", "after a {status}");
+            assert_eq!(server.join().unwrap(), 2, "after a {status}");
+        }
     }
 
     #[tokio::test]

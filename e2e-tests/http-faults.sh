@@ -11,7 +11,7 @@ set -euxo pipefail
 source lib/https-server.sh
 
 serve_dir="$(mktemp -d 2>/dev/null || mktemp -d -t 'http-faults')"
-for name in retry ratelimit down moved-to truncated truncated-no-range; do
+for name in retry bad-gateway ratelimit down moved-to truncated truncated-no-range; do
     cp signing/signing-test.tar "$serve_dir/$name.tar"
 done
 
@@ -21,6 +21,7 @@ routes="$serve_dir/routes.json"
 cat >"$routes" <<'JSON'
 {
     "/retry.tar": [{"status": 503}, {"status": 503}],
+    "/bad-gateway.tar": [{"status": 502}, {"status": 500}],
     "/ratelimit.tar": [{"status": 429, "headers": {"Retry-After": "1"}}],
     "/down.tar": [
         {"status": 503}, {"status": 503}, {"status": 503},
@@ -67,6 +68,10 @@ expect_failure() {
 # 503 twice, then 200: retried, and installed.
 install "$1" retry.tar
 [ "$(requests_for retry.tar)" -ge 3 ]
+
+# 502, 500, then 200: transient server errors are retried too.
+install "$1" bad-gateway.tar
+[ "$(requests_for bad-gateway.tar)" -ge 3 ]
 
 # 429 with Retry-After, then 200.
 install "$1" ratelimit.tar
