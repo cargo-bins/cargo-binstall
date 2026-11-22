@@ -130,6 +130,7 @@ struct Inner {
     client: remote::Client,
     release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
     release_pages: Map<GhRelease, OnceCell<bool>>,
+    release_web_assets: Map<GhRelease, OnceCell<web::ReleaseAssets>>,
     retry_after: Mutex<Option<Instant>>,
 
     auth_token: Option<Zeroizing<Box<str>>>,
@@ -161,6 +162,7 @@ impl GhApiClient {
             client,
             release_artifacts: Default::default(),
             release_pages: Default::default(),
+            release_web_assets: Default::default(),
             retry_after: Default::default(),
 
             auth_token: auth_token.and_then(sanitize_auth_token),
@@ -325,6 +327,30 @@ impl GhApiClient {
             .get(release.clone())
             .get_or_init(|| web::has_release_page(&self.0.client, release))
             .await
+    }
+
+    /// Check whether `artifact` exists without the API, for when it can't be
+    /// used: from the list of assets github.com shows on the release's page.
+    ///
+    /// Returns `None` if that list could not be had, then check the artifact
+    /// some other way.
+    ///
+    /// Only use it for a public repository, github.com answers 404 for a
+    /// private one.
+    ///
+    /// Caches the asset names per release, so this costs one request per
+    /// release however many artifacts are checked.
+    #[instrument(skip(self), ret(level = Level::DEBUG))]
+    pub async fn has_release_artifact_on_web(&self, artifact: &GhReleaseArtifact) -> Option<bool> {
+        let cell = self.0.release_web_assets.get(artifact.release.clone());
+        match cell
+            .get_or_init(|| web::fetch_release_assets(&self.0.client, &artifact.release))
+            .await
+        {
+            web::ReleaseAssets::NotFound => Some(false),
+            web::ReleaseAssets::Found(assets) => Some(assets.contains(&artifact.artifact_name)),
+            web::ReleaseAssets::Unknown => None,
+        }
     }
 
     pub async fn download_artifact(
@@ -663,6 +689,47 @@ mod test {
                     tag: CompactString::const_new("v0.18.2"),
                 })
                 .await
+        );
+    }
+
+    #[tokio::test]
+    async fn test_has_release_artifact_on_web() {
+        init_logger();
+
+        let client = GhApiClient::new(create_remote_client(), None);
+        let release = cargo_binstall_v0_20_1::RELEASE;
+
+        for artifact_name in cargo_binstall_v0_20_1::ARTIFACTS {
+            let artifact = GhReleaseArtifact {
+                release: release.clone(),
+                artifact_name: artifact_name.to_compact_string(),
+            };
+            assert_eq!(
+                client.has_release_artifact_on_web(&artifact).await,
+                Some(true),
+                "{artifact_name}"
+            );
+        }
+
+        let artifact = GhReleaseArtifact {
+            release: release.clone(),
+            artifact_name: "123z".to_compact_string(),
+        };
+        assert_eq!(
+            client.has_release_artifact_on_web(&artifact).await,
+            Some(false)
+        );
+
+        let artifact = GhReleaseArtifact {
+            release: GhRelease {
+                repo: release.repo,
+                tag: CompactString::const_new("v0.18.2"),
+            },
+            artifact_name: "1234".to_compact_string(),
+        };
+        assert_eq!(
+            client.has_release_artifact_on_web(&artifact).await,
+            Some(false)
         );
     }
 

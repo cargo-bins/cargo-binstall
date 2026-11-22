@@ -222,6 +222,15 @@ impl GhCrateMeta {
                             Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
                                 if !is_repo_private =>
                             {
+                                // Look the asset up in the release's page,
+                                // one request per release instead of one
+                                // HEAD/GET per candidate.
+                                match gh_api_client.has_release_artifact_on_web(&artifact).await {
+                                    Some(true) => return Ok(Some(resolved)),
+                                    Some(false) => return Ok(None),
+                                    None => (),
+                                }
+
                                 // Skip every asset of a missing tag, instead
                                 // of checking each one with HEAD/GET.
                                 if !gh_api_client.has_release_page(&artifact.release).await {
