@@ -20,6 +20,7 @@ mod common;
 mod error;
 mod release_artifacts;
 mod repo_info;
+mod web;
 
 use common::{check_http_status_and_header, percent_decode_http_url_path};
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
@@ -128,6 +129,7 @@ where
 struct Inner {
     client: remote::Client,
     release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
+    release_pages: Map<GhRelease, OnceCell<bool>>,
     retry_after: Mutex<Option<Instant>>,
 
     auth_token: Option<Zeroizing<Box<str>>>,
@@ -158,6 +160,7 @@ impl GhApiClient {
         Self(Arc::new(Inner {
             client,
             release_artifacts: Default::default(),
+            release_pages: Default::default(),
             retry_after: Default::default(),
 
             auth_token: auth_token.and_then(sanitize_auth_token),
@@ -389,6 +392,24 @@ impl GhApiClient {
                 release_artifacts::BatchedRelease::Incomplete => continue,
             };
         }
+    }
+
+    /// Check whether `release` exists without the API, so without spending
+    /// the API rate limit: returns `false` only if github.com has no page for
+    /// it.
+    ///
+    /// Only use it for a public repository, github.com answers 404 for a
+    /// private one.
+    ///
+    /// Caches the result per release.
+    #[instrument(skip(self), ret(level = Level::DEBUG))]
+    pub async fn has_release_page(&self, release: &GhRelease) -> bool {
+        *self
+            .0
+            .release_pages
+            .get(release.clone())
+            .get_or_init(|| web::has_release_page(&self.0.client, release))
+            .await
     }
 
     pub async fn download_artifact(
@@ -744,6 +765,28 @@ mod test {
             }
             assert!(non_existent_cell.get().unwrap().is_none());
         }
+    }
+
+    #[tokio::test]
+    async fn test_has_release_page() {
+        init_logger();
+
+        let client = GhApiClient::new(create_remote_client(), None);
+
+        assert!(
+            client
+                .has_release_page(&cargo_binstall_v0_20_1::RELEASE)
+                .await
+        );
+        assert!(
+            !client
+                .has_release_page(&GhRelease {
+                    repo: cargo_binstall_v0_20_1::RELEASE.repo,
+                    // We would never release anything older than v0.20.1
+                    tag: CompactString::const_new("v0.18.2"),
+                })
+                .await
+        );
     }
 
     #[tokio::test]
