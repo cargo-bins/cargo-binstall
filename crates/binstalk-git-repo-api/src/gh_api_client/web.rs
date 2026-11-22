@@ -90,9 +90,14 @@ fn links(html: &str) -> impl Iterator<Item = Url> + '_ {
 fn parse_release_assets(html: &str, release: &GhRelease) -> HashSet<CompactString> {
     links(html)
         .filter_map(|url| GhReleaseArtifact::try_extract_from_url(&url))
-        // The owner and repository may be spelled differently, or redirected
-        // to after a rename.
-        .filter(|artifact| artifact.release.tag == release.tag)
+        // Only the release asked for, in case the page links to another one.
+        // GitHub ignores the case of owner and repository names.
+        .filter(|artifact| {
+            let GhRelease { repo, tag } = &artifact.release;
+            *tag == release.tag
+                && repo.owner.eq_ignore_ascii_case(&release.repo.owner)
+                && repo.repo.eq_ignore_ascii_case(&release.repo.repo)
+        })
         .map(|artifact| artifact.artifact_name)
         .collect()
 }
@@ -192,6 +197,7 @@ mod test {
 <a href="/rustsec/rustsec/archive/refs/tags/cargo-audit/v0.17.6.zip" rel="nofollow">
 <a href="/rustsec/rustsec/archive/refs/tags/cargo-audit/v0.17.6.tar.gz" rel="nofollow">
 <a href="https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/absolute.tgz">
+<a href="/rustsec/other/releases/download/cargo-audit%2Fv0.17.6/other-repo.tgz">
 "#;
 
         assert!(links_source_archive(html, &release));

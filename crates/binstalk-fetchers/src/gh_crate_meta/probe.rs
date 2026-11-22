@@ -1,11 +1,13 @@
 //! Checking which of the URLs a package may be at exists, with as few
 //! requests as possible.
 //!
-//! [`Candidate`]s are rendered once per target. What their releases share is
-//! found out once, in [`Probe::new`], before any of them is checked:
+//! [`Candidate`]s are rendered once per target. The ones of the `pkg-url` a
+//! previous version was found with are checked first. Then what the releases
+//! of the others share is found out once, before any of them is checked:
 //!
 //! 1. Which release tags exist, with one request to the repository's git
-//!    server, see [`git_refs`]. The candidates of a missing tag are dropped.
+//!    server, see [`Probe::drop_missing_tags`]. The candidates of a missing
+//!    tag are dropped.
 //! 2. For GitHub, the asset names of the remaining releases: from github.com
 //!    for a public repository (see [`Probe::check_on_web`]), which costs no
 //!    API quota, or with one GraphQL query for a private one (see
@@ -15,7 +17,7 @@
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use binstalk_git_repo_api::{
@@ -89,63 +91,64 @@ pub(super) struct Probe {
     repo: Option<String>,
     subcrate: Option<String>,
     is_repo_private: bool,
-    /// Which release tags exist, if the repository's git server could tell.
-    tags: Option<RepoTags>,
+    /// Which release tags exist, once [`Probe::drop_missing_tags`] asked the
+    /// repository's git server, if it could tell.
+    tags: OnceLock<RepoTags>,
     /// The candidate asset names of each GitHub release.
     gh_candidates: HashMap<GhRelease, HashSet<CompactString>>,
 }
 
 impl Probe {
-    /// Find out which release tags of `candidates` exist and drop the
-    /// candidates of the other ones, before any API call.
-    pub(super) async fn new(
+    pub(super) fn new(
         client: Client,
         gh_api_client: GhApiClient,
-        data: &Data,
         repo: Option<&str>,
         subcrate: Option<&str>,
         is_repo_private: bool,
-        candidates: &mut Vec<Candidate>,
+        candidates: &[Candidate],
     ) -> Self {
-        // One request to the repository's git server, shared by all targets.
-        // A private repository needs authentication.
-        let tags = match repo {
-            Some(repo) if !is_repo_private => data
-                .get_repo_tags(
-                    &client,
-                    repo,
-                    candidates.iter().filter_map(|c| c.tag.as_deref()),
-                )
-                .await
-                .cloned(),
-            _ => None,
-        };
-
-        let mut probe = Self {
+        Self {
             client,
             gh_api_client,
             repo: repo.map(ToString::to_string),
             subcrate: subcrate.map(ToString::to_string),
             is_repo_private,
-            tags,
-            gh_candidates: HashMap::new(),
+            tags: OnceLock::new(),
+            gh_candidates: candidates
+                .iter()
+                .filter_map(|candidate| candidate.gh_artifact.clone())
+                .map(|artifact| (artifact.release, artifact.artifact_name))
+                .into_grouping_map()
+                .collect(),
+        }
+    }
+
+    /// Find out which release tags of `candidates` exist, with one request to
+    /// the repository's git server shared by all targets, and drop the
+    /// candidates of the other ones.
+    pub(super) async fn drop_missing_tags(&self, data: &Data, candidates: &mut Vec<Candidate>) {
+        // A private repository needs authentication.
+        let Some(repo) = self.repo.as_deref().filter(|_| !self.is_repo_private) else {
+            return;
+        };
+        let Some(tags) = data
+            .get_repo_tags(
+                &self.client,
+                repo,
+                candidates.iter().filter_map(|c| c.tag.as_deref()),
+            )
+            .await
+        else {
+            return;
         };
 
-        candidates.retain(|candidate| probe.tag_exists(candidate) != Some(false));
-
-        probe.gh_candidates = candidates
-            .iter()
-            .filter_map(|candidate| candidate.gh_artifact.clone())
-            .map(|artifact| (artifact.release, artifact.artifact_name))
-            .into_grouping_map()
-            .collect();
-
-        probe
+        let _ = self.tags.set(tags.clone());
+        candidates.retain(|candidate| self.tag_exists(candidate) != Some(false));
     }
 
     /// Whether the release tag of `candidate` exists, if known.
     fn tag_exists(&self, candidate: &Candidate) -> Option<bool> {
-        self.tags.as_ref()?.exists(candidate.tag.as_deref()?)
+        self.tags.get()?.exists(candidate.tag.as_deref()?)
     }
 
     /// For a private repository, get the assets of all the candidates' GitHub
@@ -241,11 +244,12 @@ impl Probe {
                 Ok(Some(artifact_url)) => return Ok(GhAsset::Found(Some(artifact_url))),
                 Ok(None) => return Ok(GhAsset::Missing),
 
-                // A public release asset can be checked without the API.
+                // github.com was already asked: a public release asset can
+                // still be checked with HEAD/GET.
                 Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
                     if !self.is_repo_private =>
                 {
-                    return self.check_on_web(artifact, candidate).await;
+                    return Ok(GhAsset::Unknown);
                 }
                 Err(GhApiError::RateLimit { retry_after }) => {
                     match gh_api_rate_limit_wait(retry_after) {

@@ -300,21 +300,18 @@ impl super::Fetcher for GhCrateMeta {
                 })
                 .collect();
 
-            let probe = Arc::new(
-                Probe::new(
-                    self.client.clone(),
-                    self.gh_api_client.clone(),
-                    &self.data,
-                    repo,
-                    subcrate,
-                    is_repo_private,
-                    &mut candidates,
-                )
-                .await,
-            );
+            let probe = Arc::new(Probe::new(
+                self.client.clone(),
+                self.gh_api_client.clone(),
+                repo,
+                subcrate,
+                is_repo_private,
+                &candidates,
+            ));
 
-            // Try how a previous version was found first: it is one template
-            // times one pkg-fmt, instead of all of them.
+            // Try how a previous version was found first, before any other
+            // request: it is one template times one pkg-fmt, instead of all
+            // of them.
             //
             // Only a hint that is still one of the default templates is used,
             // and only if it agrees with the crate's pkg-fmt, if any.
@@ -348,6 +345,7 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
+            probe.drop_missing_tags(&self.data, &mut candidates).await;
             probe.prefetch_gh_releases().await;
 
             if let Some(resolved) = probe.resolve(candidates).await {
