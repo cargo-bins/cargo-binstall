@@ -142,6 +142,20 @@ fn candidate_urls(
         .collect()
 }
 
+/// Check whether `artifact` of a public repository exists on github.com,
+/// without the API. Returns `None` if github.com can't tell.
+///
+/// Both checks are cached per release, so this costs at most two requests per
+/// release however many candidates are checked.
+async fn check_on_web(gh_api_client: &GhApiClient, artifact: &GhReleaseArtifact) -> Option<bool> {
+    // HEAD the release page first: github.com answers a missing release with
+    // a 404 page about as large as an asset list.
+    if !gh_api_client.has_release_page(&artifact.release).await {
+        return Some(false);
+    }
+    gh_api_client.has_release_artifact_on_web(artifact).await
+}
+
 impl GhCrateMeta {
     fn launch_baseline_find_tasks(
         &self,
@@ -197,14 +211,14 @@ impl GhCrateMeta {
                 };
 
                 if let Some(artifact) = gh_release_artifact {
-                    // Without a token, the API allows 60 requests per hour and
-                    // most candidate tags don't exist: find the ones that do
-                    // without the API, so it is only asked about those.
+                    // Without a token, the API allows 60 requests per hour:
+                    // look on github.com first, and only ask the API if that
+                    // can't tell.
                     if !is_repo_private
                         && !gh_api_client.has_gh_token()
-                        && !gh_api_client.has_release_page(&artifact.release).await
+                        && let Some(found) = check_on_web(&gh_api_client, &artifact).await
                     {
-                        return Ok(None);
+                        return Ok(found.then_some(resolved));
                     }
 
                     loop {
@@ -222,19 +236,11 @@ impl GhCrateMeta {
                             Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
                                 if !is_repo_private =>
                             {
-                                // Look the asset up in the release's page,
-                                // one request per release instead of one
-                                // HEAD/GET per candidate.
-                                match gh_api_client.has_release_artifact_on_web(&artifact).await {
-                                    Some(true) => return Ok(Some(resolved)),
-                                    Some(false) => return Ok(None),
-                                    None => (),
-                                }
-
-                                // Skip every asset of a missing tag, instead
-                                // of checking each one with HEAD/GET.
-                                if !gh_api_client.has_release_page(&artifact.release).await {
-                                    return Ok(None);
+                                // One or two requests per release on
+                                // github.com, instead of one HEAD/GET per
+                                // candidate.
+                                if let Some(found) = check_on_web(&gh_api_client, &artifact).await {
+                                    return Ok(found.then_some(resolved));
                                 }
                                 break;
                             }
