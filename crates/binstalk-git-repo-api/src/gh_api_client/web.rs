@@ -5,14 +5,15 @@
 //! They only work for public repositories, github.com answers 404 for a
 //! private one without the user's cookies.
 
-use std::{collections::HashSet, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, sync::Arc};
 
 use binstalk_downloader::remote::{self, Method, StatusCode};
 use compact_str::CompactString;
+use percent_encoding::percent_decode_str;
 use tracing::debug;
 use url::Url;
 
-use super::{GhRelease, GhReleaseArtifact, GhRepo, percent_decode_http_url_path};
+use super::{GhRelease, GhRepo, percent_decode_http_url_path};
 
 fn release_url(
     GhRelease {
@@ -63,50 +64,99 @@ pub enum ReleaseAssets {
     Unknown,
 }
 
-/// Undo the escapes HTML needs in an attribute value.
-fn unescape_html(s: &str) -> std::borrow::Cow<'_, str> {
-    if !s.contains('&') {
+/// Undo the escapes HTML needs in an attribute value, in one pass.
+fn unescape_html(s: &str) -> Cow<'_, str> {
+    const ENTITIES: [(&str, char); 5] = [
+        ("&amp;", '&'),
+        ("&quot;", '"'),
+        ("&#39;", '\''),
+        ("&lt;", '<'),
+        ("&gt;", '>'),
+    ];
+
+    let Some(first) = s.find('&') else {
         return s.into();
+    };
+
+    let mut unescaped = String::with_capacity(s.len());
+    unescaped.push_str(&s[..first]);
+
+    let mut rest = &s[first..];
+    while let Some(i) = rest.find('&') {
+        unescaped.push_str(&rest[..i]);
+        rest = &rest[i..];
+
+        // Leave anything else as is.
+        let (c, len) = ENTITIES
+            .iter()
+            .find(|(entity, _)| rest.starts_with(entity))
+            .map_or(('&', 1), |(entity, c)| (*c, entity.len()));
+        unescaped.push(c);
+        rest = &rest[len..];
     }
-    s.replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-        .into()
+    unescaped.push_str(rest);
+
+    unescaped.into()
 }
 
-/// The URLs linked to from `html`.
-fn links(html: &str) -> impl Iterator<Item = Url> + '_ {
-    let base = Url::parse("https://github.com/").expect("Literal provided must be a valid url");
-
-    html.split("href=\"")
-        .skip(1)
-        .filter_map(|s| s.split_once('"'))
-        .filter_map(move |(href, _)| base.join(&unescape_html(href)).ok())
+/// The values of the `href` attributes in `html`.
+fn hrefs(html: &str) -> impl Iterator<Item = Cow<'_, str>> {
+    html.match_indices("href=\"")
+        .filter_map(|(i, attr)| html[i + attr.len()..].split_once('"'))
+        .map(|(href, _)| unescape_html(href))
 }
 
-/// The names of the assets of `release` linked to from `html`.
-fn parse_release_assets(html: &str, release: &GhRelease) -> HashSet<CompactString> {
-    links(html)
-        .filter_map(|url| GhReleaseArtifact::try_extract_from_url(&url))
-        // Only the release asked for, in case the page links to another one.
-        // GitHub ignores the case of owner and repository names.
-        .filter(|artifact| {
-            let GhRelease { repo, tag } = &artifact.release;
-            *tag == release.tag
-                && repo.owner.eq_ignore_ascii_case(&release.repo.owner)
-                && repo.repo.eq_ignore_ascii_case(&release.repo.repo)
-        })
-        .map(|artifact| artifact.artifact_name)
-        .collect()
+/// The rest of the path of `href` if it links into `repo` on github.com.
+///
+/// GitHub ignores the case of owner and repository names.
+fn path_in_repo<'h>(href: &'h str, repo: &GhRepo) -> Option<&'h str> {
+    let path = href.strip_prefix("https://github.com").unwrap_or(href);
+    let (owner, path) = path.strip_prefix('/')?.split_once('/')?;
+    let (name, path) = path.split_once('/')?;
+
+    (owner.eq_ignore_ascii_case(&repo.owner) && name.eq_ignore_ascii_case(&repo.repo))
+        .then_some(path)
 }
 
-/// Whether `html` links to the source code archive of the tag of `release`,
-/// which github.com lists for every release, and also for a tag without one.
-fn links_source_archive(html: &str, release: &GhRelease) -> bool {
-    let suffix = format!("/archive/refs/tags/{}.tar.gz", release.tag);
-    links(html).any(|url| percent_decode_http_url_path(url.path()).ends_with(&*suffix))
+/// Whether `s` is `expected` once percent-decoded, without allocating.
+fn decodes_to(s: &str, expected: &str) -> bool {
+    percent_decode_str(s).eq(expected.bytes())
+}
+
+/// What the asset list of `release` links to: the names of its assets, and
+/// whether the source code archive of its tag is there.
+///
+/// Each link is matched against the paths of `release`, so links to anything
+/// else cost nothing.
+fn parse_release_assets(html: &str, release: &GhRelease) -> (HashSet<CompactString>, bool) {
+    let mut assets = HashSet::new();
+    let mut links_source_archive = false;
+
+    for href in hrefs(html) {
+        let Some(path) = path_in_repo(&href, &release.repo) else {
+            continue;
+        };
+
+        if let Some(path) = path.strip_prefix("releases/download/") {
+            // `{tag}/{name}`, with a `/` in the tag percent-encoded.
+            if let Some((tag, name)) = path.split_once('/')
+                && decodes_to(tag, &release.tag)
+                && !name.is_empty()
+                && !name.contains('/')
+            {
+                assets.insert(percent_decode_http_url_path(name));
+            }
+        } else if let Some(tag) = path
+            .strip_prefix("archive/refs/tags/")
+            .and_then(|path| path.strip_suffix(".tar.gz"))
+        {
+            // github.com lists it for every release, and also for a tag
+            // without one.
+            links_source_archive |= decodes_to(tag, &release.tag);
+        }
+    }
+
+    (assets, links_source_archive)
 }
 
 /// Get the asset names of `release` from the page github.com loads them from
@@ -141,11 +191,11 @@ pub(super) async fn fetch_release_assets(
 
     match response.bytes().await {
         Ok(html) => {
-            let html = String::from_utf8_lossy(&html);
-            let assets = parse_release_assets(&html, release);
+            let (assets, links_source_archive) =
+                parse_release_assets(&String::from_utf8_lossy(&html), release);
             // No asset is expected for a tag without a release, or a release
             // without assets: the page then still lists the source code.
-            if assets.is_empty() && !links_source_archive(&html, release) {
+            if assets.is_empty() && !links_source_archive {
                 debug!("Found no release assets in {url}");
                 ReleaseAssets::Unknown
             } else {
@@ -180,6 +230,13 @@ mod test {
     }
 
     #[test]
+    fn test_unescape_html() {
+        assert_eq!(unescape_html("a b"), "a b");
+        assert_eq!(unescape_html("a&amp;b&quot;&#39;&lt;&gt;"), "a&b\"'<>");
+        assert_eq!(unescape_html("&nbsp;&amp"), "&nbsp;&amp");
+    }
+
+    #[test]
     fn test_parse_release_assets() {
         let release = GhRelease {
             repo: GhRepo {
@@ -200,13 +257,17 @@ mod test {
 <a href="/rustsec/other/releases/download/cargo-audit%2Fv0.17.6/other-repo.tgz">
 "#;
 
-        assert!(links_source_archive(html, &release));
-        assert!(!links_source_archive(
-            r#"<a href="/rustsec/rustsec/archive/refs/tags/v0.17.6.tar.gz">"#,
-            &release
-        ));
+        let (assets, links_source_archive) = parse_release_assets(html, &release);
+        assert!(links_source_archive);
+        assert!(
+            !parse_release_assets(
+                r#"<a href="/rustsec/rustsec/archive/refs/tags/v0.17.6.tar.gz">"#,
+                &release
+            )
+            .1
+        );
 
-        let mut assets: Vec<_> = parse_release_assets(html, &release).into_iter().collect();
+        let mut assets: Vec<_> = assets.into_iter().collect();
         assets.sort();
         assert_eq!(
             assets,

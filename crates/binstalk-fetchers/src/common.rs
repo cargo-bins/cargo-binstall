@@ -53,16 +53,14 @@ pub(super) async fn get_gh_release_artifact_url(
     }
 }
 
-/// Check if the URL exists, with HEAD/GET.
+/// Check if the URL exists, with a GET: HEAD gives false negatives on some
+/// hosts, e.g. GitHub's release asset storage answers it with 401.
 ///
-/// It is only used for public GitHub release assets, which HEAD/GET can check
-/// without spending API quota.
+/// It costs no API quota, unlike asking the GitHub API.
 ///
 /// This function returns a future where its size should be at most size of
 /// 2-4 pointers.
-pub(super) async fn does_url_exist(client: Client, url: &Url) -> Result<bool, FetchError> {
-    debug!("Checking for package at: '{url}'");
-
+pub(super) async fn does_url_exist(client: &Client, url: &Url) -> Result<bool, FetchError> {
     Ok(Box::pin(client.remote_gettable(url.clone())).await?)
 }
 

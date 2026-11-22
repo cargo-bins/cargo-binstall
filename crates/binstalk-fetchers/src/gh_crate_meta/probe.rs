@@ -17,7 +17,7 @@
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
 use binstalk_git_repo_api::{
@@ -28,7 +28,7 @@ use binstalk_git_repo_api::{
 };
 use compact_str::CompactString;
 use itertools::Itertools;
-use tokio::time::sleep;
+use tokio::{sync::OnceCell, time::sleep};
 use url::Url;
 
 use super::Resolved;
@@ -92,8 +92,8 @@ pub(super) struct Probe {
     subcrate: Option<String>,
     is_repo_private: bool,
     /// Which release tags exist, once [`Probe::drop_missing_tags`] asked the
-    /// repository's git server, if it could tell.
-    tags: OnceLock<RepoTags>,
+    /// repository's git server: `None` inside if it could not tell.
+    tags: OnceCell<Option<Arc<RepoTags>>>,
     /// The candidate asset names of each GitHub release.
     gh_candidates: HashMap<GhRelease, HashSet<CompactString>>,
 }
@@ -113,7 +113,7 @@ impl Probe {
             repo: repo.map(ToString::to_string),
             subcrate: subcrate.map(ToString::to_string),
             is_repo_private,
-            tags: OnceLock::new(),
+            tags: OnceCell::new(),
             gh_candidates: candidates
                 .iter()
                 .filter_map(|candidate| candidate.gh_artifact.clone())
@@ -127,28 +127,28 @@ impl Probe {
     /// the repository's git server shared by all targets, and drop the
     /// candidates of the other ones.
     pub(super) async fn drop_missing_tags(&self, data: &Data, candidates: &mut Vec<Candidate>) {
-        // A private repository needs authentication.
-        let Some(repo) = self.repo.as_deref().filter(|_| !self.is_repo_private) else {
-            return;
-        };
-        let Some(tags) = data
-            .get_repo_tags(
-                &self.client,
-                repo,
-                candidates.iter().filter_map(|c| c.tag.as_deref()),
-            )
-            .await
-        else {
-            return;
-        };
+        let tags = self
+            .tags
+            .get_or_init(|| async {
+                // A private repository needs authentication.
+                let repo = self.repo.as_deref().filter(|_| !self.is_repo_private)?;
+                data.get_repo_tags(
+                    &self.client,
+                    repo,
+                    candidates.iter().filter_map(|c| c.tag.as_deref()),
+                )
+                .await
+            })
+            .await;
 
-        let _ = self.tags.set(tags.clone());
-        candidates.retain(|candidate| self.tag_exists(candidate) != Some(false));
+        if tags.is_some() {
+            candidates.retain(|candidate| self.tag_exists(candidate) != Some(false));
+        }
     }
 
     /// Whether the release tag of `candidate` exists, if known.
     fn tag_exists(&self, candidate: &Candidate) -> Option<bool> {
-        self.tags.get()?.exists(candidate.tag.as_deref()?)
+        self.tags.get()?.as_ref()?.exists(candidate.tag.as_deref()?)
     }
 
     /// For a private repository, get the assets of all the candidates' GitHub
@@ -202,7 +202,7 @@ impl Probe {
             GhAsset::Found(url) => url,
             GhAsset::Missing => return Ok(None),
             GhAsset::Unknown => {
-                if !Box::pin(self.client.remote_gettable(candidate.url.clone())).await? {
+                if !does_url_exist(&self.client, &candidate.url).await? {
                     return Ok(None);
                 }
                 None
@@ -296,7 +296,7 @@ impl Probe {
         if assets.contains(&artifact.artifact_name) {
             // The list is parsed from a page meant for people: make sure a
             // listed asset can be downloaded before picking it.
-            let found = Box::pin(self.client.remote_gettable(candidate.url.clone())).await?;
+            let found = does_url_exist(&self.client, &candidate.url).await?;
             return Ok(if found {
                 GhAsset::Found(None)
             } else {

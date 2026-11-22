@@ -346,6 +346,11 @@ impl super::Fetcher for GhCrateMeta {
             }
 
             probe.drop_missing_tags(&self.data, &mut candidates).await;
+            if candidates.is_empty() {
+                debug!("No release tag of any candidate exists");
+                return Ok(false);
+            }
+
             probe.prefetch_gh_releases().await;
 
             if let Some(resolved) = probe.resolve(candidates).await {

@@ -228,7 +228,7 @@ pub struct Data {
     version: CompactString,
     repo: Option<String>,
     repo_info: OnceCell<Option<RepoInfo>>,
-    repo_tags: OnceCell<Option<RepoTags>>,
+    repo_tags: OnceCell<Option<Arc<RepoTags>>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
@@ -376,17 +376,19 @@ impl Data {
         client: &Client,
         repo: &str,
         tags: impl Iterator<Item = &'a str>,
-    ) -> Option<&RepoTags> {
+    ) -> Option<Arc<RepoTags>> {
         self.repo_tags
             .get_or_init(|| async {
                 let tags: HashSet<CompactString> = tags.map(CompactString::from).collect();
                 if tags.is_empty() {
                     return None;
                 }
-                git_refs::list_tags(client, &Url::parse(repo).ok()?, tags).await
+                git_refs::list_tags(client, &Url::parse(repo).ok()?, tags)
+                    .await
+                    .map(Arc::new)
             })
             .await
-            .as_ref()
+            .clone()
     }
 }
 

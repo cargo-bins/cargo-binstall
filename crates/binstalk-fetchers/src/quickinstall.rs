@@ -220,7 +220,8 @@ impl super::Fetcher for QuickInstall {
 
             let download_signature_task = self.clone().download_signature();
 
-            let is_found = does_url_exist(self.client.clone(), &self.package_url).await?;
+            debug!("Checking for package at: '{}'", self.package_url);
+            let is_found = does_url_exist(&self.client, &self.package_url).await?;
 
             if !is_found {
                 self.set_status(Status::NotFound);

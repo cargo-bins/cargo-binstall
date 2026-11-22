@@ -6,10 +6,18 @@
 //! refs asked for, instead of the hundreds of kilobytes of all the refs of a
 //! repository with a long history.
 
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    io::{self, Write},
+};
 
 use binstalk_downloader::remote;
 use compact_str::CompactString;
+use gix_packetline::{
+    PacketLineRef,
+    blocking_io::encode,
+    decode::{self, Stream},
+};
 use percent_encoding::percent_decode_str;
 use tracing::debug;
 use url::Url;
@@ -64,25 +72,25 @@ fn upload_pack_url(repo: &Url) -> Url {
     url
 }
 
-/// Write `line` as a git pkt-line: its length, header included, in four hex
-/// digits, then the line itself.
-fn write_pkt_line(buf: &mut Vec<u8>, line: &str) {
-    buf.extend_from_slice(format!("{:04x}", line.len() + 4).as_bytes());
-    buf.extend_from_slice(line.as_bytes());
-}
-
-/// The git protocol v2 request listing the refs of `tags`.
-fn ls_refs_request<'a>(tags: impl IntoIterator<Item = &'a str>) -> Vec<u8> {
+/// The git protocol v2 request listing the refs of `tags`, in pkt-lines.
+///
+/// Fails only for a tag too long for a pkt-line.
+fn ls_refs_request<'a>(tags: impl IntoIterator<Item = &'a str>) -> io::Result<Vec<u8>> {
     let mut request = Vec::new();
-    write_pkt_line(&mut request, "command=ls-refs\n");
-    // Delimiter packet, between the command and its arguments.
-    request.extend_from_slice(b"0001");
+    encode::data_to_write(b"command=ls-refs\n", &mut request)?;
+    // Between the command and its arguments.
+    encode::delim_to_write(&mut request)?;
+
+    let mut line = Vec::new();
     for tag in tags {
-        write_pkt_line(&mut request, &format!("ref-prefix refs/tags/{tag}\n"));
+        line.clear();
+        writeln!(line, "ref-prefix refs/tags/{tag}")?;
+        encode::data_to_write(&line, &mut request)?;
     }
-    // Flush packet, ending the request.
-    request.extend_from_slice(b"0000");
-    request
+
+    // The end of the request.
+    encode::flush_to_write(&mut request)?;
+    Ok(request)
 }
 
 /// The tag names in an `ls-refs` response, `None` if it is not one.
@@ -92,22 +100,33 @@ fn ls_refs_request<'a>(tags: impl IntoIterator<Item = &'a str>) -> Vec<u8> {
 fn parse_ls_refs(mut response: &[u8]) -> Option<HashSet<CompactString>> {
     let mut tags = HashSet::new();
     loop {
-        let len = std::str::from_utf8(response.get(..4)?).ok()?;
-        let len = usize::from_str_radix(len, 16).ok()?;
-        if len == 0 {
-            // Flush packet, the end of the list.
-            return Some(tags);
+        let Stream::Complete {
+            line,
+            bytes_consumed,
+        } = decode::streaming(response).ok()?
+        else {
+            // Cut off before the flush packet that ends the list.
+            return None;
+        };
+        response = &response[bytes_consumed..];
+
+        if let Some(err) = line.check_error() {
+            debug!("git server answered: {}", String::from_utf8_lossy(err.0));
+            return None;
         }
-        // Fails for the special packets shorter than their header, which
-        // don't belong in the list.
-        let line = response.get(4..len)?;
-        response = &response[len..];
+        let line = match line {
+            // The end of the list.
+            PacketLineRef::Flush => return Some(tags),
+            PacketLineRef::Data(line) => line,
+            // Only used between sections, which an `ls-refs` response has
+            // none of.
+            PacketLineRef::Delimiter | PacketLineRef::ResponseEnd => return None,
+        };
 
         // `<oid> <ref>`, followed by attributes only if they were asked for.
         let line = std::str::from_utf8(line).ok()?;
         let (oid, line) = line.trim_end_matches('\n').split_once(' ')?;
         if !oid.bytes().all(|b| b.is_ascii_hexdigit()) {
-            // Most likely an `ERR` packet.
             return None;
         }
         let name = line.split(' ').next()?;
@@ -130,12 +149,17 @@ pub async fn list_tags(
 
     debug!("Listing tags at: '{url}'");
 
+    let request = match ls_refs_request(tags.iter().map(|tag| tag.as_str())) {
+        Ok(request) => request,
+        Err(err) => {
+            debug!("Failed to write the ls-refs request for {url}: {err}");
+            return None;
+        }
+    };
+
     let result = async {
         let response = client
-            .post(
-                url.clone(),
-                ls_refs_request(tags.iter().map(|tag| tag.as_str())),
-            )
+            .post(url.clone(), request)
             .header("Git-Protocol", "version=2")
             .header("Content-Type", "application/x-git-upload-pack-request")
             .send(true)
@@ -233,7 +257,7 @@ mod test {
     #[test]
     fn test_ls_refs_request() {
         assert_eq!(
-            ls_refs_request(["v1.28.0", "1.28.0"]),
+            ls_refs_request(["v1.28.0", "1.28.0"]).unwrap(),
             b"0014command=ls-refs\n00010021ref-prefix refs/tags/v1.28.0\n0020ref-prefix refs/tags/1.28.0\n0000"
         );
     }
@@ -256,6 +280,7 @@ mod test {
         assert_eq!(tags(b"0000"), Some(vec![]));
         assert_eq!(tags(b"000fERR not ok\n0000"), None);
         assert_eq!(tags(b"0001"), None);
+        assert_eq!(tags(b"0002"), None);
         assert_eq!(tags(b"003f4b6fa09d0d1ef9740a0c332e31b9ae336f97efa0"), None);
         assert_eq!(tags(b""), None);
     }
