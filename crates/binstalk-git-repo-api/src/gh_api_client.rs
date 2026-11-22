@@ -12,12 +12,13 @@ use std::{
 use binstalk_downloader::{download::Download, remote};
 use compact_str::{CompactString, ToCompactString, format_compact};
 use tokio::sync::OnceCell;
-use tracing::{Level, instrument, warn};
+use tracing::{Level, debug, instrument, warn};
 use url::Url;
 use zeroize::Zeroizing;
 
 mod common;
 mod error;
+mod graphql;
 mod release_artifacts;
 mod repo_info;
 mod web;
@@ -308,6 +309,121 @@ impl GhApiClient {
                 Err(GhApiError::RateLimit { retry_after })
             }
             Err(err) => Err(err),
+        }
+    }
+
+    /// Fetch the assets of the releases `tags` of `repo` with one GraphQL query,
+    /// so that [`GhApiClient::has_release_artifact`] finds them cached instead
+    /// of sending one query per release.
+    ///
+    /// Does nothing without a token, since the restful API can't batch, or if
+    /// fewer than two of `tags` are not cached yet: a batch of one is the
+    /// query [`GhApiClient::has_release_artifact`] sends anyway. Errors are
+    /// not returned: [`GhApiClient::has_release_artifact`] then fetches each
+    /// release on its own, as it would have without this.
+    ///
+    /// A release with more assets than fit in the batch keeps its first page,
+    /// the rest is fetched from there.
+    ///
+    /// `tags` should not repeat a tag, a repeated one is fetched twice.
+    #[instrument(skip(self, tags))]
+    pub async fn prefetch_release_artifacts(
+        &self,
+        repo: &GhRepo,
+        tags: impl IntoIterator<Item = CompactString>,
+    ) {
+        if self.0.only_use_restful_api.load(Relaxed) || self.check_retry_after().is_err() {
+            return;
+        }
+        let Some(auth_token) = self.get_auth_token() else {
+            return;
+        };
+
+        let cells: Vec<_> = tags
+            .into_iter()
+            .map(|tag| {
+                let cell = self.0.release_artifacts.get(GhRelease {
+                    repo: repo.clone(),
+                    tag: tag.clone(),
+                });
+                (tag, cell)
+            })
+            .filter(|(_, cell)| !cell.initialized())
+            .collect();
+
+        if cells.len() < 2 {
+            return;
+        }
+
+        let releases = match release_artifacts::fetch_releases_artifacts_graphql_api(
+            &self.0.client,
+            repo,
+            cells.iter().map(|(tag, _)| tag.as_str()),
+            auth_token,
+        )
+        .await
+        {
+            Ok(releases) => releases,
+            Err(GhApiError::NotFound) => {
+                // The repository itself does not exist.
+                cells.iter().for_each(|(_, cell)| {
+                    let _ = cell.set(None);
+                });
+                return;
+            }
+            Err(err) => {
+                self.note_prefetch_error(&err);
+                debug!("Failed to fetch the assets of the releases of {repo:?}: {err}");
+                return;
+            }
+        };
+
+        for ((tag, cell), release) in cells.iter().zip(releases) {
+            let artifacts = match release {
+                release_artifacts::BatchedRelease::Found(artifacts) => Some(artifacts),
+                release_artifacts::BatchedRelease::NotFound => None,
+                release_artifacts::BatchedRelease::Incomplete {
+                    artifacts,
+                    end_cursor,
+                } => {
+                    match release_artifacts::fetch_rest_of_release_artifacts(
+                        &self.0.client,
+                        repo,
+                        tag,
+                        auth_token,
+                        artifacts,
+                        end_cursor,
+                    )
+                    .await
+                    {
+                        Ok(artifacts) => Some(artifacts),
+                        Err(err) => {
+                            self.note_prefetch_error(&err);
+                            debug!(
+                                "Failed to fetch the rest of the assets of release {tag} of {repo:?}: {err}"
+                            );
+                            continue;
+                        }
+                    }
+                }
+            };
+
+            // `set` fails only if `has_release_artifact` got there first,
+            // then that value is just as good.
+            let _ = cell.set(artifacts);
+        }
+    }
+
+    /// Remember what an error says about the token and the rate limit, as
+    /// [`GhApiClient::has_release_artifact`] would.
+    fn note_prefetch_error(&self, err: &GhApiError) {
+        match err {
+            GhApiError::Unauthorized => self.0.is_auth_token_valid.store(false, Relaxed),
+            GhApiError::RateLimit { retry_after } => {
+                *self.0.retry_after.lock().unwrap() =
+                    Some(Instant::now() + retry_after.unwrap_or(DEFAULT_RETRY_DURATION));
+            }
+            _ => (),
         }
     }
 
@@ -668,6 +784,111 @@ mod test {
         for (expected, task) in tests {
             assert_eq!(task.await.unwrap().unwrap(), expected);
         }
+    }
+
+    #[tokio::test]
+    async fn rate_limited_test_prefetch_release_artifacts() {
+        init_logger();
+
+        for client in create_client() {
+            // Without a token or with only the restful API, it does nothing.
+            let can_batch = client.has_gh_token() && !client.0.only_use_restful_api.load(Relaxed);
+
+            let release = cargo_binstall_v0_20_1::RELEASE;
+            let non_existent_release = GhRelease {
+                repo: release.repo.clone(),
+                tag: CompactString::const_new("v0.18.2"),
+            };
+
+            client
+                .prefetch_release_artifacts(
+                    &release.repo,
+                    [release.tag.clone(), non_existent_release.tag.clone()],
+                )
+                .await;
+
+            let cell = client.0.release_artifacts.get(release.clone());
+            let non_existent_cell = client.0.release_artifacts.get(non_existent_release);
+
+            if !can_batch {
+                assert!(!cell.initialized());
+                assert!(!non_existent_cell.initialized());
+                continue;
+            }
+
+            let artifacts = cell.get().unwrap().as_ref().unwrap();
+            for artifact in cargo_binstall_v0_20_1::ARTIFACTS {
+                assert!(artifacts.get_artifact_url(artifact).is_some(), "{artifact}");
+            }
+            assert!(non_existent_cell.get().unwrap().is_none());
+        }
+    }
+
+    /// Compare the GraphQL rate limit cost of a query per candidate tag with
+    /// one batched query, as reported by GitHub. Prints the costs.
+    #[tokio::test]
+    async fn rate_limited_test_graphql_cost() {
+        #[derive(Debug, serde::Deserialize)]
+        struct Cost {
+            #[serde(rename = "rateLimit")]
+            rate_limit: RateLimit,
+        }
+        #[derive(Debug, serde::Deserialize)]
+        struct RateLimit {
+            cost: u32,
+        }
+
+        init_logger();
+
+        let Some(auth_token) = env::var("CI_UNIT_TEST_GITHUB_TOKEN")
+            .ok()
+            .filter(|token| !token.is_empty())
+        else {
+            return;
+        };
+        let client = create_remote_client();
+
+        let cost = |query: String| {
+            // Ask for the cost of the query itself in the same query.
+            let query = format!(
+                "{} rateLimit {{ cost }} }}",
+                query.trim_end().strip_suffix('}').unwrap()
+            );
+            let future = common::issue_graphql_query::<Cost>(&client, query, &auth_token);
+            async move { future.await.unwrap().rate_limit.cost }
+        };
+
+        // The tags GhCrateMeta tries for cargo-binstall 0.20.1 on the
+        // default pkg-url templates.
+        let repo = cargo_binstall_v0_20_1::RELEASE.repo;
+        let tags = [
+            "0.20.1",
+            "v0.20.1",
+            "cargo-binstall-v0.20.1",
+            "cargo-binstall-0.20.1",
+        ]
+        .map(CompactString::const_new);
+
+        let mut per_tag = Vec::new();
+        for tag in &tags {
+            let release = GhRelease {
+                repo: repo.clone(),
+                tag: tag.clone(),
+            };
+            per_tag.push(cost(release_artifacts::first_release_query(&release)).await);
+        }
+        let batched = cost(release_artifacts::batch_query(
+            &repo,
+            tags.iter().map(CompactString::as_str),
+        ))
+        .await;
+
+        let per_tag_total: u32 = per_tag.iter().sum();
+        println!(
+            "GraphQL cost for {} tags: one query per tag {per_tag:?} = {per_tag_total}, batched = {batched}",
+            tags.len()
+        );
+        assert!(batched < per_tag_total);
     }
 
     #[tokio::test]

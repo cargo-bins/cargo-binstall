@@ -4,3 +4,8 @@ rate-limited = { max-threads = 1 }
 [[profile.default.overrides]]
 filter = 'test(rate_limited::)'
 test-group = 'rate-limited'
+
+# Show the costs it measures.
+[[profile.default.overrides]]
+filter = 'test(rate_limited_test_graphql_cost)'
+success-output = "immediate"
