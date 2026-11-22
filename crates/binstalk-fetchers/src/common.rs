@@ -59,9 +59,14 @@ pub(super) async fn get_gh_release_artifact_url(
     }
 }
 
-/// Check if the URL exists by querying the GitHub API.
+/// Check if the URL exists, by querying the GitHub API if there is a token.
 ///
 /// Caches info on all artifacts matching (repo, tag).
+///
+/// Without a token, the URL is checked with HEAD/GET instead: the API would
+/// spend one of the 60 requests per hour GitHub gives an IP address, which
+/// [`GhCrateMeta`](crate::GhCrateMeta) needs more, while HEAD/GET on a release
+/// asset costs no API quota.
 ///
 /// This function returns a future where its size should be at most size of
 /// 2-4 pointers.
@@ -75,6 +80,7 @@ pub(super) async fn does_url_exist(
     debug!("Checking for package at: '{url}'");
 
     if !GH_API_CLIENT_FAILED.load(Relaxed)
+        && gh_api_client.has_gh_token()
         && let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url)
     {
         match get_gh_release_artifact_url(gh_api_client, artifact).await {
