@@ -363,21 +363,23 @@ impl Data {
 }
 
 impl Data {
-    /// Which release tags exist in `repo`, of the ones `urls` download from:
-    /// one request to its git server, shared by all targets.
+    /// Which of the release `tags` exist in `repo`: one request to its git
+    /// server, shared by all targets.
     ///
     /// The first caller decides which tags are asked about, the targets
     /// normally share them.
     ///
-    /// Returns `None` if no URL is a release asset, or if the git server
+    /// Returns `None` if there is no tag to ask about, or if the git server
     /// could not tell.
-    async fn get_repo_tags(&self, client: &Client, repo: &str, urls: &[Url]) -> Option<&RepoTags> {
+    async fn get_repo_tags<'a>(
+        &self,
+        client: &Client,
+        repo: &str,
+        tags: impl Iterator<Item = &'a str>,
+    ) -> Option<&RepoTags> {
         self.repo_tags
             .get_or_init(|| async {
-                let tags: HashSet<_> = urls
-                    .iter()
-                    .filter_map(|url| git_refs::release_tag(repo, url))
-                    .collect();
+                let tags: HashSet<CompactString> = tags.map(CompactString::from).collect();
                 if tags.is_empty() {
                     return None;
                 }
