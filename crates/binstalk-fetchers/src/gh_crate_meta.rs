@@ -412,6 +412,39 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
+            // All candidates in the same GitHub repository are usually spread
+            // over a few release tags. Ask about all of them in one GraphQL
+            // query instead of one query per tag.
+            if self.gh_api_client.has_gh_token() {
+                let releases = pkg_urls
+                    .clone()
+                    .cartesian_product(pkg_fmts.clone())
+                    .flat_map(|(pkg_url, pkg_fmt)| {
+                        candidate_urls(
+                            &self.data,
+                            &self.target_data.target,
+                            &self.target_data.target_related_info,
+                            pkg_fmt,
+                            &pkg_url,
+                            repo,
+                            subcrate,
+                        )
+                    })
+                    .filter_map(|(url, ..)| GhReleaseArtifact::try_extract_from_url(&url))
+                    .map(|artifact| artifact.release)
+                    .into_group_map_by(|release| release.repo.clone());
+
+                // Normally all candidates are in the same repository.
+                for (gh_repo, releases) in releases {
+                    self.gh_api_client
+                        .prefetch_release_artifacts(
+                            &gh_repo,
+                            releases.into_iter().map(|release| release.tag),
+                        )
+                        .await;
+                }
+            }
+
             let resolver = FuturesResolver::default();
 
             // Iterate over pkg_urls first to avoid String::clone.

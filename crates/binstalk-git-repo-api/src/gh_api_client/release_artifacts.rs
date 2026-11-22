@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt,
     future::Future,
     hash::{Hash, Hasher},
@@ -188,5 +188,150 @@ releaseAssets({cond}) {{
                 break Err(GhApiError::NotFound);
             }
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLBatchData {
+    /// Each release under its alias, see [`release_alias`].
+    repository: Option<HashMap<CompactString, Option<GraphQLRelease>>>,
+}
+
+fn release_alias(index: usize) -> CompactString {
+    compact_str::format_compact!("r{index}")
+}
+
+fn graphql_string(s: &str) -> String {
+    // A JSON string is a valid GraphQL string, with the same escapes.
+    serde_json::to_string(s).expect("Serializing a str never fails")
+}
+
+fn batch_query(GhRepo { owner, repo }: &GhRepo, tags: &[CompactString]) -> String {
+    use std::fmt::Write;
+
+    let mut query = format!(
+        "query {{ repository(owner:{},name:{}) {{",
+        graphql_string(owner),
+        graphql_string(repo)
+    );
+    for (index, tag) in tags.iter().enumerate() {
+        write!(
+            query,
+            " {}: release(tagName:{}) {{ releaseAssets({}) {{ nodes {{ name url }} pageInfo {{ endCursor hasNextPage }} }} }}",
+            release_alias(index),
+            graphql_string(tag),
+            FilterCondition::Init,
+        )
+        .expect("Writing to a String never fails");
+    }
+    query.push_str(" } }");
+    query
+}
+
+/// What [`fetch_releases_artifacts_graphql_api`] found out about one release.
+#[derive(Debug)]
+pub(super) enum BatchedRelease {
+    Found(Artifacts),
+    NotFound,
+    /// It has more assets than one page holds, fetch it on its own.
+    Incomplete,
+}
+
+fn parse_batch(data: GraphQLBatchData, count: usize) -> Result<Vec<BatchedRelease>, GhApiError> {
+    let Some(mut releases) = data.repository else {
+        return Err(GhApiError::NotFound);
+    };
+
+    Ok((0..count)
+        .map(
+            |index| match releases.remove(&release_alias(index)).flatten() {
+                None => BatchedRelease::NotFound,
+                Some(GraphQLRelease {
+                    assets:
+                        GraphQLReleaseAssets {
+                            page_info:
+                                GraphQLPageInfo {
+                                    has_next_page: true,
+                                    ..
+                                },
+                            ..
+                        },
+                }) => BatchedRelease::Incomplete,
+                Some(GraphQLRelease { assets }) => BatchedRelease::Found(Artifacts {
+                    assets: assets.nodes.into_iter().collect(),
+                }),
+            },
+        )
+        .collect())
+}
+
+/// Fetch the assets of every release of `repo` in `tags` with one query.
+///
+/// Returns one entry per tag, in the same order.
+pub(super) fn fetch_releases_artifacts_graphql_api(
+    client: &remote::Client,
+    repo: &GhRepo,
+    tags: &[CompactString],
+    auth_token: &str,
+) -> impl Future<Output = Result<Vec<BatchedRelease>, GhApiError>> + Send + 'static + use<> {
+    let count = tags.len();
+    let future = issue_graphql_query(client, batch_query(repo, tags), auth_token);
+
+    async move { parse_batch(future.await?, count) }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn repo() -> GhRepo {
+        GhRepo {
+            owner: CompactString::const_new("rustsec"),
+            repo: CompactString::const_new("rustsec"),
+        }
+    }
+
+    #[test]
+    fn test_batch_query() {
+        assert_eq!(
+            batch_query(
+                &repo(),
+                &["v0.17.6".into(), r#"cargo-audit/"v0.17.6""#.into()]
+            ),
+            concat!(
+                r#"query { repository(owner:"rustsec",name:"rustsec") {"#,
+                r#" r0: release(tagName:"v0.17.6") { releaseAssets(first:100) { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
+                r#" r1: release(tagName:"cargo-audit/\"v0.17.6\"") { releaseAssets(first:100) { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
+                " } }",
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_batch() {
+        let data: GraphQLBatchData = serde_json::from_str(
+            r#"{"repository": {
+                "r0": null,
+                "r1": {"releaseAssets": {
+                    "nodes": [{"name": "a.tgz", "url": "https://github.com/rustsec/rustsec/releases/download/v1/a.tgz"}],
+                    "pageInfo": {"endCursor": "x", "hasNextPage": false}
+                }},
+                "r2": {"releaseAssets": {
+                    "nodes": [],
+                    "pageInfo": {"endCursor": "y", "hasNextPage": true}
+                }}
+            }}"#,
+        )
+        .unwrap();
+
+        let releases = parse_batch(data, 3).unwrap();
+        assert!(matches!(releases[0], BatchedRelease::NotFound));
+        assert!(
+            matches!(&releases[1], BatchedRelease::Found(artifacts) if artifacts.get_artifact_url("a.tgz").is_some())
+        );
+        assert!(matches!(releases[2], BatchedRelease::Incomplete));
+
+        let data: GraphQLBatchData = serde_json::from_str(r#"{"repository": null}"#).unwrap();
+        assert!(matches!(parse_batch(data, 1), Err(GhApiError::NotFound)));
     }
 }

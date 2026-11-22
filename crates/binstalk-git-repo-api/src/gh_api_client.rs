@@ -12,7 +12,7 @@ use std::{
 use binstalk_downloader::{download::Download, remote};
 use compact_str::{CompactString, ToCompactString, format_compact};
 use tokio::sync::OnceCell;
-use tracing::{Level, instrument, warn};
+use tracing::{Level, debug, instrument, warn};
 use url::Url;
 use zeroize::Zeroizing;
 
@@ -303,6 +303,91 @@ impl GhApiClient {
                 Err(GhApiError::RateLimit { retry_after })
             }
             Err(err) => Err(err),
+        }
+    }
+
+    /// Fetch the assets of all `releases` of `repo` with one GraphQL query,
+    /// so that [`GhApiClient::has_release_artifact`] finds them cached instead
+    /// of sending one query per release.
+    ///
+    /// Does nothing without a token, since the restful API can't batch, or if
+    /// fewer than two of `releases` are not cached yet. Errors are not
+    /// returned: [`GhApiClient::has_release_artifact`] then fetches each
+    /// release on its own, as it would have without this.
+    #[instrument(skip(self, tags))]
+    pub async fn prefetch_release_artifacts(
+        &self,
+        repo: &GhRepo,
+        tags: impl IntoIterator<Item = CompactString>,
+    ) {
+        if self.0.only_use_restful_api.load(Relaxed) || self.check_retry_after().is_err() {
+            return;
+        }
+        let Some(auth_token) = self.get_auth_token() else {
+            return;
+        };
+
+        let mut tags: Vec<_> = tags.into_iter().collect();
+        tags.sort_unstable();
+        tags.dedup();
+
+        let cells: Vec<_> = tags
+            .into_iter()
+            .map(|tag| {
+                let cell = self.0.release_artifacts.get(GhRelease {
+                    repo: repo.clone(),
+                    tag: tag.clone(),
+                });
+                (tag, cell)
+            })
+            .filter(|(_, cell)| !cell.initialized())
+            .collect();
+
+        if cells.len() < 2 {
+            return;
+        }
+
+        let tags: Vec<_> = cells.iter().map(|(tag, _)| tag.clone()).collect();
+
+        let releases = match release_artifacts::fetch_releases_artifacts_graphql_api(
+            &self.0.client,
+            repo,
+            &tags,
+            auth_token,
+        )
+        .await
+        {
+            Ok(releases) => releases,
+            Err(GhApiError::NotFound) => {
+                // The repository itself does not exist.
+                cells.iter().for_each(|(_, cell)| {
+                    let _ = cell.set(None);
+                });
+                return;
+            }
+            Err(GhApiError::Unauthorized) => {
+                self.0.is_auth_token_valid.store(false, Relaxed);
+                return;
+            }
+            Err(GhApiError::RateLimit { retry_after }) => {
+                *self.0.retry_after.lock().unwrap() =
+                    Some(Instant::now() + retry_after.unwrap_or(DEFAULT_RETRY_DURATION));
+                return;
+            }
+            Err(err) => {
+                debug!("Failed to fetch the assets of releases {tags:?} of {repo:?}: {err}");
+                return;
+            }
+        };
+
+        for ((_, cell), release) in cells.iter().zip(releases) {
+            // `set` fails only if `has_release_artifact` got there first,
+            // then that value is just as good.
+            let _ = match release {
+                release_artifacts::BatchedRelease::Found(artifacts) => cell.set(Some(artifacts)),
+                release_artifacts::BatchedRelease::NotFound => cell.set(None),
+                release_artifacts::BatchedRelease::Incomplete => continue,
+            };
         }
     }
 
@@ -620,6 +705,44 @@ mod test {
 
         for (expected, task) in tests {
             assert_eq!(task.await.unwrap().unwrap(), expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn rate_limited_test_prefetch_release_artifacts() {
+        init_logger();
+
+        for client in create_client() {
+            // Without a token or with only the restful API, it does nothing.
+            let can_batch = client.has_gh_token() && !client.0.only_use_restful_api.load(Relaxed);
+
+            let release = cargo_binstall_v0_20_1::RELEASE;
+            let non_existent_release = GhRelease {
+                repo: release.repo.clone(),
+                tag: CompactString::const_new("v0.18.2"),
+            };
+
+            client
+                .prefetch_release_artifacts(
+                    &release.repo,
+                    [release.tag.clone(), non_existent_release.tag.clone()],
+                )
+                .await;
+
+            let cell = client.0.release_artifacts.get(release.clone());
+            let non_existent_cell = client.0.release_artifacts.get(non_existent_release);
+
+            if !can_batch {
+                assert!(!cell.initialized());
+                assert!(!non_existent_cell.initialized());
+                continue;
+            }
+
+            let artifacts = cell.get().unwrap().as_ref().unwrap();
+            for artifact in cargo_binstall_v0_20_1::ARTIFACTS {
+                assert!(artifacts.get_artifact_url(artifact).is_some(), "{artifact}");
+            }
+            assert!(non_existent_cell.get().unwrap().is_none());
         }
     }
 
