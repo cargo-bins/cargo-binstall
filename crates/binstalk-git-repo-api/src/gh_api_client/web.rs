@@ -49,7 +49,7 @@ pub(super) async fn has_release_page(client: &remote::Client, release: &GhReleas
     }
 }
 
-/// The asset names of a release, from [`fetch_release_assets`].
+/// The asset names of a release, from [`GhApiClient::release_assets_on_web`](super::GhApiClient::release_assets_on_web).
 #[derive(Clone, Debug)]
 pub enum ReleaseAssets {
     /// github.com has no such release.
