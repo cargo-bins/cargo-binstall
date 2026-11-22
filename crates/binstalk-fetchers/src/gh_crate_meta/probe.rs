@@ -301,13 +301,14 @@ impl Probe {
         }
 
         // The page might not list every asset. Only trust that this one is
-        // missing if the page lists another candidate of the release,
-        // otherwise check some other way.
+        // missing if the page lists no asset at all, so there is nothing it
+        // could have left out, or another candidate of the release; otherwise
+        // check some other way.
         let lists_a_candidate = self
             .gh_candidates
             .get(&artifact.release)
             .is_some_and(|names| names.iter().any(|name| assets.contains(name)));
-        Ok(if lists_a_candidate {
+        Ok(if assets.is_empty() || lists_a_candidate {
             GhAsset::Missing
         } else {
             GhAsset::Unknown

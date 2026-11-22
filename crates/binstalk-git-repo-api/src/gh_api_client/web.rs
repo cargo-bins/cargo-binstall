@@ -12,7 +12,7 @@ use compact_str::CompactString;
 use tracing::debug;
 use url::Url;
 
-use super::{GhRelease, GhReleaseArtifact, GhRepo};
+use super::{GhRelease, GhReleaseArtifact, GhRepo, percent_decode_http_url_path};
 
 fn release_url(
     GhRelease {
@@ -55,10 +55,11 @@ pub enum ReleaseAssets {
     /// github.com has no such release.
     NotFound,
     /// The names of the assets, which may not be all of them: the list comes
-    /// from a page meant for people, not from an API.
+    /// from a page meant for people, not from an API. Empty for a tag
+    /// without a release, or a release without assets.
     Found(Arc<HashSet<CompactString>>),
-    /// The request failed, or no asset could be found in the page: either
-    /// the release has none, or github.com changed the page.
+    /// The request failed, or the page doesn't look like an asset list:
+    /// github.com may have changed it.
     Unknown,
 }
 
@@ -75,20 +76,32 @@ fn unescape_html(s: &str) -> std::borrow::Cow<'_, str> {
         .into()
 }
 
-/// The names of the assets of `release` linked to from `html`.
-fn parse_release_assets(html: &str, release: &GhRelease) -> HashSet<CompactString> {
+/// The URLs linked to from `html`.
+fn links(html: &str) -> impl Iterator<Item = Url> + '_ {
     let base = Url::parse("https://github.com/").expect("Literal provided must be a valid url");
 
     html.split("href=\"")
         .skip(1)
         .filter_map(|s| s.split_once('"'))
-        .filter_map(|(href, _)| base.join(&unescape_html(href)).ok())
+        .filter_map(move |(href, _)| base.join(&unescape_html(href)).ok())
+}
+
+/// The names of the assets of `release` linked to from `html`.
+fn parse_release_assets(html: &str, release: &GhRelease) -> HashSet<CompactString> {
+    links(html)
         .filter_map(|url| GhReleaseArtifact::try_extract_from_url(&url))
         // The owner and repository may be spelled differently, or redirected
         // to after a rename.
         .filter(|artifact| artifact.release.tag == release.tag)
         .map(|artifact| artifact.artifact_name)
         .collect()
+}
+
+/// Whether `html` links to the source code archive of the tag of `release`,
+/// which github.com lists for every release, and also for a tag without one.
+fn links_source_archive(html: &str, release: &GhRelease) -> bool {
+    let suffix = format!("/archive/refs/tags/{}.tar.gz", release.tag);
+    links(html).any(|url| percent_decode_http_url_path(url.path()).ends_with(&*suffix))
 }
 
 /// Get the asset names of `release` from the page github.com loads them from
@@ -123,8 +136,11 @@ pub(super) async fn fetch_release_assets(
 
     match response.bytes().await {
         Ok(html) => {
-            let assets = parse_release_assets(&String::from_utf8_lossy(&html), release);
-            if assets.is_empty() {
+            let html = String::from_utf8_lossy(&html);
+            let assets = parse_release_assets(&html, release);
+            // No asset is expected for a tag without a release, or a release
+            // without assets: the page then still lists the source code.
+            if assets.is_empty() && !links_source_archive(&html, release) {
                 debug!("Found no release assets in {url}");
                 ReleaseAssets::Unknown
             } else {
@@ -174,8 +190,15 @@ mod test {
 <a href="/RustSec/rustsec/releases/download/cargo-audit%2Fv0.17.6/a%20b&amp;c.zip" rel="nofollow">
 <a href="/rustsec/rustsec/releases/download/v0.17.6/other-tag.tgz" rel="nofollow">
 <a href="/rustsec/rustsec/archive/refs/tags/cargo-audit/v0.17.6.zip" rel="nofollow">
+<a href="/rustsec/rustsec/archive/refs/tags/cargo-audit/v0.17.6.tar.gz" rel="nofollow">
 <a href="https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/absolute.tgz">
 "#;
+
+        assert!(links_source_archive(html, &release));
+        assert!(!links_source_archive(
+            r#"<a href="/rustsec/rustsec/archive/refs/tags/v0.17.6.tar.gz">"#,
+            &release
+        ));
 
         let mut assets: Vec<_> = parse_release_assets(html, &release).into_iter().collect();
         assets.sort();

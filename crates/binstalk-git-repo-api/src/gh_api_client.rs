@@ -928,6 +928,16 @@ mod test {
         expected.sort();
         assert_eq!(assets, expected);
 
+        // A tag without a release.
+        let tag_only = GhRelease {
+            repo: release.repo.clone(),
+            tag: CompactString::const_new("detect-targets-v0.1.0"),
+        };
+        assert!(matches!(
+            client.release_assets_on_web(&tag_only).await,
+            ReleaseAssets::Found(assets) if assets.is_empty()
+        ));
+
         let release = GhRelease {
             repo: release.repo,
             tag: CompactString::const_new("v0.18.2"),
