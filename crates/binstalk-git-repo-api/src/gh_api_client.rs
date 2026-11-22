@@ -18,6 +18,7 @@ use zeroize::Zeroizing;
 
 mod common;
 mod error;
+mod graphql;
 mod release_artifacts;
 mod repo_info;
 mod web;
@@ -309,18 +310,20 @@ impl GhApiClient {
         }
     }
 
-    /// Fetch the assets of all `releases` of `repo` with one GraphQL query,
+    /// Fetch the assets of the releases `tags` of `repo` with one GraphQL query,
     /// so that [`GhApiClient::has_release_artifact`] finds them cached instead
     /// of sending one query per release.
     ///
     /// Does nothing without a token, since the restful API can't batch, or if
-    /// fewer than two of `releases` are not cached yet: a batch of one is the
+    /// fewer than two of `tags` are not cached yet: a batch of one is the
     /// query [`GhApiClient::has_release_artifact`] sends anyway. Errors are
     /// not returned: [`GhApiClient::has_release_artifact`] then fetches each
     /// release on its own, as it would have without this.
     ///
     /// A release with more assets than fit in the batch keeps its first page,
     /// the rest is fetched from there.
+    ///
+    /// `tags` should not repeat a tag, a repeated one is fetched twice.
     #[instrument(skip(self, tags))]
     pub async fn prefetch_release_artifacts(
         &self,
@@ -333,10 +336,6 @@ impl GhApiClient {
         let Some(auth_token) = self.get_auth_token() else {
             return;
         };
-
-        let mut tags: Vec<_> = tags.into_iter().collect();
-        tags.sort_unstable();
-        tags.dedup();
 
         let cells: Vec<_> = tags
             .into_iter()
@@ -354,12 +353,10 @@ impl GhApiClient {
             return;
         }
 
-        let tags: Vec<_> = cells.iter().map(|(tag, _)| tag.clone()).collect();
-
         let releases = match release_artifacts::fetch_releases_artifacts_graphql_api(
             &self.0.client,
             repo,
-            &tags,
+            cells.iter().map(|(tag, _)| tag.as_str()),
             auth_token,
         )
         .await
@@ -374,7 +371,7 @@ impl GhApiClient {
             }
             Err(err) => {
                 self.note_prefetch_error(&err);
-                debug!("Failed to fetch the assets of releases {tags:?} of {repo:?}: {err}");
+                debug!("Failed to fetch the assets of the releases of {repo:?}: {err}");
                 return;
             }
         };
@@ -387,13 +384,10 @@ impl GhApiClient {
                     artifacts,
                     end_cursor,
                 } => {
-                    let release = GhRelease {
-                        repo: repo.clone(),
-                        tag: tag.clone(),
-                    };
                     match release_artifacts::fetch_rest_of_release_artifacts(
                         &self.0.client,
-                        &release,
+                        repo,
+                        tag,
                         auth_token,
                         artifacts,
                         end_cursor,
@@ -403,7 +397,9 @@ impl GhApiClient {
                         Ok(artifacts) => Some(artifacts),
                         Err(err) => {
                             self.note_prefetch_error(&err);
-                            debug!("Failed to fetch the rest of the assets of {release:?}: {err}");
+                            debug!(
+                                "Failed to fetch the rest of the assets of release {tag} of {repo:?}: {err}"
+                            );
                             continue;
                         }
                     }
@@ -855,7 +851,11 @@ mod test {
             };
             per_tag.push(cost(release_artifacts::first_release_query(&release)).await);
         }
-        let batched = cost(release_artifacts::batch_query(&repo, &tags)).await;
+        let batched = cost(release_artifacts::batch_query(
+            &repo,
+            tags.iter().map(CompactString::as_str),
+        ))
+        .await;
 
         let per_tag_total: u32 = per_tag.iter().sum();
         println!(

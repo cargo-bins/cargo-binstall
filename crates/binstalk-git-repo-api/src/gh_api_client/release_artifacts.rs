@@ -1,7 +1,7 @@
 use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
-    fmt,
+    fmt::{self, Write},
     future::Future,
     hash::{Hash, Hasher},
 };
@@ -14,6 +14,7 @@ use url::Url;
 use super::{
     GhApiError, GhRelease, GhRepo,
     common::{issue_graphql_query, issue_restful_api},
+    graphql::GraphQLString,
 };
 
 // Only include fields we do care about
@@ -123,9 +124,45 @@ impl fmt::Display for FilterCondition {
         match self {
             // GitHub imposes a limit of 100 for the value passed to param "first"
             FilterCondition::Init => f.write_str("first:100"),
-            FilterCondition::After(end_cursor) => write!(f, r#"first:100,after:"{end_cursor}""#),
+            FilterCondition::After(end_cursor) => {
+                write!(f, "first:100,after:{}", GraphQLString(end_cursor))
+            }
         }
     }
+}
+
+/// The part of a query that asks for one page of a release's assets.
+fn write_release_field(query: &mut String, tag: &str, cond: &FilterCondition) {
+    write!(
+        query,
+        " release(tagName:{}) {{ releaseAssets({cond}) {{ nodes {{ name url }} pageInfo {{ endCursor hasNextPage }} }} }}",
+        GraphQLString(tag),
+    )
+    .expect("Writing to a String never fails");
+}
+
+fn query_prefix(GhRepo { owner, repo }: &GhRepo) -> String {
+    format!(
+        "query {{ repository(owner:{},name:{}) {{",
+        GraphQLString(owner),
+        GraphQLString(repo)
+    )
+}
+
+const QUERY_SUFFIX: &str = " } }";
+
+/// The query for one page of the assets of the release `tag` of `repo`.
+fn release_query(repo: &GhRepo, tag: &str, cond: &FilterCondition) -> String {
+    let mut query = query_prefix(repo);
+    write_release_field(&mut query, tag, cond);
+    query.push_str(QUERY_SUFFIX);
+    query
+}
+
+/// The query [`fetch_release_artifacts_graphql_api`] starts with.
+#[cfg(test)]
+pub(super) fn first_release_query(release: &GhRelease) -> String {
+    release_query(&release.repo, &release.tag, &FilterCondition::Init)
 }
 
 pub(super) fn fetch_release_artifacts_graphql_api(
@@ -133,78 +170,57 @@ pub(super) fn fetch_release_artifacts_graphql_api(
     release: &GhRelease,
     auth_token: &str,
 ) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
-    fetch_remaining_release_artifacts(
-        client,
-        release,
-        auth_token,
-        Artifacts::default(),
-        FilterCondition::Init,
-    )
+    // `GhApiClient::do_fetch` needs a future that owns its data.
+    let client = client.clone();
+    let release = release.clone();
+    let auth_token = auth_token.to_compact_string();
+
+    async move {
+        fetch_remaining_release_artifacts(
+            &client,
+            &release.repo,
+            &release.tag,
+            &auth_token,
+            Artifacts::default(),
+            FilterCondition::Init,
+        )
+        .await
+    }
 }
 
-/// The query for one page of the assets of `release`.
-fn release_query(
-    GhRelease {
-        repo: GhRepo { owner, repo },
-        tag,
-    }: &GhRelease,
-    cond: &FilterCondition,
-) -> String {
-    format!(
-        r#"query {{
-  repository(owner:"{owner}",name:"{repo}") {{
-    release(tagName:"{tag}") {{
-releaseAssets({cond}) {{
-  nodes {{ name url }}
-  pageInfo {{ endCursor hasNextPage }}
-}}}}}}}}"#
-    )
-}
-
-/// The query [`fetch_release_artifacts_graphql_api`] starts with.
-#[cfg(test)]
-pub(super) fn first_release_query(release: &GhRelease) -> String {
-    release_query(release, &FilterCondition::Init)
-}
-
-/// Fetch the assets of `release` from `cond` on, adding them to `artifacts`.
-fn fetch_remaining_release_artifacts(
+/// Fetch the assets of the release `tag` of `repo` from `cond` on, adding
+/// them to `artifacts`.
+async fn fetch_remaining_release_artifacts(
     client: &remote::Client,
-    release: &GhRelease,
+    repo: &GhRepo,
+    tag: &str,
     auth_token: &str,
     mut artifacts: Artifacts,
     mut cond: FilterCondition,
-) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
-    let client = client.clone();
-    let auth_token = auth_token.to_compact_string();
-    let release = release.clone();
+) -> Result<Artifacts, GhApiError> {
+    loop {
+        let query = release_query(repo, tag, &cond);
 
-    async move {
-        loop {
-            let query = release_query(&release, &cond);
+        let data: GraphQLData = issue_graphql_query(client, query, auth_token).await?;
 
-            let data: GraphQLData = issue_graphql_query(&client, query, &auth_token).await?;
+        let Some(assets) = data
+            .repository
+            .and_then(|repository| repository.release)
+            .map(|release| release.assets)
+        else {
+            break Err(GhApiError::NotFound);
+        };
 
-            let assets = data
-                .repository
-                .and_then(|repository| repository.release)
-                .map(|release| release.assets);
+        artifacts.assets.extend(assets.nodes);
 
-            if let Some(assets) = assets {
-                artifacts.assets.extend(assets.nodes);
-
-                match assets.page_info {
-                    GraphQLPageInfo {
-                        end_cursor: Some(end_cursor),
-                        has_next_page: true,
-                    } => {
-                        cond = FilterCondition::After(end_cursor);
-                    }
-                    _ => break Ok(artifacts),
-                }
-            } else {
-                break Err(GhApiError::NotFound);
+        match assets.page_info {
+            GraphQLPageInfo {
+                end_cursor: Some(end_cursor),
+                has_next_page: true,
+            } => {
+                cond = FilterCondition::After(end_cursor);
             }
+            _ => break Ok(artifacts),
         }
     }
 }
@@ -219,30 +235,17 @@ fn release_alias(index: usize) -> CompactString {
     compact_str::format_compact!("r{index}")
 }
 
-fn graphql_string(s: &str) -> String {
-    // A JSON string is a valid GraphQL string, with the same escapes.
-    serde_json::to_string(s).expect("Serializing a str never fails")
-}
-
-pub(super) fn batch_query(GhRepo { owner, repo }: &GhRepo, tags: &[CompactString]) -> String {
-    use std::fmt::Write;
-
-    let mut query = format!(
-        "query {{ repository(owner:{},name:{}) {{",
-        graphql_string(owner),
-        graphql_string(repo)
-    );
-    for (index, tag) in tags.iter().enumerate() {
-        write!(
-            query,
-            " {}: release(tagName:{}) {{ releaseAssets({}) {{ nodes {{ name url }} pageInfo {{ endCursor hasNextPage }} }} }}",
-            release_alias(index),
-            graphql_string(tag),
-            FilterCondition::Init,
-        )
-        .expect("Writing to a String never fails");
+/// One query for the first page of the assets of every release of `repo` in
+/// `tags`, each under its [`release_alias`].
+pub(super) fn batch_query<'a>(repo: &GhRepo, tags: impl IntoIterator<Item = &'a str>) -> String {
+    let mut query = query_prefix(repo);
+    for (index, tag) in tags.into_iter().enumerate() {
+        query.push(' ');
+        query.push_str(&release_alias(index));
+        query.push(':');
+        write_release_field(&mut query, tag, &FilterCondition::Init);
     }
-    query.push_str(" } }");
+    query.push_str(QUERY_SUFFIX);
     query
 }
 
@@ -259,23 +262,26 @@ pub(super) enum BatchedRelease {
     },
 }
 
-/// Fetch the assets of `release` after the first page that
+/// Fetch the assets of the release `tag` of `repo` after the first page that
 /// [`fetch_releases_artifacts_graphql_api`] returned as
 /// [`BatchedRelease::Incomplete`].
-pub(super) fn fetch_rest_of_release_artifacts(
+pub(super) async fn fetch_rest_of_release_artifacts(
     client: &remote::Client,
-    release: &GhRelease,
+    repo: &GhRepo,
+    tag: &str,
     auth_token: &str,
     artifacts: Artifacts,
     end_cursor: CompactString,
-) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
+) -> Result<Artifacts, GhApiError> {
     fetch_remaining_release_artifacts(
         client,
-        release,
+        repo,
+        tag,
         auth_token,
         artifacts,
         FilterCondition::After(end_cursor),
     )
+    .await
 }
 
 fn parse_batch(data: GraphQLBatchData, count: usize) -> Result<Vec<BatchedRelease>, GhApiError> {
@@ -312,16 +318,15 @@ fn parse_batch(data: GraphQLBatchData, count: usize) -> Result<Vec<BatchedReleas
 /// Fetch the assets of every release of `repo` in `tags` with one query.
 ///
 /// Returns one entry per tag, in the same order.
-pub(super) fn fetch_releases_artifacts_graphql_api(
+pub(super) async fn fetch_releases_artifacts_graphql_api<'a>(
     client: &remote::Client,
     repo: &GhRepo,
-    tags: &[CompactString],
+    tags: impl ExactSizeIterator<Item = &'a str>,
     auth_token: &str,
-) -> impl Future<Output = Result<Vec<BatchedRelease>, GhApiError>> + Send + 'static + use<> {
+) -> Result<Vec<BatchedRelease>, GhApiError> {
     let count = tags.len();
-    let future = issue_graphql_query(client, batch_query(repo, tags), auth_token);
-
-    async move { parse_batch(future.await?, count) }
+    let data = issue_graphql_query(client, batch_query(repo, tags), auth_token).await?;
+    parse_batch(data, count)
 }
 
 #[cfg(test)]
@@ -338,14 +343,27 @@ mod test {
     #[test]
     fn test_batch_query() {
         assert_eq!(
-            batch_query(
-                &repo(),
-                &["v0.17.6".into(), r#"cargo-audit/"v0.17.6""#.into()]
-            ),
+            batch_query(&repo(), ["v0.17.6", r#"cargo-audit/"v0.17.6""#]),
             concat!(
                 r#"query { repository(owner:"rustsec",name:"rustsec") {"#,
                 r#" r0: release(tagName:"v0.17.6") { releaseAssets(first:100) { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
                 r#" r1: release(tagName:"cargo-audit/\"v0.17.6\"") { releaseAssets(first:100) { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
+                " } }",
+            )
+        );
+    }
+
+    #[test]
+    fn test_release_query() {
+        assert_eq!(
+            release_query(
+                &repo(),
+                r#"cargo-audit/"v0.17.6""#,
+                &FilterCondition::After("Y3Vy".into())
+            ),
+            concat!(
+                r#"query { repository(owner:"rustsec",name:"rustsec") {"#,
+                r#" release(tagName:"cargo-audit/\"v0.17.6\"") { releaseAssets(first:100,after:"Y3Vy") { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
                 " } }",
             )
         );

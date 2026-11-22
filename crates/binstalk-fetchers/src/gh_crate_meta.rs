@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::BTreeSet,
     fmt, iter,
     path::Path,
     sync::{Arc, OnceLock},
@@ -446,16 +447,15 @@ impl super::Fetcher for GhCrateMeta {
                         )
                     })
                     .filter_map(|(url, ..)| GhReleaseArtifact::try_extract_from_url(&url))
-                    .map(|artifact| artifact.release)
-                    .into_group_map_by(|release| release.repo.clone());
+                    .map(|artifact| (artifact.release.repo, artifact.release.tag))
+                    .into_grouping_map()
+                    // Every tag shows up once per candidate asset name.
+                    .collect::<BTreeSet<_>>();
 
                 // Normally all candidates are in the same repository.
-                for (gh_repo, releases) in releases {
+                for (gh_repo, tags) in releases {
                     self.gh_api_client
-                        .prefetch_release_artifacts(
-                            &gh_repo,
-                            releases.into_iter().map(|release| release.tag),
-                        )
+                        .prefetch_release_artifacts(&gh_repo, tags)
                         .await;
                 }
             }
