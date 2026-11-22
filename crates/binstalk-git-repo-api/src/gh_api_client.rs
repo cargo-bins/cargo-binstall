@@ -26,6 +26,7 @@ mod web;
 use common::{check_http_status_and_header, percent_decode_http_url_path};
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
 pub use repo_info::RepoInfo;
+pub use web::ReleaseAssets;
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
@@ -131,7 +132,7 @@ struct Inner {
     client: remote::Client,
     release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
     release_pages: Map<GhRelease, OnceCell<bool>>,
-    release_web_assets: Map<GhRelease, OnceCell<web::ReleaseAssets>>,
+    release_web_assets: Map<GhRelease, OnceCell<ReleaseAssets>>,
     retry_after: Mutex<Option<Instant>>,
 
     auth_token: Option<Zeroizing<Box<str>>>,
@@ -427,53 +428,6 @@ impl GhApiClient {
         }
     }
 
-    /// Fill the cache of [`GhApiClient::has_release_page`] for all of `tags`
-    /// with one request, instead of one per tag.
-    ///
-    /// Does nothing if fewer than two of `tags` are not cached yet, or if the
-    /// request fails: [`GhApiClient::has_release_page`] then checks each page
-    /// on its own.
-    ///
-    /// Only use it for a public repository.
-    #[instrument(skip(self, tags))]
-    pub async fn prefetch_release_pages(
-        &self,
-        repo: &GhRepo,
-        tags: impl IntoIterator<Item = CompactString>,
-    ) {
-        let cells: Vec<_> = tags
-            .into_iter()
-            .map(|tag| {
-                let cell = self.0.release_pages.get(GhRelease {
-                    repo: repo.clone(),
-                    tag: tag.clone(),
-                });
-                (tag, cell)
-            })
-            .filter(|(_, cell)| !cell.initialized())
-            .collect();
-
-        if cells.len() < 2 {
-            return;
-        }
-
-        let Some(existing) = web::list_tags(
-            &self.0.client,
-            repo,
-            cells.iter().map(|(tag, _)| tag.as_str()),
-        )
-        .await
-        else {
-            return;
-        };
-
-        for (tag, cell) in cells {
-            // `set` fails only if `has_release_page` got there first, then
-            // that value is just as good.
-            let _ = cell.set(existing.contains(&tag));
-        }
-    }
-
     /// Check whether `release` exists without the API, so without spending
     /// the API rate limit: returns `false` only if github.com has no page for
     /// it.
@@ -492,28 +446,26 @@ impl GhApiClient {
             .await
     }
 
-    /// Check whether `artifact` exists without the API, for when it can't be
-    /// used: from the list of assets github.com shows on the release's page.
+    /// Get the asset names of `release` without the API, for when it can't
+    /// be used: from the list github.com shows on the release's page.
     ///
-    /// Returns `None` if that list could not be had, then check the artifact
-    /// some other way.
+    /// The list comes from a page meant for people, so an asset missing from
+    /// it may still exist, and a listed one should be checked before it is
+    /// used.
     ///
     /// Only use it for a public repository, github.com answers 404 for a
     /// private one.
     ///
     /// Caches the asset names per release, so this costs one request per
     /// release however many artifacts are checked.
-    #[instrument(skip(self), ret(level = Level::DEBUG))]
-    pub async fn has_release_artifact_on_web(&self, artifact: &GhReleaseArtifact) -> Option<bool> {
-        let cell = self.0.release_web_assets.get(artifact.release.clone());
-        match cell
-            .get_or_init(|| web::fetch_release_assets(&self.0.client, &artifact.release))
+    #[instrument(skip(self))]
+    pub async fn release_assets_on_web(&self, release: &GhRelease) -> ReleaseAssets {
+        self.0
+            .release_web_assets
+            .get(release.clone())
+            .get_or_init(|| web::fetch_release_assets(&self.0.client, release))
             .await
-        {
-            web::ReleaseAssets::NotFound => Some(false),
-            web::ReleaseAssets::Found(assets) => Some(assets.contains(&artifact.artifact_name)),
-            web::ReleaseAssets::Unknown => None,
-        }
+            .clone()
     }
 
     pub async fn download_artifact(
@@ -961,71 +913,29 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_prefetch_release_pages() {
-        init_logger();
-
-        let client = GhApiClient::new(create_remote_client(), None);
-        let repo = cargo_binstall_v0_20_1::RELEASE.repo;
-
-        client
-            .prefetch_release_pages(&repo, ["v0.20.1".into(), "v0.18.2".into()])
-            .await;
-
-        let cached = |tag| {
-            client
-                .0
-                .release_pages
-                .get(GhRelease {
-                    repo: repo.clone(),
-                    tag: CompactString::const_new(tag),
-                })
-                .get()
-                .copied()
-        };
-        assert_eq!(cached("v0.20.1"), Some(true));
-        // We would never release anything older than v0.20.1
-        assert_eq!(cached("v0.18.2"), Some(false));
-    }
-
-    #[tokio::test]
-    async fn test_has_release_artifact_on_web() {
+    async fn test_release_assets_on_web() {
         init_logger();
 
         let client = GhApiClient::new(create_remote_client(), None);
         let release = cargo_binstall_v0_20_1::RELEASE;
 
-        for artifact_name in cargo_binstall_v0_20_1::ARTIFACTS {
-            let artifact = GhReleaseArtifact {
-                release: release.clone(),
-                artifact_name: artifact_name.to_compact_string(),
-            };
-            assert_eq!(
-                client.has_release_artifact_on_web(&artifact).await,
-                Some(true),
-                "{artifact_name}"
-            );
-        }
-
-        let artifact = GhReleaseArtifact {
-            release: release.clone(),
-            artifact_name: "123z".to_compact_string(),
+        let ReleaseAssets::Found(assets) = client.release_assets_on_web(&release).await else {
+            panic!("Failed to get the assets of {release:?}");
         };
-        assert_eq!(
-            client.has_release_artifact_on_web(&artifact).await,
-            Some(false)
-        );
+        let mut assets: Vec<_> = assets.iter().map(CompactString::as_str).collect();
+        assets.sort();
+        let mut expected = cargo_binstall_v0_20_1::ARTIFACTS.to_vec();
+        expected.sort();
+        assert_eq!(assets, expected);
 
-        let artifact = GhReleaseArtifact {
-            release: GhRelease {
-                repo: release.repo,
-                tag: CompactString::const_new("v0.18.2"),
-            },
-            artifact_name: "1234".to_compact_string(),
+        let release = GhRelease {
+            repo: release.repo,
+            tag: CompactString::const_new("v0.18.2"),
         };
-        assert_eq!(
-            client.has_release_artifact_on_web(&artifact).await,
-            Some(false)
-        );
+        assert!(matches!(
+            client.release_assets_on_web(&release).await,
+            ReleaseAssets::NotFound
+        ));
     }
 
     #[tokio::test]

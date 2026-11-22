@@ -1,9 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
+use std::{borrow::Cow, collections::HashSet, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
+use binstalk_git_repo_api::{
+    gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo},
+    git_refs::{self, RepoTags},
+};
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
     crate_info::PkgUrlHint,
@@ -225,6 +228,7 @@ pub struct Data {
     version: CompactString,
     repo: Option<String>,
     repo_info: OnceCell<Option<RepoInfo>>,
+    repo_tags: OnceCell<Option<RepoTags>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
@@ -236,6 +240,7 @@ impl Data {
             version,
             repo,
             repo_info: OnceCell::new(),
+            repo_tags: OnceCell::new(),
             pkg_url_hint: None,
         }
     }
@@ -354,6 +359,32 @@ impl Data {
             })
             .await
             .map(Option::as_ref)
+    }
+}
+
+impl Data {
+    /// Which release tags exist in `repo`, of the ones `urls` download from:
+    /// one request to its git server, shared by all targets.
+    ///
+    /// The first caller decides which tags are asked about, the targets
+    /// normally share them.
+    ///
+    /// Returns `None` if no URL is a release asset, or if the git server
+    /// could not tell.
+    async fn get_repo_tags(&self, client: &Client, repo: &str, urls: &[Url]) -> Option<&RepoTags> {
+        self.repo_tags
+            .get_or_init(|| async {
+                let tags: HashSet<_> = urls
+                    .iter()
+                    .filter_map(|url| git_refs::release_tag(repo, url))
+                    .collect();
+                if tags.is_empty() {
+                    return None;
+                }
+                git_refs::list_tags(client, &Url::parse(repo).ok()?, tags).await
+            })
+            .await
+            .as_ref()
     }
 }
 

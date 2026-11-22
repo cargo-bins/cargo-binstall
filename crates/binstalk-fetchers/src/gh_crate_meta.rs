@@ -1,12 +1,17 @@
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap, HashSet},
     fmt, iter,
     path::Path,
     sync::{Arc, OnceLock},
 };
 
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
+use binstalk_git_repo_api::{
+    gh_api_client::{
+        GhApiError, GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, ReleaseAssets,
+    },
+    git_refs::{self, RepoTags},
+};
 use binstalk_types::{cargo_toml_binstall::Strategy, crate_info::PkgUrlHint};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -143,18 +148,56 @@ fn candidate_urls(
         .collect()
 }
 
+/// What is known about the repository and the releases of the candidates
+/// before checking them.
+struct KnownRepo<'a> {
+    is_private: bool,
+    /// Which release tags exist, from the repository's git server.
+    tags: Option<&'a RepoTags>,
+    /// The candidate asset names of each GitHub release.
+    gh_candidates: HashMap<GhRelease, Arc<HashSet<CompactString>>>,
+}
+
 /// Check whether `artifact` of a public repository exists on github.com,
 /// without the API. Returns `None` if github.com can't tell.
 ///
-/// Both checks are cached per release, so this costs at most two requests per
-/// release however many candidates are checked.
-async fn check_on_web(gh_api_client: &GhApiClient, artifact: &GhReleaseArtifact) -> Option<bool> {
+/// The release checks are cached per release, so this costs at most two
+/// requests per release however many candidates are checked, plus one for each
+/// candidate found.
+async fn check_on_web(
+    client: &Client,
+    gh_api_client: &GhApiClient,
+    artifact: &GhReleaseArtifact,
+    url: &Url,
+    // Whether the release's tag exists, if known.
+    tag_exists: Option<bool>,
+    // The other candidates of the release.
+    release_candidates: Option<&HashSet<CompactString>>,
+) -> Result<Option<bool>, FetchError> {
     // HEAD the release page first: github.com answers a missing release with
     // a 404 page about as large as an asset list.
-    if !gh_api_client.has_release_page(&artifact.release).await {
-        return Some(false);
+    if tag_exists.is_none() && !gh_api_client.has_release_page(&artifact.release).await {
+        return Ok(Some(false));
     }
-    gh_api_client.has_release_artifact_on_web(artifact).await
+
+    let assets = match gh_api_client.release_assets_on_web(&artifact.release).await {
+        ReleaseAssets::NotFound => return Ok(Some(false)),
+        ReleaseAssets::Found(assets) => assets,
+        ReleaseAssets::Unknown => return Ok(None),
+    };
+
+    if assets.contains(&artifact.artifact_name) {
+        // The list is parsed from a page meant for people: make sure a listed
+        // asset can be downloaded before picking it.
+        return Ok(Some(Box::pin(client.remote_gettable(url.clone())).await?));
+    }
+
+    // The page might not list every asset. Only trust that this one is
+    // missing if the page lists another candidate of the release, otherwise
+    // check some other way.
+    Ok(release_candidates
+        .is_some_and(|candidates| candidates.iter().any(|name| assets.contains(name)))
+        .then_some(false))
 }
 
 impl GhCrateMeta {
@@ -165,7 +208,7 @@ impl GhCrateMeta {
         pkg_url: &Template<'_>,
         repo: Option<&str>,
         subcrate: Option<&str>,
-        is_repo_private: bool,
+        known: &KnownRepo<'_>,
     ) {
         // `pkg_url` is one of the defaults unless the crate specified it.
         let default_pkg_url = self
@@ -185,6 +228,8 @@ impl GhCrateMeta {
             subcrate,
         );
 
+        let is_repo_private = known.is_private;
+
         // go check all potential URLs at once
         futures_resolver.extend(urls.into_iter().map(move |(url, ext, target_arch)| {
             let client = self.client.clone();
@@ -196,8 +241,20 @@ impl GhCrateMeta {
             let gh_release_artifact = GhReleaseArtifact::try_extract_from_url(&url);
             let default_pkg_url = default_pkg_url.clone();
 
+            let tag_exists = repo
+                .as_deref()
+                .zip(known.tags)
+                .and_then(|(repo, tags)| tags.exists(&git_refs::release_tag(repo, &url)?));
+            let release_candidates = gh_release_artifact
+                .as_ref()
+                .and_then(|artifact| known.gh_candidates.get(&artifact.release).cloned());
+
             async move {
                 debug!("Checking for package at: '{url}'");
+
+                if tag_exists == Some(false) {
+                    return Ok(None);
+                }
 
                 let mut resolved = Resolved {
                     url: url.clone(),
@@ -217,7 +274,15 @@ impl GhCrateMeta {
                     // can't tell.
                     if !is_repo_private
                         && !gh_api_client.has_gh_token()
-                        && let Some(found) = check_on_web(&gh_api_client, &artifact).await
+                        && let Some(found) = check_on_web(
+                            &client,
+                            &gh_api_client,
+                            &artifact,
+                            &url,
+                            tag_exists,
+                            release_candidates.as_deref(),
+                        )
+                        .await?
                     {
                         return Ok(found.then_some(resolved));
                     }
@@ -240,7 +305,16 @@ impl GhCrateMeta {
                                 // One or two requests per release on
                                 // github.com, instead of one HEAD/GET per
                                 // candidate.
-                                if let Some(found) = check_on_web(&gh_api_client, &artifact).await {
+                                if let Some(found) = check_on_web(
+                                    &client,
+                                    &gh_api_client,
+                                    &artifact,
+                                    &url,
+                                    tag_exists,
+                                    release_candidates.as_deref(),
+                                )
+                                .await?
+                                {
                                     return Ok(found.then_some(resolved));
                                 }
                                 break;
@@ -399,6 +473,52 @@ impl super::Fetcher for GhCrateMeta {
                 Either::Right(PkgFmt::iter())
             };
 
+            // Every candidate URL, of every template.
+            let all_candidate_urls: Vec<Url> = pkg_urls
+                .clone()
+                .cartesian_product(pkg_fmts.clone())
+                .flat_map(|(pkg_url, pkg_fmt)| {
+                    candidate_urls(
+                        &self.data,
+                        &self.target_data.target,
+                        &self.target_data.target_related_info,
+                        pkg_fmt,
+                        &pkg_url,
+                        repo,
+                        subcrate,
+                    )
+                })
+                .map(|(url, ..)| url)
+                .collect();
+
+            // Before any API call, find out which of the release tags exist
+            // with one request to the repository's git server, for all
+            // targets. A private repository needs authentication.
+            let tags = match repo {
+                Some(repo) if !is_repo_private => {
+                    self.data
+                        .get_repo_tags(&self.client, repo, &all_candidate_urls)
+                        .await
+                }
+                _ => None,
+            };
+            let known = KnownRepo {
+                is_private: is_repo_private,
+                tags,
+                gh_candidates: all_candidate_urls
+                    .iter()
+                    .filter_map(GhReleaseArtifact::try_extract_from_url)
+                    .filter(|artifact| {
+                        tags.and_then(|tags| tags.exists(&artifact.release.tag)) != Some(false)
+                    })
+                    .map(|artifact| (artifact.release, artifact.artifact_name))
+                    .into_grouping_map()
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .map(|(release, names)| (release, Arc::new(names)))
+                    .collect(),
+            };
+
             // Try how a previous version was found first: it is one template
             // instead of all of them, times every pkg-fmt.
             //
@@ -423,7 +543,7 @@ impl super::Fetcher for GhCrateMeta {
                         &pkg_url,
                         repo,
                         subcrate,
-                        is_repo_private,
+                        &known,
                     );
 
                     if let Some(resolved) = resolver.resolve().await {
@@ -444,43 +564,21 @@ impl super::Fetcher for GhCrateMeta {
             }
 
             // All candidates in the same GitHub repository are usually spread
-            // over a few release tags. Ask about all of them in one request
-            // instead of one per tag.
-            {
-                let releases = pkg_urls
-                    .clone()
-                    .cartesian_product(pkg_fmts.clone())
-                    .flat_map(|(pkg_url, pkg_fmt)| {
-                        candidate_urls(
-                            &self.data,
-                            &self.target_data.target,
-                            &self.target_data.target_related_info,
-                            pkg_fmt,
-                            &pkg_url,
-                            repo,
-                            subcrate,
-                        )
-                    })
-                    .filter_map(|(url, ..)| GhReleaseArtifact::try_extract_from_url(&url))
-                    .map(|artifact| (artifact.release.repo, artifact.release.tag))
+            // over a few release tags. Ask about the ones that exist in one
+            // GraphQL query instead of one query per tag.
+            if self.gh_api_client.has_gh_token() {
+                let releases = known
+                    .gh_candidates
+                    .keys()
+                    .map(|release| (release.repo.clone(), release.tag.clone()))
                     .into_grouping_map()
-                    // Every tag shows up once per candidate asset name.
                     .collect::<BTreeSet<_>>();
 
                 // Normally all candidates are in the same repository.
                 for (gh_repo, tags) in releases {
-                    if self.gh_api_client.has_gh_token() {
-                        // One GraphQL query.
-                        self.gh_api_client
-                            .prefetch_release_artifacts(&gh_repo, tags)
-                            .await;
-                    } else if !is_repo_private {
-                        // Without a token `check_on_web` comes first: find
-                        // out which release pages exist with one request.
-                        self.gh_api_client
-                            .prefetch_release_pages(&gh_repo, tags)
-                            .await;
-                    }
+                    self.gh_api_client
+                        .prefetch_release_artifacts(&gh_repo, tags)
+                        .await;
                 }
             }
 
@@ -494,12 +592,7 @@ impl super::Fetcher for GhCrateMeta {
                 //             |
                 for pkg_fmt in pkg_fmts.clone() {
                     this.launch_baseline_find_tasks(
-                        &resolver,
-                        pkg_fmt,
-                        &pkg_url,
-                        repo,
-                        subcrate,
-                        is_repo_private,
+                        &resolver, pkg_fmt, &pkg_url, repo, subcrate, &known,
                     );
                 }
             }
