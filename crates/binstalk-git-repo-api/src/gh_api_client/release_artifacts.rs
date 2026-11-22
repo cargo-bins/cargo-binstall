@@ -130,40 +130,58 @@ impl fmt::Display for FilterCondition {
 
 pub(super) fn fetch_release_artifacts_graphql_api(
     client: &remote::Client,
+    release: &GhRelease,
+    auth_token: &str,
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
+    fetch_remaining_release_artifacts(
+        client,
+        release,
+        auth_token,
+        Artifacts::default(),
+        FilterCondition::Init,
+    )
+}
+
+/// The query for one page of the assets of `release`.
+fn release_query(
     GhRelease {
         repo: GhRepo { owner, repo },
         tag,
     }: &GhRelease,
+    cond: &FilterCondition,
+) -> String {
+    format!(
+        r#"query {{
+  repository(owner:"{owner}",name:"{repo}") {{
+    release(tagName:"{tag}") {{
+releaseAssets({cond}) {{
+  nodes {{ name url }}
+  pageInfo {{ endCursor hasNextPage }}
+}}}}}}}}"#
+    )
+}
+
+/// The query [`fetch_release_artifacts_graphql_api`] starts with.
+#[cfg(test)]
+pub(super) fn first_release_query(release: &GhRelease) -> String {
+    release_query(release, &FilterCondition::Init)
+}
+
+/// Fetch the assets of `release` from `cond` on, adding them to `artifacts`.
+fn fetch_remaining_release_artifacts(
+    client: &remote::Client,
+    release: &GhRelease,
     auth_token: &str,
+    mut artifacts: Artifacts,
+    mut cond: FilterCondition,
 ) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
     let client = client.clone();
     let auth_token = auth_token.to_compact_string();
-
-    let base_query_prefix = format!(
-        r#"
-query {{
-  repository(owner:"{owner}",name:"{repo}") {{
-    release(tagName:"{tag}") {{"#
-    );
-
-    let base_query_suffix = r#"
-  nodes { name url }
-  pageInfo { endCursor hasNextPage }
-}}}}"#
-        .trim();
+    let release = release.clone();
 
     async move {
-        let mut artifacts = Artifacts::default();
-        let mut cond = FilterCondition::Init;
-        let base_query_prefix = base_query_prefix.trim();
-
         loop {
-            let query = format!(
-                r#"
-{base_query_prefix}
-releaseAssets({cond}) {{
-{base_query_suffix}"#
-            );
+            let query = release_query(&release, &cond);
 
             let data: GraphQLData = issue_graphql_query(&client, query, &auth_token).await?;
 
@@ -206,7 +224,7 @@ fn graphql_string(s: &str) -> String {
     serde_json::to_string(s).expect("Serializing a str never fails")
 }
 
-fn batch_query(GhRepo { owner, repo }: &GhRepo, tags: &[CompactString]) -> String {
+pub(super) fn batch_query(GhRepo { owner, repo }: &GhRepo, tags: &[CompactString]) -> String {
     use std::fmt::Write;
 
     let mut query = format!(
@@ -233,8 +251,31 @@ fn batch_query(GhRepo { owner, repo }: &GhRepo, tags: &[CompactString]) -> Strin
 pub(super) enum BatchedRelease {
     Found(Artifacts),
     NotFound,
-    /// It has more assets than one page holds, fetch it on its own.
-    Incomplete,
+    /// It has more assets than one page holds: these are the first ones,
+    /// pass them to [`fetch_rest_of_release_artifacts`] for the rest.
+    Incomplete {
+        artifacts: Artifacts,
+        end_cursor: CompactString,
+    },
+}
+
+/// Fetch the assets of `release` after the first page that
+/// [`fetch_releases_artifacts_graphql_api`] returned as
+/// [`BatchedRelease::Incomplete`].
+pub(super) fn fetch_rest_of_release_artifacts(
+    client: &remote::Client,
+    release: &GhRelease,
+    auth_token: &str,
+    artifacts: Artifacts,
+    end_cursor: CompactString,
+) -> impl Future<Output = Result<Artifacts, GhApiError>> + Send + 'static + use<> {
+    fetch_remaining_release_artifacts(
+        client,
+        release,
+        auth_token,
+        artifacts,
+        FilterCondition::After(end_cursor),
+    )
 }
 
 fn parse_batch(data: GraphQLBatchData, count: usize) -> Result<Vec<BatchedRelease>, GhApiError> {
@@ -243,25 +284,28 @@ fn parse_batch(data: GraphQLBatchData, count: usize) -> Result<Vec<BatchedReleas
     };
 
     Ok((0..count)
-        .map(
-            |index| match releases.remove(&release_alias(index)).flatten() {
-                None => BatchedRelease::NotFound,
-                Some(GraphQLRelease {
-                    assets:
-                        GraphQLReleaseAssets {
-                            page_info:
-                                GraphQLPageInfo {
-                                    has_next_page: true,
-                                    ..
-                                },
-                            ..
-                        },
-                }) => BatchedRelease::Incomplete,
-                Some(GraphQLRelease { assets }) => BatchedRelease::Found(Artifacts {
-                    assets: assets.nodes.into_iter().collect(),
-                }),
-            },
-        )
+        .map(|index| {
+            let Some(GraphQLRelease {
+                assets: GraphQLReleaseAssets { nodes, page_info },
+            }) = releases.remove(&release_alias(index)).flatten()
+            else {
+                return BatchedRelease::NotFound;
+            };
+
+            let artifacts = Artifacts {
+                assets: nodes.into_iter().collect(),
+            };
+            match page_info {
+                GraphQLPageInfo {
+                    end_cursor: Some(end_cursor),
+                    has_next_page: true,
+                } => BatchedRelease::Incomplete {
+                    artifacts,
+                    end_cursor,
+                },
+                _ => BatchedRelease::Found(artifacts),
+            }
+        })
         .collect())
 }
 
@@ -317,7 +361,7 @@ mod test {
                     "pageInfo": {"endCursor": "x", "hasNextPage": false}
                 }},
                 "r2": {"releaseAssets": {
-                    "nodes": [],
+                    "nodes": [{"name": "b.tgz", "url": "https://github.com/rustsec/rustsec/releases/download/v2/b.tgz"}],
                     "pageInfo": {"endCursor": "y", "hasNextPage": true}
                 }}
             }}"#,
@@ -329,7 +373,11 @@ mod test {
         assert!(
             matches!(&releases[1], BatchedRelease::Found(artifacts) if artifacts.get_artifact_url("a.tgz").is_some())
         );
-        assert!(matches!(releases[2], BatchedRelease::Incomplete));
+        assert!(matches!(
+            &releases[2],
+            BatchedRelease::Incomplete { artifacts, end_cursor }
+                if artifacts.get_artifact_url("b.tgz").is_some() && end_cursor == "y"
+        ));
 
         let data: GraphQLBatchData = serde_json::from_str(r#"{"repository": null}"#).unwrap();
         assert!(matches!(parse_batch(data, 1), Err(GhApiError::NotFound)));
