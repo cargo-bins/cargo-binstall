@@ -1,25 +1,6 @@
 //! Helpers for writing GraphQL queries.
 
-use std::{fmt, io, str};
-
-/// Lets [`serde_json`], which writes to an [`io::Write`], write into a
-/// [`fmt::Write`] such as a `String` or a [`fmt::Formatter`].
-struct FmtWriter<W>(W);
-
-impl<W: fmt::Write> io::Write for FmtWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        // `serde_json` writes a string as slices of it split at the characters
-        // it escapes, which are ASCII, so each slice is valid UTF-8.
-        let s =
-            str::from_utf8(buf).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-        self.0.write_str(s).map_err(io::Error::other)?;
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
+use std::fmt::{self, Write};
 
 /// Displays a `str` as a GraphQL string literal, quotes included, so that a
 /// value can't break out of the query.
@@ -27,8 +8,23 @@ pub(super) struct GraphQLString<'a>(pub(super) &'a str);
 
 impl fmt::Display for GraphQLString<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // A JSON string is a valid GraphQL string, with the same escapes.
-        serde_json::to_writer(FmtWriter(f), self.0).map_err(|_| fmt::Error)
+        f.write_char('"')?;
+
+        // Write everything up to the next character that must be escaped as
+        // is, all of which are ASCII.
+        let mut rest = self.0;
+        while let Some(i) = rest.find(|c: char| matches!(c, '"' | '\\') || c.is_ascii_control()) {
+            f.write_str(&rest[..i])?;
+            match rest.as_bytes()[i] {
+                b'"' => f.write_str(r#"\""#)?,
+                b'\\' => f.write_str(r"\\")?,
+                control => write!(f, r"\u{control:04x}")?,
+            }
+            rest = &rest[i + 1..];
+        }
+        f.write_str(rest)?;
+
+        f.write_char('"')
     }
 }
 
@@ -38,10 +34,11 @@ mod test {
 
     #[test]
     fn test_graphql_string() {
+        assert_eq!(GraphQLString("").to_string(), r#""""#);
         assert_eq!(GraphQLString("v0.17.6").to_string(), r#""v0.17.6""#);
         assert_eq!(
-            GraphQLString("cargo-audit/\"v0.17.6\"\n").to_string(),
-            r#""cargo-audit/\"v0.17.6\"\n""#
+            GraphQLString("cargo-audit/\"v0.17.6\"\n\\").to_string(),
+            r#""cargo-audit/\"v0.17.6\"\u000a\\""#
         );
         assert_eq!(GraphQLString("é✓").to_string(), r#""é✓""#);
     }

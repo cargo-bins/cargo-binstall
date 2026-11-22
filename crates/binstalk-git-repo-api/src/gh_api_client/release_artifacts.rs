@@ -101,7 +101,8 @@ struct GraphQLRelease {
 
 #[derive(Debug, Deserialize)]
 struct GraphQLReleaseAssets {
-    nodes: Vec<Artifact>,
+    // Deserialized straight into the set `Artifacts` keeps.
+    nodes: HashSet<Artifact>,
     #[serde(rename = "pageInfo")]
     page_info: GraphQLPageInfo,
 }
@@ -231,6 +232,7 @@ struct GraphQLBatchData {
     repository: Option<HashMap<CompactString, Option<GraphQLRelease>>>,
 }
 
+/// The alias of the `index`th release in [`batch_query`].
 fn release_alias(index: usize) -> CompactString {
     compact_str::format_compact!("r{index}")
 }
@@ -240,9 +242,8 @@ fn release_alias(index: usize) -> CompactString {
 pub(super) fn batch_query<'a>(repo: &GhRepo, tags: impl IntoIterator<Item = &'a str>) -> String {
     let mut query = query_prefix(repo);
     for (index, tag) in tags.into_iter().enumerate() {
-        query.push(' ');
-        query.push_str(&release_alias(index));
-        query.push(':');
+        // The same alias as `release_alias`.
+        write!(query, " r{index}:").expect("Writing to a String never fails");
         write_release_field(&mut query, tag, &FilterCondition::Init);
     }
     query.push_str(QUERY_SUFFIX);
@@ -298,9 +299,7 @@ fn parse_batch(data: GraphQLBatchData, count: usize) -> Result<Vec<BatchedReleas
                 return BatchedRelease::NotFound;
             };
 
-            let artifacts = Artifacts {
-                assets: nodes.into_iter().collect(),
-            };
+            let artifacts = Artifacts { assets: nodes };
             match page_info {
                 GraphQLPageInfo {
                     end_cursor: Some(end_cursor),
