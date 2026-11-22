@@ -197,6 +197,16 @@ impl GhCrateMeta {
                 };
 
                 if let Some(artifact) = gh_release_artifact {
+                    // Without a token, the API allows 60 requests per hour and
+                    // most candidate tags don't exist: find the ones that do
+                    // without the API, so it is only asked about those.
+                    if !is_repo_private
+                        && !gh_api_client.has_gh_token()
+                        && !gh_api_client.has_release_page(&artifact.release).await
+                    {
+                        return Ok(None);
+                    }
+
                     loop {
                         match get_gh_release_artifact_url(gh_api_client.clone(), artifact.clone())
                             .await
@@ -212,6 +222,11 @@ impl GhCrateMeta {
                             Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
                                 if !is_repo_private =>
                             {
+                                // Skip every asset of a missing tag, instead
+                                // of checking each one with HEAD/GET.
+                                if !gh_api_client.has_release_page(&artifact.release).await {
+                                    return Ok(None);
+                                }
                                 break;
                             }
                             Err(GhApiError::RateLimit { retry_after }) => {
