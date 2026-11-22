@@ -136,14 +136,17 @@ fn parse_ls_refs(mut response: &[u8]) -> Option<HashSet<CompactString>> {
     }
 }
 
-/// Which of `tags` exist in the git repository `repo`, with one request.
+/// Which of `tags` exist in the git repository `repo`, with one request,
+/// authenticated with `credentials` (username, password) if any.
 ///
-/// Returns `None` if the request failed, e.g. for a private repository or a
-/// server without protocol v2, then check each release some other way.
+/// Returns `None` if the request failed, e.g. for a private repository without
+/// credentials or a server without protocol v2, then check each release some
+/// other way.
 pub async fn list_tags(
     client: &remote::Client,
     repo: &Url,
     tags: HashSet<CompactString>,
+    credentials: Option<(&str, &str)>,
 ) -> Option<RepoTags> {
     let url = upload_pack_url(repo);
 
@@ -158,8 +161,11 @@ pub async fn list_tags(
     };
 
     let result = async {
-        let response = client
-            .post(url.clone(), request)
+        let mut request = client.post(url.clone(), request);
+        if let Some((username, password)) = credentials {
+            request = request.basic_auth(&username, &password);
+        }
+        let response = request
             .header("Git-Protocol", "version=2")
             .header("Content-Type", "application/x-git-upload-pack-request")
             .send(true)
@@ -304,6 +310,7 @@ mod test {
             &repo,
             // We would never release anything older than v0.20.1
             ["v0.20.1".into(), "v0.18.2".into()].into(),
+            None,
         )
         .await
         .unwrap();

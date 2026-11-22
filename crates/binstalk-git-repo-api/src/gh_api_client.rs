@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::Future,
     ops::Deref,
     sync::{
@@ -10,6 +10,8 @@ use std::{
 };
 
 use binstalk_downloader::{download::Download, remote};
+
+use crate::git_refs;
 use compact_str::{CompactString, ToCompactString, format_compact};
 use tokio::sync::OnceCell;
 use tracing::{Level, debug, instrument, warn};
@@ -208,6 +210,22 @@ impl GhApiClient {
         } else {
             None
         }
+    }
+
+    /// [`git_refs::list_tags`] for a private repository on github.com,
+    /// authenticated with the token: GitHub's git server takes it as the
+    /// password of HTTP Basic authentication.
+    ///
+    /// Returns `None` without a token, for a repository elsewhere (the token
+    /// is only ever sent to github.com), or if the request failed.
+    pub async fn list_private_repo_tags(
+        &self,
+        repo: &Url,
+        tags: HashSet<CompactString>,
+    ) -> Option<git_refs::RepoTags> {
+        GhRepo::try_extract_from_url(repo)?;
+        let token = self.get_auth_token()?;
+        git_refs::list_tags(&self.0.client, repo, tags, Some(("x-access-token", token))).await
     }
 
     pub fn has_gh_token(&self) -> bool {
@@ -910,6 +928,24 @@ mod test {
                 })
                 .await
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_private_repo_tags_needs_github_and_token() {
+        let tags = || HashSet::from([CompactString::const_new("v0.20.1")]);
+
+        // No token: nothing is sent.
+        let client = GhApiClient::new(create_remote_client(), None);
+        let repo = Url::parse("https://github.com/cargo-bins/cargo-binstall").unwrap();
+        assert!(client.list_private_repo_tags(&repo, tags()).await.is_none());
+
+        // The token is never sent anywhere but github.com.
+        let client = GhApiClient::new(
+            create_remote_client(),
+            Some(Zeroizing::new("ghp_not_a_real_token".into())),
+        );
+        let repo = Url::parse("https://gitlab.com/gitlab-org/gitlab").unwrap();
+        assert!(client.list_private_repo_tags(&repo, tags()).await.is_none());
     }
 
     #[tokio::test]

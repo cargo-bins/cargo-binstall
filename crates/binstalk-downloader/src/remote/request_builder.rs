@@ -25,6 +25,13 @@ impl RequestBuilder {
         }
     }
 
+    pub fn basic_auth(self, username: &dyn fmt::Display, password: &dyn fmt::Display) -> Self {
+        Self {
+            client: self.client,
+            inner: self.inner.basic_auth(username, Some(password)),
+        }
+    }
+
     pub fn header(self, key: impl AsRef<str>, value: &str) -> Self {
         Self {
             client: self.client,

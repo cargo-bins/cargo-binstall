@@ -126,15 +126,19 @@ impl Probe {
     /// Find out which release tags of `candidates` exist, with one request to
     /// the repository's git server shared by all targets, and drop the
     /// candidates of the other ones.
+    ///
+    /// A private repository on github.com is asked with the token. If the git
+    /// server can't tell, every candidate is kept and checked with the API or
+    /// HEAD/GET as before.
     pub(super) async fn drop_missing_tags(&self, data: &Data, candidates: &mut Vec<Candidate>) {
         let tags = self
             .tags
             .get_or_init(|| async {
-                // A private repository needs authentication.
-                let repo = self.repo.as_deref().filter(|_| !self.is_repo_private)?;
                 data.get_repo_tags(
                     &self.client,
-                    repo,
+                    &self.gh_api_client,
+                    self.repo.as_deref()?,
+                    self.is_repo_private,
                     candidates.iter().filter_map(|c| c.tag.as_deref()),
                 )
                 .await
@@ -165,6 +169,14 @@ impl Probe {
         let releases = self
             .gh_candidates
             .keys()
+            // The git server may have said which tags are missing.
+            .filter(|release| {
+                self.tags
+                    .get()
+                    .and_then(Option::as_deref)
+                    .and_then(|tags| tags.exists(&release.tag))
+                    != Some(false)
+            })
             .map(|release| (release.repo.clone(), release.tag.clone()))
             .into_grouping_map()
             .collect::<BTreeSet<_>>();

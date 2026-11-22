@@ -364,7 +364,8 @@ impl Data {
 
 impl Data {
     /// Which of the release `tags` exist in `repo`: one request to its git
-    /// server, shared by all targets.
+    /// server, shared by all targets. A private repository is only asked if
+    /// it is on github.com and there is a token.
     ///
     /// The first caller decides which tags are asked about, the targets
     /// normally share them.
@@ -374,7 +375,9 @@ impl Data {
     async fn get_repo_tags<'a>(
         &self,
         client: &Client,
+        gh_api_client: &GhApiClient,
         repo: &str,
+        is_private: bool,
         tags: impl Iterator<Item = &'a str>,
     ) -> Option<Arc<RepoTags>> {
         self.repo_tags
@@ -383,9 +386,13 @@ impl Data {
                 if tags.is_empty() {
                     return None;
                 }
-                git_refs::list_tags(client, &Url::parse(repo).ok()?, tags)
-                    .await
-                    .map(Arc::new)
+                let repo = Url::parse(repo).ok()?;
+                let tags = if is_private {
+                    gh_api_client.list_private_repo_tags(&repo, tags).await
+                } else {
+                    git_refs::list_tags(client, &repo, tags, None).await
+                };
+                tags.map(Arc::new)
             })
             .await
             .clone()
