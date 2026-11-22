@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::BTreeSet,
     fmt, iter,
     path::Path,
     sync::{Arc, OnceLock},
@@ -425,6 +426,38 @@ impl super::Fetcher for GhCrateMeta {
                 debug!(
                     "pkg-url {hint_pkg_url} of the last install did not match, trying all default pkg-url"
                 );
+            }
+
+            // All candidates in the same GitHub repository are usually spread
+            // over a few release tags. Ask about all of them in one GraphQL
+            // query instead of one query per tag.
+            if self.gh_api_client.has_gh_token() {
+                let releases = pkg_urls
+                    .clone()
+                    .cartesian_product(pkg_fmts.clone())
+                    .flat_map(|(pkg_url, pkg_fmt)| {
+                        candidate_urls(
+                            &self.data,
+                            &self.target_data.target,
+                            &self.target_data.target_related_info,
+                            pkg_fmt,
+                            &pkg_url,
+                            repo,
+                            subcrate,
+                        )
+                    })
+                    .filter_map(|(url, ..)| GhReleaseArtifact::try_extract_from_url(&url))
+                    .map(|artifact| (artifact.release.repo, artifact.release.tag))
+                    .into_grouping_map()
+                    // Every tag shows up once per candidate asset name.
+                    .collect::<BTreeSet<_>>();
+
+                // Normally all candidates are in the same repository.
+                for (gh_repo, tags) in releases {
+                    self.gh_api_client
+                        .prefetch_release_artifacts(&gh_repo, tags)
+                        .await;
+                }
             }
 
             let resolver = FuturesResolver::default();
