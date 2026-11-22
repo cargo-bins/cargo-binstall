@@ -212,7 +212,13 @@ async fn fetch_remaining_release_artifacts(
             break Err(GhApiError::NotFound);
         };
 
-        artifacts.assets.extend(assets.nodes);
+        // `extend` would re-insert, and so re-hash, every asset even into an
+        // empty set: take the first page's set as it is instead.
+        if artifacts.assets.is_empty() {
+            artifacts.assets = assets.nodes;
+        } else {
+            artifacts.assets.extend(assets.nodes);
+        }
 
         match assets.page_info {
             GraphQLPageInfo {
