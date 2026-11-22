@@ -56,7 +56,6 @@ async fn get_quickinstall_supported_targets(
 
 pub struct QuickInstall {
     client: Client,
-    gh_api_client: GhApiClient,
     is_supported_v: OnceCell<bool>,
 
     data: Arc<Data>,
@@ -181,7 +180,7 @@ impl QuickInstall {
 impl super::Fetcher for QuickInstall {
     fn new(
         client: Client,
-        gh_api_client: GhApiClient,
+        _gh_api_client: GhApiClient,
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
@@ -197,7 +196,6 @@ impl super::Fetcher for QuickInstall {
         Arc::new(Self {
             client,
             data,
-            gh_api_client,
             is_supported_v: OnceCell::new(),
 
             package_url: Url::parse(&url)
@@ -222,12 +220,7 @@ impl super::Fetcher for QuickInstall {
 
             let download_signature_task = self.clone().download_signature();
 
-            let is_found = does_url_exist(
-                self.client.clone(),
-                self.gh_api_client.clone(),
-                &self.package_url,
-            )
-            .await?;
+            let is_found = does_url_exist(self.client.clone(), &self.package_url).await?;
 
             if !is_found {
                 self.set_status(Status::NotFound);

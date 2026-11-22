@@ -6,9 +6,10 @@
 //!
 //! 1. Which release tags exist, with one request to the repository's git
 //!    server, see [`git_refs`]. The candidates of a missing tag are dropped.
-//! 2. For GitHub, the asset names of the remaining releases, with one GraphQL
-//!    query with a token (see [`Probe::prefetch_gh_releases`]), or from
-//!    github.com without one (see [`Probe::check_on_web`]).
+//! 2. For GitHub, the asset names of the remaining releases: from github.com
+//!    for a public repository (see [`Probe::check_on_web`]), which costs no
+//!    API quota, or with one GraphQL query for a private one (see
+//!    [`Probe::prefetch_gh_releases`]).
 //!
 //! Only then is each candidate checked, see [`Probe::check`].
 
@@ -147,10 +148,14 @@ impl Probe {
         self.tags.as_ref()?.exists(candidate.tag.as_deref()?)
     }
 
-    /// With a token, get the assets of all the candidates' GitHub releases
-    /// in one GraphQL query per repository, instead of one per release.
+    /// For a private repository, get the assets of all the candidates' GitHub
+    /// releases in one GraphQL query per repository, instead of one per
+    /// release.
+    ///
+    /// A public repository's are looked up on github.com instead, see
+    /// [`Probe::check_on_web`].
     pub(super) async fn prefetch_gh_releases(&self) {
-        if !self.gh_api_client.has_gh_token() {
+        if !self.is_repo_private || !self.gh_api_client.has_gh_token() {
             return;
         }
 
@@ -214,16 +219,17 @@ impl Probe {
         }))
     }
 
-    /// Check a GitHub release asset with the API, or on github.com when that
-    /// costs fewer requests or the API can't be used.
+    /// Check a GitHub release asset on github.com for a public repository,
+    /// with the API if github.com can't tell or the repository is private.
     async fn check_gh_artifact(
         &self,
         artifact: &GhReleaseArtifact,
         candidate: &Candidate,
     ) -> Result<GhAsset, FetchError> {
-        // Without a token, the API allows 60 requests per hour: look on
-        // github.com first, and only ask the API if that can't tell.
-        if !self.is_repo_private && !self.gh_api_client.has_gh_token() {
+        // github.com costs no API quota, which is 60 requests per hour
+        // without a token, and the API is shared with everything else using
+        // the token.
+        if !self.is_repo_private {
             match self.check_on_web(artifact, candidate).await? {
                 GhAsset::Unknown => (),
                 found => return Ok(found),
