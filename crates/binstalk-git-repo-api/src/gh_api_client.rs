@@ -427,6 +427,53 @@ impl GhApiClient {
         }
     }
 
+    /// Fill the cache of [`GhApiClient::has_release_page`] for all of `tags`
+    /// with one request, instead of one per tag.
+    ///
+    /// Does nothing if fewer than two of `tags` are not cached yet, or if the
+    /// request fails: [`GhApiClient::has_release_page`] then checks each page
+    /// on its own.
+    ///
+    /// Only use it for a public repository.
+    #[instrument(skip(self, tags))]
+    pub async fn prefetch_release_pages(
+        &self,
+        repo: &GhRepo,
+        tags: impl IntoIterator<Item = CompactString>,
+    ) {
+        let cells: Vec<_> = tags
+            .into_iter()
+            .map(|tag| {
+                let cell = self.0.release_pages.get(GhRelease {
+                    repo: repo.clone(),
+                    tag: tag.clone(),
+                });
+                (tag, cell)
+            })
+            .filter(|(_, cell)| !cell.initialized())
+            .collect();
+
+        if cells.len() < 2 {
+            return;
+        }
+
+        let Some(existing) = web::list_tags(
+            &self.0.client,
+            repo,
+            cells.iter().map(|(tag, _)| tag.as_str()),
+        )
+        .await
+        else {
+            return;
+        };
+
+        for (tag, cell) in cells {
+            // `set` fails only if `has_release_page` got there first, then
+            // that value is just as good.
+            let _ = cell.set(existing.contains(&tag));
+        }
+    }
+
     /// Check whether `release` exists without the API, so without spending
     /// the API rate limit: returns `false` only if github.com has no page for
     /// it.
@@ -911,6 +958,33 @@ mod test {
                 })
                 .await
         );
+    }
+
+    #[tokio::test]
+    async fn test_prefetch_release_pages() {
+        init_logger();
+
+        let client = GhApiClient::new(create_remote_client(), None);
+        let repo = cargo_binstall_v0_20_1::RELEASE.repo;
+
+        client
+            .prefetch_release_pages(&repo, ["v0.20.1".into(), "v0.18.2".into()])
+            .await;
+
+        let cached = |tag| {
+            client
+                .0
+                .release_pages
+                .get(GhRelease {
+                    repo: repo.clone(),
+                    tag: CompactString::const_new(tag),
+                })
+                .get()
+                .copied()
+        };
+        assert_eq!(cached("v0.20.1"), Some(true));
+        // We would never release anything older than v0.20.1
+        assert_eq!(cached("v0.18.2"), Some(false));
     }
 
     #[tokio::test]

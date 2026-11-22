@@ -444,9 +444,9 @@ impl super::Fetcher for GhCrateMeta {
             }
 
             // All candidates in the same GitHub repository are usually spread
-            // over a few release tags. Ask about all of them in one GraphQL
-            // query instead of one query per tag.
-            if self.gh_api_client.has_gh_token() {
+            // over a few release tags. Ask about all of them in one request
+            // instead of one per tag.
+            {
                 let releases = pkg_urls
                     .clone()
                     .cartesian_product(pkg_fmts.clone())
@@ -469,9 +469,18 @@ impl super::Fetcher for GhCrateMeta {
 
                 // Normally all candidates are in the same repository.
                 for (gh_repo, tags) in releases {
-                    self.gh_api_client
-                        .prefetch_release_artifacts(&gh_repo, tags)
-                        .await;
+                    if self.gh_api_client.has_gh_token() {
+                        // One GraphQL query.
+                        self.gh_api_client
+                            .prefetch_release_artifacts(&gh_repo, tags)
+                            .await;
+                    } else if !is_repo_private {
+                        // Without a token `check_on_web` comes first: find
+                        // out which release pages exist with one request.
+                        self.gh_api_client
+                            .prefetch_release_pages(&gh_repo, tags)
+                            .await;
+                    }
                 }
             }
 

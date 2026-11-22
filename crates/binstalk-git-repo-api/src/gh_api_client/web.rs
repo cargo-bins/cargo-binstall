@@ -49,6 +49,104 @@ pub(super) async fn has_release_page(client: &remote::Client, release: &GhReleas
     }
 }
 
+/// Write `line` as a git pkt-line: its length, header included, in four hex
+/// digits, then the line itself.
+fn write_pkt_line(buf: &mut Vec<u8>, line: &str) {
+    buf.extend_from_slice(format!("{:04x}", line.len() + 4).as_bytes());
+    buf.extend_from_slice(line.as_bytes());
+}
+
+/// The git protocol v2 request listing the refs of `tags`.
+fn ls_refs_request<'a>(tags: impl IntoIterator<Item = &'a str>) -> Vec<u8> {
+    let mut request = Vec::new();
+    write_pkt_line(&mut request, "command=ls-refs\n");
+    // Delimiter packet, between the command and its arguments.
+    request.extend_from_slice(b"0001");
+    for tag in tags {
+        write_pkt_line(&mut request, &format!("ref-prefix refs/tags/{tag}\n"));
+    }
+    // Flush packet, ending the request.
+    request.extend_from_slice(b"0000");
+    request
+}
+
+/// The tag names in an `ls-refs` response, `None` if it is not one.
+///
+/// A `ref-prefix` matches every ref starting with it, so this may return more
+/// tags than were asked for.
+fn parse_ls_refs(mut response: &[u8]) -> Option<HashSet<CompactString>> {
+    let mut tags = HashSet::new();
+    loop {
+        let len = std::str::from_utf8(response.get(..4)?).ok()?;
+        let len = usize::from_str_radix(len, 16).ok()?;
+        if len == 0 {
+            // Flush packet, the end of the list.
+            return Some(tags);
+        }
+        // Fails for the special packets shorter than their header, which
+        // don't belong in the list.
+        let line = response.get(4..len)?;
+        response = &response[len..];
+
+        // `<oid> <ref>`, followed by attributes only if they were asked for.
+        let line = std::str::from_utf8(line).ok()?;
+        let (oid, line) = line.trim_end_matches('\n').split_once(' ')?;
+        if !oid.bytes().all(|b| b.is_ascii_hexdigit()) {
+            // Most likely an `ERR` packet.
+            return None;
+        }
+        let name = line.split(' ').next()?;
+        if let Some(tag) = name.strip_prefix("refs/tags/") {
+            tags.insert(tag.into());
+        }
+    }
+}
+
+/// Which of `tags` exist in `repo`, with one request to github.com's git
+/// server: git protocol v2 lists only the refs asked for, instead of the
+/// hundreds of kilobytes of all the refs of a repository with a long history.
+///
+/// A tag has a release page whether or not it has a release.
+///
+/// Returns `None` if the request failed, then check each release page.
+pub(super) async fn list_tags<'a>(
+    client: &remote::Client,
+    GhRepo { owner, repo }: &GhRepo,
+    tags: impl IntoIterator<Item = &'a str>,
+) -> Option<HashSet<CompactString>> {
+    let mut url = Url::parse("https://github.com/").expect("Literal provided must be a valid url");
+    url.path_segments_mut()
+        .expect("https url can be a base")
+        .extend([owner.as_str(), &format!("{repo}.git"), "git-upload-pack"]);
+
+    debug!("Listing tags at: '{url}'");
+
+    let result = async {
+        let response = client
+            .post(url.clone(), ls_refs_request(tags))
+            .header("Git-Protocol", "version=2")
+            .header("Content-Type", "application/x-git-upload-pack-request")
+            .send(true)
+            .await?;
+        response.bytes().await
+    }
+    .await;
+
+    match result {
+        Ok(response) => {
+            let tags = parse_ls_refs(&response);
+            if tags.is_none() {
+                debug!("Unexpected response when listing tags at {url}");
+            }
+            tags
+        }
+        Err(err) => {
+            debug!("Failed to list tags at {url}: {err}");
+            None
+        }
+    }
+}
+
 /// The asset names of a release, from [`fetch_release_assets`].
 #[derive(Debug)]
 pub(super) enum ReleaseAssets {
@@ -185,5 +283,35 @@ mod test {
                 "cargo-audit-x86_64-unknown-linux-musl-v0.17.6.tgz"
             ]
         );
+    }
+
+    #[test]
+    fn test_ls_refs_request() {
+        assert_eq!(
+            ls_refs_request(["v1.28.0", "1.28.0"]),
+            b"0014command=ls-refs\n00010021ref-prefix refs/tags/v1.28.0\n0020ref-prefix refs/tags/1.28.0\n0000"
+        );
+    }
+
+    #[test]
+    fn test_parse_ls_refs() {
+        let tags = |response: &[u8]| {
+            parse_ls_refs(response).map(|tags| {
+                let mut tags: Vec<_> = tags.into_iter().collect();
+                tags.sort();
+                tags
+            })
+        };
+
+        // From github.com, plus a tag starting with an asked for one.
+        assert_eq!(
+            tags(b"003f4b6fa09d0d1ef9740a0c332e31b9ae336f97efa0 refs/tags/v1.28.0\n0042a5c8f6e2d36c0dbf4f6a1e1dc2f1a5b0a6b7c8d9 refs/tags/v1.28.0-rc\n0000"),
+            Some(vec!["v1.28.0".into(), "v1.28.0-rc".into()])
+        );
+        assert_eq!(tags(b"0000"), Some(vec![]));
+        assert_eq!(tags(b"000fERR not ok\n0000"), None);
+        assert_eq!(tags(b"0001"), None);
+        assert_eq!(tags(b"003f4b6fa09d0d1ef9740a0c332e31b9ae336f97efa0"), None);
+        assert_eq!(tags(b""), None);
     }
 }
