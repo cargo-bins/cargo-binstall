@@ -139,3 +139,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }
+
+[dev-dependencies]
+tokio = { version = "1.52.3", features = ["test-util", "macros", "rt"], default-features = false }

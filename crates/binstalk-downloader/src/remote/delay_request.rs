@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap, future::Future, iter::Peekable, num::NonZeroU64, ops::ControlFlow,
-    sync::Mutex,
-};
+use std::{collections::HashMap, iter::Peekable, num::NonZeroU64, sync::Mutex};
 
 use compact_str::{CompactString, ToCompactString};
 use reqwest::{Request, Url};
@@ -41,29 +38,24 @@ where
     }
 }
 
+/// Client-side rate limit: at most `num_request` requests per `per`.
 #[derive(Debug)]
-struct Inner {
-    client: reqwest::Client,
+struct RateLimit {
     num_request: NonZeroU64,
     per: Duration,
+    /// End of the current window.
     until: Instant,
-    state: State,
+    /// Requests left in the current window.
+    rem: u64,
 }
 
-#[derive(Debug)]
-enum State {
-    Limited,
-    Ready { rem: NonZeroU64 },
-}
-
-impl Inner {
-    fn new(num_request: NonZeroU64, per: Duration, client: reqwest::Client) -> Self {
-        Inner {
-            client,
-            per,
+impl RateLimit {
+    fn new(num_request: NonZeroU64, per: Duration) -> Self {
+        Self {
             num_request,
+            per,
             until: Instant::now() + per,
-            state: State::Ready { rem: num_request },
+            rem: num_request.get(),
         }
     }
 
@@ -71,9 +63,7 @@ impl Inner {
         if let Some(num_request) = NonZeroU64::new(self.num_request.get() / 2) {
             // If self.num_request.get() > 1, then cut it by half
             self.num_request = num_request;
-            if let State::Ready { rem, .. } = &mut self.state {
-                *rem = num_request.min(*rem)
-            }
+            self.rem = self.rem.min(num_request.get());
         }
 
         let per = self.per;
@@ -83,67 +73,53 @@ impl Inner {
         }
     }
 
-    fn ready(&mut self) -> Readiness {
-        match self.state {
-            State::Ready { .. } => Readiness::Ready,
-            State::Limited => {
-                if self.until.elapsed().is_zero() {
-                    Readiness::Limited(self.until)
-                } else {
-                    // rate limit can be reset now and is ready
-                    self.until = Instant::now() + self.per;
-                    self.state = State::Ready {
-                        rem: self.num_request,
-                    };
+    /// Take one request from the current window, or return when the next
+    /// window starts.
+    fn try_acquire(&mut self) -> Result<(), Instant> {
+        let now = Instant::now();
 
-                    Readiness::Ready
-                }
-            }
+        // If the window has elapsed, start a new one.
+        if now >= self.until {
+            self.until = now + self.per;
+            self.rem = self.num_request.get();
+        }
+
+        if self.rem == 0 {
+            Err(self.until)
+        } else {
+            self.rem -= 1;
+            Ok(())
         }
     }
-
-    fn call(&mut self, req: Request) -> impl Future<Output = RequestResult> + use<> {
-        match &mut self.state {
-            State::Ready { rem } => {
-                let now = Instant::now();
-
-                // If the period has elapsed, reset it.
-                if now >= self.until {
-                    self.until = now + self.per;
-                    *rem = self.num_request;
-                }
-
-                if let Some(new_rem) = NonZeroU64::new(rem.get() - 1) {
-                    *rem = new_rem;
-                } else {
-                    // The service is disabled until further notice
-                    self.state = State::Limited;
-                }
-
-                // Call the inner future
-                self.client.execute(req)
-            }
-            State::Limited => panic!("service not ready; poll_ready must be called first"),
-        }
-    }
-}
-
-enum Readiness {
-    Limited(Instant),
-    Ready,
 }
 
 #[derive(Debug)]
 pub(super) struct DelayRequest {
-    inner: Mutex<Inner>,
+    client: reqwest::Client,
+    rate_limit: Mutex<RateLimit>,
+    /// Held by the request that waits for the client-side rate limit.
+    ///
+    /// tokio's `Mutex` is fair, so requests take turns in FIFO order and
+    /// only the one at the front sleeps: the others wait in the queue
+    /// without being woken up each window.
+    ///
+    /// A request that is dropped while queued simply leaves the queue, so no
+    /// window is reserved for it.
+    queue: tokio::sync::Mutex<()>,
     hosts_to_delay: Mutex<HashMap<CompactString, Instant>>,
+    #[cfg(test)]
+    attempts: std::sync::atomic::AtomicU64,
 }
 
 impl DelayRequest {
     pub(super) fn new(num_request: NonZeroU64, per: Duration, client: reqwest::Client) -> Self {
         Self {
-            inner: Mutex::new(Inner::new(num_request, per, client)),
+            client,
+            rate_limit: Mutex::new(RateLimit::new(num_request, per)),
+            queue: Default::default(),
             hosts_to_delay: Default::default(),
+            #[cfg(test)]
+            attempts: Default::default(),
         }
     }
 
@@ -180,66 +156,147 @@ impl DelayRequest {
         })
     }
 
-    // Define a new function so that the guard will be dropped ASAP and not
-    // included in the future.
-    fn call_inner(
-        &self,
-        counter: &mut u32,
-        req: &mut Option<Request>,
-    ) -> ControlFlow<impl Future<Output = RequestResult> + use<>, Instant> {
-        // Wait until we are ready to send next requests
-        // (client-side rate-limit throttler).
-        let mut guard = self.inner.lock().unwrap();
+    fn try_acquire(&self) -> Result<(), Instant> {
+        #[cfg(test)]
+        self.attempts
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        if let Readiness::Limited(until) = guard.ready() {
-            ControlFlow::Continue(until)
-        } else if let Some(until) = req
-            .as_ref()
-            .unwrap()
-            .url()
-            .host_str()
-            .and_then(|host| self.get_delay_until(host))
-        {
-            // If the host rate-limit us, then wait until then
-            // and try again (server-side rate-limit throttler).
+        self.rate_limit.lock().unwrap().try_acquire()
+    }
+
+    /// Wait until a request to `host` may be sent.
+    async fn wait(&self, host: Option<&str>) {
+        let mut counter = 0;
+
+        loop {
+            let until = {
+                // Wait for our turn, then until we are ready to send the
+                // request (client-side rate-limit throttler).
+                let _turn = self.queue.lock().await;
+
+                loop {
+                    // If the host rate-limit us, then wait until then
+                    // and try again (server-side rate-limit throttler),
+                    // without holding up requests to other hosts.
+                    if let Some(until) = host.and_then(|host| self.get_delay_until(host)) {
+                        break until;
+                    }
+
+                    match self.try_acquire() {
+                        Ok(()) => return,
+                        Err(until) => sleep_until(until).await,
+                    }
+                }
+            };
 
             // Try increasing client-side rate-limit throttler to prevent
             // rate-limit in the future.
-            guard.inc_rate_limit();
+            self.rate_limit.lock().unwrap().inc_rate_limit();
 
             let additional_delay =
-                Duration::from_millis(200) + Duration::from_millis(100) * 20.min(*counter);
+                Duration::from_millis(200) + Duration::from_millis(100) * 20.min(counter);
 
-            *counter += 1;
+            counter += 1;
 
             debug!("server-side rate limit exceeded; sleeping.");
-            ControlFlow::Continue(until + additional_delay)
-        } else {
-            ControlFlow::Break(guard.call(req.take().unwrap()))
+            sleep_until(until + additional_delay).await;
         }
     }
 
     pub(super) async fn call(&self, req: Request) -> RequestResult {
-        // Put all variables in a block so that will be dropped before polling
-        // the future returned by reqwest.
-        {
-            let mut counter = 0;
-            // Use Option here so that we don't have to move entire `Request`
-            // twice when calling `self.call_inner` while retain the ability to
-            // take its value without boxing.
-            //
-            // This will be taken when `ControlFlow::Break` is then it will
-            // break the loop, so it will never call `self.call_inner` with
-            // a `None`.
-            let mut req = Some(req);
+        self.wait(req.url().host_str()).await;
+        self.client.execute(req).await
+    }
+}
 
-            loop {
-                match self.call_inner(&mut counter, &mut req) {
-                    ControlFlow::Continue(until) => sleep_until(until).await,
-                    ControlFlow::Break(future) => break future,
-                }
-            }
+#[cfg(test)]
+mod tests {
+    use std::{
+        pin::pin,
+        sync::{Arc, atomic::Ordering},
+    };
+
+    use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
+
+    use super::*;
+
+    const PER: Duration = Duration::from_millis(10);
+
+    fn delay_request(num_request: u64) -> DelayRequest {
+        DelayRequest::new(
+            NonZeroU64::new(num_request).unwrap(),
+            PER,
+            reqwest::Client::new(),
+        )
+    }
+
+    /// Each window lets `num_request` requests through, in FIFO order, and
+    /// each queued request is only woken up once.
+    #[tokio::test(start_paused = true)]
+    async fn test_rate_limit_fifo() {
+        let delay_request = Arc::new(delay_request(2));
+        let start = Instant::now();
+
+        let handles: Vec<_> = (0..10)
+            .map(|i| {
+                let delay_request = delay_request.clone();
+                tokio::spawn(async move {
+                    delay_request.wait(Some("example.com")).await;
+                    (i, start.elapsed())
+                })
+            })
+            .collect();
+
+        let mut done = Vec::new();
+        for handle in handles {
+            done.push(handle.await.unwrap());
         }
-        .await
+        done.sort_by_key(|(_, elapsed)| *elapsed);
+
+        for (n, (i, elapsed)) in done.into_iter().enumerate() {
+            assert_eq!(elapsed, PER * (n as u32 / 2), "request {i}");
+        }
+
+        // 10 acquired + one failed attempt per window waited for.
+        assert_eq!(delay_request.attempts.load(Ordering::Relaxed), 10 + 4);
+    }
+
+    /// A request dropped while queued doesn't hold up the ones behind it.
+    #[tokio::test(start_paused = true)]
+    async fn test_rate_limit_dropped() {
+        let delay_request = delay_request(1);
+        let start = Instant::now();
+
+        // Use up the current window.
+        delay_request.wait(None).await;
+
+        let mut queued: FuturesUnordered<_> =
+            (0..100).map(|_| delay_request.wait(None).boxed()).collect();
+        // Let them all queue up, then drop them.
+        assert!(queued.next().now_or_never().is_none());
+        drop(queued);
+
+        delay_request.wait(None).await;
+        assert_eq!(start.elapsed(), PER);
+    }
+
+    /// A request to a host that rate-limited us waits for it, without holding
+    /// up requests to other hosts.
+    #[tokio::test(start_paused = true)]
+    async fn test_host_delay() {
+        let delay_request = delay_request(100);
+        let start = Instant::now();
+
+        let url = Url::parse("https://example.com/a").unwrap();
+        delay_request.add_urls_to_delay(&[&url], Duration::from_secs(1));
+
+        let mut delayed = pin!(delay_request.wait(Some("example.com")));
+        assert!((&mut delayed).now_or_never().is_none());
+
+        delay_request.wait(Some("example.org")).await;
+        assert_eq!(start.elapsed(), Duration::ZERO);
+
+        delayed.await;
+        assert_eq!(start.elapsed(), Duration::from_millis(1200));
     }
 }
