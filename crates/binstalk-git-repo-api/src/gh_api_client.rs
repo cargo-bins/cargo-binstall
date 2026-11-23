@@ -1,9 +1,8 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     future::Future,
-    ops::Deref,
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering::Relaxed},
     },
     time::{Duration, Instant},
@@ -13,8 +12,7 @@ use binstalk_downloader::{download::Download, remote};
 
 use crate::git_refs;
 use compact_str::{CompactString, ToCompactString, format_compact};
-use tokio::sync::OnceCell;
-use tracing::{Level, debug, instrument, warn};
+use tracing::{Level, instrument, warn};
 use url::Url;
 use zeroize::Zeroizing;
 
@@ -28,6 +26,7 @@ mod web;
 pub(crate) use common::check_http_status_and_header;
 use common::percent_decode_http_url_path;
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
+pub use release_artifacts::Artifacts as ReleaseArtifacts;
 pub use repo_info::RepoInfo;
 pub use web::{ReleaseAssets, ReleaseAssetsPage};
 
@@ -111,29 +110,8 @@ impl GhReleaseArtifact {
 }
 
 #[derive(Debug)]
-struct Map<K, V>(RwLock<HashMap<K, Arc<V>>>);
-
-impl<K, V> Default for Map<K, V> {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
-
-impl<K, V> Map<K, V>
-where
-    K: Eq + std::hash::Hash,
-    V: Default,
-{
-    fn get(&self, k: K) -> Arc<V> {
-        let optional_value = self.0.read().unwrap().deref().get(&k).cloned();
-        optional_value.unwrap_or_else(|| Arc::clone(self.0.write().unwrap().entry(k).or_default()))
-    }
-}
-
-#[derive(Debug)]
 struct Inner {
     client: remote::Client,
-    release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
     retry_after: Mutex<Option<Instant>>,
 
     auth_token: Option<Zeroizing<Box<str>>>,
@@ -163,7 +141,6 @@ impl GhApiClient {
     pub fn new(client: remote::Client, auth_token: Option<Zeroizing<Box<str>>>) -> Self {
         Self(Arc::new(Inner {
             client,
-            release_artifacts: Default::default(),
             retry_after: Default::default(),
 
             auth_token: auth_token.and_then(sanitize_auth_token),
@@ -284,160 +261,102 @@ impl GhApiClient {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct GhReleaseArtifactUrl(Url);
 
+impl ReleaseArtifacts {
+    /// The API URL to download the asset `name` with, if the release has it.
+    pub fn artifact_url(&self, name: &str) -> Option<GhReleaseArtifactUrl> {
+        self.get_artifact_url(name).map(GhReleaseArtifactUrl)
+    }
+}
+
 impl GhApiClient {
-    /// Return `Ok(Some(api_artifact_url))` if exists.
+    /// Get the assets of `release`, `None` if there is no such release.
     ///
-    /// Caches info on all artifacts matching (repo, tag).
-    ///
-    /// The returned future is guaranteed to be pointer size.
-    #[instrument(skip(self), ret(level = Level::DEBUG))]
-    pub async fn has_release_artifact(
+    /// Nothing is cached: the caller knows how long the answer is worth
+    /// keeping.
+    #[instrument(skip(self))]
+    pub async fn get_release_artifacts(
         &self,
-        GhReleaseArtifact {
-            release,
-            artifact_name,
-        }: GhReleaseArtifact,
-    ) -> Result<Option<GhReleaseArtifactUrl>, GhApiError> {
-        let once_cell = self.0.release_artifacts.get(release.clone());
-        let res = once_cell
-            .get_or_try_init(|| {
-                Box::pin(async {
-                    match self
-                        .do_fetch(
-                            release_artifacts::fetch_release_artifacts_graphql_api,
-                            release_artifacts::fetch_release_artifacts_restful_api,
-                            &release,
-                        )
-                        .await
-                    {
-                        Ok(artifacts) => Ok(Some(artifacts)),
-                        Err(GhApiError::NotFound) => Ok(None),
-                        Err(err) => Err(err),
-                    }
-                })
-            })
-            .await;
-
-        match res {
-            Ok(Some(artifacts)) => Ok(artifacts
-                .get_artifact_url(&artifact_name)
-                .map(GhReleaseArtifactUrl)),
-            Ok(None) => Ok(None),
-            Err(GhApiError::RateLimit { retry_after }) => {
-                *self.0.retry_after.lock().unwrap() =
-                    Some(Instant::now() + retry_after.unwrap_or(DEFAULT_RETRY_DURATION));
-
-                Err(GhApiError::RateLimit { retry_after })
+        release: &GhRelease,
+    ) -> Result<Option<ReleaseArtifacts>, GhApiError> {
+        match self
+            .do_fetch(
+                release_artifacts::fetch_release_artifacts_graphql_api,
+                release_artifacts::fetch_release_artifacts_restful_api,
+                release,
+            )
+            .await
+        {
+            Ok(artifacts) => Ok(Some(artifacts)),
+            Err(GhApiError::NotFound) => Ok(None),
+            Err(err) => {
+                self.note_error(&err);
+                Err(err)
             }
-            Err(err) => Err(err),
         }
     }
 
-    /// Fetch the assets of the releases `tags` of `repo` with one GraphQL query,
-    /// so that [`GhApiClient::has_release_artifact`] finds them cached instead
-    /// of sending one query per release.
+    /// Whether [`GhApiClient::get_releases_artifacts`] can be used: it needs
+    /// a token and the GraphQL API.
+    pub fn can_batch(&self) -> bool {
+        !self.0.only_use_restful_api.load(Relaxed) && self.has_gh_token()
+    }
+
+    /// Get the assets of the releases `tags` of `repo` with one GraphQL
+    /// query, instead of one query per release with
+    /// [`GhApiClient::get_release_artifacts`]. Check
+    /// [`GhApiClient::can_batch`] first.
     ///
-    /// Does nothing without a token, since the restful API can't batch, or if
-    /// fewer than two of `tags` are not cached yet: a batch of one is the
-    /// query [`GhApiClient::has_release_artifact`] sends anyway. Errors are
-    /// not returned: [`GhApiClient::has_release_artifact`] then fetches each
-    /// release on its own, as it would have without this.
+    /// Returns what [`GhApiClient::get_release_artifacts`] would for each
+    /// tag, in the order of `tags`. A release with more assets than fit in
+    /// the batch has the rest fetched on its own, so only its entry fails
+    /// if that does. [`GhApiError::NotFound`] if the repository doesn't
+    /// exist.
     ///
-    /// A release with more assets than fit in the batch keeps its first page,
-    /// the rest is fetched from there.
-    ///
-    /// `tags` should not repeat a tag, a repeated one is fetched twice.
-    #[instrument(skip(self, tags))]
-    pub async fn prefetch_release_artifacts(
+    /// Nothing is cached.
+    #[instrument(skip(self))]
+    pub async fn get_releases_artifacts(
         &self,
         repo: &GhRepo,
-        tags: impl IntoIterator<Item = CompactString>,
-    ) {
-        if self.0.only_use_restful_api.load(Relaxed) || self.check_retry_after().is_err() {
-            return;
-        }
-        let Some(auth_token) = self.get_auth_token() else {
-            return;
-        };
+        tags: &[CompactString],
+    ) -> Result<Vec<Result<Option<ReleaseArtifacts>, GhApiError>>, GhApiError> {
+        self.check_retry_after()?;
+        let auth_token = self.get_auth_token().ok_or(GhApiError::Unauthorized)?;
 
-        let cells: Vec<_> = tags
-            .into_iter()
-            .map(|tag| {
-                let cell = self.0.release_artifacts.get(GhRelease {
-                    repo: repo.clone(),
-                    tag: tag.clone(),
-                });
-                (tag, cell)
-            })
-            .filter(|(_, cell)| !cell.initialized())
-            .collect();
-
-        if cells.len() < 2 {
-            return;
-        }
-
-        let releases = match release_artifacts::fetch_releases_artifacts_graphql_api(
+        let releases = release_artifacts::fetch_releases_artifacts_graphql_api(
             &self.0.client,
             repo,
-            cells.iter().map(|(tag, _)| tag.as_str()),
+            tags.iter().map(CompactString::as_str),
             auth_token,
         )
         .await
-        {
-            Ok(releases) => releases,
-            Err(GhApiError::NotFound) => {
-                // The repository itself does not exist.
-                cells.iter().for_each(|(_, cell)| {
-                    let _ = cell.set(None);
-                });
-                return;
-            }
-            Err(err) => {
-                self.note_prefetch_error(&err);
-                debug!("Failed to fetch the assets of the releases of {repo:?}: {err}");
-                return;
-            }
-        };
+        .inspect_err(|err| self.note_error(err))?;
 
-        for ((tag, cell), release) in cells.iter().zip(releases) {
-            let artifacts = match release {
-                release_artifacts::BatchedRelease::Found(artifacts) => Some(artifacts),
-                release_artifacts::BatchedRelease::NotFound => None,
+        let mut results = Vec::with_capacity(tags.len());
+        for (tag, release) in tags.iter().zip(releases) {
+            results.push(match release {
+                release_artifacts::BatchedRelease::Found(artifacts) => Ok(Some(artifacts)),
+                release_artifacts::BatchedRelease::NotFound => Ok(None),
                 release_artifacts::BatchedRelease::Incomplete {
                     artifacts,
                     end_cursor,
-                } => {
-                    match release_artifacts::fetch_rest_of_release_artifacts(
-                        &self.0.client,
-                        repo,
-                        tag,
-                        auth_token,
-                        artifacts,
-                        end_cursor,
-                    )
-                    .await
-                    {
-                        Ok(artifacts) => Some(artifacts),
-                        Err(err) => {
-                            self.note_prefetch_error(&err);
-                            debug!(
-                                "Failed to fetch the rest of the assets of release {tag} of {repo:?}: {err}"
-                            );
-                            continue;
-                        }
-                    }
-                }
-            };
-
-            // `set` fails only if `has_release_artifact` got there first,
-            // then that value is just as good.
-            let _ = cell.set(artifacts);
+                } => release_artifacts::fetch_rest_of_release_artifacts(
+                    &self.0.client,
+                    repo,
+                    tag,
+                    auth_token,
+                    artifacts,
+                    end_cursor,
+                )
+                .await
+                .map(Some)
+                .inspect_err(|err| self.note_error(err)),
+            });
         }
+        Ok(results)
     }
 
-    /// Remember what an error says about the token and the rate limit, as
-    /// [`GhApiClient::has_release_artifact`] would.
-    fn note_prefetch_error(&self, err: &GhApiError) {
+    /// Remember what an error says about the token and the rate limit.
+    fn note_error(&self, err: &GhApiError) {
         match err {
             GhApiError::Unauthorized => self.0.is_auth_token_valid.store(false, Relaxed),
             GhApiError::RateLimit { retry_after } => {
@@ -766,40 +685,42 @@ mod test {
     }
 
     #[tokio::test]
-    async fn rate_limited_test_prefetch_release_artifacts() {
+    async fn rate_limited_test_get_releases_artifacts() {
         init_logger();
 
         for client in create_client() {
-            // Without a token or with only the restful API, it does nothing.
-            let can_batch = client.has_gh_token() && !client.0.only_use_restful_api.load(Relaxed);
-
-            let release = cargo_binstall_v0_20_1::RELEASE;
-            let non_existent_release = GhRelease {
-                repo: release.repo.clone(),
-                tag: CompactString::const_new("v0.18.2"),
-            };
-
-            client
-                .prefetch_release_artifacts(
-                    &release.repo,
-                    [release.tag.clone(), non_existent_release.tag.clone()],
-                )
-                .await;
-
-            let cell = client.0.release_artifacts.get(release.clone());
-            let non_existent_cell = client.0.release_artifacts.get(non_existent_release);
-
-            if !can_batch {
-                assert!(!cell.initialized());
-                assert!(!non_existent_cell.initialized());
+            // Only with a token and the GraphQL API.
+            assert_eq!(
+                client.can_batch(),
+                client.has_gh_token() && !client.0.only_use_restful_api.load(Relaxed)
+            );
+            if !client.can_batch() {
                 continue;
             }
 
-            let artifacts = cell.get().unwrap().as_ref().unwrap();
+            let release = cargo_binstall_v0_20_1::RELEASE;
+            let releases = loop {
+                match client
+                    .get_releases_artifacts(
+                        &release.repo,
+                        &[release.tag.clone(), CompactString::const_new("v0.18.2")],
+                    )
+                    .await
+                {
+                    Err(GhApiError::RateLimit { retry_after }) => {
+                        sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
+                    }
+                    res => break res.unwrap(),
+                }
+            };
+            let [artifacts, non_existent] = <[_; 2]>::try_from(releases).unwrap();
+
+            let artifacts = artifacts.unwrap().unwrap();
             for artifact in cargo_binstall_v0_20_1::ARTIFACTS {
-                assert!(artifacts.get_artifact_url(artifact).is_some(), "{artifact}");
+                assert!(artifacts.artifact_url(artifact).is_some(), "{artifact}");
             }
-            assert!(non_existent_cell.get().unwrap().is_none());
+            assert!(artifacts.artifact_url("123z").is_none());
+            assert!(non_existent.unwrap().is_none());
         }
     }
 
@@ -1047,7 +968,7 @@ mod test {
 
     #[tokio::test]
     #[ignore]
-    async fn rate_limited_test_has_release_artifact_and_download_artifacts() {
+    async fn rate_limited_test_get_release_artifacts_and_download_artifacts() {
         const RELEASES: [(GhRelease, &[&str]); 1] = [(
             cargo_binstall_v0_20_1::RELEASE,
             cargo_binstall_v0_20_1::ARTIFACTS,
@@ -1072,11 +993,14 @@ mod test {
                 artifact: &GhReleaseArtifact,
             ) -> Result<Option<GhReleaseArtifactUrl>, GhApiError> {
                 loop {
-                    match client.has_release_artifact(artifact.clone()).await {
+                    match client.get_release_artifacts(&artifact.release).await {
                         Err(GhApiError::RateLimit { retry_after }) => {
                             sleep(retry_after.unwrap_or(DEFAULT_RETRY_AFTER)).await
                         }
-                        res => break res,
+                        res => {
+                            break res
+                                .map(|artifacts| artifacts?.artifact_url(&artifact.artifact_name));
+                        }
                     }
                 }
             }
