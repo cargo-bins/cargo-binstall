@@ -41,8 +41,8 @@ struct Resolved {
     url: Url,
     pkg_fmt: PkgFmt,
     archive_suffix: Option<String>,
-    repo: Option<String>,
-    subcrate: Option<String>,
+    repo: Option<CompactString>,
+    subcrate: Option<CompactString>,
     gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
     is_repo_private: bool,
     /// The alias from [`target_arch_aliases`] that `{ target-arch }` was
@@ -273,7 +273,7 @@ impl super::Fetcher for GhCrateMeta {
             };
 
             // Every URL the package may be at, rendered once.
-            let mut candidates: Vec<Candidate> = pkg_urls
+            let candidates: Vec<Candidate> = pkg_urls
                 .cartesian_product(pkg_fmts)
                 .flat_map(|(pkg_url, pkg_fmt)| {
                     let default_pkg_url = is_default_pkg_url.then(|| template_to_string(&pkg_url));
@@ -300,14 +300,14 @@ impl super::Fetcher for GhCrateMeta {
                 })
                 .collect();
 
-            let probe = Arc::new(Probe::new(
+            let mut probe = Probe::new(
                 self.client.clone(),
                 self.gh_api_client.clone(),
                 repo,
                 subcrate,
                 is_repo_private,
-                &candidates,
-            ));
+                candidates,
+            );
 
             // Try how a previous version was found first, before any other
             // request: it is one template times one pkg-fmt, instead of all
@@ -321,15 +321,11 @@ impl super::Fetcher for GhCrateMeta {
                 ..
             }) = self.data.pkg_url_hint(&self.target_data.target)
             {
-                let hinted;
-                (hinted, candidates) = candidates.into_iter().partition(|candidate| {
+                let hinted = probe.resolve_where(|candidate| {
                     candidate.pkg_fmt == *hint_pkg_fmt
                         && candidate.default_pkg_url.as_ref() == Some(hint_pkg_url)
                 });
-
-                if !hinted.is_empty()
-                    && let Some(resolved) = probe.resolve(hinted).await
-                {
+                if let Some(resolved) = hinted.await {
                     debug!(
                         ?resolved,
                         "Found package with the pkg-url of the last install"
@@ -345,15 +341,15 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
-            probe.drop_missing_tags(&self.data, &mut candidates).await;
-            if candidates.is_empty() {
+            probe.drop_missing_tags(&self.data).await;
+            if probe.is_empty() {
                 debug!("No release tag of any candidate exists");
                 return Ok(false);
             }
 
             probe.prefetch_gh_releases().await;
 
-            if let Some(resolved) = probe.resolve(candidates).await {
+            if let Some(resolved) = probe.resolve().await {
                 debug!(?resolved, "Winning URL found!");
                 self.resolution
                     .set(resolved)

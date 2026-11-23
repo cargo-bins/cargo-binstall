@@ -25,10 +25,11 @@ mod release_artifacts;
 mod repo_info;
 mod web;
 
-use common::{check_http_status_and_header, percent_decode_http_url_path};
+pub(crate) use common::check_http_status_and_header;
+use common::percent_decode_http_url_path;
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
 pub use repo_info::RepoInfo;
-pub use web::ReleaseAssets;
+pub use web::{ReleaseAssetList, ReleaseAssets};
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
@@ -216,15 +217,16 @@ impl GhApiClient {
     /// authenticated with the token: GitHub's git server takes it as the
     /// password of HTTP Basic authentication.
     ///
-    /// Returns `None` without a token, for a repository elsewhere (the token
-    /// is only ever sent to github.com), or if the request failed.
+    /// Fails with [`GhApiError::Unauthorized`] without a token, or for a
+    /// repository elsewhere: the token is only ever sent to github.com.
     pub async fn list_private_repo_tags(
         &self,
         repo: &Url,
         tags: HashSet<CompactString>,
-    ) -> Option<git_refs::RepoTags> {
-        GhRepo::try_extract_from_url(repo)?;
-        let token = self.get_auth_token()?;
+    ) -> Result<git_refs::RepoTags, GhApiError> {
+        let token = GhRepo::try_extract_from_url(repo)
+            .and_then(|_| self.get_auth_token())
+            .ok_or(GhApiError::Unauthorized)?;
         git_refs::list_tags(&self.0.client, repo, tags, Some(("x-access-token", token))).await
     }
 
@@ -937,7 +939,10 @@ mod test {
         // No token: nothing is sent.
         let client = GhApiClient::new(create_remote_client(), None);
         let repo = Url::parse("https://github.com/cargo-bins/cargo-binstall").unwrap();
-        assert!(client.list_private_repo_tags(&repo, tags()).await.is_none());
+        assert!(matches!(
+            client.list_private_repo_tags(&repo, tags()).await,
+            Err(GhApiError::Unauthorized)
+        ));
 
         // The token is never sent anywhere but github.com.
         let client = GhApiClient::new(
@@ -945,7 +950,41 @@ mod test {
             Some(Zeroizing::new("ghp_not_a_real_token".into())),
         );
         let repo = Url::parse("https://gitlab.com/gitlab-org/gitlab").unwrap();
-        assert!(client.list_private_repo_tags(&repo, tags()).await.is_none());
+        assert!(matches!(
+            client.list_private_repo_tags(&repo, tags()).await,
+            Err(GhApiError::Unauthorized)
+        ));
+    }
+
+    /// Needs `CI_UNIT_TEST_GITHUB_TOKEN` with access to the private repository.
+    #[tokio::test]
+    async fn test_list_private_repo_tags() {
+        init_logger();
+
+        let Some(auth_token) = env::var("CI_UNIT_TEST_GITHUB_TOKEN")
+            .ok()
+            .filter(|token| !token.is_empty())
+        else {
+            return;
+        };
+
+        let repo = Url::parse("https://github.com/cargo-bins/private-repo-for-testing").unwrap();
+        let tags = || HashSet::from(["0.12.0".into(), "v0.12.0".into()]);
+
+        // Without the token, the git server asks for credentials as if the
+        // repository did not exist.
+        let err = git_refs::list_tags(&create_remote_client(), &repo, tags(), None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, GhApiError::Unauthorized), "{err:?}");
+
+        let client = GhApiClient::new(
+            create_remote_client(),
+            Some(Zeroizing::new(auth_token.into())),
+        );
+        let tags = client.list_private_repo_tags(&repo, tags()).await.unwrap();
+        assert_eq!(tags.exists("0.12.0"), Some(true));
+        assert_eq!(tags.exists("v0.12.0"), Some(false));
     }
 
     #[tokio::test]
@@ -958,11 +997,37 @@ mod test {
         let ReleaseAssets::Found(assets) = client.release_assets_on_web(&release).await else {
             panic!("Failed to get the assets of {release:?}");
         };
-        let mut assets: Vec<_> = assets.iter().map(CompactString::as_str).collect();
-        assets.sort();
-        let mut expected = cargo_binstall_v0_20_1::ARTIFACTS.to_vec();
-        expected.sort();
-        assert_eq!(assets, expected);
+        assert!(!assets.is_empty());
+        for (name, listed) in cargo_binstall_v0_20_1::ARTIFACTS
+            .iter()
+            .zip(assets.lists(cargo_binstall_v0_20_1::ARTIFACTS.iter().copied()))
+        {
+            assert!(listed, "{name} is not listed");
+        }
+        assert_eq!(
+            assets
+                .lists(["cargo-binstall-x86_64-unknown-linux-musl.tgz.sig", "a.tgz"])
+                .collect::<Vec<_>>(),
+            [false, false]
+        );
+
+        // The owner and repository name are case insensitive.
+        let release = GhRelease {
+            repo: GhRepo {
+                owner: CompactString::const_new("Cargo-Bins"),
+                repo: CompactString::const_new("Cargo-Binstall"),
+            },
+            tag: release.tag,
+        };
+        let ReleaseAssets::Found(assets) = client.release_assets_on_web(&release).await else {
+            panic!("Failed to get the assets of {release:?}");
+        };
+        assert!(
+            assets
+                .lists(["cargo-binstall-x86_64-unknown-linux-musl.tgz"])
+                .all(|listed| listed)
+        );
+        let release = cargo_binstall_v0_20_1::RELEASE;
 
         // A tag without a release.
         let tag_only = GhRelease {
@@ -972,6 +1037,19 @@ mod test {
         assert!(matches!(
             client.release_assets_on_web(&tag_only).await,
             ReleaseAssets::Found(assets) if assets.is_empty()
+        ));
+
+        // A private repository is not found without the user's cookies.
+        let private = GhRelease {
+            repo: GhRepo {
+                owner: CompactString::const_new("cargo-bins"),
+                repo: CompactString::const_new("private-repo-for-testing"),
+            },
+            tag: CompactString::const_new("0.12.0"),
+        };
+        assert!(matches!(
+            client.release_assets_on_web(&private).await,
+            ReleaseAssets::NotFound
         ));
 
         let release = GhRelease {

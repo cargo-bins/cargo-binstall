@@ -370,13 +370,13 @@ impl Data {
     /// The first caller decides which tags are asked about, the targets
     /// normally share them.
     ///
-    /// Returns `None` if there is no tag to ask about, or if the git server
-    /// could not tell.
+    /// Returns `None` if there is no repository or tag to ask about, or if
+    /// the git server could not tell.
     async fn get_repo_tags<'a>(
         &self,
         client: &Client,
         gh_api_client: &GhApiClient,
-        repo: &str,
+        repo: Option<&str>,
         is_private: bool,
         tags: impl Iterator<Item = &'a str>,
     ) -> Option<Arc<RepoTags>> {
@@ -386,13 +386,19 @@ impl Data {
                 if tags.is_empty() {
                     return None;
                 }
-                let repo = Url::parse(repo).ok()?;
+                let repo = Url::parse(repo?).ok()?;
                 let tags = if is_private {
                     gh_api_client.list_private_repo_tags(&repo, tags).await
                 } else {
                     git_refs::list_tags(client, &repo, tags, None).await
                 };
-                tags.map(Arc::new)
+                match tags {
+                    Ok(tags) => Some(Arc::new(tags)),
+                    Err(err) => {
+                        debug!("Failed to list the release tags of {repo}: {err}");
+                        None
+                    }
+                }
             })
             .await
             .clone()

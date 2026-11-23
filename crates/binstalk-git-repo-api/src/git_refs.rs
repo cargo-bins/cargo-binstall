@@ -22,6 +22,8 @@ use percent_encoding::percent_decode_str;
 use tracing::debug;
 use url::Url;
 
+use crate::gh_api_client::{GhApiError, check_http_status_and_header};
+
 /// The tag of the release `url` downloads an asset of, if it is one of `repo`.
 ///
 /// Knows the release asset URLs of GitHub and Codeberg
@@ -139,55 +141,36 @@ fn parse_ls_refs(mut response: &[u8]) -> Option<HashSet<CompactString>> {
 /// Which of `tags` exist in the git repository `repo`, with one request,
 /// authenticated with `credentials` (username, password) if any.
 ///
-/// Returns `None` if the request failed, e.g. for a private repository without
-/// credentials or a server without protocol v2, then check each release some
+/// Fails if the request failed, e.g. for a private repository without
+/// credentials or a server without protocol v2: then check each release some
 /// other way.
 pub async fn list_tags(
     client: &remote::Client,
     repo: &Url,
     tags: HashSet<CompactString>,
     credentials: Option<(&str, &str)>,
-) -> Option<RepoTags> {
+) -> Result<RepoTags, GhApiError> {
     let url = upload_pack_url(repo);
 
     debug!("Listing tags at: '{url}'");
 
-    let request = match ls_refs_request(tags.iter().map(|tag| tag.as_str())) {
-        Ok(request) => request,
-        Err(err) => {
-            debug!("Failed to write the ls-refs request for {url}: {err}");
-            return None;
-        }
-    };
-
-    let result = async {
-        let mut request = client.post(url.clone(), request);
-        if let Some((username, password)) = credentials {
-            request = request.basic_auth(&username, &password);
-        }
-        let response = request
-            .header("Git-Protocol", "version=2")
-            .header("Content-Type", "application/x-git-upload-pack-request")
-            .send(true)
-            .await?;
-        response.bytes().await
+    let mut request = client.post(url, ls_refs_request(tags.iter().map(|tag| tag.as_str()))?);
+    if let Some((username, password)) = credentials {
+        request = request.basic_auth(&username, &password);
     }
-    .await;
+    let response = request
+        .header("Git-Protocol", "version=2")
+        .header("Content-Type", "application/x-git-upload-pack-request")
+        .send(false)
+        .await?;
+    let response = check_http_status_and_header(response)?.bytes().await?;
 
-    let existing = match result {
-        Ok(response) => parse_ls_refs(&response),
-        Err(err) => {
-            debug!("Failed to list tags at {url}: {err}");
-            return None;
-        }
-    };
-    if existing.is_none() {
-        debug!("Unexpected response when listing tags at {url}");
-    }
+    let existing = parse_ls_refs(&response)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "not an ls-refs response"))?;
 
-    Some(RepoTags {
+    Ok(RepoTags {
         asked: tags,
-        existing: existing?,
+        existing,
     })
 }
 
@@ -283,8 +266,21 @@ mod test {
             tags(b"003f4b6fa09d0d1ef9740a0c332e31b9ae336f97efa0 refs/tags/v1.28.0\n0042a5c8f6e2d36c0dbf4f6a1e1dc2f1a5b0a6b7c8d9 refs/tags/v1.28.0-rc\n0000"),
             Some(vec!["v1.28.0".into(), "v1.28.0-rc".into()])
         );
+        // From gitlab.com, with the attributes git asks for.
+        assert_eq!(
+            tags(b"006fb1c9d313fc57c7677eae3eb78bddb84bc360f056 refs/tags/v17.0.0 peeled:44feccdf3a5f65891017ef143a78c7a0d22bb63b\n0000"),
+            Some(vec!["v17.0.0".into()])
+        );
+        // Only tags are asked for.
+        assert_eq!(
+            tags(b"00404b6fa09d0d1ef9740a0c332e31b9ae336f97efa0 refs/heads/v1.28.0\n0000"),
+            Some(vec![])
+        );
         assert_eq!(tags(b"0000"), Some(vec![]));
         assert_eq!(tags(b"000fERR not ok\n0000"), None);
+        // Not an object id.
+        assert_eq!(tags(b"0019xyz refs/tags/v1.0.0\n0000"), None);
+        assert_eq!(tags(b"0009oops\n0000"), None);
         assert_eq!(tags(b"0001"), None);
         assert_eq!(tags(b"0002"), None);
         assert_eq!(tags(b"003f4b6fa09d0d1ef9740a0c332e31b9ae336f97efa0"), None);
@@ -303,20 +299,38 @@ mod test {
             [],
         )
         .unwrap();
-        let repo = Url::parse("https://github.com/cargo-bins/cargo-binstall").unwrap();
+        let list_tags = |repo: &str, tags: &[&str]| {
+            let repo = Url::parse(repo).unwrap();
+            let tags = tags.iter().copied().map(CompactString::from).collect();
+            let client = &client;
+            async move { list_tags(client, &repo, tags, None).await }
+        };
 
         let tags = list_tags(
-            &client,
-            &repo,
+            "https://github.com/cargo-bins/cargo-binstall",
             // We would never release anything older than v0.20.1
-            ["v0.20.1".into(), "v0.18.2".into()].into(),
-            None,
+            &["v0.20.1", "v0.18.2"],
         )
         .await
         .unwrap();
-
         assert_eq!(tags.exists("v0.20.1"), Some(true));
         assert_eq!(tags.exists("v0.18.2"), Some(false));
         assert_eq!(tags.exists("v0.20.2"), None);
+
+        // Not only github.com.
+        let tags = list_tags(
+            "https://gitlab.com/gitlab-org/gitlab-runner",
+            &["v17.0.0", "17.0.0"],
+        )
+        .await
+        .unwrap();
+        assert_eq!(tags.exists("v17.0.0"), Some(true));
+        assert_eq!(tags.exists("17.0.0"), Some(false));
+
+        // github.com asks for credentials, as for a private repository.
+        let err = list_tags("https://github.com/cargo-bins/ttt", &["v1.0.0"])
+            .await
+            .unwrap_err();
+        assert!(matches!(err, GhApiError::Unauthorized), "{err:?}");
     }
 }

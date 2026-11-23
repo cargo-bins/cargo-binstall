@@ -18,7 +18,7 @@ pub(super) fn percent_decode_http_url_path(input: &str) -> CompactString {
     }
 }
 
-pub(super) fn check_http_status_and_header(response: Response) -> Result<Response, GhApiError> {
+pub(crate) fn check_http_status_and_header(response: Response) -> Result<Response, GhApiError> {
     match response.status() {
         remote::StatusCode::UNAUTHORIZED => Err(GhApiError::Unauthorized),
         remote::StatusCode::NOT_FOUND => Err(GhApiError::NotFound),
