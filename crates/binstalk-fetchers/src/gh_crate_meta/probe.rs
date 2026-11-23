@@ -124,14 +124,29 @@ impl Probe {
     ///
     /// The ones not found are dropped, so [`Probe::resolve`] doesn't check
     /// them again.
+    ///
+    /// More than two, one per archive suffix and `{ target-arch }` name,
+    /// are left to [`Probe::resolve`], which needs fewer requests for them.
     pub(super) async fn resolve_hint(
         &mut self,
         pkg_url: &str,
         pkg_fmt: PkgFmt,
     ) -> Result<Option<Resolved>, FetchError> {
-        while let Some(i) = self.candidates.iter().position(|candidate| {
+        let is_hinted = |candidate: &Candidate| {
             candidate.pkg_fmt == pkg_fmt && candidate.default_pkg_url.as_deref() == Some(pkg_url)
-        }) {
+        };
+        if self
+            .candidates
+            .iter()
+            .filter(|candidate| is_hinted(candidate))
+            .nth(2)
+            .is_some()
+        {
+            debug!("Too many candidates for the hint to check one at a time");
+            return Ok(None);
+        }
+
+        while let Some(i) = self.candidates.iter().position(is_hinted) {
             let candidate = self.candidates.swap_remove(i);
             let resolved = if self.shared.is_repo_private {
                 self.shared.check(candidate).await?
@@ -861,6 +876,29 @@ mod test {
                 .is_none()
         );
         assert_eq!(probe.candidates.len(), 1);
+
+        // More than two are left to `resolve`, without a request.
+        let candidates = [
+            "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+            "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+            "v0.20.1/cargo-binstall-amd64-unknown-linux-musl.tgz",
+        ]
+        .iter()
+        .map(|asset| new_candidate(BINSTALL, asset, Some(hint)))
+        .collect();
+        let mut probe = new_probe(&gh_api_client, BINSTALL, candidates).await;
+        assert!(
+            probe
+                .resolve_hint(hint, PkgFmt::Tgz)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(probe.candidates.len(), 3);
+        assert_eq!(
+            asset(probe.resolve().await.unwrap()).as_deref(),
+            Some("v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz")
+        );
     }
 
     /// Needs `CI_UNIT_TEST_GITHUB_TOKEN` with access to the private repository.
