@@ -274,9 +274,12 @@ impl super::Fetcher for GhCrateMeta {
 
             // Every URL the package may be at, rendered once.
             let candidates: Vec<Candidate> = pkg_urls
-                .cartesian_product(pkg_fmts)
-                .flat_map(|(pkg_url, pkg_fmt)| {
+                .map(|pkg_url| {
                     let default_pkg_url = is_default_pkg_url.then(|| template_to_string(&pkg_url));
+                    (default_pkg_url, pkg_url)
+                })
+                .cartesian_product(pkg_fmts)
+                .flat_map(|((default_pkg_url, pkg_url), pkg_fmt)| {
                     candidate_urls(
                         &self.data,
                         &self.target_data.target,
@@ -301,6 +304,7 @@ impl super::Fetcher for GhCrateMeta {
                 .collect();
 
             let mut probe = Probe::new(
+                self.data.clone(),
                 self.client.clone(),
                 self.gh_api_client.clone(),
                 repo,
@@ -341,8 +345,7 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
-            probe.drop_missing_tags(&self.data).await;
-            if probe.is_empty() {
+            if !probe.drop_missing_tags().await {
                 debug!("No release tag of any candidate exists");
                 return Ok(false);
             }

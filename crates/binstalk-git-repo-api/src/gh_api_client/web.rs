@@ -5,8 +5,6 @@
 //! They only work for public repositories, github.com answers 404 for a
 //! private one without the user's cookies.
 
-use std::sync::Arc;
-
 use binstalk_downloader::remote::{self, Method};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use tracing::debug;
@@ -54,23 +52,45 @@ pub(super) async fn has_release_page(client: &remote::Client, release: &GhReleas
     }
 }
 
-/// The asset list of a release, from [`GhApiClient::release_assets_on_web`](super::GhApiClient::release_assets_on_web).
-#[derive(Clone, Debug)]
+/// What github.com lists of some asset names of a release, from
+/// [`GhApiClient::release_assets_on_web`](super::GhApiClient::release_assets_on_web).
+#[derive(Debug, Eq, PartialEq)]
 pub enum ReleaseAssets {
     /// github.com has no such release.
     NotFound,
-    Found(Arc<ReleaseAssetList>),
+    /// The release has no assets, or it is a tag without a release.
+    NoAssets,
+    /// The indices of the names that are listed. The list comes from a page
+    /// meant for people, not from an API, so it may not have every asset.
+    Listed(Vec<usize>),
     /// The request failed, or the page doesn't look like an asset list:
     /// github.com may have changed it.
     Unknown,
 }
 
-/// The asset list github.com shows on the page of a release.
-///
-/// It comes from a page meant for people, not from an API, so it may not
-/// list every asset.
+/// The page github.com loads the asset list of a release from.
 #[derive(Debug)]
-pub struct ReleaseAssetList {
+pub(super) enum AssetPage {
+    NotFound,
+    Found(ReleaseAssetList),
+    Unknown,
+}
+
+impl AssetPage {
+    /// What it lists of `names`.
+    pub(super) fn lists<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> ReleaseAssets {
+        match self {
+            Self::NotFound => ReleaseAssets::NotFound,
+            Self::Found(assets) if assets.is_empty => ReleaseAssets::NoAssets,
+            Self::Found(assets) => ReleaseAssets::Listed(assets.lists(names)),
+            Self::Unknown => ReleaseAssets::Unknown,
+        }
+    }
+}
+
+/// The asset list github.com shows on the page of a release.
+#[derive(Debug)]
+pub(super) struct ReleaseAssetList {
     release: GhRelease,
     html: String,
     is_empty: bool,
@@ -91,18 +111,16 @@ const PATH_SEGMENT: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-/// Push `segment` as github.com writes it in a link in an HTML attribute.
-fn push_path_segment(buf: &mut String, segment: &str) {
-    for part in utf8_percent_encode(segment, PATH_SEGMENT) {
-        // `"`, `<` and `>` are percent-encoded already.
-        for c in part.chars() {
-            match c {
-                '&' => buf.push_str("&amp;"),
-                '\'' => buf.push_str("&#39;"),
-                c => buf.push(c),
-            }
-        }
-    }
+/// `/releases/download/{tag}/` as github.com links to it.
+///
+/// Asset names need no escaping: GitHub renames an uploaded asset with
+/// special characters in its name. A tag can still have them, a link with
+/// them written some other way is just not found.
+fn release_download_path(tag: &str) -> String {
+    let mut path = String::from("/releases/download/");
+    path.extend(utf8_percent_encode(tag, PATH_SEGMENT));
+    path.push('/');
+    path
 }
 
 /// Strip `suffix` from `s`, ignoring ASCII case.
@@ -131,56 +149,43 @@ impl ReleaseAssetList {
     /// Parse the page github.com loads the asset list of `release` from,
     /// `None` if it doesn't look like one.
     fn new(release: &GhRelease, html: String) -> Option<Self> {
-        let mut path = String::from("/releases/download/");
-        push_path_segment(&mut path, &release.tag);
-        path.push('/');
-
-        if links_to(&html, &release.repo, &path) {
-            Some(Self {
-                release: release.clone(),
-                html,
-                is_empty: false,
-            })
+        let is_empty = if links_to(&html, &release.repo, &release_download_path(&release.tag)) {
+            false
         } else if !html.contains("/releases/download/")
             // github.com lists the source code archives for every release,
             // and also for a tag without one.
             && links_to(&html, &release.repo, "/archive/refs/tags/")
         {
-            Some(Self {
-                release: release.clone(),
-                html,
-                is_empty: true,
-            })
+            true
         } else {
             // It links to assets, but not the way expected for this release.
-            None
-        }
+            return None;
+        };
+
+        Some(Self {
+            release: release.clone(),
+            html,
+            is_empty,
+        })
     }
 
-    /// Whether it lists no asset at all: the release has none, or it is a
-    /// tag without a release.
-    pub fn is_empty(&self) -> bool {
-        self.is_empty
-    }
-
-    /// Whether it lists each of `names`, by searching for the link to each.
-    pub fn lists<'a>(
-        &'a self,
-        names: impl IntoIterator<Item = &'a str>,
-    ) -> impl Iterator<Item = bool> {
-        let mut path = String::from("/releases/download/");
-        push_path_segment(&mut path, &self.release.tag);
-        path.push('/');
+    /// The indices of `names` it lists, by searching for the link to each.
+    fn lists<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> Vec<usize> {
+        let mut path = release_download_path(&self.release.tag);
         let prefix_len = path.len();
 
-        names.into_iter().map(move |name| {
-            path.truncate(prefix_len);
-            push_path_segment(&mut path, name);
-            // The end of the attribute, so that `a.tgz` doesn't match
-            // `a.tgz.sig`.
-            path.push('"');
-            !self.is_empty && links_to(&self.html, &self.release.repo, &path)
-        })
+        names
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, name)| {
+                path.truncate(prefix_len);
+                path.push_str(name);
+                // The end of the attribute, so that `a.tgz` doesn't match
+                // `a.tgz.sig`.
+                path.push('"');
+                links_to(&self.html, &self.release.repo, &path).then_some(i)
+            })
+            .collect()
     }
 }
 
@@ -188,11 +193,11 @@ impl ReleaseAssetList {
 /// when showing the release, one request no matter how many assets.
 ///
 /// The page is not documented, so anything unexpected returns
-/// [`ReleaseAssets::Unknown`] instead of hiding an asset.
+/// [`AssetPage::Unknown`] instead of hiding an asset.
 pub(super) async fn fetch_release_assets(
     client: &remote::Client,
     release: &GhRelease,
-) -> ReleaseAssets {
+) -> AssetPage {
     let url = release_url(release, "expanded_assets");
 
     debug!("Getting release assets from: '{url}'");
@@ -203,10 +208,10 @@ pub(super) async fn fetch_release_assets(
         .and_then(check_http_status_and_header)
     {
         Ok(response) => response.bytes().await,
-        Err(GhApiError::NotFound) => return ReleaseAssets::NotFound,
+        Err(GhApiError::NotFound) => return AssetPage::NotFound,
         Err(err) => {
             debug!("Failed to get release assets from {url}: {err}");
-            return ReleaseAssets::Unknown;
+            return AssetPage::Unknown;
         }
     };
     let html = match html {
@@ -214,7 +219,7 @@ pub(super) async fn fetch_release_assets(
         Ok(html) => String::from_utf8(html.into()),
         Err(err) => {
             debug!("Failed to get release assets from {url}: {err}");
-            return ReleaseAssets::Unknown;
+            return AssetPage::Unknown;
         }
     };
 
@@ -222,10 +227,10 @@ pub(super) async fn fetch_release_assets(
         .ok()
         .and_then(|html| ReleaseAssetList::new(release, html))
     {
-        Some(assets) => ReleaseAssets::Found(Arc::new(assets)),
+        Some(assets) => AssetPage::Found(assets),
         None => {
             debug!("{url} does not look like a release asset list");
-            ReleaseAssets::Unknown
+            AssetPage::Unknown
         }
     }
 }
@@ -263,18 +268,18 @@ mod test {
     }
 
     #[test]
-    fn test_push_path_segment() {
-        let segment = |s| {
-            let mut buf = String::new();
-            push_path_segment(&mut buf, s);
-            buf
-        };
-
-        assert_eq!(segment("v0.17.6"), "v0.17.6");
-        assert_eq!(segment("cargo-audit/v0.17.6"), "cargo-audit%2Fv0.17.6");
+    fn test_release_download_path() {
         assert_eq!(
-            segment("a b&c'd\"<>%.zip"),
-            "a%20b&amp;c&#39;d%22%3C%3E%25.zip"
+            release_download_path("v0.17.6"),
+            "/releases/download/v0.17.6/"
+        );
+        assert_eq!(
+            release_download_path("cargo-audit/v0.17.6"),
+            "/releases/download/cargo-audit%2Fv0.17.6/"
+        );
+        assert_eq!(
+            release_download_path("a b\"<>%"),
+            "/releases/download/a%20b%22%3C%3E%25/"
         );
     }
 
@@ -295,7 +300,7 @@ mod test {
         // Shortened from what github.com serves.
         let html = r#"
 <a href="/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/cargo-audit-x86_64-unknown-linux-musl-v0.17.6.tgz" rel="nofollow" data-turbo="false" data-view-component="true" class="Truncate">
-<a href="/RustSec/RUSTSEC/releases/download/cargo-audit%2Fv0.17.6/a%20b&amp;c.zip" rel="nofollow">
+<a href="/RustSec/RUSTSEC/releases/download/cargo-audit%2Fv0.17.6/other-case.zip" rel="nofollow">
 <a href="/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/signed.tgz.sig" rel="nofollow">
 <a href="/rustsec/rustsec/releases/download/v0.17.6/other-tag.tgz" rel="nofollow">
 <a href="/rustsec/rustsec/archive/refs/tags/cargo-audit/v0.17.6.zip" rel="nofollow">
@@ -308,11 +313,11 @@ mod test {
 "#;
 
         let assets = ReleaseAssetList::new(&release, html.into()).unwrap();
-        assert!(!assets.is_empty());
+        assert!(!assets.is_empty);
 
         let names = [
             "cargo-audit-x86_64-unknown-linux-musl-v0.17.6.tgz",
-            "a b&c.zip",
+            "other-case.zip",
             "absolute.tgz",
             "signed.tgz.sig",
             // Only a prefix of the listed name.
@@ -325,13 +330,7 @@ mod test {
             "not-a-link.tgz",
             "missing.tgz",
         ];
-        let listed: Vec<_> = assets.lists(names).collect();
-        assert_eq!(
-            listed,
-            [
-                true, true, true, true, false, false, false, false, false, false, false, false
-            ]
-        );
+        assert_eq!(assets.lists(names), [0, 1, 2, 3]);
     }
 
     #[test]
@@ -344,8 +343,11 @@ mod test {
 <a href="/rustsec/rustsec/archive/refs/tags/cargo-audit/v0.17.6.tar.gz" rel="nofollow">
 "#;
         let assets = ReleaseAssetList::new(&release, html.into()).unwrap();
-        assert!(assets.is_empty());
-        assert_eq!(assets.lists(["a.tgz"]).collect::<Vec<_>>(), [false]);
+        assert!(assets.is_empty);
+        assert_eq!(
+            AssetPage::Found(assets).lists(["a.tgz"]),
+            ReleaseAssets::NoAssets
+        );
 
         // Not an asset list: github.com may have changed it.
         assert!(ReleaseAssetList::new(&release, String::new()).is_none());

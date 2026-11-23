@@ -228,7 +228,7 @@ pub struct Data {
     version: CompactString,
     repo: Option<String>,
     repo_info: OnceCell<Option<RepoInfo>>,
-    repo_tags: OnceCell<Option<Arc<RepoTags>>>,
+    repo_tags: OnceCell<Option<RepoTags>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
@@ -363,7 +363,7 @@ impl Data {
 }
 
 impl Data {
-    /// Which of the release `tags` exist in `repo`: one request to its git
+    /// Which of the release `tags` exist in the crate's repository: one request to its git
     /// server, shared by all targets. A private repository is only asked if
     /// it is on github.com and there is a token.
     ///
@@ -376,32 +376,31 @@ impl Data {
         &self,
         client: &Client,
         gh_api_client: &GhApiClient,
-        repo: Option<&str>,
-        is_private: bool,
         tags: impl Iterator<Item = &'a str>,
-    ) -> Option<Arc<RepoTags>> {
+    ) -> Option<&RepoTags> {
         self.repo_tags
             .get_or_init(|| async {
+                // Set by `get_repo_info`, which the fetchers call first.
+                let RepoInfo {
+                    repo, is_private, ..
+                } = self.repo_info.get()?.as_ref()?;
+
                 let tags: HashSet<CompactString> = tags.map(CompactString::from).collect();
                 if tags.is_empty() {
                     return None;
                 }
-                let repo = Url::parse(repo?).ok()?;
-                let tags = if is_private {
-                    gh_api_client.list_private_repo_tags(&repo, tags).await
-                } else {
-                    git_refs::list_tags(client, &repo, tags, None).await
-                };
-                match tags {
-                    Ok(tags) => Some(Arc::new(tags)),
-                    Err(err) => {
-                        debug!("Failed to list the release tags of {repo}: {err}");
-                        None
+
+                let tags = match GhRepo::try_extract_from_url(repo) {
+                    Some(gh_repo) if *is_private => {
+                        gh_api_client.list_private_repo_tags(&gh_repo, tags).await
                     }
-                }
+                    _ => git_refs::list_tags(client, repo, tags, None).await,
+                };
+                tags.inspect_err(|err| debug!("Failed to list the release tags of {repo}: {err}"))
+                    .ok()
             })
             .await
-            .clone()
+            .as_ref()
     }
 }
 

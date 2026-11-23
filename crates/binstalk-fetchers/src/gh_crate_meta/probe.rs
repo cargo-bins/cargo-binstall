@@ -24,7 +24,7 @@ use binstalk_git_repo_api::{
     gh_api_client::{
         GhApiError, GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, ReleaseAssets,
     },
-    git_refs::{self, RepoTags},
+    git_refs,
 };
 use compact_str::CompactString;
 use itertools::Itertools;
@@ -95,9 +95,9 @@ struct GhReleaseCandidates {
 /// What the asset list of a release on github.com says about its candidates.
 enum OnWeb {
     Missing,
-    /// Whether each of [`GhReleaseCandidates::names`] is listed, at least one
-    /// of them is.
-    Listed(Box<[bool]>),
+    /// The indices of the [`GhReleaseCandidates::names`] that are listed, at
+    /// least one. Normally only one is, the others are other formats.
+    Listed(Vec<usize>),
     /// github.com could not tell, or it lists none of them: it might not
     /// list every asset.
     Unknown,
@@ -112,20 +112,21 @@ pub(super) struct Probe {
 /// What checking the candidates of one target needs, shared by the checks
 /// running at once.
 struct Shared {
+    /// Which release tags exist is in there, once [`Probe::drop_missing_tags`]
+    /// asked the repository's git server.
+    data: Arc<Data>,
     client: Client,
     gh_api_client: GhApiClient,
     repo: Option<CompactString>,
     subcrate: Option<CompactString>,
     is_repo_private: bool,
-    /// Which release tags exist, once [`Probe::drop_missing_tags`] asked the
-    /// repository's git server: `None` inside if it could not tell.
-    tags: OnceCell<Option<Arc<RepoTags>>>,
     /// The candidates of each GitHub release.
     gh_releases: HashMap<GhRelease, GhReleaseCandidates>,
 }
 
 impl Probe {
     pub(super) fn new(
+        data: Arc<Data>,
         client: Client,
         gh_api_client: GhApiClient,
         repo: Option<&str>,
@@ -138,10 +139,11 @@ impl Probe {
             .filter_map(|candidate| candidate.gh_artifact.clone())
             .map(|artifact| (artifact.release, artifact.artifact_name))
             .into_grouping_map()
-            .collect::<BTreeSet<_>>()
+            .collect::<Vec<_>>()
             .into_iter()
-            .map(|(release, names)| {
-                let names = names.into_iter().collect();
+            .map(|(release, mut names)| {
+                names.sort_unstable();
+                names.dedup();
                 let on_web = OnceCell::new();
                 (release, GhReleaseCandidates { names, on_web })
             })
@@ -149,20 +151,16 @@ impl Probe {
 
         Self {
             shared: Arc::new(Shared {
+                data,
                 client,
                 gh_api_client,
                 repo: repo.map(CompactString::from),
                 subcrate: subcrate.map(CompactString::from),
                 is_repo_private,
-                tags: OnceCell::new(),
                 gh_releases,
             }),
             candidates,
         }
-    }
-
-    pub(super) fn is_empty(&self) -> bool {
-        self.candidates.is_empty()
     }
 
     /// Check the candidates `pred` is true for at once, returning the first
@@ -183,30 +181,27 @@ impl Probe {
 
     /// Find out which release tags of the candidates exist, with one request
     /// to the repository's git server shared by all targets, and drop the
-    /// candidates of the other ones.
+    /// candidates of the other ones. Returns whether any candidate is left.
     ///
     /// A private repository on github.com is asked with the token. If the git
     /// server can't tell, every candidate is kept and checked with the API or
     /// GET as before.
-    pub(super) async fn drop_missing_tags(&mut self, data: &Data) {
+    pub(super) async fn drop_missing_tags(&mut self) -> bool {
         let shared = &*self.shared;
         let tags = shared
-            .tags
-            .get_or_init(|| {
-                data.get_repo_tags(
-                    &shared.client,
-                    &shared.gh_api_client,
-                    shared.repo.as_deref(),
-                    shared.is_repo_private,
-                    self.candidates.iter().filter_map(|c| c.tag.as_deref()),
-                )
-            })
+            .data
+            .get_repo_tags(
+                &shared.client,
+                &shared.gh_api_client,
+                self.candidates.iter().filter_map(|c| c.tag.as_deref()),
+            )
             .await;
 
         if tags.is_some() {
             self.candidates
                 .retain(|candidate| shared.tag_exists(candidate.tag.as_deref()) != Some(false));
         }
+        !self.candidates.is_empty()
     }
 
     /// For a private repository, get the assets of all the candidates' GitHub
@@ -242,7 +237,7 @@ impl Probe {
 impl Shared {
     /// Whether the release tag `tag` exists, if known.
     fn tag_exists(&self, tag: Option<&str>) -> Option<bool> {
-        self.tags.get()?.as_ref()?.exists(tag?)
+        self.data.repo_tags.get()?.as_ref()?.exists(tag?)
     }
 
     fn resolve(
@@ -355,7 +350,7 @@ impl Shared {
             OnWeb::Listed(listed) => release
                 .names
                 .binary_search(&artifact.artifact_name)
-                .is_ok_and(|i| listed[i]),
+                .is_ok_and(|i| listed.contains(&i)),
         };
         if !listed {
             // The list has another candidate of the release, so it is the
@@ -384,24 +379,18 @@ impl Shared {
             return OnWeb::Missing;
         }
 
-        let assets = match self.gh_api_client.release_assets_on_web(release).await {
-            ReleaseAssets::NotFound => return OnWeb::Missing,
-            ReleaseAssets::Found(assets) => assets,
-            ReleaseAssets::Unknown => return OnWeb::Unknown,
-        };
-        // Nothing it could have left out.
-        if assets.is_empty() {
-            return OnWeb::Missing;
-        }
-
-        let listed: Box<[bool]> = assets
-            .lists(names.iter().map(CompactString::as_str))
-            .collect();
-        if listed.contains(&true) {
-            OnWeb::Listed(listed)
-        } else {
+        let names = names.iter().map(CompactString::as_str);
+        match self
+            .gh_api_client
+            .release_assets_on_web(release, names)
+            .await
+        {
+            // Nothing it could have left out.
+            ReleaseAssets::NotFound | ReleaseAssets::NoAssets => OnWeb::Missing,
             // It might not list every asset.
-            OnWeb::Unknown
+            ReleaseAssets::Listed(listed) if listed.is_empty() => OnWeb::Unknown,
+            ReleaseAssets::Listed(listed) => OnWeb::Listed(listed),
+            ReleaseAssets::Unknown => OnWeb::Unknown,
         }
     }
 }
@@ -448,7 +437,9 @@ mod test {
         assets: &[&str],
     ) -> (Option<String>, usize) {
         let data = Data::new("test".into(), "0.0.0".into(), Some(repo.into()));
+        data.get_repo_info(&gh_api_client).await.unwrap().unwrap();
         let mut probe = Probe::new(
+            Arc::new(data),
             client(),
             gh_api_client,
             Some(repo),
@@ -457,7 +448,7 @@ mod test {
             candidates(repo, assets),
         );
 
-        probe.drop_missing_tags(&data).await;
+        probe.drop_missing_tags().await;
         let left = probe.candidates.len();
         probe.prefetch_gh_releases().await;
         let found = probe.resolve().await.map(|resolved| {
