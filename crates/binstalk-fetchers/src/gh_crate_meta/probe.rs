@@ -17,7 +17,6 @@ use std::{
 use binstalk_git_repo_api::{
     gh_api_client::{
         GhApiError, GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, GhRepo, ReleaseAssets,
-        ReleaseAssetsPage,
     },
     git_refs,
 };
@@ -81,13 +80,13 @@ enum GhAsset {
 
 /// The candidates of one target, checked with as few requests as possible.
 pub(super) struct Probe {
-    data: Arc<Data>,
     shared: Shared,
     candidates: Vec<Candidate>,
 }
 
 /// What checking a candidate needs, shared by the checks running at once.
 struct Shared {
+    data: Arc<Data>,
     client: Client,
     gh_api_client: GhApiClient,
     repo: Option<CompactString>,
@@ -106,8 +105,8 @@ impl Probe {
         candidates: Vec<Candidate>,
     ) -> Self {
         Self {
-            data,
             shared: Shared {
+                data,
                 client,
                 gh_api_client,
                 repo: repo.map(CompactString::from),
@@ -193,11 +192,8 @@ impl Probe {
     /// The answer is kept in [`Data`]: if this target has nothing, the next
     /// one is tried with the same tags.
     async fn drop_missing_tags(&mut self) {
-        let Self {
-            data,
-            shared,
-            candidates,
-        } = self;
+        let Self { shared, candidates } = self;
+        let data = &shared.data;
 
         let tags = data
             .repo_tags
@@ -213,7 +209,7 @@ impl Probe {
                 // Set by `get_repo_info`, which `find` calls first.
                 let RepoInfo {
                     repo, is_private, ..
-                } = data.repo_info.get()?.as_ref()?;
+                } = data.repo_cache.info.get()?.as_ref()?;
 
                 let tags = match GhRepo::try_extract_from_url(repo) {
                     Some(gh_repo) if *is_private => {
@@ -265,7 +261,13 @@ impl Probe {
             let names = of_release.iter().filter_map(|candidate| {
                 Some(candidate.gh_artifact.as_ref()?.artifact_name.as_str())
             });
-            match self.release_assets_on_web(release, names).await {
+            match self
+                .shared
+                .data
+                .repo_cache
+                .release_assets_on_web(&self.shared.client, release, names)
+                .await
+            {
                 // Nothing it could have left out.
                 ReleaseAssets::NotFound | ReleaseAssets::NoAssets => (),
                 // Normally only one is listed, the others are other formats.
@@ -291,30 +293,16 @@ impl Probe {
         Ok(None)
     }
 
-    /// Which of the asset `names` of `release` github.com lists, with the
-    /// page kept in [`Data`] for the other targets.
-    async fn release_assets_on_web<'a>(
-        &self,
-        release: GhRelease,
-        names: impl IntoIterator<Item = &'a str>,
-    ) -> ReleaseAssets {
-        let pages = &self.data.release_assets;
-        if let Some((_, page)) = pages.lock().unwrap().iter().find(|(r, _)| *r == release) {
-            return page.lists(names);
-        }
-
-        let page = ReleaseAssetsPage::fetch(&self.shared.client, &release).await;
-        let assets = page.lists(names);
-        pages.lock().unwrap().push((release, page));
-        assets
-    }
-
     /// With a token, get the assets of the GitHub releases of the candidates
     /// left, in one GraphQL query per repository, instead of one per
     /// release.
     async fn prefetch_gh_releases(&self) {
-        let gh_api_client = &self.shared.gh_api_client;
-        if !gh_api_client.has_gh_token() {
+        let Shared {
+            data,
+            gh_api_client,
+            ..
+        } = &self.shared;
+        if !gh_api_client.can_batch() {
             return;
         }
 
@@ -322,15 +310,48 @@ impl Probe {
             .candidates
             .iter()
             .filter_map(|candidate| candidate.gh_artifact.as_ref())
-            .map(|artifact| (&artifact.release.repo, artifact.release.tag.clone()))
+            .map(|artifact| (&artifact.release.repo, &artifact.release.tag))
             .into_grouping_map()
             .collect::<BTreeSet<_>>();
 
         // Normally all candidates are in the same repository.
         for (gh_repo, tags) in releases {
-            gh_api_client
-                .prefetch_release_artifacts(gh_repo, tags)
-                .await;
+            let (tags, cells): (Vec<CompactString>, Vec<_>) = tags
+                .into_iter()
+                .map(|tag| {
+                    let release = GhRelease {
+                        repo: gh_repo.clone(),
+                        tag: tag.clone(),
+                    };
+                    let cell = data.repo_cache.release_artifacts(&release);
+                    (release.tag, cell)
+                })
+                .filter(|(_, cell)| !cell.initialized())
+                .unzip();
+            // A batch of one is the query `check` sends anyway.
+            if tags.len() < 2 {
+                continue;
+            }
+
+            match gh_api_client.get_releases_artifacts(gh_repo, &tags).await {
+                Ok(releases) => {
+                    for (cell, release) in cells.iter().zip(releases) {
+                        // A failed one is asked again on its own by `check`.
+                        if let Ok(artifacts) = release {
+                            // Fails only if `check` got there first, then that
+                            // answer is just as good.
+                            let _ = cell.set(artifacts);
+                        }
+                    }
+                }
+                // The repository doesn't exist.
+                Err(GhApiError::NotFound) => cells.iter().for_each(|cell| {
+                    let _ = cell.set(None);
+                }),
+                Err(err) => {
+                    debug!("Failed to get the assets of the releases of {gh_repo:?}: {err}")
+                }
+            }
         }
     }
 }
@@ -376,12 +397,28 @@ impl Shared {
         }
     }
 
-    /// Check a GitHub release asset with the API.
+    /// Check a GitHub release asset with the API, which is asked once per
+    /// release.
     async fn check_gh_artifact(&self, artifact: &GhReleaseArtifact) -> Result<GhAsset, FetchError> {
+        let cell = self.data.repo_cache.release_artifacts(&artifact.release);
         loop {
-            match get_gh_release_artifact_url(self.gh_api_client.clone(), artifact.clone()).await {
-                Ok(Some(artifact_url)) => return Ok(GhAsset::Found(artifact_url)),
-                Ok(None) => return Ok(GhAsset::Missing),
+            let artifacts = cell
+                .get_or_try_init(|| {
+                    get_gh_release_artifacts(&self.gh_api_client, &artifact.release)
+                })
+                .await;
+            match artifacts {
+                Ok(artifacts) => {
+                    return Ok(
+                        match artifacts
+                            .as_ref()
+                            .and_then(|artifacts| artifacts.artifact_url(&artifact.artifact_name))
+                        {
+                            Some(artifact_url) => GhAsset::Found(artifact_url),
+                            None => GhAsset::Missing,
+                        },
+                    );
+                }
 
                 // A public release asset can still be checked with GET.
                 Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
@@ -658,7 +695,7 @@ mod test {
         let data = Data::new("test".into(), "0.0.0".into(), Some(BINSTALL.into()));
         data.get_repo_info(&gh_api_client).await.unwrap();
         let data = Arc::new(data);
-        let probe = |assets: &[&str]| {
+        let probe = |data: &Arc<Data>, assets: &[&str]| {
             let mut probe = Probe::new(
                 data.clone(),
                 client(),
@@ -678,25 +715,33 @@ mod test {
         };
 
         // A target v0.20.1 has no build for.
-        assert!(
-            probe(&[
-                "v0.20.1/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
-                "v0.18.2/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
-            ])
-            .await
-            .is_none()
-        );
+        let riscv = [
+            "v0.20.1/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
+            "v0.18.2/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
+        ];
+        assert!(probe(&data, &riscv).await.is_none());
         let musl_tgz = "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz";
-        let found = probe(&[
+        let musl = [
             musl_tgz,
             "v0.18.2/cargo-binstall-x86_64-unknown-linux-musl.tgz",
-        ])
-        .await;
-        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+        ];
+        assert_eq!(asset(probe(&data, &musl).await).as_deref(), Some(musl_tgz));
 
         // One ls-refs answer, one page.
         assert!(data.repo_tags.get().unwrap().is_some());
-        assert_eq!(data.release_assets.lock().unwrap().len(), 1);
+        assert_eq!(data.repo_cache.release_assets_len(), 1);
+
+        // The crate looked up by its binary's name shares the repository
+        // info and the page, but asks for its own tags.
+        let binary_data = Arc::new(data.with_name("binary".into()));
+        assert!(binary_data.repo_cache.info.get().is_some());
+        assert!(binary_data.repo_tags.get().is_none());
+        assert_eq!(
+            asset(probe(&binary_data, &musl).await).as_deref(),
+            Some(musl_tgz)
+        );
+        assert!(binary_data.repo_tags.get().unwrap().is_some());
+        assert_eq!(data.repo_cache.release_assets_len(), 1);
     }
 
     /// A public repository needs no API even with a token.
