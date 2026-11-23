@@ -28,8 +28,7 @@ use url::Url;
 
 use super::Resolved;
 use crate::{
-    Data, FetchError, RepoInfo, common::*, futures_resolver::FuturesResolver,
-    gh_api_rate_limit_wait,
+    Data, FetchError, RepoInfo, common::*, futures_resolver::resolve_first, gh_api_rate_limit_wait,
 };
 
 /// A URL the package may be at, rendered from a `pkg-url` template.
@@ -86,7 +85,7 @@ pub(super) struct Probe {
     candidates: Vec<Candidate>,
 }
 
-/// What checking a candidate needs, shared by the checks running at once.
+/// What checking a candidate needs, borrowed by the checks running at once.
 struct Shared {
     client: Client,
     gh_api_client: GhApiClient,
@@ -184,13 +183,15 @@ impl Probe {
 
         self.prefetch_gh_releases().await;
 
-        let shared = Arc::new(self.shared);
-        let resolver = FuturesResolver::default();
-        resolver.extend(self.candidates.into_iter().map(|candidate| {
-            let shared = Arc::clone(&shared);
-            async move { shared.check(candidate).await }
-        }));
-        Ok(resolver.resolve().await)
+        let Self {
+            shared, candidates, ..
+        } = self;
+        Ok(resolve_first(
+            candidates
+                .into_iter()
+                .map(|candidate| shared.check(candidate)),
+        )
+        .await)
     }
 
     /// Find out which release tags of the candidates exist, with one request

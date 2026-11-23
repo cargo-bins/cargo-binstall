@@ -337,6 +337,7 @@ dependencies = [
  "bytes",
  "compact_str",
  "either",
+ "futures-util",
  "itertools",
  "leon",
  "leon-macros",

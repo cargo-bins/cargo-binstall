@@ -1,86 +1,67 @@
-use std::{fmt::Debug, future::Future, pin::Pin};
+use std::{fmt::Debug, future::Future};
 
-use tokio::sync::mpsc;
+use futures_util::stream::{FuturesUnordered, StreamExt};
 use tracing::warn;
 
-/// Given multiple futures with output = `Result<Option<T>, E>`,
-/// returns the the first one that returns either `Err(_)` or
-/// `Ok(Some(_))`.
-pub struct FuturesResolver<T, E> {
-    rx: mpsc::Receiver<Result<T, E>>,
-    tx: mpsc::Sender<Result<T, E>>,
-}
-
-impl<T, E> Default for FuturesResolver<T, E> {
-    fn default() -> Self {
-        // We only need the first one, so the channel is of size 1.
-        let (tx, rx) = mpsc::channel(1);
-        Self { tx, rx }
-    }
-}
-
-impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
-    /// Insert new future into this resolver, they will start running
-    /// right away.
-    pub fn push<Fut>(&self, fut: Fut)
-    where
-        Fut: Future<Output = Result<Option<T>, E>> + Send + 'static,
-    {
-        let tx = self.tx.clone();
-
-        tokio::spawn(async move {
-            tokio::pin!(fut);
-
-            Self::spawn_inner(fut, tx).await;
-        });
-    }
-
-    async fn spawn_inner(
-        fut: Pin<&mut (dyn Future<Output = Result<Option<T>, E>> + Send)>,
-        tx: mpsc::Sender<Result<T, E>>,
-    ) {
-        let res = tokio::select! {
-            biased;
-
-            _ = tx.closed() => return,
-            res = fut => res,
-        };
-
-        if let Some(res) = res.transpose() {
-            // try_send can only fail due to being full or being closed.
-            //
-            // In both cases, this could means some other future has
-            // completed first.
-            //
-            // For closed, it could additionally means that the task
-            // is cancelled.
-            tx.try_send(res).ok();
+/// Run `futures` at once and return the output of the first one that returns
+/// `Ok(Some(_))`, `None` if none does. Errors are logged and skipped.
+///
+/// They run in the calling task instead of being spawned, so they may borrow
+/// from it. The ones still running when one is found are dropped.
+pub(crate) async fn resolve_first<T, E, Fut>(futures: impl IntoIterator<Item = Fut>) -> Option<T>
+where
+    E: Debug,
+    Fut: Future<Output = Result<Option<T>, E>>,
+{
+    let mut futures: FuturesUnordered<Fut> = futures.into_iter().collect();
+    while let Some(res) = futures.next().await {
+        match res {
+            Ok(Some(ret)) => return Some(ret),
+            Ok(None) => (),
+            Err(err) => warn!(?err, "Fail to resolve the future"),
         }
     }
+    None
+}
 
-    /// Insert multiple futures into this resolver, they will start running
-    /// right away.
-    pub fn extend<Fut, Iter>(&self, iter: Iter)
-    where
-        Fut: Future<Output = Result<Option<T>, E>> + Send + 'static,
-        Iter: IntoIterator<Item = Fut>,
-    {
-        iter.into_iter().for_each(|fut| self.push(fut));
-    }
+#[cfg(test)]
+mod test {
+    use std::{cell::Cell, future::pending};
 
-    /// Return the resolution.
-    pub fn resolve(self) -> impl Future<Output = Option<T>> {
-        let mut rx = self.rx;
-        drop(self.tx);
+    use super::*;
 
-        async move {
-            loop {
-                match rx.recv().await {
-                    Some(Ok(ret)) => return Some(ret),
-                    Some(Err(err)) => warn!(?err, "Fail to resolve the future"),
-                    None => return None,
+    #[tokio::test]
+    async fn test_resolve_first() {
+        // Borrowing, neither `'static` nor `Send`.
+        let checked = Cell::new(0);
+        let check = |i: u32| {
+            let checked = &checked;
+            async move {
+                checked.set(checked.get() + 1);
+                match i {
+                    0 => Err("failed"),
+                    1 => Ok(None),
+                    _ => Ok(Some(i)),
                 }
             }
-        }
+        };
+        assert_eq!(resolve_first([0, 1, 2].map(check)).await, Some(2));
+        assert_eq!(checked.get(), 3);
+
+        assert_eq!(resolve_first([0, 1].map(check)).await, None);
+        assert_eq!(resolve_first([0u32; 0].map(check)).await, None);
+
+        // Found while another one is still running: that one is dropped.
+        let found_or_pending = |found: bool| async move {
+            if found {
+                Ok::<_, ()>(Some(1))
+            } else {
+                pending().await
+            }
+        };
+        assert_eq!(
+            resolve_first([false, true].map(found_or_pending)).await,
+            Some(1)
+        );
     }
 }

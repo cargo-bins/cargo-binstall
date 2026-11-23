@@ -18,6 +18,7 @@ binstalk-types = { version = "0.11.0", path = "../binstalk-types" }
 bytes = "1.11.1"
 compact_str = { version = "0.10.0" }
 either = "1.11.0"
+futures-util = { version = "0.3.30", default-features = false, features = ["alloc"] }
 itertools = "0.15.0"
 leon = "3.0.0"
 leon-macros = "1.0.1"
