@@ -7,7 +7,7 @@ pub(super) use binstalk_downloader::{
     remote::{Client, Url},
 };
 pub(super) use binstalk_git_repo_api::gh_api_client::GhApiClient;
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRelease, ReleaseArtifacts};
 pub(super) use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 pub(super) use compact_str::CompactString;
 pub(super) use tokio::task::JoinHandle;
@@ -18,19 +18,15 @@ use crate::FetchError;
 static WARN_RATE_LIMIT_ONCE: Once = Once::new();
 static WARN_UNAUTHORIZED_ONCE: Once = Once::new();
 
-/// Return Ok(Some(api_artifact_url)) if exists, or Ok(None) if it doesn't.
-///
-/// Caches info on all artifacts matching (repo, tag).
-pub(super) async fn get_gh_release_artifact_url(
-    gh_api_client: GhApiClient,
-    artifact: GhReleaseArtifact,
-) -> Result<Option<GhReleaseArtifactUrl>, GhApiError> {
-    debug!(
-        "Using GitHub API to check for existence of artifact, which will also cache the API response"
-    );
+/// Get the assets of `release` with the API, `Ok(None)` if there is no such
+/// release. Warns once when the API can't be used.
+pub(super) async fn get_gh_release_artifacts(
+    gh_api_client: &GhApiClient,
+    release: &GhRelease,
+) -> Result<Option<ReleaseArtifacts>, GhApiError> {
+    debug!("Using GitHub API to get the assets of {release:?}");
 
-    // The future returned has the same size as a pointer
-    match gh_api_client.has_release_artifact(artifact).await {
+    match gh_api_client.get_release_artifacts(release).await {
         Ok(ret) => Ok(ret),
         Err(GhApiError::NotFound) => Ok(None),
 

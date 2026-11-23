@@ -1,23 +1,15 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{
-    borrow::Cow,
-    path::Path,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::{
-    gh_api_client::{GhApiError, GhRelease, GhRepo, ReleaseAssetsPage, RepoInfo as GhRepoInfo},
-    git_refs::RepoTags,
-};
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
     crate_info::PkgUrlHint,
 };
 use thiserror::Error as ThisError;
-use tokio::{sync::OnceCell, task::JoinError, time::sleep};
+use tokio::{task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -35,6 +27,9 @@ mod signing;
 use signing::*;
 
 mod futures_resolver;
+
+mod repo_cache;
+use repo_cache::RepoCache;
 
 use gh_crate_meta::hosting::RepositoryHost;
 
@@ -232,12 +227,8 @@ pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
-    repo_info: OnceCell<Option<RepoInfo>>,
-    /// Which release tags exist, asked once for all the targets.
-    repo_tags: OnceCell<Option<RepoTags>>,
-    /// github.com's asset lists of the releases looked up, so the next
-    /// target, tried when this one has nothing, doesn't get them again.
-    release_assets: Mutex<Vec<(GhRelease, ReleaseAssetsPage)>>,
+    /// Shared by all targets, and with [`Data::with_name`].
+    repo_cache: Arc<RepoCache>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
@@ -248,9 +239,21 @@ impl Data {
             name,
             version,
             repo,
-            repo_info: OnceCell::new(),
-            repo_tags: OnceCell::new(),
-            release_assets: Mutex::default(),
+            repo_cache: Arc::default(),
+            pkg_url_hint: None,
+        }
+    }
+
+    /// The same crate, looked up by another name, e.g. its binary's.
+    ///
+    /// What is known about the repository is shared, so it is asked only
+    /// once.
+    pub fn with_name(&self, name: CompactString) -> Self {
+        Self {
+            name,
+            version: self.version.clone(),
+            repo: self.repo.clone(),
+            repo_cache: Arc::clone(&self.repo_cache),
             pkg_url_hint: None,
         }
     }
@@ -357,7 +360,8 @@ impl Data {
             })
         }
 
-        self.repo_info
+        self.repo_cache
+            .info
             .get_or_try_init(move || {
                 Box::pin(async move {
                     let Some(repo) = self.repo.as_deref() else {

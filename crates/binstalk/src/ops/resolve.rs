@@ -155,24 +155,20 @@ async fn resolve_inner(
             )
         };
 
-    handles_fn(
-        Arc::new(with_pkg_url_hint(Data::new(
-            package_info.name.clone(),
-            package_info.version_str.clone(),
-            package_info.repo.clone(),
-        ))),
-        |_| true,
+    let data = Data::new(
+        package_info.name.clone(),
+        package_info.version_str.clone(),
+        package_info.repo.clone(),
     );
+    // Shares what is known about the repository with `data`.
+    let binary_data = binary_name.map(|binary_name| data.with_name(binary_name));
 
-    if let Some(binary_name) = binary_name {
-        handles_fn(
-            Arc::new(with_pkg_url_hint(Data::new(
-                binary_name,
-                package_info.version_str.clone(),
-                package_info.repo.clone(),
-            ))),
-            |name| name == FETCHER_GH_CRATE_META,
-        );
+    handles_fn(Arc::new(with_pkg_url_hint(data)), |_| true);
+
+    if let Some(binary_data) = binary_data {
+        handles_fn(Arc::new(with_pkg_url_hint(binary_data)), |name| {
+            name == FETCHER_GH_CRATE_META
+        });
     }
 
     for fetcher in &handles {
