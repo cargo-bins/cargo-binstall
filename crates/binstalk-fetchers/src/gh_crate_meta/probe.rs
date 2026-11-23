@@ -143,13 +143,7 @@ impl Probe {
                         && candidate.target_arch == rendered_with.target_arch.as_deref()
                 })
         };
-        if self
-            .candidates
-            .iter()
-            .filter(|candidate| is_hinted(candidate))
-            .nth(2)
-            .is_some()
-        {
+        if self.candidates.iter().positions(is_hinted).nth(2).is_some() {
             debug!("Too many candidates for the hint to check one at a time");
             return Ok(None);
         }
