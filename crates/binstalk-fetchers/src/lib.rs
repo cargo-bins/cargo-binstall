@@ -3,16 +3,13 @@
 use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::{
-    gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo},
-    git_refs::RepoTags,
-};
+use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
     crate_info::PkgUrlHint,
 };
 use thiserror::Error as ThisError;
-use tokio::{sync::OnceCell, task::JoinError, time::sleep};
+use tokio::{task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -230,11 +227,8 @@ pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
-    /// Shared with [`Data::with_name`].
+    /// Shared by all targets, and with [`Data::with_name`].
     repo_cache: Arc<RepoCache>,
-    /// Which release tags exist, asked once for all the targets. Not shared
-    /// with [`Data::with_name`]: the tags may have the name in them.
-    repo_tags: OnceCell<Option<RepoTags>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
@@ -246,7 +240,6 @@ impl Data {
             version,
             repo,
             repo_cache: Arc::default(),
-            repo_tags: OnceCell::new(),
             pkg_url_hint: None,
         }
     }
@@ -261,7 +254,6 @@ impl Data {
             version: self.version.clone(),
             repo: self.repo.clone(),
             repo_cache: Arc::clone(&self.repo_cache),
-            repo_tags: OnceCell::new(),
             pkg_url_hint: None,
         }
     }

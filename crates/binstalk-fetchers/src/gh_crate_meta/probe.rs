@@ -9,14 +9,12 @@
 //! repository by the releases' asset lists on github.com, which cost no API
 //! quota, and only then with the API.
 
-use std::{
-    collections::{BTreeSet, HashSet},
-    sync::Arc,
-};
+use std::{collections::BTreeSet, sync::Arc};
 
 use binstalk_git_repo_api::{
     gh_api_client::{
         GhApiError, GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, GhRepo, ReleaseAssets,
+        ReleaseAssetsPage,
     },
     git_refs,
 };
@@ -198,47 +196,43 @@ impl Probe {
     ///
     /// A private repository on github.com is asked with the token.
     ///
-    /// The answer is kept in [`Data`]: if this target has nothing, the next
-    /// one is tried with the same tags.
+    /// The answer is kept in [`Data`]: only tags no target asked about yet
+    /// are asked, normally none after the first target.
     async fn drop_missing_tags(&mut self) {
         let Self { shared, candidates } = self;
         let data = &shared.data;
 
-        let tags = data
-            .repo_tags
-            .get_or_init(|| async {
-                let tags: HashSet<CompactString> = candidates
-                    .iter()
-                    .filter_map(|candidate| candidate.tag.clone())
-                    .collect();
-                if tags.is_empty() {
-                    return None;
+        let mut tags = data.repo_cache.tags.lock().await;
+        let unasked = tags.unasked(
+            candidates
+                .iter()
+                .filter_map(|candidate| candidate.tag.as_deref()),
+        );
+        // Set by `get_repo_info`, which `find` calls first.
+        if !unasked.is_empty()
+            && let Some(Some(RepoInfo {
+                repo, is_private, ..
+            })) = data.repo_cache.info.get()
+        {
+            let listed = match GhRepo::try_extract_from_url(repo) {
+                Some(gh_repo) if *is_private => {
+                    shared
+                        .gh_api_client
+                        .list_private_repo_tags(&gh_repo, unasked)
+                        .await
                 }
-
-                // Set by `get_repo_info`, which `find` calls first.
-                let RepoInfo {
-                    repo, is_private, ..
-                } = data.repo_cache.info.get()?.as_ref()?;
-
-                let tags = match GhRepo::try_extract_from_url(repo) {
-                    Some(gh_repo) if *is_private => {
-                        shared
-                            .gh_api_client
-                            .list_private_repo_tags(&gh_repo, tags)
-                            .await
-                    }
-                    _ => git_refs::list_tags(&shared.client, repo, tags, None).await,
-                };
-                tags.inspect_err(|err| debug!("Failed to list the release tags of {repo}: {err}"))
-                    .ok()
-            })
-            .await;
-
-        if let Some(tags) = tags {
-            candidates.retain(|candidate| {
-                candidate.tag.as_deref().and_then(|tag| tags.exists(tag)) != Some(false)
-            });
+                _ => git_refs::list_tags(&shared.client, repo, unasked, None).await,
+            };
+            tags.add(
+                listed
+                    .inspect_err(|err| debug!("Failed to list the release tags of {repo}: {err}"))
+                    .ok(),
+            );
         }
+
+        candidates.retain(|candidate| {
+            candidate.tag.as_deref().and_then(|tag| tags.exists(tag)) != Some(false)
+        });
     }
 
     /// Look up the candidates of each GitHub release on github.com, which
@@ -270,13 +264,11 @@ impl Probe {
             let names = of_release.iter().filter_map(|candidate| {
                 Some(candidate.gh_artifact.as_ref()?.artifact_name.as_str())
             });
-            match self
-                .shared
-                .data
-                .repo_cache
-                .release_assets_on_web(&self.shared.client, release, names)
-                .await
-            {
+            let page = self.shared.data.repo_cache.release_assets_page(&release);
+            let page = page
+                .get_or_init(|| ReleaseAssetsPage::fetch(&self.shared.client, &release))
+                .await;
+            match page.lists(names) {
                 // Nothing it could have left out.
                 ReleaseAssets::NotFound | ReleaseAssets::NoAssets => (),
                 // Normally only one is listed, the others are other formats.
@@ -737,20 +729,31 @@ mod test {
         assert_eq!(asset(probe(&data, &musl).await).as_deref(), Some(musl_tgz));
 
         // One ls-refs answer, one page.
-        assert!(data.repo_tags.get().unwrap().is_some());
-        assert_eq!(data.repo_cache.release_assets_len(), 1);
+        let tags = data.repo_cache.tags.lock().await;
+        assert_eq!(tags.exists("v0.20.1"), Some(true));
+        assert_eq!(tags.exists("v0.18.2"), Some(false));
+        assert!(tags.unasked(["v0.20.1", "v0.18.2"]).is_empty());
+        drop(tags);
+        assert_eq!(data.repo_cache.release_assets_pages_len(), 1);
 
-        // The crate looked up by its binary's name shares the repository
-        // info and the page, but asks for its own tags.
+        // The crate looked up by its binary's name shares all of it: only
+        // the tags not asked yet are asked.
         let binary_data = Arc::new(data.with_name("binary".into()));
         assert!(binary_data.repo_cache.info.get().is_some());
-        assert!(binary_data.repo_tags.get().is_none());
-        assert_eq!(
-            asset(probe(&binary_data, &musl).await).as_deref(),
-            Some(musl_tgz)
-        );
-        assert!(binary_data.repo_tags.get().unwrap().is_some());
-        assert_eq!(data.repo_cache.release_assets_len(), 1);
+        let found = probe(
+            &binary_data,
+            &[
+                musl_tgz,
+                "binary-v0.20.1/binary-x86_64-unknown-linux-musl.tgz",
+            ],
+        )
+        .await;
+        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+        let tags = data.repo_cache.tags.lock().await;
+        assert_eq!(tags.exists("binary-v0.20.1"), Some(false));
+        assert_eq!(tags.exists("v0.20.1"), Some(true));
+        drop(tags);
+        assert_eq!(data.repo_cache.release_assets_pages_len(), 1);
     }
 
     /// A public repository needs no API even with a token.

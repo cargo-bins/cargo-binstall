@@ -56,6 +56,12 @@ impl RepoTags {
             .contains(tag)
             .then(|| self.existing.contains(tag))
     }
+
+    /// Add what `other` knows, about other tags.
+    pub fn merge(&mut self, other: Self) {
+        self.asked.extend(other.asked);
+        self.existing.extend(other.existing);
+    }
 }
 
 /// The URL git fetches `repo` from.
