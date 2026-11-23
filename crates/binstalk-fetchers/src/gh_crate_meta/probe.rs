@@ -136,13 +136,7 @@ impl Probe {
         let is_hinted = |candidate: &Candidate| {
             candidate.pkg_fmt == pkg_fmt && candidate.default_pkg_url.as_deref() == Some(pkg_url)
         };
-        if self
-            .candidates
-            .iter()
-            .filter(|candidate| is_hinted(candidate))
-            .nth(2)
-            .is_some()
-        {
+        if self.candidates.iter().positions(is_hinted).nth(2).is_some() {
             debug!("Too many candidates for the hint to check one at a time");
             return Ok(None);
         }
