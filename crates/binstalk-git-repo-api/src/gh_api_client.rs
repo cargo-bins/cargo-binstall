@@ -29,7 +29,7 @@ pub(crate) use common::check_http_status_and_header;
 use common::percent_decode_http_url_path;
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
 pub use repo_info::RepoInfo;
-pub use web::ReleaseAssets;
+pub use web::{ReleaseAssets, ReleaseAssetsPage};
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
@@ -134,7 +134,6 @@ where
 struct Inner {
     client: remote::Client,
     release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
-    release_web_assets: Map<GhRelease, OnceCell<web::AssetPage>>,
     retry_after: Mutex<Option<Instant>>,
 
     auth_token: Option<Zeroizing<Box<str>>>,
@@ -165,7 +164,6 @@ impl GhApiClient {
         Self(Arc::new(Inner {
             client,
             release_artifacts: Default::default(),
-            release_web_assets: Default::default(),
             retry_after: Default::default(),
 
             auth_token: auth_token.and_then(sanitize_auth_token),
@@ -448,32 +446,6 @@ impl GhApiClient {
             }
             _ => (),
         }
-    }
-
-    /// Which of the asset `names` of `release` github.com lists on the
-    /// release's page, without the API.
-    ///
-    /// The list comes from a page meant for people, so an asset missing from
-    /// it may still exist, and a listed one should be checked before it is
-    /// used.
-    ///
-    /// Only use it for a public repository, github.com answers 404 for a
-    /// private one.
-    ///
-    /// Caches the page per release, so this costs one request per release
-    /// however many names are looked up.
-    #[instrument(skip(self, names))]
-    pub async fn release_assets_on_web<'a>(
-        &self,
-        release: &GhRelease,
-        names: impl IntoIterator<Item = &'a str>,
-    ) -> ReleaseAssets {
-        self.0
-            .release_web_assets
-            .get(release.clone())
-            .get_or_init(|| web::fetch_release_assets(&self.0.client, release))
-            .await
-            .lists(names)
     }
 
     pub async fn download_artifact(
@@ -952,23 +924,25 @@ mod test {
     async fn test_release_assets_on_web() {
         init_logger();
 
-        let client = GhApiClient::new(create_remote_client(), None);
+        let client = create_remote_client();
+        let lists = async |release: &GhRelease, names: &[&str]| {
+            ReleaseAssetsPage::fetch(&client, release)
+                .await
+                .lists(names.iter().copied())
+        };
         let release = cargo_binstall_v0_20_1::RELEASE;
 
         let names = cargo_binstall_v0_20_1::ARTIFACTS;
         assert_eq!(
-            client
-                .release_assets_on_web(&release, names.iter().copied())
-                .await,
+            lists(&release, names).await,
             ReleaseAssets::Listed((0..names.len()).collect())
         );
         assert_eq!(
-            client
-                .release_assets_on_web(
-                    &release,
-                    ["cargo-binstall-x86_64-unknown-linux-musl.tgz.sig", "a.tgz"]
-                )
-                .await,
+            lists(
+                &release,
+                &["cargo-binstall-x86_64-unknown-linux-musl.tgz.sig", "a.tgz"]
+            )
+            .await,
             ReleaseAssets::Listed(vec![])
         );
 
@@ -981,12 +955,11 @@ mod test {
             tag: release.tag.clone(),
         };
         assert_eq!(
-            client
-                .release_assets_on_web(
-                    &other_case,
-                    ["a.tgz", "cargo-binstall-x86_64-unknown-linux-musl.tgz"]
-                )
-                .await,
+            lists(
+                &other_case,
+                &["a.tgz", "cargo-binstall-x86_64-unknown-linux-musl.tgz"]
+            )
+            .await,
             ReleaseAssets::Listed(vec![1])
         );
 
@@ -996,19 +969,18 @@ mod test {
             tag: CompactString::const_new("v1.28.0"),
         };
         assert_eq!(
-            client
-                .release_assets_on_web(
-                    &latest,
-                    [
-                        "cargo-binstall-x86_64-unknown-linux-musl.tgz",
-                        "cargo-binstall-x86_64-unknown-linux-musl.full.tgz",
-                        "cargo-binstall-x86_64-unknown-linux-musl.tgz.sig",
-                        "cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
-                        "cargo-binstall-universal-apple-darwin.zip",
-                        "minisign.pub",
-                    ]
-                )
-                .await,
+            lists(
+                &latest,
+                &[
+                    "cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                    "cargo-binstall-x86_64-unknown-linux-musl.full.tgz",
+                    "cargo-binstall-x86_64-unknown-linux-musl.tgz.sig",
+                    "cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+                    "cargo-binstall-universal-apple-darwin.zip",
+                    "minisign.pub",
+                ]
+            )
+            .await,
             ReleaseAssets::Listed(vec![0, 1, 2, 4, 5])
         );
 
@@ -1022,16 +994,15 @@ mod test {
             tag: CompactString::const_new("cargo-c-0.10.26+cargo-0.100.0"),
         };
         assert_eq!(
-            client
-                .release_assets_on_web(
-                    &with_plus,
-                    [
-                        "cargo-c-0.10.26+cargo-0.100.0-aarch64-unknown-linux-gnu.tar.gz",
-                        "cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
-                        "cargo-c-0.10.26+cargo-0.100.0-x86_64-apple-darwin.tar.gz.sig",
-                    ]
-                )
-                .await,
+            lists(
+                &with_plus,
+                &[
+                    "cargo-c-0.10.26+cargo-0.100.0-aarch64-unknown-linux-gnu.tar.gz",
+                    "cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
+                    "cargo-c-0.10.26+cargo-0.100.0-x86_64-apple-darwin.tar.gz.sig",
+                ]
+            )
+            .await,
             ReleaseAssets::Listed(vec![1, 2])
         );
         let ripgrep = GhRelease {
@@ -1039,15 +1010,14 @@ mod test {
             tag: CompactString::const_new("ripgrep-14.1.1"),
         };
         assert_eq!(
-            client
-                .release_assets_on_web(
-                    &ripgrep,
-                    [
-                        "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
-                        "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
-                    ]
-                )
-                .await,
+            lists(
+                &ripgrep,
+                &[
+                    "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
+                    "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
+                ]
+            )
+            .await,
             ReleaseAssets::Listed(vec![0])
         );
 
@@ -1056,10 +1026,7 @@ mod test {
             repo: release.repo.clone(),
             tag: CompactString::const_new("detect-targets-v0.1.0"),
         };
-        assert_eq!(
-            client.release_assets_on_web(&tag_only, ["a.tgz"]).await,
-            ReleaseAssets::NoAssets
-        );
+        assert_eq!(lists(&tag_only, &["a.tgz"]).await, ReleaseAssets::NoAssets);
 
         // A private repository is not found without the user's cookies.
         let private = GhRelease {
@@ -1069,19 +1036,13 @@ mod test {
             },
             tag: CompactString::const_new("0.12.0"),
         };
-        assert_eq!(
-            client.release_assets_on_web(&private, ["a.tgz"]).await,
-            ReleaseAssets::NotFound
-        );
+        assert_eq!(lists(&private, &["a.tgz"]).await, ReleaseAssets::NotFound);
 
         let release = GhRelease {
             repo: release.repo,
             tag: CompactString::const_new("v0.18.2"),
         };
-        assert_eq!(
-            client.release_assets_on_web(&release, ["a.tgz"]).await,
-            ReleaseAssets::NotFound
-        );
+        assert_eq!(lists(&release, &["a.tgz"]).await, ReleaseAssets::NotFound);
     }
 
     #[tokio::test]

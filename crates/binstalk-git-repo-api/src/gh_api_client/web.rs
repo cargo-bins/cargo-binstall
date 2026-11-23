@@ -5,6 +5,8 @@
 //! They only work for public repositories, github.com answers 404 for a
 //! private one without the user's cookies.
 
+use std::fmt;
+
 use binstalk_downloader::remote;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use tracing::debug;
@@ -27,7 +29,7 @@ fn release_url(
 }
 
 /// What github.com lists of some asset names of a release, from
-/// [`GhApiClient::release_assets_on_web`](super::GhApiClient::release_assets_on_web).
+/// [`ReleaseAssetsPage::lists`].
 #[derive(Debug, Eq, PartialEq)]
 pub enum ReleaseAssets {
     /// github.com has no such release.
@@ -42,32 +44,59 @@ pub enum ReleaseAssets {
     Unknown,
 }
 
-/// The page github.com loads the asset list of a release from.
+/// The page github.com loads the asset list of a release from, without the
+/// API, see [`ReleaseAssetsPage::fetch`].
 #[derive(Debug)]
-pub(super) enum AssetPage {
+pub struct ReleaseAssetsPage(Page);
+
+#[derive(Debug)]
+enum Page {
     NotFound,
     Found(ReleaseAssetList),
     Unknown,
 }
 
-impl AssetPage {
-    /// What it lists of `names`.
-    pub(super) fn lists<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> ReleaseAssets {
-        match self {
-            Self::NotFound => ReleaseAssets::NotFound,
-            Self::Found(assets) if assets.is_empty => ReleaseAssets::NoAssets,
-            Self::Found(assets) => ReleaseAssets::Listed(assets.lists(names)),
-            Self::Unknown => ReleaseAssets::Unknown,
+impl ReleaseAssetsPage {
+    /// Get the asset list of `release` from the page github.com loads it
+    /// from when showing the release, one request no matter how many assets.
+    ///
+    /// Only use it for a public repository, github.com answers 404 for a
+    /// private one. The page is not documented, so anything unexpected
+    /// gives [`ReleaseAssets::Unknown`] instead of hiding an asset.
+    pub async fn fetch(client: &remote::Client, release: &GhRelease) -> Self {
+        Self(fetch_release_assets(client, release).await)
+    }
+
+    /// Which of the asset `names` it lists.
+    ///
+    /// The list comes from a page meant for people, so an asset missing from
+    /// it may still exist, and a listed one should be checked before it is
+    /// used.
+    pub fn lists<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> ReleaseAssets {
+        match &self.0 {
+            Page::NotFound => ReleaseAssets::NotFound,
+            Page::Found(assets) if assets.is_empty => ReleaseAssets::NoAssets,
+            Page::Found(assets) => ReleaseAssets::Listed(assets.lists(names)),
+            Page::Unknown => ReleaseAssets::Unknown,
         }
     }
 }
 
 /// The asset list github.com shows on the page of a release.
-#[derive(Debug)]
-pub(super) struct ReleaseAssetList {
+struct ReleaseAssetList {
     release: GhRelease,
     html: String,
     is_empty: bool,
+}
+
+/// Without the page, which is large.
+impl fmt::Debug for ReleaseAssetList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReleaseAssetList")
+            .field("release", &self.release)
+            .field("is_empty", &self.is_empty)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What github.com percent-encodes in a tag in a link: everything but
@@ -157,15 +186,7 @@ impl ReleaseAssetList {
     }
 }
 
-/// Get the asset list of `release` from the page github.com loads it from
-/// when showing the release, one request no matter how many assets.
-///
-/// The page is not documented, so anything unexpected returns
-/// [`AssetPage::Unknown`] instead of hiding an asset.
-pub(super) async fn fetch_release_assets(
-    client: &remote::Client,
-    release: &GhRelease,
-) -> AssetPage {
+async fn fetch_release_assets(client: &remote::Client, release: &GhRelease) -> Page {
     let url = release_url(release, "expanded_assets");
 
     debug!("Getting release assets from: '{url}'");
@@ -176,10 +197,10 @@ pub(super) async fn fetch_release_assets(
         .and_then(check_http_status_and_header)
     {
         Ok(response) => response.bytes().await,
-        Err(GhApiError::NotFound) => return AssetPage::NotFound,
+        Err(GhApiError::NotFound) => return Page::NotFound,
         Err(err) => {
             debug!("Failed to get release assets from {url}: {err}");
-            return AssetPage::Unknown;
+            return Page::Unknown;
         }
     };
     let html = match html {
@@ -187,7 +208,7 @@ pub(super) async fn fetch_release_assets(
         Ok(html) => String::from_utf8(html.into()),
         Err(err) => {
             debug!("Failed to get release assets from {url}: {err}");
-            return AssetPage::Unknown;
+            return Page::Unknown;
         }
     };
 
@@ -195,10 +216,10 @@ pub(super) async fn fetch_release_assets(
         .ok()
         .and_then(|html| ReleaseAssetList::new(release, html))
     {
-        Some(assets) => AssetPage::Found(assets),
+        Some(assets) => Page::Found(assets),
         None => {
             debug!("{url} does not look like a release asset list");
-            AssetPage::Unknown
+            Page::Unknown
         }
     }
 }
@@ -457,7 +478,7 @@ mod test {
         let assets = ReleaseAssetList::new(&release, html.into()).unwrap();
         assert!(assets.is_empty);
         assert_eq!(
-            AssetPage::Found(assets).lists(["a.tgz"]),
+            ReleaseAssetsPage(Page::Found(assets)).lists(["a.tgz"]),
             ReleaseAssets::NoAssets
         );
 

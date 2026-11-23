@@ -1,10 +1,15 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow,
+    path::Path,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::{
-    gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo},
+    gh_api_client::{GhApiError, GhRelease, GhRepo, ReleaseAssetsPage, RepoInfo as GhRepoInfo},
     git_refs::RepoTags,
 };
 use binstalk_types::{
@@ -222,13 +227,17 @@ pub enum SignaturePolicy {
 }
 
 /// Data required to fetch a package
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
     repo_info: OnceCell<Option<RepoInfo>>,
+    /// Which release tags exist, asked once for all the targets.
     repo_tags: OnceCell<Option<RepoTags>>,
+    /// github.com's asset lists of the releases looked up, so the next
+    /// target, tried when this one has nothing, doesn't get them again.
+    release_assets: Mutex<Vec<(GhRelease, ReleaseAssetsPage)>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
@@ -241,6 +250,7 @@ impl Data {
             repo,
             repo_info: OnceCell::new(),
             repo_tags: OnceCell::new(),
+            release_assets: Mutex::default(),
             pkg_url_hint: None,
         }
     }

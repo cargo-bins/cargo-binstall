@@ -15,7 +15,10 @@ use std::{
 };
 
 use binstalk_git_repo_api::{
-    gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl, GhRepo, ReleaseAssets},
+    gh_api_client::{
+        GhApiError, GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, GhRepo, ReleaseAssets,
+        ReleaseAssetsPage,
+    },
     git_refs,
 };
 use compact_str::CompactString;
@@ -262,12 +265,7 @@ impl Probe {
             let names = of_release.iter().filter_map(|candidate| {
                 Some(candidate.gh_artifact.as_ref()?.artifact_name.as_str())
             });
-            match self
-                .shared
-                .gh_api_client
-                .release_assets_on_web(&release, names)
-                .await
-            {
+            match self.release_assets_on_web(release, names).await {
                 // Nothing it could have left out.
                 ReleaseAssets::NotFound | ReleaseAssets::NoAssets => (),
                 // Normally only one is listed, the others are other formats.
@@ -291,6 +289,24 @@ impl Probe {
 
         self.candidates.append(&mut unknown);
         Ok(None)
+    }
+
+    /// Which of the asset `names` of `release` github.com lists, with the
+    /// page kept in [`Data`] for the other targets.
+    async fn release_assets_on_web<'a>(
+        &self,
+        release: GhRelease,
+        names: impl IntoIterator<Item = &'a str>,
+    ) -> ReleaseAssets {
+        let pages = &self.data.release_assets;
+        if let Some((_, page)) = pages.lock().unwrap().iter().find(|(r, _)| *r == release) {
+            return page.lists(names);
+        }
+
+        let page = ReleaseAssetsPage::fetch(&self.shared.client, &release).await;
+        let assets = page.lists(names);
+        pages.lock().unwrap().push((release, page));
+        assets
     }
 
     /// With a token, get the assets of the GitHub releases of the candidates
@@ -632,6 +648,55 @@ mod test {
         // sometimes do.
         let repo = "https://github.com/Cargo-Bins/Cargo-Binstall";
         assert_eq!(probe(repo, &[musl_tgz]).await, on_web(musl_tgz, 1));
+    }
+
+    /// The next target, tried when one has nothing, reuses what the first
+    /// one asked the git server and github.com.
+    #[tokio::test]
+    async fn test_probe_next_target() {
+        let gh_api_client = GhApiClient::new(client(), None);
+        let data = Data::new("test".into(), "0.0.0".into(), Some(BINSTALL.into()));
+        data.get_repo_info(&gh_api_client).await.unwrap();
+        let data = Arc::new(data);
+        let probe = |assets: &[&str]| {
+            let mut probe = Probe::new(
+                data.clone(),
+                client(),
+                gh_api_client.clone(),
+                Some(BINSTALL),
+                None,
+                false,
+                assets
+                    .iter()
+                    .map(|asset| new_candidate(BINSTALL, asset, None))
+                    .collect(),
+            );
+            async move {
+                probe.drop_missing_tags().await;
+                probe.check_on_web().await.unwrap()
+            }
+        };
+
+        // A target v0.20.1 has no build for.
+        assert!(
+            probe(&[
+                "v0.20.1/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
+                "v0.18.2/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
+            ])
+            .await
+            .is_none()
+        );
+        let musl_tgz = "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz";
+        let found = probe(&[
+            musl_tgz,
+            "v0.18.2/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+        ])
+        .await;
+        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+
+        // One ls-refs answer, one page.
+        assert!(data.repo_tags.get().unwrap().is_some());
+        assert_eq!(data.release_assets.lock().unwrap().len(), 1);
     }
 
     /// A public repository needs no API even with a token.
