@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::Future,
     ops::Deref,
     sync::{
@@ -10,6 +10,8 @@ use std::{
 };
 
 use binstalk_downloader::{download::Download, remote};
+
+use crate::git_refs;
 use compact_str::{CompactString, ToCompactString, format_compact};
 use tokio::sync::OnceCell;
 use tracing::{Level, debug, instrument, warn};
@@ -23,9 +25,11 @@ mod release_artifacts;
 mod repo_info;
 mod web;
 
-use common::{check_http_status_and_header, percent_decode_http_url_path};
+pub(crate) use common::check_http_status_and_header;
+use common::percent_decode_http_url_path;
 pub use error::{GhApiContextError, GhApiError, GhGraphQLErrors};
 pub use repo_info::RepoInfo;
+pub use web::{ReleaseAssets, ReleaseAssetsPage};
 
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
@@ -130,7 +134,6 @@ where
 struct Inner {
     client: remote::Client,
     release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
-    release_pages: Map<GhRelease, OnceCell<bool>>,
     retry_after: Mutex<Option<Instant>>,
 
     auth_token: Option<Zeroizing<Box<str>>>,
@@ -161,7 +164,6 @@ impl GhApiClient {
         Self(Arc::new(Inner {
             client,
             release_artifacts: Default::default(),
-            release_pages: Default::default(),
             retry_after: Default::default(),
 
             auth_token: auth_token.and_then(sanitize_auth_token),
@@ -205,6 +207,27 @@ impl GhApiClient {
         } else {
             None
         }
+    }
+
+    /// [`git_refs::list_tags`] for a private repository on github.com,
+    /// authenticated with the token: GitHub's git server takes it as the
+    /// password of HTTP Basic authentication.
+    ///
+    /// Fails with [`GhApiError::Unauthorized`] without a token.
+    pub async fn list_private_repo_tags(
+        &self,
+        GhRepo { owner, repo }: &GhRepo,
+        tags: HashSet<CompactString>,
+    ) -> Result<git_refs::RepoTags, GhApiError> {
+        let token = self.get_auth_token().ok_or(GhApiError::Unauthorized)?;
+
+        let mut url =
+            Url::parse("https://github.com/").expect("Literal provided must be a valid url");
+        url.path_segments_mut()
+            .expect("https url can be a base")
+            .extend([owner, repo]);
+
+        git_refs::list_tags(&self.0.client, &url, tags, Some(("x-access-token", token))).await
     }
 
     pub fn has_gh_token(&self) -> bool {
@@ -423,24 +446,6 @@ impl GhApiClient {
             }
             _ => (),
         }
-    }
-
-    /// Check whether `release` exists without the API, so without spending
-    /// the API rate limit: returns `false` only if github.com has no page for
-    /// it.
-    ///
-    /// Only use it for a public repository, github.com answers 404 for a
-    /// private one.
-    ///
-    /// Caches the result per release.
-    #[instrument(skip(self), ret(level = Level::DEBUG))]
-    pub async fn has_release_page(&self, release: &GhRelease) -> bool {
-        *self
-            .0
-            .release_pages
-            .get(release.clone())
-            .get_or_init(|| web::has_release_page(&self.0.client, release))
-            .await
     }
 
     pub async fn download_artifact(
@@ -866,25 +871,178 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_has_release_page() {
+    async fn test_list_private_repo_tags_needs_token() {
+        // No token: nothing is sent.
+        let client = GhApiClient::new(create_remote_client(), None);
+        assert!(matches!(
+            client
+                .list_private_repo_tags(
+                    &cargo_binstall_v0_20_1::RELEASE.repo,
+                    HashSet::from([CompactString::const_new("v0.20.1")])
+                )
+                .await,
+            Err(GhApiError::Unauthorized)
+        ));
+    }
+
+    /// Needs `CI_UNIT_TEST_GITHUB_TOKEN` with access to the private repository.
+    #[tokio::test]
+    async fn test_list_private_repo_tags() {
         init_logger();
 
-        let client = GhApiClient::new(create_remote_client(), None);
+        let Some(auth_token) = env::var("CI_UNIT_TEST_GITHUB_TOKEN")
+            .ok()
+            .filter(|token| !token.is_empty())
+        else {
+            return;
+        };
 
-        assert!(
-            client
-                .has_release_page(&cargo_binstall_v0_20_1::RELEASE)
-                .await
+        let repo = GhRepo {
+            owner: CompactString::const_new("cargo-bins"),
+            repo: CompactString::const_new("private-repo-for-testing"),
+        };
+        let tags = || HashSet::from(["0.12.0".into(), "v0.12.0".into()]);
+
+        // Without the token, the git server asks for credentials as if the
+        // repository did not exist.
+        let url = Url::parse("https://github.com/cargo-bins/private-repo-for-testing").unwrap();
+        let err = git_refs::list_tags(&create_remote_client(), &url, tags(), None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, GhApiError::Unauthorized), "{err:?}");
+
+        let client = GhApiClient::new(
+            create_remote_client(),
+            Some(Zeroizing::new(auth_token.into())),
         );
-        assert!(
-            !client
-                .has_release_page(&GhRelease {
-                    repo: cargo_binstall_v0_20_1::RELEASE.repo,
-                    // We would never release anything older than v0.20.1
-                    tag: CompactString::const_new("v0.18.2"),
-                })
+        let tags = client.list_private_repo_tags(&repo, tags()).await.unwrap();
+        assert_eq!(tags.exists("0.12.0"), Some(true));
+        assert_eq!(tags.exists("v0.12.0"), Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_release_assets_on_web() {
+        init_logger();
+
+        let client = create_remote_client();
+        let lists = async |release: &GhRelease, names: &[&str]| {
+            ReleaseAssetsPage::fetch(&client, release)
                 .await
+                .lists(names.iter().copied())
+        };
+        let release = cargo_binstall_v0_20_1::RELEASE;
+
+        let names = cargo_binstall_v0_20_1::ARTIFACTS;
+        assert_eq!(
+            lists(&release, names).await,
+            ReleaseAssets::Listed((0..names.len()).collect())
         );
+        assert_eq!(
+            lists(
+                &release,
+                &["cargo-binstall-x86_64-unknown-linux-musl.tgz.sig", "a.tgz"]
+            )
+            .await,
+            ReleaseAssets::Listed(vec![])
+        );
+
+        // The owner and repository name are case insensitive.
+        let other_case = GhRelease {
+            repo: GhRepo {
+                owner: CompactString::const_new("Cargo-Bins"),
+                repo: CompactString::const_new("Cargo-Binstall"),
+            },
+            tag: release.tag.clone(),
+        };
+        assert_eq!(
+            lists(
+                &other_case,
+                &["a.tgz", "cargo-binstall-x86_64-unknown-linux-musl.tgz"]
+            )
+            .await,
+            ReleaseAssets::Listed(vec![1])
+        );
+
+        // The latest release, with `.full` builds, signatures and a key.
+        let latest = GhRelease {
+            repo: release.repo.clone(),
+            tag: CompactString::const_new("v1.28.0"),
+        };
+        assert_eq!(
+            lists(
+                &latest,
+                &[
+                    "cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                    "cargo-binstall-x86_64-unknown-linux-musl.full.tgz",
+                    "cargo-binstall-x86_64-unknown-linux-musl.tgz.sig",
+                    "cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+                    "cargo-binstall-universal-apple-darwin.zip",
+                    "minisign.pub",
+                ]
+            )
+            .await,
+            ReleaseAssets::Listed(vec![0, 1, 2, 4, 5])
+        );
+
+        // cargo-quickinstall: a release per crate version, a tag with `+`.
+        let quickinstall = GhRepo {
+            owner: CompactString::const_new("cargo-bins"),
+            repo: CompactString::const_new("cargo-quickinstall"),
+        };
+        let with_plus = GhRelease {
+            repo: quickinstall.clone(),
+            tag: CompactString::const_new("cargo-c-0.10.26+cargo-0.100.0"),
+        };
+        assert_eq!(
+            lists(
+                &with_plus,
+                &[
+                    "cargo-c-0.10.26+cargo-0.100.0-aarch64-unknown-linux-gnu.tar.gz",
+                    "cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
+                    "cargo-c-0.10.26+cargo-0.100.0-x86_64-apple-darwin.tar.gz.sig",
+                ]
+            )
+            .await,
+            ReleaseAssets::Listed(vec![1, 2])
+        );
+        let ripgrep = GhRelease {
+            repo: quickinstall,
+            tag: CompactString::const_new("ripgrep-14.1.1"),
+        };
+        assert_eq!(
+            lists(
+                &ripgrep,
+                &[
+                    "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
+                    "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
+                ]
+            )
+            .await,
+            ReleaseAssets::Listed(vec![0])
+        );
+
+        // A tag without a release.
+        let tag_only = GhRelease {
+            repo: release.repo.clone(),
+            tag: CompactString::const_new("detect-targets-v0.1.0"),
+        };
+        assert_eq!(lists(&tag_only, &["a.tgz"]).await, ReleaseAssets::NoAssets);
+
+        // A private repository is not found without the user's cookies.
+        let private = GhRelease {
+            repo: GhRepo {
+                owner: CompactString::const_new("cargo-bins"),
+                repo: CompactString::const_new("private-repo-for-testing"),
+            },
+            tag: CompactString::const_new("0.12.0"),
+        };
+        assert_eq!(lists(&private, &["a.tgz"]).await, ReleaseAssets::NotFound);
+
+        let release = GhRelease {
+            repo: release.repo,
+            tag: CompactString::const_new("v0.18.2"),
+        };
+        assert_eq!(lists(&release, &["a.tgz"]).await, ReleaseAssets::NotFound);
     }
 
     #[tokio::test]

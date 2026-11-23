@@ -1,30 +1,31 @@
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
     fmt, iter,
     path::Path,
     sync::{Arc, OnceLock},
 };
 
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl};
+use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use binstalk_types::{cargo_toml_binstall::Strategy, crate_info::PkgUrlHint};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use itertools::Itertools;
 use leon::Template;
 use strum::IntoEnumIterator;
-use tokio::time::sleep;
 use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
     Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
-    TargetDataErased, common::*, futures_resolver::FuturesResolver, gh_api_rate_limit_wait,
+    TargetDataErased, common::*,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
 
 pub(crate) mod hosting;
+mod probe;
+
+use probe::{Candidate, Probe};
 
 pub struct GhCrateMeta {
     client: Client,
@@ -40,8 +41,8 @@ struct Resolved {
     url: Url,
     pkg_fmt: PkgFmt,
     archive_suffix: Option<String>,
-    repo: Option<String>,
-    subcrate: Option<String>,
+    repo: Option<CompactString>,
+    subcrate: Option<CompactString>,
     gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
     is_repo_private: bool,
     /// The alias from [`target_arch_aliases`] that `{ target-arch }` was
@@ -141,115 +142,6 @@ fn candidate_urls(
         .cartesian_product(exts)
         .filter_map(|(target_arch, ext)| render_url(ext, target_arch))
         .collect()
-}
-
-impl GhCrateMeta {
-    fn launch_baseline_find_tasks(
-        &self,
-        futures_resolver: &FuturesResolver<Resolved, FetchError>,
-        pkg_fmt: PkgFmt,
-        pkg_url: &Template<'_>,
-        repo: Option<&str>,
-        subcrate: Option<&str>,
-        is_repo_private: bool,
-    ) {
-        // `pkg_url` is one of the defaults unless the crate specified it.
-        let default_pkg_url = self
-            .target_data
-            .meta
-            .pkg_url
-            .is_none()
-            .then(|| template_to_string(pkg_url));
-
-        let urls = candidate_urls(
-            &self.data,
-            &self.target_data.target,
-            &self.target_data.target_related_info,
-            pkg_fmt,
-            pkg_url,
-            repo,
-            subcrate,
-        );
-
-        // go check all potential URLs at once
-        futures_resolver.extend(urls.into_iter().map(move |(url, ext, target_arch)| {
-            let client = self.client.clone();
-            let gh_api_client = self.gh_api_client.clone();
-
-            let repo = repo.map(ToString::to_string);
-            let subcrate = subcrate.map(ToString::to_string);
-            let archive_suffix = ext.map(ToString::to_string);
-            let gh_release_artifact = GhReleaseArtifact::try_extract_from_url(&url);
-            let default_pkg_url = default_pkg_url.clone();
-
-            async move {
-                debug!("Checking for package at: '{url}'");
-
-                let mut resolved = Resolved {
-                    url: url.clone(),
-                    pkg_fmt,
-                    repo,
-                    subcrate,
-                    archive_suffix,
-                    is_repo_private,
-                    gh_release_artifact_url: None,
-                    target_arch,
-                    default_pkg_url,
-                };
-
-                if let Some(artifact) = gh_release_artifact {
-                    // Without a token, the API allows 60 requests per hour and
-                    // most candidate tags don't exist: find the ones that do
-                    // without the API, so it is only asked about those.
-                    if !is_repo_private
-                        && !gh_api_client.has_gh_token()
-                        && !gh_api_client.has_release_page(&artifact.release).await
-                    {
-                        return Ok(None);
-                    }
-
-                    loop {
-                        match get_gh_release_artifact_url(gh_api_client.clone(), artifact.clone())
-                            .await
-                        {
-                            Ok(Some(artifact_url)) => {
-                                resolved.gh_release_artifact_url = Some(artifact_url);
-                                return Ok(Some(resolved));
-                            }
-                            Ok(None) => return Ok(None),
-
-                            // A public release asset can be checked with
-                            // HEAD/GET instead, as `does_url_exist` does.
-                            Err(GhApiError::RateLimit { .. } | GhApiError::Unauthorized)
-                                if !is_repo_private =>
-                            {
-                                // Skip every asset of a missing tag, instead
-                                // of checking each one with HEAD/GET.
-                                if !gh_api_client.has_release_page(&artifact.release).await {
-                                    return Ok(None);
-                                }
-                                break;
-                            }
-                            Err(GhApiError::RateLimit { retry_after }) => {
-                                match gh_api_rate_limit_wait(retry_after) {
-                                    Some(wait) => sleep(wait).await,
-                                    None => {
-                                        return Err(GhApiError::RateLimit { retry_after }.into());
-                                    }
-                                }
-                            }
-
-                            Err(err) => return Err(err.into()),
-                        }
-                    }
-                }
-
-                Ok(Box::pin(client.remote_gettable(url))
-                    .await?
-                    .then_some(resolved))
-            }
-        }));
-    }
 }
 
 #[async_trait::async_trait]
@@ -374,53 +266,74 @@ impl super::Fetcher for GhCrateMeta {
             // Convert Option<Url> to Option<String> to reduce size of future.
             let repo = repo.map(|u| u.as_str().trim_end_matches('/'));
 
-            // Use reference to self to fix error of closure
-            // launch_baseline_find_tasks which moves `this`
-            let this = &self;
-
             let pkg_fmts = if let Some(pkg_fmt) = pkg_fmt {
                 Either::Left(iter::once(pkg_fmt))
             } else {
                 Either::Right(PkgFmt::iter())
             };
 
-            // Try how a previous version was found first: it is one template
-            // instead of all of them, times every pkg-fmt.
-            //
-            // Only a hint that is still one of the default templates is used,
-            // and only if it agrees with the crate's pkg-fmt, if any.
-            if is_default_pkg_url
-                && let Some(PkgUrlHint {
-                    pkg_url: hint_pkg_url,
-                    pkg_fmt: hint_pkg_fmt,
-                    ..
-                }) = self.data.pkg_url_hint(&self.target_data.target)
-                && pkg_fmt.is_none_or(|pkg_fmt| pkg_fmt == *hint_pkg_fmt)
-            {
-                if let Some(pkg_url) = pkg_urls
-                    .clone()
-                    .find(|pkg_url| template_to_string(pkg_url) == *hint_pkg_url)
-                {
-                    let resolver = FuturesResolver::default();
-                    this.launch_baseline_find_tasks(
-                        &resolver,
-                        *hint_pkg_fmt,
+            // Every URL the package may be at, rendered once.
+            let candidates: Vec<Candidate> = pkg_urls
+                .map(|pkg_url| {
+                    let default_pkg_url = is_default_pkg_url.then(|| template_to_string(&pkg_url));
+                    (default_pkg_url, pkg_url)
+                })
+                .cartesian_product(pkg_fmts)
+                .flat_map(|((default_pkg_url, pkg_url), pkg_fmt)| {
+                    candidate_urls(
+                        &self.data,
+                        &self.target_data.target,
+                        &self.target_data.target_related_info,
+                        pkg_fmt,
                         &pkg_url,
                         repo,
                         subcrate,
-                        is_repo_private,
-                    );
+                    )
+                    .into_iter()
+                    .map(move |(url, archive_suffix, target_arch)| {
+                        Candidate::new(
+                            url,
+                            pkg_fmt,
+                            archive_suffix,
+                            target_arch,
+                            default_pkg_url.clone(),
+                            repo,
+                        )
+                    })
+                })
+                .collect();
 
-                    if let Some(resolved) = resolver.resolve().await {
-                        debug!(
-                            ?resolved,
-                            "Found package with the pkg-url of the last install"
-                        );
-                        self.resolution
-                            .set(resolved)
-                            .expect("find() should be only called once");
-                        return Ok(true);
-                    }
+            let mut probe = Probe::new(
+                self.data.clone(),
+                self.client.clone(),
+                self.gh_api_client.clone(),
+                repo,
+                subcrate,
+                is_repo_private,
+                candidates,
+            );
+
+            // Try how a previous version was found first, before any other
+            // request: it is one template times one pkg-fmt, instead of all
+            // of them.
+            //
+            // Only a hint that is still one of the default templates is used,
+            // and only if it agrees with the crate's pkg-fmt, if any.
+            if let Some(PkgUrlHint {
+                pkg_url: hint_pkg_url,
+                pkg_fmt: hint_pkg_fmt,
+                ..
+            }) = self.data.pkg_url_hint(&self.target_data.target)
+            {
+                if let Some(resolved) = probe.resolve_hint(hint_pkg_url, *hint_pkg_fmt).await? {
+                    debug!(
+                        ?resolved,
+                        "Found package with the pkg-url of the last install"
+                    );
+                    self.resolution
+                        .set(resolved)
+                        .expect("find() should be only called once");
+                    return Ok(true);
                 }
 
                 debug!(
@@ -428,59 +341,7 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
-            // All candidates in the same GitHub repository are usually spread
-            // over a few release tags. Ask about all of them in one GraphQL
-            // query instead of one query per tag.
-            if self.gh_api_client.has_gh_token() {
-                let releases = pkg_urls
-                    .clone()
-                    .cartesian_product(pkg_fmts.clone())
-                    .flat_map(|(pkg_url, pkg_fmt)| {
-                        candidate_urls(
-                            &self.data,
-                            &self.target_data.target,
-                            &self.target_data.target_related_info,
-                            pkg_fmt,
-                            &pkg_url,
-                            repo,
-                            subcrate,
-                        )
-                    })
-                    .filter_map(|(url, ..)| GhReleaseArtifact::try_extract_from_url(&url))
-                    .map(|artifact| (artifact.release.repo, artifact.release.tag))
-                    .into_grouping_map()
-                    // Every tag shows up once per candidate asset name.
-                    .collect::<BTreeSet<_>>();
-
-                // Normally all candidates are in the same repository.
-                for (gh_repo, tags) in releases {
-                    self.gh_api_client
-                        .prefetch_release_artifacts(&gh_repo, tags)
-                        .await;
-                }
-            }
-
-            let resolver = FuturesResolver::default();
-
-            // Iterate over pkg_urls first to avoid String::clone.
-            for pkg_url in pkg_urls {
-                //             Clone iter pkg_fmts to ensure all pkg_fmts is
-                //             iterated over for each pkg_url, which is
-                //             basically cartesian product.
-                //             |
-                for pkg_fmt in pkg_fmts.clone() {
-                    this.launch_baseline_find_tasks(
-                        &resolver,
-                        pkg_fmt,
-                        &pkg_url,
-                        repo,
-                        subcrate,
-                        is_repo_private,
-                    );
-                }
-            }
-
-            if let Some(resolved) = resolver.resolve().await {
+            if let Some(resolved) = probe.resolve().await? {
                 debug!(?resolved, "Winning URL found!");
                 self.resolution
                     .set(resolved)

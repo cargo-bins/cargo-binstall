@@ -1,12 +1,6 @@
 #![allow(unused)]
 
-use std::{
-    future::Future,
-    sync::{
-        Once,
-        atomic::{AtomicBool, Ordering::Relaxed},
-    },
-};
+use std::{future::Future, sync::Once};
 
 pub(super) use binstalk_downloader::{
     download::{Download, ExtractedFiles},
@@ -59,41 +53,14 @@ pub(super) async fn get_gh_release_artifact_url(
     }
 }
 
-/// Check if the URL exists, by querying the GitHub API if there is a token.
+/// Check if the URL exists, with a GET: HEAD gives false negatives on some
+/// hosts, e.g. GitHub's release asset storage answers it with 401.
 ///
-/// Caches info on all artifacts matching (repo, tag).
-///
-/// Without a token, the URL is checked with HEAD/GET instead: the API would
-/// spend one of the 60 requests per hour GitHub gives an IP address, which
-/// [`GhCrateMeta`](crate::GhCrateMeta) needs more, while HEAD/GET on a release
-/// asset costs no API quota.
+/// It costs no API quota, unlike asking the GitHub API.
 ///
 /// This function returns a future where its size should be at most size of
 /// 2-4 pointers.
-pub(super) async fn does_url_exist(
-    client: Client,
-    gh_api_client: GhApiClient,
-    url: &Url,
-) -> Result<bool, FetchError> {
-    static GH_API_CLIENT_FAILED: AtomicBool = AtomicBool::new(false);
-
-    debug!("Checking for package at: '{url}'");
-
-    if !GH_API_CLIENT_FAILED.load(Relaxed)
-        && gh_api_client.has_gh_token()
-        && let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url)
-    {
-        match get_gh_release_artifact_url(gh_api_client, artifact).await {
-            Ok(ret) => return Ok(ret.is_some()),
-
-            Err(GhApiError::RateLimit { .. }) | Err(GhApiError::Unauthorized) => {}
-
-            Err(err) => return Err(err.into()),
-        }
-
-        GH_API_CLIENT_FAILED.store(true, Relaxed);
-    }
-
+pub(super) async fn does_url_exist(client: &Client, url: &Url) -> Result<bool, FetchError> {
     Ok(Box::pin(client.remote_gettable(url.clone())).await?)
 }
 

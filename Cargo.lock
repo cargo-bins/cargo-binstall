@@ -355,6 +355,7 @@ version = "0.5.54"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
+ "gix-packetline",
  "percent-encoding",
  "serde",
  "serde-tuple-vec-map",

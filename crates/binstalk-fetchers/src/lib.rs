@@ -1,9 +1,17 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow,
+    path::Path,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
+use binstalk_git_repo_api::{
+    gh_api_client::{GhApiError, GhRelease, GhRepo, ReleaseAssetsPage, RepoInfo as GhRepoInfo},
+    git_refs::RepoTags,
+};
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
     crate_info::PkgUrlHint,
@@ -219,12 +227,17 @@ pub enum SignaturePolicy {
 }
 
 /// Data required to fetch a package
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
     repo_info: OnceCell<Option<RepoInfo>>,
+    /// Which release tags exist, asked once for all the targets.
+    repo_tags: OnceCell<Option<RepoTags>>,
+    /// github.com's asset lists of the releases looked up, so the next
+    /// target, tried when this one has nothing, doesn't get them again.
+    release_assets: Mutex<Vec<(GhRelease, ReleaseAssetsPage)>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
@@ -236,6 +249,8 @@ impl Data {
             version,
             repo,
             repo_info: OnceCell::new(),
+            repo_tags: OnceCell::new(),
+            release_assets: Mutex::default(),
             pkg_url_hint: None,
         }
     }
@@ -284,11 +299,15 @@ impl Data {
             client: &GhApiClient,
         ) -> Result<RepoInfo, FetchError> {
             let repo = Url::parse(repo)?;
-            let mut repo = client
+            let redirected = client
                 .remote_client()
                 .get_redirected_final_url(repo.clone())
-                .await
-                .unwrap_or(repo);
+                .await;
+            // github.com shows a private repository only to its members
+            // signed in with a browser, so one whose page loads is public:
+            // no need to spend the API on it.
+            let has_public_page = redirected.is_ok();
+            let mut repo = redirected.unwrap_or(repo);
             let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
             let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
@@ -300,7 +319,7 @@ impl Data {
             {
                 let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
                 match GhRepo::try_extract_from_url(&repo) {
-                    Some(gh_repo) if client.has_gh_token() => {
+                    Some(gh_repo) if client.has_gh_token() && !has_public_page => {
                         if let Ok(gh_repo_info) = gh_get_repo_info(client, &gh_repo).await {
                             return Ok(RepoInfo {
                                 subcrate,
@@ -327,7 +346,7 @@ impl Data {
 
             Ok(RepoInfo {
                 is_private: match GhRepo::try_extract_from_url(&repo) {
-                    Some(gh_repo) if client.has_gh_token() => {
+                    Some(gh_repo) if client.has_gh_token() && !has_public_page => {
                         gh_get_repo_info(client, &gh_repo).await?.is_private()
                     }
                     _ => false,
