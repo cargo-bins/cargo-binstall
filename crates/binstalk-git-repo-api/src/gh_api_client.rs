@@ -134,7 +134,6 @@ where
 struct Inner {
     client: remote::Client,
     release_artifacts: Map<GhRelease, OnceCell<Option<release_artifacts::Artifacts>>>,
-    release_pages: Map<GhRelease, OnceCell<bool>>,
     release_web_assets: Map<GhRelease, OnceCell<web::AssetPage>>,
     retry_after: Mutex<Option<Instant>>,
 
@@ -166,7 +165,6 @@ impl GhApiClient {
         Self(Arc::new(Inner {
             client,
             release_artifacts: Default::default(),
-            release_pages: Default::default(),
             release_web_assets: Default::default(),
             retry_after: Default::default(),
 
@@ -450,24 +448,6 @@ impl GhApiClient {
             }
             _ => (),
         }
-    }
-
-    /// Check whether `release` exists without the API, so without spending
-    /// the API rate limit: returns `false` only if github.com has no page for
-    /// it.
-    ///
-    /// Only use it for a public repository, github.com answers 404 for a
-    /// private one.
-    ///
-    /// Caches the result per release.
-    #[instrument(skip(self), ret(level = Level::DEBUG))]
-    pub async fn has_release_page(&self, release: &GhRelease) -> bool {
-        *self
-            .0
-            .release_pages
-            .get(release.clone())
-            .get_or_init(|| web::has_release_page(&self.0.client, release))
-            .await
     }
 
     /// Which of the asset `names` of `release` github.com lists on the
@@ -916,28 +896,6 @@ mod test {
             tags.len()
         );
         assert!(batched < per_tag_total);
-    }
-
-    #[tokio::test]
-    async fn test_has_release_page() {
-        init_logger();
-
-        let client = GhApiClient::new(create_remote_client(), None);
-
-        assert!(
-            client
-                .has_release_page(&cargo_binstall_v0_20_1::RELEASE)
-                .await
-        );
-        assert!(
-            !client
-                .has_release_page(&GhRelease {
-                    repo: cargo_binstall_v0_20_1::RELEASE.repo,
-                    // We would never release anything older than v0.20.1
-                    tag: CompactString::const_new("v0.18.2"),
-                })
-                .await
-        );
     }
 
     #[tokio::test]

@@ -9,12 +9,13 @@
 //! repository by the releases' asset lists on github.com, which cost no API
 //! quota, and only then with the API.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashSet},
+    sync::Arc,
+};
 
 use binstalk_git_repo_api::{
-    gh_api_client::{
-        GhApiError, GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, ReleaseAssets,
-    },
+    gh_api_client::{GhApiError, GhReleaseArtifact, GhReleaseArtifactUrl, GhRepo, ReleaseAssets},
     git_refs,
 };
 use compact_str::CompactString;
@@ -24,7 +25,8 @@ use url::Url;
 
 use super::Resolved;
 use crate::{
-    Data, FetchError, common::*, futures_resolver::FuturesResolver, gh_api_rate_limit_wait,
+    Data, FetchError, RepoInfo, common::*, futures_resolver::FuturesResolver,
+    gh_api_rate_limit_wait,
 };
 
 /// A URL the package may be at, rendered from a `pkg-url` template.
@@ -43,10 +45,6 @@ pub(super) struct Candidate {
     tag: Option<CompactString>,
     /// The GitHub release asset it is.
     gh_artifact: Option<GhReleaseArtifact>,
-    /// Whether to check it with GET only, without the API: github.com lists
-    /// it (see [`Probe::check_on_web`]), or it is a hint for a public
-    /// repository.
-    get_only: bool,
 }
 
 impl Candidate {
@@ -61,7 +59,6 @@ impl Candidate {
         Self {
             tag: repo.and_then(|repo| git_refs::release_tag(repo, &url)),
             gh_artifact: GhReleaseArtifact::try_extract_from_url(&url),
-            get_only: false,
             url,
             pkg_fmt,
             archive_suffix,
@@ -71,11 +68,10 @@ impl Candidate {
     }
 }
 
-/// What a GitHub release asset is found to be.
+/// What the API says about a GitHub release asset.
 enum GhAsset {
     Missing,
-    /// It exists, with its API URL if the API was asked.
-    Found(Option<GhReleaseArtifactUrl>),
+    Found(GhReleaseArtifactUrl),
     /// The API could not tell.
     Unknown,
 }
@@ -134,10 +130,14 @@ impl Probe {
         while let Some(i) = self.candidates.iter().position(|candidate| {
             candidate.pkg_fmt == pkg_fmt && candidate.default_pkg_url.as_deref() == Some(pkg_url)
         }) {
-            let mut candidate = self.candidates.swap_remove(i);
-            candidate.get_only = !self.shared.is_repo_private;
-            if let Some(resolved) = self.shared.check(candidate).await? {
-                return Ok(Some(resolved));
+            let candidate = self.candidates.swap_remove(i);
+            let resolved = if self.shared.is_repo_private {
+                self.shared.check(candidate).await?
+            } else {
+                self.shared.check_with_get(candidate).await?
+            };
+            if resolved.is_some() {
+                return Ok(resolved);
             }
         }
         Ok(None)
@@ -147,20 +147,29 @@ impl Probe {
     ///
     /// 1. Drop the candidates of the release tags that don't exist, see
     ///    [`Probe::drop_missing_tags`].
-    /// 2. For a public GitHub repository, drop the candidates github.com's
-    ///    asset lists don't have, see [`Probe::check_on_web`].
+    /// 2. For a public GitHub repository, check the candidates github.com's
+    ///    asset lists have, and drop the ones they don't, see
+    ///    [`Probe::check_on_web`].
     /// 3. With a token, get the assets of the GitHub releases github.com
     ///    could not tell about in one GraphQL query.
     /// 4. Check the rest at once.
-    pub(super) async fn resolve(mut self) -> Option<Resolved> {
-        let tags_known = self.drop_missing_tags().await;
-        if !self.shared.is_repo_private {
-            self.check_on_web(tags_known).await;
-        }
+    pub(super) async fn resolve(mut self) -> Result<Option<Resolved>, FetchError> {
+        self.drop_missing_tags().await;
         if self.candidates.is_empty() {
-            debug!("No release has any of the candidates");
-            return None;
+            debug!("No release tag of any candidate exists");
+            return Ok(None);
         }
+
+        if !self.shared.is_repo_private {
+            if let Some(resolved) = self.check_on_web().await? {
+                return Ok(Some(resolved));
+            }
+            if self.candidates.is_empty() {
+                debug!("github.com has none of the candidates");
+                return Ok(None);
+            }
+        }
+
         self.prefetch_gh_releases().await;
 
         let shared = Arc::new(self.shared);
@@ -169,107 +178,124 @@ impl Probe {
             let shared = Arc::clone(&shared);
             async move { shared.check(candidate).await }
         }));
-        resolver.resolve().await
+        Ok(resolver.resolve().await)
     }
 
     /// Find out which release tags of the candidates exist, with one request
-    /// to the repository's git server shared by all targets, and drop the
-    /// candidates of the other ones. Returns whether the git server could
-    /// tell.
+    /// to the repository's git server, and drop the candidates of the other
+    /// ones. If the git server can't tell, every candidate is kept.
     ///
     /// A private repository on github.com is asked with the token.
-    async fn drop_missing_tags(&mut self) -> bool {
-        let Some(tags) = self
-            .data
-            .get_repo_tags(
-                &self.shared.client,
-                &self.shared.gh_api_client,
-                self.candidates.iter().filter_map(|c| c.tag.as_deref()),
-            )
-            .await
-        else {
-            return false;
-        };
+    ///
+    /// The answer is kept in [`Data`]: if this target has nothing, the next
+    /// one is tried with the same tags.
+    async fn drop_missing_tags(&mut self) {
+        let Self {
+            data,
+            shared,
+            candidates,
+        } = self;
 
-        self.candidates.retain(|candidate| {
-            candidate.tag.as_deref().and_then(|tag| tags.exists(tag)) != Some(false)
-        });
-        true
+        let tags = data
+            .repo_tags
+            .get_or_init(|| async {
+                let tags: HashSet<CompactString> = candidates
+                    .iter()
+                    .filter_map(|candidate| candidate.tag.clone())
+                    .collect();
+                if tags.is_empty() {
+                    return None;
+                }
+
+                // Set by `get_repo_info`, which `find` calls first.
+                let RepoInfo {
+                    repo, is_private, ..
+                } = data.repo_info.get()?.as_ref()?;
+
+                let tags = match GhRepo::try_extract_from_url(repo) {
+                    Some(gh_repo) if *is_private => {
+                        shared
+                            .gh_api_client
+                            .list_private_repo_tags(&gh_repo, tags)
+                            .await
+                    }
+                    _ => git_refs::list_tags(&shared.client, repo, tags, None).await,
+                };
+                tags.inspect_err(|err| debug!("Failed to list the release tags of {repo}: {err}"))
+                    .ok()
+            })
+            .await;
+
+        if let Some(tags) = tags {
+            candidates.retain(|candidate| {
+                candidate.tag.as_deref().and_then(|tag| tags.exists(tag)) != Some(false)
+            });
+        }
     }
 
     /// Look up the candidates of each GitHub release on github.com, which
-    /// costs no API quota: drop the ones it doesn't list, and mark the ones
-    /// it does to only be confirmed with GET.
+    /// costs no API quota. The ones it lists are checked with GET right away,
+    /// returning the first one found; the ones it doesn't are dropped.
     ///
     /// Only for a public repository, github.com answers 404 for a private
-    /// one. The list comes from a page meant for people, so it is only
-    /// trusted to leave out a candidate if it lists none at all or another
-    /// candidate of the release.
-    async fn check_on_web(&mut self, tags_known: bool) {
-        let gh_api_client = &self.shared.gh_api_client;
+    /// one. The list comes from a page meant for people, so a release's
+    /// candidates are kept to check some other way if it lists none of them
+    /// but some other assets.
+    async fn check_on_web(&mut self) -> Result<Option<Resolved>, FetchError> {
+        let mut unknown = Vec::new();
 
-        // Normally one or a few.
-        let mut releases: Vec<&GhRelease> = Vec::new();
-        for candidate in &self.candidates {
-            if let Some(artifact) = &candidate.gh_artifact
-                && !releases.contains(&&artifact.release)
-            {
-                releases.push(&artifact.release);
-            }
-        }
-
-        // What github.com says about each candidate, by index.
-        let mut found = Vec::new();
-        let mut missing = Vec::new();
-        for release in releases {
-            let (indices, names): (Vec<usize>, Vec<&str>) = self
+        while let Some(release) = self
+            .candidates
+            .iter()
+            .find_map(|candidate| Some(candidate.gh_artifact.as_ref()?.release.clone()))
+        {
+            let mut of_release: Vec<Candidate> = self
                 .candidates
-                .iter()
-                .enumerate()
-                .filter_map(|(i, candidate)| {
-                    let artifact = candidate.gh_artifact.as_ref()?;
-                    (artifact.release == *release).then_some((i, artifact.artifact_name.as_str()))
+                .extract_if(.., |candidate| {
+                    candidate
+                        .gh_artifact
+                        .as_ref()
+                        .is_some_and(|artifact| artifact.release == release)
                 })
-                .unzip();
+                .collect();
 
-            // If the git server could not tell, HEAD the release page first:
-            // github.com answers a missing release with a 404 page about as
-            // large as an asset list.
-            let assets = if !tags_known && !gh_api_client.has_release_page(release).await {
-                ReleaseAssets::NotFound
-            } else {
-                gh_api_client.release_assets_on_web(release, names).await
-            };
-
-            match assets {
-                ReleaseAssets::NotFound | ReleaseAssets::NoAssets => missing.extend(indices),
+            let names = of_release.iter().filter_map(|candidate| {
+                Some(candidate.gh_artifact.as_ref()?.artifact_name.as_str())
+            });
+            match self
+                .shared
+                .gh_api_client
+                .release_assets_on_web(&release, names)
+                .await
+            {
+                // Nothing it could have left out.
+                ReleaseAssets::NotFound | ReleaseAssets::NoAssets => (),
+                // Normally only one is listed, the others are other formats.
                 ReleaseAssets::Listed(listed) if !listed.is_empty() => {
-                    for (k, i) in indices.into_iter().enumerate() {
-                        if listed.contains(&k) {
-                            found.push(i);
-                        } else {
-                            missing.push(i);
+                    let listed = of_release
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(i, _)| listed.contains(i));
+                    for (_, candidate) in listed {
+                        if let Some(resolved) = self.shared.check_with_get(candidate).await? {
+                            return Ok(Some(resolved));
                         }
                     }
                 }
-                // It might not list every asset: check them some other way.
-                ReleaseAssets::Listed(_) | ReleaseAssets::Unknown => (),
+                // It might not list every asset.
+                ReleaseAssets::Listed(_) | ReleaseAssets::Unknown => {
+                    unknown.append(&mut of_release)
+                }
             }
         }
 
-        for i in found {
-            self.candidates[i].get_only = true;
-        }
-        // From the end, so that the indices left stay the same.
-        missing.sort_unstable();
-        for i in missing.into_iter().rev() {
-            self.candidates.swap_remove(i);
-        }
+        self.candidates.append(&mut unknown);
+        Ok(None)
     }
 
     /// With a token, get the assets of the GitHub releases of the candidates
-    /// github.com could not tell about, in one GraphQL query per
-    /// repository, instead of one per release.
+    /// left, in one GraphQL query per repository, instead of one per
+    /// release.
     async fn prefetch_gh_releases(&self) {
         let gh_api_client = &self.shared.gh_api_client;
         if !gh_api_client.has_gh_token() {
@@ -279,7 +305,6 @@ impl Probe {
         let releases = self
             .candidates
             .iter()
-            .filter(|candidate| !candidate.get_only)
             .filter_map(|candidate| candidate.gh_artifact.as_ref())
             .map(|artifact| (&artifact.release.repo, artifact.release.tag.clone()))
             .into_grouping_map()
@@ -295,25 +320,34 @@ impl Probe {
 }
 
 impl Shared {
+    /// Check `candidate` with the API if it is a GitHub release asset, with
+    /// GET otherwise or if the API can't tell.
     async fn check(&self, candidate: Candidate) -> Result<Option<Resolved>, FetchError> {
+        let Some(artifact) = &candidate.gh_artifact else {
+            return self.check_with_get(candidate).await;
+        };
+
+        debug!("Checking for package with the API: '{}'", candidate.url);
+        match self.check_gh_artifact(artifact).await? {
+            GhAsset::Found(artifact_url) => Ok(Some(self.resolved(candidate, Some(artifact_url)))),
+            GhAsset::Missing => Ok(None),
+            GhAsset::Unknown => self.check_with_get(candidate).await,
+        }
+    }
+
+    async fn check_with_get(&self, candidate: Candidate) -> Result<Option<Resolved>, FetchError> {
         debug!("Checking for package at: '{}'", candidate.url);
+        Ok(does_url_exist(&self.client, &candidate.url)
+            .await?
+            .then(|| self.resolved(candidate, None)))
+    }
 
-        let gh_asset = match &candidate.gh_artifact {
-            Some(artifact) if !candidate.get_only => self.check_gh_artifact(artifact).await?,
-            _ => GhAsset::Unknown,
-        };
-        let gh_release_artifact_url = match gh_asset {
-            GhAsset::Found(url) => url,
-            GhAsset::Missing => return Ok(None),
-            GhAsset::Unknown => {
-                if !does_url_exist(&self.client, &candidate.url).await? {
-                    return Ok(None);
-                }
-                None
-            }
-        };
-
-        Ok(Some(Resolved {
+    fn resolved(
+        &self,
+        candidate: Candidate,
+        gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
+    ) -> Resolved {
+        Resolved {
             url: candidate.url,
             pkg_fmt: candidate.pkg_fmt,
             archive_suffix: candidate.archive_suffix.map(ToString::to_string),
@@ -323,14 +357,14 @@ impl Shared {
             is_repo_private: self.is_repo_private,
             target_arch: candidate.target_arch,
             default_pkg_url: candidate.default_pkg_url,
-        }))
+        }
     }
 
     /// Check a GitHub release asset with the API.
     async fn check_gh_artifact(&self, artifact: &GhReleaseArtifact) -> Result<GhAsset, FetchError> {
         loop {
             match get_gh_release_artifact_url(self.gh_api_client.clone(), artifact.clone()).await {
-                Ok(Some(artifact_url)) => return Ok(GhAsset::Found(Some(artifact_url))),
+                Ok(Some(artifact_url)) => return Ok(GhAsset::Found(artifact_url)),
                 Ok(None) => return Ok(GhAsset::Missing),
 
                 // A public release asset can still be checked with GET.
@@ -418,23 +452,66 @@ mod test {
         Some(path.split_once("/releases/download/").unwrap().1.to_owned())
     }
 
-    /// Resolve the candidates for `assets` of the public `repo`, returning
-    /// the asset found, and how many candidates are left once the missing
-    /// tags were dropped, and once github.com was asked.
-    async fn probe(repo: &str, assets: &[&str]) -> (Option<String>, usize, usize) {
-        let gh_api_client = GhApiClient::new(client(), None);
+    /// How the candidates of a public repository were resolved.
+    #[derive(Debug, PartialEq)]
+    struct Probed {
+        /// The asset found, `{tag}/{name}`.
+        found: Option<String>,
+        /// Candidates left once the missing tags were dropped.
+        after_tags: usize,
+        /// Candidates left once github.com was asked, `None` if it was
+        /// found there.
+        after_web: Option<usize>,
+    }
+
+    /// Resolve the candidates for `assets` of the public `repo`.
+    async fn probe(repo: &str, assets: &[&str]) -> Probed {
+        probe_with(&GhApiClient::new(client(), None), repo, assets).await
+    }
+
+    async fn probe_with(gh_api_client: &GhApiClient, repo: &str, assets: &[&str]) -> Probed {
         let candidates = assets
             .iter()
             .map(|asset| new_candidate(repo, asset, None))
             .collect();
-        let mut probe = new_probe(&gh_api_client, repo, candidates).await;
+        let mut probe = new_probe(gh_api_client, repo, candidates).await;
+        assert!(!probe.shared.is_repo_private);
 
-        assert!(probe.drop_missing_tags().await);
+        probe.drop_missing_tags().await;
         let after_tags = probe.candidates.len();
-        probe.check_on_web(true).await;
-        let after_web = probe.candidates.len();
 
-        (asset(probe.resolve().await), after_tags, after_web)
+        if let Some(found) = probe.check_on_web().await.unwrap() {
+            return Probed {
+                found: asset(Some(found)),
+                after_tags,
+                after_web: None,
+            };
+        }
+        let after_web = Some(probe.candidates.len());
+
+        Probed {
+            found: asset(probe.resolve().await.unwrap()),
+            after_tags,
+            after_web,
+        }
+    }
+
+    /// `Probed` of an asset found on github.com.
+    fn on_web(found: &str, after_tags: usize) -> Probed {
+        Probed {
+            found: Some(found.to_owned()),
+            after_tags,
+            after_web: None,
+        }
+    }
+
+    /// `Probed` of nothing found.
+    fn not_found(after_tags: usize, after_web: usize) -> Probed {
+        Probed {
+            found: None,
+            after_tags,
+            after_web: Some(after_web),
+        }
     }
 
     #[test]
@@ -467,47 +544,62 @@ mod test {
     #[tokio::test]
     async fn test_probe_cargo_binstall() {
         // We would never release anything older than v0.20.1
-        let (found, after_tags, after_web) = probe(
-            BINSTALL,
-            &[
-                "v0.18.2/cargo-binstall-x86_64-unknown-linux-musl.tgz",
-                "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.zip",
-                "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz",
-            ],
-        )
-        .await;
+        let musl_tgz = "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz";
+        // The missing tag is dropped, then the asset github.com lists is
+        // found without checking the one it doesn't.
         assert_eq!(
-            found.as_deref(),
-            Some("v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz")
+            probe(
+                BINSTALL,
+                &[
+                    "v0.18.2/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                    "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.zip",
+                    musl_tgz,
+                ],
+            )
+            .await,
+            on_web(musl_tgz, 2)
         );
-        // The missing tag is dropped, then the asset github.com doesn't
-        // list, since it lists the other one.
-        assert_eq!((after_tags, after_web), (2, 1));
 
         // github.com lists none of them: it might not list every asset, so
         // they are kept and checked some other way.
-        let (found, after_tags, after_web) = probe(
-            BINSTALL,
-            &[
-                "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.zip",
-                "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
-            ],
-        )
-        .await;
-        assert_eq!(found, None);
-        assert_eq!((after_tags, after_web), (2, 2));
+        assert_eq!(
+            probe(
+                BINSTALL,
+                &[
+                    "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.zip",
+                    "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+                ],
+            )
+            .await,
+            not_found(2, 2)
+        );
 
         // A tag without a release: nothing to download.
-        let (found, after_tags, after_web) = probe(
-            BINSTALL,
-            &["detect-targets-v0.1.0/detect-targets-x86_64-unknown-linux-musl.tgz"],
-        )
-        .await;
-        assert_eq!(found, None);
-        assert_eq!((after_tags, after_web), (1, 0));
+        assert_eq!(
+            probe(
+                BINSTALL,
+                &["detect-targets-v0.1.0/detect-targets-x86_64-unknown-linux-musl.tgz"],
+            )
+            .await,
+            not_found(1, 0)
+        );
 
-        // The latest release, with `.full` builds and signatures.
-        let (found, _, after_web) = probe(
+        // No tag exists: github.com is not asked.
+        assert_eq!(
+            probe(
+                BINSTALL,
+                &[
+                    "v0.0.0/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                    "0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                ],
+            )
+            .await,
+            not_found(0, 0)
+        );
+
+        // The latest release, with `.full` builds and signatures. The
+        // signature is not listed under the name of the archive.
+        let found = probe(
             BINSTALL,
             &[
                 "v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.tgz.sig",
@@ -516,47 +608,105 @@ mod test {
             ],
         )
         .await;
-        assert!(found.is_some_and(|found| {
+        assert_eq!(found.after_web, None);
+        assert!(found.found.is_some_and(|found| {
             found.starts_with("v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.")
         }));
-        assert_eq!(after_web, 2);
+
+        // Assets of two releases: the one github.com lists is found, though
+        // the other release lists none of its candidates, which are kept.
+        assert_eq!(
+            probe(
+                BINSTALL,
+                &[
+                    "v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+                    "v1.28.0/cargo-binstall-x86_64-unknown-none.tgz",
+                    musl_tgz,
+                ],
+            )
+            .await,
+            on_web(musl_tgz, 3)
+        );
+
+        // The owner and repository written in another case, as crates
+        // sometimes do.
+        let repo = "https://github.com/Cargo-Bins/Cargo-Binstall";
+        assert_eq!(probe(repo, &[musl_tgz]).await, on_web(musl_tgz, 1));
+    }
+
+    /// A public repository needs no API even with a token.
+    ///
+    /// Only meaningful with a token that isn't valid, which the API would
+    /// reject, so in CI: locally the proxy signs every request in.
+    #[tokio::test]
+    async fn test_probe_public_repo_with_token() {
+        let gh_api_client = GhApiClient::new(
+            client(),
+            Some(
+                "ghp_000000000000000000000000000000000000"
+                    .to_owned()
+                    .into_boxed_str()
+                    .into(),
+            ),
+        );
+        let musl_tgz = "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz";
+        assert_eq!(
+            probe_with(
+                &gh_api_client,
+                BINSTALL,
+                &[
+                    "v0.18.2/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                    musl_tgz,
+                ],
+            )
+            .await,
+            on_web(musl_tgz, 1)
+        );
+        // The API would have rejected it.
+        assert!(gh_api_client.has_gh_token());
     }
 
     #[tokio::test]
     async fn test_probe_cargo_quickinstall() {
         // A tag with `+`, and a target it has no build for.
-        let (found, after_tags, after_web) = probe(
-            QUICKINSTALL,
-            &[
-                "cargo-c-0.10.26+cargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-aarch64-unknown-linux-gnu.tar.gz",
-                "cargo-c-0.10.26+cargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
-                "cargo-c-v0.10.26+cargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
-            ],
-        )
-        .await;
+        let found = "cargo-c-0.10.26+cargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz";
         assert_eq!(
-            found.as_deref(),
-            Some(
-                "cargo-c-0.10.26+cargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz"
+            probe(
+                QUICKINSTALL,
+                &[
+                    "cargo-c-0.10.26+cargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-aarch64-unknown-linux-gnu.tar.gz",
+                    found,
+                    "cargo-c-v0.10.26+cargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
+                ],
             )
+            .await,
+            on_web(found, 2)
         );
-        assert_eq!((after_tags, after_web), (2, 1));
 
         // A tag that is a prefix of others, `ripgrep-14.1.10` and so on.
-        let (found, after_tags, after_web) = probe(
-            QUICKINSTALL,
-            &[
-                "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
-                "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
-                "ripgrep-14.1.10/ripgrep-14.1.10-x86_64-unknown-linux-gnu.tar.gz",
-            ],
-        )
-        .await;
+        let found = "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz";
         assert_eq!(
-            found.as_deref(),
-            Some("ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz")
+            probe(
+                QUICKINSTALL,
+                &[
+                    "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
+                    found,
+                    "ripgrep-14.1.10/ripgrep-14.1.10-x86_64-unknown-linux-gnu.tar.gz",
+                ],
+            )
+            .await,
+            on_web(found, 2)
         );
-        assert_eq!((after_tags, after_web), (2, 1));
+
+        // A target it has no build for, so github.com lists other assets.
+        assert_eq!(
+            probe(
+                QUICKINSTALL,
+                &["ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tar.gz"],
+            )
+            .await,
+            not_found(1, 1)
+        );
     }
 
     #[tokio::test]
@@ -627,10 +777,10 @@ mod test {
         assert!(probe.shared.is_repo_private);
 
         // The git server was asked with the token.
-        assert!(probe.drop_missing_tags().await);
+        probe.drop_missing_tags().await;
         assert_eq!(probe.candidates.len(), 2);
 
-        let found = probe.resolve().await.unwrap();
+        let found = probe.resolve().await.unwrap().unwrap();
         // Downloaded with the API.
         assert!(found.gh_release_artifact_url.is_some());
         assert_eq!(

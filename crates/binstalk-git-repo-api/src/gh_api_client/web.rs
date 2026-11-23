@@ -5,7 +5,7 @@
 //! They only work for public repositories, github.com answers 404 for a
 //! private one without the user's cookies.
 
-use binstalk_downloader::remote::{self, Method};
+use binstalk_downloader::remote;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use tracing::debug;
 use url::Url;
@@ -24,32 +24,6 @@ fn release_url(
         .expect("https url can be a base")
         .extend([owner.as_str(), repo, "releases", page, tag]);
     url
-}
-
-/// Check whether `release` exists, by HEAD-ing its page.
-///
-/// Returns `true` unless github.com answers 404: a failed request must not
-/// hide a release, it only costs the requests this check was meant to save.
-///
-/// The page also exists for a tag without a release, then the release's
-/// assets are simply not found.
-pub(super) async fn has_release_page(client: &remote::Client, release: &GhRelease) -> bool {
-    let url = release_url(release, "tag");
-
-    debug!("Checking for release page at: '{url}'");
-
-    let response = client.request(Method::HEAD, url.clone()).send(false).await;
-    match response
-        .map_err(GhApiError::from)
-        .and_then(check_http_status_and_header)
-    {
-        Ok(_) => true,
-        Err(GhApiError::NotFound) => false,
-        Err(err) => {
-            debug!("Failed to check release page {url}: {err}");
-            true
-        }
-    }
 }
 
 /// What github.com lists of some asset names of a release, from

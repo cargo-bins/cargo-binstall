@@ -1,11 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{borrow::Cow, collections::HashSet, path::Path, sync::Arc, time::Duration};
+use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::{
     gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo},
-    git_refs::{self, RepoTags},
+    git_refs::RepoTags,
 };
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
@@ -289,11 +289,15 @@ impl Data {
             client: &GhApiClient,
         ) -> Result<RepoInfo, FetchError> {
             let repo = Url::parse(repo)?;
-            let mut repo = client
+            let redirected = client
                 .remote_client()
                 .get_redirected_final_url(repo.clone())
-                .await
-                .unwrap_or(repo);
+                .await;
+            // github.com shows a private repository only to its members
+            // signed in with a browser, so one whose page loads is public:
+            // no need to spend the API on it.
+            let has_public_page = redirected.is_ok();
+            let mut repo = redirected.unwrap_or(repo);
             let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
             let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
@@ -305,7 +309,7 @@ impl Data {
             {
                 let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
                 match GhRepo::try_extract_from_url(&repo) {
-                    Some(gh_repo) if client.has_gh_token() => {
+                    Some(gh_repo) if client.has_gh_token() && !has_public_page => {
                         if let Ok(gh_repo_info) = gh_get_repo_info(client, &gh_repo).await {
                             return Ok(RepoInfo {
                                 subcrate,
@@ -332,7 +336,7 @@ impl Data {
 
             Ok(RepoInfo {
                 is_private: match GhRepo::try_extract_from_url(&repo) {
-                    Some(gh_repo) if client.has_gh_token() => {
+                    Some(gh_repo) if client.has_gh_token() && !has_public_page => {
                         gh_get_repo_info(client, &gh_repo).await?.is_private()
                     }
                     _ => false,
@@ -359,48 +363,6 @@ impl Data {
             })
             .await
             .map(Option::as_ref)
-    }
-}
-
-impl Data {
-    /// Which of the release `tags` exist in the crate's repository: one request to its git
-    /// server, shared by all targets. A private repository is only asked if
-    /// it is on github.com and there is a token.
-    ///
-    /// The first caller decides which tags are asked about, the targets
-    /// normally share them.
-    ///
-    /// Returns `None` if there is no repository or tag to ask about, or if
-    /// the git server could not tell.
-    async fn get_repo_tags<'a>(
-        &self,
-        client: &Client,
-        gh_api_client: &GhApiClient,
-        tags: impl Iterator<Item = &'a str>,
-    ) -> Option<&RepoTags> {
-        self.repo_tags
-            .get_or_init(|| async {
-                // Set by `get_repo_info`, which the fetchers call first.
-                let RepoInfo {
-                    repo, is_private, ..
-                } = self.repo_info.get()?.as_ref()?;
-
-                let tags: HashSet<CompactString> = tags.map(CompactString::from).collect();
-                if tags.is_empty() {
-                    return None;
-                }
-
-                let tags = match GhRepo::try_extract_from_url(repo) {
-                    Some(gh_repo) if *is_private => {
-                        gh_api_client.list_private_repo_tags(&gh_repo, tags).await
-                    }
-                    _ => git_refs::list_tags(client, repo, tags, None).await,
-                };
-                tags.inspect_err(|err| debug!("Failed to list the release tags of {repo}: {err}"))
-                    .ok()
-            })
-            .await
-            .as_ref()
     }
 }
 

@@ -341,7 +341,7 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
-            if let Some(resolved) = probe.resolve().await {
+            if let Some(resolved) = probe.resolve().await? {
                 debug!(?resolved, "Winning URL found!");
                 self.resolution
                     .set(resolved)

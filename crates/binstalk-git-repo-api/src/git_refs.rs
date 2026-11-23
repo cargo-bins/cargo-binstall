@@ -343,6 +343,34 @@ mod test {
         assert_eq!(tags.exists("v17.0.0"), Some(true));
         assert_eq!(tags.exists("17.0.0"), Some(false));
 
+        // In a subgroup.
+        let tags = list_tags(
+            "https://gitlab.com/gitlab-org/security-products/analyzers/semgrep",
+            &["v5.0.0", "v0.0.0"],
+        )
+        .await
+        .unwrap();
+        assert_eq!(tags.exists("v5.0.0"), Some(true));
+        assert_eq!(tags.exists("v0.0.0"), Some(false));
+
+        let tags = list_tags(
+            "https://bitbucket.org/atlassian/atlassian-connect-express",
+            &["0.7.1", "v0.0.0"],
+        )
+        .await
+        .unwrap();
+        assert_eq!(tags.exists("0.7.1"), Some(true));
+        assert_eq!(tags.exists("v0.0.0"), Some(false));
+
+        // They ask for credentials too.
+        for repo in [
+            "https://gitlab.com/gitlab-org/ttt-binstall-test",
+            "https://bitbucket.org/atlassian/ttt-binstall-test",
+        ] {
+            let err = list_tags(repo, &["v1.0.0"]).await.unwrap_err();
+            assert!(matches!(err, GhApiError::Unauthorized), "{repo}: {err:?}");
+        }
+
         // github.com asks for credentials, as for a private repository.
         let err = list_tags("https://github.com/cargo-bins/ttt", &["v1.0.0"])
             .await
