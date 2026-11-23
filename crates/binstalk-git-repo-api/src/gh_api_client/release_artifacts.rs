@@ -54,8 +54,9 @@ impl Borrow<str> for Artifact {
     }
 }
 
+/// The assets of a release, from [`GhApiClient::get_release_artifacts`](super::GhApiClient::get_release_artifacts).
 #[derive(Debug, Default, Deserialize)]
-pub(super) struct Artifacts {
+pub struct Artifacts {
     assets: HashSet<Artifact>,
 }
 
