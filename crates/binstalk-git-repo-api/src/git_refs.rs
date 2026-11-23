@@ -317,6 +317,22 @@ mod test {
         assert_eq!(tags.exists("v0.18.2"), Some(false));
         assert_eq!(tags.exists("v0.20.2"), None);
 
+        // A tag with `+`, and one that is a prefix of other ones
+        // (`ripgrep-14.1.10`, ...) which the server lists too.
+        let tags = list_tags(
+            "https://github.com/cargo-bins/cargo-quickinstall",
+            &[
+                "cargo-c-0.10.26+cargo-0.100.0",
+                "ripgrep-14.1.1",
+                "ripgrep-0.0.0",
+            ],
+        )
+        .await
+        .unwrap();
+        assert_eq!(tags.exists("cargo-c-0.10.26+cargo-0.100.0"), Some(true));
+        assert_eq!(tags.exists("ripgrep-14.1.1"), Some(true));
+        assert_eq!(tags.exists("ripgrep-0.0.0"), Some(false));
+
         // Not only github.com.
         let tags = list_tags(
             "https://gitlab.com/gitlab-org/gitlab-runner",

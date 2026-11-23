@@ -1032,6 +1032,67 @@ mod test {
             ReleaseAssets::Listed(vec![1])
         );
 
+        // The latest release, with `.full` builds, signatures and a key.
+        let latest = GhRelease {
+            repo: release.repo.clone(),
+            tag: CompactString::const_new("v1.28.0"),
+        };
+        assert_eq!(
+            client
+                .release_assets_on_web(
+                    &latest,
+                    [
+                        "cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                        "cargo-binstall-x86_64-unknown-linux-musl.full.tgz",
+                        "cargo-binstall-x86_64-unknown-linux-musl.tgz.sig",
+                        "cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+                        "cargo-binstall-universal-apple-darwin.zip",
+                        "minisign.pub",
+                    ]
+                )
+                .await,
+            ReleaseAssets::Listed(vec![0, 1, 2, 4, 5])
+        );
+
+        // cargo-quickinstall: a release per crate version, a tag with `+`.
+        let quickinstall = GhRepo {
+            owner: CompactString::const_new("cargo-bins"),
+            repo: CompactString::const_new("cargo-quickinstall"),
+        };
+        let with_plus = GhRelease {
+            repo: quickinstall.clone(),
+            tag: CompactString::const_new("cargo-c-0.10.26+cargo-0.100.0"),
+        };
+        assert_eq!(
+            client
+                .release_assets_on_web(
+                    &with_plus,
+                    [
+                        "cargo-c-0.10.26+cargo-0.100.0-aarch64-unknown-linux-gnu.tar.gz",
+                        "cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
+                        "cargo-c-0.10.26+cargo-0.100.0-x86_64-apple-darwin.tar.gz.sig",
+                    ]
+                )
+                .await,
+            ReleaseAssets::Listed(vec![1, 2])
+        );
+        let ripgrep = GhRelease {
+            repo: quickinstall,
+            tag: CompactString::const_new("ripgrep-14.1.1"),
+        };
+        assert_eq!(
+            client
+                .release_assets_on_web(
+                    &ripgrep,
+                    [
+                        "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
+                        "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
+                    ]
+                )
+                .await,
+            ReleaseAssets::Listed(vec![0])
+        );
+
         // A tag without a release.
         let tag_only = GhRelease {
             repo: release.repo.clone(),

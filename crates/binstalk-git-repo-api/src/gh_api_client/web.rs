@@ -6,7 +6,7 @@
 //! private one without the user's cookies.
 
 use binstalk_downloader::remote::{self, Method};
-use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use tracing::debug;
 use url::Url;
 
@@ -96,29 +96,23 @@ pub(super) struct ReleaseAssetList {
     is_empty: bool,
 }
 
-/// What github.com percent-encodes in a path segment of a link, like `/` in a
-/// tag.
-const PATH_SEGMENT: &AsciiSet = &CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'#')
-    .add(b'%')
-    .add(b'/')
-    .add(b'<')
-    .add(b'>')
-    .add(b'?')
-    .add(b'`')
-    .add(b'{')
-    .add(b'}');
+/// What github.com percent-encodes in a tag in a link: everything but
+/// letters, digits and `-._~`, e.g. `/` and `+`.
+const TAG: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~');
 
 /// `/releases/download/{tag}/` as github.com links to it.
 ///
-/// Asset names need no escaping: GitHub renames an uploaded asset with
-/// special characters in its name. A tag can still have them, a link with
-/// them written some other way is just not found.
+/// Asset names are written as is, `+` included: GitHub renames an uploaded
+/// asset with other special characters in its name. If github.com writes a
+/// tag some other way, the page just doesn't look like the asset list of the
+/// release.
 fn release_download_path(tag: &str) -> String {
     let mut path = String::from("/releases/download/");
-    path.extend(utf8_percent_encode(tag, PATH_SEGMENT));
+    path.extend(utf8_percent_encode(tag, TAG));
     path.push('/');
     path
 }
@@ -277,10 +271,154 @@ mod test {
             release_download_path("cargo-audit/v0.17.6"),
             "/releases/download/cargo-audit%2Fv0.17.6/"
         );
+        // As github.com writes the tags of cargo-quickinstall.
         assert_eq!(
-            release_download_path("a b\"<>%"),
-            "/releases/download/a%20b%22%3C%3E%25/"
+            release_download_path("cargo-c-0.10.26+cargo-0.100.0"),
+            "/releases/download/cargo-c-0.10.26%2Bcargo-0.100.0/"
         );
+        assert_eq!(
+            release_download_path("v1.0_rc~1"),
+            "/releases/download/v1.0_rc~1/"
+        );
+        assert_eq!(
+            release_download_path("a b\"<>%@é"),
+            "/releases/download/a%20b%22%3C%3E%25%40%C3%A9/"
+        );
+    }
+
+    fn gh_release(owner: &'static str, repo: &'static str, tag: &'static str) -> GhRelease {
+        GhRelease {
+            repo: GhRepo {
+                owner: CompactString::const_new(owner),
+                repo: CompactString::const_new(repo),
+            },
+            tag: CompactString::const_new(tag),
+        }
+    }
+
+    /// An asset list item as github.com writes it.
+    fn asset_link(path: &str) -> String {
+        format!(
+            r#"<li><div><a href="{path}" rel="nofollow" data-turbo="false" class="wb-break-all"></div></li>"#
+        )
+    }
+
+    #[test]
+    fn test_release_asset_list_cargo_quickinstall() {
+        // A tag with `+`: percent-encoded in the tag, not in the name.
+        let release = gh_release(
+            "cargo-bins",
+            "cargo-quickinstall",
+            "cargo-c-0.10.26+cargo-0.100.0",
+        );
+        let html = [
+            "/cargo-bins/cargo-quickinstall/releases/download/cargo-c-0.10.26%2Bcargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
+            "/cargo-bins/cargo-quickinstall/releases/download/cargo-c-0.10.26%2Bcargo-0.100.0/cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz.sig",
+            "/cargo-bins/cargo-quickinstall/archive/refs/tags/cargo-c-0.10.26+cargo-0.100.0.zip",
+            "/cargo-bins/cargo-quickinstall/archive/refs/tags/cargo-c-0.10.26+cargo-0.100.0.tar.gz",
+        ]
+        .map(asset_link)
+        .concat();
+        let assets = ReleaseAssetList::new(&release, html).unwrap();
+        assert_eq!(
+            assets.lists([
+                "cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-gnu.tar.gz",
+                "cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
+                "cargo-c-0.10.26+cargo-0.100.0-x86_64-unknown-linux-musl.tar.gz.sig",
+                "cargo-c-0.10.26%2Bcargo-0.100.0-x86_64-unknown-linux-musl.tar.gz",
+            ]),
+            [1, 2]
+        );
+
+        // A tag that is a prefix of another one.
+        let release = gh_release("cargo-bins", "cargo-quickinstall", "ripgrep-14.1.1");
+        let html = [
+            "/cargo-bins/cargo-quickinstall/releases/download/ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
+            "/cargo-bins/cargo-quickinstall/releases/download/ripgrep-14.1.10/ripgrep-14.1.10-x86_64-unknown-linux-musl.tar.gz",
+            "/cargo-bins/cargo-quickinstall/archive/refs/tags/ripgrep-14.1.1.tar.gz",
+        ]
+        .map(asset_link)
+        .concat();
+        let assets = ReleaseAssetList::new(&release, html).unwrap();
+        assert_eq!(
+            assets.lists([
+                "ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
+                "ripgrep-14.1.10-x86_64-unknown-linux-musl.tar.gz",
+            ]),
+            [0]
+        );
+    }
+
+    #[test]
+    fn test_release_asset_list_cargo_binstall() {
+        let release = gh_release("cargo-bins", "cargo-binstall", "v1.28.0");
+        let html = [
+            "/cargo-bins/cargo-binstall/releases/download/v1.28.0/cargo-binstall-aarch64-apple-darwin.full.zip",
+            "/cargo-bins/cargo-binstall/releases/download/v1.28.0/cargo-binstall-aarch64-apple-darwin.full.zip.sig",
+            "/cargo-bins/cargo-binstall/releases/download/v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+            "/cargo-bins/cargo-binstall/releases/download/v1.28.0/minisign.pub",
+            "/cargo-bins/cargo-binstall/archive/refs/tags/v1.28.0.zip",
+            "/cargo-bins/cargo-binstall/archive/refs/tags/v1.28.0.tar.gz",
+        ]
+        .map(asset_link)
+        .concat();
+        let assets = ReleaseAssetList::new(&release, html).unwrap();
+        assert_eq!(
+            assets.lists([
+                // Only `.full.zip` is there.
+                "cargo-binstall-aarch64-apple-darwin.zip",
+                "cargo-binstall-aarch64-apple-darwin.full.zip",
+                "cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                "cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+                "cargo-binstall-x86_64-unknown-linux-musl",
+                "minisign.pub",
+            ]),
+            [1, 2, 5]
+        );
+
+        // The repository in `Cargo.toml` in other case.
+        let other_case = GhRelease {
+            repo: GhRepo {
+                owner: CompactString::const_new("Cargo-Bins"),
+                repo: CompactString::const_new("CARGO-BINSTALL"),
+            },
+            tag: release.tag.clone(),
+        };
+        let html = asset_link(
+            "/cargo-bins/cargo-binstall/releases/download/v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+        );
+        let assets = ReleaseAssetList::new(&other_case, html).unwrap();
+        assert_eq!(
+            assets.lists(["cargo-binstall-x86_64-unknown-linux-musl.tgz"]),
+            [0]
+        );
+    }
+
+    #[test]
+    fn test_release_asset_list_unexpected() {
+        // A repository that moved: github.com links to the new owner.
+        let moved = gh_release("alsuren", "cargo-quickinstall", "ripgrep-14.1.1");
+        let html = [
+            "/cargo-bins/cargo-quickinstall/releases/download/ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz",
+            "/cargo-bins/cargo-quickinstall/archive/refs/tags/ripgrep-14.1.1.tar.gz",
+        ]
+        .map(asset_link)
+        .concat();
+        assert!(ReleaseAssetList::new(&moved, html).is_none());
+
+        // Only the assets of another release.
+        let release = gh_release("cargo-bins", "cargo-binstall", "v1.28.0");
+        let html = [
+            "/cargo-bins/cargo-binstall/releases/download/v1.27.0/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+            "/cargo-bins/cargo-binstall/archive/refs/tags/v1.28.0.tar.gz",
+        ]
+        .map(asset_link)
+        .concat();
+        assert!(ReleaseAssetList::new(&release, html).is_none());
+
+        // An error page, or a login page.
+        let html = r#"<html><body><a href="/login">Sign in</a></body></html>"#;
+        assert!(ReleaseAssetList::new(&release, html.into()).is_none());
     }
 
     #[test]

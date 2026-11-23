@@ -325,11 +325,7 @@ impl super::Fetcher for GhCrateMeta {
                 ..
             }) = self.data.pkg_url_hint(&self.target_data.target)
             {
-                let hinted = probe.resolve_where(|candidate| {
-                    candidate.pkg_fmt == *hint_pkg_fmt
-                        && candidate.default_pkg_url.as_ref() == Some(hint_pkg_url)
-                });
-                if let Some(resolved) = hinted.await {
+                if let Some(resolved) = probe.resolve_hint(hint_pkg_url, *hint_pkg_fmt).await? {
                     debug!(
                         ?resolved,
                         "Found package with the pkg-url of the last install"
@@ -344,13 +340,6 @@ impl super::Fetcher for GhCrateMeta {
                     "pkg-url {hint_pkg_url} of the last install did not match, trying all default pkg-url"
                 );
             }
-
-            if !probe.drop_missing_tags().await {
-                debug!("No release tag of any candidate exists");
-                return Ok(false);
-            }
-
-            probe.prefetch_gh_releases().await;
 
             if let Some(resolved) = probe.resolve().await {
                 debug!(?resolved, "Winning URL found!");
