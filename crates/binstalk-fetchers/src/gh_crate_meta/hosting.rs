@@ -1,3 +1,4 @@
+use binstalk_git_repo_api::release_assets::Forge;
 use itertools::Itertools;
 use leon::{Item, Template};
 use leon_macros::template;
@@ -77,6 +78,21 @@ impl RepositoryHost {
             Some("sourceforge.net") => SourceForge,
             Some("codeberg.org") => Codeberg,
             _ => Unknown,
+        }
+    }
+
+    /// How [`binstalk_git_repo_api::release_assets`] lists the release
+    /// assets of this host, `None` for GitHub, which has its own way, or an
+    /// unknown one.
+    pub fn forge(self) -> Option<Forge> {
+        use RepositoryHost::*;
+
+        match self {
+            GitLab => Some(Forge::GitLab),
+            BitBucket => Some(Forge::Bitbucket),
+            SourceForge => Some(Forge::SourceForge),
+            Codeberg => Some(Forge::Forgejo),
+            GitHub | Unknown => None,
         }
     }
 
