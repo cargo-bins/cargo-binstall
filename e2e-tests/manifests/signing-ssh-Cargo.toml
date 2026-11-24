@@ -1,0 +1,19 @@
+[package]
+name = "signing-test"
+description = "Rust binary package installer for CI integration"
+version = "0.1.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2021"
+license = "GPL-3.0"
+
+[[bin]]
+name = "signing-test"
+path = "src/main.rs"
+
+[package.metadata.binstall]
+# pkg-url is passed by signing.sh, since the local server picks its port.
+pkg-fmt = "tar"
+
+[package.metadata.binstall.signing]
+algorithm = "ssh"
+pubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZF8xnQQStf3/FtjefqpOkVa/NnGIe+JzX4HUuUX6TL binstall-e2e"

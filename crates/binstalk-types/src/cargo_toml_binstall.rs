@@ -290,6 +290,10 @@ pub struct PkgSigning {
 pub enum SigningAlgorithm {
     /// [minisign](https://jedisct1.github.io/minisign/)
     Minisign,
+
+    /// SSH signatures made by `ssh-keygen -Y sign -n file`
+    /// ([sshsig](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.sshsig))
+    Ssh,
 }
 
 #[cfg(test)]

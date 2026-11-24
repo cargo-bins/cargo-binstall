@@ -14,11 +14,20 @@ cp signing/signing-test.tar "$serve_dir/tampered.tar"
 printf 'tampered' >>"$serve_dir/tampered.tar"
 cp signing/signing-test.tar.sig "$serve_dir/tampered.tar.sig"
 cp signing/signing-test.tar "$serve_dir/unsigned.tar"
+# The same package signed with `ssh-keygen -Y sign -n file` by the key in
+# signing/ssh.pub.
+cp signing/signing-test.tar "$serve_dir/ssh.tar"
+cp signing/signing-test.tar.sshsig "$serve_dir/ssh.tar.sig"
+cp signing/signing-test.tar "$serve_dir/ssh-tampered.tar"
+printf 'tampered' >>"$serve_dir/ssh-tampered.tar"
+cp signing/signing-test.tar.sshsig "$serve_dir/ssh-tampered.tar.sig"
 
 start_https_server "$serve_dir"
 
+manifest=manifests/signing-Cargo.toml
+
 install() {
-    "$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm \
+    "$1" binstall --force --manifest-path "$manifest" --no-confirm \
         --strategies crate-meta-data \
         --pkg-url "$HTTPS_SERVER_URL/$2" "${@:3}" signing-test
 }
@@ -53,6 +62,16 @@ install "$1" tampered.tar --skip-signatures
 expect_failure "$1" "unsigned.tar.sig: HTTP status client error (404" unsigned.tar
 expect_failure "$1" "unsigned.tar.sig: HTTP status client error (404" unsigned.tar --only-signed
 install "$1" unsigned.tar --skip-signatures
+
+manifest=manifests/signing-ssh-Cargo.toml
+
+install "$1" ssh.tar 2>&1 | tee "$log"
+grep -F "Verified signature for package 'signing-test': ssh-ed25519 key SHA256:" "$log"
+install "$1" ssh.tar --only-signed
+
+expect_failure "$1" "SSH signature does not match the package" ssh-tampered.tar
+# A minisign signature is not an SSH signature.
+expect_failure "$1" "Signature file is not a valid SSH signature" signing-test.tar
 
 # from quick-install
 #"$1" binstall --force --strategies quick-install --no-confirm --only-signed --target x86_64-unknown-linux-musl zellij@0.38.2
