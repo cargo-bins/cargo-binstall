@@ -575,6 +575,7 @@ mod test {
         num::{NonZeroU16, NonZeroU64},
     };
 
+    use binstalk_git_repo_api::release_assets::ForgeTokens;
     use binstalk_types::crate_info::RenderedWith;
 
     use super::*;
@@ -1299,5 +1300,119 @@ mod test {
         assert!(found.gh_release_artifact_url.is_some());
         assert_eq!(asset(Some(found)).as_deref(), Some(assets[2]));
         assert_eq!(repo_cache.release_artifacts_len(), 1);
+    }
+
+    /// The private GitLab repository `CI_UNIT_TEST_GITLAB_REPO`, and the
+    /// token `CI_UNIT_TEST_GITLAB_TOKEN` that can read it, if both are set.
+    ///
+    /// It has the tag `v0.1.0`, and a release of it with the link
+    /// `binaries/a-x86_64-unknown-linux-musl.tgz` (its `direct_asset_path`)
+    /// to `a/0.1.0/a-x86_64-unknown-linux-musl.tgz` in the generic package
+    /// registry of the project, a gzipped tarball.
+    fn private_gitlab_repo() -> Option<(String, ForgeTokens)> {
+        let get = |name| env::var(name).ok().filter(|var: &String| !var.is_empty());
+        let repo = get("CI_UNIT_TEST_GITLAB_REPO")?;
+        let token = get("CI_UNIT_TEST_GITLAB_TOKEN")?;
+
+        let mut tokens = ForgeTokens::default();
+        let host = Url::parse(&repo).unwrap().host_str().unwrap().to_owned();
+        tokens.add_gitlab(
+            &host,
+            GitLabToken::access_token(token.into_boxed_str().into()),
+        );
+        Some((repo.trim_end_matches('/').to_owned(), tokens))
+    }
+
+    /// The probe of the candidates `{tag}/{filepath}` of `repo` on GitLab.
+    async fn new_gitlab_probe(repo: &str, tokens: ForgeTokens, assets: &[&str]) -> Probe {
+        let candidates = assets
+            .iter()
+            .map(|asset| {
+                let (tag, filepath) = asset.split_once('/').unwrap();
+                let url = Url::parse(&format!("{repo}/-/releases/{tag}/downloads/{filepath}"));
+                Candidate::new(
+                    url.unwrap(),
+                    PkgFmt::Tgz,
+                    Some(".tgz"),
+                    None,
+                    OTHER_TEMPLATE.into(),
+                    Some(repo),
+                    Some(Forge::GitLab),
+                )
+            })
+            .collect();
+
+        let gh_api_client = GhApiClient::new(client(), None);
+        let data = Data::new("a".into(), "0.1.0".into(), Some(repo.into()))
+            .with_forge_tokens(Arc::new(tokens));
+        let info = data.get_repo_info(&gh_api_client).await.unwrap().unwrap();
+        let is_repo_private = info.is_private;
+        Probe::new(
+            Arc::new(data),
+            client(),
+            gh_api_client,
+            Some(repo),
+            None,
+            is_repo_private,
+            candidates,
+        )
+    }
+
+    const GITLAB_ASSETS: &[&str] = &[
+        "v0.1.0/binaries/a-x86_64-unknown-linux-musl.zip",
+        "0.1.0/binaries/a-x86_64-unknown-linux-musl.tgz",
+        "v0.1.0/binaries/a-x86_64-unknown-linux-musl.tgz",
+    ];
+
+    /// Needs `CI_UNIT_TEST_GITLAB_REPO` and `CI_UNIT_TEST_GITLAB_TOKEN`, see
+    /// [`private_gitlab_repo`].
+    #[tokio::test]
+    async fn test_probe_private_gitlab_repo() {
+        let Some((repo, tokens)) = private_gitlab_repo() else {
+            return;
+        };
+
+        let mut probe = new_gitlab_probe(&repo, tokens, GITLAB_ASSETS).await;
+        // GitLab asked to sign in for its page.
+        assert!(probe.shared.is_repo_private);
+
+        // The git server was asked with the token.
+        probe.drop_missing_tags().await;
+        assert_eq!(probe.candidates.len(), 2);
+
+        let found = probe.resolve().await.unwrap().unwrap();
+        assert_eq!(
+            found.url.path(),
+            format!(
+                "{}/-/releases/{}/downloads/{}",
+                Url::parse(&repo).unwrap().path(),
+                "v0.1.0",
+                "binaries/a-x86_64-unknown-linux-musl.tgz"
+            )
+        );
+
+        // Downloaded from the package registry, with the token.
+        let (url, token) = found.gitlab_download.unwrap();
+        assert!(url.path().starts_with("/api/v4/projects/"), "{url}");
+        let response = token
+            .authenticate_download(client().get(url))
+            .send(true)
+            .await
+            .unwrap();
+        let tgz = response.bytes().await.unwrap();
+        assert_eq!(tgz.get(..2), Some(&[0x1f, 0x8b][..]), "not gzip");
+    }
+
+    /// The same repository without a token: GitLab tells nothing, and
+    /// nothing is mistaken for the package.
+    #[tokio::test]
+    async fn test_probe_private_gitlab_repo_without_token() {
+        let Some((repo, _)) = private_gitlab_repo() else {
+            return;
+        };
+
+        let probe = new_gitlab_probe(&repo, ForgeTokens::default(), GITLAB_ASSETS).await;
+        assert!(probe.shared.is_repo_private);
+        assert!(probe.resolve().await.unwrap().is_none());
     }
 }
