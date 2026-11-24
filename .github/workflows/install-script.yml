@@ -156,6 +156,70 @@ jobs:
         shell: bash
         run: cargo binstall -vV
 
+  # Containers that only have wget, to test the fallback for when curl is
+  # missing.
+  linux-wget:
+    name: linux-wget (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # busybox wget, which checks certificates through `ssl_client`
+          - name: alpine
+            image: alpine:latest
+            setup: ''
+            expect: success
+          # GNU wget
+          - name: debian
+            image: debian:stable-slim
+            setup: apt-get update && apt-get install -y --no-install-recommends wget ca-certificates
+            expect: success
+          # wget2 is Fedora's `wget`
+          - name: fedora
+            image: fedora:latest
+            setup: dnf install -y wget2-wget && rpm -e --nodeps "$(rpm -qf "$(command -v curl)")"
+            expect: success
+          # busybox wget built with its own TLS code, which does not check
+          # certificates, so the script must refuse it.
+          - name: busybox
+            image: busybox:musl
+            setup: ''
+            expect: refuse
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install `cargo-binstall` using scripts
+        env:
+          IMAGE: ${{ matrix.image }}
+          SETUP: ${{ matrix.setup }}
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          docker run --rm -e CI -e SETUP -e EXPECT -v "$PWD:/src:ro" "$IMAGE" sh -euc '
+            eval "$SETUP"
+            if command -v curl; then
+              echo "curl is installed, so this does not test the wget fallback"
+              exit 1
+            fi
+            if [ "$EXPECT" = refuse ]; then
+              if sh /src/install-from-binstall-release.sh 2> err.log; then
+                cat err.log
+                echo "the install script accepted a wget that does not check certificates"
+                exit 1
+              fi
+              cat err.log
+              grep -q "This wget does not validate TLS certificates" err.log
+              test ! -e "$HOME/.cargo/bin/cargo-binstall"
+            else
+              sh /src/install-from-binstall-release.sh
+              "$HOME/.cargo/bin/cargo-binstall" -vV
+            fi
+          '
+
   # Dummy job to have a stable name for the "all tests pass" requirement
   tests-pass:
     name: Install scripts test pass
@@ -163,6 +227,7 @@ jobs:
       - unix
       - windows
       - windows-bash
+      - linux-wget
     if: always() # always run even if dependencies fail
     runs-on: ubuntu-latest
     steps:
