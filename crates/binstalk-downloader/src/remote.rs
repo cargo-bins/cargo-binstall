@@ -102,7 +102,11 @@ fn hickory_resolver(dns: DnsResolver) -> Option<Arc<dyn reqwest::dns::Resolve>> 
     match dns {
         DnsResolver::System => None,
         #[cfg(feature = "hickory-dns")]
-        DnsResolver::Hickory => Some(Arc::new(TrustDnsResolver::default())),
+        DnsResolver::Hickory => Some(Arc::new(TrustDnsResolver::new())),
+        #[cfg(feature = "hickory-dns")]
+        DnsResolver::HickoryWithSystemFallback => {
+            Some(Arc::new(TrustDnsResolver::with_system_fallback()))
+        }
     }
 }
 
@@ -549,8 +553,11 @@ mod tests {
 
     #[cfg(feature = "hickory-dns")]
     #[test]
-    fn dns_resolver_defaults_to_hickory() {
-        assert_eq!(DnsResolver::default(), DnsResolver::Hickory);
+    fn dns_resolver_defaults_to_hickory_with_system_fallback() {
+        assert_eq!(
+            DnsResolver::default(),
+            DnsResolver::HickoryWithSystemFallback
+        );
     }
 
     #[cfg(not(feature = "hickory-dns"))]
@@ -568,12 +575,17 @@ mod tests {
     #[test]
     fn hickory_dns_installs_custom_resolver() {
         assert!(hickory_resolver(DnsResolver::Hickory).is_some());
+        assert!(hickory_resolver(DnsResolver::HickoryWithSystemFallback).is_some());
     }
 
     #[test]
     fn client_builds_with_either_dns_resolver() {
         #[cfg(feature = "hickory-dns")]
-        let resolvers = [DnsResolver::System, DnsResolver::Hickory];
+        let resolvers = [
+            DnsResolver::System,
+            DnsResolver::Hickory,
+            DnsResolver::HickoryWithSystemFallback,
+        ];
         #[cfg(not(feature = "hickory-dns"))]
         let resolvers = [DnsResolver::System];
 

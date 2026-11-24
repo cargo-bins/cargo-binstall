@@ -218,13 +218,13 @@ Some crate installation strategies may collect anonymized usage statistics by de
    Note that this is insecure and not recommended outside of testing.
 * `--dns <RESOLVER>` — Select the DNS resolver used for all network requests.
 
-   `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`) instead, which helps on hosts where hickory-dns cannot resolve names, for example behind some VPNs or in containers that rely on NSS. The value can also be set with the `BINSTALL_DNS` environment variable.
+   `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`) instead, which helps on hosts where hickory-dns cannot resolve names, for example behind some VPNs or in containers that rely on NSS. `auto` (the default) uses hickory-dns, and switches to `system` for the rest of the run once a lookup fails for any reason other than the name not existing. Pass `hickory` to report hickory-dns errors instead. The value can also be set with the `BINSTALL_DNS` environment variable.
 
-   `hickory` is only available when cargo-binstall was built with the `trust-dns` feature (enabled by default); without it `system` is the only resolver.
+   `auto` and `hickory` are only available when cargo-binstall was built with the `trust-dns` feature (enabled by default); without it `system` is the only resolver.
 
-  Default value: `hickory`
+  Default value: `auto`
 
-  Possible values: `system`, `hickory`
+  Possible values: `auto`, `hickory`, `system`
 
 * `--root-certificates <PATH>` — Specify the root certificates to use for https connections, in addition to default system-wide ones
 * `--json-output` — Print logs in json format to be parsable

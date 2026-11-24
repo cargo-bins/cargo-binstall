@@ -1,4 +1,12 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    fmt,
+    net::SocketAddr,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 #[cfg(windows)]
 use std::io;
@@ -11,6 +19,7 @@ use hickory_resolver::{
         CLOUDFLARE, GOOGLE, LookupIpStrategy, NameServerConfig, ResolverConfig, ResolverOpts,
         ServerGroup,
     },
+    net::NetError,
 };
 
 #[cfg(any(windows, target_vendor = "apple"))]
@@ -24,24 +33,170 @@ use netdev::Interface;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-#[derive(Debug, Default, Clone)]
-pub struct TrustDnsResolver(Arc<OnceCell<TokioAsyncResolver>>);
+/// Resolves names with hickory-dns, optionally retrying lookups it cannot answer with
+/// the operating system's resolver (`getaddrinfo`).
+#[derive(Debug, Clone)]
+pub struct TrustDnsResolver(Arc<Inner>);
+
+struct Inner {
+    resolver: OnceCell<TokioAsyncResolver>,
+    /// Resolver to retry with when hickory-dns fails, `None` to report its error as is.
+    fallback: Option<Arc<dyn Resolve>>,
+    /// Set once hickory-dns has failed and `fallback` took over: every later lookup goes
+    /// straight to `fallback`, so a hickory-dns that times out on this host costs that
+    /// timeout once per run instead of once per hostname.
+    use_fallback: AtomicBool,
+}
+
+impl fmt::Debug for Inner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TrustDnsResolver")
+            .field("resolver", &self.resolver)
+            .field("fallback_to_system", &self.fallback.is_some())
+            .field("use_fallback", &self.use_fallback)
+            .finish()
+    }
+}
+
+impl TrustDnsResolver {
+    /// hickory-dns only, its errors are returned as is.
+    pub fn new() -> Self {
+        Self::with_fallback(None)
+    }
+
+    /// hickory-dns, falling back to the operating system's resolver (`getaddrinfo`).
+    pub fn with_system_fallback() -> Self {
+        Self::with_fallback(Some(Arc::new(SystemResolver)))
+    }
+
+    fn with_fallback(fallback: Option<Arc<dyn Resolve>>) -> Self {
+        Self(Arc::new(Inner {
+            resolver: OnceCell::new(),
+            fallback,
+            use_fallback: AtomicBool::new(false),
+        }))
+    }
+
+    #[cfg(test)]
+    fn from_parts(resolver: TokioAsyncResolver, fallback: Option<Arc<dyn Resolve>>) -> Self {
+        let this = Self::with_fallback(fallback);
+        this.0.resolver.set(resolver).unwrap();
+        this
+    }
+
+    async fn lookup_hickory(&self, name: &str) -> Result<Addrs, HickoryError> {
+        let resolver = self
+            .0
+            .resolver
+            .get_or_try_init(new_resolver)
+            .map_err(HickoryError::Init)?;
+
+        let lookup = resolver
+            .lookup_ip(name)
+            .await
+            .map_err(HickoryError::Lookup)?;
+        Ok(Box::new(
+            lookup
+                .iter()
+                .map(|ip| SocketAddr::new(ip, 0))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        ))
+    }
+}
 
 impl Resolve for TrustDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
-        let resolver = self.clone();
+        let this = self.clone();
         Box::pin(async move {
-            let resolver = resolver.0.get_or_try_init(new_resolver)?;
+            let inner = &*this.0;
 
-            let lookup = resolver.lookup_ip(name.as_str()).await?;
-            let addrs: Addrs = Box::new(
-                lookup
-                    .iter()
-                    .map(|ip| SocketAddr::new(ip, 0))
-                    .collect::<Vec<_>>()
-                    .into_iter(),
-            );
-            Ok(addrs)
+            let Some(fallback) = &inner.fallback else {
+                return Ok(this.lookup_hickory(name.as_str()).await?);
+            };
+
+            if !inner.use_fallback.load(Ordering::Relaxed) {
+                let err = match this.lookup_hickory(name.as_str()).await {
+                    Ok(addrs) => return Ok(addrs),
+                    Err(err) if err.is_definitive() => return Err(err.into()),
+                    Err(err) => err,
+                };
+
+                if !inner.use_fallback.swap(true, Ordering::Relaxed) {
+                    debug!(
+                        "hickory-dns failed to resolve {}: {err}; \
+                        using the system DNS resolver (getaddrinfo) from now on",
+                        name.as_str()
+                    );
+                }
+
+                return fallback.resolve(name).await.map_err(|system| {
+                    Box::new(FallbackError {
+                        hickory: err,
+                        system,
+                    }) as BoxError
+                });
+            }
+
+            fallback.resolve(name).await
+        })
+    }
+}
+
+#[derive(Debug)]
+enum HickoryError {
+    /// The resolver could not be built, e.g. the system DNS configuration is unusable.
+    Init(BoxError),
+    Lookup(NetError),
+}
+
+impl HickoryError {
+    /// Whether a nameserver answered that the name has no address (NXDOMAIN, or NODATA).
+    ///
+    /// The system resolver would get the same answer, so retrying with it only costs
+    /// another round trip.
+    fn is_definitive(&self) -> bool {
+        matches!(self, Self::Lookup(err) if err.is_no_records_found())
+    }
+}
+
+impl fmt::Display for HickoryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Init(err) => fmt::Display::fmt(err, f),
+            Self::Lookup(err) => fmt::Display::fmt(err, f),
+        }
+    }
+}
+
+impl std::error::Error for HickoryError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Init(err) => err.source(),
+            Self::Lookup(err) => err.source(),
+        }
+    }
+}
+
+/// Both hickory-dns and the system resolver failed to resolve a name.
+#[derive(Debug, thiserror::Error)]
+#[error("hickory-dns failed: {hickory}; the system DNS resolver (getaddrinfo) failed too")]
+struct FallbackError {
+    hickory: HickoryError,
+    #[source]
+    system: BoxError,
+}
+
+/// The operating system's resolver (`getaddrinfo`), which is what reqwest uses when no
+/// resolver is configured: `getaddrinfo` blocks, so it runs on tokio's blocking pool.
+#[derive(Debug)]
+struct SystemResolver;
+
+impl Resolve for SystemResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        Box::pin(async move {
+            let addrs = tokio::net::lookup_host((name.as_str(), 0)).await?;
+            Ok(Box::new(addrs.collect::<Vec<_>>().into_iter()) as Addrs)
         })
     }
 }
@@ -445,5 +600,149 @@ mod tests {
             opts.timeout <= Duration::from_millis(750),
             "fallback per-query timeout should stay aggressive so blocked transports fail fast"
         );
+    }
+}
+
+#[cfg(test)]
+mod fallback_tests {
+    use std::{
+        net::{IpAddr, Ipv4Addr, SocketAddr},
+        str::FromStr,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::Duration,
+    };
+
+    use hickory_resolver::config::{
+        ConnectionConfig, NameServerConfig, ResolveHosts, ResolverConfig, ResolverOpts,
+    };
+    use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+
+    use super::{FallbackError, TokioAsyncResolver, TrustDnsResolver};
+
+    const FALLBACK_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1));
+
+    /// Stands in for `getaddrinfo`, counting how often it is asked.
+    #[derive(Debug, Default)]
+    struct StubSystem {
+        calls: AtomicUsize,
+        fail: bool,
+    }
+
+    impl Resolve for StubSystem {
+        fn resolve(&self, _name: Name) -> Resolving {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            let fail = self.fail;
+            Box::pin(async move {
+                if fail {
+                    Err("stub system resolver failed".into())
+                } else {
+                    Ok(Box::new(vec![SocketAddr::new(FALLBACK_IP, 0)].into_iter()) as Addrs)
+                }
+            })
+        }
+    }
+
+    /// A hickory resolver whose only nameserver refuses TCP connections, so every
+    /// lookup that reaches the network fails fast without depending on it.
+    fn unreachable_hickory() -> TokioAsyncResolver {
+        let port = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let mut connection = ConnectionConfig::tcp();
+        connection.port = port;
+
+        let mut config = ResolverConfig::default();
+        config.add_name_server(NameServerConfig::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            true,
+            vec![connection],
+        ));
+        let mut opts = ResolverOpts::default();
+        opts.timeout = Duration::from_millis(500);
+        opts.attempts = 0;
+        opts.use_hosts_file = ResolveHosts::Never;
+
+        let mut builder = TokioAsyncResolver::builder_with_config(config, Default::default());
+        *builder.options_mut() = opts;
+        builder.build().unwrap()
+    }
+
+    fn ips(addrs: Addrs) -> Vec<IpAddr> {
+        addrs.map(|addr| addr.ip()).collect()
+    }
+
+    fn name(s: &str) -> Name {
+        Name::from_str(s).unwrap()
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_system_and_sticks_to_it() {
+        let system = Arc::new(StubSystem::default());
+        let resolver = TrustDnsResolver::from_parts(unreachable_hickory(), Some(system.clone()));
+
+        let addrs = resolver.resolve(name("example.com")).await.unwrap();
+        assert_eq!(ips(addrs), [FALLBACK_IP]);
+        assert_eq!(system.calls.load(Ordering::Relaxed), 1);
+
+        // Later lookups skip hickory-dns, even for names it answers locally.
+        let addrs = resolver.resolve(name("localhost")).await.unwrap();
+        assert_eq!(ips(addrs), [FALLBACK_IP]);
+        assert_eq!(system.calls.load(Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test]
+    async fn explicit_hickory_does_not_fall_back() {
+        let resolver = TrustDnsResolver::from_parts(unreachable_hickory(), None);
+
+        let err = resolver.resolve(name("example.com")).await.err().unwrap();
+        assert!(err.downcast_ref::<FallbackError>().is_none(), "{err:?}");
+    }
+
+    #[tokio::test]
+    async fn nxdomain_is_not_retried() {
+        let system = Arc::new(StubSystem::default());
+        let resolver = TrustDnsResolver::from_parts(unreachable_hickory(), Some(system.clone()));
+
+        // hickory-dns answers NXDOMAIN for `.invalid` (RFC 6761) without a query.
+        assert!(resolver.resolve(name("binstall.invalid")).await.is_err());
+        assert_eq!(system.calls.load(Ordering::Relaxed), 0);
+
+        // An answer from hickory-dns is used as is.
+        let addrs = resolver.resolve(name("localhost")).await.unwrap();
+        assert!(ips(addrs).iter().all(IpAddr::is_loopback));
+        assert_eq!(system.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn reports_both_errors_when_system_fails_too() {
+        let system = Arc::new(StubSystem {
+            fail: true,
+            ..Default::default()
+        });
+        let resolver = TrustDnsResolver::from_parts(unreachable_hickory(), Some(system.clone()));
+
+        let err = resolver.resolve(name("example.com")).await.err().unwrap();
+        let err = err.downcast_ref::<FallbackError>().expect("FallbackError");
+        assert!(err.to_string().starts_with("hickory-dns failed: "), "{err}");
+        assert_eq!(
+            std::error::Error::source(err).unwrap().to_string(),
+            "stub system resolver failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn system_resolver_resolves_localhost() {
+        let addrs = super::SystemResolver
+            .resolve(name("localhost"))
+            .await
+            .unwrap();
+        let ips = ips(addrs);
+        assert!(!ips.is_empty());
+        assert!(ips.iter().all(IpAddr::is_loopback), "{ips:?}");
     }
 }

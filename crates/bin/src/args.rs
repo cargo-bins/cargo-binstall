@@ -474,11 +474,13 @@ pub struct Args {
     /// `hickory` uses the built-in hickory-dns resolver, which reads the system nameservers itself
     /// and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`)
     /// instead, which helps on hosts where hickory-dns cannot resolve names, for example behind
-    /// some VPNs or in containers that rely on NSS. The value can also be set with the
-    /// `BINSTALL_DNS` environment variable.
+    /// some VPNs or in containers that rely on NSS. `auto` (the default) uses hickory-dns, and
+    /// switches to `system` for the rest of the run once a lookup fails for any reason other than
+    /// the name not existing. Pass `hickory` to report hickory-dns errors instead. The value can
+    /// also be set with the `BINSTALL_DNS` environment variable.
     ///
-    /// `hickory` is only available when cargo-binstall was built with the `trust-dns` feature
-    /// (enabled by default); without it `system` is the only resolver.
+    /// `auto` and `hickory` are only available when cargo-binstall was built with the `trust-dns`
+    /// feature (enabled by default); without it `system` is the only resolver.
     #[clap(
         help_heading = "Options",
         long,
@@ -643,19 +645,23 @@ impl From<TLSVersion> for remote::TLSVersion {
 
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq, ValueEnum)]
 pub(crate) enum DnsResolver {
-    #[cfg_attr(not(feature = "trust-dns"), default)]
-    System,
     #[cfg(feature = "trust-dns")]
     #[default]
+    Auto,
+    #[cfg(feature = "trust-dns")]
     Hickory,
+    #[cfg_attr(not(feature = "trust-dns"), default)]
+    System,
 }
 
 impl From<DnsResolver> for remote::DnsResolver {
     fn from(dns: DnsResolver) -> Self {
         match dns {
-            DnsResolver::System => remote::DnsResolver::System,
+            #[cfg(feature = "trust-dns")]
+            DnsResolver::Auto => remote::DnsResolver::HickoryWithSystemFallback,
             #[cfg(feature = "trust-dns")]
             DnsResolver::Hickory => remote::DnsResolver::Hickory,
+            DnsResolver::System => remote::DnsResolver::System,
         }
     }
 }
@@ -1040,9 +1046,13 @@ mod test {
 
     #[cfg(feature = "trust-dns")]
     #[test]
-    fn dns_defaults_to_hickory() {
+    fn dns_defaults_to_auto() {
         let args = Args::try_parse_from(["cargo-binstall", "ripgrep"]).unwrap();
-        assert_eq!(args.dns, DnsResolver::Hickory);
+        assert_eq!(args.dns, DnsResolver::Auto);
+        assert_eq!(
+            remote::DnsResolver::from(args.dns),
+            remote::DnsResolver::HickoryWithSystemFallback
+        );
     }
 
     #[cfg(not(feature = "trust-dns"))]
@@ -1052,6 +1062,7 @@ mod test {
         assert_eq!(args.dns, DnsResolver::System);
 
         assert!(Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).is_err());
+        assert!(Args::try_parse_from(["cargo-binstall", "--dns", "auto", "ripgrep"]).is_err());
     }
 
     #[test]
@@ -1064,6 +1075,15 @@ mod test {
             let args =
                 Args::try_parse_from(["cargo-binstall", "--dns", "hickory", "ripgrep"]).unwrap();
             assert_eq!(args.dns, DnsResolver::Hickory);
+            // An explicit `hickory` must not fall back to the system resolver.
+            assert_eq!(
+                remote::DnsResolver::from(args.dns),
+                remote::DnsResolver::Hickory
+            );
+
+            let args =
+                Args::try_parse_from(["cargo-binstall", "--dns", "auto", "ripgrep"]).unwrap();
+            assert_eq!(args.dns, DnsResolver::Auto);
         }
 
         assert!(

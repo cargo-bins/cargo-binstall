@@ -58,6 +58,7 @@ tokio = { version = "1.52.3", features = [
     "rt-multi-thread",
     "sync",
     "time",
+    "net",
     "fs",
 ], default-features = false }
 astral-tokio-tar = "0.7.0"
