@@ -310,7 +310,7 @@ impl super::Fetcher for GhCrateMeta {
             );
 
             // Try how a previous version was found first, before any other
-            // request: one URL, instead of all of them.
+            // request: normally one URL, instead of all of them.
             //
             // Only a hint that is still one of the crate's templates is used,
             // and only if it agrees with the crate's pkg-fmt, if any.

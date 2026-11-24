@@ -1,8 +1,9 @@
 //! Checking which of the URLs a package may be at exists, with as few
 //! requests as possible.
 //!
-//! [`Candidate`]s are rendered once per target. The one a previous version
-//! was found at is checked first, see [`Probe::resolve_hint`]. The others are narrowed down before any of them
+//! [`Candidate`]s are rendered once per target. The ones of the `pkg-url` a
+//! previous version was found with are checked first, see
+//! [`Probe::resolve_hint`]. The others are narrowed down before any of them
 //! is checked, see [`Probe::resolve`]: by which release tags exist, with one
 //! request to the repository's git server, then for a public GitHub
 //! repository by the releases' asset lists on github.com, which cost no API
@@ -115,41 +116,47 @@ impl Probe {
         }
     }
 
-    /// Check the candidate a previous version was found with, before any
-    /// other request: with GET, or with the API for a private GitHub
-    /// repository, whose assets can't be downloaded without it.
+    /// Check the candidates of the `pkg_url` and `pkg_fmt` a previous
+    /// version was found with, one at a time, before any other request: with
+    /// GET, or with the API for a private GitHub repository, whose assets
+    /// can't be downloaded without it. A hint that records what else the URL
+    /// was rendered with has only one.
     ///
-    /// The `pkg_url`, `pkg_fmt` and what else the URL was rendered with pick
-    /// one candidate. If it is not found, it is dropped, so
-    /// [`Probe::resolve`] doesn't check it again.
+    /// The ones not found are dropped, so [`Probe::resolve`] doesn't check
+    /// them again.
     ///
-    /// A hint written before what else the URL was rendered with was
-    /// recorded is left to [`Probe::resolve`], which needs fewer requests than
-    /// checking each of its candidates, and whose hint then records it.
+    /// More than two, one per archive suffix and `{ target-arch }` name of an
+    /// older hint, are left to [`Probe::resolve`], which needs fewer requests
+    /// for them.
     pub(super) async fn resolve_hint(
         &mut self,
         hint: &PkgUrlHint,
     ) -> Result<Option<Resolved>, FetchError> {
-        let Some(rendered_with) = &hint.rendered_with else {
-            debug!("The hint doesn't record what its URL was rendered with");
-            return Ok(None);
-        };
-
-        let Some(i) = self.candidates.iter().position(|candidate| {
+        let is_hinted = |candidate: &Candidate| {
             candidate.pkg_fmt == hint.pkg_fmt
                 && *candidate.pkg_url == *hint.pkg_url
-                && candidate.archive_suffix == rendered_with.archive_suffix.as_deref()
-                && candidate.target_arch == rendered_with.target_arch.as_deref()
-        }) else {
-            return Ok(None);
+                && hint.rendered_with.as_ref().is_none_or(|rendered_with| {
+                    candidate.archive_suffix == rendered_with.archive_suffix.as_deref()
+                        && candidate.target_arch == rendered_with.target_arch.as_deref()
+                })
         };
-
-        let candidate = self.candidates.swap_remove(i);
-        if self.shared.is_repo_private {
-            self.shared.check(candidate).await
-        } else {
-            self.shared.check_with_get(candidate).await
+        if self.candidates.iter().positions(is_hinted).nth(2).is_some() {
+            debug!("Too many candidates for the hint to check one at a time");
+            return Ok(None);
         }
+
+        while let Some(i) = self.candidates.iter().position(is_hinted) {
+            let candidate = self.candidates.swap_remove(i);
+            let resolved = if self.shared.is_repo_private {
+                self.shared.check(candidate).await?
+            } else {
+                self.shared.check_with_get(candidate).await?
+            };
+            if resolved.is_some() {
+                return Ok(resolved);
+            }
+        }
+        Ok(None)
     }
 
     /// Check all the remaining candidates, returning the first one found:
@@ -870,11 +877,41 @@ mod test {
         let gh_api_client = GhApiClient::new(client(), None);
         let musl_tgz = "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz";
 
-        let tgz = |asset, pkg_url, archive_suffix, target_arch| {
+        // A hint written before `rendered_with` was recorded.
+        let candidates = vec![
+            new_candidate(
+                BINSTALL,
+                "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.zip",
+                TEMPLATE,
+            ),
+            new_candidate(BINSTALL, musl_tgz, OTHER_TEMPLATE),
+            new_candidate(BINSTALL, musl_tgz, TEMPLATE),
+        ];
+        let mut probe = new_probe(&gh_api_client, BINSTALL, candidates).await;
+
+        let found = probe.resolve_hint(&hint(PkgFmt::Tgz, None)).await.unwrap();
+        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+        // The one not found is dropped, the one of another template is
+        // left for `resolve`.
+        assert_eq!(probe.candidates.len(), 1);
+        assert_eq!(&*probe.candidates[0].pkg_url, OTHER_TEMPLATE);
+
+        // Another pkg-fmt.
+        assert!(
+            probe
+                .resolve_hint(&hint(PkgFmt::Zip, None))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(probe.candidates.len(), 1);
+
+        // More than two are left to `resolve`, without a request.
+        let tgz = |asset, archive_suffix, target_arch| {
             new_candidate_with(
                 BINSTALL,
                 asset,
-                pkg_url,
+                TEMPLATE,
                 PkgFmt::Tgz,
                 archive_suffix,
                 target_arch,
@@ -884,72 +921,17 @@ mod test {
             vec![
                 tgz(
                     "v0.20.1/cargo-binstall-amd64-unknown-linux-musl.tgz",
-                    TEMPLATE,
                     Some(".tgz"),
                     Some("amd64"),
                 ),
                 tgz(
                     "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
-                    TEMPLATE,
                     Some(".tar.gz"),
                     None,
                 ),
-                tgz(musl_tgz, OTHER_TEMPLATE, Some(".tgz"), None),
-                tgz(musl_tgz, TEMPLATE, Some(".tgz"), None),
+                tgz(musl_tgz, Some(".tgz"), None),
             ]
         };
-        let rendered_with = |target_arch: Option<&str>| {
-            Some(RenderedWith {
-                archive_suffix: Some(".tgz".into()),
-                target_arch: target_arch.map(Into::into),
-            })
-        };
-
-        // The one candidate of the template, archive suffix and
-        // architecture's name it was found with.
-        let mut probe = new_probe(&gh_api_client, BINSTALL, candidates()).await;
-        let found = probe
-            .resolve_hint(&hint(PkgFmt::Tgz, rendered_with(None)))
-            .await
-            .unwrap();
-        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
-        assert_eq!(probe.candidates.len(), 3);
-        // Only that one was checked.
-        assert!(!probe.candidates.iter().any(|candidate| {
-            &*candidate.pkg_url == TEMPLATE
-                && candidate.archive_suffix == Some(".tgz")
-                && candidate.target_arch.is_none()
-        }));
-
-        // The alias it was found with: only that one is checked and dropped.
-        let mut probe = new_probe(&gh_api_client, BINSTALL, candidates()).await;
-        assert!(
-            probe
-                .resolve_hint(&hint(PkgFmt::Tgz, rendered_with(Some("amd64"))))
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(probe.candidates.len(), 3);
-        assert!(
-            probe
-                .candidates
-                .iter()
-                .all(|candidate| candidate.target_arch.is_none())
-        );
-
-        // Another pkg-fmt matches none.
-        assert!(
-            probe
-                .resolve_hint(&hint(PkgFmt::Zip, rendered_with(None)))
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(probe.candidates.len(), 3);
-
-        // A hint written before `rendered_with` was recorded is left to
-        // `resolve`, without a request.
         let mut probe = new_probe(&gh_api_client, BINSTALL, candidates()).await;
         assert!(
             probe
@@ -958,10 +940,43 @@ mod test {
                 .unwrap()
                 .is_none()
         );
-        assert_eq!(probe.candidates.len(), 4);
+        assert_eq!(probe.candidates.len(), 3);
         assert_eq!(
             asset(probe.resolve().await.unwrap()).as_deref(),
             Some(musl_tgz)
+        );
+
+        // A hint that records the archive suffix and the architecture's name
+        // matches only one.
+        let exact = hint(
+            PkgFmt::Tgz,
+            Some(RenderedWith {
+                archive_suffix: Some(".tgz".into()),
+                target_arch: None,
+            }),
+        );
+        let mut probe = new_probe(&gh_api_client, BINSTALL, candidates()).await;
+        let found = probe.resolve_hint(&exact).await.unwrap();
+        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+        assert_eq!(probe.candidates.len(), 2);
+
+        // The alias it was found with.
+        let amd64 = hint(
+            PkgFmt::Tgz,
+            Some(RenderedWith {
+                archive_suffix: Some(".tgz".into()),
+                target_arch: Some("amd64".into()),
+            }),
+        );
+        let mut probe = new_probe(&gh_api_client, BINSTALL, candidates()).await;
+        assert!(probe.resolve_hint(&amd64).await.unwrap().is_none());
+        // Only the one it named was checked and dropped.
+        assert_eq!(probe.candidates.len(), 2);
+        assert!(
+            probe
+                .candidates
+                .iter()
+                .all(|candidate| candidate.target_arch.is_none())
         );
     }
 
@@ -1004,13 +1019,7 @@ mod test {
         let candidates = vec![new_candidate(PRIVATE, assets[2], TEMPLATE)];
         let mut probe = new_probe(&gh_api_client, PRIVATE, candidates).await;
         let found = probe
-            .resolve_hint(&hint(
-                PkgFmt::Tgz,
-                Some(RenderedWith {
-                    archive_suffix: Some(".tgz".into()),
-                    target_arch: None,
-                }),
-            ))
+            .resolve_hint(&hint(PkgFmt::Tgz, None))
             .await
             .unwrap()
             .unwrap();
