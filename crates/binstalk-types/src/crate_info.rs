@@ -25,17 +25,18 @@ pub struct CrateInfo {
     pub source: CrateSource,
     pub target: CompactString,
     pub bins: Vec<CompactString>,
-    /// How the package was found on `target`, when it came from a default
+    /// How the package was found on `target`, when it came from a
     /// `pkg-url`, so that updating it can try that first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pkg_url_hint: Option<PkgUrlHint>,
 }
 
-/// A default `pkg-url` that a crate's package was found with.
+/// The `pkg-url` that a crate's package was found with, a default one or
+/// the crate's own.
 ///
-/// Binstall otherwise probes every default `pkg-url` x `pkg-fmt` combination
-/// on each install, which is a lot of requests and GitHub API usage for an
-/// update whose asset naming almost never changes.
+/// Binstall otherwise probes every `pkg-url` x `pkg-fmt` x archive suffix
+/// combination on each install, which is a lot of requests and GitHub API
+/// usage for an update whose asset naming almost never changes.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PkgUrlHint {
     /// The name `{ name }` was rendered with: the crate's, or its only
@@ -44,6 +45,25 @@ pub struct PkgUrlHint {
     /// The template, in the same syntax as `pkg-url` in `Cargo.toml`.
     pub pkg_url: CompactString,
     pub pkg_fmt: PkgFmt,
+    /// What else the URL was rendered with, so the hint renders to that one
+    /// URL. `None` in a hint written before it was recorded: then every URL
+    /// of `pkg_url` and `pkg_fmt` is tried.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendered_with: Option<RenderedWith>,
+}
+
+/// The parts of a `pkg-url` that can render to more than one value for the
+/// same target.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenderedWith {
+    /// The archive suffix, e.g. `.tar.gz`. `None` if `pkg_url` has none of
+    /// `{ format }`, `{ archive-format }` and `{ archive-suffix }`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive_suffix: Option<CompactString>,
+    /// The other name `{ target-arch }` was rendered as, e.g. `amd64`.
+    /// `None` for the architecture's own name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_arch: Option<CompactString>,
 }
 
 impl borrow::Borrow<str> for CrateInfo {
@@ -100,5 +120,50 @@ impl CrateSource {
             source_type: SourceType::Registry,
             url: MaybeOwned::Borrowed(cratesio_url()),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_pkg_url_hint_serde() {
+        // Written before `rendered_with` was recorded.
+        let old: PkgUrlHint = serde_json::from_str(
+            r#"{"name":"a","pkg_url":"{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }","pkg_fmt":"tgz"}"#,
+        )
+        .unwrap();
+        assert_eq!(old.rendered_with, None);
+        assert!(
+            !serde_json::to_string(&old)
+                .unwrap()
+                .contains("rendered_with")
+        );
+
+        let hint = PkgUrlHint {
+            rendered_with: Some(RenderedWith {
+                archive_suffix: Some(".tar.gz".into()),
+                target_arch: Some("amd64".into()),
+            }),
+            ..old.clone()
+        };
+        let json = serde_json::to_string(&hint).unwrap();
+        assert!(
+            json.ends_with(
+                r#""rendered_with":{"archive_suffix":".tar.gz","target_arch":"amd64"}}"#
+            ),
+            "{json}"
+        );
+        assert_eq!(serde_json::from_str::<PkgUrlHint>(&json).unwrap(), hint);
+
+        // The architecture's own name, and no archive suffix.
+        let hint = PkgUrlHint {
+            rendered_with: Some(RenderedWith::default()),
+            ..old
+        };
+        let json = serde_json::to_string(&hint).unwrap();
+        assert!(json.ends_with(r#""rendered_with":{}}"#), "{json}");
+        assert_eq!(serde_json::from_str::<PkgUrlHint>(&json).unwrap(), hint);
     }
 }
