@@ -23,7 +23,7 @@ use tokio::task;
 use url::{ParseError as UrlParseError, Url};
 
 mod auth;
-pub use auth::{RegistryAuth, ResolvedRegistry};
+pub use auth::{CredentialProvider, CredentialProviderError, RegistryAuth, ResolvedRegistry};
 
 #[cfg(feature = "git")]
 pub use simple_git::{GitError, GitUrl, GitUrlParseError};
@@ -120,6 +120,13 @@ pub enum RegistryError {
         "Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active."
     ))]
     AuthenticationRequired(Box<Url>),
+
+    #[error("failed to get a token for registry {registry}")]
+    CredentialProvider {
+        registry: CompactString,
+        #[source]
+        source: std::sync::Arc<dyn std::error::Error + Send + Sync + 'static>,
+    },
 }
 
 impl From<CargoTomlError> for RegistryError {
@@ -275,7 +282,13 @@ impl Registry {
         match self {
             #[cfg(feature = "git")]
             Registry::Git(registry) => registry.url().to_string(),
-            Registry::Sparse(registry) => format!("sparse+{}", registry.url()),
+            // Cargo requires a sparse index url to end with `/`, and passes
+            // it so to credential providers.
+            Registry::Sparse(registry) => {
+                let url = registry.url().as_str();
+                let slash = if url.ends_with('/') { "" } else { "/" };
+                format!("sparse+{url}{slash}")
+            }
         }
     }
 }

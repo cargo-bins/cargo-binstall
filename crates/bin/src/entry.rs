@@ -143,7 +143,11 @@ pub fn install_crates(
         let cargo_home = cargo_home.as_deref().unwrap_or(&cargo_root);
 
         if let Some(index) = args.index.clone() {
-            let resolved_registry = binstalk::registry::ResolvedRegistry::new(index, None);
+            // An index without a name can still use the global credential
+            // providers, like in cargo.
+            let registry_auth = resolve_registry_auth(&cargo_config, cargo_home, None, &index);
+            let resolved_registry =
+                binstalk::registry::ResolvedRegistry::new(index, Some(registry_auth));
             let cargo_install_index = resolved_registry.cargo_install_index_arg().into();
 
             (resolved_registry, None, Some(cargo_install_index))
@@ -181,7 +185,7 @@ pub fn install_crates(
             );
 
             (
-                binstalk::registry::ResolvedRegistry::new(registry, registry_auth),
+                binstalk::registry::ResolvedRegistry::new(registry, Some(registry_auth)),
                 registry_name.filter(|name| !name.eq_ignore_ascii_case("crates-io")),
                 None,
             )

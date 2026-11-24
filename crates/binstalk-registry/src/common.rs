@@ -79,7 +79,10 @@ pub(super) async fn parse_manifest(
     let mut digest = Sha256Digest::new(checksum);
 
     Download::from_response_with_data_verifier(
-        apply_auth(client.get(crate_url), auth).send(true).await?,
+        apply_auth(client.get(crate_url.clone()), auth, &crate_url, Vec::new())
+            .await?
+            .send(true)
+            .await?,
         &mut digest,
     )
     .and_visit_tar(TarBasedFmt::Tgz, &mut manifest_visitor)
@@ -95,12 +98,19 @@ pub(super) async fn parse_manifest(
     }
 }
 
-pub(super) fn apply_auth(request: RequestBuilder, auth: Option<&RegistryAuth>) -> RequestBuilder {
-    if let Some(auth) = auth {
-        request.header("Authorization", auth.token())
+/// * `url` - url of `request`
+/// * `headers` - see [`crate::CredentialProvider::get_token`]
+pub(super) async fn apply_auth(
+    request: RequestBuilder,
+    auth: Option<&RegistryAuth>,
+    url: &Url,
+    headers: Vec<String>,
+) -> Result<RequestBuilder, RegistryError> {
+    Ok(if let Some(auth) = auth {
+        request.header("Authorization", auth.token(url, headers).await?)
     } else {
         request
-    }
+    })
 }
 
 /// Return components of crate prefix

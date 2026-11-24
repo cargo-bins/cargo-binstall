@@ -53,7 +53,24 @@ impl SparseRegistry {
                                 return Err(RegistryError::AuthenticationRequired(Box::new(url)));
                             };
 
-                            apply_auth(client.get(url), Some(auth)).send(true).await?
+                            // Pass the headers on like cargo does, so that the
+                            // credential provider can read e.g. `WWW-Authenticate`.
+                            let headers = response
+                                .headers()
+                                .iter()
+                                .map(|(name, value)| {
+                                    format!(
+                                        "{}: {}",
+                                        name.as_str(),
+                                        value.to_str().unwrap_or_default()
+                                    )
+                                })
+                                .collect();
+
+                            apply_auth(client.get(url.clone()), Some(auth), &url, headers)
+                                .await?
+                                .send(true)
+                                .await?
                         }
                         _ => response.error_for_status()?,
                     };
@@ -85,7 +102,8 @@ impl SparseRegistry {
             path.push(&crate_name.to_lowercase());
         }
 
-        let response = apply_auth(client.get(url.clone()), auth)
+        let response = apply_auth(client.get(url.clone()), auth, &url, Vec::new())
+            .await?
             .send(false)
             .await?;
         let body = match response.status() {

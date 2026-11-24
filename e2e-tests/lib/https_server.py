@@ -27,6 +27,13 @@ of:
     {"ignore_range": true}
         the whole file from DIR with a 200, even if a range was asked for
 
+If the environment variable HTTPS_SERVER_AUTH is set to `PREFIX TOKEN`, a
+request for a path starting with PREFIX gets a `401 Unauthorized` with a
+`WWW-Authenticate: Cargo` header, unless its `Authorization` header is
+TOKEN. Such a request is logged with ` Authorization: yes` or
+` Authorization: no` appended, so that a test can check which ones carried
+it. The token itself is never logged.
+
 Otherwise a `Range: bytes=N-` request for a file is answered with a 206 and
 the rest of the file from byte N, unless an `If-Range` doesn't match the
 file's `Last-Modified`.
@@ -71,9 +78,20 @@ def serve(sock, directory, cert, key, request_log, routes_file):
                 with open(self.request_log, "a", newline="\n") as f:
                     range_header = self.headers.get("Range")
                     suffix = f" Range: {range_header}" if range_header else ""
+                    if self.needs_auth(path):
+                        authorized = "yes" if self.authorized() else "no"
+                        suffix += f" Authorization: {authorized}"
                     f.write(f"{self.command} {path}{suffix}\n")
+                if self.needs_auth(path) and not self.authorized():
+                    return {"status": 401, "headers": {"WWW-Authenticate": "Cargo"}}
                 actions = self.routes.get(path)
                 return actions.pop(0) if actions else None
+
+        def needs_auth(self, path):
+            return auth is not None and path.startswith(auth[0])
+
+        def authorized(self):
+            return self.headers.get("Authorization") == auth[1]
 
         def handle_action(self, action):
             if action is None:
@@ -149,6 +167,9 @@ def serve(sock, directory, cert, key, request_log, routes_file):
         def do_HEAD(self):
             if not self.handle_action(self.next_action()):
                 super().do_HEAD()
+
+    auth = os.environ.get("HTTPS_SERVER_AUTH")
+    auth = auth.split(" ", 1) if auth else None
 
     routes = {}
     if routes_file is not None:
