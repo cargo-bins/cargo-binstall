@@ -5,9 +5,11 @@
 //! previous version was found with are checked first, see
 //! [`Probe::resolve_hint`]. The others are narrowed down before any of them
 //! is checked, see [`Probe::resolve`]: by which release tags exist, with one
-//! request to the repository's git server, then for a public GitHub
-//! repository by the releases' asset lists on github.com, which cost no API
-//! quota, and only then with the API.
+//! request to the repository's git server, then by the releases' asset
+//! lists: on github.com for a public GitHub repository, which cost no API
+//! quota, or from the website of a repository on GitLab, Codeberg, Bitbucket
+//! or SourceForge. Only then with the GitHub API, or one request per
+//! candidate.
 
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -17,6 +19,7 @@ use binstalk_git_repo_api::{
         ReleaseAssetsPage,
     },
     git_refs,
+    release_assets::{self, AssetList, Forge, ListedAsset},
 };
 use compact_str::CompactString;
 use itertools::Itertools;
@@ -46,6 +49,8 @@ pub(super) struct Candidate {
     tag: Option<CompactString>,
     /// The GitHub release asset it is.
     gh_artifact: Option<GhReleaseArtifact>,
+    /// The release asset it is on another git hosting website.
+    listed: Option<ListedAsset>,
 }
 
 impl Candidate {
@@ -56,10 +61,14 @@ impl Candidate {
         target_arch: Option<&'static str>,
         pkg_url: Arc<str>,
         repo: Option<&str>,
+        forge: Option<Forge>,
     ) -> Self {
         Self {
             tag: repo.and_then(|repo| git_refs::release_tag(repo, &url)),
             gh_artifact: GhReleaseArtifact::try_extract_from_url(&url),
+            listed: repo
+                .zip(forge)
+                .and_then(|(repo, forge)| release_assets::locate(forge, repo, &url)),
             url,
             pkg_fmt,
             archive_suffix,
@@ -170,9 +179,11 @@ impl Probe {
     /// 2. For a public GitHub repository, check the candidates github.com's
     ///    asset lists have, and drop the ones they don't, see
     ///    [`Probe::check_on_web`].
-    /// 3. With a token, get the assets of the GitHub releases github.com
+    /// 3. The same with the asset lists of the other git hosting websites,
+    ///    see [`Probe::check_listed`].
+    /// 4. With a token, get the assets of the GitHub releases github.com
     ///    could not tell about in one GraphQL query.
-    /// 4. Check the rest at once.
+    /// 5. Check the rest at once.
     pub(super) async fn resolve(mut self) -> Result<Option<Resolved>, FetchError> {
         self.drop_missing_tags().await;
         if self.candidates.is_empty() {
@@ -188,6 +199,14 @@ impl Probe {
                 debug!("github.com has none of the candidates");
                 return Ok(None);
             }
+        }
+
+        if let Some(resolved) = self.check_listed().await? {
+            return Ok(Some(resolved));
+        }
+        if self.candidates.is_empty() {
+            debug!("The release asset lists have none of the candidates");
+            return Ok(None);
         }
 
         self.prefetch_gh_releases().await;
@@ -297,6 +316,55 @@ impl Probe {
                 // It might not list every asset.
                 ReleaseAssets::Listed(_) | ReleaseAssets::Unknown => {
                     unknown.append(&mut of_release)
+                }
+            }
+        }
+
+        self.candidates.append(&mut unknown);
+        Ok(None)
+    }
+
+    /// Look up the candidates of each release on a git hosting website
+    /// other than GitHub in the release's asset list, one request per
+    /// release. The ones it lists are checked with GET right away, returning
+    /// the first one found; the ones it doesn't are dropped.
+    ///
+    /// The ones of a list that may not be complete, or that couldn't be
+    /// fetched, are kept to check one at a time.
+    async fn check_listed(&mut self) -> Result<Option<Resolved>, FetchError> {
+        let mut unknown = Vec::new();
+
+        while let Some(listing) = self
+            .candidates
+            .iter()
+            .find_map(|candidate| Some(candidate.listed.as_ref()?.listing.clone()))
+        {
+            let of_release = self.candidates.extract_if(.., |candidate| {
+                candidate
+                    .listed
+                    .as_ref()
+                    .is_some_and(|listed| listed.listing == listing)
+            });
+            let mut of_release: Vec<Candidate> = of_release.collect();
+
+            let list = self.shared.data.repo_cache.asset_list(&listing);
+            let list = list
+                .get_or_init(|| AssetList::fetch(&self.shared.client, &listing))
+                .await;
+
+            let mut listed = Vec::new();
+            for candidate in of_release.drain(..) {
+                let name = &candidate.listed.as_ref().expect("filtered above").name;
+                match list.lists(name) {
+                    Some(true) => listed.push(candidate),
+                    Some(false) => (),
+                    None => unknown.push(candidate),
+                }
+            }
+            // Normally only one is listed, the others are other formats.
+            for candidate in listed {
+                if let Some(resolved) = self.shared.check_with_get(candidate).await? {
+                    return Ok(Some(resolved));
                 }
             }
         }
@@ -506,6 +574,7 @@ mod test {
             target_arch,
             pkg_url.into(),
             Some(repo),
+            None,
         )
     }
 
@@ -635,9 +704,16 @@ mod test {
             None,
             OTHER_TEMPLATE.into(),
             Some(repo),
+            Some(Forge::GitLab),
         );
         assert_eq!(candidate.tag.as_deref(), Some("v1.0.0"));
         assert!(candidate.gh_artifact.is_none());
+        let listed = candidate.listed.unwrap();
+        assert_eq!(
+            listed.listing.to_string(),
+            "https://gitlab.com/api/v4/projects/a%2Fb/releases/v1.0.0"
+        );
+        assert_eq!(listed.name, "a.tgz");
     }
 
     #[tokio::test]
@@ -731,6 +807,74 @@ mod test {
         // sometimes do.
         let repo = "https://github.com/Cargo-Bins/Cargo-Binstall";
         assert_eq!(probe(repo, &[musl_tgz]).await, on_web(musl_tgz, 1));
+    }
+
+    /// The candidates `{tag}/{filepath}` of the releases of glab on GitLab,
+    /// resolved like [`probe`]: `after_web` is the ones left once the asset
+    /// lists were asked.
+    async fn probe_gitlab(assets: &[&str]) -> Probed {
+        const GLAB: &str = "https://gitlab.com/gitlab-org/cli";
+
+        let candidates = assets
+            .iter()
+            .map(|asset| {
+                let (tag, filepath) = asset.split_once('/').unwrap();
+                let url = Url::parse(&format!("{GLAB}/-/releases/{tag}/downloads/{filepath}"));
+                Candidate::new(
+                    url.unwrap(),
+                    PkgFmt::Tgz,
+                    Some(".tgz"),
+                    None,
+                    OTHER_TEMPLATE.into(),
+                    Some(GLAB),
+                    Some(Forge::GitLab),
+                )
+            })
+            .collect();
+        let gh_api_client = GhApiClient::new(client(), None);
+        let mut probe = new_probe(&gh_api_client, GLAB, candidates).await;
+
+        probe.drop_missing_tags().await;
+        let after_tags = probe.candidates.len();
+
+        let found = probe.check_listed().await.unwrap();
+        let after_web = found.is_none().then_some(probe.candidates.len());
+        let found = found.map(|found| {
+            let path = found.url.path().to_owned();
+            let (_, rest) = path.split_once("/-/releases/").unwrap();
+            rest.replacen("/downloads/", "/", 1)
+        });
+        Probed {
+            found,
+            after_tags,
+            after_web,
+        }
+    }
+
+    /// A release on GitLab: its asset list is asked once, and only the asset
+    /// it lists is checked.
+    #[tokio::test]
+    async fn test_probe_gitlab() {
+        let tar_gz = "v1.131.0/glab_1.131.0_linux_amd64.tar.gz";
+        assert_eq!(
+            probe_gitlab(&[
+                "v1.131.0/glab_1.131.0_linux_amd64.zip",
+                "1.131.0/glab_1.131.0_linux_amd64.tar.gz",
+                tar_gz,
+            ])
+            .await,
+            on_web(tar_gz, 2)
+        );
+
+        // The list has every asset: the ones it doesn't have are dropped.
+        assert_eq!(
+            probe_gitlab(&[
+                "v1.131.0/glab-x86_64-unknown-linux-musl.tgz",
+                "v1.131.0/binaries/glab_1.131.0_linux_amd64.tar.gz",
+            ])
+            .await,
+            not_found(2, 0)
+        );
     }
 
     /// The next target, tried when one has nothing, reuses what the first

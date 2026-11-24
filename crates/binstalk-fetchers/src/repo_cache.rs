@@ -7,12 +7,14 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    hash::Hash,
     sync::{Arc, RwLock},
 };
 
 use binstalk_git_repo_api::{
     gh_api_client::{GhRelease, ReleaseArtifacts, ReleaseAssetsPage},
     git_refs::RepoTags,
+    release_assets::{AssetList, AssetListing},
 };
 use compact_str::CompactString;
 use tokio::sync::{Mutex, OnceCell};
@@ -24,8 +26,9 @@ pub(crate) struct RepoCache {
     pub(crate) info: OnceCell<Option<RepoInfo>>,
     /// Locked while the git server is asked, so a tag is asked once.
     pub(crate) tags: Mutex<Tags>,
-    release_assets_pages: Cells<ReleaseAssetsPage>,
-    release_artifacts: Cells<Option<ReleaseArtifacts>>,
+    release_assets_pages: Cells<GhRelease, ReleaseAssetsPage>,
+    release_artifacts: Cells<GhRelease, Option<ReleaseArtifacts>>,
+    asset_lists: Cells<AssetListing, AssetList>,
 }
 
 impl RepoCache {
@@ -44,6 +47,12 @@ impl RepoCache {
         release: &GhRelease,
     ) -> Arc<OnceCell<Option<ReleaseArtifacts>>> {
         self.release_artifacts.get(release)
+    }
+
+    /// Where the assets listed at `listing`, on a git hosting website other
+    /// than GitHub, are kept.
+    pub(crate) fn asset_list(&self, listing: &AssetListing) -> Arc<OnceCell<AssetList>> {
+        self.asset_lists.get(listing)
     }
 
     #[cfg(test)]
@@ -99,20 +108,20 @@ impl Tags {
 
 /// A value per release, each fetched once however many look it up at once.
 #[derive(Debug)]
-struct Cells<V>(RwLock<HashMap<GhRelease, Arc<OnceCell<V>>>>);
+struct Cells<K, V>(RwLock<HashMap<K, Arc<OnceCell<V>>>>);
 
-impl<V> Default for Cells<V> {
+impl<K, V> Default for Cells<K, V> {
     fn default() -> Self {
         Self(RwLock::default())
     }
 }
 
-impl<V> Cells<V> {
-    fn get(&self, release: &GhRelease) -> Arc<OnceCell<V>> {
-        if let Some(cell) = self.0.read().unwrap().get(release) {
+impl<K: Clone + Eq + Hash, V> Cells<K, V> {
+    fn get(&self, key: &K) -> Arc<OnceCell<V>> {
+        if let Some(cell) = self.0.read().unwrap().get(key) {
             return Arc::clone(cell);
         }
-        Arc::clone(self.0.write().unwrap().entry(release.clone()).or_default())
+        Arc::clone(self.0.write().unwrap().entry(key.clone()).or_default())
     }
 }
 

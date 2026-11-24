@@ -175,6 +175,7 @@ impl super::Fetcher for GhCrateMeta {
             let repo = info.map(|info| &info.repo);
             let subcrate = info.and_then(|info| info.subcrate.as_deref());
             let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
+            let forge = info.and_then(|info| info.repository_host.forge());
 
             let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -298,6 +299,7 @@ impl super::Fetcher for GhCrateMeta {
                             target_arch,
                             pkg_url_str.clone(),
                             repo,
+                            forge,
                         )
                     })
                 })
