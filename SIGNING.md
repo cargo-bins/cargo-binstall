@@ -1,6 +1,6 @@
 # Signature support
 
-Binstall supports verifying signatures of downloaded files, made with [minisign](#minisign), and [GitHub artifact attestations](#github-artifact-attestations) of GitHub release assets.
+Binstall supports verifying signatures of downloaded files, made with [minisign](#minisign) or keyless with [Sigstore](#sigstore), and [GitHub artifact attestations](#github-artifact-attestations) of GitHub release assets.
 
 This feature requires adding to the Cargo.toml metadata: no autodiscovery here!
 
@@ -73,6 +73,35 @@ The legacy signature format is not supported.
 The `pubkey` must be in the same format as minisign generates.
 It may or may not include the untrusted comment; it's ignored by Binstall so we recommend not.
 
+### Sigstore
+
+`algorithm` must be `"sigstore"`; `pubkey` is not used, `identity` and `issuer` are required.
+
+Sigstore signs with a short-lived certificate issued to an OIDC identity, such as a CI workflow or an email address, so there is no key to keep.
+Sign each package with [cosign](https://github.com/sigstore/cosign), which writes a bundle with the signature, the certificate and the transparency log entry:
+
+```console
+cosign sign-blob --bundle package-name.tar.zst.sigstore.json package-name.tar.zst
+```
+
+`package-name.tar.zst.sigstore.json` is the default signature file name for this algorithm.
+DSSE bundles, as made by `cosign attest-blob --bundle` or `actions/attest`, work too.
+
+```toml
+[package.metadata.binstall.signing]
+algorithm = "sigstore"
+# The certificate's identity (its subject alternative name). This is a
+# template, with the same variables as `pkg-url`.
+identity = "https://github.com/owner/repo/.github/workflows/release.yml@refs/tags/v{ version }"
+# The OIDC issuer of the certificate.
+issuer = "https://token.actions.githubusercontent.com"
+```
+
+Both must match exactly: for a CI workflow, the identity usually ends with the git ref the workflow ran on, hence the template.
+Some common issuers are `https://token.actions.githubusercontent.com` (GitHub Actions), `https://gitlab.com` (GitLab CI), `https://accounts.google.com` and `https://github.com/login/oauth` (people signing with their account).
+
+Bundles are verified against the Sigstore public-good and GitHub trusted roots built into Binstall; no other request is made.
+
 ### GitHub artifact attestations
 
 `algorithm` must be `"github-attestations"`; `pubkey` and `file` are not used.
@@ -113,10 +142,10 @@ The solution here is either:
 - Omit the `[...signing]` section in the source, and write the entire section on publish instead of just filling in the `pubkey`; signatures won't be checked for `--git` installs. Binstall uses this approach.
 - Instruct your users to use `--skip-signatures` if they want to install with `--git`.
 
-## Why not X? (Sigstore bundles, GPG, signify, with SSH keys, ...)
+## Why not X? (GPG, signify, with SSH keys, ...)
 
 We're open to pull requests adding algorithms!
-Sigstore's "keyless" signing is supported through [GitHub artifact attestations](#github-artifact-attestations); we're interested in Sigstore bundles from other CI providers too.
+Sigstore's "keyless" signing is supported, both [generally](#sigstore) and through [GitHub artifact attestations](#github-artifact-attestations).
 We chose minisign as the first supported algorithm as it's lightweight, fairly popular, and has zero options to choose from.
 
 ## There's a competing project that does package signature verification differently!

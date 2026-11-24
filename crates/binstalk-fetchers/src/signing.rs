@@ -7,12 +7,15 @@ use tracing::{error, trace};
 use crate::FetchError;
 
 mod github_attestations;
+mod sigstore;
 pub use github_attestations::GithubAttestationsVerifier;
+pub use sigstore::SigstoreVerifier;
 
 pub enum SignatureVerifier {
     Noop,
     Minisign(Box<MinisignVerifier>),
     GithubAttestations(Box<GithubAttestationsVerifier>),
+    Sigstore(Box<SigstoreVerifier>),
 }
 
 impl SignatureVerifier {
@@ -30,11 +33,15 @@ impl SignatureVerifier {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
             Self::GithubAttestations(v) => Ok(v.data_verifier()),
+            Self::Sigstore(v) => Ok(v.data_verifier()),
         }
     }
 
     pub fn info(&self) -> Option<String> {
-        self.trusted_comment().map(Into::into)
+        match self {
+            Self::Sigstore(v) => Some(v.info()),
+            _ => self.trusted_comment().map(Into::into),
+        }
     }
 
     /// The signature's trusted comment. It is only authenticated once the
@@ -43,7 +50,7 @@ impl SignatureVerifier {
         match self {
             Self::Noop => None,
             Self::Minisign(v) => Some(v.signature.trusted_comment()),
-            Self::GithubAttestations(_) => None,
+            Self::GithubAttestations(_) | Self::Sigstore(_) => None,
         }
     }
 }
