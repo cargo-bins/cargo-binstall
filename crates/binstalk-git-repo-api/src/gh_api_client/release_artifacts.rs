@@ -23,6 +23,10 @@ use super::{
 struct Artifact {
     name: CompactString,
     url: Url,
+    /// Like `sha256:<hex>`, computed by GitHub when the asset was uploaded.
+    /// Assets uploaded before June 2025 have none.
+    #[serde(default)]
+    digest: Option<CompactString>,
 }
 
 // Manually implement PartialEq and Hash to ensure it will always produce the
@@ -66,6 +70,11 @@ impl Artifacts {
         self.assets
             .get(artifact_name)
             .map(|artifact| artifact.url.clone())
+    }
+
+    /// The digest GitHub computed of the artifact, like `sha256:<hex>`.
+    pub(super) fn get_artifact_digest(&self, artifact_name: &str) -> Option<&str> {
+        self.assets.get(artifact_name)?.digest.as_deref()
     }
 }
 
@@ -137,7 +146,7 @@ impl fmt::Display for FilterCondition {
 fn write_release_field(query: &mut String, tag: &str, cond: &FilterCondition) {
     write!(
         query,
-        " release(tagName:{}) {{ releaseAssets({cond}) {{ nodes {{ name url }} pageInfo {{ endCursor hasNextPage }} }} }}",
+        " release(tagName:{}) {{ releaseAssets({cond}) {{ nodes {{ name url digest }} pageInfo {{ endCursor hasNextPage }} }} }}",
         GraphQLString(tag),
     )
     .expect("Writing to a String never fails");
@@ -352,8 +361,8 @@ mod test {
             batch_query(&repo(), ["v0.17.6", r#"cargo-audit/"v0.17.6""#]),
             concat!(
                 r#"query { repository(owner:"rustsec",name:"rustsec") {"#,
-                r#" r0: release(tagName:"v0.17.6") { releaseAssets(first:100) { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
-                r#" r1: release(tagName:"cargo-audit/\"v0.17.6\"") { releaseAssets(first:100) { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
+                r#" r0: release(tagName:"v0.17.6") { releaseAssets(first:100) { nodes { name url digest } pageInfo { endCursor hasNextPage } } }"#,
+                r#" r1: release(tagName:"cargo-audit/\"v0.17.6\"") { releaseAssets(first:100) { nodes { name url digest } pageInfo { endCursor hasNextPage } } }"#,
                 " } }",
             )
         );
@@ -369,7 +378,7 @@ mod test {
             ),
             concat!(
                 r#"query { repository(owner:"rustsec",name:"rustsec") {"#,
-                r#" release(tagName:"cargo-audit/\"v0.17.6\"") { releaseAssets(first:100,after:"Y3Vy") { nodes { name url } pageInfo { endCursor hasNextPage } } }"#,
+                r#" release(tagName:"cargo-audit/\"v0.17.6\"") { releaseAssets(first:100,after:"Y3Vy") { nodes { name url digest } pageInfo { endCursor hasNextPage } } }"#,
                 " } }",
             )
         );
@@ -381,11 +390,11 @@ mod test {
             r#"{"repository": {
                 "r0": null,
                 "r1": {"releaseAssets": {
-                    "nodes": [{"name": "a.tgz", "url": "https://github.com/rustsec/rustsec/releases/download/v1/a.tgz"}],
+                    "nodes": [{"name": "a.tgz", "url": "https://github.com/rustsec/rustsec/releases/download/v1/a.tgz", "digest": "sha256:ab"}],
                     "pageInfo": {"endCursor": "x", "hasNextPage": false}
                 }},
                 "r2": {"releaseAssets": {
-                    "nodes": [{"name": "b.tgz", "url": "https://github.com/rustsec/rustsec/releases/download/v2/b.tgz"}],
+                    "nodes": [{"name": "b.tgz", "url": "https://github.com/rustsec/rustsec/releases/download/v2/b.tgz", "digest": null}],
                     "pageInfo": {"endCursor": "y", "hasNextPage": true}
                 }}
             }}"#,
@@ -395,12 +404,15 @@ mod test {
         let releases = parse_batch(data, 3).unwrap();
         assert!(matches!(releases[0], BatchedRelease::NotFound));
         assert!(
-            matches!(&releases[1], BatchedRelease::Found(artifacts) if artifacts.get_artifact_url("a.tgz").is_some())
+            matches!(&releases[1], BatchedRelease::Found(artifacts) if artifacts.get_artifact_url("a.tgz").is_some()
+                && artifacts.get_artifact_digest("a.tgz") == Some("sha256:ab"))
         );
         assert!(matches!(
             &releases[2],
             BatchedRelease::Incomplete { artifacts, end_cursor }
-                if artifacts.get_artifact_url("b.tgz").is_some() && end_cursor == "y"
+                if artifacts.get_artifact_url("b.tgz").is_some()
+                    && artifacts.get_artifact_digest("b.tgz").is_none()
+                    && end_cursor == "y"
         ));
 
         let data: GraphQLBatchData = serde_json::from_str(r#"{"repository": null}"#).unwrap();

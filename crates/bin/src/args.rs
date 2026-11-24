@@ -533,9 +533,9 @@ pub struct Args {
     /// disables that behaviour entirely, which will also stop downloading
     /// signature files in the first place.
     ///
-    /// It also stops looking for checksum files published next to the
-    /// package, such as `{ url }.sha256`, which are verified by default when
-    /// they exist.
+    /// It also stops verifying checksums, which are verified by default when
+    /// published: GitHub's digest of a release asset, or a checksum file next
+    /// to the package, such as `{ url }.sha256`.
     ///
     /// Note that this is insecure and not recommended outside of testing.
     #[clap(help_heading = "Options", long, conflicts_with = "only_signed")]

@@ -1,15 +1,17 @@
-//! Checksum files published next to a package, e.g. `{ pkg }.sha256`, which
-//! many releases have: if there is one, the package must match it.
+//! The checksum a package must have, if one is published: the sha256
+//! digest GitHub computes of each release asset uploaded since June 2025, or
+//! else a checksum file next to the package, e.g. `{ pkg }.sha256`, which
+//! many releases have.
 //!
-//! Such a file comes from the same place as the package, so it catches a
-//! broken or truncated download, or an asset replaced without its checksum,
-//! not a release made by someone else: that is what signatures are for, see
+//! Either comes from the same place as the package, so it catches a broken
+//! or truncated download, or an asset replaced without its checksum, not a
+//! release made by someone else: that is what signatures are for, see
 //! `SIGNING.md`.
 //!
-//! For a GitHub release, the asset list says which checksum files there
-//! are, normally already fetched to find the package, so a release without
-//! any costs no request. Anywhere else, the most common two are tried with
-//! GET.
+//! For a GitHub release, the asset list, normally already fetched to find
+//! the package, has the digest and says which checksum files there are, so
+//! it costs no request. Anywhere else, the most common two checksum files
+//! are tried with GET.
 
 use binstalk_downloader::remote::StatusCode;
 use binstalk_git_repo_api::gh_api_client::{
@@ -45,6 +47,7 @@ impl Algorithm {
     }
 }
 
+#[derive(Debug)]
 struct Sidecar {
     suffix: &'static str,
     algorithm: Algorithm,
@@ -88,9 +91,14 @@ const MAX_CHECKSUM_FILE_SIZE: usize = 64 * 1024;
 pub(super) struct Checksum {
     pub(super) algorithm: Algorithm,
     expected: Box<[u8]>,
-    /// Where it was read from.
-    pub(super) url: Url,
+    /// Where it was read from: the URL of the checksum file, or
+    /// [`GITHUB_DIGEST`].
+    pub(super) source: CompactString,
 }
+
+/// The [`Checksum::source`] of the digest GitHub computed of a release
+/// asset.
+const GITHUB_DIGEST: &str = "GitHub's digest of the release asset";
 
 impl Checksum {
     pub(super) fn verifier(&self) -> ChecksumVerifier<'_> {
@@ -173,8 +181,9 @@ fn with_suffix(url: &Url, suffix: &str) -> Url {
     url
 }
 
-/// Find the checksum file published next to the package at `url`, if any,
-/// and read the package's checksum from it.
+/// Find the checksum the package at `url` must have, if any: the digest
+/// GitHub computed of a release asset, or else the one in a checksum file
+/// published next to the package.
 ///
 /// A checksum file that can't be found or read is warned about and
 /// skipped: the package is then installed as if there was none.
@@ -199,7 +208,7 @@ async fn find_with(
     let name = file_name(url)?;
 
     if let Some(artifact) = GhReleaseArtifact::try_extract_from_url(url) {
-        if let Some(listed) = listed_on_github(
+        if let Some(listing) = list_on_github(
             sidecars,
             client,
             gh_api_client,
@@ -209,7 +218,14 @@ async fn find_with(
         )
         .await
         {
-            for (sidecar, artifact_url) in listed {
+            if let Some(digest) = listing.digest {
+                return Some(Checksum {
+                    algorithm: Algorithm::Sha256,
+                    expected: digest,
+                    source: GITHUB_DIGEST.into(),
+                });
+            }
+            for (sidecar, artifact_url) in listing.sidecars {
                 let sidecar_url = with_suffix(url, sidecar.suffix);
                 let artifact_url = artifact_url.filter(|_| is_repo_private);
                 let Some(contents) =
@@ -252,21 +268,45 @@ async fn find_with(
     None
 }
 
-/// The checksum files the GitHub release of `artifact` has, most preferred
-/// first, with the URLs to download them with the API if known.
+/// What the asset list of a GitHub release says about the checksum of one
+/// of its assets.
+#[derive(Debug, Default)]
+struct GhListing {
+    /// The sha256 digest GitHub computed of the asset when it was uploaded.
+    digest: Option<Box<[u8]>>,
+    /// The checksum files the release has for it, most preferred first, with
+    /// the URLs to download them with the API if known.
+    sidecars: Vec<(&'static Sidecar, Option<GhReleaseArtifactUrl>)>,
+}
+
+/// Decode a sha256 digest, `sha256:` prefixed if `prefixed`.
+fn decode_sha256_digest(digest: &str, prefixed: bool) -> Option<Box<[u8]>> {
+    let hex = if prefixed {
+        digest.strip_prefix("sha256:")?
+    } else {
+        digest
+    };
+    let mut sha256 = vec![0; Algorithm::Sha256.len()].into_boxed_slice();
+    (hex.len() == 64 && base16::decode_slice(hex, &mut sha256) == Ok(sha256.len()))
+        .then_some(sha256)
+}
+
+/// What the asset list of the GitHub release of `artifact` says about its
+/// checksum.
 ///
 /// `None` if its asset list can't tell, or can't be had.
-async fn listed_on_github(
+async fn list_on_github(
     sidecars: &'static [Sidecar],
     client: &Client,
     gh_api_client: &GhApiClient,
     data: &Data,
     artifact: &GhReleaseArtifact,
     is_repo_private: bool,
-) -> Option<Vec<(&'static Sidecar, Option<GhReleaseArtifactUrl>)>> {
+) -> Option<GhListing> {
+    let name = artifact.artifact_name.as_str();
     let names: Vec<String> = sidecars
         .iter()
-        .map(|sidecar| format!("{}{}", artifact.artifact_name, sidecar.suffix))
+        .map(|sidecar| format!("{name}{}", sidecar.suffix))
         .collect();
 
     // The API's answer, if finding the package asked it, or if it must be
@@ -299,15 +339,21 @@ async fn listed_on_github(
     }
     if let Some(artifacts) = cell.get() {
         let Some(artifacts) = artifacts else {
-            return Some(Vec::new());
+            return Some(GhListing::default());
         };
-        return Some(
-            sidecars
+        let digest = artifacts.artifact_digest(name);
+        let decoded = digest.and_then(|digest| decode_sha256_digest(digest, true));
+        if let (Some(digest), None) = (digest, &decoded) {
+            debug!("Ignoring GitHub's digest {digest:?} of {artifact:?}: not a sha256 one");
+        }
+        return Some(GhListing {
+            digest: decoded,
+            sidecars: sidecars
                 .iter()
                 .zip(&names)
                 .filter_map(|(sidecar, name)| Some((sidecar, Some(artifacts.artifact_url(name)?))))
                 .collect(),
-        );
+        });
     }
 
     // The asset list on github.com, normally already fetched to find the
@@ -316,17 +362,18 @@ async fn listed_on_github(
     let page = page
         .get_or_init(|| ReleaseAssetsPage::fetch(client, &artifact.release))
         .await;
-    match page.lists(
-        std::iter::once(artifact.artifact_name.as_str()).chain(names.iter().map(String::as_str)),
-    ) {
+    match page.lists(std::iter::once(name).chain(names.iter().map(String::as_str))) {
         // It lists the package, so it is not missing assets that the
         // checksum files would be.
-        ReleaseAssets::Listed(listed) if listed.contains(&0) => Some(
-            listed
+        ReleaseAssets::Listed(listed) if listed.contains(&0) => Some(GhListing {
+            digest: page
+                .sha256_digest(name)
+                .and_then(|digest| decode_sha256_digest(digest, false)),
+            sidecars: listed
                 .into_iter()
                 .filter_map(|i| Some((sidecars.get(i.checked_sub(1)?)?, None)))
                 .collect(),
-        ),
+        }),
         _ => None,
     }
 }
@@ -386,7 +433,7 @@ fn parse(sidecar: &Sidecar, url: &Url, contents: &[u8], name: &str) -> Option<Ch
         Ok(expected) => Some(Checksum {
             algorithm: sidecar.algorithm,
             expected,
-            url: url.clone(),
+            source: url.as_str().into(),
         }),
         Err(err) => {
             warn!("Ignoring checksum file {url}: {err}");
@@ -582,7 +629,7 @@ mod test {
         Checksum {
             algorithm,
             expected: expected.into(),
-            url: Url::parse("https://example.com/a.sha256").unwrap(),
+            source: "https://example.com/a.sha256".into(),
         }
     }
 
@@ -638,8 +685,14 @@ mod test {
         },
     ];
 
+    fn asset_url(tag: &str, name: &str) -> Url {
+        Url::parse(&format!("{BINSTALL}/releases/download/{tag}/{name}")).unwrap()
+    }
+
+    const MUSL_TGZ: &str = "cargo-binstall-x86_64-unknown-linux-musl.tgz";
+
     #[tokio::test]
-    async fn listed_on_github_page() {
+    async fn github_page() {
         let client = client();
         let gh_api_client = GhApiClient::new(client.clone(), None);
         let data = Data::new(
@@ -647,43 +700,67 @@ mod test {
             "1.28.0".into(),
             Some(BINSTALL.into()),
         );
-        let url = Url::parse(&format!(
-            "{BINSTALL}/releases/download/v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
-        ))
-        .unwrap();
+        let url = asset_url("v1.28.0", MUSL_TGZ);
         let artifact = GhReleaseArtifact::try_extract_from_url(&url).unwrap();
 
-        let listed = listed_on_github(&SIG, &client, &gh_api_client, &data, &artifact, false)
+        let listing = list_on_github(&SIG, &client, &gh_api_client, &data, &artifact, false)
             .await
             .unwrap();
         assert_eq!(
-            listed
+            listing
+                .sidecars
                 .iter()
                 .map(|(sidecar, artifact_url)| (sidecar.suffix, artifact_url.is_some()))
                 .collect::<Vec<_>>(),
             [(".sig", false)]
         );
 
-        // None of the real ones is listed, so none is asked for, and the
-        // page is fetched once.
-        assert!(
-            find(&client, &gh_api_client, &data, &url, false)
-                .await
-                .is_none()
+        // GitHub's digest, from the page, which is fetched once.
+        let checksum = find(&client, &gh_api_client, &data, &url, false)
+            .await
+            .unwrap();
+        assert_eq!(checksum.algorithm, Algorithm::Sha256);
+        assert_eq!(checksum.source, GITHUB_DIGEST);
+        assert_eq!(
+            checksum.expected_hex(),
+            "dad3d904258f50b0cc5ac34e6a6e8cefbada8bf65ab3da063faa1d6b534ad28a"
         );
         assert_eq!(data.repo_cache.release_assets_pages_len(), 1);
 
         // An asset the page doesn't list: it can't tell.
-        let missing = Url::parse(&format!(
-            "{BINSTALL}/releases/download/v1.28.0/cargo-binstall-no-such-target.tgz"
-        ))
-        .unwrap();
+        let missing = asset_url("v1.28.0", "cargo-binstall-no-such-target.tgz");
         let artifact = GhReleaseArtifact::try_extract_from_url(&missing).unwrap();
         assert!(
-            listed_on_github(&SIG, &client, &gh_api_client, &data, &artifact, false)
+            list_on_github(&SIG, &client, &gh_api_client, &data, &artifact, false)
                 .await
                 .is_none()
         );
+
+        // Uploaded before GitHub computed digests, and without checksum
+        // files: no checksum, and nothing else asked for.
+        let old = asset_url("v1.12.5", MUSL_TGZ);
+        assert!(
+            find(&client, &gh_api_client, &data, &old, false)
+                .await
+                .is_none()
+        );
+        assert_eq!(data.repo_cache.release_assets_pages_len(), 2);
+    }
+
+    #[test]
+    fn sha256_digests() {
+        let hex = "dad3d904258f50b0cc5ac34e6a6e8cefbada8bf65ab3da063faa1d6b534ad28a";
+        let decoded = |digest: &str, prefixed| {
+            decode_sha256_digest(digest, prefixed).map(|digest| base16::encode_lower(&digest))
+        };
+        assert_eq!(
+            decoded(&format!("sha256:{hex}"), true).as_deref(),
+            Some(hex)
+        );
+        assert_eq!(decoded(hex, false).as_deref(), Some(hex));
+        assert_eq!(decoded(hex, true), None);
+        assert_eq!(decoded(&format!("sha512:{hex}{hex}"), true), None);
+        assert_eq!(decoded(&format!("sha256:{}", &hex[1..]), true), None);
     }
 
     #[test]

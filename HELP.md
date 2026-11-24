@@ -240,7 +240,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    The default is to verify signatures if they are available. This option disables that behaviour entirely, which will also stop downloading signature files in the first place.
 
-   It also stops looking for checksum files published next to the package, such as `{ url }.sha256`, which are verified by default when they exist.
+   It also stops verifying checksums, which are verified by default when published: GitHub's digest of a release asset, or a checksum file next to the package, such as `{ url }.sha256`.
 
    Note that this is insecure and not recommended outside of testing.
 * `--settings <SETTINGS>` — Custom settings file

@@ -80,6 +80,18 @@ impl ReleaseAssetsPage {
             Page::Unknown => ReleaseAssets::Unknown,
         }
     }
+
+    /// The sha256 digest github.com shows next to the asset `name`, hex
+    /// encoded, if it lists the asset with exactly one.
+    ///
+    /// GitHub computes it when the asset is uploaded; assets uploaded before
+    /// June 2025 have none.
+    pub fn sha256_digest(&self, name: &str) -> Option<&str> {
+        match &self.0 {
+            Page::Found(assets) => assets.sha256_digest(name),
+            Page::NotFound | Page::Unknown => None,
+        }
+    }
 }
 
 /// The asset list github.com shows on the page of a release.
@@ -131,14 +143,24 @@ fn strip_suffix_ignore_case<'s>(s: &'s str, suffix: &str) -> Option<&'s str> {
 /// `href="/{owner}/{repo}{path}`, or with `https://github.com` before it.
 ///
 /// GitHub ignores the case of owner and repository names.
-fn links_to(html: &str, GhRepo { owner, repo }: &GhRepo, path: &str) -> bool {
-    html.match_indices(path).any(|(i, _)| {
+fn links_to(html: &str, repo: &GhRepo, path: &str) -> bool {
+    links(html, repo, path).next().is_some()
+}
+
+/// Where each link to `path` in `repo` ends in `html`, see [`links_to`].
+fn links<'h>(
+    html: &'h str,
+    GhRepo { owner, repo }: &'h GhRepo,
+    path: &'h str,
+) -> impl Iterator<Item = usize> + 'h {
+    html.match_indices(path).filter_map(move |(i, _)| {
         strip_suffix_ignore_case(&html[..i], repo)
             .and_then(|s| s.strip_suffix('/'))
             .and_then(|s| strip_suffix_ignore_case(s, owner))
             .and_then(|s| s.strip_suffix('/'))
             .map(|s| s.strip_suffix("https://github.com").unwrap_or(s))
             .is_some_and(|s| s.ends_with("href=\""))
+            .then_some(i + path.len())
     })
 }
 
@@ -164,6 +186,43 @@ impl ReleaseAssetList {
             html,
             is_empty,
         })
+    }
+
+    /// The sha256 digest shown in the list item of the asset `name`.
+    ///
+    /// The item is from the link to the asset to the end of the item, and
+    /// must not link to another asset: if the page changes so that this is
+    /// not where the digest is, no digest is found, rather than another
+    /// asset's.
+    fn sha256_digest(&self, name: &str) -> Option<&str> {
+        let mut path = release_download_path(&self.release.tag);
+        path.push_str(name);
+        path.push('"');
+
+        let mut found = None;
+        for start in links(&self.html, &self.release.repo, &path) {
+            let item = &self.html[start..];
+            let item = &item[..item.find("</li>")?];
+            if item.contains("/releases/download/") {
+                return None;
+            }
+
+            for (i, _) in item.match_indices("sha256:") {
+                let hex = item.get(i + 7..i + 7 + 64)?;
+                let ends = item[i + 7 + 64..]
+                    .bytes()
+                    .next()
+                    .is_none_or(|b| !b.is_ascii_hexdigit());
+                if !(ends && hex.bytes().all(|b| b.is_ascii_hexdigit())) {
+                    return None;
+                }
+                match found {
+                    Some(found) if found != hex => return None,
+                    _ => found = Some(hex),
+                }
+            }
+        }
+        found
     }
 
     /// The indices of `names` it lists, by searching for the link to each.
@@ -386,6 +445,49 @@ mod test {
         assert_eq!(
             assets.lists(["cargo-binstall-x86_64-unknown-linux-musl.tgz"]),
             [0]
+        );
+    }
+
+    #[test]
+    fn test_release_asset_sha256_digest() {
+        let release = gh_release("cargo-bins", "cargo-binstall", "v1.28.0");
+        let a = "e5b9966136b960b0ca353aea6416340a027ee7632f0b5c52b4a5951ddc52f392";
+        let b = "dad3d904258f50b0cc5ac34e6a6e8cefbada8bf65ab3da063faa1d6b534ad28a";
+        // As github.com writes it: the digest after the link, twice more in
+        // the copy button.
+        let item = |name: &str, digest: &str| {
+            format!(
+                r#"<li><div><a href="/cargo-bins/cargo-binstall/releases/download/v1.28.0/{name}" rel="nofollow" data-turbo="false" class="wb-break-all"><span>{name}</span></a></div><div><span class="Truncate-text">{digest}</span><clipboard-copy id="clipboard-button-{digest}" value="{digest}"></clipboard-copy></div></li>"#
+            )
+        };
+        let html = [
+            item("a.tgz", &format!("sha256:{a}")),
+            item("a.tgz.sig", &format!("sha256:{b}")),
+            // Uploaded before GitHub computed digests.
+            item("old.tgz", ""),
+            item("short.tgz", &format!("sha256:{}", &a[1..])),
+            item("long.tgz", &format!("sha256:{a}0")),
+            item("two.tgz", &format!("sha256:{a} sha256:{b}")),
+            // The digest of the next asset must not be taken.
+            r#"<li><a href="/cargo-bins/cargo-binstall/releases/download/v1.28.0/unclosed.tgz">"#
+                .to_owned(),
+            item("next.tgz", &format!("sha256:{b}")),
+        ]
+        .concat();
+        let assets = ReleaseAssetsPage(Page::Found(ReleaseAssetList::new(&release, html).unwrap()));
+
+        assert_eq!(assets.sha256_digest("a.tgz"), Some(a));
+        assert_eq!(assets.sha256_digest("a.tgz.sig"), Some(b));
+        assert_eq!(assets.sha256_digest("old.tgz"), None);
+        assert_eq!(assets.sha256_digest("short.tgz"), None);
+        assert_eq!(assets.sha256_digest("long.tgz"), None);
+        assert_eq!(assets.sha256_digest("two.tgz"), None);
+        assert_eq!(assets.sha256_digest("unclosed.tgz"), None);
+        assert_eq!(assets.sha256_digest("next.tgz"), Some(b));
+        assert_eq!(assets.sha256_digest("missing.tgz"), None);
+        assert_eq!(
+            ReleaseAssetsPage(Page::Unknown).sha256_digest("a.tgz"),
+            None
         );
     }
 

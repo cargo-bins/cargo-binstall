@@ -92,10 +92,14 @@ pub enum FetchError {
     #[error("Failed to verify signature")]
     InvalidSignature,
 
-    #[error("{algorithm} checksum of {url} is {actual}, but {checksum_url} says it is {expected}")]
+    #[error(
+        "{algorithm} checksum of {url} is {actual}, but {checksum_source} says it is {expected}"
+    )]
     ChecksumMismatch {
         url: Box<Url>,
-        checksum_url: Box<Url>,
+        /// The URL of the checksum file, or where else the checksum is
+        /// from.
+        checksum_source: CompactString,
         algorithm: &'static str,
         expected: CompactString,
         actual: CompactString,

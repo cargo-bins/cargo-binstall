@@ -266,6 +266,12 @@ impl ReleaseArtifacts {
     pub fn artifact_url(&self, name: &str) -> Option<GhReleaseArtifactUrl> {
         self.get_artifact_url(name).map(GhReleaseArtifactUrl)
     }
+
+    /// The digest GitHub computed of the asset `name` when it was uploaded,
+    /// like `sha256:<hex>`. Assets uploaded before June 2025 have none.
+    pub fn artifact_digest(&self, name: &str) -> Option<&str> {
+        self.get_artifact_digest(name)
+    }
 }
 
 impl GhApiClient {

@@ -442,9 +442,9 @@ impl super::Fetcher for GhCrateMeta {
         let verifier = verifier?;
         if let Some(checksum) = &checksum {
             debug!(
-                "Package must have the {} checksum in {}",
+                "Package must have the {} checksum from {}",
                 checksum.algorithm.name(),
-                checksum.url
+                checksum.source
             );
         }
 
@@ -480,7 +480,7 @@ impl super::Fetcher for GhCrateMeta {
             if !checksum_verifier.validate() {
                 return Err(FetchError::ChecksumMismatch {
                     url: Box::new(resolved.url.clone()),
-                    checksum_url: Box::new(checksum.url.clone()),
+                    checksum_source: checksum.source.clone(),
                     algorithm: checksum.algorithm.name(),
                     expected: checksum.expected_hex().into(),
                     actual: checksum_verifier.actual_hex().into(),
@@ -490,7 +490,7 @@ impl super::Fetcher for GhCrateMeta {
                 "Verified {} checksum of package '{}' from {}",
                 checksum.algorithm.name(),
                 self.data.name,
-                checksum.url
+                checksum.source
             );
         }
 
