@@ -33,6 +33,36 @@ try {
 } catch {
     throw "Failed to download: $_"
 }
+
+# See verify_attestation in install-from-binstall-release.sh.
+$verify = if ($Env:BINSTALL_VERIFY_ATTESTATION) { $Env:BINSTALL_VERIFY_ATTESTATION } else { "false" }
+if ($verify -notin "auto", "true", "false") {
+    throw "BINSTALL_VERIFY_ATTESTATION must be auto, true or false, not '$verify'"
+}
+if ($verify -ne "false") {
+    $reason = $null
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        $reason = "gh (GitHub CLI) is not installed"
+    } elseif ($BINSTALL_VERSION -match '^v(\d+)\.(\d+)' -and ([int]$Matches[1] -eq 0 -or ([int]$Matches[1] -eq 1 -and [int]$Matches[2] -lt 19))) {
+        $reason = "$BINSTALL_VERSION predates attestations (v1.19.0)"
+    }
+    if ($reason) {
+        if ($verify -eq "true") {
+            throw "Cannot verify the attestation of cargo-binstall: $reason"
+        }
+        if ($Env:GITHUB_ACTIONS) {
+            Write-Output "::warning::Not verifying the attestation of cargo-binstall: $reason"
+        } else {
+            Write-Warning "Not verifying the attestation of cargo-binstall: $reason"
+        }
+    } else {
+        gh attestation verify "$zip" --repo cargo-bins/cargo-binstall --signer-workflow cargo-bins/cargo-binstall/.github/workflows/release-cli.yml
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to verify the attestation of cargo-binstall"
+        }
+    }
+}
+
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 $sw.Stop()
 Write-Verbose -Verbose -Message "Download: $($sw.Elapsed.Seconds) seconds"
