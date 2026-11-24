@@ -787,3 +787,190 @@ pub fn prune_crates(args: Args) -> Result<()> {
 
     Ok(())
 }
+
+pub fn uninstall_crates(args: Args) -> Result<()> {
+    let Init {
+        install_path,
+        manifests,
+        ..
+    } = crate::initialise::initialise(&args)?;
+
+    let Some(manifests) = manifests else {
+        miette::bail!(
+            "--uninstall needs install tracking, which is disabled by --no-track, \
+             --install-path or a custom install path in the settings"
+        );
+    };
+
+    let installed = manifests.list_crates();
+
+    let mut packages = Vec::with_capacity(args.crate_names.len());
+    for crate_name in CrateName::dedup(args.crate_names) {
+        let version_req = match (crate_name.version_req, &args.version_req) {
+            (Some(_), Some(_)) => return Err(BinstallError::SuperfluousVersionOption.into()),
+            (Some(version_req), None) => Some(version_req),
+            (None, version_req) => version_req.clone(),
+        };
+
+        let name = &crate_name.name;
+        let Some(info) = installed.iter().find(|info| info.name == *name) else {
+            miette::bail!("package `{name}` is not installed");
+        };
+
+        if let Some(version_req) = version_req
+            && !version_req.matches(&info.cargo_version)
+        {
+            miette::bail!(
+                "package `{name}@{version_req}` is not installed, v{} is",
+                info.cargo_version
+            );
+        }
+
+        packages.push(info);
+    }
+
+    let current_exe = env::current_exe().and_then(fs::canonicalize).ok();
+
+    let mut uninstalled = Vec::with_capacity(packages.len());
+    let mut failed = Vec::new();
+
+    for info in packages {
+        let mut removed_all = true;
+
+        for path in installed_bin_files(&install_path, info) {
+            if args.dry_run {
+                info!("Dry-run: would remove {}", path.display());
+            } else {
+                info!("Removing {}", path.display());
+                if let Err(err) = remove_bin_file(&path, current_exe.as_deref()) {
+                    warn!("Failed to remove {}: {err}", path.display());
+                    removed_all = false;
+                }
+            }
+        }
+
+        if removed_all {
+            uninstalled.push(info);
+        } else {
+            failed.push(info.name.as_str());
+        }
+    }
+
+    if !args.dry_run && !uninstalled.is_empty() {
+        manifests.remove(
+            &uninstalled
+                .iter()
+                .map(|info| &*info.name)
+                .collect::<Vec<_>>(),
+        )?;
+    }
+
+    if args.json_output {
+        let names: Vec<_> = uninstalled.iter().map(|info| &info.name).collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "uninstalled": names,
+                "failed": failed,
+                "dry_run": args.dry_run,
+            })
+        );
+    } else {
+        for info in &uninstalled {
+            if args.dry_run {
+                info!(
+                    "Dry-run: would uninstall {} v{}",
+                    info.name, info.cargo_version
+                );
+            } else {
+                info!("Uninstalled {} v{}", info.name, info.cargo_version);
+            }
+        }
+    }
+
+    if !failed.is_empty() {
+        miette::bail!(
+            "failed to uninstall {}, they are still recorded as installed",
+            failed.join(", ")
+        );
+    }
+
+    Ok(())
+}
+
+/// The files in `install_path` that belong to `info`: each binary (aliases
+/// are recorded as binaries too) and, if it was installed with `--symlink`,
+/// the versioned file it links to.
+///
+/// Files that are already gone are skipped with a warning, so that a package
+/// whose binaries were deleted by hand can still be uninstalled.
+fn installed_bin_files(
+    install_path: &Path,
+    info: &binstalk_manifests::crates_manifests::InstalledCrateInfo,
+) -> Vec<PathBuf> {
+    let ext = env::consts::EXE_SUFFIX;
+    let mut files = Vec::with_capacity(info.bins.len());
+
+    let mut push_if_exists = |file_name: &str| {
+        let path = install_path.join(file_name);
+        let exists = fs::symlink_metadata(&path).is_ok();
+        if exists && !files.contains(&path) {
+            files.push(path);
+        }
+        exists
+    };
+
+    for bin in &info.bins {
+        // `.crates.toml` is user-editable: never let a recorded name point
+        // outside of the install path.
+        if !matches!(
+            Path::new(bin.as_str())
+                .components()
+                .collect::<Vec<_>>()
+                .as_slice(),
+            [std::path::Component::Normal(_)]
+        ) {
+            warn!(
+                "Skipping invalid binary name {bin:?} recorded for {}",
+                info.name
+            );
+            continue;
+        }
+
+        // Binaries are recorded with their extension, except in the record
+        // that `cargo-binstall --self-install` used to write.
+        let found =
+            push_if_exists(bin) || (!bin.ends_with(ext) && push_if_exists(&format!("{bin}{ext}")));
+        if !found {
+            warn!(
+                "{} is already gone, skipping",
+                install_path.join(bin.as_str()).display()
+            );
+        }
+
+        let stem = bin.strip_suffix(ext).unwrap_or(bin);
+        push_if_exists(&format!("{stem}-v{}{ext}", info.cargo_version));
+    }
+
+    files
+}
+
+/// Remove an installed binary, which may be the running cargo-binstall.
+///
+/// * `current_exe` - canonicalized path of the running executable.
+#[cfg_attr(not(windows), allow(unused_variables))]
+fn remove_bin_file(path: &Path, current_exe: Option<&Path>) -> std::io::Result<()> {
+    // A running executable cannot be deleted on Windows: have a copy of it
+    // delete it once this process exits.
+    //
+    // A symlink to it can be removed like any other file.
+    #[cfg(windows)]
+    if let Some(current_exe) = current_exe
+        && !fs::symlink_metadata(path)?.is_symlink()
+        && fs::canonicalize(path)? == current_exe
+    {
+        return self_replace::self_delete_at(path);
+    }
+
+    fs::remove_file(path)
+}

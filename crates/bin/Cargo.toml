@@ -64,6 +64,10 @@ tracing-log = { version = "0.2.0", default-features = false }
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "json", "ansi"], default-features = false }
 zeroize = "1.8.1"
 
+[target.'cfg(windows)'.dependencies]
+# Deletes the running cargo-binstall on `--uninstall cargo-binstall`.
+self-replace = "1.5.1"
+
 [build-dependencies]
 embed-resource = "3.0.9"
 vergen-gitcl = { version = "10.0.0", features = ["build", "cargo", "rustc"] }
