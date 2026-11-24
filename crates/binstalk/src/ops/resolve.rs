@@ -516,7 +516,7 @@ impl PackageInfo {
                 None,
             ),
             #[cfg(feature = "git")]
-            Some(Git(git_url)) => {
+            Some(Git(git_url, reference)) => {
                 use crate::helpers::git::{GitCancellationToken, Repository as GitRepository};
 
                 let cancellation_token = GitCancellationToken::default();
@@ -525,12 +525,14 @@ impl PackageInfo {
 
                 let (ret, commit_hash) = spawn_blocking({
                     let git_url = git_url.clone();
+                    let reference = reference.clone();
                     let name = name.clone();
                     move || {
                         let dir = tempfile::TempDir::new()?;
-                        let repo = GitRepository::shallow_clone(
+                        let repo = GitRepository::shallow_clone_reference(
                             git_url,
                             dir.as_ref(),
+                            &reference,
                             Some(cancellation_token),
                         )?;
 
@@ -550,7 +552,7 @@ impl PackageInfo {
                     ret,
                     CrateSource {
                         source_type: SourceType::Git,
-                        url: MaybeOwned::Owned(Url::parse(&format!("{git_url}#{commit_hash}"))?),
+                        url: MaybeOwned::Owned(git_source_url(git_url, reference, commit_hash)?),
                     },
                     None,
                 )
@@ -686,6 +688,31 @@ fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
     }
 }
 
+/// The source url of a crate installed from git, in the format cargo writes
+/// to `.crates.toml`: `{url}?branch={branch}#{commit}` (or `tag=`/`rev=`,
+/// nothing for the default branch).
+#[cfg(feature = "git")]
+fn git_source_url(
+    git_url: &crate::helpers::git::GitUrl,
+    reference: &crate::helpers::git::GitReference,
+    commit_hash: impl std::fmt::Display,
+) -> Result<Url, BinstallError> {
+    use crate::helpers::git::GitReference::*;
+
+    let mut url = Url::parse(&git_url.to_string())?;
+    let query = match reference {
+        Branch(branch) => Some(("branch", branch)),
+        Tag(tag) => Some(("tag", tag)),
+        Rev(rev) => Some(("rev", rev)),
+        _ => None,
+    };
+    if let Some((key, value)) = query {
+        url.query_pairs_mut().append_pair(key, value);
+    }
+    url.set_fragment(Some(&commit_hash.to_string()));
+    Ok(url)
+}
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 ///
 /// This is a blocking function.
@@ -707,4 +734,35 @@ pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
     }
 
     inner(manifest_path.as_ref(), name.as_ref())
+}
+
+#[cfg(all(test, feature = "git"))]
+mod tests {
+    use super::*;
+    use crate::helpers::git::{GitReference, GitUrl};
+
+    #[test]
+    fn git_source_url_matches_cargo() {
+        let url: GitUrl = "https://github.com/cargo-bins/cargo-binstall"
+            .parse()
+            .unwrap();
+        let commit = "0123456789abcdef0123456789abcdef01234567";
+
+        for (reference, expected) in [
+            (GitReference::DefaultBranch, ""),
+            (GitReference::Branch("main".into()), "?branch=main"),
+            (GitReference::Tag("v1.0.0".into()), "?tag=v1.0.0"),
+            (GitReference::Rev("abc123".into()), "?rev=abc123"),
+            (
+                GitReference::Branch("a b/c&d".into()),
+                "?branch=a+b%2Fc%26d",
+            ),
+        ] {
+            assert_eq!(
+                git_source_url(&url, &reference, commit).unwrap().as_str(),
+                format!("https://github.com/cargo-bins/cargo-binstall{expected}#{commit}"),
+                "{reference:?}"
+            );
+        }
+    }
 }

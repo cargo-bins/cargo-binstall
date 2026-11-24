@@ -17,14 +17,21 @@ use crate::{
 
 pub mod resolve;
 
+#[cfg(feature = "git")]
+pub use crate::helpers::git::GitReference;
+
 pub type Resolver =
     fn(Client, GhApiClient, Arc<Data>, Arc<TargetDataErased>, SignaturePolicy) -> Arc<dyn Fetcher>;
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum CargoTomlFetchOverride {
+    /// Clone the repository at the url and check out the reference.
     #[cfg(feature = "git")]
-    Git(crate::helpers::git::GitUrl),
+    Git(
+        crate::helpers::git::GitUrl,
+        crate::helpers::git::GitReference,
+    ),
     Path(PathBuf),
 }
 

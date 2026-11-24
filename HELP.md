@@ -57,6 +57,15 @@ Some crate installation strategies may collect anonymized usage statistics by de
    This skips searching crates.io and instead clones the repository specified and runs as if `--manifest-path $cloned_repo` is passed to binstall.
 
    This option cannot be used with `--manifest-path`.
+* `--branch <BRANCH>` — Branch to use when installing from git.
+
+   Requires `--git`. Only the tip of the branch is fetched.
+* `--tag <TAG>` — Tag to use when installing from git.
+
+   Requires `--git`. Only the tagged commit is fetched.
+* `--rev <SHA>` — Specific commit to use when installing from git.
+
+   Requires `--git`. A full commit hash or a full ref name such as `refs/pull/1/head` is fetched on its own; anything else, e.g. an abbreviated commit hash, needs the whole history of every branch and tag, which is much slower.
 * `--bin-dir <BIN_DIR>` — Path template for binary files in packages
 
    It is the path of the binary inside of the package, or of the dir holding it, not where it is installed: that is `--install-path`.
