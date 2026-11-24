@@ -309,6 +309,43 @@ jobs:
         # and build quite a few unused dependencies.
         working-directory: crates/detect-targets
 
+  detect-targets-windows-arm-test:
+    needs: changed-files
+    if: needs.changed-files.outputs.has_detect_target_changed == 'true'
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-all-crates: true
+          save-if: ${{ github.event_name != 'merge_group' }}
+      - name: Add x64 and Arm64EC targets
+        run: rustup target add x86_64-pc-windows-msvc arm64ec-pc-windows-msvc
+      - name: Build and run detect-targets tests
+        shell: bash
+        run: |
+          set -euxo pipefail
+          # native targets first, then Arm64EC before x64
+          expected="$(printf '%s\n' \
+              aarch64-pc-windows-msvc \
+              aarch64-pc-windows-gnu \
+              aarch64-pc-windows-gnullvm \
+              arm64ec-pc-windows-msvc \
+              x86_64-pc-windows-msvc)"
+          output="$(cargo run --features cli-logging --bin detect-targets)"
+          [ "$(echo "$output" | head -n5)" = "$expected" ]
+
+          # Without rustc, the host is the machine that Windows runs on, also
+          # for x64 (emulated) and Arm64EC builds of detect-targets.
+          for target in x86_64-pc-windows-msvc arm64ec-pc-windows-msvc; do
+              cargo build --features cli-logging --bin detect-targets --target "$target"
+              output="$(env -u CARGO PATH=/usr/bin "../../target/$target/debug/detect-targets.exe")"
+              [ "$(echo "$output" | head -n5)" = "$expected" ]
+          done
+        # Set working directory here, otherwise `cargo` would download
+        # and build quite a few unused dependencies.
+        working-directory: crates/detect-targets
+
   detect-targets-ubuntu-x86_64-test:
     needs:
       - detect-targets-build
@@ -512,6 +549,7 @@ jobs:
       - detect-targets-build
       - detect-targets-alpine-test
       - detect-targets-ubuntu-arm-test
+      - detect-targets-windows-arm-test
       - detect-targets-ubuntu-x86_64-test
       - detect-targets-more-glibc-test
       - detect-targets-probe-multilib-test

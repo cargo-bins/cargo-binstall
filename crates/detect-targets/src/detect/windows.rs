@@ -1,14 +1,24 @@
 use std::mem;
-use windows_sys::Win32::{
-    Foundation::{HMODULE, S_OK},
-    System::{
-        LibraryLoader::{GetProcAddress, LoadLibraryA},
-        SystemInformation::{
-            IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM,
-            IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
+
+use super::windows_targets::{Machine, alternative_targets};
+use windows_sys::{
+    Win32::{
+        Foundation::{HANDLE, HMODULE, S_OK},
+        System::{
+            LibraryLoader::{GetProcAddress, LoadLibraryA},
+            SystemInformation::{
+                GetNativeSystemInfo, IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64,
+                IMAGE_FILE_MACHINE_ARM, IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
+                PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64,
+                PROCESSOR_ARCHITECTURE_INTEL,
+            },
+            Threading::{
+                GetCurrentProcess, GetMachineTypeAttributes, IsWow64Process2, MACHINE_ATTRIBUTES,
+                UserEnabled, Wow64Container,
+            },
         },
-        Threading::{GetMachineTypeAttributes, MACHINE_ATTRIBUTES, UserEnabled, Wow64Container},
     },
+    core::BOOL,
 };
 
 struct LibraryHandle(HMODULE);
@@ -63,71 +73,78 @@ fn is_arch_supported(arch: IMAGE_FILE_MACHINE) -> bool {
     is_arch_supported_inner(arch).unwrap_or(false)
 }
 
+type IsWow64Process2FuncType =
+    unsafe extern "system" fn(HANDLE, *mut IMAGE_FILE_MACHINE, *mut IMAGE_FILE_MACHINE) -> BOOL;
+const _: () = {
+    // Same as for `GetMachineTypeAttributes` above.
+    let _: IsWow64Process2FuncType = IsWow64Process2;
+};
+
+/// The machine that Windows itself runs on.
+///
+/// `GetNativeSystemInfo` reports x64 to x64 and Arm64EC processes on ARM64,
+/// since both run under the x64 emulation, so it is only a fallback for
+/// `IsWow64Process2`, which reports the real machine.
+fn native_machine() -> Option<IMAGE_FILE_MACHINE> {
+    // IsWow64Process2 is only available on Win10 1511+, so dynamically load it.
+    let is_wow64_process2 = LibraryHandle::new(b"kernel32.dll\0").and_then(|kernel32| {
+        // SAFETY: IsWow64Process2FuncType is checked to match the real function signature.
+        unsafe { kernel32.get_proc_address::<IsWow64Process2FuncType>(b"IsWow64Process2\0") }
+    });
+    if let Some(is_wow64_process2) = is_wow64_process2 {
+        let mut process_machine = 0;
+        let mut native_machine = 0;
+        // SAFETY: both pointers are valid for writes, and the pseudo handle
+        // returned by GetCurrentProcess needs no closing.
+        let ret = unsafe {
+            is_wow64_process2(
+                GetCurrentProcess(),
+                &mut process_machine,
+                &mut native_machine,
+            )
+        };
+        if ret != 0 {
+            return Some(native_machine);
+        }
+    }
+
+    let mut system_info = mem::MaybeUninit::uninit();
+    // SAFETY: GetNativeSystemInfo cannot fail and always fills in system_info.
+    let system_info = unsafe {
+        GetNativeSystemInfo(system_info.as_mut_ptr());
+        system_info.assume_init()
+    };
+    // SAFETY: wProcessorArchitecture is the only member of the union that is
+    // ever set.
+    match unsafe { system_info.Anonymous.Anonymous.wProcessorArchitecture } {
+        PROCESSOR_ARCHITECTURE_AMD64 => Some(IMAGE_FILE_MACHINE_AMD64),
+        PROCESSOR_ARCHITECTURE_INTEL => Some(IMAGE_FILE_MACHINE_I386),
+        PROCESSOR_ARCHITECTURE_ARM64 => Some(IMAGE_FILE_MACHINE_ARM64),
+        _ => None,
+    }
+}
+
+/// Guess the host target from the machine Windows runs on, rather than from
+/// what this process is compiled for or emulated as.
+///
+/// This replaces `guess_host_triple`, which depends on winapi, and winapi
+/// does not compile for Arm64EC.
+pub(super) fn guess_host_triple() -> Option<&'static str> {
+    match native_machine()? {
+        IMAGE_FILE_MACHINE_AMD64 => Some("x86_64-pc-windows-msvc"),
+        IMAGE_FILE_MACHINE_I386 => Some("i686-pc-windows-msvc"),
+        IMAGE_FILE_MACHINE_ARM64 => Some("aarch64-pc-windows-msvc"),
+        _ => None,
+    }
+}
+
 pub(super) fn detect_alternative_targets(target: &str) -> impl Iterator<Item = String> + use<> {
-    let (prefix, abi) = target
-        .rsplit_once('-')
-        .expect("unwrap: target always has a -");
-
-    let arch = prefix
-        .split_once('-')
-        .expect("unwrap: target always has at least two -")
-        .0;
-
-    let msvc_fallback_target = (abi != "msvc").then(|| format!("{prefix}-msvc"));
-
-    let gnu_fallback_targets = (abi == "msvc")
-        .then(|| [format!("{prefix}-gnu"), format!("{prefix}-gnullvm")])
-        .into_iter()
-        .flatten();
-
-    let x64_fallback_targets = (arch != "x86_64" && is_arch_supported(IMAGE_FILE_MACHINE_AMD64))
-        .then_some([
-            "x86_64-pc-windows-msvc",
-            "x86_64-pc-windows-gnu",
-            "x86_64-pc-windows-gnullvm",
-        ])
-        .into_iter()
-        .flatten()
-        .map(ToString::to_string);
-
-    let x86_fallback_targets = (arch != "x86" && is_arch_supported(IMAGE_FILE_MACHINE_I386))
-        .then_some([
-            "i586-pc-windows-msvc",
-            "i586-pc-windows-gnu",
-            "i586-pc-windows-gnullvm",
-            "i686-pc-windows-msvc",
-            "i686-pc-windows-gnu",
-            "i686-pc-windows-gnullvm",
-        ])
-        .into_iter()
-        .flatten()
-        .map(ToString::to_string);
-
-    let arm32_fallback_targets = (arch != "thumbv7a" && is_arch_supported(IMAGE_FILE_MACHINE_ARM))
-        .then_some([
-            "thumbv7a-pc-windows-msvc",
-            "thumbv7a-pc-windows-gnu",
-            "thumbv7a-pc-windows-gnullvm",
-        ])
-        .into_iter()
-        .flatten()
-        .map(ToString::to_string);
-
-    let arm64_fallback_targets = (arch != "aarch64" && is_arch_supported(IMAGE_FILE_MACHINE_ARM64))
-        .then_some([
-            "aarch64-pc-windows-msvc",
-            "aarch64-pc-windows-gnu",
-            "aarch64-pc-windows-gnullvm",
-        ])
-        .into_iter()
-        .flatten()
-        .map(ToString::to_string);
-
-    msvc_fallback_target
-        .into_iter()
-        .chain(gnu_fallback_targets)
-        .chain(x64_fallback_targets)
-        .chain(x86_fallback_targets)
-        .chain(arm32_fallback_targets)
-        .chain(arm64_fallback_targets)
+    alternative_targets(target, |machine| {
+        is_arch_supported(match machine {
+            Machine::X64 => IMAGE_FILE_MACHINE_AMD64,
+            Machine::X86 => IMAGE_FILE_MACHINE_I386,
+            Machine::Arm32 => IMAGE_FILE_MACHINE_ARM,
+            Machine::Arm64 => IMAGE_FILE_MACHINE_ARM64,
+        })
+    })
 }

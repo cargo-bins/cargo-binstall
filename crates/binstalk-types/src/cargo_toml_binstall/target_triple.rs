@@ -35,21 +35,26 @@ impl TargetTriple {
 impl FromStr for TargetTriple {
     type Err = TargetTripleParseError;
 
-    fn from_str(mut s: &str) -> Result<Self, Self::Err> {
-        let is_universal_macos = is_universal_macos(s);
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // target-lexicon cannot parse these targets, so parse a target that
+        // shares everything but the architecture and put the arch back after.
+        let (triple, arch) = if is_universal_macos(s) {
+            (
+                Triple::from_str("x86_64-apple-darwin")?,
+                Some(ArchOr::Universal),
+            )
+        } else if let Some(rest) = s.strip_prefix("arm64ec-") {
+            (
+                Triple::from_str(&format!("aarch64-{rest}"))?,
+                Some(ArchOr::Arm64ec),
+            )
+        } else {
+            (Triple::from_str(s)?, None)
+        };
 
-        if is_universal_macos {
-            s = "x86_64-apple-darwin";
-        }
-
-        let triple = Triple::from_str(s)?;
         Ok(Self {
             os: triple.operating_system,
-            arch: if is_universal_macos {
-                ArchOr::Universal
-            } else {
-                ArchOr::Arch(triple.architecture)
-            },
+            arch: arch.unwrap_or(ArchOr::Arch(triple.architecture)),
             env: triple.environment,
             vendor: triple.vendor,
             family: Family::from_os(triple.operating_system),
@@ -117,12 +122,16 @@ impl<'a> CfgOption<'a> {
     }
 }
 
-/// Either an [`Architecture`] from an LLVM target triple, or "universal",
-/// which is an Apple multi-architecture binary.
+/// Either an [`Architecture`] from an LLVM target triple, or an architecture
+/// that [`Architecture`] has no variant for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArchOr {
     Arch(Architecture),
+    /// "universal", which is an Apple multi-architecture binary.
     Universal,
+    /// "arm64ec", Windows on ARM64 code that is ABI compatible with x64,
+    /// see <https://learn.microsoft.com/en-us/windows/arm/arm64ec>.
+    Arm64ec,
 }
 
 impl ArchOr {
@@ -130,6 +139,7 @@ impl ArchOr {
         match self {
             Self::Arch(arch) => arch.into_str(),
             Self::Universal => Cow::Borrowed("universal"),
+            Self::Arm64ec => Cow::Borrowed("arm64ec"),
         }
     }
 }
@@ -285,6 +295,20 @@ mod tests {
         assert_eq!(triple.env, Environment::Gnu);
         assert_eq!(triple.vendor, Vendor::Pc);
         assert_eq!(triple.family, Some(Family::Windows));
+    }
+
+    #[test]
+    fn test_parse_windows_arm64ec_target() {
+        let triple: TargetTriple = "arm64ec-pc-windows-msvc".parse().unwrap();
+
+        assert_eq!(triple.os, OperatingSystem::Windows);
+        assert_eq!(triple.arch, ArchOr::Arm64ec);
+        assert_eq!(triple.env, Environment::Msvc);
+        assert_eq!(triple.vendor, Vendor::Pc);
+        assert_eq!(triple.family, Some(Family::Windows));
+
+        // Matches `rustc --print cfg --target arm64ec-pc-windows-msvc`.
+        assert!(triple.cfgs().iter().any(|c| matches!(c, Cfg::KeyPair(ident, value) if ident.name == "target_arch" && value == "arm64ec")));
     }
 
     #[test]

@@ -64,6 +64,14 @@ mod tests {
     }
 
     #[test]
+    fn test_target_arch_arm64ec() {
+        let triple: TargetTriple = "arm64ec-pc-windows-msvc".parse().unwrap();
+        assert_eq!(triple.get_value("target-arch").as_deref(), Some("arm64ec"));
+        assert_eq!(triple.get_value("os-name").as_deref(), Some("windows"));
+        assert_eq!(triple.get_value("target-libc").as_deref(), Some("msvc"));
+    }
+
+    #[test]
     fn test_existing_keys_unchanged() {
         let triple: TargetTriple = "x86_64-unknown-linux-gnu".parse().unwrap();
         assert_eq!(triple.get_value("target-arch").as_deref(), Some("x86_64"));
