@@ -236,9 +236,11 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--only-signed` — Only install packages that are signed
 
    The default is to verify signatures if they are available, but to allow unsigned packages as well.
-* `--skip-signatures` — Don't check any signatures
+* `--skip-signatures` — Don't check any signatures or checksums
 
    The default is to verify signatures if they are available. This option disables that behaviour entirely, which will also stop downloading signature files in the first place.
+
+   It also stops looking for checksum files published next to the package, such as `{ url }.sha256`, which are verified by default when they exist.
 
    Note that this is insecure and not recommended outside of testing.
 * `--settings <SETTINGS>` — Custom settings file

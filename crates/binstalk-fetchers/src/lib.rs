@@ -92,6 +92,15 @@ pub enum FetchError {
     #[error("Failed to verify signature")]
     InvalidSignature,
 
+    #[error("{algorithm} checksum of {url} is {actual}, but {checksum_url} says it is {expected}")]
+    ChecksumMismatch {
+        url: Box<Url>,
+        checksum_url: Box<Url>,
+        algorithm: &'static str,
+        expected: CompactString,
+        actual: CompactString,
+    },
+
     #[error("Failed to wait for task: {0}")]
     TaskJoinError(#[from] JoinError),
 }

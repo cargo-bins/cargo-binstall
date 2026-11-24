@@ -178,6 +178,24 @@ If you like to live dangerously (please don't use this outside testing), you can
 use `--skip-signatures` to disable checking or even downloading signatures at
 all.
 
+## Checksums
+
+Many releases publish a checksum file next to each package, such as
+`app-x86_64-unknown-linux-musl.tar.gz.sha256`. If there is one, Binstall
+verifies that the package it downloads matches it, and refuses to install it
+otherwise. It looks for `.sha512`, `.sha512sum`, `.sha256` and `.sha256sum`
+files, in the format `sha256sum` writes, with or without `--tag`, or holding
+just the checksum.
+
+For a GitHub release, the release's asset list tells which of them exist, so
+this costs no extra request unless there is one to download. For any other
+host, the `.sha512` and `.sha256` files are asked for.
+
+A checksum file comes from the same place as the package, so unlike a
+signature it does not tell who made the package: it catches a corrupted
+download, or a package replaced without its checksum file.
+`--skip-signatures` skips checksum files too.
+
 ## FAQ
 
 ### Why use this?

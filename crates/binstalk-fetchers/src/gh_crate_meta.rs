@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+use binstalk_downloader::download::DataVerifier;
 use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use binstalk_types::{
     cargo_toml_binstall::Strategy,
@@ -25,6 +26,7 @@ use crate::{
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
 
+mod checksum;
 pub(crate) mod hosting;
 mod probe;
 
@@ -54,6 +56,29 @@ struct Resolved {
     /// The `pkg-url` that `url` was rendered from, see
     /// [`PkgUrlHint::pkg_url`].
     pkg_url: Arc<str>,
+}
+
+/// Feeds the package to the signature verifier and to the checksum
+/// verifier, if any.
+struct Verifiers<'a, 'b, 'c> {
+    signature: &'a mut (dyn DataVerifier + 'b),
+    checksum: Option<&'a mut checksum::ChecksumVerifier<'c>>,
+}
+
+impl DataVerifier for Verifiers<'_, '_, '_> {
+    fn update(&mut self, data: &bytes::Bytes) {
+        self.signature.update(data);
+        if let Some(checksum) = &mut self.checksum {
+            checksum.update(data);
+        }
+    }
+
+    /// Not used: each verifier is validated on its own, to tell which one
+    /// failed. Fails closed if called anyway.
+    fn validate(&mut self) -> bool {
+        debug_assert!(false, "validate each verifier on its own");
+        false
+    }
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -356,42 +381,72 @@ impl super::Fetcher for GhCrateMeta {
             .expect("find() should be called once before fetch_and_extract()");
         trace!(?resolved, "preparing to fetch");
 
-        let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
-            (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
-                SignatureVerifier::Noop
-            }
-            (SignaturePolicy::Require, None) => {
-                return Err(FetchError::MissingSignature);
-            }
-            (_, Some(config)) => {
-                let template = match config.file.as_deref() {
-                    Some(file) => Template::parse(file)?,
-                    None => leon_macros::template!("{ url }.sig"),
-                };
-                trace!(?template, "parsed signature file template");
+        let signature = async {
+            Ok(
+                match (self.signature_policy, &self.target_data.meta.signing) {
+                    (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
+                        SignatureVerifier::Noop
+                    }
+                    (SignaturePolicy::Require, None) => {
+                        return Err(FetchError::MissingSignature);
+                    }
+                    (_, Some(config)) => {
+                        let template = match config.file.as_deref() {
+                            Some(file) => Template::parse(file)?,
+                            None => leon_macros::template!("{ url }.sig"),
+                        };
+                        trace!(?template, "parsed signature file template");
 
-                let sign_url = {
-                    let mut ctx = Context::from_data_with_repo(
-                        &self.data,
-                        &self.target_data.target,
-                        &self.target_data.target_related_info,
-                        resolved.archive_suffix.as_deref(),
-                        resolved.repo.as_deref(),
-                        resolved.subcrate.as_deref(),
-                    );
-                    ctx.target_arch = resolved.target_arch;
-                    ctx.with_url(&resolved.url).render_url_with(&template)?
-                };
+                        let sign_url = {
+                            let mut ctx = Context::from_data_with_repo(
+                                &self.data,
+                                &self.target_data.target,
+                                &self.target_data.target_related_info,
+                                resolved.archive_suffix.as_deref(),
+                                resolved.repo.as_deref(),
+                                resolved.subcrate.as_deref(),
+                            );
+                            ctx.target_arch = resolved.target_arch;
+                            ctx.with_url(&resolved.url).render_url_with(&template)?
+                        };
 
-                debug!(?sign_url, "Downloading signature");
-                let signature = Download::new(self.client.clone(), sign_url)
-                    .into_bytes()
-                    .await?;
-                trace!(?signature, "got signature contents");
+                        debug!(?sign_url, "Downloading signature");
+                        let signature = Download::new(self.client.clone(), sign_url)
+                            .into_bytes()
+                            .await?;
+                        trace!(?signature, "got signature contents");
 
-                SignatureVerifier::new(config, &signature)?
-            }
+                        SignatureVerifier::new(config, &signature)?
+                    }
+                },
+            )
         };
+
+        // `--skip-signatures` skips checksum files too: it is the way out
+        // of a release whose checksum file is wrong.
+        let checksum = async {
+            if self.signature_policy == SignaturePolicy::Ignore {
+                return None;
+            }
+            checksum::find(
+                &self.client,
+                &self.gh_api_client,
+                &self.data,
+                &resolved.url,
+                resolved.is_repo_private,
+            )
+            .await
+        };
+
+        let (verifier, checksum) = futures_util::future::join(signature, checksum).await;
+        let verifier = verifier?;
+        if let Some(checksum) = &checksum {
+            debug!(
+                "Package must have the {} checksum in {}",
+                checksum.algorithm.name(),
+                checksum.url
+            );
+        }
 
         debug!(
             url=%resolved.url,
@@ -400,20 +455,45 @@ impl super::Fetcher for GhCrateMeta {
             "Downloading package",
         );
         let mut data_verifier = verifier.data_verifier()?;
+        let mut checksum_verifier = checksum.as_ref().map(checksum::Checksum::verifier);
+        let mut verifiers = Verifiers {
+            signature: data_verifier.as_mut(),
+            checksum: checksum_verifier.as_mut(),
+        };
         let files = match resolved.gh_release_artifact_url.as_ref() {
             Some(artifact_url) if resolved.is_repo_private => self
                 .gh_api_client
                 .download_artifact(artifact_url.clone())
                 .await?
-                .with_data_verifier(data_verifier.as_mut()),
+                .with_data_verifier(&mut verifiers),
             _ => Download::new_with_data_verifier(
                 self.client.clone(),
                 resolved.url.clone(),
-                data_verifier.as_mut(),
+                &mut verifiers,
             ),
         }
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
+
+        if let (Some(checksum), Some(checksum_verifier)) = (&checksum, &mut checksum_verifier) {
+            trace!("validating checksum");
+            if !checksum_verifier.validate() {
+                return Err(FetchError::ChecksumMismatch {
+                    url: Box::new(resolved.url.clone()),
+                    checksum_url: Box::new(checksum.url.clone()),
+                    algorithm: checksum.algorithm.name(),
+                    expected: checksum.expected_hex().into(),
+                    actual: checksum_verifier.actual_hex().into(),
+                });
+            }
+            info!(
+                "Verified {} checksum of package '{}' from {}",
+                checksum.algorithm.name(),
+                self.data.name,
+                checksum.url
+            );
+        }
+
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {

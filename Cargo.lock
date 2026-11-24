@@ -330,6 +330,7 @@ name = "binstalk-fetchers"
 version = "0.10.54"
 dependencies = [
  "async-trait",
+ "base16",
  "binstalk-bins",
  "binstalk-downloader",
  "binstalk-git-repo-api",
@@ -337,11 +338,14 @@ dependencies = [
  "bytes",
  "compact_str",
  "either",
+ "futures-util",
  "itertools",
  "leon",
  "leon-macros",
  "miette",
  "minisign-verify",
+ "percent-encoding",
+ "sha2",
  "strum",
  "thiserror 2.0.21",
  "tokio",

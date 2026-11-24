@@ -527,11 +527,15 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub(crate) only_signed: bool,
 
-    /// Don't check any signatures
+    /// Don't check any signatures or checksums
     ///
     /// The default is to verify signatures if they are available. This option
     /// disables that behaviour entirely, which will also stop downloading
     /// signature files in the first place.
+    ///
+    /// It also stops looking for checksum files published next to the
+    /// package, such as `{ url }.sha256`, which are verified by default when
+    /// they exist.
     ///
     /// Note that this is insecure and not recommended outside of testing.
     #[clap(help_heading = "Options", long, conflicts_with = "only_signed")]
