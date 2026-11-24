@@ -111,10 +111,13 @@ impl Client {
     /// Construct a new downloader client
     ///
     /// * `per_millis` - The duration (in millisecond) for which at most
-    ///   `num_request` can be sent. Increase it if rate-limit errors
-    ///   happen.
+    ///   `num_request` can be sent to each host. Increase it if rate-limit
+    ///   errors happen.
     /// * `num_request` - maximum number of requests to be processed for
-    ///   each `per_millis` duration.
+    ///   each `per_millis` duration, for each host.
+    ///
+    /// The rate limit is kept per host, so a host that rate-limits us only
+    /// slows down requests to itself.
     ///
     /// The [`reqwest::Client`] constructed has secure defaults, such as allowing
     /// only TLS v1.2 and above, and disallowing plaintext HTTP altogether. Set

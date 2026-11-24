@@ -201,14 +201,19 @@ pub struct Args {
 
     /// Override the rate limit duration.
     ///
-    /// By default, cargo-binstall allows one request per 10 ms.
+    /// By default, cargo-binstall allows one request per 10 ms to each host.
+    ///
+    /// The limit applies to each host separately, e.g. a host that
+    /// rate-limits cargo-binstall (and makes it back off) does not slow
+    /// down requests to other hosts.
     ///
     /// Example:
     ///
-    ///  - `6`: Set the duration to 6ms, allows one request per 6 ms.
+    ///  - `6`: Set the duration to 6ms, allows one request per 6 ms to each
+    ///    host.
     ///
     ///  - `6/2`: Set the duration to 6ms and request_count to 2,
-    ///    allows 2 requests per 6ms.
+    ///    allows 2 requests per 6ms to each host.
     ///
     /// Both duration and request count must not be 0.
     #[clap(
