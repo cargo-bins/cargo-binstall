@@ -159,6 +159,10 @@ $ cargo-binstall \
   crate_name
 ```
 
+A project that is not on crates.io, or not written in Rust, can be installed too,
+from a `Cargo.toml` you write for it, see
+[Installing a project that is not on crates.io](https://github.com/cargo-bins/cargo-binstall/blob/main/SUPPORT.md#installing-a-project-that-is-not-on-cratesio).
+
 Maintainers wanting to make their users' life easier can add
 [explicit Binstall metadata](https://github.com/cargo-bins/cargo-binstall/blob/main/SUPPORT.md)
 to `Cargo.toml` to locate the appropriate binary package for a given version and
@@ -209,6 +213,24 @@ download of the package files.
 Compared to something like a `curl ... | sh` script, we're not running arbitrary
 code, but of course the crate you're downloading a package for might itself be
 malicious!
+
+### Does it work behind a proxy?
+
+Yes, the proxy is read from the `HTTPS_PROXY`, `HTTP_PROXY` and `ALL_PROXY`
+environment variables (or their lowercase forms), with hosts to reach directly
+in `NO_PROXY`. A proxy that needs a login takes it in the URL, like
+`HTTPS_PROXY=http://user:password@proxy.example.com:8080`, with special
+characters in the user or password percent-encoded. `socks5://` and
+`socks5h://` proxies work too. On macOS and Windows, the system proxy settings
+are used when none of these are set. Cargo's own `http.proxy` setting is not
+read.
+
+If the proxy or network re-signs HTTPS traffic with its own certificate
+authority, pass its certificate with `--root-certificates` (or
+`BINSTALL_HTTPS_ROOT_CERTS`), or set Cargo's `http.cainfo` to it.
+
+To install from a private registry instead of crates.io, pass `--registry` or
+`--index`, as with `cargo install`.
 
 ### What do the error codes mean?
 
