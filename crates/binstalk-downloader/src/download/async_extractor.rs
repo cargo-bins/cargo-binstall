@@ -15,24 +15,30 @@ use tokio::{io::AsyncRead, sync::mpsc};
 use tokio_util::io::{ReaderStream, StreamReader};
 use tracing::debug;
 
-use super::{CompressionFmt, DownloadError, ExtractedFiles, TarBasedFmt, extractor::*};
+use super::{
+    CompressionFmt, DownloadError, ExtractedFiles, TarBasedFmt, UnpackBudget, extractor::*,
+};
 use crate::{
     download::zip_extraction::do_extract_zip,
     utils::{StreamReadable, extract_with_blocking_task},
 };
 
-pub async fn extract_bin<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
+pub async fn extract_bin<S>(
+    stream: S,
+    path: &Path,
+    budget: UnpackBudget,
+) -> Result<ExtractedFiles, DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
 {
     debug!("Writing to `{}`", path.display());
 
-    extract_with_blocking_decoder(stream, path, |rx, path| {
+    extract_with_blocking_decoder(stream, path, move |rx, path| {
         let mut extracted_files = ExtractedFiles::new();
 
         extracted_files.add_file(Path::new(path.file_name().unwrap()));
 
-        write_stream_to_file(rx, fs::File::create(path)?)?;
+        write_stream_to_file(rx, budget.writer(fs::File::create(path)?))?;
 
         Ok(extracted_files)
     })
@@ -45,6 +51,7 @@ pub async fn extract_compressed_bin<S>(
     stream: S,
     path: &Path,
     fmt: CompressionFmt,
+    budget: UnpackBudget,
 ) -> Result<ExtractedFiles, DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Send + Sync + Unpin,
@@ -74,20 +81,26 @@ where
     extract_bin(
         ReaderStream::new(decoder).map(|res| res.map_err(DownloadError::from)),
         path,
+        budget,
     )
     .await
 }
 
-pub async fn extract_zip<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
+pub async fn extract_zip<S>(
+    stream: S,
+    path: &Path,
+    budget: UnpackBudget,
+) -> Result<ExtractedFiles, DownloadError>
 where
     S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync,
 {
     debug!("Downloading from zip archive to tempfile");
 
-    extract_with_blocking_decoder(stream, path, |rx, path| {
+    extract_with_blocking_decoder(stream, path, move |rx, path| {
         debug!("Decompressing from zip archive to `{}`", path.display());
 
-        do_extract_zip(write_stream_to_file(rx, create_tmpfile()?)?, path).map_err(io::Error::from)
+        do_extract_zip(write_stream_to_file(rx, create_tmpfile()?)?, path, &budget)
+            .map_err(io::Error::from)
     })
     .await
 }
@@ -194,7 +207,7 @@ where
     })
 }
 
-fn write_stream_to_file(mut rx: mpsc::Receiver<Bytes>, f: fs::File) -> io::Result<fs::File> {
+fn write_stream_to_file<W: Write>(mut rx: mpsc::Receiver<Bytes>, f: W) -> io::Result<W> {
     let mut f = io::BufWriter::new(f);
 
     while let Some(bytes) = rx.blocking_recv() {
@@ -209,6 +222,7 @@ fn write_stream_to_file(mut rx: mpsc::Receiver<Bytes>, f: fs::File) -> io::Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::download::UnpackLimit;
 
     use std::io::Write;
 
@@ -261,9 +275,14 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("bin-mycrate");
 
-            let extracted = extract_compressed_bin(chunked(compress(fmt, &content)), &path, fmt)
-                .await
-                .unwrap();
+            let extracted = extract_compressed_bin(
+                chunked(compress(fmt, &content)),
+                &path,
+                fmt,
+                UnpackBudget::new(UnpackLimit::DEFAULT),
+            )
+            .await
+            .unwrap();
 
             assert_eq!(fs::read(&path).unwrap(), content, "{fmt}");
             assert!(extracted.has_file(Path::new("bin-mycrate")), "{fmt}");
@@ -279,9 +298,14 @@ mod tests {
             let mut data = compress(fmt, b"hello, ");
             data.extend(compress(fmt, b"world"));
 
-            extract_compressed_bin(chunked(data), &path, fmt)
-                .await
-                .unwrap();
+            extract_compressed_bin(
+                chunked(data),
+                &path,
+                fmt,
+                UnpackBudget::new(UnpackLimit::DEFAULT),
+            )
+            .await
+            .unwrap();
 
             assert_eq!(fs::read(&path).unwrap(), b"hello, world", "{fmt}");
         }
@@ -296,9 +320,14 @@ mod tests {
             let mut data = compress(fmt, &[0x42; 4096]);
             data.truncate(data.len() / 2);
 
-            extract_compressed_bin(chunked(data), &path, fmt)
-                .await
-                .unwrap_err();
+            extract_compressed_bin(
+                chunked(data),
+                &path,
+                fmt,
+                UnpackBudget::new(UnpackLimit::DEFAULT),
+            )
+            .await
+            .unwrap_err();
         }
     }
 
@@ -308,9 +337,45 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("bin");
 
-            extract_compressed_bin(chunked(b"\x7fELF not compressed".to_vec()), &path, fmt)
+            extract_compressed_bin(
+                chunked(b"\x7fELF not compressed".to_vec()),
+                &path,
+                fmt,
+                UnpackBudget::new(UnpackLimit::DEFAULT),
+            )
+            .await
+            .unwrap_err();
+        }
+    }
+
+    #[tokio::test]
+    async fn compressed_bin_bomb_is_stopped() {
+        let zeros = vec![0; 4 << 20];
+
+        for fmt in FMTS {
+            let data = compress(fmt, &zeros);
+            assert!(data.len() as u64 * 20 < 1 << 20, "{fmt}: {}", data.len());
+
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("bin");
+            let budget = UnpackBudget::new(UnpackLimit::new(1 << 20, 20));
+            budget.add_compressed(data.len());
+            let err = extract_compressed_bin(chunked(data.clone()), &path, fmt, budget)
                 .await
                 .unwrap_err();
+            assert!(
+                matches!(err, DownloadError::UnpackLimitExceeded { .. }),
+                "{fmt}: {err:?}"
+            );
+            let written = fs::metadata(&path).map_or(0, |m| m.len());
+            assert!(written <= 1 << 20, "{fmt}: {written}");
+
+            let budget = UnpackBudget::new(UnpackLimit::new(8 << 20, 20));
+            budget.add_compressed(data.len());
+            extract_compressed_bin(chunked(data), &path, fmt, budget)
+                .await
+                .unwrap();
+            assert_eq!(fs::metadata(&path).unwrap().len(), 4 << 20, "{fmt}");
         }
     }
 }

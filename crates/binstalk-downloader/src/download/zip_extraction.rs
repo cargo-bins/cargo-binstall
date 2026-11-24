@@ -8,7 +8,7 @@ use normalize_path::NormalizePath;
 use rc_zip_sync::{ReadZip, rc_zip::parse::EntryKind};
 use tracing::warn;
 
-use super::{DownloadError, ExtractedFiles};
+use super::{DownloadError, ExtractedFiles, UnpackBudget};
 
 #[cfg(any(unix, target_os = "wasi"))]
 const MAX_LINK_TARGET: u64 = 4096;
@@ -20,7 +20,11 @@ fn create_parent_dir(path: &Path) -> io::Result<()> {
     create_dir_all(parent)
 }
 
-pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadError> {
+pub(super) fn do_extract_zip(
+    f: File,
+    dir: &Path,
+    budget: &UnpackBudget,
+) -> Result<ExtractedFiles, DownloadError> {
     let mut extracted_files = ExtractedFiles::new();
 
     for entry in f.read_zip()?.entries() {
@@ -87,7 +91,7 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
             EntryKind::File | EntryKind::Symlink => {
                 create_parent_dir(path)?;
 
-                let mut entry_writer = File::create_new(path)?;
+                let mut entry_writer = budget.writer(File::create_new(path)?);
                 let mut entry_reader = entry.reader();
                 io::copy(&mut entry_reader, &mut entry_writer)?;
 
@@ -110,6 +114,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::download::UnpackLimit;
 
     const MODE_FILE: u32 = 0o100_644;
     const MODE_DIR: u32 = 0o040_755;
@@ -242,7 +247,7 @@ mod tests {
 
             let out = self.out();
             fs::create_dir_all(&out).unwrap();
-            do_extract_zip(f, &out)
+            do_extract_zip(f, &out, &UnpackBudget::new(UnpackLimit::DEFAULT))
         }
 
         fn assert_root_contains_only(&self, expected: &[&str]) {
