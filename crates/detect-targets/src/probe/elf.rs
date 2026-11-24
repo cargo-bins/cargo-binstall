@@ -28,7 +28,7 @@ pub(crate) enum Class {
 
 impl Class {
     /// Size of `Elf{32,64}_Ehdr`.
-    const fn ehsize(self) -> usize {
+    pub(crate) const fn ehsize(self) -> usize {
         match self {
             Class::Elf32 => 52,
             Class::Elf64 => 64,
@@ -36,7 +36,7 @@ impl Class {
     }
 
     /// Size of `Elf{32,64}_Phdr`.
-    const fn phentsize(self) -> usize {
+    pub(crate) const fn phentsize(self) -> usize {
         match self {
             Class::Elf32 => 32,
             Class::Elf64 => 56,
@@ -44,7 +44,7 @@ impl Class {
     }
 
     /// Size of `Elf{32,64}_Dyn`.
-    const fn dynent(self) -> usize {
+    pub(crate) const fn dynent(self) -> usize {
         match self {
             Class::Elf32 => 8,
             Class::Elf64 => 16,

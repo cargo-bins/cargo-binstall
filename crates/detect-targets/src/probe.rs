@@ -45,7 +45,7 @@ use tokio::{
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
-mod elf;
+pub(crate) mod elf;
 mod memfd;
 mod table;
 
@@ -56,7 +56,7 @@ use memfd::SealedExecutable;
 pub struct Probe {
     /// The Rust target triple whose binaries this probe stands in for.
     pub target: &'static str,
-    spec: ElfSpec,
+    pub(crate) spec: ElfSpec,
 }
 
 /// The outcome of running a [`Probe`].

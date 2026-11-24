@@ -107,6 +107,11 @@ async fn resolve_inner(
         .collect::<Result<Vec<_>, BinstallError>>()?;
     let resolvers = &opts.resolvers;
 
+    // The targets were detected from this host, so the binaries must run
+    // here. Explicit `--targets` may be for another machine, e.g. when
+    // installing into a sysroot.
+    let check_host_compat = opts.desired_targets.get_initialized().is_none();
+
     let binary_name = match package_info.binaries.as_slice() {
         [bin] if bin.name != package_info.name => Some(CompactString::from(bin.name.as_str())),
         _ => None,
@@ -195,6 +200,7 @@ async fn resolve_inner(
                         &opts.install_path,
                         opts.no_symlinks,
                         &opts.bins,
+                        check_host_compat,
                     )
                     .await
                     {
@@ -304,6 +310,8 @@ async fn resolve_inner(
 }
 
 ///  * `fetcher` - `fetcher.find()` must have returned `Ok(true)`.
+///  * `check_host_compat` - check that the binaries can run on this host,
+///    see [`detect_targets::compat`].
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
@@ -314,6 +322,7 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
+    check_host_compat: bool,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Download and extract it.
     // If that fails, then ignore this fetcher.
@@ -336,7 +345,7 @@ async fn download_extract_and_verify(
 
     let name = &package_info.name;
 
-    package_info
+    let bin_files = package_info
         .binaries
         .iter()
         .zip(bin_files)
@@ -377,8 +386,24 @@ But since it requires features {features}, this bin is ignored."
                 }
             }
         })
-        .collect::<Result<Vec<bins::BinFile>, bins::Error>>()
-        .map_err(BinstallError::from)
+        .collect::<Result<Vec<bins::BinFile>, bins::Error>>()?;
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if check_host_compat {
+        for bin_file in &bin_files {
+            if let Err(reason) = detect_targets::compat::check(&bin_file.source).await {
+                return Err(BinstallError::IncompatibleBinary {
+                    bin: bin_file.base_name.clone(),
+                    target: fetcher.target().into(),
+                    reason,
+                });
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let _ = check_host_compat;
+
+    Ok(bin_files)
 }
 
 fn collect_bin_files(

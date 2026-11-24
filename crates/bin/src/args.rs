@@ -84,6 +84,11 @@ pub struct Args {
     /// `x86_64-unknown-linux-musl` binary. However, on a musl system, the gnu version will not be
     /// considered.
     ///
+    /// On Linux, a binary found for a detected target is skipped if it can't run on this system:
+    /// if it needs a newer glibc (or other library version) than the system has, a shared library
+    /// that isn't installed, or a dynamic loader the system lacks, e.g. a musl binary linked
+    /// dynamically on a glibc system. Targets given with this option are not checked.
+    ///
     /// This option takes a comma-separated list of target triples, which will be tried in order.
     /// They override the default list, which is detected automatically from the current platform.
     ///
