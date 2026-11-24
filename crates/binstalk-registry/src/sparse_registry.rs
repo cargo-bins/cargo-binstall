@@ -1,8 +1,6 @@
 use std::time::Duration;
 
 use binstalk_downloader::remote::{Client, StatusCode};
-use binstalk_types::cargo_toml_binstall::Meta;
-use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
 use jiff::Timestamp;
 use semver::VersionReq;
@@ -12,9 +10,13 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, apply_auth,
-    crate_prefix_components, parse_manifest, publish_age::publish_cutoff, render_dl_template,
+    MatchedCrate, MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, apply_auth,
+    crate_prefix_components, publish_age::publish_cutoff, render_dl_template,
 };
+
+pub(crate) const CRATES_IO_SPARSE_INDEX: &str = "https://index.crates.io/";
+/// `dl` in <https://index.crates.io/config.json>
+const CRATES_IO_DL: &str = "https://static.crates.io/crates";
 
 #[derive(Debug)]
 pub struct SparseRegistry {
@@ -25,10 +27,20 @@ pub struct SparseRegistry {
 impl SparseRegistry {
     /// * `url` - `url.cannot_be_a_base()` must be `false`
     pub fn new(url: Url) -> Self {
-        Self {
-            url,
-            config: Default::default(),
-        }
+        // crates.io's `config.json` is well known, and its `static.crates.io`
+        // download urls are relied upon far beyond cargo, so use it directly
+        // instead of fetching it on every install.
+        // `test_crates_io_config_preset_up_to_date` catches a change.
+        let config = if url.as_str() == CRATES_IO_SPARSE_INDEX {
+            OnceCell::new_with(Some(RegistryConfig {
+                dl: CompactString::const_new(CRATES_IO_DL),
+                auth_required: false,
+            }))
+        } else {
+            OnceCell::new()
+        };
+
+        Self { url, config }
     }
 
     pub fn url(&self) -> &Url {
@@ -118,14 +130,14 @@ impl SparseRegistry {
             version_req = format_args!("{version_req}"),
         )
     )]
-    pub async fn fetch_crate_matched(
+    pub async fn find_crate_matched(
         &self,
         client: Client,
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
         min_publish_age: Option<Duration>,
-    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<MatchedCrate, RegistryError> {
         let cutoff = min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age));
         let crate_prefix = crate_prefix_components(crate_name)?;
         let registry_config = self.get_config(&client, auth).await?;
@@ -140,7 +152,7 @@ impl SparseRegistry {
         } else {
             None
         };
-        let mut matched_version = Self::find_crate_matched_ver(
+        let matched_version = Self::find_crate_matched_ver(
             &client,
             self.url.clone(),
             auth,
@@ -157,9 +169,69 @@ impl SparseRegistry {
             &matched_version,
         )?)?;
 
-        let pubtime = matched_version.pubtime.take();
-        let manifest = parse_manifest(client, crate_name, dl_url, matched_version, auth).await?;
+        Ok(MatchedCrate::new(
+            client,
+            crate_name,
+            dl_url,
+            matched_version,
+            auth,
+        ))
+    }
+}
 
-        Ok((manifest, pubtime))
+#[cfg(test)]
+mod test {
+    use std::num::NonZeroU16;
+
+    use super::*;
+    use crate::Registry;
+
+    fn crates_io_config(registry: &Registry) -> Option<&RegistryConfig> {
+        match registry {
+            Registry::Sparse(sparse) => sparse.config.get(),
+            #[allow(unreachable_patterns)]
+            _ => panic!("expected sparse registry, got {registry:?}"),
+        }
+    }
+
+    #[test]
+    fn test_crates_io_config_preset() {
+        for registry in [
+            Registry::crates_io_sparse_registry(),
+            "sparse+https://index.crates.io".parse().unwrap(),
+            "sparse+https://index.crates.io/".parse().unwrap(),
+        ] {
+            let config = crates_io_config(&registry).unwrap();
+            assert_eq!(config.dl, CRATES_IO_DL);
+            assert!(!config.auth_required);
+        }
+
+        let other: Registry = "sparse+https://example.com/index/".parse().unwrap();
+        assert!(crates_io_config(&other).is_none());
+    }
+
+    /// Fail if crates.io ever changes its `config.json`, so the preset can be
+    /// updated.
+    #[tokio::test]
+    async fn test_crates_io_config_preset_up_to_date() {
+        let client = Client::new(
+            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+            None,
+            false,
+            Default::default(),
+            NonZeroU16::new(10).unwrap(),
+            1.try_into().unwrap(),
+            [],
+        )
+        .unwrap();
+
+        let live = SparseRegistry {
+            url: Url::parse(CRATES_IO_SPARSE_INDEX).unwrap(),
+            config: OnceCell::new(),
+        };
+        let live = live.get_config(&client, None).await.unwrap();
+
+        assert_eq!(live.dl, CRATES_IO_DL);
+        assert!(!live.auth_required);
     }
 }

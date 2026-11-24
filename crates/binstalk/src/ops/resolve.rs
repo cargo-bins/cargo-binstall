@@ -556,12 +556,24 @@ impl PackageInfo {
                 )
             }
             None => {
-                let (manifest, pubtime) = Box::pin(opts.registry.fetch_crate_matched(
-                    client,
-                    &name,
-                    version_req,
-                ))
-                .await?;
+                let matched =
+                    Box::pin(opts.registry.find_crate_matched(client, &name, version_req)).await?;
+
+                // The registry index already says which version would be
+                // installed, so don't download the crate just to find out
+                // it is up to date.
+                if let Some(curr_version) = &curr_version
+                    && Version::parse(matched.version()).is_ok_and(|v| v == *curr_version)
+                {
+                    info!(
+                        "{} v{curr_version} is already installed, use --force to override",
+                        name
+                    );
+                    return Ok(None);
+                }
+
+                let pubtime = matched.pubtime().map(CompactString::from);
+                let manifest = Box::pin(matched.fetch_manifest()).await?;
 
                 (manifest, opts.registry.crate_source()?, pubtime)
             }
