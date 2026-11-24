@@ -56,9 +56,12 @@ struct Resolved {
     pkg_url: Arc<str>,
 }
 
-/// Write `template` back in the syntax [`Template::parse`] reads.
-fn template_to_string(template: &Template<'_>) -> CompactString {
-    let mut s = CompactString::default();
+/// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
+///
+/// `s` is cleared first, so that one buffer can be reused for every
+/// template.
+fn write_template(template: &Template<'_>, s: &mut String) {
+    s.clear();
     for item in template.items.iter() {
         match item {
             leon::Item::Text(text) => {
@@ -76,7 +79,6 @@ fn template_to_string(template: &Template<'_>) -> CompactString {
             }
         }
     }
-    s
 }
 
 /// Other names commonly used for an architecture in release assets, tried
@@ -269,9 +271,11 @@ impl super::Fetcher for GhCrateMeta {
             };
 
             // Every URL the package may be at, rendered once.
+            let mut buf = String::new();
             let candidates: Vec<Candidate> = pkg_urls
                 .map(|pkg_url| {
-                    let pkg_url_str: Arc<str> = template_to_string(&pkg_url).as_str().into();
+                    write_template(&pkg_url, &mut buf);
+                    let pkg_url_str: Arc<str> = buf.as_str().into();
                     (pkg_url_str, pkg_url)
                 })
                 .cartesian_product(pkg_fmts)
@@ -788,9 +792,15 @@ mod test {
         );
     }
 
+    fn template_to_string(template: &Template<'_>) -> String {
+        let mut s = "stale".to_owned();
+        super::write_template(template, &mut s);
+        s
+    }
+
     #[test]
     fn template_to_string_round_trips() {
-        use super::{hosting::RepositoryHost, template_to_string};
+        use super::hosting::RepositoryHost;
 
         let hosts = [
             RepositoryHost::GitHub,
