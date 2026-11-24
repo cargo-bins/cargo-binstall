@@ -3,6 +3,7 @@
 mod args;
 mod bin_util;
 mod entry;
+mod forge_tokens;
 mod gh_token;
 mod git_credentials;
 mod initialise;

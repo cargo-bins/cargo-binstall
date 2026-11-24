@@ -4,12 +4,15 @@
 //!
 //! GitHub has its own way, see [`crate::gh_api_client::ReleaseAssetsPage`].
 //!
-//! All of them are asked without a token, so they only work for a public
-//! repository. Each answer either lists every asset of the release, or says
-//! it may not have, so that an asset it doesn't list is still checked some
-//! other way.
+//! They are asked without a token, so they only work for a public
+//! repository, except GitLab with a [`GitLabToken`] for its host. Each answer
+//! either lists every asset of the release, or says it may not have, so that
+//! an asset it doesn't list is still checked some other way.
 
-use std::{collections::HashSet, fmt};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use binstalk_downloader::remote;
 use compact_str::CompactString;
@@ -17,6 +20,7 @@ use percent_encoding::percent_decode_str;
 use serde::{Deserialize, de::IgnoredAny};
 use tracing::debug;
 use url::Url;
+use zeroize::Zeroizing;
 
 use crate::gh_api_client::{GhApiError, check_http_status_and_header};
 
@@ -31,6 +35,104 @@ pub enum Forge {
     Bitbucket,
     /// sourceforge.net
     SourceForge,
+}
+
+/// A token of a GitLab user or CI job, for the API and git of one GitLab
+/// instance.
+#[derive(Clone)]
+pub struct GitLabToken {
+    token: Zeroizing<Box<str>>,
+    is_job_token: bool,
+}
+
+impl fmt::Debug for GitLabToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GitLabToken")
+            .field("is_job_token", &self.is_job_token)
+            .finish_non_exhaustive()
+    }
+}
+
+impl GitLabToken {
+    /// A personal, project, group or OAuth access token.
+    pub fn access_token(token: Zeroizing<Box<str>>) -> Self {
+        Self {
+            token,
+            is_job_token: false,
+        }
+    }
+
+    /// `CI_JOB_TOKEN` of a GitLab CI job.
+    pub fn job_token(token: Zeroizing<Box<str>>) -> Self {
+        Self {
+            token,
+            is_job_token: true,
+        }
+    }
+
+    /// Authenticate a download, which may be redirected to another host.
+    ///
+    /// Only the `Authorization` header is left out of a redirect to another
+    /// host, so a job token goes there as basic auth, not as `JOB-TOKEN`.
+    pub fn authenticate_download(&self, request: remote::RequestBuilder) -> remote::RequestBuilder {
+        if self.is_job_token {
+            let (username, password) = self.git_credentials();
+            request.basic_auth(&username, &password)
+        } else {
+            request.bearer_auth(&&*self.token)
+        }
+    }
+
+    /// Authenticate an API `request` with it, one that isn't redirected:
+    /// see [`GitLabToken::authenticate_download`].
+    pub fn authenticate(&self, request: remote::RequestBuilder) -> remote::RequestBuilder {
+        if self.is_job_token {
+            request.header("JOB-TOKEN", &self.token)
+        } else {
+            // Takes personal access tokens too.
+            request.bearer_auth(&&*self.token)
+        }
+    }
+
+    /// The username and password git authenticates with.
+    pub fn git_credentials(&self) -> (&str, &str) {
+        let username = if self.is_job_token {
+            "gitlab-ci-token"
+        } else {
+            // Any username works with an access token.
+            "oauth2"
+        };
+        (username, &self.token)
+    }
+}
+
+/// The [`GitLabToken`] of each GitLab instance, by host.
+///
+/// A token is only ever sent to its own host: the repository of a crate can
+/// be anywhere.
+#[derive(Debug, Default)]
+pub struct ForgeTokens {
+    gitlab: HashMap<String, GitLabToken>,
+}
+
+impl ForgeTokens {
+    /// Use `token` for the GitLab instance at `host`, unless there already
+    /// is one for it.
+    pub fn add_gitlab(&mut self, host: &str, token: GitLabToken) {
+        self.gitlab
+            .entry(host.to_ascii_lowercase())
+            .or_insert(token);
+    }
+
+    /// The token of the GitLab instance at the host of `url`, if any.
+    pub fn gitlab(&self, url: &Url) -> Option<&GitLabToken> {
+        let host = url.host_str()?.to_ascii_lowercase();
+        self.gitlab.get(&host)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.gitlab.is_empty()
+    }
 }
 
 /// Where the assets of a release are listed, see [`locate`].
@@ -195,6 +297,8 @@ enum List {
         /// Whether `names` has every asset: Bitbucket and SourceForge send
         /// the newest ones.
         complete: bool,
+        /// The URL each GitLab release link points to, by name.
+        links: HashMap<CompactString, Url>,
     },
     /// The request failed, or the answer doesn't look as expected.
     Unknown,
@@ -202,16 +306,38 @@ enum List {
 
 impl AssetList {
     /// Get the assets listed at `listing`, with one request.
-    pub async fn fetch(client: &remote::Client, listing: &AssetListing) -> Self {
+    ///
+    /// `token` is only used for GitLab: get it with [`ForgeTokens::gitlab`]
+    /// for [`AssetListing::url`].
+    pub async fn fetch(
+        client: &remote::Client,
+        listing: &AssetListing,
+        token: Option<&GitLabToken>,
+    ) -> Self {
         let AssetListing { kind, url } = listing;
         debug!("Getting release assets from: '{url}'");
 
-        let response = client
-            .get(url.clone())
-            .send(false)
-            .await
-            .map_err(GhApiError::from)
-            .and_then(check_http_status_and_header);
+        let get = |token: Option<&GitLabToken>| {
+            let mut request = client.get(url.clone());
+            if let (Kind::GitLab, Some(token)) = (kind, token) {
+                request = token.authenticate(request);
+            }
+            async move {
+                request
+                    .send(false)
+                    .await
+                    .map_err(GhApiError::from)
+                    .and_then(check_http_status_and_header)
+            }
+        };
+        let mut token = token.filter(|_| matches!(kind, Kind::GitLab));
+        let mut response = get(token).await;
+        if token.is_some() && matches!(response, Err(GhApiError::Unauthorized)) {
+            // Expired or revoked: a public repository doesn't need it.
+            debug!("The token for {url} was refused, trying without it");
+            token = None;
+            response = get(None).await;
+        }
         let body = match response {
             Ok(response) => response.bytes().await,
             Err(GhApiError::NotFound) => {
@@ -228,7 +354,13 @@ impl AssetList {
             }
         };
         let list = match body {
-            Ok(body) => parse(kind, &body),
+            Ok(body) => parse(kind, &body).map(|mut list| {
+                // Downloading from them needs a token that works.
+                if let (List::Found { links, .. }, None) = (&mut list, token) {
+                    links.clear();
+                }
+                list
+            }),
             Err(err) => {
                 debug!("Failed to get release assets from {url}: {err}");
                 return Self(List::Unknown);
@@ -250,6 +382,20 @@ impl AssetList {
         }
     }
 
+    /// Where the GitLab release link `name` points to, if it is listed with
+    /// a token that works.
+    ///
+    /// Unlike `{repo}/-/releases/{tag}/downloads/{filepath}`, which needs the
+    /// user to be signed in with a browser for a private repository, a link
+    /// to the API of the same instance can be downloaded with a
+    /// [`GitLabToken`].
+    pub fn link_url(&self, name: &str) -> Option<&Url> {
+        match &self.0 {
+            List::Found { links, .. } => links.get(name),
+            _ => None,
+        }
+    }
+
     /// Whether the release exists, `None` if it can't tell.
     #[cfg(test)]
     fn exists(&self) -> Option<bool> {
@@ -258,6 +404,13 @@ impl AssetList {
             List::Found { .. } => Some(true),
             List::Unknown => None,
         }
+    }
+}
+
+impl AssetListing {
+    /// What is requested.
+    pub fn url(&self) -> &Url {
+        &self.url
     }
 }
 
@@ -280,6 +433,7 @@ struct GitLabAssets {
 
 #[derive(Deserialize)]
 struct GitLabLink {
+    url: String,
     direct_asset_url: String,
 }
 
@@ -305,18 +459,23 @@ struct BitbucketDownloads {
 const SOURCEFORGE_FEED_LEN: usize = 100;
 
 fn parse(kind: &Kind, body: &[u8]) -> Option<List> {
+    let mut links = HashMap::new();
     let (names, complete) = match kind {
         Kind::GitLab => {
             let release: GitLabRelease = serde_json::from_slice(body).ok()?;
             let names = release
                 .assets
                 .links
-                .iter()
+                .into_iter()
                 .filter_map(|link| {
                     // A link without a `filepath` has its own URL instead.
                     let (_, rest) = link.direct_asset_url.split_once("/-/releases/")?;
                     let (_, filepath) = rest.split_once("/downloads/")?;
-                    decode(filepath)
+                    let name = decode(filepath)?;
+                    if let Ok(url) = Url::parse(&link.url) {
+                        links.insert(name.clone(), url);
+                    }
+                    Some(name)
                 })
                 .collect();
             (names, true)
@@ -354,7 +513,11 @@ fn parse(kind: &Kind, body: &[u8]) -> Option<List> {
             (names, len < SOURCEFORGE_FEED_LEN)
         }
     };
-    Some(List::Found { names, complete })
+    Some(List::Found {
+        names,
+        complete,
+        links,
+    })
 }
 
 /// Undo the escaping of XML text, which only has the predefined entities in
@@ -380,6 +543,37 @@ mod test {
 
     fn pair(url: &str, name: &str) -> Option<(String, String)> {
         Some((url.to_owned(), name.to_owned()))
+    }
+
+    #[test]
+    fn test_forge_tokens() {
+        let mut tokens = ForgeTokens::default();
+        assert!(tokens.is_empty());
+        let token = |s: &str| Zeroizing::new(Box::<str>::from(s));
+        tokens.add_gitlab("GitLab.example.com", GitLabToken::access_token(token("a")));
+        // The first one stays.
+        tokens.add_gitlab("gitlab.example.com", GitLabToken::job_token(token("b")));
+
+        let url = |s: &str| Url::parse(s).unwrap();
+        let found = tokens
+            .gitlab(&url("https://gitlab.example.com/a/b/-/releases/v1"))
+            .unwrap();
+        assert_eq!(found.git_credentials(), ("oauth2", "a"));
+        // Not sent anywhere else.
+        assert!(tokens.gitlab(&url("https://gitlab.com/a/b")).is_none());
+        assert!(
+            tokens
+                .gitlab(&url("https://gitlab.example.com.evil.com/a/b"))
+                .is_none()
+        );
+
+        assert_eq!(
+            GitLabToken::job_token(token("c")).git_credentials(),
+            ("gitlab-ci-token", "c")
+        );
+        // Not printed.
+        let secret = GitLabToken::access_token(token("glpat-secret"));
+        assert!(!format!("{secret:?}").contains("glpat-secret"));
     }
 
     #[test]
@@ -519,7 +713,9 @@ mod test {
 
     fn found(list: &List) -> (Vec<&str>, bool) {
         match list {
-            List::Found { names, complete } => {
+            List::Found {
+                names, complete, ..
+            } => {
                 let mut names: Vec<&str> = names.iter().map(|name| name.as_str()).collect();
                 names.sort_unstable();
                 (names, *complete)
@@ -543,6 +739,15 @@ mod test {
                 true
             )
         );
+
+        let list = AssetList(list);
+        assert_eq!(
+            list.link_url("glab_1.131.0_linux_amd64.tar.gz")
+                .unwrap()
+                .as_str(),
+            "https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/1%2E131%2E0/glab_1%2E131%2E0_linux_amd64%2Etar%2Egz"
+        );
+        assert_eq!(list.link_url("glab.zip"), None);
 
         assert!(parse(&Kind::GitLab, br#"{"message":"403 Forbidden"}"#).is_none());
     }
@@ -632,7 +837,7 @@ mod test {
 
     async fn fetch(forge: Forge, repo: &str, url: &str) -> (ListedAsset, AssetList) {
         let asset = locate(forge, repo, &Url::parse(url).unwrap()).unwrap();
-        let list = AssetList::fetch(&client(), &asset.listing).await;
+        let list = AssetList::fetch(&client(), &asset.listing, None).await;
         (asset, list)
     }
 

@@ -19,7 +19,7 @@ use binstalk_git_repo_api::{
         ReleaseAssetsPage,
     },
     git_refs,
-    release_assets::{self, AssetList, Forge, ListedAsset},
+    release_assets::{self, AssetList, Forge, GitLabToken, ListedAsset},
 };
 use compact_str::CompactString;
 use itertools::Itertools;
@@ -240,10 +240,11 @@ impl Probe {
         );
         // Set by `get_repo_info`, which `find` calls first.
         if !unasked.is_empty()
-            && let Some(Some(RepoInfo {
-                repo, is_private, ..
-            })) = data.repo_cache.info.get()
+            && let Some(Some(info)) = data.repo_cache.info.get()
         {
+            let RepoInfo {
+                repo, is_private, ..
+            } = info;
             let listed = match GhRepo::try_extract_from_url(repo) {
                 Some(gh_repo) if *is_private => {
                     shared
@@ -251,7 +252,23 @@ impl Probe {
                         .list_private_repo_tags(&gh_repo, unasked)
                         .await
                 }
-                _ => git_refs::list_tags(&shared.client, repo, unasked, None).await,
+                _ => match data.gitlab_token(info).map(GitLabToken::git_credentials) {
+                    Some(credentials) => {
+                        let client = &shared.client;
+                        match git_refs::list_tags(client, repo, unasked.clone(), Some(credentials))
+                            .await
+                        {
+                            // Expired or revoked: a public repository doesn't
+                            // need it.
+                            Err(GhApiError::Unauthorized) => {
+                                debug!("The token for {repo} was refused, trying without it");
+                                git_refs::list_tags(client, repo, unasked, None).await
+                            }
+                            listed => listed,
+                        }
+                    }
+                    None => git_refs::list_tags(&shared.client, repo, unasked, None).await,
+                },
             };
             tags.add(
                 listed
@@ -347,15 +364,36 @@ impl Probe {
             });
             let mut of_release: Vec<Candidate> = of_release.collect();
 
-            let list = self.shared.data.repo_cache.asset_list(&listing);
+            let data = &self.shared.data;
+            let token = data.forge_tokens.gitlab(listing.url());
+            let list = data.repo_cache.asset_list(&listing);
             let list = list
-                .get_or_init(|| AssetList::fetch(&self.shared.client, &listing))
+                .get_or_init(|| AssetList::fetch(&self.shared.client, &listing, token))
                 .await;
 
             let mut listed = Vec::new();
             for candidate in of_release.drain(..) {
                 let name = &candidate.listed.as_ref().expect("filtered above").name;
+                // The API of a GitLab instance, which the token is for,
+                // listed it: no need to check.
+                if let Some(token) = token
+                    && let Some(link) = list.link_url(name)
+                    && is_gitlab_api_url(link, listing.url())
+                {
+                    let mut resolved = self.shared.resolved(candidate, None);
+                    resolved.gitlab_download = Some((link.clone(), token.clone()));
+                    return Ok(Some(resolved));
+                }
+                // On the website of a private repository, it needs a browser
+                // signed in: GET would be sent to sign in.
+                let needs_sign_in = self.shared.is_repo_private
+                    && list
+                        .link_url(name)
+                        .is_none_or(|link| link.host_str() == listing.url().host_str());
                 match list.lists(name) {
+                    Some(true) if needs_sign_in => {
+                        debug!("{} needs signing in to download", candidate.url)
+                    }
                     Some(true) => listed.push(candidate),
                     Some(false) => (),
                     None => unknown.push(candidate),
@@ -436,6 +474,16 @@ impl Probe {
     }
 }
 
+/// Whether `link` is on the API of the GitLab instance `api` is a URL of the
+/// API of: a release link to the package registry of a private project
+/// needs the token, the web URL of the link needs a browser signed in.
+fn is_gitlab_api_url(link: &Url, api: &Url) -> bool {
+    link.scheme() == api.scheme()
+        && link.host_str() == api.host_str()
+        && link.port_or_known_default() == api.port_or_known_default()
+        && link.path().starts_with("/api/v4/")
+}
+
 impl Shared {
     /// Check `candidate` with the API if it is a GitHub release asset, with
     /// GET otherwise or if the API can't tell.
@@ -474,6 +522,7 @@ impl Shared {
             is_repo_private: self.is_repo_private,
             target_arch: candidate.target_arch,
             pkg_url: candidate.pkg_url,
+            gitlab_download: None,
         }
     }
 
@@ -526,6 +575,7 @@ mod test {
         num::{NonZeroU16, NonZeroU64},
     };
 
+    use binstalk_git_repo_api::release_assets::ForgeTokens;
     use binstalk_types::crate_info::RenderedWith;
 
     use super::*;
@@ -849,6 +899,45 @@ mod test {
             after_tags,
             after_web,
         }
+    }
+
+    #[test]
+    fn test_is_gitlab_api_url() {
+        let url = |s: &str| Url::parse(s).unwrap();
+        let api = url("https://gitlab.example.com/api/v4/projects/a%2Fb/releases/v1");
+        let is = |link: &str| is_gitlab_api_url(&url(link), &api);
+
+        assert!(is(
+            "https://gitlab.example.com/api/v4/projects/a%2Fb/packages/generic/a/1/a.tgz"
+        ));
+        assert!(!is(
+            "https://gitlab.example.com/a/b/-/project/1/uploads/x/a.tgz"
+        ));
+        assert!(!is("https://example.com/api/v4/a.tgz"));
+        assert!(!is("http://gitlab.example.com/api/v4/a.tgz"));
+        assert!(!is("https://gitlab.example.com:8443/api/v4/a.tgz"));
+    }
+
+    /// A private GitLab repository without a token: nothing is checked, as
+    /// GitLab would answer with the page for signing in.
+    #[tokio::test]
+    async fn test_probe_gitlab_needing_sign_in() {
+        const REPO: &str = "https://gitlab.com/cargo-bins/no-such-repository-for-testing";
+
+        let url = Url::parse(&format!("{REPO}/-/releases/v1.0.0/downloads/a.tgz")).unwrap();
+        let candidate = Candidate::new(
+            url,
+            PkgFmt::Tgz,
+            Some(".tgz"),
+            None,
+            OTHER_TEMPLATE.into(),
+            Some(REPO),
+            Some(Forge::GitLab),
+        );
+        let gh_api_client = GhApiClient::new(client(), None);
+        let probe = new_probe(&gh_api_client, REPO, vec![candidate]).await;
+        assert!(probe.shared.is_repo_private);
+        assert!(probe.resolve().await.unwrap().is_none());
     }
 
     /// A release on GitLab: its asset list is asked once, and only the asset
@@ -1211,5 +1300,119 @@ mod test {
         assert!(found.gh_release_artifact_url.is_some());
         assert_eq!(asset(Some(found)).as_deref(), Some(assets[2]));
         assert_eq!(repo_cache.release_artifacts_len(), 1);
+    }
+
+    /// The private GitLab repository `CI_UNIT_TEST_GITLAB_REPO`, and the
+    /// token `CI_UNIT_TEST_GITLAB_TOKEN` that can read it, if both are set.
+    ///
+    /// It has the tag `v0.1.0`, and a release of it with the link
+    /// `binaries/a-x86_64-unknown-linux-musl.tgz` (its `direct_asset_path`)
+    /// to `a/0.1.0/a-x86_64-unknown-linux-musl.tgz` in the generic package
+    /// registry of the project, a gzipped tarball.
+    fn private_gitlab_repo() -> Option<(String, ForgeTokens)> {
+        let get = |name| env::var(name).ok().filter(|var: &String| !var.is_empty());
+        let repo = get("CI_UNIT_TEST_GITLAB_REPO")?;
+        let token = get("CI_UNIT_TEST_GITLAB_TOKEN")?;
+
+        let mut tokens = ForgeTokens::default();
+        let host = Url::parse(&repo).unwrap().host_str().unwrap().to_owned();
+        tokens.add_gitlab(
+            &host,
+            GitLabToken::access_token(token.into_boxed_str().into()),
+        );
+        Some((repo.trim_end_matches('/').to_owned(), tokens))
+    }
+
+    /// The probe of the candidates `{tag}/{filepath}` of `repo` on GitLab.
+    async fn new_gitlab_probe(repo: &str, tokens: ForgeTokens, assets: &[&str]) -> Probe {
+        let candidates = assets
+            .iter()
+            .map(|asset| {
+                let (tag, filepath) = asset.split_once('/').unwrap();
+                let url = Url::parse(&format!("{repo}/-/releases/{tag}/downloads/{filepath}"));
+                Candidate::new(
+                    url.unwrap(),
+                    PkgFmt::Tgz,
+                    Some(".tgz"),
+                    None,
+                    OTHER_TEMPLATE.into(),
+                    Some(repo),
+                    Some(Forge::GitLab),
+                )
+            })
+            .collect();
+
+        let gh_api_client = GhApiClient::new(client(), None);
+        let data = Data::new("a".into(), "0.1.0".into(), Some(repo.into()))
+            .with_forge_tokens(Arc::new(tokens));
+        let info = data.get_repo_info(&gh_api_client).await.unwrap().unwrap();
+        let is_repo_private = info.is_private;
+        Probe::new(
+            Arc::new(data),
+            client(),
+            gh_api_client,
+            Some(repo),
+            None,
+            is_repo_private,
+            candidates,
+        )
+    }
+
+    const GITLAB_ASSETS: &[&str] = &[
+        "v0.1.0/binaries/a-x86_64-unknown-linux-musl.zip",
+        "0.1.0/binaries/a-x86_64-unknown-linux-musl.tgz",
+        "v0.1.0/binaries/a-x86_64-unknown-linux-musl.tgz",
+    ];
+
+    /// Needs `CI_UNIT_TEST_GITLAB_REPO` and `CI_UNIT_TEST_GITLAB_TOKEN`, see
+    /// [`private_gitlab_repo`].
+    #[tokio::test]
+    async fn test_probe_private_gitlab_repo() {
+        let Some((repo, tokens)) = private_gitlab_repo() else {
+            return;
+        };
+
+        let mut probe = new_gitlab_probe(&repo, tokens, GITLAB_ASSETS).await;
+        // GitLab asked to sign in for its page.
+        assert!(probe.shared.is_repo_private);
+
+        // The git server was asked with the token.
+        probe.drop_missing_tags().await;
+        assert_eq!(probe.candidates.len(), 2);
+
+        let found = probe.resolve().await.unwrap().unwrap();
+        assert_eq!(
+            found.url.path(),
+            format!(
+                "{}/-/releases/{}/downloads/{}",
+                Url::parse(&repo).unwrap().path(),
+                "v0.1.0",
+                "binaries/a-x86_64-unknown-linux-musl.tgz"
+            )
+        );
+
+        // Downloaded from the package registry, with the token.
+        let (url, token) = found.gitlab_download.unwrap();
+        assert!(url.path().starts_with("/api/v4/projects/"), "{url}");
+        let response = token
+            .authenticate_download(client().get(url))
+            .send(true)
+            .await
+            .unwrap();
+        let tgz = response.bytes().await.unwrap();
+        assert_eq!(tgz.get(..2), Some(&[0x1f, 0x8b][..]), "not gzip");
+    }
+
+    /// The same repository without a token: GitLab tells nothing, and
+    /// nothing is mistaken for the package.
+    #[tokio::test]
+    async fn test_probe_private_gitlab_repo_without_token() {
+        let Some((repo, _)) = private_gitlab_repo() else {
+            return;
+        };
+
+        let probe = new_gitlab_probe(&repo, ForgeTokens::default(), GITLAB_ASSETS).await;
+        assert!(probe.shared.is_repo_private);
+        assert!(probe.resolve().await.unwrap().is_none());
     }
 }

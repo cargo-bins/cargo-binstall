@@ -115,6 +115,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CI_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           CI_UNIT_TEST_GITHUB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITHUB_TOKEN }}
+          # A private GitLab repository and a token that can read it, see
+          # `test_probe_private_gitlab_repo` in binstalk-fetchers.
+          CI_UNIT_TEST_GITLAB_REPO: ${{ vars.CI_UNIT_TEST_GITLAB_REPO }}
+          CI_UNIT_TEST_GITLAB_TOKEN: ${{ secrets.CI_UNIT_TEST_GITLAB_TOKEN }}
 
   cross-check:
     strategy:

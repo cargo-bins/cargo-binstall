@@ -3,7 +3,10 @@
 use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
-use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
+use binstalk_git_repo_api::{
+    gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo},
+    release_assets::{ForgeTokens, GitLabToken},
+};
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
     crate_info::PkgUrlHint,
@@ -205,6 +208,8 @@ struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
     subcrate: Option<CompactString>,
+    /// Whether only its members can see it: on GitHub, from the API, on
+    /// GitLab, from its page asking to sign in.
     is_private: bool,
 }
 
@@ -231,6 +236,8 @@ pub struct Data {
     repo_cache: Arc<RepoCache>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
+    /// Tokens for git hosting websites other than GitHub.
+    forge_tokens: Arc<ForgeTokens>,
 }
 
 impl Data {
@@ -241,7 +248,21 @@ impl Data {
             repo,
             repo_cache: Arc::default(),
             pkg_url_hint: None,
+            forge_tokens: Arc::default(),
         }
+    }
+
+    /// Use `tokens` for the repository, if it is on one of their hosts.
+    pub fn with_forge_tokens(mut self, tokens: Arc<ForgeTokens>) -> Self {
+        self.forge_tokens = tokens;
+        self
+    }
+
+    /// The token for the GitLab instance `repo` is on, if any.
+    fn gitlab_token(&self, repo: &RepoInfo) -> Option<&GitLabToken> {
+        (repo.repository_host == RepositoryHost::GitLab)
+            .then(|| self.forge_tokens.gitlab(&repo.repo))
+            .flatten()
     }
 
     /// The same crate, looked up by another name, e.g. its binary's.
@@ -255,6 +276,7 @@ impl Data {
             repo: self.repo.clone(),
             repo_cache: Arc::clone(&self.repo_cache),
             pkg_url_hint: None,
+            forge_tokens: Arc::clone(&self.forge_tokens),
         }
     }
 
@@ -297,20 +319,46 @@ impl Data {
             }
         }
 
+        /// What loading the page of a repository gives.
+        enum RepoPage {
+            /// It loads, after redirects to this URL.
+            Loads(Url),
+            /// It redirects to the page for signing in, as GitLab does with a
+            /// private repository for whoever isn't signed in.
+            SignIn,
+            /// It doesn't load.
+            Fails,
+        }
+
+        async fn load_repo_page(client: &GhApiClient, repo: Url) -> RepoPage {
+            let is_sign_in = |url: &Url| url.path() == "/users/sign_in";
+            match client.remote_client().get_redirected_final_url(repo).await {
+                Ok(redirected) if is_sign_in(&redirected) => RepoPage::SignIn,
+                Ok(redirected) => RepoPage::Loads(redirected),
+                // The page for signing in may not load either, e.g. when
+                // Cloudflare asks to prove a browser loads it.
+                Err(RemoteError::Http(err)) if err.final_url().is_some_and(is_sign_in) => {
+                    RepoPage::SignIn
+                }
+                Err(_) => RepoPage::Fails,
+            }
+        }
+
         async fn get_repo_info_inner(
             repo: &str,
             client: &GhApiClient,
         ) -> Result<RepoInfo, FetchError> {
             let repo = Url::parse(repo)?;
-            let redirected = client
-                .remote_client()
-                .get_redirected_final_url(repo.clone())
-                .await;
+            let page = load_repo_page(client, repo.clone()).await;
             // github.com shows a private repository only to its members
             // signed in with a browser, so one whose page loads is public:
             // no need to spend the API on it.
-            let has_public_page = redirected.is_ok();
-            let mut repo = redirected.unwrap_or(repo);
+            let has_public_page = matches!(page, RepoPage::Loads(_));
+            let needs_sign_in = matches!(page, RepoPage::SignIn);
+            let mut repo = match page {
+                RepoPage::Loads(redirected) => redirected,
+                RepoPage::SignIn | RepoPage::Fails => repo,
+            };
             let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
             let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
@@ -332,10 +380,8 @@ impl Data {
                             });
                         }
                     }
-                    _ => {
-                        if let Ok(repo) =
-                            client.remote_client().get_redirected_final_url(repo).await
-                        {
+                    _ => match load_repo_page(client, repo.clone()).await {
+                        RepoPage::Loads(repo) => {
                             return Ok(RepoInfo {
                                 subcrate,
                                 repository_host: RepositoryHost::guess_git_hosting_services(&repo),
@@ -343,7 +389,16 @@ impl Data {
                                 is_private: false,
                             });
                         }
-                    }
+                        RepoPage::SignIn => {
+                            return Ok(RepoInfo {
+                                subcrate,
+                                repository_host,
+                                repo,
+                                is_private: true,
+                            });
+                        }
+                        RepoPage::Fails => (),
+                    },
                 }
             }
 
@@ -352,7 +407,7 @@ impl Data {
                     Some(gh_repo) if client.has_gh_token() && !has_public_page => {
                         gh_get_repo_info(client, &gh_repo).await?.is_private()
                     }
-                    _ => false,
+                    _ => needs_sign_in,
                 },
                 subcrate,
                 repo,
@@ -554,6 +609,35 @@ mod test {
         let repo_info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
 
         assert_eq!(url_without_git, repo_info.repo.as_str());
+    }
+
+    /// GitLab asks whoever isn't signed in to sign in for a private
+    /// repository, and for one that doesn't exist: the repository is kept,
+    /// as a private one.
+    #[tokio::test]
+    async fn test_gitlab_repo_needing_sign_in() {
+        let repo = "https://gitlab.com/cargo-bins/no-such-repository-for-testing";
+        for url in [repo.to_owned(), format!("{repo}.git")] {
+            let data = Data::new("a".into(), "1.0.0".into(), Some(url));
+            let gh_client = GhApiClient::new(
+                Client::new(
+                    "user-agent",
+                    None,
+                    false,
+                    Default::default(),
+                    NonZeroU16::new(1000).unwrap(),
+                    NonZeroU64::new(1000).unwrap(),
+                    [],
+                )
+                .unwrap(),
+                None,
+            );
+
+            let info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
+            assert_eq!(info.repo.as_str(), repo);
+            assert_eq!(info.repository_host, RepositoryHost::GitLab);
+            assert!(info.is_private);
+        }
     }
 
     #[test]

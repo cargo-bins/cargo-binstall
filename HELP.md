@@ -233,6 +233,11 @@ Some crate installation strategies may collect anonymized usage statistics by de
    Fallback to environment variable `GITHUB_TOKEN` if this option is not specified (which is also shown by clap's auto generated doc below), or try environment variable `GH_TOKEN`, which is also used by `gh` cli.
 
    If none of them are present, then binstall will try to extract github token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml` unless `--no-discover-github-token` is specified.
+* `--gitlab-token <TOKEN>` — Provide a GitLab token, for crates whose repository is private on GitLab.
+
+   It is used for gitlab.com, or for the GitLab instance that environment variable `GITLAB_HOST` names, as with `glab`. Falls back to environment variable `GITLAB_TOKEN`.
+
+   In GitLab CI, `CI_JOB_TOKEN` is also used, for the instance the job runs on. Tokens for other GitLab instances are read from `$HOME/.git-credentials`.
 * `--only-signed` — Only install packages that are signed
 
    The default is to verify signatures if they are available, but to allow unsigned packages as well.
