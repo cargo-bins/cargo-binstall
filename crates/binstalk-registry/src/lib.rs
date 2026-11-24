@@ -173,7 +173,7 @@ impl Registry {
     /// Return a crates.io sparse registry
     pub fn crates_io_sparse_registry() -> Self {
         Self::Sparse(Arc::new(SparseRegistry::new(
-            Url::parse(sparse_registry::CRATES_IO_SPARSE_INDEX).unwrap(),
+            Url::parse("https://index.crates.io/").unwrap(),
         )))
     }
 
