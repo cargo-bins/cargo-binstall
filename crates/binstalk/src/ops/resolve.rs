@@ -416,7 +416,16 @@ fn collect_bin_files(
         .as_deref()
         .map(Cow::Borrowed)
         .unwrap_or_else(|| {
-            bins::infer_bin_dir_template(&bin_data, &mut |p| extracted_files.get_dir(p).is_some())
+            let sole_root_dir = extracted_files
+                .get_dir(Path::new("."))
+                .and_then(|names| names.iter().exactly_one().ok())
+                .filter(|name| extracted_files.get_dir(Path::new(name)).is_some())
+                .and_then(|name| name.to_str());
+            bins::infer_bin_dir_template(
+                &bin_data,
+                &mut |p| extracted_files.get_dir(p).is_some(),
+                sole_root_dir,
+            )
         });
 
     let template = Template::parse(&bin_dir)?;

@@ -150,6 +150,8 @@ that exists:
 - `{ name }`
 <!-- END generated:default-bin-dirs -->
 
+If none of them exists and the archive holds a single dir at its top, that dir is used.
+
 Then it will concat the dir with `"{ bin }{ binary-ext }"` and use that as the final `bin-dir`.
 
 `name` here is the name of the crate, `bin` is the cargo binary name and `binary-ext` is `.exe`
