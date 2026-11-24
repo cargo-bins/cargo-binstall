@@ -48,18 +48,17 @@ impl RequestBuilder {
 
     pub async fn send(self, error_for_status: bool) -> Result<Response, Error> {
         let request = self.inner.build()?;
-        let method = request.method().clone();
-        Ok(Response {
-            inner: self.client.send_request(request, error_for_status).await?,
-            method,
-        })
+        self.client.send_request(request, error_for_status).await
     }
 }
 
 #[derive(Debug)]
 pub struct Response {
-    inner: reqwest::Response,
-    method: Method,
+    pub(super) inner: reqwest::Response,
+    pub(super) method: Method,
+    /// [`Self::url`] when the response came from a mirror: the url it
+    /// mirrors.
+    pub(super) unmirrored_url: Option<Url>,
 }
 
 impl Response {
@@ -97,8 +96,10 @@ impl Response {
         self.inner.status()
     }
 
+    /// The final url after redirects, mapped back from a mirror if the
+    /// request was sent to one.
     pub fn url(&self) -> &Url {
-        self.inner.url()
+        self.unmirrored_url.as_ref().unwrap_or(self.inner.url())
     }
 
     pub fn method(&self) -> &Method {
@@ -110,7 +111,7 @@ impl Response {
             Ok(_) => Ok(self),
             Err(err) => Err(Error::Http(Box::new(HttpError {
                 method: self.method().clone(),
-                url: self.url().clone(),
+                url: self.inner.url().clone(),
                 err,
             }))),
         }

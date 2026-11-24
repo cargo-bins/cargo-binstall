@@ -227,6 +227,17 @@ Some crate installation strategies may collect anonymized usage statistics by de
   Possible values: `system`, `hickory`
 
 * `--root-certificates <PATH>` — Specify the root certificates to use for https connections, in addition to default system-wide ones
+* `--mirror <FROM=TO>` — Send requests for urls under `FROM` to `TO` instead, e.g. a mirror or an Artifactory remote repository in a network that cannot reach GitHub. Can be given multiple times.
+
+   For example `--mirror https://github.com/=https://artifactory.example.com/artifactory/github/` downloads `https://github.com/o/r/releases/download/v1/a.tgz` from `https://artifactory.example.com/artifactory/github/o/r/releases/download/v1/a.tgz`. GitHub is reached through `https://github.com/`, `https://api.github.com/` and, for quickinstall, `https://raw.githubusercontent.com/`.
+
+   `FROM` matches whole path segments, and the mirror with the longest `FROM` wins. The mirror must serve the content itself rather than redirect to the host it mirrors.
+
+   Tokens for `FROM`, such as the GitHub token, are not sent to the mirror; credentials in `TO` (`https://user:password@host/`) are sent to it as basic auth instead.
+
+   Only requests binstall makes itself are mirrored, not those of `git` for a git registry nor those of `cargo install` when falling back to it.
+
+   `BINSTALL_MIRRORS` takes space separated mirrors.
 * `--json-output` — Print logs in json format to be parsable
 * `--github-token <TOKEN>` — Provide the github token for accessing the restful API of api.github.com
 

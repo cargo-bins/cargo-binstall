@@ -215,6 +215,35 @@ malicious!
 You can find a full description of errors including exit codes here:
 <https://docs.rs/binstalk/latest/binstalk/errors/enum.BinstallError.html>
 
+### Can I use it behind a proxy or without access to GitHub?
+
+Yes. Requests go through the proxy in the `HTTPS_PROXY` (or `https_proxy`,
+`ALL_PROXY`) environment variable, and `NO_PROXY` lists the hosts
+to reach directly. A proxy that needs authentication takes the credentials in
+its url, percent-encoded:
+
+```sh
+HTTPS_PROXY=http://user:p%40ssword@proxy.example.com:3128 cargo binstall ripgrep
+```
+
+If GitHub cannot be reached at all, `--mirror FROM=TO` (or the space separated
+`BINSTALL_MIRRORS` environment variable) sends the requests for urls under
+`FROM` to a mirror, such as an Artifactory remote repository, instead:
+
+```sh
+cargo binstall \
+  --mirror https://github.com/=https://artifactory.example.com/artifactory/github/ \
+  --mirror https://api.github.com/=https://artifactory.example.com/artifactory/github-api/ \
+  --mirror https://raw.githubusercontent.com/=https://artifactory.example.com/artifactory/github-raw/ \
+  ripgrep
+```
+
+The mirror must serve the content itself instead of redirecting to the host it
+mirrors. Tokens for GitHub are not sent to a mirror; credentials in its url
+(`https://user:password@host/`) are sent to it instead. Any other host works the
+same way, e.g. `https://static.crates.io/`, and crates.io itself can also be
+replaced with `--registry`.
+
 ### Are debug symbols available?
 
 Yes! Extra pre-built packages with a `.full` suffix are available and contain

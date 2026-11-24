@@ -27,6 +27,9 @@ pub use certificate::Certificate;
 mod dns_resolver;
 pub use dns_resolver::DnsResolver;
 
+mod mirror;
+pub use mirror::{Mirror, MirrorError};
+
 mod request_builder;
 pub use request_builder::{Body, RequestBuilder, Response};
 
@@ -94,7 +97,7 @@ struct Inner {
 }
 
 #[derive(Clone, Debug)]
-pub struct Client(Arc<Inner>);
+pub struct Client(Arc<Inner>, Option<Arc<[Mirror]>>);
 
 /// Returns the hickory-dns resolver to install on the [`reqwest::ClientBuilder`]
 /// for `dns`, or `None` to keep reqwest's default system resolver (`getaddrinfo`).
@@ -194,14 +197,35 @@ impl Client {
     ) -> Result<Self, Error> {
         let client = builder.build()?;
 
-        Ok(Client(Arc::new(Inner {
-            client: client.clone(),
-            service: DelayRequest::new(
-                num_request,
-                Duration::from_millis(per_millis.get() as u64),
-                client,
-            ),
-        })))
+        Ok(Client(
+            Arc::new(Inner {
+                client: client.clone(),
+                service: DelayRequest::new(
+                    num_request,
+                    Duration::from_millis(per_millis.get() as u64),
+                    client,
+                ),
+            }),
+            None,
+        ))
+    }
+
+    /// Send the requests for urls under a [`Mirror`]'s prefix to the mirror
+    /// instead, see [`Mirror`].
+    ///
+    /// When several mirrors match a url, the one with the longest prefix is
+    /// used. Response urls under a mirror are mapped back, so callers see the
+    /// urls they asked for.
+    pub fn with_mirrors(mut self, mirrors: impl IntoIterator<Item = Mirror>) -> Self {
+        let mirrors: Arc<[Mirror]> = mirrors
+            .into_iter()
+            .map(|mut mirror| {
+                mirror.extract_auth(&self.0.client);
+                mirror
+            })
+            .collect();
+        self.1 = (!mirrors.is_empty()).then_some(mirrors);
+        self
     }
 
     /// Return inner reqwest client.
@@ -329,10 +353,15 @@ impl Client {
     /// * `request` - `Request::try_clone` must always return `Some`.
     async fn send_request(
         &self,
-        request: Request,
+        mut request: Request,
         error_for_status: bool,
-    ) -> Result<reqwest::Response, Error> {
-        debug!("Downloading from: '{}'", request.url());
+    ) -> Result<Response, Error> {
+        let mirrors = self.1.as_deref().unwrap_or_default();
+        if mirror::rewrite(mirrors, &mut request) {
+            debug!("Downloading from mirror: '{}'", request.url());
+        } else {
+            debug!("Downloading from: '{}'", request.url());
+        }
 
         self.send_request_inner(&request)
             .await
@@ -342,6 +371,11 @@ impl Client {
                 } else {
                     Ok(response)
                 }
+            })
+            .map(|inner| Response {
+                unmirrored_url: mirror::unmirror(mirrors, inner.url()),
+                inner,
+                method: request.method().clone(),
             })
             .map_err(|err| {
                 Error::Http(Box::new(HttpError {
@@ -356,7 +390,7 @@ impl Client {
         &self,
         url: Url,
         error_for_status: bool,
-    ) -> Result<reqwest::Response, Error> {
+    ) -> Result<Response, Error> {
         let res = self
             .send_request(Request::new(Method::HEAD, url.clone()), error_for_status)
             .await;
@@ -652,6 +686,62 @@ mod tests {
         assert_eq!(&body[..], b"ok");
 
         server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn sends_requests_to_mirror() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // Like a mirror passing on a redirect of a renamed GitHub repo.
+        let server = thread::spawn(move || {
+            let mut heads = Vec::new();
+            for response in [
+                &b"HTTP/1.1 301 Moved Permanently\r\nLocation: /m/New/Repo\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"[..],
+                b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+            ] {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buf = [0u8; 1024];
+                let n = stream.read(&mut buf).unwrap();
+                heads.push(String::from_utf8_lossy(&buf[..n]).to_lowercase());
+                stream.write_all(response).unwrap();
+                stream.flush().unwrap();
+            }
+            heads
+        });
+
+        let client = test_client(true).with_mirrors([format!(
+            "https://github.com/=http://user:pass@{addr}/m/"
+        )
+        .parse()
+        .unwrap()]);
+        let response = client
+            .get(Url::parse("https://github.com/old/repo?x=1").unwrap())
+            .bearer_auth(&"gh-token")
+            .send(true)
+            .await
+            .unwrap();
+        assert_eq!(response.url().as_str(), "https://github.com/New/Repo");
+        assert_eq!(&response.bytes().await.unwrap()[..], b"ok");
+
+        let heads = server.join().unwrap();
+        assert!(
+            heads[0].starts_with("get /m/old/repo?x=1 http/1.1"),
+            "{}",
+            heads[0]
+        );
+        assert!(
+            heads[1].starts_with("get /m/new/repo http/1.1"),
+            "{}",
+            heads[1]
+        );
+        // The mirror gets its own credentials, never the GitHub token.
+        assert!(
+            heads[0].contains("authorization: basic dxnlcjpwyxnz"),
+            "{}",
+            heads[0]
+        );
+        assert!(!heads.iter().any(|head| head.contains("gh-token")));
     }
 
     /// Serve each of `responses` to one connection, in order, returning how

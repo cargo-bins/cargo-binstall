@@ -499,6 +499,37 @@ pub struct Args {
     )]
     pub(crate) root_certificates: Vec<PathBuf>,
 
+    /// Send requests for urls under `FROM` to `TO` instead, e.g. a mirror or
+    /// an Artifactory remote repository in a network that cannot reach
+    /// GitHub. Can be given multiple times.
+    ///
+    /// For example `--mirror https://github.com/=https://artifactory.example.com/artifactory/github/`
+    /// downloads `https://github.com/o/r/releases/download/v1/a.tgz` from
+    /// `https://artifactory.example.com/artifactory/github/o/r/releases/download/v1/a.tgz`.
+    /// GitHub is reached through `https://github.com/`, `https://api.github.com/`
+    /// and, for quickinstall, `https://raw.githubusercontent.com/`.
+    ///
+    /// `FROM` matches whole path segments, and the mirror with the longest
+    /// `FROM` wins. The mirror must serve the content itself rather than
+    /// redirect to the host it mirrors.
+    ///
+    /// Tokens for `FROM`, such as the GitHub token, are not sent to the mirror;
+    /// credentials in `TO` (`https://user:password@host/`) are sent to it as
+    /// basic auth instead.
+    ///
+    /// Only requests binstall makes itself are mirrored, not those of `git` for
+    /// a git registry nor those of `cargo install` when falling back to it.
+    ///
+    /// `BINSTALL_MIRRORS` takes space separated mirrors.
+    #[clap(
+        help_heading = "Options",
+        long = "mirror",
+        env = "BINSTALL_MIRRORS",
+        value_name = "FROM=TO",
+        value_delimiter = ' '
+    )]
+    pub(crate) mirrors: Vec<remote::Mirror>,
+
     /// Print logs in json format to be parsable.
     #[clap(help_heading = "Options", long)]
     pub json_output: bool,

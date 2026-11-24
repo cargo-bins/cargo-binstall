@@ -109,7 +109,8 @@ pub fn install_crates(
             http.as_mut().and_then(|http| http.cainfo.take()),
         ),
     )
-    .map_err(BinstallError::from)?;
+    .map_err(BinstallError::from)?
+    .with_mirrors(args.mirrors);
 
     let gh_api_client = args
         .github_token
