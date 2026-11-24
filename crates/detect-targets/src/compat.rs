@@ -17,7 +17,7 @@
 //! [`check`] reads the binary's `PT_INTERP` and dynamic section, the same
 //! things the loader looks at, and checks them against the host the way
 //! the loader would. The loader is tested by running the matching
-//! [probe](crate::probe), never the binary itself, as nothing downloaded
+//! [`probe`](crate::probe), never the binary itself, as nothing downloaded
 //! may run before the user has confirmed the installation.
 //!
 //! The check only fails on what the loader would certainly reject. When
