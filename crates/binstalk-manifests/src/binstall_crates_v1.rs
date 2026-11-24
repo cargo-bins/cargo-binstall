@@ -277,6 +277,7 @@ mod test {
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             },
             CrateInfo {
                 name: "b".into(),
@@ -286,6 +287,7 @@ mod test {
                 target: target.clone(),
                 bins: vec!["1".into(), "2".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             },
             CrateInfo {
                 name: "a".into(),
@@ -295,6 +297,7 @@ mod test {
                 target: target.clone(),
                 bins: vec!["1".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             },
         ];
 
@@ -326,6 +329,7 @@ mod test {
             target,
             bins: vec!["1".into(), "2".into()],
             pkg_url_hint: None,
+            share_files: Vec::new(),
         };
         append_to_path(path, [new_metadata.clone()]).unwrap();
         metadata_set.insert(new_metadata);

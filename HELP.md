@@ -159,6 +159,9 @@ Some crate installation strategies may collect anonymized usage statistics by de
    This also disables binstall’s ability to protect against multiple concurrent invocations of binstall installing at the same time.
 
    This flag will also be passed to `cargo-install` if it is invoked.
+* `--no-share-files` — Don't install the man pages and shell completions that come with a package.
+
+   Binstall installs the man pages and bash, zsh and fish completions named after the crate's binaries, found in the package, to `share/man`, `share/bash-completion/completions`, `share/zsh/site-functions` and `share/fish/vendor_completions.d` in the install root (`$CARGO_HOME` by default), next to its `bin`. They are never installed on Windows or with `--install-path`.
 * `--disable-telemetry` — Disable statistics collection on popular crates.
 
    Strategy quick-install (can be disabled via --disable-strategies) collects statistics of popular crates by default, by sending the crate, version, target and status to https://cargo-quickinstall-stats-server.fly.dev/record-install

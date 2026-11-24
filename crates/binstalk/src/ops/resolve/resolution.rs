@@ -9,7 +9,10 @@ use std::{
     time::Duration,
 };
 
-use binstalk_bins::BinFile;
+use binstalk_bins::{
+    BinFile,
+    share::{ShareFile, share_file_path},
+};
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -35,6 +38,9 @@ pub struct ResolutionFetch {
     pub name: CompactString,
     pub version_req: CompactString,
     pub bin_files: Vec<bins::BinFile>,
+    /// Man pages and shell completions to install to
+    /// [`Options::share_dir`].
+    pub share_files: Vec<ShareFile>,
     pub source: CrateSource,
 }
 
@@ -95,6 +101,8 @@ impl ResolutionFetch {
             install_link(file)?;
         }
 
+        let share_files = self.install_share_files(opts);
+
         Ok(CrateInfo {
             name: self.name,
             version_req: self.version_req,
@@ -103,7 +111,62 @@ impl ResolutionFetch {
             target: self.found.target().to_compact_string(),
             bins: Self::resolve_bins(&opts.bins, self.bin_files),
             pkg_url_hint: self.found.pkg_url_hint(),
+            share_files,
         })
+    }
+
+    /// Install [`ResolutionFetch::share_files`], and remove the ones that the
+    /// installed version had but this one doesn't.
+    ///
+    /// A file that exists but wasn't installed for this crate is only
+    /// replaced with `force`. Failing to install one isn't fatal: the
+    /// binaries are already installed.
+    ///
+    /// Returns the files installed, for [`CrateInfo::share_files`].
+    fn install_share_files(&self, opts: &Options) -> Vec<CompactString> {
+        let Some(share_dir) = &opts.share_dir else {
+            return Vec::new();
+        };
+        let installed = opts
+            .installed_share_files
+            .get(&self.name)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+
+        if !self.share_files.is_empty() {
+            info!("Installing man pages and shell completions...");
+        }
+        let mut share_files = Vec::new();
+        for file in &self.share_files {
+            let dest = file.dest_in(share_dir);
+            if !opts.force && !installed.contains(&file.dest) && fs::symlink_metadata(&dest).is_ok()
+            {
+                warn!(
+                    "Not replacing {}, which was not installed by {}, use --force to replace it",
+                    dest.display(),
+                    self.name
+                );
+                continue;
+            }
+            match file.install(share_dir) {
+                Ok(()) => share_files.push(file.dest.clone()),
+                Err(err) => warn!("Failed to install {}: {err}", dest.display()),
+            }
+        }
+
+        for stale in installed.iter().filter(|dest| !share_files.contains(dest)) {
+            // The new version no longer has it, or it failed to install.
+            let Some(path) = share_file_path(share_dir, stale) else {
+                continue;
+            };
+            match fs::remove_file(&path) {
+                Ok(()) => debug!("Removed {}", path.display()),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
+                Err(err) => warn!("Failed to remove {}: {err}", path.display()),
+            }
+        }
+
+        share_files
     }
 
     fn resolve_bins(
@@ -171,6 +234,15 @@ impl ResolutionFetch {
             info!("And create (or update) the following symlinks:");
             for file in bin_files {
                 info!("  - {}", file.preview_link());
+            }
+        }
+
+        if let Some(share_dir) = &opts.share_dir
+            && !self.share_files.is_empty()
+        {
+            info!("And the following man pages and shell completions:");
+            for file in &self.share_files {
+                info!("  - {}", file.dest_in(share_dir).display());
             }
         }
 

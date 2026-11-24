@@ -358,6 +358,17 @@ pub struct Args {
     #[clap(help_heading = "Options", long)]
     pub(crate) no_track: bool,
 
+    /// Don't install the man pages and shell completions that come with a package.
+    ///
+    /// Binstall installs the man pages and bash, zsh and fish completions
+    /// named after the crate's binaries, found in the package, to
+    /// `share/man`, `share/bash-completion/completions`,
+    /// `share/zsh/site-functions` and `share/fish/vendor_completions.d` in
+    /// the install root (`$CARGO_HOME` by default), next to its `bin`.
+    /// They are never installed on Windows or with `--install-path`.
+    #[clap(help_heading = "Options", long)]
+    pub(crate) no_share_files: bool,
+
     /// Disable statistics collection on popular crates.
     ///
     /// Strategy quick-install (can be disabled via --disable-strategies) collects

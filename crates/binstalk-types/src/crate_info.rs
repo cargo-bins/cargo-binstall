@@ -29,6 +29,10 @@ pub struct CrateInfo {
     /// `pkg-url`, so that updating it can try that first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pkg_url_hint: Option<PkgUrlHint>,
+    /// Man pages and shell completions installed with the binaries, as `/`
+    /// separated paths relative to `{ root }/share`, e.g. `man/man1/sk.1`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub share_files: Vec<CompactString>,
 }
 
 /// The `pkg-url` that a crate's package was found with, a default one or

@@ -274,6 +274,31 @@ Binary must be uploaded to the "File" page of your project, under the directory
 For all other situations, `binstall` does not provide a default `pkg-url` and
 you need to manually specify it.
 
+### Man pages and shell completions
+
+Man pages and shell completions in the package are installed too, into `share`
+in the install root (`$CARGO_HOME` by default), next to its `bin`. Only files
+named after one of the crate's binaries are picked, anywhere up to 4 dirs deep
+in the archive:
+
+| File in the archive | Installed to |
+|---|---|
+| `{ bin }.N`, `{ bin }-*.N` (`N` from 1 to 9, optionally `.gz`) | `share/man/manN/` |
+| `{ bin }.bash`, `{ bin }.bash-completion` | `share/bash-completion/completions/{ bin }` |
+| `_{ bin }` or `*.zsh`, starting with a `#compdef` line naming `{ bin }` | `share/zsh/site-functions/_{ bin }` |
+| `{ bin }.fish` | `share/fish/vendor_completions.d/{ bin }.fish` |
+
+With a single binary, `completion.bash`/`completions.bash` and
+`completion.fish`/`completions.fish` count as its completions too. These
+are the names `clap_complete` and `clap_mangen` use, and what e.g. ripgrep,
+fd, bat and skim ship.
+
+`man` finds the pages from `PATH`, as do recent versions of `bash-completion`;
+zsh needs `$CARGO_HOME/share/zsh/site-functions` in `fpath`, and fish
+`$CARGO_HOME/share` in `XDG_DATA_DIRS`. They are not installed on Windows,
+with `--install-path`, or with `--no-share-files`, and a file that `binstall`
+didn't install for the same crate is only replaced with `--force`.
+
 ### QuickInstall
 
 [QuickInstall](https://github.com/alsuren/cargo-quickinstall) is an unofficial repository of prebuilt binaries for Crates, and `binstall` has built-in support for it! If your crate is built by QuickInstall, it will already work with `binstall`. However, binaries as configured above take precedence when they exist.

@@ -254,6 +254,7 @@ mod tests {
                 target: "x86_64-unknown-linux-gnu".into(),
                 bins: vec!["cargo-watch".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             },
             // sccache drifted: binstall has 0.17.0, cargo has 0.18.0
             CrateInfo {
@@ -264,6 +265,7 @@ mod tests {
                 target: "x86_64-unknown-linux-gnu".into(),
                 bins: vec!["sccache".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             },
             // uninstalled-crate: in binstall manifest, but absent from .crates.toml
             CrateInfo {
@@ -274,6 +276,7 @@ mod tests {
                 target: "x86_64-unknown-linux-gnu".into(),
                 bins: vec!["uninstalled-crate".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             },
         ];
         append_to_path(&binstall_json_path, binstall_data).unwrap();
@@ -361,6 +364,7 @@ mod tests {
             target: "x86_64-unknown-linux-gnu".into(),
             bins: vec!["sccache".into()],
             pkg_url_hint: None,
+            share_files: Vec::new(),
         }];
         append_to_path(&binstall_json_path, binstall_data).unwrap();
 
@@ -373,6 +377,7 @@ mod tests {
             target: "x86_64-unknown-linux-gnu".into(),
             bins: vec!["new-tool".into()],
             pkg_url_hint: None,
+            share_files: Vec::new(),
         };
         manifests.update(vec![new_crate]).unwrap();
 
