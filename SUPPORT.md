@@ -51,7 +51,7 @@ with the following variables available:
 - `os-name`: `rustc`-style operating system name of the target, e.g. `windows`, `macos` or `linux`
 - `target-arch`: Architecture of the target, `universal` on `{universal, universal2}-apple-darwin`,
   otherwise from [`target_lexicon::Architecture`].
-  When `pkg-url` uses it, binstall also tries the common aliases `arm64` for `aarch64` and `amd64` for `x86_64`,
+  When `pkg-url` uses it, binstall also tries the common aliases `arm64` for `aarch64` and `amd64` and `x64` for `x86_64`,
   after Rust's name, and the alias that is found is also used for `bin-dir` and the signature `file`
 - `target-libc`: ABI environment of the target from [`target_lexicon::Environment`]
 - `target-vendor`: Vendor of the target from [`target_lexicon::Vendor`]
@@ -150,6 +150,8 @@ that exists:
 - `{ name }`
 <!-- END generated:default-bin-dirs -->
 
+If none of them exists and the archive holds a single dir at its top, that dir is used.
+
 Then it will concat the dir with `"{ bin }{ binary-ext }"` and use that as the final `bin-dir`.
 
 `name` here is the name of the crate, `bin` is the cargo binary name and `binary-ext` is `.exe`
@@ -177,7 +179,21 @@ are:
 - `{ name }_v{ version }_{ target }{ archive-suffix }`
 - `{ name }-{ target }{ archive-suffix }` ("versionless")
 - `{ name }_{ target }{ archive-suffix }` ("versionless")
+- `{ name }-{ version }-{ target-arch }-{ os-name }{ archive-suffix }` (GitHub only)
+- `{ name }-v{ version }-{ target-arch }-{ os-name }{ archive-suffix }` (GitHub only)
+- `{ name }_{ version }_{ target-family }_{ target-arch }{ archive-suffix }` (GitHub only)
+- `{ name }-{ target-arch }-{ os-name }{ archive-suffix }` ("versionless") (GitHub only)
+- `{ name }-{ os-name }-{ target-arch }{ archive-suffix }` ("versionless") (GitHub only)
+- `{ name }-{ target-family }-{ target-arch }{ archive-suffix }` ("versionless") (GitHub only)
+- `{ name }-{ target-arch }-{ target-family }-{ target-libc }{ archive-suffix }` ("versionless") (GitHub only)
+- `{ name }-{ target-family }-{ target-arch }-{ target-libc }{ archive-suffix }` ("versionless") (GitHub only)
 <!-- END generated:pkg-url-filenames -->
+
+The filenames without `{ target }` name the target by its OS and architecture
+instead. Those without `{ target-libc }` are taken to be built for the OS's
+default libc, so they are not tried for musl and other non-default libc
+targets. Those with `{ target-libc }` are not tried for targets without one,
+such as macOS.
 
 The paths are listed below. Paths containing `{ subcrate }` are only tried
 when the crate's `repository` points at a crate inside a GitHub, GitLab or
@@ -185,7 +201,7 @@ Codeberg repository, such as `https://github.com/owner/repo/tree/main/crates/foo
 or `https://github.com/owner/repo/tree/main/foo`. `{ subcrate }` is then the
 crate's directory (`foo`) and `{ repo }` is the repository itself
 (`https://github.com/owner/repo`). The `%2F` in those paths is a URL-encoded
-`/`, which matches release tags such as `foo/v1.2.3`.
+`/`, which matches release tags such as `foo/v1.2.3`, and `%40` is a URL-encoded `@`.
 
 #### for GitHub
 
@@ -196,6 +212,9 @@ crate's directory (`foo`) and `{ repo }` is the repository itself
 - `{ repo }/releases/download/{ subcrate }%2Fv{ version }/`
 - `{ repo }/releases/download/{ name }-v{ version }/`
 - `{ repo }/releases/download/{ name }-{ version }/`
+- `{ repo }/releases/download/{ name }%2Fv{ version }/`
+- `{ repo }/releases/download/{ name }%40{ version }/`
+- `{ repo }/releases/download/release-{ version }/`
 <!-- END generated:pkg-url-paths-github -->
 
 #### for GitLab
@@ -205,6 +224,9 @@ crate's directory (`foo`) and `{ repo }` is the repository itself
 - `{ repo }/-/releases/v{ version }/downloads/binaries/`
 - `{ repo }/-/releases/{ subcrate }%2F{ version }/downloads/binaries/`
 - `{ repo }/-/releases/{ subcrate }%2Fv{ version }/downloads/binaries/`
+- `{ repo }/-/releases/{ name }%2Fv{ version }/downloads/binaries/`
+- `{ repo }/-/releases/{ name }%40{ version }/downloads/binaries/`
+- `{ repo }/-/releases/release-{ version }/downloads/binaries/`
 <!-- END generated:pkg-url-paths-gitlab -->
 
 Note that this uses the [Permanent links to release assets][gitlab-permalinks]
@@ -245,6 +267,9 @@ Binary must be uploaded to the "File" page of your project, under the directory
 - `{ repo }/releases/download/{ subcrate }%2Fv{ version }/`
 - `{ repo }/releases/download/{ name }-v{ version }/`
 - `{ repo }/releases/download/{ name }-{ version }/`
+- `{ repo }/releases/download/{ name }%2Fv{ version }/`
+- `{ repo }/releases/download/{ name }%40{ version }/`
+- `{ repo }/releases/download/release-{ version }/`
 <!-- END generated:pkg-url-paths-codeberg -->
 
 #### Others

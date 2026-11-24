@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashSet,
     fmt, iter,
     path::Path,
     sync::{Arc, OnceLock},
@@ -83,7 +84,7 @@ fn template_to_string(template: &Template<'_>) -> CompactString {
 pub(crate) fn target_arch_aliases(target_arch: &str) -> &'static [&'static str] {
     match target_arch {
         "aarch64" => &["arm64"],
-        "x86_64" => &["amd64"],
+        "x86_64" => &["amd64", "x64"],
         _ => &[],
     }
 }
@@ -226,6 +227,12 @@ impl super::Fetcher for GhCrateMeta {
             {
                 if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
                     let has_subcrate = subcrate.is_some();
+                    let target_libc = self
+                        .target_data
+                        .target_related_info
+                        .get_value("target-libc")
+                        .map(Cow::into_owned)
+                        .unwrap_or_default();
 
                     (
                         Either::Right(
@@ -236,6 +243,9 @@ impl super::Fetcher for GhCrateMeta {
                                 // included.
                                 .filter(move |template| {
                                     has_subcrate || !template.has_key("subcrate")
+                                })
+                                .filter(move |template| {
+                                    hosting::is_for_target_libc(template, &target_libc)
                                 }),
                         ),
                         true,
@@ -272,7 +282,10 @@ impl super::Fetcher for GhCrateMeta {
                 Either::Right(PkgFmt::iter())
             };
 
-            // Every URL the package may be at, rendered once.
+            // Every URL the package may be at, rendered once: templates
+            // such as `{ os-name }` and `{ target-family }` ones render the
+            // same URL on most targets, only the first is kept.
+            let mut rendered = HashSet::new();
             let candidates: Vec<Candidate> = pkg_urls
                 .map(|pkg_url| {
                     let default_pkg_url = is_default_pkg_url.then(|| template_to_string(&pkg_url));
@@ -301,6 +314,7 @@ impl super::Fetcher for GhCrateMeta {
                         )
                     })
                 })
+                .filter(|candidate| rendered.insert(candidate.url.clone()))
                 .collect();
 
             let mut probe = Probe::new(
@@ -700,6 +714,171 @@ mod test {
                 None
             )]
         );
+    }
+
+    /// The asset names the default GitHub `pkg-url`s render to for `target`
+    /// in release `v1.2.3`, as `.tgz`.
+    fn default_asset_names(
+        target: &str,
+        os: &'static str,
+        os_name: &'static str,
+        arch: &'static str,
+        libc: &'static str,
+    ) -> Vec<String> {
+        use super::hosting::{RepositoryHost, is_for_target_libc};
+
+        let data = Data::new(
+            "foo".to_compact_string(),
+            "1.2.3".to_compact_string(),
+            Some("https://github.com/o/foo".to_string()),
+        );
+        let target_info = leon::vals(|key| match key {
+            "target-family" => Some(os.into()),
+            "os-name" => Some(os_name.into()),
+            "target-arch" => Some(arch.into()),
+            "target-libc" => Some(libc.into()),
+            _ => None,
+        });
+        let prefix = "https://github.com/o/foo/releases/download/v1.2.3/";
+        RepositoryHost::GitHub
+            .get_default_pkg_url_template()
+            .unwrap()
+            .filter(|template| !template.has_key("subcrate") && is_for_target_libc(template, libc))
+            .flat_map(|template| {
+                candidate_urls(
+                    &data,
+                    target,
+                    &target_info,
+                    PkgFmt::Tgz,
+                    &template,
+                    data.repo.as_deref(),
+                    None,
+                )
+            })
+            .filter_map(|(url, ext, _)| {
+                (ext == Some(".tgz"))
+                    .then(|| url.as_str().strip_prefix(prefix).map(str::to_owned))?
+            })
+            .collect()
+    }
+
+    #[test]
+    fn default_templates_without_target_triple() {
+        let names = default_asset_names(
+            "x86_64-unknown-linux-gnu",
+            "linux",
+            "linux",
+            "x86_64",
+            "gnu",
+        );
+        for name in [
+            "foo-x86_64-unknown-linux-gnu.tgz",
+            "foo-1.2.3-x86_64-linux.tgz",
+            "foo-v1.2.3-x86_64-linux.tgz",
+            "foo_1.2.3_linux_amd64.tgz",
+            "foo-x86_64-linux.tgz",
+            "foo-linux-x86_64.tgz",
+            "foo-linux-x64.tgz",
+            "foo-x86_64-linux-gnu.tgz",
+            "foo-linux-x64-gnu.tgz",
+        ] {
+            assert!(names.iter().any(|n| n == name), "{name} not in {names:#?}");
+        }
+
+        // glibc builds are not tried for musl.
+        let names = default_asset_names(
+            "x86_64-unknown-linux-musl",
+            "linux",
+            "linux",
+            "x86_64",
+            "musl",
+        );
+        for name in ["foo-x86_64-linux-musl.tgz", "foo-linux-amd64-musl.tgz"] {
+            assert!(names.iter().any(|n| n == name), "{name} not in {names:#?}");
+        }
+        for name in [
+            "foo-x86_64-linux.tgz",
+            "foo_1.2.3_linux_amd64.tgz",
+            "foo-linux-x64.tgz",
+        ] {
+            assert!(!names.iter().any(|n| n == name), "{name} in {names:#?}");
+        }
+
+        // macOS has no libc in its target, and is also called darwin.
+        let names = default_asset_names(
+            "aarch64-apple-darwin",
+            "darwin",
+            "macos",
+            "aarch64",
+            "unknown",
+        );
+        for name in [
+            "foo-1.2.3-aarch64-macos.tgz",
+            "foo_1.2.3_darwin_arm64.tgz",
+            "foo-aarch64-macos.tgz",
+            "foo-macos-arm64.tgz",
+            "foo-darwin-arm64.tgz",
+        ] {
+            assert!(names.iter().any(|n| n == name), "{name} not in {names:#?}");
+        }
+        assert!(!names.iter().any(|n| n.contains("unknown")), "{names:#?}");
+
+        let names = default_asset_names(
+            "x86_64-pc-windows-msvc",
+            "windows",
+            "windows",
+            "x86_64",
+            "msvc",
+        );
+        for name in [
+            "foo-x86_64-windows.tgz",
+            "foo_1.2.3_windows_amd64.tgz",
+            "foo-x86_64-windows-msvc.tgz",
+        ] {
+            assert!(names.iter().any(|n| n == name), "{name} not in {names:#?}");
+        }
+    }
+
+    #[test]
+    fn default_release_tags() {
+        use super::hosting::RepositoryHost;
+
+        let data = Data::new(
+            "foo".to_compact_string(),
+            "1.2.3".to_compact_string(),
+            Some("https://github.com/o/foo".to_string()),
+        );
+        let target_info = leon::vals(|_| None);
+        let tags: Vec<_> = RepositoryHost::GitHub
+            .get_default_pkg_url_template()
+            .unwrap()
+            .filter(|template| !template.has_key("subcrate"))
+            .flat_map(|template| {
+                candidate_urls(
+                    &data,
+                    "x86_64-unknown-linux-gnu",
+                    &target_info,
+                    PkgFmt::Tgz,
+                    &template,
+                    data.repo.as_deref(),
+                    None,
+                )
+            })
+            .filter_map(|(url, ..)| {
+                binstalk_git_repo_api::git_refs::release_tag("https://github.com/o/foo", &url)
+            })
+            .collect();
+        for tag in [
+            "1.2.3",
+            "v1.2.3",
+            "foo-v1.2.3",
+            "foo-1.2.3",
+            "foo/v1.2.3",
+            "foo@1.2.3",
+            "release-1.2.3",
+        ] {
+            assert!(tags.iter().any(|t| t == tag), "{tag}");
+        }
     }
 
     #[test]

@@ -14,7 +14,9 @@ pub enum RepositoryHost {
 }
 
 /// Make sure to update `binstalk_bins::possible_bin_dirs`
-/// if you modified FULL_FILENAMES or NOVERSION_FILENAMES.
+/// if you modified FULL_FILENAMES or NOVERSION_FILENAMES. The archives of
+/// OS_ARCH_FILENAMES are found by their sole top dir, see
+/// `binstalk_bins::infer_bin_dir_template`.
 pub const FULL_FILENAMES: &[Template<'_>] = &[
     template!("/{ name }-{ target }-v{ version }{ archive-suffix }"),
     template!("/{ name }-{ target }-{ version }{ archive-suffix }"),
@@ -31,6 +33,50 @@ pub const NOVERSION_FILENAMES: &[Template<'_>] = &[
     template!("/{ name }_{ target }{ archive-suffix }"),
 ];
 
+/// Filenames naming the target by its OS and architecture instead of
+/// `{ target }`, see [`is_for_target_libc`].
+///
+/// Only for hosts whose release assets can be listed: each is tried with up
+/// to three `{ target-arch }` names (see `target_arch_aliases`) times every
+/// archive suffix, which would be too many requests to check one by one.
+pub const OS_ARCH_FILENAMES: &[Template<'_>] = &[
+    // `helix-25.01-x86_64-linux.tar.xz`, `wasmtime-v24.0.0-aarch64-macos.tar.xz`
+    template!("/{ name }-{ version }-{ target-arch }-{ os-name }{ archive-suffix }"),
+    template!("/{ name }-v{ version }-{ target-arch }-{ os-name }{ archive-suffix }"),
+    // GoReleaser's default: `foo_1.2.3_linux_amd64.tar.gz`, `foo_1.2.3_darwin_arm64.tar.gz`
+    template!("/{ name }_{ version }_{ target-family }_{ target-arch }{ archive-suffix }"),
+    // `rye-x86_64-linux.gz`, `rye-aarch64-macos.gz`
+    template!("/{ name }-{ target-arch }-{ os-name }{ archive-suffix }"),
+    // `gitui-linux-x86_64.tar.gz`, `zed-macos-aarch64.tar.gz`
+    template!("/{ name }-{ os-name }-{ target-arch }{ archive-suffix }"),
+    // `taplo-linux-x86_64.gz`, `biome-darwin-arm64`, `biome-linux-x64`
+    template!("/{ name }-{ target-family }-{ target-arch }{ archive-suffix }"),
+    // The triple without the vendor, as zig and Debian name targets:
+    // `foo-x86_64-linux-gnu.tar.gz`, `foo-x86_64-linux-musl.tar.gz`
+    template!("/{ name }-{ target-arch }-{ target-family }-{ target-libc }{ archive-suffix }"),
+    // `oxlint-linux-x64-gnu`, `biome-linux-x64-musl`
+    template!("/{ name }-{ target-family }-{ target-arch }-{ target-libc }{ archive-suffix }"),
+];
+
+/// Whether the default `pkg-url` `template` may be the package of a target
+/// whose `{ target-libc }` is `target_libc`.
+///
+/// A template without `{ target }` names the target by its OS and
+/// architecture. Without `{ target-libc }`, it is taken to be built for the
+/// OS's default libc: glibc on Linux, so it is not tried for musl, which can
+/// not run glibc binaries. With `{ target-libc }`, it is not tried when the
+/// target has none (`unknown`, e.g. on macOS), as a name such as
+/// `foo-aarch64-darwin-unknown` doesn't exist.
+pub(crate) fn is_for_target_libc(template: &Template<'_>, target_libc: &str) -> bool {
+    if template.has_key("target") {
+        true
+    } else if template.has_key("target-libc") {
+        target_libc != "unknown"
+    } else {
+        matches!(target_libc, "gnu" | "msvc" | "unknown")
+    }
+}
+
 const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
     template!("{ repo }/releases/download/{ version }"),
     template!("{ repo }/releases/download/v{ version }"),
@@ -40,6 +86,12 @@ const GITHUB_RELEASE_PATHS: &[Template<'_>] = &[
     // Default tags of workspace release tools such as release-plz and cargo-release.
     template!("{ repo }/releases/download/{ name }-v{ version }"),
     template!("{ repo }/releases/download/{ name }-{ version }"),
+    // Other per-crate tags: `foo/v1.2.3` (e.g. rustsec's `cargo-audit/v0.17.6`)
+    // and `foo@1.2.3` (cargo-workspaces' default, changesets), and
+    // `release-1.2.3`.
+    template!("{ repo }/releases/download/{ name }%2Fv{ version }"),
+    template!("{ repo }/releases/download/{ name }%40{ version }"),
+    template!("{ repo }/releases/download/release-{ version }"),
 ];
 
 const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
@@ -48,6 +100,9 @@ const GITLAB_RELEASE_PATHS: &[Template<'_>] = &[
     // %2F is escaped form of '/'
     template!("{ repo }/-/releases/{ subcrate }%2F{ version }/downloads/binaries"),
     template!("{ repo }/-/releases/{ subcrate }%2Fv{ version }/downloads/binaries"),
+    template!("{ repo }/-/releases/{ name }%2Fv{ version }/downloads/binaries"),
+    template!("{ repo }/-/releases/{ name }%40{ version }/downloads/binaries"),
+    template!("{ repo }/-/releases/release-{ version }/downloads/binaries"),
 ];
 
 const BITBUCKET_RELEASE_PATHS: &[Template<'_>] = &[template!("{ repo }/downloads")];
@@ -89,7 +144,7 @@ impl RepositoryHost {
         Some(match self {
             GitHub => DefaultPkgUrls {
                 paths: GITHUB_RELEASE_PATHS,
-                filenames: &[FULL_FILENAMES, NOVERSION_FILENAMES],
+                filenames: &[FULL_FILENAMES, NOVERSION_FILENAMES, OS_ARCH_FILENAMES],
                 suffix: "",
             },
             GitLab => DefaultPkgUrls {
@@ -211,12 +266,18 @@ mod tests {
         let mut filenames = String::new();
         for (filenames_set, note) in [
             (FULL_FILENAMES, ""),
-            (NOVERSION_FILENAMES, r#" ("versionless")"#),
+            (NOVERSION_FILENAMES, ""),
+            (OS_ARCH_FILENAMES, " (GitHub only)"),
         ] {
             for filename in filenames_set {
+                let versionless = if filename.has_key("version") {
+                    ""
+                } else {
+                    r#" ("versionless")"#
+                };
                 let filename = render(filename);
                 let filename = filename.strip_prefix('/').unwrap();
-                filenames += &format!("- `{filename}`{note}\n");
+                filenames += &format!("- `{filename}`{versionless}{note}\n");
             }
         }
 
