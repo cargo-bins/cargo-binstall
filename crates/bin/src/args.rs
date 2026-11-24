@@ -366,6 +366,13 @@ pub struct Args {
     /// `CARGO_REGISTRIES_{registry_name}_INDEX` for the index URL. If that is not
     /// set, it falls back to the `registries.<name>.index` key in `.cargo/config.toml`.
     ///
+    /// If the registry requires authentication, the token comes from the
+    /// credential providers configured for Cargo
+    /// <https://doc.rust-lang.org/cargo/reference/registry-authentication.html>:
+    /// `cargo:token`, `cargo:token-from-stdout` and external providers are
+    /// supported, while `cargo:wincred`, `cargo:macos-keychain` and
+    /// `cargo:libsecret` are not yet.
+    ///
     /// Cannot be combined with `--index`.
     #[clap(
         help_heading = "Options",

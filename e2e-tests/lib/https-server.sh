@@ -24,6 +24,10 @@
 #   ` Range: ...`, if any) to for every request, so that a test can check
 #   what was requested, and how often
 #
+# Export HTTPS_SERVER_AUTH="PREFIX TOKEN" before start_https_server to make
+# the paths starting with PREFIX require `Authorization: TOKEN`, see
+# lib/https_server.py.
+#
 # The server is stopped when the test script exits.
 
 _https_server_python() {
