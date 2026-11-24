@@ -16,6 +16,7 @@ use tracing::{Level, instrument, warn};
 use url::Url;
 use zeroize::Zeroizing;
 
+mod attestations;
 mod common;
 mod error;
 mod graphql;
@@ -353,6 +354,39 @@ impl GhApiClient {
             });
         }
         Ok(results)
+    }
+
+    /// Get the [sigstore bundles] of the [artifact attestations] that `repo`
+    /// has for the artifact with the hex-encoded `sha256` digest.
+    ///
+    /// Bundles GitHub only serves compressed from a separate URL are left
+    /// out.
+    ///
+    /// [sigstore bundles]: https://docs.sigstore.dev/about/bundle/
+    /// [artifact attestations]: https://docs.github.com/en/rest/repos/attestations
+    #[instrument(skip(self))]
+    pub async fn get_attestations<T: serde::de::DeserializeOwned>(
+        &self,
+        repo: &GhRepo,
+        sha256: &str,
+    ) -> Result<Vec<T>, GhApiError> {
+        self.check_retry_after()?;
+
+        match attestations::fetch_attestations_restful_api(
+            &self.0.client,
+            repo,
+            sha256,
+            self.get_auth_token(),
+        )
+        .await
+        {
+            Ok(bundles) => Ok(bundles),
+            Err(GhApiError::NotFound) => Ok(Vec::new()),
+            Err(err) => {
+                self.note_error(&err);
+                Err(err.context("Restful API"))
+            }
+        }
     }
 
     /// Remember what an error says about the token and the rate limit.

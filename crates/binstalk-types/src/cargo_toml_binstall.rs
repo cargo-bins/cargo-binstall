@@ -276,7 +276,8 @@ pub struct PkgSigning {
     /// Signing algorithm supported by Binstall.
     pub algorithm: SigningAlgorithm,
 
-    /// Signing public key
+    /// Signing public key, not used by [`SigningAlgorithm::GithubAttestations`]
+    #[serde(default)]
     pub pubkey: Cow<'static, str>,
 
     /// Signature file override template (url to download)
@@ -290,6 +291,10 @@ pub struct PkgSigning {
 pub enum SigningAlgorithm {
     /// [minisign](https://jedisct1.github.io/minisign/)
     Minisign,
+
+    /// [GitHub artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations)
+    /// of the release asset, made by the repository hosting the release
+    GithubAttestations,
 }
 
 #[cfg(test)]

@@ -6,9 +6,13 @@ use tracing::{error, trace};
 
 use crate::FetchError;
 
+mod github_attestations;
+pub use github_attestations::GithubAttestationsVerifier;
+
 pub enum SignatureVerifier {
     Noop,
     Minisign(Box<MinisignVerifier>),
+    GithubAttestations(Box<GithubAttestationsVerifier>),
 }
 
 impl SignatureVerifier {
@@ -25,6 +29,7 @@ impl SignatureVerifier {
         match self {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
+            Self::GithubAttestations(v) => Ok(v.data_verifier()),
         }
     }
 
@@ -38,6 +43,7 @@ impl SignatureVerifier {
         match self {
             Self::Noop => None,
             Self::Minisign(v) => Some(v.signature.trusted_comment()),
+            Self::GithubAttestations(_) => None,
         }
     }
 }
