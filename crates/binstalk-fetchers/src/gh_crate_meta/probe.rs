@@ -251,9 +251,8 @@ impl Probe {
     /// returning the first one found; the ones it doesn't are dropped.
     ///
     /// Only for a public repository, github.com answers 404 for a private
-    /// one. The list comes from a page meant for people, so a release's
-    /// candidates are kept to check some other way if it lists none of them
-    /// but some other assets.
+    /// one. A release's candidates are only kept to check some other way if
+    /// the page doesn't look like an asset list.
     async fn check_on_web(&mut self) -> Result<Option<Resolved>, FetchError> {
         let mut unknown = Vec::new();
 
@@ -283,7 +282,7 @@ impl Probe {
                 // Nothing it could have left out.
                 ReleaseAssets::NotFound | ReleaseAssets::NoAssets => (),
                 // Normally only one is listed, the others are other formats.
-                ReleaseAssets::Listed(listed) if !listed.is_empty() => {
+                ReleaseAssets::Listed(listed) => {
                     let listed = of_release
                         .into_iter()
                         .enumerate()
@@ -294,10 +293,7 @@ impl Probe {
                         }
                     }
                 }
-                // It might not list every asset.
-                ReleaseAssets::Listed(_) | ReleaseAssets::Unknown => {
-                    unknown.append(&mut of_release)
-                }
+                ReleaseAssets::Unknown => unknown.append(&mut of_release),
             }
         }
 
@@ -659,8 +655,7 @@ mod test {
             on_web(musl_tgz, 2)
         );
 
-        // github.com lists none of them: it might not list every asset, so
-        // they are kept and checked some other way.
+        // github.com lists none of them, so none is checked.
         assert_eq!(
             probe(
                 BINSTALL,
@@ -670,7 +665,7 @@ mod test {
                 ],
             )
             .await,
-            not_found(2, 2)
+            not_found(2, 0)
         );
 
         // A tag without a release: nothing to download.
@@ -713,7 +708,7 @@ mod test {
         }));
 
         // Assets of two releases: the one github.com lists is found, though
-        // the other release lists none of its candidates, which are kept.
+        // the other release lists none of its candidates, which are dropped.
         assert_eq!(
             probe(
                 BINSTALL,
@@ -865,14 +860,15 @@ mod test {
             on_web(found, 2)
         );
 
-        // A target it has no build for, so github.com lists other assets.
+        // A target it has no build for, so github.com lists other assets
+        // and nothing is checked.
         assert_eq!(
             probe(
                 QUICKINSTALL,
                 &["ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tar.gz"],
             )
             .await,
-            not_found(1, 1)
+            not_found(1, 0)
         );
     }
 

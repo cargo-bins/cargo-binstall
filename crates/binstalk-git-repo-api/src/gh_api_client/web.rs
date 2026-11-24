@@ -36,8 +36,8 @@ pub enum ReleaseAssets {
     NotFound,
     /// The release has no assets, or it is a tag without a release.
     NoAssets,
-    /// The indices of the names that are listed. The list comes from a page
-    /// meant for people, not from an API, so it may not have every asset.
+    /// The indices of the names that are listed, the others are not assets
+    /// of the release. It is the page github.com shows all the assets with.
     Listed(Vec<usize>),
     /// The request failed, or the page doesn't look like an asset list:
     /// github.com may have changed it.
