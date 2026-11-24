@@ -393,7 +393,19 @@ impl Client {
 
     /// Check if remote exists using `Method::GET`.
     pub async fn remote_gettable(&self, url: Url) -> Result<bool, Error> {
-        Ok(self.get(url).send(false).await?.status().is_success())
+        Ok(self.get_if_exists(url).await?.is_some())
+    }
+
+    /// `GET` `url`, returning the response if it is a success, `None` if
+    /// the server answered with any other status.
+    ///
+    /// Its body is left unread: pass it with `url` to
+    /// [`Download::from_get_response`](crate::download::Download::from_get_response)
+    /// to download it without asking again, or drop it if only whether `url`
+    /// exists matters.
+    pub async fn get_if_exists(&self, url: Url) -> Result<Option<Response>, Error> {
+        let response = self.get(url).send(false).await?;
+        Ok(response.status().is_success().then_some(response))
     }
 
     /// Attempt to get final redirected url using `Method::HEAD` or fallback

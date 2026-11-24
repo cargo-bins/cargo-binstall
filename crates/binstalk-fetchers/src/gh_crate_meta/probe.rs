@@ -9,7 +9,10 @@
 //! repository by the releases' asset lists on github.com, which cost no API
 //! quota, and only then with the API.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, Mutex},
+};
 
 use binstalk_git_repo_api::{
     gh_api_client::{
@@ -367,7 +370,9 @@ impl Shared {
 
         debug!("Checking for package with the API: '{}'", candidate.url);
         match self.check_gh_artifact(artifact).await? {
-            GhAsset::Found(artifact_url) => Ok(Some(self.resolved(candidate, Some(artifact_url)))),
+            GhAsset::Found(artifact_url) => {
+                Ok(Some(self.resolved(candidate, Some(artifact_url), None)))
+            }
             GhAsset::Missing => Ok(None),
             GhAsset::Unknown => self.check_with_get(candidate).await,
         }
@@ -375,15 +380,18 @@ impl Shared {
 
     async fn check_with_get(&self, candidate: Candidate) -> Result<Option<Resolved>, FetchError> {
         debug!("Checking for package at: '{}'", candidate.url);
-        Ok(does_url_exist(&self.client, &candidate.url)
+        Ok(get_if_exists(&self.client, &candidate.url)
             .await?
-            .then(|| self.resolved(candidate, None)))
+            .map(|response| self.resolved(candidate, None, Some(response))))
     }
 
+    /// * `response` - The response to the GET that found `candidate`, to
+    ///   download it from.
     fn resolved(
         &self,
         candidate: Candidate,
         gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
+        response: Option<Response>,
     ) -> Resolved {
         Resolved {
             url: candidate.url,
@@ -395,6 +403,7 @@ impl Shared {
             is_repo_private: self.is_repo_private,
             target_arch: candidate.target_arch,
             default_pkg_url: candidate.default_pkg_url,
+            response: Mutex::new(response),
         }
     }
 

@@ -87,7 +87,17 @@ impl DataVerifier for () {
 
 #[derive(Debug)]
 enum DownloadContent {
-    ToIssue { client: Client, url: Url },
+    ToIssue {
+        client: Client,
+        url: Url,
+    },
+    /// The response to `client.get(url)`, which can be continued like the
+    /// one [`DownloadContent::ToIssue`] issues.
+    Got {
+        client: Client,
+        url: Url,
+        response: Response,
+    },
     Response(Response),
 }
 
@@ -95,7 +105,7 @@ impl DownloadContent {
     /// The body to read, continuing it with `Range` requests if it breaks
     /// partway.
     ///
-    /// Only a download this issues itself can be continued: a caller-supplied
+    /// Only a download of a plain `GET` can be continued: a caller-supplied
     /// [`Response`] came from a request that isn't ours to repeat, since its
     /// headers and its authorisation are not recorded here, so its body is read
     /// as-is.
@@ -104,30 +114,39 @@ impl DownloadContent {
         resume: bool,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, RemoteError>> + Send + Sync>>, DownloadError>
     {
-        Ok(match self {
-            DownloadContent::ToIssue { client, url } if resume => {
-                let response = client.get(url.clone()).send(true).await?;
+        Ok(match self.into_response().await? {
+            (Some((client, url)), response) if resume => {
                 Box::pin(resumable_stream(client, url, response))
             }
+            (_, response) => Box::pin(response.bytes_stream()),
+        })
+    }
+
+    /// The response to read the body of, with what to continue it with if it
+    /// is the response to a plain `GET`.
+    async fn into_response(self) -> Result<(Option<(Client, Url)>, Response), RemoteError> {
+        Ok(match self {
             DownloadContent::ToIssue { client, url } => {
-                Box::pin(client.get(url).send(true).await?.bytes_stream())
+                let response = client.get(url.clone()).send(true).await?;
+                (Some((client, url)), response)
             }
-            DownloadContent::Response(response) => Box::pin(response.bytes_stream()),
+            DownloadContent::Got {
+                client,
+                url,
+                response,
+            } => (Some((client, url)), response),
+            DownloadContent::Response(response) => (None, response),
         })
     }
 
     /// The whole body in memory, continuing it with `Range` requests if it
     /// breaks partway, as [`Self::into_byte_stream`] does.
     async fn into_bytes(self, resume: bool) -> Result<Bytes, RemoteError> {
-        match self {
-            DownloadContent::ToIssue { client, url } if resume => {
-                let response = client.get(url.clone()).send(true).await?;
+        match self.into_response().await? {
+            (Some((client, url)), response) if resume => {
                 collect_bytes(resumable_stream(client, url, response)).await
             }
-            DownloadContent::ToIssue { client, url } => {
-                client.get(url).send(true).await?.bytes().await
-            }
-            DownloadContent::Response(response) => response.bytes().await,
+            (_, response) => response.bytes().await,
         }
     }
 }
@@ -177,6 +196,24 @@ impl Download<'static> {
     pub fn new(client: Client, url: Url) -> Self {
         Self {
             content: DownloadContent::ToIssue { client, url },
+            data_verifier: None,
+            resume: true,
+        }
+    }
+
+    /// Download the body of `response`, the response to `client.get(url)`,
+    /// for instance from [`Client::get_if_exists`], instead of asking for it
+    /// again.
+    ///
+    /// Unlike [`Download::from_response`], it is continued with `Range`
+    /// requests to `url` if it breaks partway, as [`Download::new`] is.
+    pub fn from_get_response(client: Client, url: Url, response: Response) -> Self {
+        Self {
+            content: DownloadContent::Got {
+                client,
+                url,
+                response,
+            },
             data_verifier: None,
             resume: true,
         }
@@ -233,7 +270,7 @@ impl<'a> Download<'a> {
     /// because requests to the host are metered or rate-limited more tightly
     /// than the bytes are.
     ///
-    /// A download from a caller-supplied [`Response`] is never continued
+    /// A download from [`Download::from_response`] is never continued
     /// regardless, since the request behind it isn't ours to repeat.
     pub fn without_resume(self) -> Self {
         Self {
