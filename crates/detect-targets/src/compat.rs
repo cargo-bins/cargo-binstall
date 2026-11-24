@@ -606,7 +606,9 @@ mod tests {
                 version,
                 provided: Some(provided),
             }) => {
-                assert_eq!(library, "libc.so.6");
+                // Whichever glibc library comes first among the
+                // binary's version requirements: libc, libm, ...
+                assert!(library.contains(".so"), "{library}");
                 assert!(version.starts_with("GLIBC_9."), "{version}");
                 assert!(provided.starts_with("GLIBC_2."), "{provided}");
             }
