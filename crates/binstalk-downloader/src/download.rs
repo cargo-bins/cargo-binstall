@@ -12,6 +12,7 @@ use tracing::{debug, error, instrument};
 
 pub use binstalk_types::cargo_toml_binstall::{CompressionFmt, PkgFmt, TarBasedFmt};
 pub use rc_zip_sync::rc_zip::error::Error as ZipError;
+pub use sevenz_rust2::Error as SevenZipError;
 
 use crate::remote::{Client, Error as RemoteError, Response, Url};
 
@@ -27,6 +28,10 @@ mod extractor;
 mod extracted_files;
 pub use extracted_files::{ExtractedFiles, ExtractedFilesEntry};
 
+mod archive_entry;
+
+mod sevenz_extraction;
+
 mod zip_extraction;
 
 mod resumable;
@@ -37,6 +42,9 @@ use resumable::resumable_stream;
 pub enum DownloadError {
     #[error("Failed to extract zipfile: {0}")]
     Unzip(#[from] ZipError),
+
+    #[error("Failed to extract 7z archive: {0}")]
+    SevenZip(#[from] SevenZipError),
 
     #[error("Failed to download from remote: {0}")]
     Remote(#[from] RemoteError),
@@ -347,6 +355,7 @@ impl Download<'_> {
                     extract_compressed_bin(&mut stream, path, fmt).await
                 }
                 PkgFmtDecomposed::Zip => extract_zip(&mut stream, path).await,
+                PkgFmtDecomposed::SevenZip => extract_7z(&mut stream, path).await,
             };
 
             if has_data_verifier {

@@ -4,7 +4,7 @@ description = "The binstall toolkit for downloading and extracting file"
 repository = "https://github.com/cargo-bins/cargo-binstall"
 documentation = "https://docs.rs/binstalk-downloader"
 version = "0.14.2"
-rust-version = "1.88.0"
+rust-version = "1.93.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2024"
 license = "Apache-2.0 OR MIT"
@@ -46,6 +46,14 @@ reqwest = { version = "0.13.1", features = [
 ], default-features = false }
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 serde_json = { version = "1.0.149", optional = true }
+# Only decoding, and only the methods 7-Zip itself uses: no encryption,
+# brotli, lz4 or deflate (7-Zip doesn't write it to a 7z by default and
+# enabling it here would turn on flate2/zlib-rs for everyone).
+sevenz-rust2 = { version = "0.25.0", default-features = false, features = [
+    "bzip2",
+    "ppmd",
+    "zstd",
+] }
 # Use a fork here since we need PAX support, but the upstream
 # does not hav the PR merged yet.
 #
@@ -141,4 +149,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }
 
 [dev-dependencies]
+sevenz-rust2 = { version = "0.25.0", default-features = false, features = ["compress"] }
 tokio = { version = "1.52.3", features = ["test-util", "macros", "rt"], default-features = false }

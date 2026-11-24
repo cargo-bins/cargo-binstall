@@ -22,6 +22,10 @@ pub enum PkgFmt {
     Tzstd,
     /// Download format is Zip
     Zip,
+    /// Download format is 7z
+    #[serde(rename = "7z")]
+    #[strum(to_string = "7z")]
+    SevenZip,
     /// Download format is raw / binary
     Bin,
     /// Download format is a single binary compressed with GZip, not a TAR
@@ -47,6 +51,7 @@ impl PkgFmt {
             PkgFmt::Tzstd => PkgFmtDecomposed::Tar(TarBasedFmt::Tzstd),
             PkgFmt::Bin => PkgFmtDecomposed::Bin,
             PkgFmt::Zip => PkgFmtDecomposed::Zip,
+            PkgFmt::SevenZip => PkgFmtDecomposed::SevenZip,
             PkgFmt::Gz => PkgFmtDecomposed::CompressedBin(CompressionFmt::Gz),
             PkgFmt::Bz2 => PkgFmtDecomposed::CompressedBin(CompressionFmt::Bz2),
             PkgFmt::Xz => PkgFmtDecomposed::CompressedBin(CompressionFmt::Xz),
@@ -88,6 +93,7 @@ impl PkgFmt {
                 }
             }
             PkgFmt::Zip => &[".zip"],
+            PkgFmt::SevenZip => &[".7z"],
             PkgFmt::Gz if is_windows => &[".gz", ".exe.gz"],
             PkgFmt::Gz => &[".gz"],
             PkgFmt::Bz2 if is_windows => &[".bz2", ".exe.bz2"],
@@ -134,6 +140,7 @@ impl PkgFmt {
 
             "exe" | "bin" => Some(PkgFmt::Bin),
             "zip" => Some(PkgFmt::Zip),
+            "7z" => Some(PkgFmt::SevenZip),
 
             _ => None,
         }
@@ -145,6 +152,7 @@ pub enum PkgFmtDecomposed {
     Tar(TarBasedFmt),
     Bin,
     Zip,
+    SevenZip,
     /// A single binary compressed without an archive around it.
     CompressedBin(CompressionFmt),
 }
@@ -232,7 +240,8 @@ mod test {
             ("gz", None),
             ("tar.gz", None),
             ("{ name }-{ target }", None),
-            ("{ name }-{ target }.7z", None),
+            ("{ name }-{ target }.7z", Some(PkgFmt::SevenZip)),
+            ("7z", None),
         ];
 
         for (pkg_url, expected) in cases {
@@ -259,9 +268,27 @@ mod test {
         }
 
         assert!(PkgFmt::Bin.is_single_file());
-        for fmt in [PkgFmt::Tar, PkgFmt::Tgz, PkgFmt::Zip] {
+        for fmt in [PkgFmt::Tar, PkgFmt::Tgz, PkgFmt::Zip, PkgFmt::SevenZip] {
             assert!(!fmt.is_single_file());
         }
+    }
+
+    #[test]
+    fn parse_7z() {
+        for s in ["7z", "7Z"] {
+            assert_eq!(PkgFmt::from_str(s).unwrap(), PkgFmt::SevenZip, "{s}");
+        }
+
+        let toml: PkgFmt = serde_json::from_str("\"7z\"").unwrap();
+        assert_eq!(toml, PkgFmt::SevenZip);
+        assert_eq!(serde_json::to_string(&PkgFmt::SevenZip).unwrap(), "\"7z\"");
+
+        // Shown to users as what they'd write in `pkg-fmt`.
+        assert_eq!(PkgFmt::SevenZip.to_string(), "7z");
+        assert_eq!(
+            PkgFmt::guess_pkg_format("{ name }.7z"),
+            Some(PkgFmt::SevenZip)
+        );
     }
 
     #[test]

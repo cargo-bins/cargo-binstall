@@ -8,17 +8,7 @@ use normalize_path::NormalizePath;
 use rc_zip_sync::{ReadZip, rc_zip::parse::EntryKind};
 use tracing::warn;
 
-use super::{DownloadError, ExtractedFiles};
-
-#[cfg(any(unix, target_os = "wasi"))]
-const MAX_LINK_TARGET: u64 = 4096;
-
-fn create_parent_dir(path: &Path) -> io::Result<()> {
-    let parent = path
-        .parent()
-        .expect("all full entry paths should have parent paths");
-    create_dir_all(parent)
-}
+use super::{DownloadError, ExtractedFiles, archive_entry::create_parent_dir};
 
 pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, DownloadError> {
     let mut extracted_files = ExtractedFiles::new();
@@ -37,48 +27,13 @@ pub(super) fn do_extract_zip(f: File, dir: &Path) -> Result<ExtractedFiles, Down
         match entry.kind() {
             #[cfg(any(unix, target_os = "wasi"))]
             EntryKind::Symlink => {
-                use std::{ffi::OsStr, io::Read};
-
-                #[cfg(unix)]
-                use std::os::unix::{ffi::OsStrExt, fs::symlink};
-
-                #[cfg(target_os = "wasi")]
-                use std::os::wasi::{ffi::OsStrExt, fs::symlink_path as symlink};
-
-                let mut src = Vec::new();
-                entry
-                    .reader()
-                    .take(MAX_LINK_TARGET + 1)
-                    .read_to_end(&mut src)?;
-                if src.is_empty() || src.len() as u64 > MAX_LINK_TARGET || src.contains(&0) {
-                    warn!(
-                        "Skip zip symlink dest={} with invalid target",
-                        path.display(),
-                    );
-                    continue;
-                }
-
-                let src = Path::new(OsStr::from_bytes(&src));
-                let Some(src) = &src.try_normalize() else {
-                    warn!(
-                        "Skip zip symlink {} => {} with target pointing outside, beware of possible malware",
-                        src.display(),
-                        path.display(),
-                    );
-                    continue;
-                };
-
-                // src is relative to link_dir
-                let link_dir = name.parent().unwrap_or(Path::new(""));
-                if link_dir.join(src) == *name {
-                    warn!("Skip symlink loop {}", path.display());
-                    continue;
-                }
-
-                create_parent_dir(path)?;
-                symlink(src, path)?;
-
-                extracted_files.add_file(name);
+                super::archive_entry::extract_symlink(
+                    "zip",
+                    name,
+                    path,
+                    &mut entry.reader(),
+                    &mut extracted_files,
+                )?;
             }
             EntryKind::Directory => {
                 create_dir_all(path)?;

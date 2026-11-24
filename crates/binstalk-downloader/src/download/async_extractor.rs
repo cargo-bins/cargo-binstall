@@ -17,7 +17,7 @@ use tracing::debug;
 
 use super::{CompressionFmt, DownloadError, ExtractedFiles, TarBasedFmt, extractor::*};
 use crate::{
-    download::zip_extraction::do_extract_zip,
+    download::{sevenz_extraction::do_extract_7z, zip_extraction::do_extract_zip},
     utils::{StreamReadable, extract_with_blocking_task},
 };
 
@@ -88,6 +88,20 @@ where
         debug!("Decompressing from zip archive to `{}`", path.display());
 
         do_extract_zip(write_stream_to_file(rx, create_tmpfile()?)?, path).map_err(io::Error::from)
+    })
+    .await
+}
+
+pub async fn extract_7z<S>(stream: S, path: &Path) -> Result<ExtractedFiles, DownloadError>
+where
+    S: Stream<Item = Result<Bytes, DownloadError>> + Unpin + Send + Sync,
+{
+    debug!("Downloading from 7z archive to tempfile");
+
+    extract_with_blocking_decoder(stream, path, |rx, path| {
+        debug!("Decompressing from 7z archive to `{}`", path.display());
+
+        do_extract_7z(write_stream_to_file(rx, create_tmpfile()?)?, path).map_err(io::Error::from)
     })
     .await
 }

@@ -163,6 +163,8 @@ pub struct Args {
     ///
     /// - zip: Download format is Zip
     ///
+    /// - 7z: Download format is 7z
+    ///
     /// - bin: Download format is raw / binary
     ///
     /// - gz: Download format is a single binary compressed with GZip, not a TAR
