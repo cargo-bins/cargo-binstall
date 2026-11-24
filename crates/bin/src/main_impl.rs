@@ -9,6 +9,7 @@ use crate::{
     bin_util::{MainExit, run_tokio_main},
     entry,
     logging::logging,
+    ui::time_spent_in_prompts,
 };
 
 pub fn do_main() -> impl Termination {
@@ -62,8 +63,12 @@ rustc-llvm-version: {rustc_llvm_version}"#
         let result =
             run_tokio_main(|| entry::install_crates(args, cli_overrides, jobserver_client));
 
-        let done = start.elapsed();
-        debug!("run time: {done:?}");
+        let elapsed = start.elapsed();
+        let in_prompts = time_spent_in_prompts();
+        debug!("run time: {elapsed:?}, waiting for user input: {in_prompts:?}");
+
+        // Don't count the time the user took to answer the prompts.
+        let done = elapsed.saturating_sub(in_prompts);
 
         MainExit::new(result, Some(done))
     }

@@ -1,6 +1,8 @@
 use std::{
     io::{self, BufRead, StdinLock, Write},
+    sync::{Mutex, MutexGuard},
     thread,
+    time::{Duration, Instant},
 };
 
 use binstalk::errors::BinstallError;
@@ -36,7 +38,29 @@ pub async fn confirm() -> Result<(), BinstallError> {
     }
 }
 
+/// Total time spent waiting for the user to answer a prompt.
+fn time_in_prompts() -> MutexGuard<'static, Duration> {
+    static TIME_IN_PROMPTS: Mutex<Duration> = Mutex::new(Duration::ZERO);
+
+    TIME_IN_PROMPTS
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+}
+
+/// Returns how long the user has spent answering prompts so far,
+/// so that it can be excluded from the reported run time.
+pub fn time_spent_in_prompts() -> Duration {
+    *time_in_prompts()
+}
+
 pub fn confirm_sync(prompt: &str, default: bool) -> bool {
+    let start = Instant::now();
+    let res = confirm_sync_inner(prompt, default);
+    *time_in_prompts() += start.elapsed();
+    res
+}
+
+fn confirm_sync_inner(prompt: &str, default: bool) -> bool {
     // This task should be the only one able to access stdin
     let mut stdin = io::stdin().lock();
     let mut input = String::with_capacity(16);
