@@ -37,6 +37,9 @@ jobs:
 
       - name: Install cargo-binstall
         uses: ./ # uses action.yml from root of the repo
+        with:
+          # GitHub-hosted runners have gh, so the attestation must verify.
+          verify-attestation: 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
 

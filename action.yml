@@ -6,6 +6,14 @@ inputs:
     description: 'Version of cargo-binstall to install (e.g. 1.2.3 or v1.2.3). Defaults to latest.'
     required: false
     default: ''
+  verify-attestation:
+    description: >-
+      Verify the downloaded cargo-binstall with `gh attestation verify` before
+      running it: `auto` verifies if `gh` is installed and the version has an
+      attestation (v1.19.0 or later) and warns otherwise, `true` fails instead
+      of warning, `false` skips the check.
+    required: false
+    default: 'auto'
 
 runs:
   using: composite
@@ -15,6 +23,8 @@ runs:
       shell: sh
       env:
         BINSTALL_VERSION: ${{ inputs.version }}
+        BINSTALL_VERIFY_ATTESTATION: ${{ inputs.verify-attestation }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -eu
         bash "$GITHUB_ACTION_PATH/install-from-binstall-release.sh"
@@ -23,4 +33,6 @@ runs:
       shell: powershell
       env:
         BINSTALL_VERSION: ${{ inputs.version }}
+        BINSTALL_VERIFY_ATTESTATION: ${{ inputs.verify-attestation }}
+        GH_TOKEN: ${{ github.token }}
       run: Set-ExecutionPolicy Unrestricted -Scope Process; iex "$Env:GITHUB_ACTION_PATH/install-from-binstall-release.ps1"

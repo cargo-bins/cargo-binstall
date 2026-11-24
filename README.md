@@ -116,8 +116,12 @@ We provide a first-party, minimal action that installs Binstall:
 ```yml
 - uses: cargo-bins/cargo-binstall@main
   with:
-      version: "1.2.3" # optional; defaults to latest
+      version: "1.28.0" # optional; defaults to latest
+      verify-attestation: "true" # optional; defaults to "auto"
 ```
+
+Before running the downloaded Binstall, the action checks it with [`gh attestation verify`](https://cli.github.com/manual/gh_attestation_verify) against the provenance attested by Binstall's release workflow, so a tampered release asset is caught without trusting Binstall to check itself.
+With the default `auto`, the check is skipped with a warning when `gh` isn't installed (it is on GitHub-hosted runners) or the version predates attestations (before 1.19.0); `true` fails instead, and `false` turns the check off.
 
 For more features, we recommend the excellent
 [taiki-e/install-action](https://github.com/marketplace/actions/install-development-tools),
