@@ -117,17 +117,20 @@ impl Probe {
     }
 
     /// Check the candidates of the `pkg_url` and `pkg_fmt` a previous
-    /// version was found with, one at a time, before any other request: with
-    /// GET, or with the API for a private GitHub repository, whose assets
-    /// can't be downloaded without it. A hint that records what else the URL
-    /// was rendered with has only one.
+    /// version was found with, one at a time, before any other request. A
+    /// hint that records what else the URL was rendered with has only one.
+    ///
+    /// - For a public repository, with GET. More than two, one per archive
+    ///   suffix and `{ target-arch }` name of an older hint, are left to
+    ///   [`Probe::resolve`], which needs fewer requests for them.
+    /// - For a private GitHub repository, whose assets can't be downloaded
+    ///   without the API, with one API request per release, however many
+    ///   there are. Only without the GraphQL API: with it,
+    ///   [`Probe::resolve`]'s ls-refs and one GraphQL query for every
+    ///   candidate are preferred.
     ///
     /// The ones not found are dropped, so [`Probe::resolve`] doesn't check
     /// them again.
-    ///
-    /// More than two, one per archive suffix and `{ target-arch }` name of an
-    /// older hint, are left to [`Probe::resolve`], which needs fewer requests
-    /// for them.
     pub(super) async fn resolve_hint(
         &mut self,
         hint: &PkgUrlHint,
@@ -140,7 +143,12 @@ impl Probe {
                         && candidate.target_arch == rendered_with.target_arch.as_deref()
                 })
         };
-        if self.candidates.iter().positions(is_hinted).nth(2).is_some() {
+        if self.shared.is_repo_private {
+            if self.shared.gh_api_client.can_batch() {
+                debug!("Leaving the hint of a private repository to the GraphQL API");
+                return Ok(None);
+            }
+        } else if self.candidates.iter().positions(is_hinted).nth(2).is_some() {
             debug!("Too many candidates for the hint to check one at a time");
             return Ok(None);
         }
@@ -1015,14 +1023,57 @@ mod test {
             Some("0.12.0/cargo-binstall-x86_64-unknown-linux-musl.tgz")
         );
 
-        // The hint of a private repository is checked with the API.
-        let candidates = vec![new_candidate(PRIVATE, assets[2], TEMPLATE)];
-        let mut probe = new_probe(&gh_api_client, PRIVATE, candidates).await;
+        // The hint of a private repository is left to `resolve` while the
+        // GraphQL API can be used, without a request.
+        let candidates = || {
+            let tgz = |asset, archive_suffix, target_arch| {
+                new_candidate_with(
+                    PRIVATE,
+                    asset,
+                    TEMPLATE,
+                    PkgFmt::Tgz,
+                    archive_suffix,
+                    target_arch,
+                )
+            };
+            vec![
+                tgz(
+                    "0.12.0/cargo-binstall-amd64-unknown-linux-musl.tgz",
+                    Some(".tgz"),
+                    Some("amd64"),
+                ),
+                tgz(
+                    "0.12.0/cargo-binstall-x86_64-unknown-linux-musl.tar.gz",
+                    Some(".tar.gz"),
+                    None,
+                ),
+                tgz(assets[2], Some(".tgz"), None),
+            ]
+        };
+        let mut probe = new_probe(&gh_api_client, PRIVATE, candidates()).await;
+        if gh_api_client.can_batch() {
+            assert!(
+                probe
+                    .resolve_hint(&hint(PkgFmt::Tgz, None))
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(probe.candidates.len(), 3);
+            assert_eq!(probe.shared.data.repo_cache.release_artifacts_len(), 0);
+        }
+
+        // Without it, all its candidates are checked, with one API request
+        // for their release.
+        gh_api_client.set_only_use_restful_api();
+        let mut probe = new_probe(&gh_api_client, PRIVATE, candidates()).await;
         let found = probe
             .resolve_hint(&hint(PkgFmt::Tgz, None))
             .await
             .unwrap()
             .unwrap();
         assert!(found.gh_release_artifact_url.is_some());
+        assert_eq!(asset(Some(found)).as_deref(), Some(assets[2]));
+        assert_eq!(probe.shared.data.repo_cache.release_artifacts_len(), 1);
     }
 }

@@ -50,6 +50,11 @@ impl RepoCache {
     pub(crate) fn release_assets_pages_len(&self) -> usize {
         self.release_assets_pages.0.read().unwrap().len()
     }
+
+    #[cfg(test)]
+    pub(crate) fn release_artifacts_len(&self) -> usize {
+        self.release_artifacts.0.read().unwrap().len()
+    }
 }
 
 /// Which release tags exist, from the repository's git server.
