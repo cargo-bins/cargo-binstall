@@ -84,7 +84,7 @@ git -C "$INDEX" revert --no-edit HEAD
 
 test_cargo_binstall_install
 
-[ "$(ls -d "$CARGO_HOME"/binstall/registry/index/local-* | wc -l)" -eq 2 ] # clone + .lock
+[ "$(find "$CARGO_HOME/binstall/registry/index" -mindepth 1 -maxdepth 1 -name 'local-*' | wc -l)" -eq 2 ] # clone + .lock
 
 # Install binaries using registry t2 in config
 "$1" binstall --force --registry t2 -y cargo-binstall@0.12.0
