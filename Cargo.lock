@@ -400,6 +400,7 @@ dependencies = [
  "binstalk-types",
  "cargo-toml-workspace",
  "compact_str",
+ "fs-lock",
  "jiff 1.0.1",
  "leon",
  "miette",
@@ -4502,8 +4503,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 [[package]]
 name = "simple-git"
 version = "0.2.38"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "219924145c7331072db9de5dd614c7e80e3c59748eeb213de2e3704b62940fec"
+source = "git+https://github.com/cargo-bins/simple-git?branch=shallow-fetch-head#c32a0a70d84e5b9e6ff247d71471244b7559516d"
 dependencies = [
  "compact_str",
  "derive_destructure2",

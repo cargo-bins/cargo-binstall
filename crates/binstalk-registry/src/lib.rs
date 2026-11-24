@@ -176,6 +176,21 @@ impl Registry {
         )))
     }
 
+    /// Keep clones of a git index in `cache_root` across runs instead of
+    /// cloning it again every time, see [`GitRegistry::with_cache`].
+    ///
+    /// Does nothing for a sparse registry.
+    #[cfg_attr(not(feature = "git"), allow(unused_variables))]
+    pub fn with_git_index_cache(self, cache_root: impl Into<std::path::PathBuf>) -> Self {
+        match self {
+            #[cfg(feature = "git")]
+            Self::Git(registry) => {
+                Self::Git(GitRegistry::with_cache(registry.url().clone(), cache_root))
+            }
+            registry => registry,
+        }
+    }
+
     fn from_str_inner(s: &str) -> Result<Self, InvalidRegistryErrorInner> {
         if let Some(s) = s.strip_prefix("sparse+") {
             let url = Url::parse(s.trim_end_matches('/'))?;

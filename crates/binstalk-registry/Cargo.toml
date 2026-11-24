@@ -19,6 +19,9 @@ binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader", def
 binstalk-types = { version = "0.11.0", path = "../binstalk-types" }
 cargo-toml-workspace = { version = "7.0.12", path = "../cargo-toml-workspace" }
 compact_str = { version = "0.10.0", features = ["serde"] }
+fs-lock = { version = "0.1.17", path = "../fs-lock", features = [
+    "tracing",
+], optional = true }
 jiff = { version = "1.0.1", default-features = false, features = ["std"] }
 leon = "3.0.0"
 miette = "7.0.0"
@@ -46,7 +49,7 @@ binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader", def
 ] }
 
 [features]
-git = ["simple-git"]
+git = ["simple-git", "fs-lock"]
 
 rustls = ["simple-git?/rustls"]
 native-tls = ["simple-git?/native-tls"]
