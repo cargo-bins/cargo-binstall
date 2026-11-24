@@ -205,11 +205,15 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      # release-dry-run below only runs outside pull_request events, so read
+      # the release metadata in the merge queue. release-meta only looks at
+      # pull_request.body, and the squash commit the queue tests carries the
+      # PR body (with the release-pr comment) in its message.
       - id: meta
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'merge_group'
         uses: cargo-bins/release-meta@8ac87a95dfd0aa6903e06fc40fd9a7a26b766898 # v1.0.1
         with:
-          event-data: ${{ toJSON(github.event) }}
+          event-data: ${{ format('{{"pull_request":{{"body":{0}}}}}', toJSON(github.event.merge_group.head_commit.message)) }}
           extract-notes-under: "### Release notes"
 
   release-dry-run:
