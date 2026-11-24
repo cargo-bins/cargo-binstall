@@ -13,7 +13,7 @@ use tracing::{debug, error, instrument};
 pub use binstalk_types::cargo_toml_binstall::{CompressionFmt, PkgFmt, TarBasedFmt};
 pub use rc_zip_sync::rc_zip::error::Error as ZipError;
 
-use crate::remote::{Client, Error as RemoteError, Response, Url};
+use crate::remote::{Client, Error as RemoteError, GetResponse, Response, Url};
 
 mod async_extractor;
 use async_extractor::*;
@@ -91,13 +91,8 @@ enum DownloadContent {
         client: Client,
         url: Url,
     },
-    /// The response to `client.get(url)`, which can be continued like the
-    /// one [`DownloadContent::ToIssue`] issues.
-    Got {
-        client: Client,
-        url: Url,
-        response: Response,
-    },
+    /// Continued like the response [`DownloadContent::ToIssue`] gets.
+    Got(GetResponse),
     Response(Response),
 }
 
@@ -130,11 +125,11 @@ impl DownloadContent {
                 let response = client.get(url.clone()).send(true).await?;
                 (Some((client, url)), response)
             }
-            DownloadContent::Got {
+            DownloadContent::Got(GetResponse {
                 client,
                 url,
                 response,
-            } => (Some((client, url)), response),
+            }) => (Some((client, url)), response),
             DownloadContent::Response(response) => (None, response),
         })
     }
@@ -201,27 +196,24 @@ impl Download<'static> {
         }
     }
 
-    /// Download the body of `response`, the response to `client.get(url)`,
-    /// for instance from [`Client::get_if_exists`], instead of asking for it
-    /// again.
-    ///
-    /// Unlike [`Download::from_response`], it is continued with `Range`
-    /// requests to `url` if it breaks partway, as [`Download::new`] is.
-    pub fn from_get_response(client: Client, url: Url, response: Response) -> Self {
+    pub fn from_response(response: Response) -> Self {
         Self {
-            content: DownloadContent::Got {
-                client,
-                url,
-                response,
-            },
+            content: DownloadContent::Response(response),
             data_verifier: None,
             resume: true,
         }
     }
+}
 
-    pub fn from_response(response: Response) -> Self {
+/// Download the body of a response, for instance from
+/// [`Client::get_if_exists`], instead of asking for it again.
+///
+/// Unlike [`Download::from_response`], it is continued with `Range` requests
+/// if it breaks partway, as [`Download::new`] is.
+impl From<GetResponse> for Download<'static> {
+    fn from(response: GetResponse) -> Self {
         Self {
-            content: DownloadContent::Response(response),
+            content: DownloadContent::Got(response),
             data_verifier: None,
             resume: true,
         }

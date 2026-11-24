@@ -391,7 +391,7 @@ impl Shared {
         &self,
         candidate: Candidate,
         gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
-        response: Option<Response>,
+        response: Option<GetResponse>,
     ) -> Resolved {
         Resolved {
             url: candidate.url,

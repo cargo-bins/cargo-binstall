@@ -28,7 +28,7 @@ mod dns_resolver;
 pub use dns_resolver::DnsResolver;
 
 mod request_builder;
-pub use request_builder::{Body, RequestBuilder, Response};
+pub use request_builder::{Body, GetResponse, RequestBuilder, Response};
 
 mod tls_version;
 pub use tls_version::TLSVersion;
@@ -399,13 +399,16 @@ impl Client {
     /// `GET` `url`, returning the response if it is a success, `None` if
     /// the server answered with any other status.
     ///
-    /// Its body is left unread: pass it with `url` to
-    /// [`Download::from_get_response`](crate::download::Download::from_get_response)
-    /// to download it without asking again, or drop it if only whether `url`
-    /// exists matters.
-    pub async fn get_if_exists(&self, url: Url) -> Result<Option<Response>, Error> {
-        let response = self.get(url).send(false).await?;
-        Ok(response.status().is_success().then_some(response))
+    /// Its body is left unread: convert it into a
+    /// [`Download`](crate::download::Download) to download it without asking
+    /// again, or drop it if only whether `url` exists matters.
+    pub async fn get_if_exists(&self, url: Url) -> Result<Option<GetResponse>, Error> {
+        let response = self.get(url.clone()).send(false).await?;
+        Ok(response.status().is_success().then(|| GetResponse {
+            client: self.clone(),
+            url,
+            response,
+        }))
     }
 
     /// Attempt to get final redirected url using `Method::HEAD` or fallback

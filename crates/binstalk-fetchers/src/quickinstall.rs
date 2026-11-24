@@ -69,7 +69,7 @@ pub struct QuickInstall {
     signature_verifier: OnceLock<SignatureVerifier>,
     /// The response to the GET that found `package_url`, its body unread,
     /// which `fetch_and_extract` downloads instead of asking again.
-    response: Mutex<Option<Response>>,
+    response: Mutex<Option<GetResponse>>,
     status: Mutex<Status>,
 }
 
@@ -275,7 +275,9 @@ by rust officially."#,
         debug!(url=%self.package_url, "Downloading package");
         let mut data_verifier = verifier.data_verifier()?;
         let response = self.response.lock().unwrap().take();
-        let files = download(self.client.clone(), self.package_url.clone(), response)
+        let files = response
+            .map(Download::from)
+            .unwrap_or_else(|| Download::new(self.client.clone(), self.package_url.clone()))
             .with_data_verifier(data_verifier.as_mut())
             .and_extract(self.pkg_fmt(), dst)
             .await?;

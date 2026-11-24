@@ -53,7 +53,7 @@ struct Resolved {
     default_pkg_url: Option<CompactString>,
     /// The response to the GET that found `url`, its body unread, which
     /// `fetch_and_extract` downloads instead of asking again.
-    response: Mutex<Option<Response>>,
+    response: Mutex<Option<GetResponse>>,
 }
 
 /// Write `template` back in the syntax [`Template::parse`] reads.
@@ -415,7 +415,9 @@ impl super::Fetcher for GhCrateMeta {
                 .with_data_verifier(data_verifier.as_mut()),
             _ => {
                 let response = resolved.response.lock().unwrap().take();
-                download(self.client.clone(), resolved.url.clone(), response)
+                response
+                    .map(Download::from)
+                    .unwrap_or_else(|| Download::new(self.client.clone(), resolved.url.clone()))
                     .with_data_verifier(data_verifier.as_mut())
             }
         }

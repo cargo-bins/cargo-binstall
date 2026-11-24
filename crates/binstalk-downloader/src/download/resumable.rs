@@ -430,12 +430,8 @@ mod tests {
         let server = serve(listener, &[CUT_SHORT, THE_REST]);
 
         let url = Url::parse(&format!("http://{addr}/")).unwrap();
-        let client = test_client();
-        let response = client.get_if_exists(url.clone()).await.unwrap().unwrap();
-        let bytes = Download::from_get_response(client, url, response)
-            .into_bytes()
-            .await
-            .unwrap();
+        let response = test_client().get_if_exists(url).await.unwrap().unwrap();
+        let bytes = Download::from(response).into_bytes().await.unwrap();
 
         assert_eq!(&bytes[..], b"0123456789abcdefghij");
         let requests = server.join().unwrap();
