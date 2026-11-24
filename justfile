@@ -368,17 +368,18 @@ package-prepare: build package-dir
     just split-debuginfo packages/prep/detect-targets
 
 # underscored pdb name needs to remain for debuggers to find the file properly
-# read from deps because sometimes cargo doesn't copy the pdb to the output folder
+# (cargo uplifts it under that name; since the build-dir layout v2 of cargo
+# 1.100 the deps folder is no longer next to the output folder)
 [windows]
 package-prepare: build package-dir
     just get-binary packages/prep
-    just get-output deps/cargo_binstall.pdb packages/prep
+    just get-output cargo_binstall.pdb packages/prep
 
     just get-output detect-wasi.exe packages/prep
-    just get-output deps/detect_wasi.pdb packages/prep
+    just get-output detect_wasi.pdb packages/prep
 
     just get-output detect-targets.exe packages/prep
-    just get-output deps/detect_targets.pdb packages/prep
+    just get-output detect_targets.pdb packages/prep
 
 [macos]
 lipo-prepare: package-dir
@@ -444,10 +445,12 @@ repackage-lipo: package-dir
     cd packages/prep && zip -r -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
 
 # Merge the per-arch dSYM bundles of an extracted .full package into a
-# universal one; lldb picks the slice by the binary's UUID.
+# universal one; lldb picks the slice by the binary's UUID. The DWARF file in
+# a bundle is named after the crate (cargo_binstall), not the binary.
 [macos]
 lipo-dsym bin:
     rm -rf packages/prep/{{bin}}.dSYM
     cp -R packages/prep/arm64/{{bin}}.dSYM packages/prep/{{bin}}.dSYM
-    lipo -create -output packages/prep/{{bin}}.dSYM/Contents/Resources/DWARF/{{bin}} packages/prep/{arm64,x64}/{{bin}}.dSYM/Contents/Resources/DWARF/{{bin}}
+    -cp -R packages/prep/x64/{{bin}}.dSYM/Contents/Resources/Relocations/. packages/prep/{{bin}}.dSYM/Contents/Resources/Relocations/
+    cd packages/prep && for dwarf in {{bin}}.dSYM/Contents/Resources/DWARF/*; do lipo -create -output "$dwarf" "arm64/$dwarf" "x64/$dwarf"; done
     dwarfdump --uuid packages/prep/{{bin}} packages/prep/{{bin}}.dSYM
