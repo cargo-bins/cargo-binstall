@@ -1,22 +1,27 @@
 //! Checking which of the URLs a package may be at exists, with as few
 //! requests as possible.
 //!
-//! [`Candidate`]s are rendered once per target. The ones of the `pkg-url` a
-//! previous version was found with are checked first, see
-//! [`Probe::resolve_hint`]. The others are narrowed down before any of them
-//! is checked, see [`Probe::resolve`]: by which release tags exist, with one
-//! request to the repository's git server, then for a public GitHub
-//! repository by the releases' asset lists on github.com, which cost no API
-//! quota, and only then with the API.
+//! [`Candidate`]s are rendered once per target. Whether a github.com
+//! repository is private is found out first, with the request listing the
+//! tags of the candidates, see [`Probe::find_out_if_repo_is_private`]. The
+//! ones of the `pkg-url` a previous version was found with are checked
+//! first, see [`Probe::resolve_hint`]. The others are narrowed down before
+//! any of them is checked, see [`Probe::resolve`]: by which release tags
+//! exist, with one request to the repository's git server, then for a public
+//! GitHub repository by the releases' asset lists on github.com, which cost
+//! no API quota, and only then with the API.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashSet},
+    sync::Arc,
+};
 
 use binstalk_git_repo_api::{
     gh_api_client::{
         GhApiError, GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, GhRepo, ReleaseAssets,
         ReleaseAssetsPage,
     },
-    git_refs,
+    git_refs::{self, RepoTags},
 };
 use compact_str::CompactString;
 use itertools::Itertools;
@@ -26,7 +31,7 @@ use url::Url;
 use super::Resolved;
 use crate::{
     Data, FetchError, RepoInfo, common::*, futures_resolver::FuturesResolver,
-    gh_api_rate_limit_wait,
+    gh_api_rate_limit_wait, gh_get_repo_info,
 };
 
 /// A URL the package may be at, rendered from a `pkg-url` template.
@@ -99,7 +104,6 @@ impl Probe {
         gh_api_client: GhApiClient,
         repo: Option<&str>,
         subcrate: Option<&str>,
-        is_repo_private: bool,
         candidates: Vec<Candidate>,
     ) -> Self {
         Self {
@@ -109,9 +113,24 @@ impl Probe {
                 gh_api_client,
                 repo: repo.map(CompactString::from),
                 subcrate: subcrate.map(CompactString::from),
-                is_repo_private,
+                // Found out by `find_out_if_repo_is_private`.
+                is_repo_private: false,
             },
             candidates,
+        }
+    }
+
+    /// Find out whether the repository is private, if it isn't known yet:
+    /// for a github.com repository, by listing the tags of the candidates,
+    /// see [`Probe::drop_missing_tags`].
+    pub(super) async fn find_out_if_repo_is_private(&mut self) -> Result<(), FetchError> {
+        match self.shared.data.repo_cache.info.get() {
+            Some(Some(info)) if !info.is_private.initialized() => self.drop_missing_tags().await,
+            Some(Some(info)) => {
+                self.shared.is_repo_private = info.is_private.get().copied().unwrap_or_default();
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 
@@ -125,6 +144,8 @@ impl Probe {
     ///
     /// More than two, one per archive suffix and `{ target-arch }` name,
     /// are left to [`Probe::resolve`], which needs fewer requests for them.
+    ///
+    /// Call [`Probe::find_out_if_repo_is_private`] first.
     pub(super) async fn resolve_hint(
         &mut self,
         pkg_url: &str,
@@ -163,7 +184,7 @@ impl Probe {
     ///    could not tell about in one GraphQL query.
     /// 4. Check the rest at once.
     pub(super) async fn resolve(mut self) -> Result<Option<Resolved>, FetchError> {
-        self.drop_missing_tags().await;
+        self.drop_missing_tags().await?;
         if self.candidates.is_empty() {
             debug!("No release tag of any candidate exists");
             return Ok(None);
@@ -194,13 +215,24 @@ impl Probe {
     /// to the repository's git server, and drop the candidates of the other
     /// ones. If the git server can't tell, every candidate is kept.
     ///
-    /// A private repository on github.com is asked with the token.
+    /// It also finds out whether a github.com repository is private, before
+    /// anything else is checked: if its git server lists the tags without a
+    /// token, it is public. Otherwise, with a token, the API is asked, and a
+    /// private one is listed with the token.
     ///
-    /// The answer is kept in [`Data`]: only tags no target asked about yet
+    /// The answers are kept in [`Data`]: only tags no target asked about yet
     /// are asked, normally none after the first target.
-    async fn drop_missing_tags(&mut self) {
+    pub(super) async fn drop_missing_tags(&mut self) -> Result<(), FetchError> {
         let Self { shared, candidates } = self;
         let data = &shared.data;
+
+        // Set by `get_repo_info`, which `find` calls first.
+        let Some(Some(RepoInfo {
+            repo, is_private, ..
+        })) = data.repo_cache.info.get()
+        else {
+            return Ok(());
+        };
 
         let mut tags = data.repo_cache.tags.lock().await;
         let unasked = tags.unasked(
@@ -208,31 +240,40 @@ impl Probe {
                 .iter()
                 .filter_map(|candidate| candidate.tag.as_deref()),
         );
-        // Set by `get_repo_info`, which `find` calls first.
-        if !unasked.is_empty()
-            && let Some(Some(RepoInfo {
-                repo, is_private, ..
-            })) = data.repo_cache.info.get()
-        {
-            let listed = match GhRepo::try_extract_from_url(repo) {
-                Some(gh_repo) if *is_private => {
-                    shared
-                        .gh_api_client
-                        .list_private_repo_tags(&gh_repo, unasked)
-                        .await
-                }
-                _ => git_refs::list_tags(&shared.client, repo, unasked, None).await,
-            };
+        let gh_repo = GhRepo::try_extract_from_url(repo);
+
+        let listed = match (is_private.get(), gh_repo) {
+            (Some(_), _) if unasked.is_empty() => None,
+            (Some(true), Some(gh_repo)) => Some(
+                shared
+                    .gh_api_client
+                    .list_private_repo_tags(&gh_repo, unasked)
+                    .await,
+            ),
+            (Some(_), _) | (None, None) => {
+                Some(git_refs::list_tags(&shared.client, repo, unasked, None).await)
+            }
+            (None, Some(gh_repo)) => {
+                let (private, listed) = shared
+                    .list_tags_of_github_repo(repo, &gh_repo, unasked)
+                    .await?;
+                let _ = is_private.set(private);
+                Some(listed)
+            }
+        };
+        if let Some(listed) = listed {
             tags.add(
                 listed
                     .inspect_err(|err| debug!("Failed to list the release tags of {repo}: {err}"))
                     .ok(),
             );
         }
+        shared.is_repo_private = is_private.get().copied().unwrap_or_default();
 
         candidates.retain(|candidate| {
             candidate.tag.as_deref().and_then(|tag| tags.exists(tag)) != Some(false)
         });
+        Ok(())
     }
 
     /// Look up the candidates of each GitHub release on github.com, which
@@ -358,6 +399,41 @@ impl Probe {
 }
 
 impl Shared {
+    /// Which of `tags` exist in the github.com repository `repo`, and
+    /// whether it is private.
+    ///
+    /// If its git server lists them without a token, it is public: no need
+    /// to ask the API. Without a token, it is taken as public either way.
+    async fn list_tags_of_github_repo(
+        &self,
+        repo: &Url,
+        gh_repo: &GhRepo,
+        tags: HashSet<CompactString>,
+    ) -> Result<(bool, Result<RepoTags, GhApiError>), FetchError> {
+        let err = match git_refs::list_tags(&self.client, repo, tags.clone(), None).await {
+            Ok(listed) => return Ok((false, Ok(listed))),
+            Err(err) if !self.gh_api_client.has_gh_token() => return Ok((false, Err(err))),
+            Err(err) => err,
+        };
+        debug!(
+            "Failed to list the release tags of {repo} without a token, asking the API whether \
+            it is private: {err}"
+        );
+
+        if gh_get_repo_info(&self.gh_api_client, gh_repo)
+            .await?
+            .is_private()
+        {
+            let listed = self
+                .gh_api_client
+                .list_private_repo_tags(gh_repo, tags)
+                .await;
+            Ok((true, listed))
+        } else {
+            Ok((false, Err(err)))
+        }
+    }
+
     /// Check `candidate` with the API if it is a GitHub release asset, with
     /// GET otherwise or if the API can't tell.
     async fn check(&self, candidate: Candidate) -> Result<Option<Resolved>, FetchError> {
@@ -481,23 +557,24 @@ mod test {
         )
     }
 
+    /// A probe of `repo`, which knows whether it is private.
     async fn new_probe(
         gh_api_client: &GhApiClient,
         repo: &str,
         candidates: Vec<Candidate>,
     ) -> Probe {
         let data = Data::new("test".into(), "0.0.0".into(), Some(repo.into()));
-        let info = data.get_repo_info(gh_api_client).await.unwrap().unwrap();
-        let is_repo_private = info.is_private;
-        Probe::new(
+        data.get_repo_info(gh_api_client).await.unwrap().unwrap();
+        let mut probe = Probe::new(
             Arc::new(data),
             client(),
             gh_api_client.clone(),
             Some(repo),
             None,
-            is_repo_private,
             candidates,
-        )
+        );
+        probe.find_out_if_repo_is_private().await.unwrap();
+        probe
     }
 
     /// The asset of `resolved`, `{tag}/{name}`.
@@ -531,7 +608,7 @@ mod test {
         let mut probe = new_probe(gh_api_client, repo, candidates).await;
         assert!(!probe.shared.is_repo_private);
 
-        probe.drop_missing_tags().await;
+        probe.drop_missing_tags().await.unwrap();
         let after_tags = probe.candidates.len();
 
         if let Some(found) = probe.check_on_web().await.unwrap() {
@@ -688,6 +765,26 @@ mod test {
         assert_eq!(probe(repo, &[musl_tgz]).await, on_web(musl_tgz, 1));
     }
 
+    /// A repository that was transferred or renamed, as cargo-binstall
+    /// was from ryankurte: its git server answers under the old name, and
+    /// github.com redirects its pages, which link to the assets under the
+    /// new one.
+    #[tokio::test]
+    async fn test_probe_renamed_repo() {
+        let musl_tgz = "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz";
+        assert_eq!(
+            probe(
+                "https://github.com/ryankurte/cargo-binstall",
+                &[
+                    "v0.18.2/cargo-binstall-x86_64-unknown-linux-musl.tgz",
+                    musl_tgz,
+                ],
+            )
+            .await,
+            on_web(musl_tgz, 1)
+        );
+    }
+
     /// The next target, tried when one has nothing, reuses what the first
     /// one asked the git server and github.com.
     #[tokio::test]
@@ -703,14 +800,13 @@ mod test {
                 gh_api_client.clone(),
                 Some(BINSTALL),
                 None,
-                false,
                 assets
                     .iter()
                     .map(|asset| new_candidate(BINSTALL, asset, None))
                     .collect(),
             );
             async move {
-                probe.drop_missing_tags().await;
+                probe.drop_missing_tags().await.unwrap();
                 probe.check_on_web().await.unwrap()
             }
         };
@@ -922,7 +1018,7 @@ mod test {
         assert!(probe.shared.is_repo_private);
 
         // The git server was asked with the token.
-        probe.drop_missing_tags().await;
+        probe.drop_missing_tags().await.unwrap();
         assert_eq!(probe.candidates.len(), 2);
 
         let found = probe.resolve().await.unwrap().unwrap();

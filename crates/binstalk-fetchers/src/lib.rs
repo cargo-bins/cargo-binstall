@@ -9,7 +9,7 @@ use binstalk_types::{
     crate_info::PkgUrlHint,
 };
 use thiserror::Error as ThisError;
-use tokio::{task::JoinError, time::sleep};
+use tokio::{sync::OnceCell, task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -200,12 +200,14 @@ impl leon::Values for TargetArchOverride<'_> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct RepoInfo {
     repo: Url,
     repository_host: RepositoryHost,
     subcrate: Option<CompactString>,
-    is_private: bool,
+    /// Unset for a github.com repository until its tags are listed, which
+    /// finds out whether it is public, see `Probe::drop_missing_tags`.
+    is_private: OnceCell<bool>,
 }
 
 /// What to do about package signatures
@@ -219,6 +221,25 @@ pub enum SignaturePolicy {
 
     /// Require signatures to be present (and valid)
     Require,
+}
+
+/// [`GhApiClient::get_repo_info`], waiting out a short rate limit.
+async fn gh_get_repo_info(
+    client: &GhApiClient,
+    gh_repo: &GhRepo,
+) -> Result<GhRepoInfo, GhApiError> {
+    loop {
+        match client.get_repo_info(gh_repo).await {
+            Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
+            Ok(None) => break Err(GhApiError::NotFound),
+            Err(GhApiError::RateLimit { retry_after }) => match gh_api_rate_limit_wait(retry_after)
+            {
+                Some(wait) => sleep(wait).await,
+                None => break Err(GhApiError::RateLimit { retry_after }),
+            },
+            Err(err) => break Err(err),
+        }
+    }
 }
 
 /// Data required to fetch a package
@@ -278,39 +299,20 @@ impl Data {
 
     #[instrument(skip(client))]
     async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
-        async fn gh_get_repo_info(
-            client: &GhApiClient,
-            gh_repo: &GhRepo,
-        ) -> Result<GhRepoInfo, GhApiError> {
-            loop {
-                match client.get_repo_info(gh_repo).await {
-                    Ok(Some(gh_repo_info)) => break Ok(gh_repo_info),
-                    Ok(None) => break Err(GhApiError::NotFound),
-                    Err(GhApiError::RateLimit { retry_after }) => {
-                        match gh_api_rate_limit_wait(retry_after) {
-                            Some(wait) => sleep(wait).await,
-                            None => break Err(GhApiError::RateLimit { retry_after }),
-                        }
-                    }
-                    Err(err) => break Err(err),
-                }
-            }
-        }
-
         async fn get_repo_info_inner(
             repo: &str,
             client: &GhApiClient,
         ) -> Result<RepoInfo, FetchError> {
-            let repo = Url::parse(repo)?;
-            let redirected = client
+            let mut repo = Url::parse(repo)?;
+            if let Some(repo_info) = RepoInfo::github(&mut repo) {
+                return Ok(repo_info);
+            }
+
+            let mut repo = client
                 .remote_client()
                 .get_redirected_final_url(repo.clone())
-                .await;
-            // github.com shows a private repository only to its members
-            // signed in with a browser, so one whose page loads is public:
-            // no need to spend the API on it.
-            let has_public_page = redirected.is_ok();
-            let mut repo = redirected.unwrap_or(repo);
+                .await
+                .unwrap_or(repo);
             let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
             let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
@@ -319,41 +321,18 @@ impl Data {
                 .as_str()
                 .strip_suffix(".git")
                 .and_then(|s| Url::parse(s).ok())
+                && let Ok(repo) = client.remote_client().get_redirected_final_url(repo).await
             {
-                let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
-                match GhRepo::try_extract_from_url(&repo) {
-                    Some(gh_repo) if client.has_gh_token() && !has_public_page => {
-                        if let Ok(gh_repo_info) = gh_get_repo_info(client, &gh_repo).await {
-                            return Ok(RepoInfo {
-                                subcrate,
-                                repository_host,
-                                repo,
-                                is_private: gh_repo_info.is_private(),
-                            });
-                        }
-                    }
-                    _ => {
-                        if let Ok(repo) =
-                            client.remote_client().get_redirected_final_url(repo).await
-                        {
-                            return Ok(RepoInfo {
-                                subcrate,
-                                repository_host: RepositoryHost::guess_git_hosting_services(&repo),
-                                repo,
-                                is_private: false,
-                            });
-                        }
-                    }
-                }
+                return Ok(RepoInfo {
+                    subcrate,
+                    repository_host: RepositoryHost::guess_git_hosting_services(&repo),
+                    repo,
+                    is_private: OnceCell::new_with(Some(false)),
+                });
             }
 
             Ok(RepoInfo {
-                is_private: match GhRepo::try_extract_from_url(&repo) {
-                    Some(gh_repo) if client.has_gh_token() && !has_public_page => {
-                        gh_get_repo_info(client, &gh_repo).await?.is_private()
-                    }
-                    _ => false,
-                },
+                is_private: OnceCell::new_with(Some(false)),
                 subcrate,
                 repo,
                 repository_host,
@@ -381,6 +360,39 @@ impl Data {
 }
 
 impl RepoInfo {
+    /// The info of a github.com repository, without any request: the
+    /// repository is `https://github.com/{owner}/{repo}`, so its page is not
+    /// needed to find out where it is, and whether it is public is found out
+    /// with the request listing its tags.
+    ///
+    /// The owner and repository of a renamed or transferred one are kept,
+    /// github.com redirects them.
+    fn github(repo: &mut Url) -> Option<Self> {
+        if !matches!(repo.scheme(), "https" | "http") {
+            return None;
+        }
+        let GhRepo { owner, repo: name } = GhRepo::try_extract_from_url(repo)?;
+        let name = name.strip_suffix(".git").unwrap_or(&name);
+        if owner.is_empty() || name.is_empty() {
+            return None;
+        }
+
+        let subcrate = Self::detect_subcrate(repo, RepositoryHost::GitHub);
+
+        let mut repo =
+            Url::parse("https://github.com/").expect("Literal provided must be a valid url");
+        repo.path_segments_mut()
+            .expect("https url can be a base")
+            .extend([owner.as_str(), name]);
+
+        Some(Self {
+            repo,
+            repository_host: RepositoryHost::GitHub,
+            subcrate,
+            is_private: OnceCell::new(),
+        })
+    }
+
     /// If `repo` contains a subcrate, then extracts and returns it.
     /// It will also remove that subcrate path from `repo` to match
     /// `scheme:/{repo_owner}/{repo_name}`
@@ -528,6 +540,68 @@ mod test {
                 Url::parse("https://gitlab.kitware.com/NobodyXu/hello").unwrap()
             );
         }
+    }
+
+    #[test]
+    fn test_github_repo_info() {
+        let info = |repo: &str| {
+            let mut repo = Url::parse(repo).unwrap();
+            RepoInfo::github(&mut repo).map(|info| {
+                assert!(!info.is_private.initialized());
+                (info.repo.to_string(), info.subcrate)
+            })
+        };
+        let binstall = || {
+            Some((
+                "https://github.com/cargo-bins/cargo-binstall".to_owned(),
+                None,
+            ))
+        };
+
+        assert_eq!(
+            info("https://github.com/cargo-bins/cargo-binstall"),
+            binstall()
+        );
+        assert_eq!(
+            info("https://github.com/cargo-bins/cargo-binstall/"),
+            binstall()
+        );
+        assert_eq!(
+            info("https://github.com/cargo-bins/cargo-binstall.git"),
+            binstall()
+        );
+        assert_eq!(
+            info("http://github.com/cargo-bins/cargo-binstall"),
+            binstall()
+        );
+        assert_eq!(
+            info("https://github.com/cargo-bins/cargo-binstall#readme"),
+            binstall()
+        );
+        assert_eq!(
+            info("https://github.com/cargo-bins/cargo-binstall/tree/main/crates/bin"),
+            Some((
+                "https://github.com/cargo-bins/cargo-binstall".to_owned(),
+                Some("bin".into())
+            ))
+        );
+        // The case is kept, github.com ignores it.
+        assert_eq!(
+            info("https://github.com/Cargo-Bins/Cargo-Binstall").map(|(repo, _)| repo),
+            Some("https://github.com/Cargo-Bins/Cargo-Binstall".to_owned())
+        );
+
+        // Not a repository.
+        assert_eq!(info("https://github.com/cargo-bins"), None);
+        assert_eq!(info("https://github.com/cargo-bins/"), None);
+        assert_eq!(info("https://github.com/cargo-bins/.git"), None);
+        // Not github.com: its page is asked where it is.
+        assert_eq!(info("https://gitlab.com/gitlab-org/gitlab-runner"), None);
+        assert_eq!(
+            info("https://www.github.com/cargo-bins/cargo-binstall"),
+            None
+        );
+        assert_eq!(info("git://github.com/cargo-bins/cargo-binstall"), None);
     }
 
     #[tokio::test]

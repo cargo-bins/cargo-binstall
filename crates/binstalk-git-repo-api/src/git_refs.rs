@@ -89,6 +89,12 @@ fn ls_refs_request<'a>(tags: impl IntoIterator<Item = &'a str>) -> io::Result<Ve
     // Between the command and its arguments.
     encode::delim_to_write(&mut request)?;
 
+    let mut tags = tags.into_iter().peekable();
+    if tags.peek().is_none() {
+        // Without a prefix, every ref would be listed. Only `HEAD` is, to
+        // find out whether the repository can be read at all.
+        encode::data_to_write(b"ref-prefix HEAD\n", &mut request)?;
+    }
     let mut line = Vec::new();
     for tag in tags {
         line.clear();
@@ -255,6 +261,11 @@ mod test {
             ls_refs_request(["v1.28.0", "1.28.0"]).unwrap(),
             b"0014command=ls-refs\n00010021ref-prefix refs/tags/v1.28.0\n0020ref-prefix refs/tags/1.28.0\n0000"
         );
+        // Asking for no tag doesn't list every ref.
+        assert_eq!(
+            ls_refs_request([]).unwrap(),
+            b"0014command=ls-refs\n00010014ref-prefix HEAD\n0000"
+        );
     }
 
     #[test]
@@ -322,6 +333,12 @@ mod test {
         assert_eq!(tags.exists("v0.20.1"), Some(true));
         assert_eq!(tags.exists("v0.18.2"), Some(false));
         assert_eq!(tags.exists("v0.20.2"), None);
+
+        // No tag: whether the repository can be read.
+        let tags = list_tags("https://github.com/cargo-bins/cargo-binstall", &[])
+            .await
+            .unwrap();
+        assert_eq!(tags.exists("v0.20.1"), None);
 
         // A tag with `+`, and one that is a prefix of other ones
         // (`ripgrep-14.1.10`, ...) which the server lists too.

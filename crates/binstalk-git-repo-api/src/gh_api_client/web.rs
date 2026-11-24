@@ -192,11 +192,22 @@ async fn fetch_release_assets(client: &remote::Client, release: &GhRelease) -> P
     debug!("Getting release assets from: '{url}'");
 
     let response = client.get(url.clone()).send(false).await;
+    // github.com redirects a renamed or transferred repository, whose page
+    // then links to the assets under its new name.
+    let renamed;
     let html = match response
         .map_err(GhApiError::from)
         .and_then(check_http_status_and_header)
     {
-        Ok(response) => response.bytes().await,
+        Ok(response) => {
+            renamed = GhRepo::try_extract_from_url(response.url())
+                .filter(|repo| *repo != release.repo)
+                .map(|repo| GhRelease {
+                    repo,
+                    tag: release.tag.clone(),
+                });
+            response.bytes().await
+        }
         Err(GhApiError::NotFound) => return Page::NotFound,
         Err(err) => {
             debug!("Failed to get release assets from {url}: {err}");
@@ -214,7 +225,7 @@ async fn fetch_release_assets(client: &remote::Client, release: &GhRelease) -> P
 
     match html
         .ok()
-        .and_then(|html| ReleaseAssetList::new(release, html))
+        .and_then(|html| ReleaseAssetList::new(renamed.as_ref().unwrap_or(release), html))
     {
         Some(assets) => Page::Found(assets),
         None => {
