@@ -9,7 +9,7 @@ use crate::{
     fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
     helpers::{
         gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient,
-        lazy_gh_api_client::LazyGhApiClient, remote::Client,
+        lazy_gh_api_client::LazyGhApiClient, release_assets::ForgeTokens, remote::Client,
     },
     manifests::cargo_toml_binstall::PkgOverride,
     registry::ResolvedRegistry,
@@ -65,6 +65,8 @@ pub struct Options {
 
     pub client: Client,
     pub gh_api_client: LazyGhApiClient,
+    /// Tokens for git hosting websites other than GitHub.
+    pub forge_tokens: Arc<ForgeTokens>,
     pub jobserver_client: LazyJobserverClient,
     pub registry: ResolvedRegistry,
 

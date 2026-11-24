@@ -159,7 +159,8 @@ async fn resolve_inner(
         package_info.name.clone(),
         package_info.version_str.clone(),
         package_info.repo.clone(),
-    );
+    )
+    .with_forge_tokens(opts.forge_tokens.clone());
     // Shares what is known about the repository with `data`.
     let binary_data = binary_name.map(|binary_name| data.with_name(binary_name));
 

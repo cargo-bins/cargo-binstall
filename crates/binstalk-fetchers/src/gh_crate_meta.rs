@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
+use binstalk_git_repo_api::{gh_api_client::GhReleaseArtifactUrl, release_assets::GitLabToken};
 use binstalk_types::{
     cargo_toml_binstall::Strategy,
     crate_info::{PkgUrlHint, RenderedWith},
@@ -54,6 +54,9 @@ struct Resolved {
     /// The `pkg-url` that `url` was rendered from, see
     /// [`PkgUrlHint::pkg_url`].
     pkg_url: Arc<str>,
+    /// Where the GitLab API has the package, and the token it is
+    /// downloaded with.
+    gitlab_download: Option<(Url, GitLabToken)>,
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -402,13 +405,23 @@ impl super::Fetcher for GhCrateMeta {
             "Downloading package",
         );
         let mut data_verifier = verifier.data_verifier()?;
-        let files = match resolved.gh_release_artifact_url.as_ref() {
-            Some(artifact_url) if resolved.is_repo_private => self
+        let files = match (
+            resolved.gh_release_artifact_url.as_ref(),
+            &resolved.gitlab_download,
+        ) {
+            (_, Some((url, token))) => {
+                let response = token
+                    .authenticate_download(self.client.get(url.clone()))
+                    .send(true)
+                    .await?;
+                Download::from_response_with_data_verifier(response, data_verifier.as_mut())
+            }
+            (Some(artifact_url), None) if resolved.is_repo_private => self
                 .gh_api_client
                 .download_artifact(artifact_url.clone())
                 .await?
                 .with_data_verifier(data_verifier.as_mut()),
-            _ => Download::new_with_data_verifier(
+            (_, None) => Download::new_with_data_verifier(
                 self.client.clone(),
                 resolved.url.clone(),
                 data_verifier.as_mut(),

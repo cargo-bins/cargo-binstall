@@ -520,6 +520,25 @@ pub struct Args {
     )]
     pub(crate) github_token: Option<GithubToken>,
 
+    /// Provide a GitLab token, for crates whose repository is private on
+    /// GitLab.
+    ///
+    /// It is used for gitlab.com, or for the GitLab instance that
+    /// environment variable `GITLAB_HOST` names, as with `glab`. Falls back
+    /// to environment variable `GITLAB_TOKEN`.
+    ///
+    /// In GitLab CI, `CI_JOB_TOKEN` is also used, for the instance the job
+    /// runs on. Tokens for other GitLab instances are read from
+    /// `$HOME/.git-credentials`.
+    #[clap(
+        help_heading = "Options",
+        long,
+        env = "GITLAB_TOKEN",
+        value_name = "TOKEN",
+        hide_env_values = true
+    )]
+    pub(crate) gitlab_token: Option<GitLabToken>,
+
     /// Only install packages that are signed
     ///
     /// The default is to verify signatures if they are available, but to allow
@@ -621,6 +640,21 @@ pub(crate) struct GithubToken(pub(crate) Zeroizing<Box<str>>);
 impl From<&str> for GithubToken {
     fn from(s: &str) -> Self {
         Self(Zeroizing::new(s.into()))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct GitLabToken(pub(crate) Zeroizing<Box<str>>);
+
+impl From<&str> for GitLabToken {
+    fn from(s: &str) -> Self {
+        Self(Zeroizing::new(s.into()))
+    }
+}
+
+impl fmt::Debug for GitLabToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("GitLabToken(..)")
     }
 }
 

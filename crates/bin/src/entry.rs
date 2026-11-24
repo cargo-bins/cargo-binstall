@@ -38,7 +38,7 @@ use tokio::task::block_in_place;
 use tracing::{debug, info, warn};
 
 use crate::registry_auth::{get_registry_env_var, resolve_registry_auth};
-use crate::{args::Args, gh_token, git_credentials, initialise::Init, ui::confirm};
+use crate::{args::Args, forge_tokens, gh_token, git_credentials, initialise::Init, ui::confirm};
 
 pub fn install_crates(
     args: Args,
@@ -139,6 +139,9 @@ pub fn install_crates(
             }
         });
 
+    let forge_tokens =
+        forge_tokens::discover(args.gitlab_token.as_ref().map(|token| token.0.clone()));
+
     let (resolved_registry, cargo_install_registry, cargo_install_index) = {
         let cargo_home = cargo_home.as_deref().unwrap_or(&cargo_root);
 
@@ -233,6 +236,7 @@ pub fn install_crates(
 
         client,
         gh_api_client,
+        forge_tokens: Arc::new(forge_tokens),
         jobserver_client,
         registry: resolved_registry,
 

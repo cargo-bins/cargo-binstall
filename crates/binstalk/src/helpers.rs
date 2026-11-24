@@ -8,7 +8,7 @@ pub(crate) mod target_triple;
 pub mod tasks;
 
 pub(crate) use binstalk_downloader::download;
-pub use binstalk_git_repo_api::gh_api_client;
+pub use binstalk_git_repo_api::{gh_api_client, release_assets};
 
 pub(crate) use cargo_toml_workspace::{self, cargo_toml};
 #[cfg(feature = "git")]

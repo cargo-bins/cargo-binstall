@@ -211,6 +211,13 @@ Note that this uses the [Permanent links to release assets][gitlab-permalinks]
 feature of GitLab EE: it requires you to create an asset as a link with a
 `filepath`, which, as of writing, can only be set using GitLab's API.
 
+For a private repository, give binstall a GitLab token with `--gitlab-token`
+or `GITLAB_TOKEN` (see [HELP.md](./HELP.md)). The link must then point to
+GitLab's API on the same instance, such as a file in the
+[generic package registry][gitlab-generic-packages]: the permanent link itself
+can only be downloaded by a browser that is signed in.
+
+[gitlab-generic-packages]: https://docs.gitlab.com/user/packages/generic_packages/
 [gitlab-permalinks]: https://docs.gitlab.com/ee/user/project/releases/index.html#permanent-links-to-latest-release-assets
 
 #### for BitBucket

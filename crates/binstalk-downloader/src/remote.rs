@@ -85,6 +85,11 @@ impl HttpError {
     pub fn is_status(&self) -> bool {
         self.err.is_status()
     }
+
+    /// The URL the error is for, after redirects, if any.
+    pub fn final_url(&self) -> Option<&url::Url> {
+        self.err.url()
+    }
 }
 
 #[derive(Debug)]
