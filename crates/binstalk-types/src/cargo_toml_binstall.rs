@@ -290,6 +290,11 @@ pub struct PkgSigning {
 pub enum SigningAlgorithm {
     /// [minisign](https://jedisct1.github.io/minisign/)
     Minisign,
+
+    /// Detached [OpenPGP](https://www.rfc-editor.org/rfc/rfc9580) signatures,
+    /// as made by `gpg --detach-sign`
+    #[serde(rename = "openpgp", alias = "gpg")]
+    OpenPgp,
 }
 
 #[cfg(test)]

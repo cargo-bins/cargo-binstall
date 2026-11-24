@@ -6,9 +6,13 @@ use tracing::{error, trace};
 
 use crate::FetchError;
 
+mod openpgp;
+use openpgp::OpenPgpVerifier;
+
 pub enum SignatureVerifier {
     Noop,
     Minisign(Box<MinisignVerifier>),
+    OpenPgp(Box<OpenPgpVerifier>),
 }
 
 impl SignatureVerifier {
@@ -17,6 +21,9 @@ impl SignatureVerifier {
             SigningAlgorithm::Minisign => MinisignVerifier::new(config, signature)
                 .map(Box::new)
                 .map(Self::Minisign),
+            SigningAlgorithm::OpenPgp => OpenPgpVerifier::new(&config.pubkey, signature)
+                .map(Box::new)
+                .map(Self::OpenPgp),
             algorithm => Err(FetchError::UnsupportedSigningAlgorithm(algorithm)),
         }
     }
@@ -25,11 +32,15 @@ impl SignatureVerifier {
         match self {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
+            Self::OpenPgp(v) => Ok(v.data_verifier()),
         }
     }
 
     pub fn info(&self) -> Option<String> {
-        self.trusted_comment().map(Into::into)
+        match self {
+            Self::OpenPgp(v) => Some(v.info()),
+            _ => self.trusted_comment().map(Into::into),
+        }
     }
 
     /// The signature's trusted comment. It is only authenticated once the
@@ -38,6 +49,7 @@ impl SignatureVerifier {
         match self {
             Self::Noop => None,
             Self::Minisign(v) => Some(v.signature.trusted_comment()),
+            Self::OpenPgp(_) => None,
         }
     }
 }
