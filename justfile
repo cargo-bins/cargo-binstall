@@ -88,10 +88,6 @@ cargo-features := trim_end_match(if override-features != "" { override-features 
     } else { ""
 }, ",")
 
-# it seems we can't split debuginfo for non-buildstd builds
-# errors with: "Found a record with an unknown abbreviation code"
-cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
-
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
 # **DISABLED because it's buggy**
 rustc-miropt := "" # if for-release != "" { " -Z mir-opt-level=4" } else { "" }
@@ -157,7 +153,7 @@ cargo-nightly-args := if toolchain-name == "nightly" {
     ""
 }
 
-cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo)
+cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" })
 cargo-build-args := (if for-release != "" { " --release" } else { "" }) + cargo-nightly-args + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
 export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf) + (if enable-h3 != "" { " --cfg reqwest_unstable" } else { "" })
 
@@ -320,42 +316,21 @@ package-dir:
 [macos]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -just get-output cargo-binstall.dSYM packages/prep
-
     just get-output detect-wasi{{output-ext}} packages/prep
-    -just get-output detect-wasi.dSYM packages/prep
-
     just get-output detect-targets{{output-ext}} packages/prep
-    -just get-output detect-targets.dSYM packages/prep
 
-# when https://github.com/rust-lang/cargo/pull/11384 lands, we can use
-# -just get-output cargo_binstall.dwp packages/prep
-# underscored dwp name needs to remain for debuggers to find the file properly
 [linux]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -cp {{output-folder}}/deps/cargo_binstall-*.dwp packages/prep/cargo_binstall.dwp
-
     just get-output detect-wasi packages/prep
-    -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect_wasi.dwp
-
     just get-output detect-targets packages/prep
-    -cp {{output-folder}}/deps/detect_target-*.dwp packages/prep/detect_target.dwp
 
-# underscored pdb name needs to remain for debuggers to find the file properly
-# read from deps because sometimes cargo doesn't copy the pdb to the output folder
 [windows]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -just get-output deps/cargo_binstall.pdb packages/prep
-
     just get-output detect-wasi.exe packages/prep
-    -just get-output deps/detect_wasi.pdb packages/prep
-
     just get-output detect-targets.exe packages/prep
-    -just get-output deps/detect_target.pdb packages/prep
 
-# we don't get dSYM bundles for universal binaries; unsure if it's even a thing
 [macos]
 lipo-prepare: package-dir
     just target=aarch64-apple-darwin build get-binary packages/prep/arm64

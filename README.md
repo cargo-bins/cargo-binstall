@@ -217,9 +217,10 @@ You can find a full description of errors including exit codes here:
 
 ### Are debug symbols available?
 
-Yes! Extra pre-built packages with a `.full` suffix are available and contain
-split debuginfo, documentation files, and extra binaries like the `detect-wasi`
-utility.
+No. Release binaries are built without debuginfo and with symbols stripped, to
+keep downloads small. Extra pre-built packages with a `.full` suffix are
+available and contain documentation files and extra binaries like the
+`detect-wasi` and `detect-targets` utilities.
 
 ## Telemetry collection
 
