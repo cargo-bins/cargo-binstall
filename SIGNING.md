@@ -102,6 +102,9 @@ Some common issuers are `https://token.actions.githubusercontent.com` (GitHub Ac
 
 Bundles are verified against the Sigstore public-good and GitHub trusted roots built into Binstall; no other request is made.
 
+Sigstore verification is part of the `sigstore-signing` cargo feature of cargo-binstall, which is on by default.
+A build without it treats `algorithm = "sigstore"` as an unsupported algorithm.
+
 ### GitHub artifact attestations
 
 `algorithm` must be `"github-attestations"`; `pubkey` and `file` are not used.
