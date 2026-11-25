@@ -68,6 +68,7 @@ pub struct QuickInstall {
 
 #[derive(Debug, Clone, Copy)]
 enum Status {
+    Start,
     NotFound,
     AttemptingInstall,
     InvalidSignature,
@@ -77,6 +78,7 @@ enum Status {
 impl Status {
     fn as_str(&self) -> &'static str {
         match self {
+            Status::Start => "start",
             Status::NotFound => "not-found",
             Status::AttemptingInstall => "attempting-install",
             Status::InvalidSignature => "invalid-signature",
@@ -158,6 +160,26 @@ impl QuickInstall {
         }
     }
 
+    async fn find_package(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
+        if !self.is_supported().await? {
+            return Ok(None);
+        }
+
+        let download_signature_task = self.clone().download_signature();
+
+        debug!("Checking for package at: '{}'", self.package_url);
+        let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
+            return Ok(None);
+        };
+        let verifier = download_signature_task.flattened_join().await?;
+
+        Ok(Some(Box::new(QuickInstallFound {
+            fetcher: self,
+            verifier,
+            response: Some(response),
+        }) as Box<dyn Found>))
+    }
+
     /// Sends `status` to quickinstall's stats server in the background.
     fn send_report(self: Arc<Self>, status: Status) {
         if !self.telemetry {
@@ -222,24 +244,20 @@ impl super::Fetcher for QuickInstall {
     }
 
     async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
-        if !self.is_supported().await? {
-            return Ok(None);
+        let ret = self.clone().find_package().await;
+
+        let status = match &ret {
+            // Reported by `QuickInstallFound::fetch_and_extract`.
+            Ok(Some(_)) => None,
+            Ok(None) => Some(Status::NotFound),
+            Err(FetchError::InvalidSignature) => Some(Status::InvalidSignature),
+            Err(_) => Some(Status::Start),
+        };
+        if let Some(status) = status {
+            self.send_report(status);
         }
 
-        let download_signature_task = self.clone().download_signature();
-
-        debug!("Checking for package at: '{}'", self.package_url);
-        let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
-            self.send_report(Status::NotFound);
-            return Ok(None);
-        };
-        let verifier = download_signature_task.flattened_join().await?;
-
-        Ok(Some(Box::new(QuickInstallFound {
-            fetcher: self,
-            verifier,
-            response: Some(response),
-        }) as Box<dyn Found>))
+        ret
     }
 
     fn fetcher_name(&self) -> &'static str {
