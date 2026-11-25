@@ -1,5 +1,10 @@
 # Cargo B(inary)Install
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/assets/cargo-binstall-logo.svg"
+       alt="cargo-binstall logo" width="400">
+</p>
+
 Binstall provides a low-complexity mechanism for installing Rust binaries as an
 alternative to building from source (via `cargo install`) or manually
 downloading packages. This is intended to work with existing CI artifacts and
