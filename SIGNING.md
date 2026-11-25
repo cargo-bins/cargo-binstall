@@ -123,6 +123,9 @@ For private repositories, a GitHub token is needed, as for downloading the packa
 Crates without a `[...signing]` section can be verified this way too: with `--only-signed`, Binstall checks the GitHub attestations of packages downloaded from GitHub releases instead of refusing them.
 Without `--only-signed`, attestations are not looked up for such crates, to save the API request.
 
+Attestation verification is part of the `github-attestations` cargo feature of cargo-binstall, which is on by default.
+A build without it treats `algorithm = "github-attestations"` as an unsupported algorithm.
+
 ## Just-in-time signing
 
 To reduce the risk of a key being stolen, this scheme supports just-in-time or "keyless" signing.

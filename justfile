@@ -81,8 +81,8 @@ support-pkg-config := if target == target-host {
 
 h3-features := if enable-h3 != "" { ",http3" } else { "" }
 cargo-features := trim_end_match(if override-features != "" { override-features + h3-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug,zlib-rs" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + h3-features + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto,zlib-rs" + h3-features + extra-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug,zlib-rs,github-attestations,sigstore-signing" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + h3-features + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto,zlib-rs,github-attestations,sigstore-signing" + h3-features + extra-features
     } else if extra-features != "" { extra-features + h3-features
     } else if enable-h3 != "" { "http3"
     } else { ""

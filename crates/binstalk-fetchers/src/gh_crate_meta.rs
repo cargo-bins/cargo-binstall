@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use binstalk_git_repo_api::gh_api_client::{GhReleaseArtifact, GhReleaseArtifactUrl};
+use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
     crate_info::{PkgUrlHint, RenderedWith},
@@ -19,8 +19,8 @@ use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 use crate::{
-    Data, FetchError, GithubAttestationsVerifier, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
-    SignatureVerifier, SigstoreVerifier, TargetDataErased, common::*,
+    Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
+    TargetDataErased, common::*,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -58,11 +58,22 @@ struct Resolved {
 
 /// A verifier of the GitHub attestations of `resolved`, if it is a GitHub
 /// release asset.
+#[cfg(feature = "github-attestations")]
 fn attestations_verifier(resolved: &Resolved) -> Option<SignatureVerifier> {
+    use binstalk_git_repo_api::gh_api_client::GhReleaseArtifact;
+
+    use crate::GithubAttestationsVerifier;
+
     let artifact = GhReleaseArtifact::try_extract_from_url(&resolved.url)?;
     Some(SignatureVerifier::GithubAttestations(Box::new(
         GithubAttestationsVerifier::new(artifact.release),
     )))
+}
+
+/// GitHub attestations cannot be verified without the `github-attestations` feature.
+#[cfg(not(feature = "github-attestations"))]
+fn attestations_verifier(_resolved: &Resolved) -> Option<SignatureVerifier> {
+    None
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -375,6 +386,12 @@ impl super::Fetcher for GhCrateMeta {
                 Some(verifier) => verifier,
                 None => return Err(FetchError::MissingSignature),
             },
+            #[cfg(not(feature = "github-attestations"))]
+            (_, Some(config)) if config.algorithm == SigningAlgorithm::GithubAttestations => {
+                error!("Built without the `github-attestations` feature");
+                return Err(FetchError::UnsupportedSigningAlgorithm(config.algorithm));
+            }
+            #[cfg(feature = "github-attestations")]
             (_, Some(config)) if config.algorithm == SigningAlgorithm::GithubAttestations => {
                 attestations_verifier(resolved).ok_or_else(|| {
                     error!(
@@ -383,6 +400,11 @@ impl super::Fetcher for GhCrateMeta {
                     );
                     FetchError::MissingSignature
                 })?
+            }
+            #[cfg(not(feature = "sigstore-signing"))]
+            (_, Some(config)) if config.algorithm == SigningAlgorithm::Sigstore => {
+                error!("Built without the `sigstore-signing` feature");
+                return Err(FetchError::UnsupportedSigningAlgorithm(config.algorithm));
             }
             (_, Some(config)) => {
                 let is_sigstore = config.algorithm == SigningAlgorithm::Sigstore;
@@ -427,10 +449,11 @@ impl super::Fetcher for GhCrateMeta {
                 trace!(?signature, "got signature contents");
 
                 match sigstore_signer {
+                    #[cfg(feature = "sigstore-signing")]
                     Some((identity, issuer)) => SignatureVerifier::Sigstore(Box::new(
-                        SigstoreVerifier::new(&signature, identity, issuer)?,
+                        crate::SigstoreVerifier::new(&signature, identity, issuer)?,
                     )),
-                    None => SignatureVerifier::new(config, &signature)?,
+                    _ => SignatureVerifier::new(config, &signature)?,
                 }
             }
         };
@@ -463,6 +486,7 @@ impl super::Fetcher for GhCrateMeta {
         drop(data_verifier);
 
         let info = match &verifier {
+            #[cfg(feature = "github-attestations")]
             SignatureVerifier::GithubAttestations(verifier) => {
                 Some(verifier.verify(&self.gh_api_client).await?)
             }

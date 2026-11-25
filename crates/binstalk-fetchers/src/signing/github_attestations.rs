@@ -30,7 +30,7 @@ use sigstore_verify::{
 };
 use tracing::{debug, error, warn};
 
-use super::sigstore::{sha256, verifier};
+use super::sigstore_common::{sha256, verifier};
 use crate::FetchError;
 
 /// OIDC issuer of the certificates GitHub Actions workflows sign with.

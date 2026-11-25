@@ -6,15 +6,24 @@ use tracing::{error, trace};
 
 use crate::FetchError;
 
+#[cfg(feature = "github-attestations")]
 mod github_attestations;
+#[cfg(feature = "sigstore-signing")]
 mod sigstore;
+#[cfg(any(feature = "github-attestations", feature = "sigstore-signing"))]
+mod sigstore_common;
+
+#[cfg(feature = "github-attestations")]
 pub use github_attestations::GithubAttestationsVerifier;
+#[cfg(feature = "sigstore-signing")]
 pub use sigstore::SigstoreVerifier;
 
 pub enum SignatureVerifier {
     Noop,
     Minisign(Box<MinisignVerifier>),
+    #[cfg(feature = "github-attestations")]
     GithubAttestations(Box<GithubAttestationsVerifier>),
+    #[cfg(feature = "sigstore-signing")]
     Sigstore(Box<SigstoreVerifier>),
 }
 
@@ -32,13 +41,16 @@ impl SignatureVerifier {
         match self {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
+            #[cfg(feature = "github-attestations")]
             Self::GithubAttestations(v) => Ok(v.data_verifier()),
+            #[cfg(feature = "sigstore-signing")]
             Self::Sigstore(v) => Ok(v.data_verifier()),
         }
     }
 
     pub fn info(&self) -> Option<String> {
         match self {
+            #[cfg(feature = "sigstore-signing")]
             Self::Sigstore(v) => Some(v.info()),
             _ => self.trusted_comment().map(Into::into),
         }
@@ -50,7 +62,10 @@ impl SignatureVerifier {
         match self {
             Self::Noop => None,
             Self::Minisign(v) => Some(v.signature.trusted_comment()),
-            Self::GithubAttestations(_) | Self::Sigstore(_) => None,
+            #[cfg(feature = "github-attestations")]
+            Self::GithubAttestations(_) => None,
+            #[cfg(feature = "sigstore-signing")]
+            Self::Sigstore(_) => None,
         }
     }
 }
