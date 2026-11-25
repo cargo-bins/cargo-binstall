@@ -171,85 +171,79 @@ async fn resolve_inner(
     }
 
     for fetcher in &handles {
-        match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await {
-            Ok(ret) => match ret {
-                Ok(Some(mut found)) => {
-                    // Generate temporary binary path
-                    let bin_path = opts.temp_dir.join(format!(
-                        "bin-{}-{}-{}",
-                        package_info.name,
-                        found.target(),
-                        fetcher.fetcher_name()
-                    ));
-
-                    match download_extract_and_verify(
-                        found.as_mut(),
-                        &bin_path,
-                        &package_info,
-                        &opts.install_path,
-                        opts.no_symlinks,
-                        &opts.bins,
-                    )
-                    .await
-                    {
-                        Ok(bin_files) => {
-                            if !bin_files.is_empty() {
-                                if !opts.disable_telemetry {
-                                    fetcher.clone().report_to_upstream();
-                                }
-                                return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
-                                    found,
-                                    new_version: package_info.version,
-                                    pubtime: package_info.pubtime,
-                                    name: package_info.name,
-                                    version_req: version_req_str,
-                                    source: package_info.source,
-                                    bin_files,
-                                })));
-                            } else {
-                                warn!(
-                                    "Error when checking binaries provided by fetcher {}: \
-                                The fetcher does not provide any optional binary",
-                                    found.source_name(),
-                                );
-                            }
-                        }
-                        Err(err) => {
-                            if let BinstallError::UserAbort = err {
-                                return Err(err);
-                            }
-                            warn!(
-                                "Error while downloading and extracting from fetcher {}: {}",
-                                found.source_name(),
-                                err
-                            );
-                        }
-                    }
-                }
-                Ok(None) => (),
-                Err(err) => {
-                    warn!(
-                        "Error while checking fetcher {}: {}",
-                        fetcher.fetcher_name(),
-                        err
-                    );
-                }
-            },
+        let found = match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await {
+            Ok(Ok(found)) => found,
+            Ok(Err(err)) => {
+                warn!(
+                    "Error while checking fetcher {}: {}",
+                    fetcher.fetcher_name(),
+                    err
+                );
+                None
+            }
             Err(err) => {
                 warn!(
                     "Timeout reached while checking fetcher {}: {}",
                     fetcher.fetcher_name(),
                     err
                 );
+                None
             }
-        }
-    }
+        };
+        let Some(mut found) = found else {
+            if !opts.disable_telemetry {
+                fetcher.clone().report_to_upstream();
+            }
+            continue;
+        };
 
-    // At this point, we don't know whether fallback to cargo install is allowed, or whether it will
-    // succeed, but things start to get convoluted when try to include that data, so this will do.
-    if !opts.disable_telemetry {
-        for fetcher in handles {
-            fetcher.report_to_upstream();
+        // Generate temporary binary path
+        let bin_path = opts.temp_dir.join(format!(
+            "bin-{}-{}-{}",
+            package_info.name,
+            found.target(),
+            fetcher.fetcher_name()
+        ));
+
+        let ret = download_extract_and_verify(
+            found.as_mut(),
+            &bin_path,
+            &package_info,
+            &opts.install_path,
+            opts.no_symlinks,
+            &opts.bins,
+        )
+        .await;
+
+        if matches!(ret, Err(BinstallError::UserAbort)) {
+            return Err(BinstallError::UserAbort);
+        }
+        if !opts.disable_telemetry {
+            found.report_to_upstream();
+        }
+
+        match ret {
+            Ok(bin_files) if !bin_files.is_empty() => {
+                return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
+                    found,
+                    new_version: package_info.version,
+                    pubtime: package_info.pubtime,
+                    name: package_info.name,
+                    version_req: version_req_str,
+                    source: package_info.source,
+                    bin_files,
+                })));
+            }
+            Ok(_) => warn!(
+                "Error when checking binaries provided by fetcher {}: \
+                The fetcher does not provide any optional binary",
+                found.source_name(),
+            ),
+            Err(err) => warn!(
+                "Error while downloading and extracting from fetcher {}: {}",
+                found.source_name(),
+                err
+            ),
         }
     }
 

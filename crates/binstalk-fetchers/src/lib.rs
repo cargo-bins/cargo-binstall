@@ -131,7 +131,10 @@ pub trait Fetcher: Send + Sync {
     /// fatal conditions only.
     async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError>;
 
-    /// Report to upstream that cargo-binstall tries to use this fetcher.
+    /// Report to upstream that cargo-binstall tried this fetcher and
+    /// [`Fetcher::find`] did not find a package. A package that was found
+    /// is reported by [`Found::report_to_upstream`] instead.
+    ///
     /// Currently it is only overridden by [`quickinstall::QuickInstall`].
     fn report_to_upstream(self: Arc<Self>) {}
 
