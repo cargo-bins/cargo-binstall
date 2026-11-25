@@ -8,22 +8,28 @@ pub trait ClientBuilderExt: Sized {
     /// `http.proxy` setting, which is libcurl's:
     /// `[scheme://][user:password@]host[:port]`.
     ///
-    /// As with Cargo, this replaces the proxy otherwise taken from the
-    /// `HTTPS_PROXY`, `HTTP_PROXY` and `ALL_PROXY` environment variables and
-    /// the system settings, while hosts in `NO_PROXY` are still reached
-    /// directly. An empty `proxy` turns proxies off altogether.
+    /// As with Cargo, `proxy` takes precedence over the proxy reqwest takes
+    /// from the `HTTPS_PROXY`, `HTTP_PROXY` and `ALL_PROXY` environment
+    /// variables and the system settings, while hosts in `NO_PROXY` are still
+    /// reached directly. An empty `proxy` leaves the builder unchanged, so
+    /// reqwest's default proxies still apply.
     fn cargo_http_proxy(self, proxy: &str) -> Result<Self, Error>;
 }
 
 impl ClientBuilderExt for reqwest::ClientBuilder {
     fn cargo_http_proxy(self, proxy: &str) -> Result<Self, Error> {
         if proxy.is_empty() {
-            return Ok(self.no_proxy());
+            return Ok(self);
         }
 
         let proxy =
             reqwest::Proxy::all(libcurl_proxy_url(proxy)?)?.no_proxy(reqwest::NoProxy::from_env());
 
+        // `ClientBuilder::proxy` also turns off reqwest's default proxies,
+        // which reqwest has no public API to add back. They would never be
+        // reached anyway: they are only tried for a request no added proxy
+        // takes, and this one takes every request except to hosts in
+        // `NO_PROXY`, which reqwest's defaults leave out too.
         Ok(self.proxy(proxy))
     }
 }

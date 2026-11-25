@@ -112,8 +112,10 @@ pub fn install_crates(
     // over the proxy environment variables reqwest reads otherwise.
     if let Some(proxy) = env::var("CARGO_HTTP_PROXY")
         .ok()
+        .filter(|proxy| !proxy.is_empty())
         .map(CompactString::from)
         .or_else(|| http.as_mut().and_then(|http| http.proxy.take()))
+        .filter(|proxy| !proxy.is_empty())
     {
         debug!("Using the proxy from Cargo's http.proxy");
         client_builder = client_builder

@@ -232,9 +232,9 @@ are used when none of these are set.
 As with Cargo, Cargo's `http.proxy` setting (or the `CARGO_HTTP_PROXY`
 environment variable) takes precedence over all of these, and is used for every
 request except to hosts in `NO_PROXY`. It takes libcurl's format, like
-`proxy.example.com:8080` or `http://user:password@proxy.example.com:8080`, and
-setting it to `""` turns proxies off. Cargo also reads `http.proxy` from your git
-configuration, which binstall does not.
+`proxy.example.com:8080` or `http://user:password@proxy.example.com:8080`.
+Cargo also reads `http.proxy` from your git configuration, which binstall does
+not.
 
 If the proxy or network re-signs HTTPS traffic with its own certificate
 authority, pass its certificate with `--root-certificates` (or
