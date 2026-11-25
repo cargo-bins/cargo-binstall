@@ -16,7 +16,7 @@
 //! [immutable release]: https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases
 //! [`actions/attest`]: https://github.com/actions/attest
 
-use std::sync::{LazyLock, OnceLock};
+use std::sync::OnceLock;
 
 use aws_lc_rs::digest;
 use binstalk_downloader::download::DataVerifier;
@@ -24,12 +24,13 @@ use binstalk_git_repo_api::gh_api_client::{GhApiClient, GhRelease};
 use bytes::Bytes;
 use serde_json::Value;
 use sigstore_verify::{
-    SubjectAltName, VerificationPolicy, VerificationResult, Verifier,
-    trust_root::{SigstoreInstance, TrustedRoot},
+    SubjectAltName, VerificationResult,
+    trust_root::SigstoreInstance,
     types::{Bundle, Sha256Hash, SignatureContent},
 };
 use tracing::{debug, error, warn};
 
+use super::sigstore_common::{sha256, verifier};
 use crate::FetchError;
 
 /// OIDC issuer of the certificates GitHub Actions workflows sign with.
@@ -189,47 +190,6 @@ fn statement(bundle: &Bundle) -> Result<Value, String> {
     }
 }
 
-/// The verifier and policy for bundles of `instance`, built once.
-fn verifier(instance: SigstoreInstance) -> Result<&'static (Verifier, VerificationPolicy), String> {
-    static PUBLIC_GOOD: LazyLock<Result<(Verifier, VerificationPolicy), String>> =
-        LazyLock::new(|| {
-            // Who signed is checked by `check_signer`.
-            build(
-                SigstoreInstance::PublicGood,
-                VerificationPolicy::any_identity(),
-            )
-        });
-    static GITHUB: LazyLock<Result<(Verifier, VerificationPolicy), String>> = LazyLock::new(|| {
-        // GitHub's instance has neither a transparency log nor certificate
-        // transparency: its bundles carry RFC 3161 timestamps instead, which
-        // are still verified, as `gh attestation verify` does.
-        build(
-            SigstoreInstance::GitHub,
-            VerificationPolicy::any_identity()
-                .skip_tlog_unsafe()
-                .skip_sct(),
-        )
-    });
-
-    fn build(
-        instance: SigstoreInstance,
-        policy: VerificationPolicy,
-    ) -> Result<(Verifier, VerificationPolicy), String> {
-        TrustedRoot::from_embedded(instance)
-            .map_err(|err| err.to_string())
-            .and_then(|root| Verifier::new(&root).map_err(|err| err.to_string()))
-            .map(|verifier| (verifier, policy))
-            .map_err(|err| format!("failed to load the {instance:?} trusted root: {err}"))
-    }
-
-    match instance {
-        SigstoreInstance::GitHub => &*GITHUB,
-        _ => &*PUBLIC_GOOD,
-    }
-    .as_ref()
-    .map_err(Clone::clone)
-}
-
 struct DigestRecorder<'a> {
     digest: &'a OnceLock<Sha256Hash>,
     context: Option<digest::Context>,
@@ -245,12 +205,7 @@ impl DataVerifier for DigestRecorder<'_> {
     /// The digest is checked by [`GithubAttestationsVerifier::verify`].
     fn validate(&mut self) -> bool {
         if let Some(context) = self.context.take() {
-            let digest = context.finish();
-            let digest = digest
-                .as_ref()
-                .try_into()
-                .expect("SHA-256 digests are 32 bytes");
-            let _ = self.digest.set(Sha256Hash::new(digest));
+            let _ = self.digest.set(sha256(context));
         }
         true
     }

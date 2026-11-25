@@ -80,6 +80,7 @@ default = [
     "zstd-thin",
     "git",
     "github-attestations",
+    "sigstore-signing",
 ]
 
 git = ["binstalk/git"]
@@ -88,6 +89,9 @@ git-max-perf = ["binstalk/git-max-perf"]
 # Verify GitHub artifact attestations of packages (`algorithm =
 # "github-attestations"`, or `--only-signed` without a signing section).
 github-attestations = ["binstalk/github-attestations"]
+
+# Verify Sigstore bundles of keyless signatures (`algorithm = "sigstore"`).
+sigstore-signing = ["binstalk/sigstore-signing"]
 
 mimalloc = ["dep:mimalloc"]
 

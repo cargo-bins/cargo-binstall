@@ -283,6 +283,17 @@ pub struct PkgSigning {
     /// Signature file override template (url to download)
     #[serde(default)]
     pub file: Option<String>,
+
+    /// Template of the identity the signing certificate must be issued to,
+    /// for [`SigningAlgorithm::Sigstore`]: an email address or a URI, such as
+    /// a CI workflow's.
+    #[serde(default)]
+    pub identity: Option<String>,
+
+    /// OIDC issuer that must have issued the signing certificate, for
+    /// [`SigningAlgorithm::Sigstore`].
+    #[serde(default)]
+    pub issuer: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -295,6 +306,10 @@ pub enum SigningAlgorithm {
     /// [GitHub artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations)
     /// of the release asset, made by the repository hosting the release
     GithubAttestations,
+
+    /// [Sigstore](https://www.sigstore.dev/) bundles of keyless signatures,
+    /// as made by `cosign sign-blob --bundle`
+    Sigstore,
 }
 
 #[cfg(test)]

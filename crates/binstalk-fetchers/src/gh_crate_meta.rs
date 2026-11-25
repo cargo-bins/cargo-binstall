@@ -401,14 +401,21 @@ impl super::Fetcher for GhCrateMeta {
                     FetchError::MissingSignature
                 })?
             }
+            #[cfg(not(feature = "sigstore-signing"))]
+            (_, Some(config)) if config.algorithm == SigningAlgorithm::Sigstore => {
+                error!("Built without the `sigstore-signing` feature");
+                return Err(FetchError::UnsupportedSigningAlgorithm(config.algorithm));
+            }
             (_, Some(config)) => {
+                let is_sigstore = config.algorithm == SigningAlgorithm::Sigstore;
                 let template = match config.file.as_deref() {
                     Some(file) => Template::parse(file)?,
+                    None if is_sigstore => leon_macros::template!("{ url }.sigstore.json"),
                     None => leon_macros::template!("{ url }.sig"),
                 };
                 trace!(?template, "parsed signature file template");
 
-                let sign_url = {
+                let (sign_url, sigstore_signer) = {
                     let mut ctx = Context::from_data_with_repo(
                         &self.data,
                         &self.target_data.target,
@@ -418,7 +425,21 @@ impl super::Fetcher for GhCrateMeta {
                         resolved.subcrate.as_deref(),
                     );
                     ctx.target_arch = resolved.target_arch;
-                    ctx.with_url(&resolved.url).render_url_with(&template)?
+                    ctx.with_url(&resolved.url);
+                    let sign_url = ctx.render_url_with(&template)?;
+
+                    // Check the configuration before downloading anything.
+                    let sigstore_signer = if is_sigstore {
+                        let (Some(identity), Some(issuer)) = (&config.identity, &config.issuer)
+                        else {
+                            error!("Sigstore signing requires both `identity` and `issuer`");
+                            return Err(FetchError::InvalidSignature);
+                        };
+                        Some((Template::parse(identity)?.render(&ctx)?, issuer.clone()))
+                    } else {
+                        None
+                    };
+                    (sign_url, sigstore_signer)
                 };
 
                 debug!(?sign_url, "Downloading signature");
@@ -427,7 +448,13 @@ impl super::Fetcher for GhCrateMeta {
                     .await?;
                 trace!(?signature, "got signature contents");
 
-                SignatureVerifier::new(config, &signature)?
+                match sigstore_signer {
+                    #[cfg(feature = "sigstore-signing")]
+                    Some((identity, issuer)) => SignatureVerifier::Sigstore(Box::new(
+                        crate::SigstoreVerifier::new(&signature, identity, issuer)?,
+                    )),
+                    _ => SignatureVerifier::new(config, &signature)?,
+                }
             }
         };
 

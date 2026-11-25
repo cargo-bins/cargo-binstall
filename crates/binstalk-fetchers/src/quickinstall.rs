@@ -124,6 +124,8 @@ impl QuickInstall {
                             algorithm: SigningAlgorithm::Minisign,
                             pubkey: QUICKINSTALL_SIGN_KEY,
                             file: None,
+                            identity: None,
+                            issuer: None,
                         };
                         let verifier = SignatureVerifier::new(&config, &signature)?;
                         self.check_signed_file_name(&verifier)?;

@@ -8,14 +8,23 @@ use crate::FetchError;
 
 #[cfg(feature = "github-attestations")]
 mod github_attestations;
+#[cfg(feature = "sigstore-signing")]
+mod sigstore;
+#[cfg(any(feature = "github-attestations", feature = "sigstore-signing"))]
+mod sigstore_common;
+
 #[cfg(feature = "github-attestations")]
 pub use github_attestations::GithubAttestationsVerifier;
+#[cfg(feature = "sigstore-signing")]
+pub use sigstore::SigstoreVerifier;
 
 pub enum SignatureVerifier {
     Noop,
     Minisign(Box<MinisignVerifier>),
     #[cfg(feature = "github-attestations")]
     GithubAttestations(Box<GithubAttestationsVerifier>),
+    #[cfg(feature = "sigstore-signing")]
+    Sigstore(Box<SigstoreVerifier>),
 }
 
 impl SignatureVerifier {
@@ -34,11 +43,17 @@ impl SignatureVerifier {
             Self::Minisign(v) => v.data_verifier(),
             #[cfg(feature = "github-attestations")]
             Self::GithubAttestations(v) => Ok(v.data_verifier()),
+            #[cfg(feature = "sigstore-signing")]
+            Self::Sigstore(v) => Ok(v.data_verifier()),
         }
     }
 
     pub fn info(&self) -> Option<String> {
-        self.trusted_comment().map(Into::into)
+        match self {
+            #[cfg(feature = "sigstore-signing")]
+            Self::Sigstore(v) => Some(v.info()),
+            _ => self.trusted_comment().map(Into::into),
+        }
     }
 
     /// The signature's trusted comment. It is only authenticated once the
@@ -49,6 +64,8 @@ impl SignatureVerifier {
             Self::Minisign(v) => Some(v.signature.trusted_comment()),
             #[cfg(feature = "github-attestations")]
             Self::GithubAttestations(_) => None,
+            #[cfg(feature = "sigstore-signing")]
+            Self::Sigstore(_) => None,
         }
     }
 }

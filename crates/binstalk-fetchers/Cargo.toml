@@ -44,12 +44,15 @@ binstalk-bins = { version = "0.8.0", path = "../binstalk-bins" }
 binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader" }
 
 [features]
-default = ["github-attestations"]
+default = ["github-attestations", "sigstore-signing"]
 
 quickinstall = []
 
 # Verify GitHub artifact attestations of GitHub release assets.
 github-attestations = ["dep:aws-lc-rs", "dep:serde_json", "dep:sigstore-verify"]
+
+# Verify Sigstore bundles of keyless signatures, e.g. made by cosign.
+sigstore-signing = ["dep:aws-lc-rs", "dep:serde_json", "dep:sigstore-verify"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

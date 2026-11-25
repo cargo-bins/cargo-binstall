@@ -46,10 +46,13 @@ url = { version = "2.5.8", features = ["serde"] }
 zeroize = "1.8.1"
 
 [features]
-default = ["static", "rustls", "git", "github-attestations"]
+default = ["static", "rustls", "git", "github-attestations", "sigstore-signing"]
 
 # Verify GitHub artifact attestations of GitHub release assets.
 github-attestations = ["binstalk-fetchers/github-attestations"]
+
+# Verify Sigstore bundles of keyless signatures, e.g. made by cosign.
+sigstore-signing = ["binstalk-fetchers/sigstore-signing"]
 
 git = ["binstalk-registry/git", "simple-git"]
 git-max-perf = ["git", "simple-git/git-max-perf-safe", "zlib-rs"]
