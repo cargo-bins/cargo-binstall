@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{borrow::Cow, path::Path, sync::Arc};
 
 use binstalk_downloader::remote::Method;
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning, Strategy};
@@ -65,16 +61,10 @@ pub struct QuickInstall {
     signature_policy: SignaturePolicy,
 
     target_data: Arc<TargetDataErased>,
-
-    /// What [`Fetcher::find`](super::Fetcher::find) ended with, reported when
-    /// it found nothing. Once a package is found, [`QuickInstallFound`]
-    /// keeps the status instead.
-    status: Mutex<Status>,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Status {
-    Start,
     NotFound,
     Found,
     AttemptingInstall,
@@ -85,7 +75,6 @@ enum Status {
 impl Status {
     fn as_str(&self) -> &'static str {
         match self {
-            Status::Start => "start",
             Status::NotFound => "not-found",
             Status::Found => "found",
             Status::AttemptingInstall => "attempting-install",
@@ -164,13 +153,8 @@ impl QuickInstall {
                 signed = signed.unwrap_or("<none>"),
                 "Signature is for a different file"
             );
-            self.set_status(Status::InvalidSignature);
             Err(FetchError::InvalidSignature)
         }
-    }
-
-    fn get_status(&self) -> Status {
-        *self.status.lock().unwrap()
     }
 
     /// Sends `status` to quickinstall's stats server in the background.
@@ -194,10 +178,6 @@ by rust officially."#,
                 }
             });
         }
-    }
-
-    fn set_status(&self, status: Status) {
-        *self.status.lock().unwrap() = status;
     }
 }
 
@@ -231,8 +211,6 @@ impl super::Fetcher for QuickInstall {
             signature_policy,
 
             target_data,
-
-            status: Mutex::new(Status::Start),
         })
     }
 
@@ -245,7 +223,6 @@ impl super::Fetcher for QuickInstall {
 
         debug!("Checking for package at: '{}'", self.package_url);
         let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
-            self.set_status(Status::NotFound);
             return Ok(None);
         };
         let verifier = download_signature_task.flattened_join().await?;
@@ -259,8 +236,7 @@ impl super::Fetcher for QuickInstall {
     }
 
     fn report_to_upstream(self: Arc<Self>) {
-        let status = self.get_status();
-        self.send_report(status);
+        self.send_report(Status::NotFound);
     }
 
     fn fetcher_name(&self) -> &'static str {

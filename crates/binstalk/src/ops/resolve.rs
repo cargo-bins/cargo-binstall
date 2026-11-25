@@ -171,15 +171,22 @@ async fn resolve_inner(
     }
 
     for fetcher in &handles {
-        let found = match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await {
-            Ok(Ok(found)) => found,
+        let mut found = match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await
+        {
+            Ok(Ok(Some(found))) => found,
+            Ok(Ok(None)) => {
+                if !opts.disable_telemetry {
+                    fetcher.clone().report_to_upstream();
+                }
+                continue;
+            }
             Ok(Err(err)) => {
                 warn!(
                     "Error while checking fetcher {}: {}",
                     fetcher.fetcher_name(),
                     err
                 );
-                None
+                continue;
             }
             Err(err) => {
                 warn!(
@@ -187,14 +194,8 @@ async fn resolve_inner(
                     fetcher.fetcher_name(),
                     err
                 );
-                None
+                continue;
             }
-        };
-        let Some(mut found) = found else {
-            if !opts.disable_telemetry {
-                fetcher.clone().report_to_upstream();
-            }
-            continue;
         };
 
         // Generate temporary binary path
