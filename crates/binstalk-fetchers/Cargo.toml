@@ -12,7 +12,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 async-trait = "0.1.88"
-aws-lc-rs = "1.19.0"
+aws-lc-rs = { version = "1.19.0", optional = true }
 binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader", default-features = false }
 binstalk-git-repo-api = { version = "0.5.54", path = "../binstalk-git-repo-api" }
 binstalk-types = { version = "0.11.0", path = "../binstalk-types" }
@@ -24,10 +24,12 @@ leon = "3.0.0"
 leon-macros = "1.0.1"
 miette = "7.0.0"
 minisign-verify = "0.3.0"
-serde_json = "1.0.149"
+serde_json = { version = "1.0.149", optional = true }
 # Only verifies against the trusted roots embedded in sigstore-trust-root:
 # its `tuf` feature would fetch them with its own HTTP client.
-sigstore-verify = { version = "0.17.0", default-features = false, features = ["aws-lc-rs"] }
+sigstore-verify = { version = "0.17.0", default-features = false, features = [
+    "aws-lc-rs",
+], optional = true }
 strum = "0.28.0"
 thiserror = "2.0.11"
 tokio = { version = "1.52.3", features = [
@@ -42,7 +44,12 @@ binstalk-bins = { version = "0.8.0", path = "../binstalk-bins" }
 binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader" }
 
 [features]
+default = ["github-attestations"]
+
 quickinstall = []
+
+# Verify GitHub artifact attestations of GitHub release assets.
+github-attestations = ["dep:aws-lc-rs", "dep:serde_json", "dep:sigstore-verify"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
