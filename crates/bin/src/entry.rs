@@ -14,7 +14,7 @@ use binstalk::{
     helpers::{
         jobserver_client::LazyJobserverClient,
         lazy_gh_api_client::LazyGhApiClient,
-        remote::{Certificate, Client, set_cargo_http_proxy},
+        remote::{Certificate, Client, ClientBuilderExt},
         tasks::AutoAbortJoinHandle,
     },
     ops::{
@@ -116,8 +116,9 @@ pub fn install_crates(
         .or_else(|| http.as_mut().and_then(|http| http.proxy.take()))
     {
         debug!("Using the proxy from Cargo's http.proxy");
-        client_builder =
-            set_cargo_http_proxy(client_builder, &proxy).map_err(BinstallError::from)?;
+        client_builder = client_builder
+            .cargo_http_proxy(&proxy)
+            .map_err(BinstallError::from)?;
     }
 
     let client = Client::from_builder(
