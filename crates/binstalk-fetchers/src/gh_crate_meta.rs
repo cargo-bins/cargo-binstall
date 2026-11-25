@@ -1,9 +1,4 @@
-use std::{
-    borrow::Cow,
-    fmt, iter,
-    path::Path,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use binstalk_types::{
@@ -19,7 +14,7 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    Data, FetchError, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
+    Data, FetchError, Found, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
     TargetDataErased, common::*,
 };
 
@@ -36,7 +31,6 @@ pub struct GhCrateMeta {
     data: Arc<Data>,
     target_data: Arc<TargetDataErased>,
     signature_policy: SignaturePolicy,
-    resolution: OnceLock<Resolved>,
 }
 
 #[derive(Debug)]
@@ -56,7 +50,7 @@ struct Resolved {
     pkg_url: Arc<str>,
     /// The response to the GET that found `url`, its body unread, which
     /// `fetch_and_extract` downloads instead of asking again.
-    response: Mutex<Option<GetResponse>>,
+    response: Option<GetResponse>,
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -160,6 +154,7 @@ impl super::Fetcher for GhCrateMeta {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        _telemetry: bool,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,
@@ -167,199 +162,210 @@ impl super::Fetcher for GhCrateMeta {
             data,
             target_data,
             signature_policy,
-            resolution: OnceLock::new(),
         })
     }
 
-    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
-        tokio::spawn(async move {
-            let info = self.data.get_repo_info(&self.gh_api_client).await?;
+    async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
+        let info = self.data.get_repo_info(&self.gh_api_client).await?;
 
-            let repo = info.map(|info| &info.repo);
-            let subcrate = info.and_then(|info| info.subcrate.as_deref());
-            let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
+        let repo = info.map(|info| &info.repo);
+        let subcrate = info.and_then(|info| info.subcrate.as_deref());
+        let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
 
-            let mut pkg_fmt = self.target_data.meta.pkg_fmt;
+        let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-            let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-                let template = Template::parse(pkg_url)?;
+        let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+            let template = Template::parse(pkg_url)?;
 
-                if pkg_fmt.is_none()
-                    && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
-                {
-                    // The crate does not specify the pkg-fmt, yet its pkg-url
-                    // template doesn't contains format, archive-format or
-                    // archive-suffix which is required for automatically
-                    // deducing the pkg-fmt.
-                    //
-                    // We will attempt to guess the pkg-fmt there, but this is
-                    // just a best-effort
-                    pkg_fmt = PkgFmt::guess_pkg_format(pkg_url);
-
-                    let crate_name = &self.data.name;
-                    let version = &self.data.version;
-                    let target = &self.target_data.target;
-
-                    if pkg_fmt.is_none() {
-                        return Err(InvalidPkgFmtError {
-                            crate_name: crate_name.clone(),
-                            version: version.clone(),
-                            target: target.into(),
-                            pkg_url: pkg_url.into(),
-                            reason:
-                                &"pkg-fmt is not specified, yet pkg-url does not contain format, \
-                                archive-format or archive-suffix which is required for automatically \
-                                deducing pkg-fmt",
-                        }
-                        .into());
-                    }
-
-                    warn!(
-                        "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt \
-                        but its pkg-url also does not contain key format, archive-format or \
-                        archive-suffix.\nbinstall was able to guess that from pkg-url, but \
-                        just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
-                        pkg_fmt = pkg_fmt.unwrap(),
-                    );
-                }
-
-                Either::Left(iter::once(template))
-            } else if let Some(RepoInfo {
-                repo,
-                repository_host,
-                ..
-            }) = info
+            if pkg_fmt.is_none()
+                && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
             {
-                if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
-                    let has_subcrate = subcrate.is_some();
+                // The crate does not specify the pkg-fmt, yet its pkg-url
+                // template doesn't contains format, archive-format or
+                // archive-suffix which is required for automatically
+                // deducing the pkg-fmt.
+                //
+                // We will attempt to guess the pkg-fmt there, but this is
+                // just a best-effort
+                let crate_name = &self.data.name;
+                let version = &self.data.version;
+                let target = &self.target_data.target;
 
-                    Either::Right(
-                        pkg_urls
-                            .map(Template::cast)
-                            // If subcrate is Some, then all templates will be included.
-                            // Otherwise, only templates without key "subcrate" will be
-                            // included.
-                            .filter(move |template| has_subcrate || !template.has_key("subcrate")),
-                    )
-                } else {
-                    warn!(
-                        concat!(
-                            "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
-                            "Please ask the upstream to provide it for target {}."
-                        ),
-                        repo, self.target_data.target
-                    );
+                let Some(guessed) = PkgFmt::guess_pkg_format(pkg_url) else {
+                    return Err(InvalidPkgFmtError {
+                        crate_name: crate_name.clone(),
+                        version: version.clone(),
+                        target: target.into(),
+                        pkg_url: pkg_url.into(),
+                        reason: &"pkg-fmt is not specified, yet pkg-url does not contain format, \
+                            archive-format or archive-suffix which is required for automatically \
+                            deducing pkg-fmt",
+                    }
+                    .into());
+                };
+                pkg_fmt = Some(guessed);
 
-                    return Ok(false);
-                }
+                warn!(
+                    "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt \
+                    but its pkg-url also does not contain key format, archive-format or \
+                    archive-suffix.\nbinstall was able to guess that from pkg-url, but \
+                    just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
+                    pkg_fmt = guessed,
+                );
+            }
+
+            Either::Left(iter::once(template))
+        } else if let Some(RepoInfo {
+            repo,
+            repository_host,
+            ..
+        }) = info
+        {
+            if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
+                let has_subcrate = subcrate.is_some();
+
+                Either::Right(
+                    pkg_urls
+                        .map(Template::cast)
+                        // If subcrate is Some, then all templates will be included.
+                        // Otherwise, only templates without key "subcrate" will be
+                        // included.
+                        .filter(move |template| has_subcrate || !template.has_key("subcrate")),
+                )
             } else {
                 warn!(
                     concat!(
-                        "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
+                        "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
                         "Please ask the upstream to provide it for target {}."
                     ),
-                    self.target_data.target
+                    repo, self.target_data.target
                 );
 
-                return Ok(false);
-            };
-
-            // Convert Option<Url> to Option<String> to reduce size of future.
-            let repo = repo.map(|u| u.as_str().trim_end_matches('/'));
-
-            let pkg_fmts = if let Some(pkg_fmt) = pkg_fmt {
-                Either::Left(iter::once(pkg_fmt))
-            } else {
-                Either::Right(PkgFmt::iter())
-            };
-
-            // Every URL the package may be at, rendered once.
-            let mut buf = String::new();
-            let candidates: Vec<Candidate> = pkg_urls
-                .map(|pkg_url| {
-                    write_template(&pkg_url, &mut buf);
-                    let pkg_url_str: Arc<str> = buf.as_str().into();
-                    (pkg_url_str, pkg_url)
-                })
-                .cartesian_product(pkg_fmts)
-                .flat_map(|((pkg_url_str, pkg_url), pkg_fmt)| {
-                    candidate_urls(
-                        &self.data,
-                        &self.target_data.target,
-                        &self.target_data.target_related_info,
-                        pkg_fmt,
-                        &pkg_url,
-                        repo,
-                        subcrate,
-                    )
-                    .into_iter()
-                    .map(move |(url, archive_suffix, target_arch)| {
-                        Candidate::new(
-                            url,
-                            pkg_fmt,
-                            archive_suffix,
-                            target_arch,
-                            pkg_url_str.clone(),
-                            repo,
-                        )
-                    })
-                })
-                .collect();
-
-            let mut probe = Probe::new(
-                self.data.clone(),
-                self.client.clone(),
-                self.gh_api_client.clone(),
-                repo,
-                subcrate,
-                is_repo_private,
-                candidates,
+                return Ok(None);
+            }
+        } else {
+            warn!(
+                concat!(
+                    "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
+                    "Please ask the upstream to provide it for target {}."
+                ),
+                self.target_data.target
             );
 
-            // Try how a previous version was found first, before any other
-            // request: normally one URL, instead of all of them. See
-            // `Probe::resolve_hint` for when it isn't.
-            //
-            // Only a hint that is still one of the crate's templates is used,
-            // and only if it agrees with the crate's pkg-fmt, if any.
-            if let Some(hint) = self.data.pkg_url_hint(&self.target_data.target) {
-                if let Some(resolved) = probe.resolve_hint(hint).await? {
-                    debug!(
-                        ?resolved,
-                        "Found package with the pkg-url of the last install"
-                    );
-                    self.resolution
-                        .set(resolved)
-                        .expect("find() should be only called once");
-                    return Ok(true);
-                }
+            return Ok(None);
+        };
 
+        // Convert Option<Url> to Option<String> to reduce size of future.
+        let repo = repo.map(|u| u.as_str().trim_end_matches('/'));
+
+        let pkg_fmts = if let Some(pkg_fmt) = pkg_fmt {
+            Either::Left(iter::once(pkg_fmt))
+        } else {
+            Either::Right(PkgFmt::iter())
+        };
+
+        // Every URL the package may be at, rendered once.
+        let mut buf = String::new();
+        let candidates: Vec<Candidate> = pkg_urls
+            .map(|pkg_url| {
+                write_template(&pkg_url, &mut buf);
+                let pkg_url_str: Arc<str> = buf.as_str().into();
+                (pkg_url_str, pkg_url)
+            })
+            .cartesian_product(pkg_fmts)
+            .flat_map(|((pkg_url_str, pkg_url), pkg_fmt)| {
+                candidate_urls(
+                    &self.data,
+                    &self.target_data.target,
+                    &self.target_data.target_related_info,
+                    pkg_fmt,
+                    &pkg_url,
+                    repo,
+                    subcrate,
+                )
+                .into_iter()
+                .map(move |(url, archive_suffix, target_arch)| {
+                    Candidate::new(
+                        url,
+                        pkg_fmt,
+                        archive_suffix,
+                        target_arch,
+                        pkg_url_str.clone(),
+                        repo,
+                    )
+                })
+            })
+            .collect();
+
+        let mut probe = Probe::new(
+            self.data.clone(),
+            self.client.clone(),
+            self.gh_api_client.clone(),
+            repo,
+            subcrate,
+            is_repo_private,
+            candidates,
+        );
+
+        // Try how a previous version was found first, before any other
+        // request: normally one URL, instead of all of them. See
+        // `Probe::resolve_hint` for when it isn't.
+        //
+        // Only a hint that is still one of the crate's templates is used,
+        // and only if it agrees with the crate's pkg-fmt, if any.
+        if let Some(hint) = self.data.pkg_url_hint(&self.target_data.target) {
+            if let Some(resolved) = probe.resolve_hint(hint).await? {
                 debug!(
-                    "pkg-url {} of the last install did not match, trying all pkg-url",
-                    hint.pkg_url
+                    ?resolved,
+                    "Found package with the pkg-url of the last install"
                 );
+                return Ok(Some(self.found(resolved)));
             }
 
-            if let Some(resolved) = probe.resolve().await? {
-                debug!(?resolved, "Winning URL found!");
-                self.resolution
-                    .set(resolved)
-                    .expect("find() should be only called once");
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        })
+            debug!(
+                "pkg-url {} of the last install did not match, trying all pkg-url",
+                hint.pkg_url
+            );
+        }
+
+        let resolved = probe.resolve().await?;
+        Ok(resolved.map(|resolved| {
+            debug!(?resolved, "Winning URL found!");
+            self.found(resolved)
+        }))
     }
 
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let resolved = self
-            .resolution
-            .get()
-            .expect("find() should be called once before fetch_and_extract()");
+    fn fetcher_name(&self) -> &'static str {
+        FETCHER_GH_CRATE_META
+    }
+
+    fn strategy(&self) -> Strategy {
+        Strategy::CrateMetaData
+    }
+}
+
+impl GhCrateMeta {
+    fn found(self: &Arc<Self>, resolved: Resolved) -> Box<dyn Found> {
+        Box::new(GhCrateMetaFound {
+            fetcher: Arc::clone(self),
+            resolved,
+        })
+    }
+}
+
+/// The package [`GhCrateMeta`] found.
+struct GhCrateMetaFound {
+    fetcher: Arc<GhCrateMeta>,
+    resolved: Resolved,
+}
+
+#[async_trait::async_trait]
+impl Found for GhCrateMetaFound {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+        let Self { fetcher, resolved } = self;
         trace!(?resolved, "preparing to fetch");
 
-        let verifier = match (self.signature_policy, &self.target_data.meta.signing) {
+        let verifier = match (fetcher.signature_policy, &fetcher.target_data.meta.signing) {
             (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
                 SignatureVerifier::Noop
             }
@@ -375,9 +381,9 @@ impl super::Fetcher for GhCrateMeta {
 
                 let sign_url = {
                     let mut ctx = Context::from_data_with_repo(
-                        &self.data,
-                        &self.target_data.target,
-                        &self.target_data.target_related_info,
+                        &fetcher.data,
+                        &fetcher.target_data.target,
+                        &fetcher.target_data.target_related_info,
                         resolved.archive_suffix.as_deref(),
                         resolved.repo.as_deref(),
                         resolved.subcrate.as_deref(),
@@ -387,7 +393,7 @@ impl super::Fetcher for GhCrateMeta {
                 };
 
                 debug!(?sign_url, "Downloading signature");
-                let signature = Download::new(self.client.clone(), sign_url)
+                let signature = Download::new(fetcher.client.clone(), sign_url)
                     .into_bytes()
                     .await?;
                 trace!(?signature, "got signature contents");
@@ -404,18 +410,17 @@ impl super::Fetcher for GhCrateMeta {
         );
         let mut data_verifier = verifier.data_verifier()?;
         let files = match resolved.gh_release_artifact_url.as_ref() {
-            Some(artifact_url) if resolved.is_repo_private => self
+            Some(artifact_url) if resolved.is_repo_private => fetcher
                 .gh_api_client
                 .download_artifact(artifact_url.clone())
                 .await?
                 .with_data_verifier(data_verifier.as_mut()),
-            _ => {
-                let response = resolved.response.lock().unwrap().take();
-                response
-                    .map(Download::from)
-                    .unwrap_or_else(|| Download::new(self.client.clone(), resolved.url.clone()))
-                    .with_data_verifier(data_verifier.as_mut())
-            }
+            _ => resolved
+                .response
+                .take()
+                .map(Download::from)
+                .unwrap_or_else(|| Download::new(fetcher.client.clone(), resolved.url.clone()))
+                .with_data_verifier(data_verifier.as_mut()),
         }
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
@@ -424,7 +429,7 @@ impl super::Fetcher for GhCrateMeta {
             if let Some(info) = verifier.info() {
                 info!(
                     "Verified signature for package '{}': {info}",
-                    self.data.name
+                    fetcher.data.name
                 );
             }
             Ok(files)
@@ -434,23 +439,23 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
-        self.resolution.get().unwrap().pkg_fmt
+        self.resolved.pkg_fmt
     }
 
     fn target_meta(&self) -> PkgMeta {
-        let mut meta = self.target_data.meta.clone();
+        let mut meta = self.fetcher.target_data.meta.clone();
         meta.pkg_fmt = Some(self.pkg_fmt());
         meta
     }
 
     fn resolved_target_arch(&self) -> Option<&str> {
-        self.resolution.get()?.target_arch
+        self.resolved.target_arch
     }
 
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
-        let resolved = self.resolution.get()?;
+        let resolved = &self.resolved;
         Some(PkgUrlHint {
-            name: self.data.name.clone(),
+            name: self.fetcher.data.name.clone(),
             pkg_url: resolved.pkg_url.as_ref().into(),
             pkg_fmt: resolved.pkg_fmt,
             rendered_with: Some(RenderedWith {
@@ -460,39 +465,27 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    fn source_name(&self) -> CompactString {
-        self.resolution
-            .get()
-            .map(|resolved| {
-                if let Some(domain) = resolved.url.domain() {
-                    domain.to_compact_string()
-                } else if let Some(host) = resolved.url.host_str() {
-                    host.to_compact_string()
-                } else {
-                    resolved.url.to_compact_string()
-                }
-            })
-            .unwrap_or_else(|| "invalid url".into())
-    }
-
-    fn fetcher_name(&self) -> &'static str {
-        FETCHER_GH_CRATE_META
-    }
-
-    fn strategy(&self) -> Strategy {
-        Strategy::CrateMetaData
-    }
-
     fn is_third_party(&self) -> bool {
         false
     }
 
     fn target(&self) -> &str {
-        &self.target_data.target
+        &self.fetcher.target_data.target
     }
 
     fn target_data(&self) -> &Arc<TargetDataErased> {
-        &self.target_data
+        &self.fetcher.target_data
+    }
+
+    fn source_name(&self) -> CompactString {
+        let url = &self.resolved.url;
+        if let Some(domain) = url.domain() {
+            domain.to_compact_string()
+        } else if let Some(host) = url.host_str() {
+            host.to_compact_string()
+        } else {
+            url.to_compact_string()
+        }
     }
 }
 

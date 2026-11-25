@@ -9,10 +9,7 @@
 //! repository by the releases' asset lists on github.com, which cost no API
 //! quota, and only then with the API.
 
-use std::{
-    collections::BTreeSet,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeSet, sync::Arc};
 
 use binstalk_git_repo_api::{
     gh_api_client::{
@@ -414,7 +411,7 @@ impl Shared {
             is_repo_private: self.is_repo_private,
             target_arch: candidate.target_arch,
             pkg_url: candidate.pkg_url,
-            response: Mutex::new(response),
+            response,
         }
     }
 
