@@ -146,6 +146,7 @@ fn candidate_urls(
         .collect()
 }
 
+#[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
     fn new(
         client: Client,
@@ -163,178 +164,175 @@ impl super::Fetcher for GhCrateMeta {
         })
     }
 
-    fn find(self: Arc<Self>) -> JoinHandle<Result<Option<Box<dyn Found>>, FetchError>> {
-        tokio::spawn(async move {
-            let info = self.data.get_repo_info(&self.gh_api_client).await?;
+    async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
+        let info = self.data.get_repo_info(&self.gh_api_client).await?;
 
-            let repo = info.map(|info| &info.repo);
-            let subcrate = info.and_then(|info| info.subcrate.as_deref());
-            let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
+        let repo = info.map(|info| &info.repo);
+        let subcrate = info.and_then(|info| info.subcrate.as_deref());
+        let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
 
-            let mut pkg_fmt = self.target_data.meta.pkg_fmt;
+        let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-            let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-                let template = Template::parse(pkg_url)?;
+        let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
+            let template = Template::parse(pkg_url)?;
 
-                if pkg_fmt.is_none()
-                    && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
-                {
-                    // The crate does not specify the pkg-fmt, yet its pkg-url
-                    // template doesn't contains format, archive-format or
-                    // archive-suffix which is required for automatically
-                    // deducing the pkg-fmt.
-                    //
-                    // We will attempt to guess the pkg-fmt there, but this is
-                    // just a best-effort
-                    pkg_fmt = PkgFmt::guess_pkg_format(pkg_url);
-
-                    let crate_name = &self.data.name;
-                    let version = &self.data.version;
-                    let target = &self.target_data.target;
-
-                    if pkg_fmt.is_none() {
-                        return Err(InvalidPkgFmtError {
-                            crate_name: crate_name.clone(),
-                            version: version.clone(),
-                            target: target.into(),
-                            pkg_url: pkg_url.into(),
-                            reason:
-                                &"pkg-fmt is not specified, yet pkg-url does not contain format, \
-                                archive-format or archive-suffix which is required for automatically \
-                                deducing pkg-fmt",
-                        }
-                        .into());
-                    }
-
-                    warn!(
-                        "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt \
-                        but its pkg-url also does not contain key format, archive-format or \
-                        archive-suffix.\nbinstall was able to guess that from pkg-url, but \
-                        just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
-                        pkg_fmt = pkg_fmt.unwrap(),
-                    );
-                }
-
-                Either::Left(iter::once(template))
-            } else if let Some(RepoInfo {
-                repo,
-                repository_host,
-                ..
-            }) = info
+            if pkg_fmt.is_none()
+                && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
             {
-                if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
-                    let has_subcrate = subcrate.is_some();
+                // The crate does not specify the pkg-fmt, yet its pkg-url
+                // template doesn't contains format, archive-format or
+                // archive-suffix which is required for automatically
+                // deducing the pkg-fmt.
+                //
+                // We will attempt to guess the pkg-fmt there, but this is
+                // just a best-effort
+                pkg_fmt = PkgFmt::guess_pkg_format(pkg_url);
 
-                    Either::Right(
-                        pkg_urls
-                            .map(Template::cast)
-                            // If subcrate is Some, then all templates will be included.
-                            // Otherwise, only templates without key "subcrate" will be
-                            // included.
-                            .filter(move |template| has_subcrate || !template.has_key("subcrate")),
-                    )
-                } else {
-                    warn!(
-                        concat!(
-                            "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
-                            "Please ask the upstream to provide it for target {}."
-                        ),
-                        repo, self.target_data.target
-                    );
+                let crate_name = &self.data.name;
+                let version = &self.data.version;
+                let target = &self.target_data.target;
 
-                    return Ok(None);
+                if pkg_fmt.is_none() {
+                    return Err(InvalidPkgFmtError {
+                        crate_name: crate_name.clone(),
+                        version: version.clone(),
+                        target: target.into(),
+                        pkg_url: pkg_url.into(),
+                        reason: &"pkg-fmt is not specified, yet pkg-url does not contain format, \
+                            archive-format or archive-suffix which is required for automatically \
+                            deducing pkg-fmt",
+                    }
+                    .into());
                 }
-            } else {
+
                 warn!(
-                    concat!(
-                        "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
-                        "Please ask the upstream to provide it for target {}."
-                    ),
-                    self.target_data.target
-                );
-
-                return Ok(None);
-            };
-
-            // Convert Option<Url> to Option<String> to reduce size of future.
-            let repo = repo.map(|u| u.as_str().trim_end_matches('/'));
-
-            let pkg_fmts = if let Some(pkg_fmt) = pkg_fmt {
-                Either::Left(iter::once(pkg_fmt))
-            } else {
-                Either::Right(PkgFmt::iter())
-            };
-
-            // Every URL the package may be at, rendered once.
-            let mut buf = String::new();
-            let candidates: Vec<Candidate> = pkg_urls
-                .map(|pkg_url| {
-                    write_template(&pkg_url, &mut buf);
-                    let pkg_url_str: Arc<str> = buf.as_str().into();
-                    (pkg_url_str, pkg_url)
-                })
-                .cartesian_product(pkg_fmts)
-                .flat_map(|((pkg_url_str, pkg_url), pkg_fmt)| {
-                    candidate_urls(
-                        &self.data,
-                        &self.target_data.target,
-                        &self.target_data.target_related_info,
-                        pkg_fmt,
-                        &pkg_url,
-                        repo,
-                        subcrate,
-                    )
-                    .into_iter()
-                    .map(move |(url, archive_suffix, target_arch)| {
-                        Candidate::new(
-                            url,
-                            pkg_fmt,
-                            archive_suffix,
-                            target_arch,
-                            pkg_url_str.clone(),
-                            repo,
-                        )
-                    })
-                })
-                .collect();
-
-            let mut probe = Probe::new(
-                self.data.clone(),
-                self.client.clone(),
-                self.gh_api_client.clone(),
-                repo,
-                subcrate,
-                is_repo_private,
-                candidates,
-            );
-
-            // Try how a previous version was found first, before any other
-            // request: normally one URL, instead of all of them. See
-            // `Probe::resolve_hint` for when it isn't.
-            //
-            // Only a hint that is still one of the crate's templates is used,
-            // and only if it agrees with the crate's pkg-fmt, if any.
-            if let Some(hint) = self.data.pkg_url_hint(&self.target_data.target) {
-                if let Some(resolved) = probe.resolve_hint(hint).await? {
-                    debug!(
-                        ?resolved,
-                        "Found package with the pkg-url of the last install"
-                    );
-                    return Ok(Some(self.found(resolved)));
-                }
-
-                debug!(
-                    "pkg-url {} of the last install did not match, trying all pkg-url",
-                    hint.pkg_url
+                    "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt \
+                    but its pkg-url also does not contain key format, archive-format or \
+                    archive-suffix.\nbinstall was able to guess that from pkg-url, but \
+                    just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
+                    pkg_fmt = pkg_fmt.unwrap(),
                 );
             }
 
-            let resolved = probe.resolve().await?;
-            Ok(resolved.map(|resolved| {
-                debug!(?resolved, "Winning URL found!");
-                self.found(resolved)
-            }))
-        })
+            Either::Left(iter::once(template))
+        } else if let Some(RepoInfo {
+            repo,
+            repository_host,
+            ..
+        }) = info
+        {
+            if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
+                let has_subcrate = subcrate.is_some();
+
+                Either::Right(
+                    pkg_urls
+                        .map(Template::cast)
+                        // If subcrate is Some, then all templates will be included.
+                        // Otherwise, only templates without key "subcrate" will be
+                        // included.
+                        .filter(move |template| has_subcrate || !template.has_key("subcrate")),
+                )
+            } else {
+                warn!(
+                    concat!(
+                        "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
+                        "Please ask the upstream to provide it for target {}."
+                    ),
+                    repo, self.target_data.target
+                );
+
+                return Ok(None);
+            }
+        } else {
+            warn!(
+                concat!(
+                    "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
+                    "Please ask the upstream to provide it for target {}."
+                ),
+                self.target_data.target
+            );
+
+            return Ok(None);
+        };
+
+        // Convert Option<Url> to Option<String> to reduce size of future.
+        let repo = repo.map(|u| u.as_str().trim_end_matches('/'));
+
+        let pkg_fmts = if let Some(pkg_fmt) = pkg_fmt {
+            Either::Left(iter::once(pkg_fmt))
+        } else {
+            Either::Right(PkgFmt::iter())
+        };
+
+        // Every URL the package may be at, rendered once.
+        let mut buf = String::new();
+        let candidates: Vec<Candidate> = pkg_urls
+            .map(|pkg_url| {
+                write_template(&pkg_url, &mut buf);
+                let pkg_url_str: Arc<str> = buf.as_str().into();
+                (pkg_url_str, pkg_url)
+            })
+            .cartesian_product(pkg_fmts)
+            .flat_map(|((pkg_url_str, pkg_url), pkg_fmt)| {
+                candidate_urls(
+                    &self.data,
+                    &self.target_data.target,
+                    &self.target_data.target_related_info,
+                    pkg_fmt,
+                    &pkg_url,
+                    repo,
+                    subcrate,
+                )
+                .into_iter()
+                .map(move |(url, archive_suffix, target_arch)| {
+                    Candidate::new(
+                        url,
+                        pkg_fmt,
+                        archive_suffix,
+                        target_arch,
+                        pkg_url_str.clone(),
+                        repo,
+                    )
+                })
+            })
+            .collect();
+
+        let mut probe = Probe::new(
+            self.data.clone(),
+            self.client.clone(),
+            self.gh_api_client.clone(),
+            repo,
+            subcrate,
+            is_repo_private,
+            candidates,
+        );
+
+        // Try how a previous version was found first, before any other
+        // request: normally one URL, instead of all of them. See
+        // `Probe::resolve_hint` for when it isn't.
+        //
+        // Only a hint that is still one of the crate's templates is used,
+        // and only if it agrees with the crate's pkg-fmt, if any.
+        if let Some(hint) = self.data.pkg_url_hint(&self.target_data.target) {
+            if let Some(resolved) = probe.resolve_hint(hint).await? {
+                debug!(
+                    ?resolved,
+                    "Found package with the pkg-url of the last install"
+                );
+                return Ok(Some(self.found(resolved)));
+            }
+
+            debug!(
+                "pkg-url {} of the last install did not match, trying all pkg-url",
+                hint.pkg_url
+            );
+        }
+
+        let resolved = probe.resolve().await?;
+        Ok(resolved.map(|resolved| {
+            debug!(?resolved, "Winning URL found!");
+            self.found(resolved)
+        }))
     }
 
     fn fetcher_name(&self) -> &'static str {
@@ -343,18 +341,6 @@ impl super::Fetcher for GhCrateMeta {
 
     fn strategy(&self) -> Strategy {
         Strategy::CrateMetaData
-    }
-
-    fn is_third_party(&self) -> bool {
-        false
-    }
-
-    fn target(&self) -> &str {
-        &self.target_data.target
-    }
-
-    fn target_data(&self) -> &Arc<TargetDataErased> {
-        &self.target_data
     }
 }
 
@@ -477,6 +463,18 @@ impl Found for GhCrateMetaFound {
                 target_arch: resolved.target_arch.map(CompactString::from),
             }),
         })
+    }
+
+    fn is_third_party(&self) -> bool {
+        false
+    }
+
+    fn target(&self) -> &str {
+        &self.fetcher.target_data.target
+    }
+
+    fn target_data(&self) -> &Arc<TargetDataErased> {
+        &self.fetcher.target_data
     }
 
     fn source_name(&self) -> CompactString {

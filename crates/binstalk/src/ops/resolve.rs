@@ -21,7 +21,6 @@ use crate::{
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
-        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverrides},
     ops::{CargoTomlFetchOverride, Options},
@@ -172,24 +171,18 @@ async fn resolve_inner(
     }
 
     for fetcher in &handles {
-        match timeout(
-            opts.maximum_resolution_timeout,
-            AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join(),
-        )
-        .await
-        {
+        match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await {
             Ok(ret) => match ret {
                 Ok(Some(mut found)) => {
                     // Generate temporary binary path
                     let bin_path = opts.temp_dir.join(format!(
                         "bin-{}-{}-{}",
                         package_info.name,
-                        fetcher.target(),
+                        found.target(),
                         fetcher.fetcher_name()
                     ));
 
                     match download_extract_and_verify(
-                        fetcher.as_ref(),
                         found.as_mut(),
                         &bin_path,
                         &package_info,
@@ -205,7 +198,6 @@ async fn resolve_inner(
                                     fetcher.clone().report_to_upstream();
                                 }
                                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
-                                    fetcher: fetcher.clone(),
                                     found,
                                     new_version: package_info.version,
                                     pubtime: package_info.pubtime,
@@ -305,12 +297,11 @@ async fn resolve_inner(
     }))
 }
 
-///  * `found` - What `fetcher.find()` returned.
+///  * `found` - What a fetcher's `find()` returned.
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
 async fn download_extract_and_verify(
-    fetcher: &dyn Fetcher,
     found: &mut dyn Found,
     bin_path: &Path,
     package_info: &PackageInfo,
@@ -325,7 +316,6 @@ async fn download_extract_and_verify(
 
     // Verify that all non-optional bin_files exist
     let bin_files = collect_bin_files(
-        fetcher,
         found,
         package_info,
         bin_path,
@@ -382,7 +372,6 @@ But since it requires features {features}, this bin is ignored."
 }
 
 fn collect_bin_files(
-    fetcher: &dyn Fetcher,
     found: &dyn Found,
     package_info: &PackageInfo,
     bin_path: &Path,
@@ -393,7 +382,7 @@ fn collect_bin_files(
     // `bin-dir` must use the same `{ target-arch }` as the URL the package
     // was found at.
     let target_related_info = TargetArchOverride {
-        values: &fetcher.target_data().target_related_info,
+        values: &found.target_data().target_related_info,
         target_arch: found.resolved_target_arch(),
     };
 
@@ -401,7 +390,7 @@ fn collect_bin_files(
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
         name: &package_info.name,
-        target: fetcher.target(),
+        target: found.target(),
         version: &package_info.version_str,
         repo: package_info.repo.as_deref(),
         meta: found.target_meta(),

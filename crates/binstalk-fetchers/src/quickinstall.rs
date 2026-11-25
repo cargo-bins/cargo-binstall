@@ -175,6 +175,7 @@ impl QuickInstall {
     }
 }
 
+#[async_trait::async_trait]
 impl super::Fetcher for QuickInstall {
     fn new(
         client: Client,
@@ -209,28 +210,26 @@ impl super::Fetcher for QuickInstall {
         })
     }
 
-    fn find(self: Arc<Self>) -> JoinHandle<Result<Option<Box<dyn Found>>, FetchError>> {
-        tokio::spawn(async move {
-            if !self.is_supported().await? {
-                return Ok(None);
-            }
+    async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
+        if !self.is_supported().await? {
+            return Ok(None);
+        }
 
-            let download_signature_task = self.clone().download_signature();
+        let download_signature_task = self.clone().download_signature();
 
-            debug!("Checking for package at: '{}'", self.package_url);
-            let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
-                self.set_status(Status::NotFound);
-                return Ok(None);
-            };
-            let verifier = download_signature_task.flattened_join().await?;
+        debug!("Checking for package at: '{}'", self.package_url);
+        let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
+            self.set_status(Status::NotFound);
+            return Ok(None);
+        };
+        let verifier = download_signature_task.flattened_join().await?;
 
-            self.set_status(Status::Found);
-            Ok(Some(Box::new(QuickInstallFound {
-                fetcher: self,
-                verifier,
-                response: Some(response),
-            }) as Box<dyn Found>))
-        })
+        self.set_status(Status::Found);
+        Ok(Some(Box::new(QuickInstallFound {
+            fetcher: self,
+            verifier,
+            response: Some(response),
+        }) as Box<dyn Found>))
     }
 
     fn report_to_upstream(self: Arc<Self>) {
@@ -262,18 +261,6 @@ by rust officially."#,
     fn strategy(&self) -> Strategy {
         Strategy::QuickInstall
     }
-
-    fn is_third_party(&self) -> bool {
-        true
-    }
-
-    fn target(&self) -> &str {
-        &self.target_data.target
-    }
-
-    fn target_data(&self) -> &Arc<TargetDataErased> {
-        &self.target_data
-    }
 }
 
 /// The package [`QuickInstall`] found.
@@ -288,25 +275,21 @@ struct QuickInstallFound {
 #[async_trait::async_trait]
 impl Found for QuickInstallFound {
     async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let Self {
-            fetcher,
-            verifier,
-            response,
-        } = self;
+        let response = self.response.take();
+        let fetcher = &self.fetcher;
         fetcher.set_status(Status::AttemptingInstall);
 
         debug!(url=%fetcher.package_url, "Downloading package");
-        let mut data_verifier = verifier.data_verifier()?;
+        let mut data_verifier = self.verifier.data_verifier()?;
         let files = response
-            .take()
             .map(Download::from)
             .unwrap_or_else(|| Download::new(fetcher.client.clone(), fetcher.package_url.clone()))
             .with_data_verifier(data_verifier.as_mut())
-            .and_extract(PkgFmt::Tgz, dst)
+            .and_extract(self.pkg_fmt(), dst)
             .await?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
-            if let Some(info) = verifier.info() {
+            if let Some(info) = self.verifier.info() {
                 info!(
                     "Verified signature for package '{}': {info}",
                     fetcher.package
@@ -329,6 +312,18 @@ impl Found for QuickInstallFound {
         meta.pkg_fmt = Some(self.pkg_fmt());
         meta.bin_dir = Some("{ bin }{ binary-ext }".to_string());
         meta
+    }
+
+    fn is_third_party(&self) -> bool {
+        true
+    }
+
+    fn target(&self) -> &str {
+        &self.fetcher.target_data.target
+    }
+
+    fn target_data(&self) -> &Arc<TargetDataErased> {
+        &self.fetcher.target_data
     }
 
     fn source_name(&self) -> CompactString {

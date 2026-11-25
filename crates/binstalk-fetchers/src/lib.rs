@@ -108,6 +108,7 @@ impl From<InvalidPkgFmtError> for FetchError {
     }
 }
 
+#[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
     /// Create a new fetcher from some data
     #[allow(clippy::new_ret_no_self)]
@@ -128,7 +129,7 @@ pub trait Fetcher: Send + Sync {
     ///
     /// Must return `None` if no package is available, and reserve errors to
     /// fatal conditions only.
-    fn find(self: Arc<Self>) -> JoinHandle<Result<Option<Box<dyn Found>>, FetchError>>;
+    async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError>;
 
     /// Report to upstream that cargo-binstall tries to use this fetcher.
     /// Currently it is only overridden by [`quickinstall::QuickInstall`].
@@ -143,14 +144,6 @@ pub trait Fetcher: Send + Sync {
 
     /// The strategy used by this fetcher
     fn strategy(&self) -> Strategy;
-
-    /// Should return true if the remote is from a third-party source
-    fn is_third_party(&self) -> bool;
-
-    /// Return the target for this fetcher
-    fn target(&self) -> &str;
-
-    fn target_data(&self) -> &Arc<TargetDataErased>;
 }
 
 /// A package [`Fetcher::find`] found.
@@ -167,6 +160,14 @@ pub trait Found: Send + Sync {
 
     /// A short human-readable name or descriptor for the package source
     fn source_name(&self) -> CompactString;
+
+    /// Should return true if the remote is from a third-party source
+    fn is_third_party(&self) -> bool;
+
+    /// Return the target of the package
+    fn target(&self) -> &str;
+
+    fn target_data(&self) -> &Arc<TargetDataErased>;
 
     /// The name `{ target-arch }` was rendered as in the package's URL, if
     /// [`Fetcher::find`] picked an alias rather than the name from
