@@ -27,6 +27,9 @@ pub use certificate::Certificate;
 mod dns_resolver;
 pub use dns_resolver::DnsResolver;
 
+mod proxy;
+pub use proxy::set_cargo_http_proxy;
+
 mod request_builder;
 pub use request_builder::{Body, GetResponse, RequestBuilder, Response};
 
