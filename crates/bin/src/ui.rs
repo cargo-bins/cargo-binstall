@@ -1,6 +1,6 @@
 use std::{
     io::{self, BufRead, StdinLock, Write},
-    sync::{Mutex, MutexGuard},
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -21,11 +21,29 @@ fn ask_for_confirm(stdin: &mut StdinLock, input: &mut String, prompt: &str) -> i
     Ok(())
 }
 
-pub async fn confirm() -> Result<(), BinstallError> {
+/// How long the user has spent answering prompts, so that it can be
+/// excluded from the reported run time.
+///
+/// Clones share the same total.
+#[derive(Clone, Debug, Default)]
+pub struct TimeInPrompts(Arc<Mutex<Duration>>);
+
+impl TimeInPrompts {
+    pub fn get(&self) -> Duration {
+        *self.0.lock().unwrap_or_else(|err| err.into_inner())
+    }
+
+    fn add(&self, duration: Duration) {
+        *self.0.lock().unwrap_or_else(|err| err.into_inner()) += duration;
+    }
+}
+
+pub async fn confirm(time_in_prompts: &TimeInPrompts) -> Result<(), BinstallError> {
     let (tx, rx) = oneshot::channel();
+    let time_in_prompts = time_in_prompts.clone();
 
     thread::spawn(move || {
-        let res = confirm_sync("Do you wish to continue? [yes]/no ", true);
+        let res = confirm_sync("Do you wish to continue? [yes]/no ", true, &time_in_prompts);
 
         // The main thread might be terminated by signal and thus cancel the confirmation
         tx.send(res).ok();
@@ -38,25 +56,10 @@ pub async fn confirm() -> Result<(), BinstallError> {
     }
 }
 
-/// Total time spent waiting for the user to answer a prompt.
-fn time_in_prompts() -> MutexGuard<'static, Duration> {
-    static TIME_IN_PROMPTS: Mutex<Duration> = Mutex::new(Duration::ZERO);
-
-    TIME_IN_PROMPTS
-        .lock()
-        .unwrap_or_else(|err| err.into_inner())
-}
-
-/// Returns how long the user has spent answering prompts so far,
-/// so that it can be excluded from the reported run time.
-pub fn time_spent_in_prompts() -> Duration {
-    *time_in_prompts()
-}
-
-pub fn confirm_sync(prompt: &str, default: bool) -> bool {
+pub fn confirm_sync(prompt: &str, default: bool, time_in_prompts: &TimeInPrompts) -> bool {
     let start = Instant::now();
     let res = confirm_sync_inner(prompt, default);
-    *time_in_prompts() += start.elapsed();
+    time_in_prompts.add(start.elapsed());
     res
 }
 
