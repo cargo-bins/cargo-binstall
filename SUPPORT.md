@@ -299,3 +299,53 @@ bin-dir = "{ name }-{ target }/bin"
 ```
 
 Versions of cargo-binstall up to v1.27.0 do not support this and fail to find the binary, so use the full path if users may be on those.
+
+### Installing a project that is not on crates.io
+
+`binstall` takes the metadata above from a crate's `Cargo.toml`, so a project that
+is not published on crates.io, or is not written in Rust at all, can still be
+installed from its release downloads: write a `Cargo.toml` for it yourself and
+pass it with `--manifest-path`.
+
+For example, say the `v1.2.3` release of `https://github.com/example/mytool` has
+the downloads `mytool-1.2.3-linux_amd64.tar.gz`, `mytool-1.2.3-darwin_arm64.tar.gz`
+and `mytool-1.2.3-windows_amd64.zip`, each holding the `mytool` binary at the top:
+
+```toml
+[package]
+name = "mytool"
+version = "1.2.3"
+repository = "https://github.com/example/mytool"
+
+# Every binary to install needs a `[[bin]]` entry, since there are no sources
+# to infer them from. `path` must be set, but the file does not need to exist.
+[[bin]]
+name = "mytool"
+path = "main.rs"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ os-name }_{ target-arch }{ archive-suffix }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install", "compile"]
+
+[package.metadata.binstall.overrides.'cfg(target_os = "macos")']
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-darwin_{ target-arch }{ archive-suffix }"
+
+[package.metadata.binstall.overrides.'cfg(target_os = "windows")']
+pkg-fmt = "zip"
+```
+
+```console
+$ cargo binstall --manifest-path path/to/Cargo.toml mytool
+```
+
+`{ target-arch }` becomes `amd64` and `arm64` here through the aliases listed for it above,
+and `disabled-strategies` stops `binstall` from looking the name up on QuickInstall
+or trying to build it with `cargo install`, which cannot work without sources.
+
+The crate name on the command line must be the `name` in the file. The `version`
+in the file is installed unless an exact version is given, like `mytool@1.2.4`
+or `--version 1.2.4`, which is then used for `{ version }` instead, so the same
+file installs any release named the same way. A version requirement such as
+`^1.2` is not resolved, since there is no registry to list versions: the `version`
+in the file is used, with a warning if it does not match.
