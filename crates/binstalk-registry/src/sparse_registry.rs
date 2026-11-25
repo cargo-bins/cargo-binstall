@@ -126,40 +126,28 @@ impl SparseRegistry {
     ) -> Result<MatchedCrate, RegistryError> {
         let cutoff = min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age));
         let crate_prefix = crate_prefix_components(crate_name)?;
-        let find_matched_ver = |auth| {
-            Self::find_crate_matched_ver(
-                &client,
-                self.url.clone(),
-                auth,
-                crate_name,
-                &crate_prefix,
-                version_req,
-                cutoff,
-            )
-        };
+        let registry_config = self.get_config(&client, auth).await?;
+        let auth = if registry_config.auth_required {
+            let Some(auth) = auth else {
+                return Err(RegistryError::AuthenticationRequired(Box::new(
+                    self.url.clone(),
+                )));
+            };
 
-        let (registry_config, auth, matched_version) = match auth {
-            None => {
-                // Without a token the index file is fetched the same way
-                // whatever config.json says, so fetch both at once to save a
-                // round trip.
-                let (registry_config, matched_version) =
-                    tokio::join!(self.get_config(&client, None), find_matched_ver(None));
-                let registry_config = registry_config?;
-                if registry_config.auth_required {
-                    return Err(RegistryError::AuthenticationRequired(Box::new(
-                        self.url.clone(),
-                    )));
-                }
-                (registry_config, None, matched_version?)
-            }
-            Some(auth) => {
-                // Only send the token if config.json asks for it.
-                let registry_config = self.get_config(&client, Some(auth)).await?;
-                let auth = registry_config.auth_required.then_some(auth);
-                (registry_config, auth, find_matched_ver(auth).await?)
-            }
+            Some(auth)
+        } else {
+            None
         };
+        let matched_version = Self::find_crate_matched_ver(
+            &client,
+            self.url.clone(),
+            auth,
+            crate_name,
+            &crate_prefix,
+            version_req,
+            cutoff,
+        )
+        .await?;
         let dl_url = Url::parse(&render_dl_template(
             &registry_config.dl,
             crate_name,
