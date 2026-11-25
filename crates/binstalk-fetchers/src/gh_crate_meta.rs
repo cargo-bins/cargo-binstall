@@ -186,13 +186,11 @@ impl super::Fetcher for GhCrateMeta {
                 //
                 // We will attempt to guess the pkg-fmt there, but this is
                 // just a best-effort
-                pkg_fmt = PkgFmt::guess_pkg_format(pkg_url);
-
                 let crate_name = &self.data.name;
                 let version = &self.data.version;
                 let target = &self.target_data.target;
 
-                if pkg_fmt.is_none() {
+                let Some(guessed) = PkgFmt::guess_pkg_format(pkg_url) else {
                     return Err(InvalidPkgFmtError {
                         crate_name: crate_name.clone(),
                         version: version.clone(),
@@ -203,14 +201,15 @@ impl super::Fetcher for GhCrateMeta {
                             deducing pkg-fmt",
                     }
                     .into());
-                }
+                };
+                pkg_fmt = Some(guessed);
 
                 warn!(
                     "Crate {crate_name}@{version} on target {target} does not specify pkg-fmt \
                     but its pkg-url also does not contain key format, archive-format or \
                     archive-suffix.\nbinstall was able to guess that from pkg-url, but \
                     just note that it could be wrong:\npkg-fmt=\"{pkg_fmt}\", pkg-url=\"{pkg_url}\"",
-                    pkg_fmt = pkg_fmt.unwrap(),
+                    pkg_fmt = guessed,
                 );
             }
 

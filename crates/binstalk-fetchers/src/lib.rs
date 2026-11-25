@@ -187,6 +187,12 @@ pub trait Found: Send + Sync {
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
         None
     }
+
+    /// Report to upstream how installing this package went, once
+    /// [`Found::fetch_and_extract`] is done.
+    ///
+    /// Currently it is only overridden by [`quickinstall::QuickInstall`].
+    fn report_to_upstream(&self) {}
 }
 
 /// [`leon::Values`] that gives `target-arch` from
@@ -432,9 +438,11 @@ impl RepoInfo {
             //
             // scheme:/{addr}/{repo_owner}/{repo_name}
             //
-            // path_segments() succeeds, so path_segments_mut()
-            // must also succeeds.
-            let mut paths = repo.path_segments_mut().unwrap();
+            let Ok(mut paths) = repo.path_segments_mut() else {
+                // Unreachable: path_segments() succeeded above, so the url
+                // can be a base.
+                return None;
+            };
 
             paths.pop(); // pop subcrate
             if is_crate_present {
