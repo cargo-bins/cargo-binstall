@@ -1,7 +1,6 @@
 # Signature support
 
-Binstall supports verifying signatures of downloaded files.
-At the moment, only one algorithm is supported, but this is expected to improve as time goes.
+Binstall supports verifying signatures of downloaded files, made with [minisign](#minisign), and [GitHub artifact attestations](#github-artifact-attestations) of GitHub release assets.
 
 This feature requires adding to the Cargo.toml metadata: no autodiscovery here!
 
@@ -74,6 +73,30 @@ The legacy signature format is not supported.
 The `pubkey` must be in the same format as minisign generates.
 It may or may not include the untrusted comment; it's ignored by Binstall so we recommend not.
 
+### GitHub artifact attestations
+
+`algorithm` must be `"github-attestations"`; `pubkey` and `file` are not used.
+
+```toml
+[package.metadata.binstall.signing]
+algorithm = "github-attestations"
+```
+
+Only packages downloaded from a GitHub release can be verified this way.
+After downloading a package, Binstall looks up the [attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations) that the repository hosting the release has for its SHA-256 digest, with one GitHub API request, and accepts the package if one of them verifies and is either:
+
+- the release attestation GitHub makes for every asset of an [immutable release](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases), for this repository and release tag, or
+- provenance signed by a GitHub Actions workflow of this repository, for example with [`actions/attest`](https://github.com/actions/attest).
+
+Bundles are verified against the Sigstore public-good and GitHub trusted roots built into Binstall; no other request is made.
+For private repositories, a GitHub token is needed, as for downloading the package itself.
+
+Crates without a `[...signing]` section can be verified this way too: with `--only-signed`, Binstall checks the GitHub attestations of packages downloaded from GitHub releases instead of refusing them.
+Without `--only-signed`, attestations are not looked up for such crates, to save the API request.
+
+Attestation verification is part of the `github-attestations` cargo feature of cargo-binstall, which is on by default.
+A build without it treats `algorithm = "github-attestations"` as an unsupported algorithm.
+
 ## Just-in-time signing
 
 To reduce the risk of a key being stolen, this scheme supports just-in-time or "keyless" signing.
@@ -93,10 +116,10 @@ The solution here is either:
 - Omit the `[...signing]` section in the source, and write the entire section on publish instead of just filling in the `pubkey`; signatures won't be checked for `--git` installs. Binstall uses this approach.
 - Instruct your users to use `--skip-signatures` if they want to install with `--git`.
 
-## Why not X? (Sigstore, GPG, signify, with SSH keys, ...)
+## Why not X? (Sigstore bundles, GPG, signify, with SSH keys, ...)
 
 We're open to pull requests adding algorithms!
-We're especially interested in Sigstore for a better implementation of "just-in-time" signing (which it calls "keyless").
+Sigstore's "keyless" signing is supported through [GitHub artifact attestations](#github-artifact-attestations); we're interested in Sigstore bundles from other CI providers too.
 We chose minisign as the first supported algorithm as it's lightweight, fairly popular, and has zero options to choose from.
 
 ## There's a competing project that does package signature verification differently!

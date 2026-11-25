@@ -1,0 +1,32 @@
+[package]
+name = "cargo-binstall"
+description = "Rust binary package installer for CI integration"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+version = "1.28.0"
+edition = "2024"
+license = "GPL-3.0"
+
+[[bin]]
+name = "cargo-binstall"
+path = "src/main.rs"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.universal-apple-darwin]
+pkg-fmt = "zip"
+[package.metadata.binstall.overrides.universal2-apple-darwin]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.signing]
+algorithm = "github-attestations"

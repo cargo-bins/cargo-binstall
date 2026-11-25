@@ -7,7 +7,7 @@ use std::{
 
 use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use binstalk_types::{
-    cargo_toml_binstall::Strategy,
+    cargo_toml_binstall::{SigningAlgorithm, Strategy},
     crate_info::{PkgUrlHint, RenderedWith},
 };
 use compact_str::{CompactString, ToCompactString};
@@ -15,7 +15,7 @@ use either::Either;
 use itertools::Itertools;
 use leon::Template;
 use strum::IntoEnumIterator;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 use crate::{
@@ -57,6 +57,26 @@ struct Resolved {
     /// The response to the GET that found `url`, its body unread, which
     /// `fetch_and_extract` downloads instead of asking again.
     response: Mutex<Option<GetResponse>>,
+}
+
+/// A verifier of the GitHub attestations of `resolved`, if it is a GitHub
+/// release asset.
+#[cfg(feature = "github-attestations")]
+fn attestations_verifier(resolved: &Resolved) -> Option<SignatureVerifier> {
+    use binstalk_git_repo_api::gh_api_client::GhReleaseArtifact;
+
+    use crate::GithubAttestationsVerifier;
+
+    let artifact = GhReleaseArtifact::try_extract_from_url(&resolved.url)?;
+    Some(SignatureVerifier::GithubAttestations(Box::new(
+        GithubAttestationsVerifier::new(artifact.release),
+    )))
+}
+
+/// GitHub attestations cannot be verified without the `github-attestations` feature.
+#[cfg(not(feature = "github-attestations"))]
+fn attestations_verifier(_resolved: &Resolved) -> Option<SignatureVerifier> {
+    None
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -363,8 +383,26 @@ impl super::Fetcher for GhCrateMeta {
             (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => {
                 SignatureVerifier::Noop
             }
-            (SignaturePolicy::Require, None) => {
-                return Err(FetchError::MissingSignature);
+            // Without a signing section, a GitHub release asset can still be
+            // attested by its repository.
+            (SignaturePolicy::Require, None) => match attestations_verifier(resolved) {
+                Some(verifier) => verifier,
+                None => return Err(FetchError::MissingSignature),
+            },
+            #[cfg(not(feature = "github-attestations"))]
+            (_, Some(config)) if config.algorithm == SigningAlgorithm::GithubAttestations => {
+                error!("Built without the `github-attestations` feature");
+                return Err(FetchError::UnsupportedSigningAlgorithm(config.algorithm));
+            }
+            #[cfg(feature = "github-attestations")]
+            (_, Some(config)) if config.algorithm == SigningAlgorithm::GithubAttestations => {
+                attestations_verifier(resolved).ok_or_else(|| {
+                    error!(
+                        url=%resolved.url,
+                        "Only GitHub release assets can have GitHub attestations"
+                    );
+                    FetchError::MissingSignature
+                })?
             }
             (_, Some(config)) => {
                 let template = match config.file.as_deref() {
@@ -420,17 +458,25 @@ impl super::Fetcher for GhCrateMeta {
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
         trace!("validating signature (if any)");
-        if data_verifier.validate() {
-            if let Some(info) = verifier.info() {
-                info!(
-                    "Verified signature for package '{}': {info}",
-                    self.data.name
-                );
-            }
-            Ok(files)
-        } else {
-            Err(FetchError::InvalidSignature)
+        if !data_verifier.validate() {
+            return Err(FetchError::InvalidSignature);
         }
+        drop(data_verifier);
+
+        let info = match &verifier {
+            #[cfg(feature = "github-attestations")]
+            SignatureVerifier::GithubAttestations(verifier) => {
+                Some(verifier.verify(&self.gh_api_client).await?)
+            }
+            verifier => verifier.info(),
+        };
+        if let Some(info) = info {
+            info!(
+                "Verified signature for package '{}': {info}",
+                self.data.name
+            );
+        }
+        Ok(files)
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

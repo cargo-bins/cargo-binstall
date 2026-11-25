@@ -72,10 +72,22 @@ vergen-gitcl = { version = "10.0.0", features = ["build", "cargo", "rustc"] }
 serde_json = "1.0.149"
 
 [features]
-default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin", "git"]
+default = [
+    "static",
+    "rustls",
+    "trust-dns",
+    "fancy-no-backtrace",
+    "zstd-thin",
+    "git",
+    "github-attestations",
+]
 
 git = ["binstalk/git"]
 git-max-perf = ["binstalk/git-max-perf"]
+
+# Verify GitHub artifact attestations of packages (`algorithm =
+# "github-attestations"`, or `--only-signed` without a signing section).
+github-attestations = ["binstalk/github-attestations"]
 
 mimalloc = ["dep:mimalloc"]
 

@@ -81,8 +81,8 @@ support-pkg-config := if target == target-host {
 
 h3-features := if enable-h3 != "" { ",http3" } else { "" }
 cargo-features := trim_end_match(if override-features != "" { override-features + h3-features
-    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug,zlib-rs" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + h3-features + extra-features
-    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto,zlib-rs" + h3-features + extra-features
+    } else if (cargo-profile / ci-or-no) == "dev/ci" { "git,rustls,fancy-with-backtrace,zstd-thin,log_max_level_debug,zlib-rs,github-attestations" + (if support-pkg-config != "" { ",pkg-config" } else { "" }) + h3-features + extra-features
+    } else if (cargo-profile / ci-or-no) == "release/ci" { "git,static,rustls,trust-dns,fancy-no-backtrace,zstd-thin,log_release_max_level_debug,cross-lang-fat-lto,zlib-rs,github-attestations" + h3-features + extra-features
     } else if extra-features != "" { extra-features + h3-features
     } else if enable-h3 != "" { "http3"
     } else { ""
@@ -251,6 +251,7 @@ e2e-test-tls: (e2e-test "tls" "1.2")
 e2e-test-tls: (e2e-test "tls" "1.2") (e2e-test "tls" "1.3")
 
 e2e-test-signing: (e2e-test "signing")
+e2e-test-github-attestations: (e2e-test "github-attestations")
 
 # taplo ships a zip rather than a single compressed binary on Windows.
 [linux]
@@ -260,7 +261,7 @@ e2e-test-compressed-bin: (e2e-test "compressed-bin")
 e2e-test-compressed-bin:
 
 [parallel]
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-crates2-json e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune e2e-test-aliases e2e-test-shadowed-bin e2e-test-http-faults e2e-test-target-arch e2e-test-compressed-bin e2e-test-pkg-url-hint e2e-test-manifest-lock
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-crates2-json e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-github-attestations e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune e2e-test-aliases e2e-test-shadowed-bin e2e-test-http-faults e2e-test-target-arch e2e-test-compressed-bin e2e-test-pkg-url-hint e2e-test-manifest-lock
 
 unit-tests: print-env
     cargo test --no-run --target {{target}}

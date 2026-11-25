@@ -236,6 +236,8 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--only-signed` — Only install packages that are signed
 
    The default is to verify signatures if they are available, but to allow unsigned packages as well.
+
+   Packages of crates without signing information are accepted if they were downloaded from a GitHub release and have a valid GitHub artifact attestation from the repository.
 * `--skip-signatures` — Don't check any signatures
 
    The default is to verify signatures if they are available. This option disables that behaviour entirely, which will also stop downloading signature files in the first place.

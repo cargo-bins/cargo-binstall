@@ -524,6 +524,10 @@ pub struct Args {
     ///
     /// The default is to verify signatures if they are available, but to allow
     /// unsigned packages as well.
+    ///
+    /// Packages of crates without signing information are accepted if they
+    /// were downloaded from a GitHub release and have a valid GitHub artifact
+    /// attestation from the repository.
     #[clap(help_heading = "Options", long)]
     pub(crate) only_signed: bool,
 
