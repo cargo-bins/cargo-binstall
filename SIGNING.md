@@ -91,6 +91,9 @@ This writes `package-name.tar.zst.sig`, the default signature file name.
 Binstall rejects signatures made for any other namespace, so that a signature made for something else, like a git commit, can't pass as a package signature.
 At install time, it prints the SHA256 fingerprint of the key, the same as `ssh-keygen -l` prints.
 
+SSH verification is part of the `ssh-signing` cargo feature of cargo-binstall, which is on by default.
+A build without it treats `algorithm = "ssh"` as an unsupported algorithm.
+
 ## Just-in-time signing
 
 To reduce the risk of a key being stolen, this scheme supports just-in-time or "keyless" signing.

@@ -6,12 +6,15 @@ use tracing::{error, trace};
 
 use crate::FetchError;
 
+#[cfg(feature = "ssh-signing")]
 mod ssh;
+#[cfg(feature = "ssh-signing")]
 use ssh::SshVerifier;
 
 pub enum SignatureVerifier {
     Noop,
     Minisign(Box<MinisignVerifier>),
+    #[cfg(feature = "ssh-signing")]
     Ssh(Box<SshVerifier>),
 }
 
@@ -21,9 +24,15 @@ impl SignatureVerifier {
             SigningAlgorithm::Minisign => MinisignVerifier::new(config, signature)
                 .map(Box::new)
                 .map(Self::Minisign),
+            #[cfg(feature = "ssh-signing")]
             SigningAlgorithm::Ssh => SshVerifier::new(&config.pubkey, signature)
                 .map(Box::new)
                 .map(Self::Ssh),
+            #[cfg(not(feature = "ssh-signing"))]
+            SigningAlgorithm::Ssh => {
+                error!("Built without the `ssh-signing` feature");
+                Err(FetchError::UnsupportedSigningAlgorithm(config.algorithm))
+            }
             algorithm => Err(FetchError::UnsupportedSigningAlgorithm(algorithm)),
         }
     }
@@ -32,12 +41,14 @@ impl SignatureVerifier {
         match self {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
+            #[cfg(feature = "ssh-signing")]
             Self::Ssh(v) => Ok(v.data_verifier()),
         }
     }
 
     pub fn info(&self) -> Option<String> {
         match self {
+            #[cfg(feature = "ssh-signing")]
             Self::Ssh(v) => Some(v.info()),
             _ => self.trusted_comment().map(Into::into),
         }
@@ -49,6 +60,7 @@ impl SignatureVerifier {
         match self {
             Self::Noop => None,
             Self::Minisign(v) => Some(v.signature.trusted_comment()),
+            #[cfg(feature = "ssh-signing")]
             Self::Ssh(_) => None,
         }
     }
