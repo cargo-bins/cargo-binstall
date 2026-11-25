@@ -154,6 +154,7 @@ impl super::Fetcher for GhCrateMeta {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        _telemetry: bool,
     ) -> Arc<dyn super::Fetcher> {
         Arc::new(Self {
             client,

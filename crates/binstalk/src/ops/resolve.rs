@@ -140,6 +140,7 @@ async fn resolve_inner(
                             data.clone(),
                             target_data.clone(),
                             opts.signature_policy,
+                            !opts.disable_telemetry,
                         );
 
                         if let Some(disabled_strategies) =
@@ -174,12 +175,7 @@ async fn resolve_inner(
         let mut found = match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await
         {
             Ok(Ok(Some(found))) => found,
-            Ok(Ok(None)) => {
-                if !opts.disable_telemetry {
-                    fetcher.clone().report_to_upstream();
-                }
-                continue;
-            }
+            Ok(Ok(None)) => continue,
             Ok(Err(err)) => {
                 warn!(
                     "Error while checking fetcher {}: {}",
@@ -216,13 +212,6 @@ async fn resolve_inner(
         )
         .await;
 
-        if matches!(ret, Err(BinstallError::UserAbort)) {
-            return Err(BinstallError::UserAbort);
-        }
-        if !opts.disable_telemetry {
-            found.report_to_upstream();
-        }
-
         match ret {
             Ok(bin_files) if !bin_files.is_empty() => {
                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
@@ -240,6 +229,7 @@ async fn resolve_inner(
                 The fetcher does not provide any optional binary",
                 found.source_name(),
             ),
+            Err(BinstallError::UserAbort) => return Err(BinstallError::UserAbort),
             Err(err) => warn!(
                 "Error while downloading and extracting from fetcher {}: {}",
                 found.source_name(),

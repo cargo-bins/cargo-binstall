@@ -110,7 +110,10 @@ impl From<InvalidPkgFmtError> for FetchError {
 
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
-    /// Create a new fetcher from some data
+    /// Create a new fetcher from some data.
+    ///
+    /// `telemetry`: whether the fetcher may report to its upstream how
+    /// finding and installing the package went (only QuickInstall does).
     #[allow(clippy::new_ret_no_self)]
     fn new(
         client: Client,
@@ -118,6 +121,7 @@ pub trait Fetcher: Send + Sync {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        telemetry: bool,
     ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
@@ -130,13 +134,6 @@ pub trait Fetcher: Send + Sync {
     /// Must return `None` if no package is available, and reserve errors to
     /// fatal conditions only.
     async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError>;
-
-    /// Report to upstream that [`Fetcher::find`] returned `Ok(None)`.
-    /// A package that was found is reported by [`Found::report_to_upstream`]
-    /// instead.
-    ///
-    /// Currently it is only overridden by [`quickinstall::QuickInstall`].
-    fn report_to_upstream(self: Arc<Self>) {}
 
     /// A short human-readable name, must contains only characters
     /// and numbers and it also must be unique.
@@ -187,12 +184,6 @@ pub trait Found: Send + Sync {
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
         None
     }
-
-    /// Report to upstream how installing this package went, once
-    /// [`Found::fetch_and_extract`] is done.
-    ///
-    /// Currently it is only overridden by [`quickinstall::QuickInstall`].
-    fn report_to_upstream(&self) {}
 }
 
 /// [`leon::Values`] that gives `target-arch` from

@@ -61,12 +61,14 @@ pub struct QuickInstall {
     signature_policy: SignaturePolicy,
 
     target_data: Arc<TargetDataErased>,
+
+    /// Send [`Status`] to quickinstall's stats server.
+    telemetry: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Status {
     NotFound,
-    Found,
     AttemptingInstall,
     InvalidSignature,
     InstalledFromTarball,
@@ -76,7 +78,6 @@ impl Status {
     fn as_str(&self) -> &'static str {
         match self {
             Status::NotFound => "not-found",
-            Status::Found => "found",
             Status::AttemptingInstall => "attempting-install",
             Status::InvalidSignature => "invalid-signature",
             Status::InstalledFromTarball => "installed-from-tarball",
@@ -159,6 +160,10 @@ impl QuickInstall {
 
     /// Sends `status` to quickinstall's stats server in the background.
     fn send_report(self: Arc<Self>, status: Status) {
+        if !self.telemetry {
+            return;
+        }
+
         if cfg!(debug_assertions) {
             debug!("Not sending quickinstall report in debug mode");
         } else if is_universal_macos(&self.target_data.target) {
@@ -189,6 +194,7 @@ impl super::Fetcher for QuickInstall {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        telemetry: bool,
     ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
@@ -211,6 +217,7 @@ impl super::Fetcher for QuickInstall {
             signature_policy,
 
             target_data,
+            telemetry,
         })
     }
 
@@ -223,6 +230,7 @@ impl super::Fetcher for QuickInstall {
 
         debug!("Checking for package at: '{}'", self.package_url);
         let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
+            self.send_report(Status::NotFound);
             return Ok(None);
         };
         let verifier = download_signature_task.flattened_join().await?;
@@ -231,12 +239,7 @@ impl super::Fetcher for QuickInstall {
             fetcher: self,
             verifier,
             response: Some(response),
-            status: Status::Found,
         }) as Box<dyn Found>))
-    }
-
-    fn report_to_upstream(self: Arc<Self>) {
-        self.send_report(Status::NotFound);
     }
 
     fn fetcher_name(&self) -> &'static str {
@@ -255,15 +258,15 @@ struct QuickInstallFound {
     /// The response to the GET that found the package, its body unread,
     /// which `fetch_and_extract` downloads instead of asking again.
     response: Option<GetResponse>,
-    status: Status,
 }
 
-#[async_trait::async_trait]
-impl Found for QuickInstallFound {
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        let response = self.response.take();
+impl QuickInstallFound {
+    async fn download_and_extract(
+        &self,
+        response: Option<GetResponse>,
+        dst: &Path,
+    ) -> Result<ExtractedFiles, FetchError> {
         let fetcher = &self.fetcher;
-        self.status = Status::AttemptingInstall;
 
         debug!(url=%fetcher.package_url, "Downloading package");
         let mut data_verifier = self.verifier.data_verifier()?;
@@ -281,12 +284,26 @@ impl Found for QuickInstallFound {
                     fetcher.package
                 );
             }
-            self.status = Status::InstalledFromTarball;
             Ok(files)
         } else {
-            self.status = Status::InvalidSignature;
             Err(FetchError::InvalidSignature)
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl Found for QuickInstallFound {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+        let response = self.response.take();
+        let ret = self.download_and_extract(response, dst).await;
+
+        self.fetcher.clone().send_report(match &ret {
+            Ok(_) => Status::InstalledFromTarball,
+            Err(FetchError::InvalidSignature) => Status::InvalidSignature,
+            Err(_) => Status::AttemptingInstall,
+        });
+
+        ret
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
@@ -314,10 +331,6 @@ impl Found for QuickInstallFound {
 
     fn source_name(&self) -> CompactString {
         CompactString::from("QuickInstall")
-    }
-
-    fn report_to_upstream(&self) {
-        self.fetcher.clone().send_report(self.status);
     }
 }
 
