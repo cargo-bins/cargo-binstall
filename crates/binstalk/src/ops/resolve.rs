@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, TargetArchOverride, TargetData},
+    fetchers::{Data, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -179,7 +179,7 @@ async fn resolve_inner(
         .await
         {
             Ok(ret) => match ret {
-                Ok(true) => {
+                Ok(Some(mut found)) => {
                     // Generate temporary binary path
                     let bin_path = opts.temp_dir.join(format!(
                         "bin-{}-{}-{}",
@@ -190,6 +190,7 @@ async fn resolve_inner(
 
                     match download_extract_and_verify(
                         fetcher.as_ref(),
+                        found.as_mut(),
                         &bin_path,
                         &package_info,
                         &opts.install_path,
@@ -205,6 +206,7 @@ async fn resolve_inner(
                                 }
                                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                                     fetcher: fetcher.clone(),
+                                    found,
                                     new_version: package_info.version,
                                     pubtime: package_info.pubtime,
                                     name: package_info.name,
@@ -216,7 +218,7 @@ async fn resolve_inner(
                                 warn!(
                                     "Error when checking binaries provided by fetcher {}: \
                                 The fetcher does not provide any optional binary",
-                                    fetcher.source_name(),
+                                    found.source_name(),
                                 );
                             }
                         }
@@ -226,17 +228,17 @@ async fn resolve_inner(
                             }
                             warn!(
                                 "Error while downloading and extracting from fetcher {}: {}",
-                                fetcher.source_name(),
+                                found.source_name(),
                                 err
                             );
                         }
                     }
                 }
-                Ok(false) => (),
+                Ok(None) => (),
                 Err(err) => {
                     warn!(
                         "Error while checking fetcher {}: {}",
-                        fetcher.source_name(),
+                        fetcher.fetcher_name(),
                         err
                     );
                 }
@@ -244,7 +246,7 @@ async fn resolve_inner(
             Err(err) => {
                 warn!(
                     "Timeout reached while checking fetcher {}: {}",
-                    fetcher.source_name(),
+                    fetcher.fetcher_name(),
                     err
                 );
             }
@@ -303,12 +305,13 @@ async fn resolve_inner(
     }))
 }
 
-///  * `fetcher` - `fetcher.find()` must have returned `Ok(true)`.
+///  * `found` - What `fetcher.find()` returned.
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
 async fn download_extract_and_verify(
     fetcher: &dyn Fetcher,
+    found: &mut dyn Found,
     bin_path: &Path,
     package_info: &PackageInfo,
     install_path: &Path,
@@ -317,17 +320,14 @@ async fn download_extract_and_verify(
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Download and extract it.
     // If that fails, then ignore this fetcher.
-    let extracted_files = fetcher.fetch_and_extract(bin_path).await?;
+    let extracted_files = found.fetch_and_extract(bin_path).await?;
     debug!("extracted_files = {extracted_files:#?}");
-
-    // Build final metadata
-    let meta = fetcher.target_meta();
 
     // Verify that all non-optional bin_files exist
     let bin_files = collect_bin_files(
         fetcher,
+        found,
         package_info,
-        meta,
         bin_path,
         install_path,
         no_symlinks,
@@ -383,8 +383,8 @@ But since it requires features {features}, this bin is ignored."
 
 fn collect_bin_files(
     fetcher: &dyn Fetcher,
+    found: &dyn Found,
     package_info: &PackageInfo,
-    meta: PkgMeta,
     bin_path: &Path,
     install_path: &Path,
     no_symlinks: bool,
@@ -394,7 +394,7 @@ fn collect_bin_files(
     // was found at.
     let target_related_info = TargetArchOverride {
         values: &fetcher.target_data().target_related_info,
-        target_arch: fetcher.resolved_target_arch(),
+        target_arch: found.resolved_target_arch(),
     };
 
     // List files to be installed
@@ -404,7 +404,7 @@ fn collect_bin_files(
         target: fetcher.target(),
         version: &package_info.version_str,
         repo: package_info.repo.as_deref(),
-        meta,
+        meta: found.target_meta(),
         bin_path,
         install_path,
         target_related_info: &target_related_info,

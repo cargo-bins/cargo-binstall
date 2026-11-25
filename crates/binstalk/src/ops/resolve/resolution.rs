@@ -21,13 +21,15 @@ use tracing::{debug, error, info, warn};
 use crate::{
     bins,
     errors::BinstallError,
-    fetchers::Fetcher,
+    fetchers::{Fetcher, Found},
     manifests::crate_info::{CrateInfo, CrateSource},
     ops::Options,
 };
 
 pub struct ResolutionFetch {
     pub fetcher: Arc<dyn Fetcher>,
+    /// What `fetcher` found, already downloaded and extracted.
+    pub found: Box<dyn Found>,
     pub new_version: Version,
     /// Publish time (RFC 3339) from the registry index, if known
     pub pubtime: Option<CompactString>,
@@ -101,7 +103,7 @@ impl ResolutionFetch {
             source: self.source,
             target: self.fetcher.target().to_compact_string(),
             bins: Self::resolve_bins(&opts.bins, self.bin_files),
-            pkg_url_hint: self.fetcher.pkg_url_hint(),
+            pkg_url_hint: self.found.pkg_url_hint(),
         })
     }
 
@@ -148,7 +150,7 @@ impl ResolutionFetch {
 
         debug!(
             "Found a binary install source: {} ({target})",
-            fetcher.source_name(),
+            self.found.source_name(),
         );
 
         warn!(
@@ -158,7 +160,7 @@ impl ResolutionFetch {
             } else {
                 ""
             },
-            fetcher.source_name()
+            self.found.source_name()
         );
 
         info!("This will install the following binaries:");
