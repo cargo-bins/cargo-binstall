@@ -27,6 +27,9 @@ pub use certificate::Certificate;
 mod dns_resolver;
 pub use dns_resolver::DnsResolver;
 
+mod proxy;
+pub use proxy::ClientBuilderExt;
+
 mod request_builder;
 pub use request_builder::{Body, GetResponse, RequestBuilder, Response};
 
@@ -56,6 +59,10 @@ pub enum Error {
 
     #[error(transparent)]
     Http(Box<HttpError>),
+
+    /// A proxy, such as Cargo's `http.proxy`, is not a valid URL.
+    #[error("invalid proxy URL: {0}")]
+    InvalidProxyUrl(#[from] url::ParseError),
 
     /// A response body ended before the length its headers promised, and the
     /// remainder could not be fetched.

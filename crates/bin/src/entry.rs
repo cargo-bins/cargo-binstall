@@ -14,7 +14,7 @@ use binstalk::{
     helpers::{
         jobserver_client::LazyJobserverClient,
         lazy_gh_api_client::LazyGhApiClient,
-        remote::{Certificate, Client},
+        remote::{Certificate, Client, ClientBuilderExt},
         tasks::AutoAbortJoinHandle,
     },
     ops::{
@@ -103,17 +103,36 @@ pub fn install_crates(
 
     let mut http = cargo_config.http.clone();
 
-    let client = Client::new(
+    let mut client_builder = Client::default_builder(
         concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
         args.min_tls_version.map(|v| v.into()),
         args.allow_insecure_http,
         args.dns.into(),
-        rate_limit.duration,
-        rate_limit.request_count,
-        read_root_certs(
+        &mut read_root_certs(
             args.root_certificates,
             http.as_mut().and_then(|http| http.cainfo.take()),
         ),
+    );
+
+    // As in Cargo, `CARGO_HTTP_PROXY` and then `http.proxy` take precedence
+    // over the proxy environment variables reqwest reads otherwise.
+    if let Some(proxy) = env::var("CARGO_HTTP_PROXY")
+        .ok()
+        .filter(|proxy| !proxy.is_empty())
+        .map(CompactString::from)
+        .or_else(|| http.as_mut().and_then(|http| http.proxy.take()))
+        .filter(|proxy| !proxy.is_empty())
+    {
+        debug!("Using the proxy from Cargo's http.proxy");
+        client_builder = client_builder
+            .cargo_http_proxy(&proxy)
+            .map_err(BinstallError::from)?;
+    }
+
+    let client = Client::from_builder(
+        client_builder,
+        rate_limit.duration,
+        rate_limit.request_count,
     )
     .map_err(BinstallError::from)?;
 

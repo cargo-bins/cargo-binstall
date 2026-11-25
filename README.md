@@ -227,8 +227,14 @@ in `NO_PROXY`. A proxy that needs a login takes it in the URL, like
 `HTTPS_PROXY=http://user:password@proxy.example.com:8080`, with special
 characters in the user or password percent-encoded. `socks5://` and
 `socks5h://` proxies work too. On macOS and Windows, the system proxy settings
-are used when none of these are set. Cargo's own `http.proxy` setting is not
-read.
+are used when none of these are set.
+
+As with Cargo, Cargo's `http.proxy` setting (or the `CARGO_HTTP_PROXY`
+environment variable) takes precedence over all of these, and is used for every
+request except to hosts in `NO_PROXY`. It takes libcurl's format, like
+`proxy.example.com:8080` or `http://user:password@proxy.example.com:8080`.
+Cargo also reads `http.proxy` from your git configuration, which binstall does
+not.
 
 If the proxy or network re-signs HTTPS traffic with its own certificate
 authority, pass its certificate with `--root-certificates` (or
