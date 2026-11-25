@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     fmt, iter,
     path::Path,
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
@@ -54,6 +54,9 @@ struct Resolved {
     /// The `pkg-url` that `url` was rendered from, see
     /// [`PkgUrlHint::pkg_url`].
     pkg_url: Arc<str>,
+    /// The response to the GET that found `url`, its body unread, which
+    /// `fetch_and_extract` downloads instead of asking again.
+    response: Mutex<Option<GetResponse>>,
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -406,11 +409,13 @@ impl super::Fetcher for GhCrateMeta {
                 .download_artifact(artifact_url.clone())
                 .await?
                 .with_data_verifier(data_verifier.as_mut()),
-            _ => Download::new_with_data_verifier(
-                self.client.clone(),
-                resolved.url.clone(),
-                data_verifier.as_mut(),
-            ),
+            _ => {
+                let response = resolved.response.lock().unwrap().take();
+                response
+                    .map(Download::from)
+                    .unwrap_or_else(|| Download::new(self.client.clone(), resolved.url.clone()))
+                    .with_data_verifier(data_verifier.as_mut())
+            }
         }
         .and_extract(resolved.pkg_fmt, dst)
         .await?;

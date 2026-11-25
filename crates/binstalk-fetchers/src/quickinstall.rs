@@ -67,6 +67,9 @@ pub struct QuickInstall {
     target_data: Arc<TargetDataErased>,
 
     signature_verifier: OnceLock<SignatureVerifier>,
+    /// The response to the GET that found `package_url`, its body unread,
+    /// which `fetch_and_extract` downloads instead of asking again.
+    response: Mutex<Option<GetResponse>>,
     status: Mutex<Status>,
 }
 
@@ -208,6 +211,7 @@ impl super::Fetcher for QuickInstall {
             target_data,
 
             signature_verifier: OnceLock::new(),
+            response: Mutex::new(None),
             status: Mutex::new(Status::Start),
         })
     }
@@ -221,12 +225,11 @@ impl super::Fetcher for QuickInstall {
             let download_signature_task = self.clone().download_signature();
 
             debug!("Checking for package at: '{}'", self.package_url);
-            let is_found = does_url_exist(&self.client, &self.package_url).await?;
-
-            if !is_found {
+            let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
                 self.set_status(Status::NotFound);
                 return Ok(false);
-            }
+            };
+            *self.response.lock().unwrap() = Some(response);
 
             if self
                 .signature_verifier
@@ -271,13 +274,13 @@ by rust officially."#,
 
         debug!(url=%self.package_url, "Downloading package");
         let mut data_verifier = verifier.data_verifier()?;
-        let files = Download::new_with_data_verifier(
-            self.client.clone(),
-            self.package_url.clone(),
-            data_verifier.as_mut(),
-        )
-        .and_extract(self.pkg_fmt(), dst)
-        .await?;
+        let response = self.response.lock().unwrap().take();
+        let files = response
+            .map(Download::from)
+            .unwrap_or_else(|| Download::new(self.client.clone(), self.package_url.clone()))
+            .with_data_verifier(data_verifier.as_mut())
+            .and_extract(self.pkg_fmt(), dst)
+            .await?;
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {
