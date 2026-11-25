@@ -421,6 +421,47 @@ mod tests {
         assert_eq!(server.join().unwrap().len(), 1);
     }
 
+    #[tokio::test]
+    async fn a_found_response_is_downloaded_without_asking_again() {
+        // The check's GET is the download, and it is continued like one
+        // `Download::new` issues: the only other request is for the rest.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = serve(listener, &[CUT_SHORT, THE_REST]);
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let response = test_client().get_if_exists(url).await.unwrap().unwrap();
+        let bytes = Download::from(response).into_bytes().await.unwrap();
+
+        assert_eq!(&bytes[..], b"0123456789abcdefghij");
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(
+            requests[1]
+                .to_ascii_lowercase()
+                .contains("range: bytes=10-"),
+            "expected the rest to be asked for, got:\n{}",
+            requests[1]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_missing_url_has_no_response() {
+        const NOT_FOUND: &[u8] = b"HTTP/1.1 404 Not Found\r\n\
+            Content-Length: 0\r\n\
+            Connection: close\r\n\r\n";
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = serve(listener, &[NOT_FOUND]);
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let response = test_client().get_if_exists(url).await.unwrap();
+
+        assert!(response.is_none(), "expected none, got {response:?}");
+        assert_eq!(server.join().unwrap().len(), 1);
+    }
+
     #[test]
     fn partial_content_continuing_at_the_offset_splices() {
         let range = header("bytes 4096-8191/8192");

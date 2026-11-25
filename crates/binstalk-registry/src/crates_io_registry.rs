@@ -10,7 +10,7 @@ use serde::Deserialize;
 use tracing::{debug, instrument};
 
 use crate::{
-    MatchedVersion, RegistryError, RegistryIndexEntry, parse_manifest, publish_age::publish_cutoff,
+    MatchedCrate, MatchedVersion, RegistryError, RegistryIndexEntry, publish_age::publish_cutoff,
 };
 
 #[derive(Deserialize)]
@@ -120,7 +120,7 @@ pub async fn fetch_crate_cratesio_api(
             e => e.into(),
         })?;
 
-    let mut matched_version = MatchedVersion::find(
+    let matched_version = MatchedVersion::find(
         &mut versions.into_iter().map(|version| Ok(version.into())),
         version_req,
         min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age)),
@@ -137,8 +137,8 @@ pub async fn fetch_crate_cratesio_api(
         .push(version)
         .push("download");
 
-    let pubtime = matched_version.pubtime.take();
-    let manifest = parse_manifest(client, name, crate_url, matched_version, None).await?;
+    let matched = MatchedCrate::new(client, name, crate_url, matched_version, None);
+    let pubtime = matched.pubtime().map(CompactString::from);
 
-    Ok((manifest, pubtime))
+    Ok((matched.fetch_manifest().await?, pubtime))
 }

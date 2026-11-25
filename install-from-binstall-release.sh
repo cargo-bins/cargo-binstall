@@ -9,9 +9,58 @@ if [ -n "${CI:-}" ] || [ -n "${BINSTALL_DEBUG:-}" ]; then
     set -x
 fi
 
-do_curl() {
-    curl --retry 10 -A "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0" -L --proto '=https' --tlsv1.2 -sSf "$@"
-}
+user_agent="Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0"
+
+# `download URL` writes the body of URL to stdout. It uses curl when it is
+# installed and falls back to wget otherwise, so that minimal systems (Alpine,
+# busybox) that only ship wget can run this script too.
+if command -v curl > /dev/null 2>&1; then
+    download() {
+        curl --retry 10 -A "$user_agent" -L --proto '=https' --tlsv1.2 -sSf "$1"
+    }
+elif command -v wget > /dev/null 2>&1; then
+    if wget --version 2> /dev/null | grep -q 'GNU Wget'; then
+        # GNU wget and wget2 retry transient failures on their own. `-q`
+        # also hides the error, and `-nv` would print the signed redirect URL
+        # on success, so report a failure here instead.
+        download() {
+            if ! wget --tries=10 -U "$user_agent" --secure-protocol=TLSv1_2 -q -O - "$1"; then
+                echo "wget failed to download $1" >&2
+                return 1
+            fi
+        }
+    else
+        # busybox wget only knows `-q -O -U -T` and has no retry option, so
+        # retry here. The body goes to a file first so that a failed attempt
+        # never leaves partial output on stdout.
+        download() {
+            attempt=1
+            while ! wget -U "$user_agent" -T 30 -q -O download.tmp "$1" 2> download.err; do
+                cat download.err >&2
+                if [ "$attempt" -ge 5 ]; then
+                    rm -f download.tmp download.err
+                    return 1
+                fi
+                sleep "$attempt"
+                attempt=$((attempt + 1))
+            done
+            # busybox built with its own TLS code instead of `ssl_client` does
+            # not check the server certificate, and says so on stderr. Refuse
+            # to install a binary that anyone on the path could have swapped.
+            if grep -q 'certificate validation not implemented' download.err; then
+                cat download.err >&2
+                rm -f download.tmp download.err
+                echo "This wget does not validate TLS certificates, install curl or a wget that does and retry" >&2
+                return 1
+            fi
+            cat download.tmp
+            rm -f download.tmp download.err
+        }
+    fi
+else
+    echo "Neither curl nor wget is installed, install one of them and retry" >&2
+    exit 1
+fi
 
 # Set pipefail if it works in a subshell, disregard if unsupported
 # shellcheck disable=SC3040
@@ -37,7 +86,7 @@ fi
 os="$(uname -s)"
 if [ "$os" = "Darwin" ]; then
     url="${base_url}universal-apple-darwin.zip"
-    do_curl -O "$url"
+    download "$url" > cargo-binstall-universal-apple-darwin.zip
     unzip cargo-binstall-universal-apple-darwin.zip
 elif [ "$os" = "Linux" ]; then
     machine="$(uname -m)"
@@ -53,12 +102,13 @@ elif [ "$os" = "Linux" ]; then
     fi
 
     url="${base_url}${target}.tgz"
-    do_curl "$url" | tar -xvzf -
+    download "$url" > "cargo-binstall-${target}.tgz"
+    tar -xvzf "cargo-binstall-${target}.tgz"
 elif [ "${OS-}" = "Windows_NT" ]; then
     machine="$(uname -m)"
     target="${machine}-pc-windows-msvc"
     url="${base_url}${target}.zip"
-    do_curl -O "$url"
+    download "$url" > "cargo-binstall-${target}.zip"
     unzip "cargo-binstall-${target}.zip"
 else
     echo "Unsupported OS ${os}"

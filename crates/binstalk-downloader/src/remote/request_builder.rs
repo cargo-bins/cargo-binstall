@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::{Deref, DerefMut},
+};
 
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
@@ -134,5 +137,38 @@ impl Response {
     {
         let bytes = self.error_for_status()?.bytes().await?;
         Ok(serde_json::from_slice(&bytes)?)
+    }
+}
+
+/// The response to a plain `GET` of a URL, with the [`Client`] that sent it,
+/// so that the request can be repeated.
+///
+/// Converts into a [`Download`](crate::download::Download) of its body,
+/// continued with `Range` requests to the URL if it breaks partway, like
+/// [`Download::new`](crate::download::Download::new).
+#[derive(Debug)]
+pub struct GetResponse {
+    pub(crate) client: Client,
+    pub(crate) url: Url,
+    pub(crate) response: Response,
+}
+
+impl GetResponse {
+    pub fn into_response(self) -> Response {
+        self.response
+    }
+}
+
+impl Deref for GetResponse {
+    type Target = Response;
+
+    fn deref(&self) -> &Response {
+        &self.response
+    }
+}
+
+impl DerefMut for GetResponse {
+    fn deref_mut(&mut self) -> &mut Response {
+        &mut self.response
     }
 }

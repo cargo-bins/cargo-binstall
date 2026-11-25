@@ -1,4 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/assets/cargo-binstall-logo.svg"
+)]
 
 pub mod errors;
 pub mod helpers;
