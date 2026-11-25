@@ -38,12 +38,18 @@ use tokio::task::block_in_place;
 use tracing::{debug, info, warn};
 
 use crate::registry_auth::{get_registry_env_var, resolve_registry_auth};
-use crate::{args::Args, gh_token, git_credentials, initialise::Init, ui::confirm};
+use crate::{
+    args::Args,
+    gh_token, git_credentials,
+    initialise::Init,
+    ui::{TimeInPrompts, confirm},
+};
 
 pub fn install_crates(
     args: Args,
     cli_overrides: PkgOverride,
     jobserver_client: LazyJobserverClient,
+    time_in_prompts: TimeInPrompts,
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     let Init {
         mut cargo_config,
@@ -53,7 +59,7 @@ pub fn install_crates(
         install_path,
         manifests,
         temp_dir,
-    } = crate::initialise::initialise(&args)?;
+    } = crate::initialise::initialise(&args, &time_in_prompts)?;
 
     let mut cargo_install_fallback = false;
     let resolvers: Vec<_> = settings
@@ -306,7 +312,7 @@ pub fn install_crates(
             // Confirm
             if !dry_run
                 && !no_confirm
-                && let Err(abort_err) = confirm().await
+                && let Err(abort_err) = confirm(&time_in_prompts).await
             {
                 return if let Some(err) = BinstallError::crate_errors(errors) {
                     Err(Report::new(abort_err).wrap_err(err))
@@ -374,7 +380,7 @@ pub fn install_crates(
 
             // Confirm
             if !dry_run && !no_confirm {
-                confirm().await?;
+                confirm(&time_in_prompts).await?;
             }
 
             do_install_fetches(
@@ -618,7 +624,7 @@ pub fn self_install(args: Args) -> Result<()> {
         install_path,
         manifests,
         ..
-    } = crate::initialise::initialise(&args)?;
+    } = crate::initialise::initialise(&args, &TimeInPrompts::default())?;
 
     let mut dest = install_path.join("cargo-binstall");
     if cfg!(windows) {
@@ -652,7 +658,7 @@ fn print_divider(width: usize) {
 }
 
 fn load_manifests(args: &Args) -> Result<Option<Manifests>> {
-    let Init { manifests, .. } = crate::initialise::initialise(args)?;
+    let Init { manifests, .. } = crate::initialise::initialise(args, &TimeInPrompts::default())?;
 
     let Some(manifests) = manifests else {
         if args.json_output {
