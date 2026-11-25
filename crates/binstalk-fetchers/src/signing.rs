@@ -6,12 +6,15 @@ use tracing::{error, trace};
 
 use crate::FetchError;
 
+#[cfg(feature = "openpgp-signing")]
 mod openpgp;
+#[cfg(feature = "openpgp-signing")]
 use openpgp::OpenPgpVerifier;
 
 pub enum SignatureVerifier {
     Noop,
     Minisign(Box<MinisignVerifier>),
+    #[cfg(feature = "openpgp-signing")]
     OpenPgp(Box<OpenPgpVerifier>),
 }
 
@@ -21,9 +24,15 @@ impl SignatureVerifier {
             SigningAlgorithm::Minisign => MinisignVerifier::new(config, signature)
                 .map(Box::new)
                 .map(Self::Minisign),
+            #[cfg(feature = "openpgp-signing")]
             SigningAlgorithm::OpenPgp => OpenPgpVerifier::new(&config.pubkey, signature)
                 .map(Box::new)
                 .map(Self::OpenPgp),
+            #[cfg(not(feature = "openpgp-signing"))]
+            SigningAlgorithm::OpenPgp => {
+                error!("Built without the `openpgp-signing` feature");
+                Err(FetchError::UnsupportedSigningAlgorithm(config.algorithm))
+            }
             algorithm => Err(FetchError::UnsupportedSigningAlgorithm(algorithm)),
         }
     }
@@ -32,12 +41,14 @@ impl SignatureVerifier {
         match self {
             Self::Noop => Ok(Box::new(())),
             Self::Minisign(v) => v.data_verifier(),
+            #[cfg(feature = "openpgp-signing")]
             Self::OpenPgp(v) => Ok(v.data_verifier()),
         }
     }
 
     pub fn info(&self) -> Option<String> {
         match self {
+            #[cfg(feature = "openpgp-signing")]
             Self::OpenPgp(v) => Some(v.info()),
             _ => self.trusted_comment().map(Into::into),
         }
@@ -49,6 +60,7 @@ impl SignatureVerifier {
         match self {
             Self::Noop => None,
             Self::Minisign(v) => Some(v.signature.trusted_comment()),
+            #[cfg(feature = "openpgp-signing")]
             Self::OpenPgp(_) => None,
         }
     }

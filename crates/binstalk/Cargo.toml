@@ -13,7 +13,7 @@ license = "GPL-3.0-only"
 binstalk-bins = { version = "0.8.0", path = "../binstalk-bins" }
 binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader", default-features = false }
 binstalk-git-repo-api = { version = "0.5.54", path = "../binstalk-git-repo-api" }
-binstalk-fetchers = { version = "0.10.54", path = "../binstalk-fetchers", features = [
+binstalk-fetchers = { version = "0.10.54", path = "../binstalk-fetchers", default-features = false, features = [
     "quickinstall",
 ] }
 binstalk-registry = { version = "0.13.0", path = "../binstalk-registry" }
@@ -46,7 +46,10 @@ url = { version = "2.5.8", features = ["serde"] }
 zeroize = "1.8.1"
 
 [features]
-default = ["static", "rustls", "git"]
+default = ["static", "rustls", "git", "openpgp-signing"]
+
+# Verify OpenPGP (GnuPG) signatures of packages.
+openpgp-signing = ["binstalk-fetchers/openpgp-signing"]
 
 git = ["binstalk-registry/git", "simple-git"]
 git-max-perf = ["git", "simple-git/git-max-perf-safe", "zlib-rs"]

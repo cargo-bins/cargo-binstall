@@ -105,6 +105,9 @@ Text-mode (`--textmode`), cleartext and inline signatures are not supported.
 The key is trusted as written in the Cargo.toml: Binstall doesn't check its self-signatures, expiry or revocation, so publish a new release with a new key rather than revoking the old one.
 An expired signature is rejected.
 
+OpenPGP verification is part of the `openpgp-signing` cargo feature of cargo-binstall, which is on by default.
+A build without it treats `algorithm = "openpgp"` as an unsupported algorithm.
+
 ## Just-in-time signing
 
 To reduce the risk of a key being stolen, this scheme supports just-in-time or "keyless" signing.
