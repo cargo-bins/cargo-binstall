@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Extracted, Fetcher, Found, TargetArchOverride, TargetData},
+    fetchers::{Data, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -214,10 +214,9 @@ async fn resolve_inner(
         .await;
 
         match ret {
-            Ok((extracted, bin_files)) if !bin_files.is_empty() => {
+            Ok(bin_files) if !bin_files.is_empty() => {
                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                     found,
-                    extracted,
                     new_version: package_info.version,
                     pubtime: package_info.pubtime,
                     name: package_info.name,
@@ -295,7 +294,7 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
-) -> Result<(Arc<Extracted>, Vec<bins::BinFile>), BinstallError> {
+) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Download and extract it, unless another crate did already: then it is
     // somewhere else than `bin_path`.
     // If that fails, then ignore this fetcher.
@@ -357,7 +356,6 @@ But since it requires features {features}, this bin is ignored."
             }
         })
         .collect::<Result<Vec<bins::BinFile>, bins::Error>>()
-        .map(|bin_files| (Arc::clone(&extracted), bin_files))
         .map_err(BinstallError::from)
 }
 
