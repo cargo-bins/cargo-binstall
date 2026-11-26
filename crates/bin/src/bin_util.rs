@@ -3,7 +3,10 @@ use std::{
     time::Duration,
 };
 
-use binstalk::{errors::BinstallError, helpers::tasks::AutoAbortJoinHandle};
+use binstalk::{
+    errors::BinstallError,
+    helpers::{remote::HickoryDnsError, tasks::AutoAbortJoinHandle},
+};
 use miette::Result;
 use tokio::runtime::Runtime;
 use tracing::{error, info, warn};
@@ -38,6 +41,17 @@ impl Termination for MainExit {
 
         error!("Fatal error:");
         println!("{err:?}");
+
+        if err
+            .chain()
+            .any(|err| err.downcast_ref::<HickoryDnsError>().is_some())
+        {
+            println!(
+                "The built-in hickory-dns resolver could not resolve a hostname. If other programs \
+                on this machine can, retry with `--dns system` (or `BINSTALL_DNS=system`) to use \
+                the operating system's resolver instead."
+            );
+        }
 
         code
     }

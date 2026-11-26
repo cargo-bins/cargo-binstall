@@ -22,6 +22,8 @@ use tracing::{debug, instrument, warn};
 #[cfg(windows)]
 use netdev::Interface;
 
+use super::HickoryDnsError;
+
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Debug, Default, Clone)]
@@ -31,9 +33,15 @@ impl Resolve for TrustDnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let resolver = self.clone();
         Box::pin(async move {
-            let resolver = resolver.0.get_or_try_init(new_resolver)?;
+            let resolver = resolver
+                .0
+                .get_or_try_init(new_resolver)
+                .map_err(HickoryDnsError::new)?;
 
-            let lookup = resolver.lookup_ip(name.as_str()).await?;
+            let lookup = resolver
+                .lookup_ip(name.as_str())
+                .await
+                .map_err(HickoryDnsError::new)?;
             let addrs: Addrs = Box::new(
                 lookup
                     .iter()
