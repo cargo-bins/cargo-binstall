@@ -37,3 +37,12 @@ no_pkg_url_probed
 # Only the manifest of the release path of the last install is checked.
 [ "$(grep -cF "Reading dist-manifest.json at" "$log")" -eq 1 ]
 [ "$(grep -cE "Checking for package (at|with the API)" "$log")" -eq 1 ]
+
+# Releases made by older versions of dist (here 0.3) list the checksum only
+# in a .sha256 file next to the archive, which is read while the archive
+# downloads.
+"$1" binstall "${args[@]}" axolotlsay@0.2.0 2>&1 | tee "$log"
+axolotlsay --version | grep -F '0.2.0'
+grep -F "Reading sha256 checksum file https://github.com/axodotdev/axolotlsay/releases/download/v0.2.0/axolotlsay-" "$log"
+grep -F "Verified sha256 checksum of package 'axolotlsay' from dist-manifest.json" "$log"
+no_pkg_url_probed

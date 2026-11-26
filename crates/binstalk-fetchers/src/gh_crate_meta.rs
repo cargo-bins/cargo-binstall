@@ -10,6 +10,7 @@ use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use itertools::Itertools;
 use leon::Template;
+use sha2::{Digest, Sha256};
 use strum::IntoEnumIterator;
 use tracing::{debug, info, trace, warn};
 use url::Url;
@@ -23,8 +24,8 @@ pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
 
 mod dist_manifest;
 use dist_manifest::{
-    DIST_MANIFEST, DistManifest, MAX_CHECKSUM_FILE_SIZE, MAX_MANIFEST_SIZE, Sha256Source,
-    Sha256Verifier, download_release_asset, parse_sha256_file,
+    DIST_MANIFEST, DistManifest, ExpectedSha256, MAX_CHECKSUM_FILE_SIZE, MAX_MANIFEST_SIZE,
+    Sha256Source, download_release_asset, parse_sha256_file,
 };
 
 pub(crate) mod hosting;
@@ -66,14 +67,14 @@ struct Resolved {
     /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
     /// The sha256 checksum the package must have.
-    sha256: Option<[u8; 32]>,
+    sha256: Option<ExpectedSha256>,
 }
 
-/// Feeds the data to the signature verifier and to the sha256 checksum
-/// verifier, if any.
+/// Feeds the data to the signature verifier and to the sha256 hasher, if
+/// any.
 struct Verifiers<'a, 'b> {
     signature: &'a mut (dyn DataVerifier + 'b),
-    sha256: Option<&'a mut Sha256Verifier>,
+    sha256: Option<&'a mut Sha256>,
 }
 
 impl DataVerifier for Verifiers<'_, '_> {
@@ -84,8 +85,8 @@ impl DataVerifier for Verifiers<'_, '_> {
         }
     }
 
-    /// Not used: each verifier is validated on its own, to tell which one
-    /// failed. Fails closed if called anyway.
+    /// Not used: the signature and the checksum are checked on their own,
+    /// to tell which one failed. Fails closed if called anyway.
     fn validate(&mut self) -> bool {
         debug_assert!(false, "validate each verifier on its own");
         false
@@ -394,12 +395,12 @@ impl GhCrateMeta {
             .collect()
     }
 
-    async fn new_probe(
+    fn new_probe(
         &self,
         candidates: Vec<Candidate>,
         repo: Option<&str>,
         subcrate: Option<&str>,
-    ) -> Probe {
+    ) -> impl Future<Output = Probe> {
         Probe::new(
             self.data.clone(),
             self.client.clone(),
@@ -408,18 +409,17 @@ impl GhCrateMeta {
             subcrate,
             candidates,
         )
-        .await
     }
 
     /// Check `candidates`, returning the first one found.
     ///
-    /// * `manifest_candidates` - The urls the `dist-manifest.json` of the
-    ///   release may be at, see [`GhCrateMeta::dist_manifest_candidates`].
+    /// * `dist_manifest_candidates` - The urls the `dist-manifest.json` of
+    ///   the release may be at, see [`GhCrateMeta::dist_manifest_candidates`].
     ///   If one names the package, that is used instead.
     async fn probe(
-        &self,
+        self: &Arc<Self>,
         candidates: Vec<Candidate>,
-        manifest_candidates: Vec<Candidate>,
+        dist_manifest_candidates: Vec<Candidate>,
         repo: Option<&str>,
         subcrate: Option<&str>,
     ) -> Result<Option<Resolved>, FetchError> {
@@ -430,10 +430,13 @@ impl GhCrateMeta {
         // first. It is found the same way as the package, so the release
         // tags and asset lists asked for it are reused for the package if
         // there is none.
-        let mut manifest_probe = if manifest_candidates.is_empty() {
+        let mut manifest_probe = if dist_manifest_candidates.is_empty() {
             None
         } else {
-            Some(self.new_probe(manifest_candidates, repo, subcrate).await)
+            Some(
+                self.new_probe(dist_manifest_candidates, repo, subcrate)
+                    .await,
+            )
         };
 
         let hint = self.data.pkg_url_hint(&self.target_data.target);
@@ -567,7 +570,7 @@ impl GhCrateMeta {
     /// Read the `dist-manifest.json` `found` by a [`Probe`], and find the
     /// archive for the target in it.
     async fn read_dist_manifest(
-        &self,
+        self: &Arc<Self>,
         found: Resolved,
         repo: Option<&str>,
         subcrate: Option<&str>,
@@ -619,34 +622,17 @@ impl GhCrateMeta {
         let pkg_url = url.join(artifact.filename)?;
 
         let sha256 = match artifact.sha256 {
-            Some(Sha256Source::Inline(sha256)) => Some(sha256),
+            Some(Sha256Source::Inline(sha256)) => Some(ExpectedSha256::Inline(sha256)),
             Some(Sha256Source::File(filename)) => {
-                let checksum_url = url.join(filename)?;
-                let artifact_url = if is_repo_private {
-                    self.private_asset_url(checksum_url.clone(), repo, subcrate)
-                        .await?
-                } else {
-                    None
-                };
-                let sha256 = if is_repo_private && artifact_url.is_none() {
-                    None
-                } else {
-                    download_release_asset(
-                        client,
-                        gh_api_client,
-                        &checksum_url,
-                        artifact_url,
-                        None,
-                        MAX_CHECKSUM_FILE_SIZE,
-                    )
-                    .await?
-                    .as_deref()
-                    .and_then(parse_sha256_file)
-                };
-                if sha256.is_none() {
-                    warn!("Cannot read the sha256 checksum of {pkg_url} from {checksum_url}");
-                }
-                sha256
+                let url = url.join(filename)?;
+                // Read it while the package is looked up and downloaded.
+                let task = AutoAbortJoinHandle::spawn(Arc::clone(self).read_sha256_file(
+                    url.clone(),
+                    is_repo_private,
+                    repo.map(CompactString::from),
+                    subcrate.map(CompactString::from),
+                ));
+                Some(ExpectedSha256::File { url, task })
             }
             None => None,
         };
@@ -680,6 +666,47 @@ impl GhCrateMeta {
             bin: None,
             sha256,
         }))
+    }
+
+    /// Read the sha256 checksum file `url` of a package listed in a
+    /// `dist-manifest.json`, `None` if it can't be.
+    async fn read_sha256_file(
+        self: Arc<Self>,
+        url: Url,
+        is_repo_private: bool,
+        repo: Option<CompactString>,
+        subcrate: Option<CompactString>,
+    ) -> Result<Option<[u8; 32]>, FetchError> {
+        debug!("Reading sha256 checksum file {url}");
+        let artifact_url = if is_repo_private {
+            let artifact_url = self
+                .private_asset_url(url.clone(), repo.as_deref(), subcrate.as_deref())
+                .await?;
+            if artifact_url.is_none() {
+                warn!(
+                    "Cannot find sha256 checksum file {url}, not checking the package against it"
+                );
+                return Ok(None);
+            }
+            artifact_url
+        } else {
+            None
+        };
+        let sha256 = download_release_asset(
+            &self.client,
+            &self.gh_api_client,
+            &url,
+            artifact_url,
+            None,
+            MAX_CHECKSUM_FILE_SIZE,
+        )
+        .await?
+        .as_deref()
+        .and_then(parse_sha256_file);
+        if sha256.is_none() {
+            warn!("Cannot read sha256 checksum file {url}, not checking the package against it");
+        }
+        Ok(sha256)
     }
 
     /// Find the package of each binary of [`Data::with_bins`], for a
@@ -781,7 +808,7 @@ impl GhCrateMetaFound {
             url: resolved.url.clone(),
             pkg_fmt: resolved.pkg_fmt,
             signing,
-            sha256: resolved.sha256,
+            sha256: resolved.sha256.as_ref().map(ExpectedSha256::id),
         })
     }
 
@@ -834,10 +861,11 @@ impl GhCrateMetaFound {
             "Downloading package",
         );
         let mut data_verifier = verifier.data_verifier()?;
-        let mut sha256_verifier = resolved.sha256.map(Sha256Verifier::new);
+        let expected_sha256 = resolved.sha256.take();
+        let mut hasher = expected_sha256.as_ref().map(|_| Sha256::new());
         let mut verifiers = Verifiers {
             signature: data_verifier.as_mut(),
-            sha256: sha256_verifier.as_mut(),
+            sha256: hasher.as_mut(),
         };
         let files = match resolved.gh_release_artifact_url.as_ref() {
             Some(artifact_url) if resolved.is_repo_private => fetcher
@@ -855,19 +883,22 @@ impl GhCrateMetaFound {
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
 
-        if let Some(sha256_verifier) = &mut sha256_verifier {
+        if let (Some(expected), Some(hasher)) = (expected_sha256, hasher) {
             trace!("validating sha256 checksum");
-            if !sha256_verifier.validate() {
-                return Err(FetchError::ChecksumMismatch {
-                    url: Box::new(resolved.url.clone()),
-                    expected: sha256_verifier.expected_hex().into(),
-                    actual: sha256_verifier.actual_hex().unwrap_or_default().into(),
-                });
+            if let Some(expected) = expected.get().await? {
+                let actual: [u8; 32] = hasher.finalize().into();
+                if actual != expected {
+                    return Err(FetchError::ChecksumMismatch {
+                        url: Box::new(resolved.url.clone()),
+                        expected: base16::encode_lower(&expected).into(),
+                        actual: base16::encode_lower(&actual).into(),
+                    });
+                }
+                info!(
+                    "Verified sha256 checksum of package '{}' from {DIST_MANIFEST}",
+                    fetcher.data.name
+                );
             }
-            info!(
-                "Verified sha256 checksum of package '{}' from {DIST_MANIFEST}",
-                fetcher.data.name
-            );
         }
 
         trace!("validating signature (if any)");

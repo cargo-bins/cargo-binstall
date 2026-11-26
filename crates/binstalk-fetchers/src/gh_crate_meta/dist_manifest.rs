@@ -15,9 +15,8 @@ use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use bytes::{Bytes, BytesMut};
 use compact_str::CompactString;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 
-use crate::{FetchError, common::*};
+use crate::{FetchError, common::*, fetch_context::Sha256Id};
 
 /// The file dist uploads to the release.
 pub(super) const DIST_MANIFEST: &str = "dist-manifest.json";
@@ -230,42 +229,35 @@ pub(super) fn parse_sha256_file(contents: &[u8]) -> Option<[u8; 32]> {
     decode_sha256(contents.split_whitespace().next()?)
 }
 
-/// Verifies that the data downloaded has the sha256 checksum expected.
-pub(super) struct Sha256Verifier {
-    expected: [u8; 32],
-    state: Option<Sha256>,
-    actual: Option<[u8; 32]>,
+/// The sha256 checksum a package found in a `dist-manifest.json` must have.
+#[derive(Debug)]
+pub(super) enum ExpectedSha256 {
+    /// Listed in the manifest.
+    Inline([u8; 32]),
+    /// In the checksum file at `url`, read in the background while the
+    /// package downloads. `None` if it can't be read.
+    File {
+        url: Url,
+        task: AutoAbortJoinHandle<Result<Option<[u8; 32]>, FetchError>>,
+    },
 }
 
-impl Sha256Verifier {
-    pub(super) fn new(expected: [u8; 32]) -> Self {
-        Self {
-            expected,
-            state: Some(Sha256::new()),
-            actual: None,
+impl ExpectedSha256 {
+    /// What the package is checked against, see
+    /// [`PackageId::sha256`](crate::fetch_context::PackageId::sha256).
+    pub(super) fn id(&self) -> Sha256Id {
+        match self {
+            Self::Inline(sha256) => Sha256Id::Inline(*sha256),
+            Self::File { url, .. } => Sha256Id::File(url.clone()),
         }
     }
 
-    pub(super) fn update(&mut self, data: &[u8]) {
-        if let Some(state) = &mut self.state {
-            state.update(data);
+    /// Wait for the checksum, `None` if its file can't be read.
+    pub(super) async fn get(self) -> Result<Option<[u8; 32]>, FetchError> {
+        match self {
+            Self::Inline(sha256) => Ok(Some(sha256)),
+            Self::File { task, .. } => task.flattened_join().await,
         }
-    }
-
-    /// Return true if the checksum matches.
-    pub(super) fn validate(&mut self) -> bool {
-        if let Some(state) = self.state.take() {
-            self.actual = Some(state.finalize().into());
-        }
-        self.actual == Some(self.expected)
-    }
-
-    pub(super) fn expected_hex(&self) -> String {
-        base16::encode_lower(&self.expected)
-    }
-
-    pub(super) fn actual_hex(&self) -> Option<String> {
-        self.actual.map(|actual| base16::encode_lower(&actual))
     }
 }
 
@@ -464,21 +456,5 @@ mod tests {
         assert_eq!(parse_sha256_file(format!("{hex}\n").as_bytes()), expected);
         assert_eq!(parse_sha256_file(&hex.as_bytes()[1..]), None);
         assert_eq!(parse_sha256_file(b""), None);
-    }
-
-    #[test]
-    fn sha256_verifier() {
-        let data = b"hello";
-        let expected: [u8; 32] = Sha256::digest(data).into();
-
-        let mut verifier = Sha256Verifier::new(expected);
-        verifier.update(&data[..2]);
-        verifier.update(&data[2..]);
-        assert!(verifier.validate());
-
-        let mut verifier = Sha256Verifier::new(expected);
-        verifier.update(b"world");
-        assert!(!verifier.validate());
-        assert_ne!(verifier.actual_hex(), Some(verifier.expected_hex()));
     }
 }

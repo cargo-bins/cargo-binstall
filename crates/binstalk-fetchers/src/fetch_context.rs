@@ -137,7 +137,16 @@ pub(crate) struct PackageId {
     /// The algorithm and public key its signature is checked with, if it is.
     pub(crate) signing: Option<(SigningAlgorithm, Box<str>)>,
     /// The sha256 checksum it is checked against, if it is.
-    pub(crate) sha256: Option<[u8; 32]>,
+    pub(crate) sha256: Option<Sha256Id>,
+}
+
+/// A sha256 checksum a package is checked against.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum Sha256Id {
+    Inline([u8; 32]),
+    /// The one in the checksum file at this url, which is read once it is
+    /// needed.
+    File(Url),
 }
 
 /// Which release tags exist, from the repository's git server.
