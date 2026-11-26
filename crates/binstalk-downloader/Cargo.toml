@@ -49,7 +49,7 @@ serde_json = { version = "1.0.149", optional = true }
 # Only decoding, and only the methods 7-Zip itself uses: no encryption,
 # brotli, lz4 or deflate (7-Zip doesn't write it to a 7z by default and
 # enabling it here would turn on flate2/zlib-rs for everyone).
-sevenz-rust2 = { version = "0.25.0", default-features = false, features = [
+sevenz-rust2 = { version = "0.27.0", default-features = false, features = [
     "bzip2",
     "ppmd",
     "zstd",
@@ -149,5 +149,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(reqwest_unstable)'] }
 
 [dev-dependencies]
-sevenz-rust2 = { version = "0.25.0", default-features = false, features = ["compress"] }
+sevenz-rust2 = { version = "0.27.0", default-features = false, features = ["compress"] }
 tokio = { version = "1.52.3", features = ["test-util", "macros", "rt"], default-features = false }

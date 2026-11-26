@@ -3389,9 +3389,9 @@ dependencies = [
 
 [[package]]
 name = "lzma-rust2"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef1d73c59a56771343712b22ea5615092c612c16ba291c0979e3105dfeec4890"
+checksum = "4c7861572250348d13073a9035c6a83f3e583ec9a76a65ce92f338fe1107d8f5"
 
 [[package]]
 name = "mac-addr"
@@ -4450,9 +4450,9 @@ dependencies = [
 
 [[package]]
 name = "sevenz-rust2"
-version = "0.25.0"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5e465701779cbc6d0d10cf907f175035cfdd50b8d3cb628d7f1f435ef02972f"
+checksum = "2e668242e054ba8b7360918104c30c6685bdedf847909a784cf267d002f40a6a"
 dependencies = [
  "bzip2",
  "crc32fast",
