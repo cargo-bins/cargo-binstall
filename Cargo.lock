@@ -4481,7 +4481,7 @@ version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
- "errno 0.2.8",
+ "errno 0.3.15",
  "libc",
 ]
 
@@ -4510,7 +4510,8 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 [[package]]
 name = "simple-git"
 version = "0.2.38"
-source = "git+https://github.com/cargo-bins/simple-git?branch=shallow-fetch-head#04ac5b78afb3ac27cbec5de0e82e995e4f76e667"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "219924145c7331072db9de5dd614c7e80e3c59748eeb213de2e3704b62940fec"
 dependencies = [
  "compact_str",
  "derive_destructure2",
@@ -5805,3 +5806,8 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "simple-git"
+version = "0.2.39"
+source = "git+https://github.com/cargo-bins/simple-git?branch=shallow-fetch-head#8c97fdaab0d57f94fcd8dbade1b57d6ad77a336f"
