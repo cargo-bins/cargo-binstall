@@ -59,6 +59,47 @@ const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
     template!("{ repo }/files/binaries/v{ version }"),
 ];
 
+/// The release tags that dist's `{tag}` in `simple-download-url` is tried
+/// as: those of [`GITHUB_RELEASE_PATHS`] that need no repository or
+/// subcrate.
+const DIST_SIMPLE_TAGS: &[Template<'_>] = &[
+    template!("{ version }"),
+    template!("v{ version }"),
+    template!("{ name }-v{ version }"),
+    template!("{ name }-{ version }"),
+];
+
+/// The urls the `dist-manifest.json` of a release may be at, if dist's
+/// `simple-download-url` is `simple_download_url`, e.g.
+/// `https://static.myapp.com/{tag}`: the directory the release's files
+/// are uploaded to, with `{tag}` for its git tag.
+///
+/// See <https://axodotdev.github.io/cargo-dist/book/reference/config.html#simple-download-url>.
+pub(crate) fn dist_simple_manifest_url_templates(
+    simple_download_url: &str,
+) -> impl Iterator<Item = Template<'_>> {
+    let dir = simple_download_url.trim_end_matches('/');
+    // Without `{tag}`, every tag has the same url.
+    let tags = if dir.contains("{tag}") {
+        DIST_SIMPLE_TAGS
+    } else {
+        &DIST_SIMPLE_TAGS[..1]
+    };
+    tags.iter().map(move |tag| {
+        let mut template = Template::new(&[], None);
+        for (i, text) in dir.split("{tag}").enumerate() {
+            if i > 0 {
+                template += tag;
+            }
+            if !text.is_empty() {
+                template += Item::Text(text);
+            }
+        }
+        template += Item::Text("/dist-manifest.json");
+        template
+    })
+}
+
 /// Every filename is appended to every release path, followed by `suffix`.
 struct DefaultPkgUrls {
     paths: &'static [Template<'static>],
@@ -165,6 +206,37 @@ mod tests {
     use std::{env, fs, path::Path};
 
     use super::*;
+
+    #[test]
+    fn dist_simple_manifest_urls() {
+        let urls = |url| {
+            dist_simple_manifest_url_templates(url)
+                .map(|template| render(&template))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            urls("https://static.example.com/{tag}/"),
+            [
+                "https://static.example.com/{ version }/dist-manifest.json",
+                "https://static.example.com/v{ version }/dist-manifest.json",
+                "https://static.example.com/{ name }-v{ version }/dist-manifest.json",
+                "https://static.example.com/{ name }-{ version }/dist-manifest.json",
+            ]
+        );
+        assert_eq!(
+            urls("https://example.com/releases/{tag}/files"),
+            [
+                "https://example.com/releases/{ version }/files/dist-manifest.json",
+                "https://example.com/releases/v{ version }/files/dist-manifest.json",
+                "https://example.com/releases/{ name }-v{ version }/files/dist-manifest.json",
+                "https://example.com/releases/{ name }-{ version }/files/dist-manifest.json",
+            ]
+        );
+        assert_eq!(
+            urls("https://example.com/latest"),
+            ["https://example.com/latest/dist-manifest.json"]
+        );
+    }
 
     /// Renders `template` back into the syntax used in `Cargo.toml`.
     fn render(template: &Template<'_>) -> String {

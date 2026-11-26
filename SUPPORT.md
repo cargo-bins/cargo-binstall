@@ -232,6 +232,22 @@ This is only done when the crate doesn't set `pkg-url`: dist's default archive
 names and layout already match the defaults above, so nothing needs to be set
 for such a release.
 
+dist's own config is read too, from the published crate: `dist-workspace.toml`
+or `dist.toml` next to its `Cargo.toml`, `[workspace.metadata.dist]` in the
+`Cargo.toml` as written (cargo keeps it as `Cargo.toml.orig`), and
+`[package.metadata.dist]`. The crate's directory has to be the workspace root
+for the first two, so this is only the case for a single-package workspace,
+or with `--manifest-path`/`--git` pointing at the root. With it:
+
+- [`simple-download-url`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#simple-download-url)
+  is looked under too, with `{tag}` as each of `{ version }`, `v{ version }`,
+  `{ name }-v{ version }` and `{ name }-{ version }`. This happens before the
+  GitHub release paths, unless
+  [`hosting`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#hosting)
+  lists `github` first, or leaves out `simple`. The crate's repository may be
+  on any host, or not be set at all.
+- `dist = false` skips looking for `dist-manifest.json`.
+
 #### for GitLab
 
 <!-- BEGIN generated:pkg-url-paths-gitlab from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->

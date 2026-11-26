@@ -30,6 +30,7 @@ use dist_manifest::{
 pub(crate) mod hosting;
 mod probe;
 
+use hosting::dist_simple_manifest_url_templates;
 use probe::{Candidate, Probe};
 
 pub struct GhCrateMeta {
@@ -244,7 +245,7 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
-            Either::Left(iter::once(template))
+            vec![template]
         } else if let Some(RepoInfo {
             repo,
             repository_host,
@@ -254,14 +255,16 @@ impl super::Fetcher for GhCrateMeta {
             if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
                 let has_subcrate = subcrate.is_some();
 
-                Either::Right(
-                    pkg_urls
-                        .map(Template::cast)
-                        // If subcrate is Some, then all templates will be included.
-                        // Otherwise, only templates without key "subcrate" will be
-                        // included.
-                        .filter(move |template| has_subcrate || !template.has_key("subcrate")),
-                )
+                pkg_urls
+                    .map(Template::cast)
+                    // If subcrate is Some, then all templates will be included.
+                    // Otherwise, only templates without key "subcrate" will be
+                    // included.
+                    .filter(move |template| has_subcrate || !template.has_key("subcrate"))
+                    .collect()
+            } else if self.dist_simple_download_url().is_some() {
+                debug!("Unknown repository {repo}, looking for {DIST_MANIFEST} only");
+                Vec::new()
             } else {
                 warn!(
                     concat!(
@@ -273,6 +276,9 @@ impl super::Fetcher for GhCrateMeta {
 
                 return Ok(None);
             }
+        } else if self.dist_simple_download_url().is_some() {
+            debug!("Package does not specify repository, looking for {DIST_MANIFEST} only");
+            Vec::new()
         } else {
             warn!(
                 concat!(
@@ -297,6 +303,7 @@ impl super::Fetcher for GhCrateMeta {
         // Every pkg-url, with how it is written for `PkgUrlHint::pkg_url`.
         let mut buf = String::new();
         let pkg_urls: Vec<(Arc<str>, Template<'_>)> = pkg_urls
+            .into_iter()
             .map(|pkg_url| {
                 write_template(&pkg_url, &mut buf);
                 (buf.as_str().into(), pkg_url)
@@ -465,7 +472,14 @@ impl GhCrateMeta {
     }
 
     /// The urls the `dist-manifest.json` of the release may be at, if the
-    /// crate doesn't set `pkg-url` and dist supports its repository's host.
+    /// crate doesn't set `pkg-url`:
+    ///
+    /// - under dist's `simple-download-url`, if the crate's dist config
+    ///   sets one and its `hosting` doesn't leave out `simple`;
+    /// - under the GitHub release paths, if its repository is on GitHub.
+    ///
+    /// Ordered as `hosting` prefers them, the simple host first by default.
+    /// None if the config sets `dist = false`.
     fn dist_manifest_candidates(
         &self,
         info: Option<&RepoInfo>,
@@ -475,11 +489,15 @@ impl GhCrateMeta {
         if self.target_data.meta.pkg_url.is_some() {
             return Vec::new();
         }
-        let Some(templates) =
-            info.and_then(|info| info.repository_host.dist_manifest_url_templates())
-        else {
+        let dist = self.data.dist.as_ref();
+        if dist.and_then(|dist| dist.dist) == Some(false) {
+            debug!("Not looking for {DIST_MANIFEST}: the crate sets `dist = false`");
             return Vec::new();
-        };
+        }
+
+        let hosting = dist.and_then(|dist| dist.hosting.as_deref());
+        let position =
+            |host: &str| hosting.and_then(|hosting| hosting.iter().position(|h| h == host));
 
         let ctx = Context::from_data_with_repo(
             &self.data,
@@ -490,25 +508,59 @@ impl GhCrateMeta {
             subcrate,
         );
         let mut buf = String::new();
-        templates
-            .filter(|template| subcrate.is_some() || !template.has_key("subcrate"))
-            .filter_map(|template| {
-                let url = ctx
-                    .render_url_with(&template)
-                    .inspect_err(|err| warn!("Failed to render url for {ctx:#?}: {err}"))
-                    .ok()?;
-                write_template(&template, &mut buf);
-                // The pkg-fmt is that of the archive the manifest names, it
-                // is only known once it is read.
-                Some(Candidate::new(
-                    url,
-                    PkgFmt::Bin,
-                    None,
-                    None,
-                    buf.as_str().into(),
-                ))
-            })
-            .collect()
+        let mut candidate = |template: &Template<'_>| {
+            if subcrate.is_none() && template.has_key("subcrate") {
+                return None;
+            }
+            let url = ctx
+                .render_url_with(template)
+                .inspect_err(|err| warn!("Failed to render url for {ctx:#?}: {err}"))
+                .ok()?;
+            write_template(template, &mut buf);
+            // The pkg-fmt is that of the archive the manifest names, it is
+            // only known once it is read.
+            Some(Candidate::new(
+                url,
+                PkgFmt::Bin,
+                None,
+                None,
+                buf.as_str().into(),
+            ))
+        };
+
+        let simple: Vec<_> = self
+            .dist_simple_download_url()
+            .into_iter()
+            .flat_map(dist_simple_manifest_url_templates)
+            .filter_map(|template| candidate(&template))
+            .collect();
+        // GitHub, even if `hosting` leaves it out: dist still uploads there
+        // with `ci = "github"`.
+        let github: Vec<_> = info
+            .and_then(|info| info.repository_host.dist_manifest_url_templates())
+            .into_iter()
+            .flatten()
+            .filter_map(|template| candidate(&template))
+            .collect();
+
+        let (first, second) = match (position("simple"), position("github")) {
+            (Some(simple_pos), Some(github_pos)) if github_pos < simple_pos => (github, simple),
+            _ => (simple, github),
+        };
+        first.into_iter().chain(second).collect()
+    }
+
+    /// dist's `simple-download-url` of the crate, unless its `hosting`
+    /// leaves out the simple host, or it sets `dist = false`.
+    fn dist_simple_download_url(&self) -> Option<&str> {
+        let dist = self.data.dist.as_ref()?;
+        let uses_simple = dist
+            .hosting
+            .as_ref()
+            .is_none_or(|hosting| hosting.iter().any(|host| host == "simple"));
+        dist.simple_download_url
+            .as_deref()
+            .filter(|_| uses_simple && dist.dist != Some(false))
     }
 
     /// The template of the manifest url that a previous version of the

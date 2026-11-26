@@ -25,6 +25,105 @@ pub use target_triple::*;
 #[serde(rename_all = "kebab-case")]
 pub struct Meta {
     pub binstall: Option<PkgMeta>,
+    /// The `[package.metadata.dist]` of [dist], or the workspace's dist
+    /// config merged into it, see [`DistMeta`].
+    ///
+    /// Invalid config is ignored rather than failing the manifest: it is
+    /// dist's, not binstall's.
+    ///
+    /// [dist]: https://github.com/axodotdev/cargo-dist
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub dist: Option<DistMeta>,
+}
+
+/// The few settings of [dist]'s config that tell where it uploads releases.
+///
+/// See <https://axodotdev.github.io/cargo-dist/book/reference/config.html>.
+/// Each one that is invalid is ignored.
+///
+/// [dist]: https://github.com/axodotdev/cargo-dist
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct DistMeta {
+    /// `dist = false` opts a package out of being built by dist.
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub dist: Option<bool>,
+    /// The hosting providers installers download from, in order of
+    /// preference, e.g. `["simple", "github"]`.
+    #[serde(
+        default,
+        deserialize_with = "lenient_one_or_many",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub hosting: Option<Vec<CompactString>>,
+    /// The url of the directory a release's files are uploaded to, with
+    /// `{tag}` for its git tag, e.g. `https://static.myapp.com/{tag}`.
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub simple_download_url: Option<String>,
+}
+
+impl DistMeta {
+    /// Fill each setting `self` doesn't have from `other`, which has lower
+    /// precedence.
+    pub fn or(self, other: Self) -> Self {
+        Self {
+            dist: self.dist.or(other.dist),
+            hosting: self.hosting.or(other.hosting),
+            simple_download_url: self.simple_download_url.or(other.simple_download_url),
+        }
+    }
+}
+
+/// Deserialize `T`, or `None` if it is something else.
+fn lenient<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Lenient<T> {
+        Valid(T),
+        Invalid(serde::de::IgnoredAny),
+    }
+
+    Ok(match Lenient::<T>::deserialize(deserializer)? {
+        Lenient::Valid(value) => Some(value),
+        Lenient::Invalid(_) => None,
+    })
+}
+
+/// Like [`lenient`], for a list that may be written as a single item.
+fn lenient_one_or_many<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany<T> {
+        Many(Vec<T>),
+        One(T),
+    }
+
+    Ok(
+        lenient::<D, OneOrMany<T>>(deserializer)?.map(|value| match value {
+            OneOrMany::Many(values) => values,
+            OneOrMany::One(value) => vec![value],
+        }),
+    )
 }
 
 /// Strategies to use for binary discovery
@@ -300,6 +399,60 @@ mod tests {
     use strum::VariantArray;
 
     use super::*;
+
+    #[test]
+    fn dist_meta_is_lenient() {
+        let meta: Meta = serde_json::from_value(json!({
+            "dist": {
+                "dist": false,
+                "hosting": "github",
+                "simple-download-url": "https://static.example.com/{tag}",
+                "unknown": 1,
+            },
+        }))
+        .unwrap();
+        assert_eq!(
+            meta.dist,
+            Some(DistMeta {
+                dist: Some(false),
+                hosting: Some(vec!["github".into()]),
+                simple_download_url: Some("https://static.example.com/{tag}".into()),
+            })
+        );
+
+        let meta: Meta = serde_json::from_value(json!({
+            "dist": { "dist": "yes", "hosting": [1], "simple-download-url": ["x"] },
+        }))
+        .unwrap();
+        assert_eq!(meta.dist, Some(DistMeta::default()));
+
+        let meta: Meta = serde_json::from_value(json!({ "dist": 1 })).unwrap();
+        assert_eq!(meta.dist, None);
+
+        let meta: Meta = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(meta.dist, None);
+    }
+
+    #[test]
+    fn dist_meta_or() {
+        let package = DistMeta {
+            dist: Some(true),
+            ..DistMeta::default()
+        };
+        let workspace = DistMeta {
+            dist: Some(false),
+            hosting: Some(vec!["simple".into()]),
+            simple_download_url: None,
+        };
+        assert_eq!(
+            package.or(workspace),
+            DistMeta {
+                dist: Some(true),
+                hosting: Some(vec!["simple".into()]),
+                simple_download_url: None,
+            }
+        );
+    }
 
     #[test]
     fn test_strategy_ser() {

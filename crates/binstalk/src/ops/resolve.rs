@@ -22,8 +22,9 @@ use crate::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
     },
-    manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverrides},
+    manifests::cargo_toml_binstall::{DistMeta, Meta, PkgMeta, PkgOverrides},
     ops::{CargoTomlFetchOverride, Options},
+    registry::merge_workspace_dist_meta,
 };
 
 mod crate_name;
@@ -135,7 +136,9 @@ async fn resolve_inner(
         .collect();
 
     let with_pkg_url_hint = |data: Data| {
-        let data = data.with_bins(bin_infos.clone());
+        let data = data
+            .with_bins(bin_infos.clone())
+            .with_dist_meta(package_info.dist.clone());
         match pkg_url_hint.clone() {
             Some((target, hint)) => data.with_pkg_url_hint(target, hint),
             None => data,
@@ -515,6 +518,8 @@ struct PackageInfo {
     pubtime: Option<CompactString>,
     repo: Option<String>,
     overrides: PkgOverrides,
+    /// The crate's dist config, see [`Meta::dist`].
+    dist: Option<DistMeta>,
 }
 
 struct Bin {
@@ -573,11 +578,10 @@ impl PackageInfo {
                             Some(cancellation_token),
                         )?;
 
-                        Ok::<_, BinstallError>((
-                            load_manifest_from_workspace(dir.as_ref(), &name)
-                                .map_err(BinstallError::from)?,
-                            repo.get_head_commit_hash()?,
-                        ))
+                        let mut manifest = load_manifest_from_workspace(dir.as_ref(), &name)
+                            .map_err(BinstallError::from)?;
+                        merge_workspace_dist_meta(dir.as_ref(), &mut manifest);
+                        Ok::<_, BinstallError>((manifest, repo.get_head_commit_hash()?))
                     }
                 })
                 .await??;
@@ -656,12 +660,13 @@ impl PackageInfo {
             return Ok(None);
         }
 
+        let metadata = package.metadata.take();
+        let dist = metadata.as_ref().and_then(|m| m.dist.clone());
+        if let Some(dist) = &dist {
+            debug!("Found dist config: {dist:?}");
+        }
         let (mut meta, binaries): (_, Vec<Bin>) = (
-            package
-                .metadata
-                .take()
-                .and_then(|m| m.binstall)
-                .unwrap_or_default(),
+            metadata.and_then(|m| m.binstall).unwrap_or_default(),
             manifest
                 .bin
                 .into_iter()
@@ -698,6 +703,7 @@ impl PackageInfo {
                 version: new_version,
                 pubtime,
                 repo: package.repository().map(ToString::to_string),
+                dist,
             }))
         }
     }
@@ -780,7 +786,14 @@ pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
         );
 
         // Load and parse manifest (this checks file system for binary output names)
-        let manifest = load_manifest_from_workspace(manifest_path, crate_name)?;
+        let mut manifest = load_manifest_from_workspace(manifest_path, crate_name)?;
+        // The workspace root, if `manifest_path` is that of a workspace.
+        let root = if manifest_path.is_file() {
+            manifest_path.parent().unwrap_or(Path::new("."))
+        } else {
+            manifest_path
+        };
+        merge_workspace_dist_meta(root, &mut manifest);
 
         // Return metadata
         Ok(manifest)

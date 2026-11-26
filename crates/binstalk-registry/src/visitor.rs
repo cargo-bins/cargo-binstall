@@ -7,7 +7,11 @@ use normalize_path::NormalizePath;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
-use crate::{RegistryError, vfs::Vfs};
+use crate::{
+    RegistryError,
+    dist::{DIST_CONFIG_FILES, MAX_CONFIG_FILE_SIZE, WorkspaceDistConfig},
+    vfs::Vfs,
+};
 
 #[derive(Debug)]
 pub(super) struct ManifestVisitor {
@@ -16,6 +20,10 @@ pub(super) struct ManifestVisitor {
     manifest_dir_path: PathBuf,
 
     vfs: Vfs,
+
+    /// For the `[package.metadata.dist]` that [`ManifestVisitor::load_manifest`]
+    /// returns.
+    dist_config: WorkspaceDistConfig,
 }
 
 impl ManifestVisitor {
@@ -25,6 +33,7 @@ impl ManifestVisitor {
             cargo_toml_content: Vec::with_capacity(2000),
             manifest_dir_path,
             vfs: Vfs::default(),
+            dist_config: WorkspaceDistConfig::default(),
         }
     }
 }
@@ -60,6 +69,28 @@ impl TarEntriesVisitor for ManifestVisitor {
             entry.read_to_end(&mut self.cargo_toml_content).await?;
         }
 
+        let dist_config = if path == Path::new("Cargo.toml.orig") {
+            Some(&mut self.dist_config.root_manifest)
+        } else {
+            DIST_CONFIG_FILES
+                .iter()
+                .position(|name| path == Path::new(name))
+                .map(|i| &mut self.dist_config.files[i])
+        };
+        if let Some(dist_config) = dist_config {
+            let size = entry.size()?;
+            if size <= MAX_CONFIG_FILE_SIZE {
+                let mut content = Vec::with_capacity(size.try_into().unwrap_or(0));
+                entry.read_to_end(&mut content).await?;
+                *dist_config = Some(content);
+            } else {
+                debug!(
+                    "Ignoring {}: larger than {MAX_CONFIG_FILE_SIZE} bytes",
+                    path.display()
+                );
+            }
+        }
+
         Ok(())
     }
 }
@@ -74,6 +105,7 @@ impl ManifestVisitor {
         debug!("Manifest: {manifest:?}");
         // Checks vfs for binary output names
         manifest.complete_from_abstract_filesystem::<Value, _>(&self.vfs, None)?;
+        self.dist_config.merge_into(&mut manifest);
 
         // Return metadata
         Ok(manifest)

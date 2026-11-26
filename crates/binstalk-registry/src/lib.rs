@@ -23,7 +23,10 @@ use tokio::task;
 use url::{ParseError as UrlParseError, Url};
 
 mod auth;
+
+mod dist;
 pub use auth::{RegistryAuth, ResolvedRegistry};
+pub use dist::merge_workspace_dist_meta;
 
 #[cfg(feature = "git")]
 pub use simple_git::{GitError, GitUrl, GitUrlParseError};
