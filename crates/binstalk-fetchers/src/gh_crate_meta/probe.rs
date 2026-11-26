@@ -117,8 +117,9 @@ struct Shared {
 }
 
 impl Probe {
-    /// `data`'s repository info must be got first, with
-    /// [`Data::get_repo_info`].
+    /// `data`'s repository info, if needed, must be got first, with
+    /// [`Data::get_repo_info`]. Without it the crate's repository is
+    /// treated as any other.
     pub(super) async fn new(
         data: Arc<Data>,
         client: Client,

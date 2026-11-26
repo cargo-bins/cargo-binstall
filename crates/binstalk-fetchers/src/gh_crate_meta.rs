@@ -166,15 +166,36 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
-        let info = self.data.get_repo_info(&self.gh_api_client).await?;
+        let meta = &self.target_data.meta;
+        let pkg_url = meta.pkg_url.as_deref().map(Template::parse).transpose()?;
+
+        // The crate's repository is only needed for the default templates and
+        // to render `{ repo }` and `{ subcrate }`. A `pkg-url` pointing
+        // elsewhere, e.g. at cargo-quickinstall, needs no request for it:
+        // each candidate is checked in its own repository, see `Probe`.
+        let uses_repo = |template: &Template<'_>| template.has_any_of_keys(&["repo", "subcrate"]);
+        let needs_repo = pkg_url.as_ref().is_none_or(uses_repo)
+            || match meta
+                .signing
+                .as_ref()
+                .and_then(|signing| signing.file.as_deref())
+            {
+                Some(file) => uses_repo(&Template::parse(file)?),
+                None => false,
+            };
+        let info = if needs_repo {
+            self.data.get_repo_info(&self.gh_api_client).await?
+        } else {
+            None
+        };
 
         let repo = info.map(|info| &info.repo);
         let subcrate = info.and_then(|info| info.subcrate.as_deref());
 
         let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-        let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-            let template = Template::parse(pkg_url)?;
+        let pkg_urls = if let Some(template) = pkg_url {
+            let pkg_url = meta.pkg_url.as_deref().expect("parsed above");
 
             if pkg_fmt.is_none()
                 && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
