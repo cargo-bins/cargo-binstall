@@ -32,7 +32,7 @@ use url::Url;
 
 use binstalk_types::crate_info::PkgUrlHint;
 
-use super::{Resolved, hosting::RepositoryHost};
+use super::Resolved;
 use crate::{
     Data, FetchError, RepoInfo, common::*, futures_resolver::FuturesResolver,
     gh_api_rate_limit_wait,
@@ -59,23 +59,15 @@ pub(super) struct Candidate {
 }
 
 impl Candidate {
-    /// * `repo` - The crate's repository. The release of an asset in it is
-    ///   known on any host, the release of an asset in another repository
-    ///   only on a known git hosting service.
     pub(super) fn new(
         url: Url,
         pkg_fmt: PkgFmt,
         archive_suffix: Option<&'static str>,
         target_arch: Option<&'static str>,
         pkg_url: Arc<str>,
-        repo: Option<&str>,
     ) -> Self {
-        let release_tag = ReleaseTag::of_asset(&url).filter(|_| {
-            RepositoryHost::guess_git_hosting_services(&url) != RepositoryHost::Unknown
-                || repo.is_some_and(|repo| url.as_str().starts_with(repo.trim_end_matches('/')))
-        });
         Self {
-            release_tag,
+            release_tag: ReleaseTag::of_asset(&url),
             gh_artifact: GhReleaseArtifact::try_extract_from_url(&url),
             is_private: false,
             url,
@@ -616,6 +608,7 @@ mod test {
     use binstalk_types::crate_info::RenderedWith;
 
     use super::*;
+    use crate::gh_crate_meta::hosting::RepositoryHost;
 
     const BINSTALL: &str = "https://github.com/cargo-bins/cargo-binstall";
     const QUICKINSTALL: &str = "https://github.com/cargo-bins/cargo-quickinstall";
@@ -654,14 +647,7 @@ mod test {
         target_arch: Option<&'static str>,
     ) -> Candidate {
         let url = Url::parse(&format!("{repo}/releases/download/{asset}")).unwrap();
-        Candidate::new(
-            url,
-            pkg_fmt,
-            archive_suffix,
-            target_arch,
-            pkg_url.into(),
-            Some(repo),
-        )
+        Candidate::new(url, pkg_fmt, archive_suffix, target_arch, pkg_url.into())
     }
 
     /// A hint of [`TEMPLATE`].
@@ -800,14 +786,7 @@ mod test {
         // Not on GitHub, but the tag is still known.
         let repo = "https://gitlab.com/a/b";
         let url = Url::parse(&format!("{repo}/-/releases/v1.0.0/downloads/a.tgz")).unwrap();
-        let candidate = Candidate::new(
-            url,
-            PkgFmt::Tgz,
-            None,
-            None,
-            OTHER_TEMPLATE.into(),
-            Some(repo),
-        );
+        let candidate = Candidate::new(url, PkgFmt::Tgz, None, None, OTHER_TEMPLATE.into());
         assert_eq!(tag(&candidate), some(repo, "v1.0.0"));
         assert!(candidate.gh_artifact.is_none());
 
@@ -819,27 +798,16 @@ mod test {
                 None,
                 None,
                 OTHER_TEMPLATE.into(),
-                Some(BINSTALL),
             )
         };
         let quickinstall = candidate(&format!("{QUICKINSTALL}/releases/download/a-1.0.0/a.tgz"));
         assert_eq!(tag(&quickinstall), some(QUICKINSTALL, "a-1.0.0"));
         let codeberg = candidate("https://codeberg.org/a/b/releases/download/v1.0.0/a.tgz");
         assert_eq!(tag(&codeberg), some("https://codeberg.org/a/b", "v1.0.0"));
-        // On a host that may not be a git server at all.
-        let unknown = candidate("https://example.com/a/b/releases/download/v1.0.0/a.tgz");
-        assert_eq!(tag(&unknown), None);
-        // Unless the crate's repository is there.
+        // On any host, such as a self-hosted Gitea or Forgejo.
         let repo = "https://git.example.com/a/b";
-        let own = Candidate::new(
-            Url::parse(&format!("{repo}/releases/download/v1.0.0/a.tgz")).unwrap(),
-            PkgFmt::Tgz,
-            None,
-            None,
-            OTHER_TEMPLATE.into(),
-            Some(repo),
-        );
-        assert_eq!(tag(&own), some(repo, "v1.0.0"));
+        let self_hosted = candidate(&format!("{repo}/releases/download/v1.0.0/a.tgz"));
+        assert_eq!(tag(&self_hosted), some(repo, "v1.0.0"));
     }
 
     #[tokio::test]
@@ -1132,14 +1100,7 @@ mod test {
                     .iter()
                     .map(|asset| {
                         let url = Url::parse(&format!("{QUICKINSTALL}/releases/download/{asset}"));
-                        Candidate::new(
-                            url.unwrap(),
-                            PkgFmt::Tgz,
-                            None,
-                            None,
-                            OTHER_TEMPLATE.into(),
-                            Some(BINSTALL),
-                        )
+                        Candidate::new(url.unwrap(), PkgFmt::Tgz, None, None, OTHER_TEMPLATE.into())
                     })
                     .collect();
                 let probe = new_probe(&gh_api_client, BINSTALL, candidates).await;
@@ -1441,7 +1402,6 @@ mod test {
                     None,
                     None,
                     OTHER_TEMPLATE.into(),
-                    Some(BINSTALL),
                 )
             })
             .collect();

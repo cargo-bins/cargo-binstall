@@ -290,7 +290,6 @@ impl super::Fetcher for GhCrateMeta {
                         archive_suffix,
                         target_arch,
                         pkg_url_str.clone(),
-                        repo,
                     )
                 })
             })
