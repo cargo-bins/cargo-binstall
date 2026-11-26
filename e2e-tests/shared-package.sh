@@ -22,6 +22,9 @@ for bin in b3sum cargo-watch; do
         chmod +x "$pkg_dir/$file"
     done
 done
+# Random, so that it doesn't compress: much more than the socket buffers
+# hold, so that the server only logs it as sent if it was read.
+head -c 16777216 /dev/urandom >"$pkg_dir/padding"
 tar -czf "$serve_dir/shared.tgz" -C "$pkg_dir" .
 
 start_https_server "$serve_dir"
@@ -30,15 +33,12 @@ start_https_server "$serve_dir"
 # targets the host has.
 target="$("$1" -vV | sed -n 's/^build-target: //p')"
 
-log="$(mktemp)"
-
 "$1" binstall --no-confirm --strategies crate-meta-data --targets "$target" \
-    --log-level debug \
     --pkg-url "$HTTPS_SERVER_URL/shared.tgz" --pkg-fmt tgz \
     --bin-dir "{ bin }{ binary-ext }" \
-    b3sum@1.5.0 cargo-watch@8.4.0 2>&1 | tee "$log"
+    b3sum@1.5.0 cargo-watch@8.4.0
 
-cat "$HTTPS_SERVER_LOG"
+cat "$HTTPS_SERVER_LOG" "$HTTPS_SERVER_SENT_LOG"
 
 for bin in b3sum cargo-watch; do
     if [ ! -e "$CARGO_HOME/bin/$bin" ] && [ ! -e "$CARGO_HOME/bin/$bin.exe" ]; then
@@ -47,11 +47,9 @@ for bin in b3sum cargo-watch; do
     fi
 done
 
-# Each crate checks that the package exists with a GET request, and the
-# one that downloads it does so from that response, so the requests can't
-# tell whether the other one downloaded it too: count the downloads
-# instead.
-downloads="$(grep -c 'Downloading package' "$log" || true)"
+# Each crate checks that the package exists with a GET request, and the one
+# that downloads it reads that response, the other one doesn't.
+downloads="$(grep -c '^/shared.tgz$' "$HTTPS_SERVER_SENT_LOG" || true)"
 if [ "$downloads" != 1 ]; then
     echo "Expected shared.tgz to be downloaded once, got $downloads downloads"
     exit 1
@@ -60,6 +58,7 @@ fi
 # With a `bin-dir` that is the same file for both crates, installing it
 # leaves it where it is, so the crate that installs second still finds it.
 : >"$HTTPS_SERVER_LOG"
+: >"$HTTPS_SERVER_SENT_LOG"
 rm -f "$CARGO_HOME"/bin/b3sum* "$CARGO_HOME"/bin/cargo-watch*
 
 "$1" binstall --no-confirm --force --strategies crate-meta-data --targets "$target" \
@@ -67,7 +66,7 @@ rm -f "$CARGO_HOME"/bin/b3sum* "$CARGO_HOME"/bin/cargo-watch*
     --bin-dir "b3sum{ binary-ext }" \
     b3sum@1.5.0 cargo-watch@8.4.0
 
-cat "$HTTPS_SERVER_LOG"
+cat "$HTTPS_SERVER_LOG" "$HTTPS_SERVER_SENT_LOG"
 
 for bin in b3sum cargo-watch; do
     if [ ! -e "$CARGO_HOME/bin/$bin" ] && [ ! -e "$CARGO_HOME/bin/$bin.exe" ]; then
@@ -75,3 +74,9 @@ for bin in b3sum cargo-watch; do
         exit 1
     fi
 done
+
+downloads="$(grep -c '^/shared.tgz$' "$HTTPS_SERVER_SENT_LOG" || true)"
+if [ "$downloads" != 1 ]; then
+    echo "Expected shared.tgz to be downloaded once, got $downloads downloads"
+    exit 1
+fi
