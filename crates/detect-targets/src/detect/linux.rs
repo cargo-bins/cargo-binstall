@@ -1,13 +1,18 @@
 use tokio_util::task::AbortOnDropHandle;
 
-use crate::probe::{self, ProbeResult};
+use crate::{
+    compat::Host,
+    probe::{self, ProbeResult},
+};
 
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
 mod fallback;
 
-pub(super) async fn detect_targets(target: String) -> Vec<String> {
+/// The targets this host supports, and what was found out about it on the
+/// way, see [`Host`].
+pub(super) async fn detect_targets(target: String) -> (Vec<String>, Host) {
     let (_, postfix) = target
         .rsplit_once('-')
         .expect("unwrap: target always has a -");
@@ -45,10 +50,13 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
         // `--version` banners.
         Libc::Gnu | Libc::Musl => {
             let gnu_target = format!("{cpu_arch}-unknown-linux-gnu{abi}");
+            let musl_target = musl_fallback_target();
+
+            let host = Host::load().await;
 
             let has_glibc = async {
                 match probe::find(&gnu_target) {
-                    Some(probe) => match probe.run().await {
+                    Some(probe) => match probe.run().await.recorded_in(&host, probe) {
                         ProbeResult::Runnable => true,
                         ProbeResult::NotRunnable => false,
                         ProbeResult::Inconclusive(_err) => {
@@ -64,21 +72,44 @@ pub(super) async fn detect_targets(target: String) -> Vec<String> {
                 }
             };
 
-            // The extra targets don't depend on the glibc probe, so run
-            // them alongside it.
-            let (has_glibc, compat_targets) =
-                tokio::join!(has_glibc, detect_extra_targets(cpu_arch, abi));
+            // Whether the musl loader is installed, i.e. whether musl
+            // binaries linked dynamically run here (#1466): the musl
+            // target is offered either way, as Rust links it statically by
+            // default, but checking a binary against the host
+            // (`Host::check`) needs to know.
+            let has_musl_loader = async {
+                if let Some(probe) = probe::find(&musl_target) {
+                    probe.run().await.recorded_in(&host, probe);
+                }
+            };
 
-            [
-                has_glibc.then_some(gnu_target),
-                Some(musl_fallback_target()),
-            ]
-            .into_iter()
-            .flatten()
-            .chain(compat_targets)
-            .collect()
+            // The extra targets don't depend on the libc probes, so run
+            // them alongside.
+            let (has_glibc, (), compat_targets) = tokio::join!(
+                has_glibc,
+                has_musl_loader,
+                detect_extra_targets(cpu_arch, abi)
+            );
+
+            let targets = [has_glibc.then_some(gnu_target), Some(musl_target)]
+                .into_iter()
+                .flatten()
+                .chain(compat_targets)
+                .collect();
+            (targets, host)
         }
-        Libc::Android | Libc::Unknown => vec![target.clone(), musl_fallback_target()],
+        Libc::Android | Libc::Unknown => (
+            vec![target.clone(), musl_fallback_target()],
+            Host::load().await,
+        ),
+    }
+}
+
+impl ProbeResult {
+    /// Record a dynamic probe's result in `host`, see [`Host::record`].
+    fn recorded_in(self, host: &Host, probe: &probe::Probe) -> Self {
+        host.record(probe, &self);
+        self
     }
 }
 

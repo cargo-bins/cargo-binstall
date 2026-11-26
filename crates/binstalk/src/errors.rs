@@ -457,7 +457,6 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::incompatible_binary`
     /// - Exit: 102
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("{bin} for {target} can't run on this system: {reason}")]
     #[diagnostic(severity(error), code(binstall::incompatible_binary))]
     IncompatibleBinary {
@@ -513,7 +512,6 @@ impl BinstallError {
             LoadManifestFromWSError(_) => 99,
             CargoInstallDoesNotSupportInstallPath => 100,
             CargoInstallDoesNotSupportAliases => 101,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
             IncompatibleBinary { .. } => 102,
             CrateContext(context) => context.err.exit_number(),
             Errors(errors) => (errors.0)[0].err.exit_number(),

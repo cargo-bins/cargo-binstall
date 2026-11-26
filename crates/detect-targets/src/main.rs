@@ -65,11 +65,11 @@ fn probe_all(rt: runtime::Runtime) -> io::Result<()> {
 
 /// Check whether each given executable can run here, printing
 /// `path: ok` or `path: <reason>` for each.
-#[cfg(any(target_os = "linux", target_os = "android"))]
 fn check(rt: runtime::Runtime, paths: Vec<String>) -> io::Result<()> {
     rt.block_on(async {
+        let host = detect_targets::detect().await.host;
         for path in paths {
-            match detect_targets::compat::check(path.as_ref()).await {
+            match host.check(path.as_ref()).await {
                 Ok(()) => println!("{path}: ok"),
                 Err(err) => println!("{path}: {err}"),
             }
@@ -77,12 +77,6 @@ fn check(rt: runtime::Runtime, paths: Vec<String>) -> io::Result<()> {
     });
 
     Ok(())
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn check(_rt: runtime::Runtime, _paths: Vec<String>) -> io::Result<()> {
-    eprintln!("--check is only supported on Linux");
-    std::process::exit(1);
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
