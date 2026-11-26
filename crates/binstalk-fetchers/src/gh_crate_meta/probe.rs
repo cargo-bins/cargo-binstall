@@ -54,7 +54,7 @@ pub(super) struct Candidate {
     /// The GitHub release asset it is.
     gh_artifact: Option<GhReleaseArtifact>,
     /// Whether it is in a private GitHub repository, see
-    /// [`Probe::find_gh_repos`].
+    /// [`Probe::find_repos`].
     is_private: bool,
 }
 
@@ -78,16 +78,20 @@ impl Candidate {
         }
     }
 
-    /// Move the GitHub release asset to repository `to`, which its own
-    /// redirects to.
-    fn move_to(&mut self, to: &GhRepo) {
-        // `/{owner}/{repo}/releases/download/{tag}/{name}`, see
-        // `GhReleaseArtifact::try_extract_from_url`.
-        let Some(rest) = self.url.path().splitn(4, '/').nth(3) else {
+    /// Move the release asset from repository `from`, its
+    /// [`ReleaseTag::repo`], to `to`, which `from` redirects to.
+    fn move_to(&mut self, from: &Url, to: &Url) {
+        let path = self.url.path();
+        let Some(rest) = path
+            .get(..from.path().len())
+            .filter(|repo_path| repo_path.eq_ignore_ascii_case(from.path()))
+            .map(|_| &path[from.path().len()..])
+        else {
             return;
         };
-        let mut url = self.url.clone();
-        url.set_path(&format!("/{}/{}/{rest}", to.owner, to.repo));
+        let mut url = to.clone();
+        url.set_path(&format!("{}{rest}", to.path().trim_end_matches('/')));
+        url.set_query(self.url.query());
         debug!("{} redirects to {url}", self.url);
         self.release_tag = ReleaseTag::of_asset(&url);
         self.gh_artifact = GhReleaseArtifact::try_extract_from_url(&url);
@@ -95,20 +99,29 @@ impl Candidate {
     }
 }
 
-/// What [`Probe::find_gh_repos`] needs of a [`RepoInfo`].
+/// Whether `a` and `b` are the same repository. github.com and others
+/// ignore the case of its path.
+fn same_repo(a: &Url, b: &Url) -> bool {
+    a.as_str()
+        .trim_end_matches('/')
+        .eq_ignore_ascii_case(b.as_str().trim_end_matches('/'))
+}
+
+/// What [`Probe::find_repos`] needs of a [`RepoInfo`].
 #[derive(Clone, Default)]
-struct GhRepoInfo {
+struct CandidateRepo {
     /// The repository it redirects to, if not itself.
-    moved_to: Option<GhRepo>,
+    moved_to: Option<Url>,
     is_private: bool,
 }
 
-impl GhRepoInfo {
-    fn new(gh_repo: &GhRepo, info: Option<&RepoInfo>) -> Self {
+impl CandidateRepo {
+    fn new(repo: &Url, info: Option<&RepoInfo>) -> Self {
         Self {
             moved_to: info
-                .and_then(|info| GhRepo::try_extract_from_url(&info.repo))
-                .filter(|to| to != gh_repo),
+                .map(|info| &info.repo)
+                .filter(|to| !same_repo(to, repo))
+                .cloned(),
             is_private: info.is_some_and(|info| info.is_private),
         }
     }
@@ -158,48 +171,45 @@ impl Probe {
             },
             candidates,
         };
-        probe.find_gh_repos().await;
+        probe.find_repos().await;
         probe
     }
 
-    /// Look up the GitHub repository of each candidate:
+    /// Look up the repository of each candidate whose release is known:
     ///
-    /// - whether it is private, so that its assets can only be checked and
-    ///   downloaded with the API;
-    /// - where it redirects to, if it was renamed or transferred, so that the
-    ///   candidates are checked there without a redirect for each request.
+    /// - where it redirects to, if it was renamed or moved, so that the
+    ///   candidates are checked there without a redirect for each request;
+    /// - whether it is a private GitHub repository, whose assets can only be
+    ///   checked and downloaded with the API.
     ///
     /// The crate's repository is known already. Another one is looked up
     /// once per run, see [`FetchContext`](crate::FetchContext).
-    async fn find_gh_repos(&mut self) {
+    async fn find_repos(&mut self) {
         let Self { shared, candidates } = self;
         let crate_repo = shared.data.repo_info.get().and_then(Option::as_ref);
 
         // Normally one or two repositories.
-        let mut repos = Vec::<(GhRepo, GhRepoInfo)>::new();
+        let mut repos = Vec::<(Url, CandidateRepo)>::new();
         for candidate in candidates.iter_mut() {
-            let Some(artifact) = &candidate.gh_artifact else {
+            let Some(release_tag) = &candidate.release_tag else {
                 continue;
             };
-            let gh_repo = &artifact.release.repo;
-            let info = match repos.iter().find(|(r, _)| r == gh_repo) {
+            let repo = release_tag.repo.clone();
+            let info = match repos.iter().find(|(r, _)| *r == repo) {
                 Some((_, info)) => info.clone(),
                 None => {
                     let info = match crate_repo {
-                        Some(info)
-                            if GhRepo::try_extract_from_url(&info.repo).as_ref()
-                                == Some(gh_repo) =>
-                        {
-                            GhRepoInfo::new(gh_repo, Some(info))
+                        Some(info) if same_repo(&info.repo, &repo) => {
+                            CandidateRepo::new(&repo, Some(info))
                         }
-                        _ => shared.other_gh_repo_info(gh_repo).await,
+                        _ => shared.other_repo_info(&repo).await,
                     };
-                    repos.push((gh_repo.clone(), info.clone()));
+                    repos.push((repo.clone(), info.clone()));
                     info
                 }
             };
             if let Some(to) = &info.moved_to {
-                candidate.move_to(to);
+                candidate.move_to(&repo, to);
             }
             candidate.is_private = info.is_private;
         }
@@ -519,20 +529,17 @@ impl Probe {
 }
 
 impl Shared {
-    /// [`GhRepoInfo`] of `gh_repo`, which is not the crate's repository.
+    /// [`CandidateRepo`] of `repo`, which is not the crate's repository.
     /// Kept in the [`FetchContext`](crate::FetchContext), so looked up once
     /// per run. If it can't be, its assets are checked as public ones where
     /// they are.
-    async fn other_gh_repo_info(&self, gh_repo: &GhRepo) -> GhRepoInfo {
-        let Ok(repo) = gh_repo.repo_url() else {
-            return GhRepoInfo::default();
-        };
+    async fn other_repo_info(&self, repo: &Url) -> CandidateRepo {
         let info = self.data.context.repo_info(repo.as_str());
         match RepoInfo::get(&info, Some(repo.as_str()), &self.gh_api_client).await {
-            Ok(info) => GhRepoInfo::new(gh_repo, info),
+            Ok(info) => CandidateRepo::new(repo, info),
             Err(err) => {
                 debug!("Failed to look up {repo}: {err}");
-                GhRepoInfo::default()
+                CandidateRepo::default()
             }
         }
     }
@@ -1232,18 +1239,23 @@ mod test {
     #[test]
     fn test_candidate_move_to() {
         let mut candidate = new_candidate(
-            "https://github.com/alsuren/cargo-quickinstall",
+            // Written in another case than the repository's.
+            "https://github.com/Alsuren/Cargo-Quickinstall",
             "a-1.0.0+b/a-1.0.0+b-x.tar.gz",
             OTHER_TEMPLATE,
         );
-        let to = GhRepo::try_extract_from_url(&Url::parse(QUICKINSTALL).unwrap()).unwrap();
-        candidate.move_to(&to);
+        let from = candidate.release_tag.clone().unwrap().repo;
+        let to = Url::parse(QUICKINSTALL).unwrap();
+        candidate.move_to(&from, &to);
         assert_eq!(
             candidate.url.as_str(),
             format!("{QUICKINSTALL}/releases/download/a-1.0.0+b/a-1.0.0+b-x.tar.gz")
         );
         let artifact = candidate.gh_artifact.unwrap();
-        assert_eq!(artifact.release.repo, to);
+        assert_eq!(
+            artifact.release.repo,
+            GhRepo::try_extract_from_url(&to).unwrap()
+        );
         assert_eq!(artifact.release.tag, "a-1.0.0+b");
         assert_eq!(artifact.artifact_name, "a-1.0.0+b-x.tar.gz");
         let tag = candidate.release_tag.unwrap();
@@ -1251,6 +1263,26 @@ mod test {
             (tag.repo.as_str(), tag.tag.as_str()),
             (QUICKINSTALL, "a-1.0.0+b")
         );
+
+        // Not on GitHub, and moved to another host.
+        let url = "https://gitlab.com/a/b/-/releases/v1.0.0/downloads/a.tgz";
+        let mut candidate = Candidate::new(
+            Url::parse(url).unwrap(),
+            PkgFmt::Tgz,
+            None,
+            None,
+            OTHER_TEMPLATE.into(),
+        );
+        let from = candidate.release_tag.clone().unwrap().repo;
+        let to = Url::parse("https://git.example.com/c/d").unwrap();
+        candidate.move_to(&from, &to);
+        assert_eq!(
+            candidate.url.as_str(),
+            "https://git.example.com/c/d/-/releases/v1.0.0/downloads/a.tgz"
+        );
+        let tag = candidate.release_tag.unwrap();
+        assert_eq!(tag.repo, to);
+        assert_eq!(tag.tag, "v1.0.0");
     }
 
     /// A candidate in a repository that was transferred is checked where it
