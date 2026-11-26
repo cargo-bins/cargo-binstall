@@ -170,7 +170,6 @@ impl super::Fetcher for GhCrateMeta {
 
         let repo = info.map(|info| &info.repo);
         let subcrate = info.and_then(|info| info.subcrate.as_deref());
-        let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
 
         let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
@@ -291,7 +290,6 @@ impl super::Fetcher for GhCrateMeta {
                         archive_suffix,
                         target_arch,
                         pkg_url_str.clone(),
-                        repo,
                     )
                 })
             })
@@ -303,9 +301,9 @@ impl super::Fetcher for GhCrateMeta {
             self.gh_api_client.clone(),
             repo,
             subcrate,
-            is_repo_private,
             candidates,
-        );
+        )
+        .await;
 
         // Try how a previous version was found first, before any other
         // request: normally one URL, instead of all of them. See
