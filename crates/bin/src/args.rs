@@ -475,8 +475,8 @@ pub struct Args {
     /// and falls back to public DNS. `system` uses the operating system's resolver (`getaddrinfo`)
     /// instead, which helps on hosts where hickory-dns cannot resolve names, for example behind
     /// some VPNs or in containers that rely on NSS. `auto` (the default) uses hickory-dns, and
-    /// switches to `system` for the rest of the run once a lookup fails for any reason other than
-    /// the name not existing. Pass `hickory` to report hickory-dns errors instead. The value can
+    /// retries a lookup with `system` when it fails for any reason other than the name not
+    /// existing. Pass `hickory` to report hickory-dns errors instead. The value can
     /// also be set with the `BINSTALL_DNS` environment variable.
     ///
     /// `auto` and `hickory` are only available when cargo-binstall was built with the `trust-dns`

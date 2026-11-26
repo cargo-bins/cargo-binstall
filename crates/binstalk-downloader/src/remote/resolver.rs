@@ -1,12 +1,4 @@
-use std::{
-    fmt,
-    net::SocketAddr,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
-};
+use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 #[cfg(windows)]
 use std::io;
@@ -42,10 +34,6 @@ struct Inner {
     resolver: OnceCell<TokioAsyncResolver>,
     /// Resolver to retry with when hickory-dns fails, `None` to report its error as is.
     fallback: Option<Arc<dyn Resolve>>,
-    /// Set once hickory-dns has failed and `fallback` took over: every later lookup goes
-    /// straight to `fallback`, so a hickory-dns that times out on this host costs that
-    /// timeout once per run instead of once per hostname.
-    use_fallback: AtomicBool,
 }
 
 impl fmt::Debug for Inner {
@@ -53,7 +41,6 @@ impl fmt::Debug for Inner {
         f.debug_struct("TrustDnsResolver")
             .field("resolver", &self.resolver)
             .field("fallback_to_system", &self.fallback.is_some())
-            .field("use_fallback", &self.use_fallback)
             .finish()
     }
 }
@@ -73,7 +60,6 @@ impl TrustDnsResolver {
         Self(Arc::new(Inner {
             resolver: OnceCell::new(),
             fallback,
-            use_fallback: AtomicBool::new(false),
         }))
     }
 
@@ -115,30 +101,24 @@ impl Resolve for TrustDnsResolver {
                 return Ok(this.lookup_hickory(name.as_str()).await?);
             };
 
-            if !inner.use_fallback.load(Ordering::Relaxed) {
-                let err = match this.lookup_hickory(name.as_str()).await {
-                    Ok(addrs) => return Ok(addrs),
-                    Err(err) if err.is_definitive() => return Err(err.into()),
-                    Err(err) => err,
-                };
+            let err = match this.lookup_hickory(name.as_str()).await {
+                Ok(addrs) => return Ok(addrs),
+                Err(err) if err.is_definitive() => return Err(err.into()),
+                Err(err) => err,
+            };
 
-                if !inner.use_fallback.swap(true, Ordering::Relaxed) {
-                    debug!(
-                        "hickory-dns failed to resolve {}: {err}; \
-                        using the system DNS resolver (getaddrinfo) from now on",
-                        name.as_str()
-                    );
-                }
+            debug!(
+                "hickory-dns failed to resolve {}: {err}; \
+                retrying with the system DNS resolver (getaddrinfo)",
+                name.as_str()
+            );
 
-                return fallback.resolve(name).await.map_err(|system| {
-                    Box::new(FallbackError {
-                        hickory: err,
-                        system,
-                    }) as BoxError
-                });
-            }
-
-            fallback.resolve(name).await
+            fallback.resolve(name).await.map_err(|system| {
+                Box::new(FallbackError {
+                    hickory: err,
+                    system,
+                }) as BoxError
+            })
         })
     }
 }
@@ -681,7 +661,7 @@ mod fallback_tests {
     }
 
     #[tokio::test]
-    async fn falls_back_to_system_and_sticks_to_it() {
+    async fn falls_back_to_system_per_lookup() {
         let system = Arc::new(StubSystem::default());
         let resolver = TrustDnsResolver::from_parts(unreachable_hickory(), Some(system.clone()));
 
@@ -689,10 +669,10 @@ mod fallback_tests {
         assert_eq!(ips(addrs), [FALLBACK_IP]);
         assert_eq!(system.calls.load(Ordering::Relaxed), 1);
 
-        // Later lookups skip hickory-dns, even for names it answers locally.
+        // Later lookups still try hickory-dns first: `localhost` it answers locally.
         let addrs = resolver.resolve(name("localhost")).await.unwrap();
-        assert_eq!(ips(addrs), [FALLBACK_IP]);
-        assert_eq!(system.calls.load(Ordering::Relaxed), 2);
+        assert!(ips(addrs).iter().all(IpAddr::is_loopback));
+        assert_eq!(system.calls.load(Ordering::Relaxed), 1);
     }
 
     #[tokio::test]

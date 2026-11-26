@@ -22,8 +22,7 @@ pub enum DnsResolver {
     /// behind some VPNs or in containers that rely on NSS.
     ///
     /// A nameserver answering that the name has no address (NXDOMAIN or no
-    /// records) is not retried. Once a lookup has fallen back, all later lookups
-    /// go straight to the operating system's resolver.
+    /// records) is not retried.
     ///
     /// Only available with the `hickory-dns` feature, where it is the default.
     #[cfg(feature = "hickory-dns")]
