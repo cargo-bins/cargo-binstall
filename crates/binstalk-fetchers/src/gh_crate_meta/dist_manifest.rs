@@ -10,11 +10,12 @@
 
 use std::collections::BTreeMap;
 
-use binstalk_downloader::remote::StatusCode;
+use binstalk_downloader::{download::DataVerifier, remote::StatusCode};
 use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use bytes::{Bytes, BytesMut};
 use compact_str::CompactString;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use crate::{FetchError, common::*, fetch_context::Sha256Id};
 
@@ -261,6 +262,53 @@ impl ExpectedSha256 {
     }
 }
 
+/// Hashes the data downloaded, to compare it with an [`ExpectedSha256`]
+/// once that is known.
+pub(super) struct Sha256Verifier {
+    state: Option<Sha256>,
+    actual: Option<[u8; 32]>,
+    expected: Option<[u8; 32]>,
+}
+
+impl Sha256Verifier {
+    pub(super) fn new() -> Self {
+        Self {
+            state: Some(Sha256::new()),
+            actual: None,
+            expected: None,
+        }
+    }
+
+    /// Set the checksum [`DataVerifier::validate`] checks against.
+    pub(super) fn expect(&mut self, sha256: [u8; 32]) {
+        self.expected = Some(sha256);
+    }
+
+    pub(super) fn expected_hex(&self) -> Option<String> {
+        self.expected.map(|sha256| base16::encode_lower(&sha256))
+    }
+
+    pub(super) fn actual_hex(&self) -> Option<String> {
+        self.actual.map(|sha256| base16::encode_lower(&sha256))
+    }
+}
+
+impl DataVerifier for Sha256Verifier {
+    fn update(&mut self, data: &Bytes) {
+        if let Some(state) = &mut self.state {
+            state.update(data);
+        }
+    }
+
+    /// Fails if [`Sha256Verifier::expect`] wasn't called.
+    fn validate(&mut self) -> bool {
+        if let Some(state) = self.state.take() {
+            self.actual = Some(state.finalize().into());
+        }
+        self.expected.is_some() && self.actual == self.expected
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,5 +504,28 @@ mod tests {
         assert_eq!(parse_sha256_file(format!("{hex}\n").as_bytes()), expected);
         assert_eq!(parse_sha256_file(&hex.as_bytes()[1..]), None);
         assert_eq!(parse_sha256_file(b""), None);
+    }
+
+    #[test]
+    fn sha256_verifier() {
+        let data = Bytes::from_static(b"hello");
+        let expected: [u8; 32] = Sha256::digest(&data).into();
+
+        let mut verifier = Sha256Verifier::new();
+        verifier.update(&data.slice(..2));
+        verifier.update(&data.slice(2..));
+        verifier.expect(expected);
+        assert!(verifier.validate());
+
+        let mut verifier = Sha256Verifier::new();
+        verifier.update(&Bytes::from_static(b"world"));
+        verifier.expect(expected);
+        assert!(!verifier.validate());
+        assert_ne!(verifier.actual_hex(), verifier.expected_hex());
+
+        // Nothing to check against.
+        let mut verifier = Sha256Verifier::new();
+        verifier.update(&data);
+        assert!(!verifier.validate());
     }
 }

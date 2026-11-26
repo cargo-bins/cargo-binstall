@@ -85,6 +85,95 @@ impl DataVerifier for () {
     }
 }
 
+impl<T: DataVerifier + ?Sized> DataVerifier for &mut T {
+    fn update(&mut self, data: &Bytes) {
+        (**self).update(data)
+    }
+    fn validate(&mut self) -> bool {
+        (**self).validate()
+    }
+}
+
+impl<T: DataVerifier + ?Sized> DataVerifier for Box<T> {
+    fn update(&mut self, data: &Bytes) {
+        (**self).update(data)
+    }
+    fn validate(&mut self) -> bool {
+        (**self).validate()
+    }
+}
+
+/// No verifier accepts any data.
+impl<T: DataVerifier> DataVerifier for Option<T> {
+    fn update(&mut self, data: &Bytes) {
+        if let Some(verifier) = self {
+            verifier.update(data)
+        }
+    }
+    fn validate(&mut self) -> bool {
+        self.as_mut().is_none_or(T::validate)
+    }
+}
+
+/// Feeds the data to every verifier, and is valid if all of them are.
+///
+/// Every verifier is validated, even after one fails, so that each can be
+/// asked about its result afterwards.
+impl<T: DataVerifier> DataVerifier for [T] {
+    fn update(&mut self, data: &Bytes) {
+        self.iter_mut().for_each(|verifier| verifier.update(data))
+    }
+    fn validate(&mut self) -> bool {
+        self.iter_mut()
+            .fold(true, |valid, verifier| verifier.validate() & valid)
+    }
+}
+
+/// See the impl for `[T]`.
+impl<T: DataVerifier, const N: usize> DataVerifier for [T; N] {
+    fn update(&mut self, data: &Bytes) {
+        self.as_mut_slice().update(data)
+    }
+    fn validate(&mut self) -> bool {
+        self.as_mut_slice().validate()
+    }
+}
+
+/// See the impl for `[T]`.
+impl<T: DataVerifier> DataVerifier for Vec<T> {
+    fn update(&mut self, data: &Bytes) {
+        self.as_mut_slice().update(data)
+    }
+    fn validate(&mut self) -> bool {
+        self.as_mut_slice().validate()
+    }
+}
+
+/// Like the impl for `[T]`, for verifiers of different types.
+macro_rules! impl_data_verifier_for_tuple {
+    ($($name:ident)+) => {
+        impl<$($name: DataVerifier),+> DataVerifier for ($($name,)+) {
+            #[allow(non_snake_case)]
+            fn update(&mut self, data: &Bytes) {
+                let ($($name,)+) = self;
+                $($name.update(data);)+
+            }
+            #[allow(non_snake_case)]
+            fn validate(&mut self) -> bool {
+                let ($($name,)+) = self;
+                true $(& $name.validate())+
+            }
+        }
+    };
+}
+
+impl_data_verifier_for_tuple!(A);
+impl_data_verifier_for_tuple!(A B);
+impl_data_verifier_for_tuple!(A B C);
+impl_data_verifier_for_tuple!(A B C D);
+impl_data_verifier_for_tuple!(A B C D E);
+impl_data_verifier_for_tuple!(A B C D E F);
+
 #[derive(Debug)]
 enum DownloadContent {
     ToIssue {
@@ -412,6 +501,60 @@ mod test {
         num::NonZeroU16,
     };
     use tempfile::tempdir;
+
+    /// Counts the bytes it is fed, valid if they are `expected`.
+    #[derive(Default)]
+    struct Len {
+        len: usize,
+        expected: usize,
+        validated: bool,
+    }
+
+    impl Len {
+        fn expect(expected: usize) -> Self {
+            Self {
+                expected,
+                ..Self::default()
+            }
+        }
+    }
+
+    impl DataVerifier for Len {
+        fn update(&mut self, data: &Bytes) {
+            self.len += data.len();
+        }
+        fn validate(&mut self) -> bool {
+            self.validated = true;
+            self.len == self.expected
+        }
+    }
+
+    fn feed(verifier: &mut dyn DataVerifier) -> bool {
+        verifier.update(&Bytes::from_static(b"ab"));
+        verifier.update(&Bytes::from_static(b"c"));
+        verifier.validate()
+    }
+
+    #[test]
+    fn composed_data_verifiers() {
+        let mut tuple = (Len::expect(3), Some(Len::expect(3)), None::<Len>);
+        assert!(feed(&mut tuple));
+        assert_eq!(tuple.1.as_ref().unwrap().len, 3);
+
+        // A failing verifier doesn't stop the others from being validated.
+        let mut array = [Len::expect(1), Len::expect(3)];
+        assert!(!feed(&mut array));
+        assert!(array.iter().all(|verifier| verifier.validated));
+
+        let mut vec = vec![Len::expect(3), Len::expect(3)];
+        assert!(feed(&mut vec));
+        assert!(feed(&mut Vec::<Len>::new()));
+
+        let mut boxed: Box<dyn DataVerifier> = Box::new(Len::expect(3));
+        let mut other = Len::expect(2);
+        assert!(!feed(&mut (&mut boxed, &mut other)));
+        assert_eq!(other.len, 3);
+    }
 
     #[tokio::test]
     async fn test_and_extract() {

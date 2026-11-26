@@ -10,7 +10,6 @@ use compact_str::{CompactString, ToCompactString};
 use either::Either;
 use itertools::Itertools;
 use leon::Template;
-use sha2::{Digest, Sha256};
 use strum::IntoEnumIterator;
 use tracing::{debug, info, trace, warn};
 use url::Url;
@@ -25,7 +24,7 @@ pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
 mod dist_manifest;
 use dist_manifest::{
     DIST_MANIFEST, DistManifest, ExpectedSha256, MAX_CHECKSUM_FILE_SIZE, MAX_MANIFEST_SIZE,
-    Sha256Source, download_release_asset, parse_sha256_file,
+    Sha256Source, Sha256Verifier, download_release_asset, parse_sha256_file,
 };
 
 pub(crate) mod hosting;
@@ -68,29 +67,6 @@ struct Resolved {
     bin: Option<CompactString>,
     /// The sha256 checksum the package must have.
     sha256: Option<ExpectedSha256>,
-}
-
-/// Feeds the data to the signature verifier and to the sha256 hasher, if
-/// any.
-struct Verifiers<'a, 'b> {
-    signature: &'a mut (dyn DataVerifier + 'b),
-    sha256: Option<&'a mut Sha256>,
-}
-
-impl DataVerifier for Verifiers<'_, '_> {
-    fn update(&mut self, data: &bytes::Bytes) {
-        self.signature.update(data);
-        if let Some(sha256) = &mut self.sha256 {
-            sha256.update(data);
-        }
-    }
-
-    /// Not used: the signature and the checksum are checked on their own,
-    /// to tell which one failed. Fails closed if called anyway.
-    fn validate(&mut self) -> bool {
-        debug_assert!(false, "validate each verifier on its own");
-        false
-    }
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -862,11 +838,8 @@ impl GhCrateMetaFound {
         );
         let mut data_verifier = verifier.data_verifier()?;
         let expected_sha256 = resolved.sha256.take();
-        let mut hasher = expected_sha256.as_ref().map(|_| Sha256::new());
-        let mut verifiers = Verifiers {
-            signature: data_verifier.as_mut(),
-            sha256: hasher.as_mut(),
-        };
+        let mut sha256_verifier = expected_sha256.as_ref().map(|_| Sha256Verifier::new());
+        let mut verifiers = (data_verifier.as_mut(), sha256_verifier.as_mut());
         let files = match resolved.gh_release_artifact_url.as_ref() {
             Some(artifact_url) if resolved.is_repo_private => fetcher
                 .gh_api_client
@@ -883,15 +856,15 @@ impl GhCrateMetaFound {
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
 
-        if let (Some(expected), Some(hasher)) = (expected_sha256, hasher) {
+        if let (Some(expected), Some(sha256_verifier)) = (expected_sha256, &mut sha256_verifier) {
             trace!("validating sha256 checksum");
             if let Some(expected) = expected.get().await? {
-                let actual: [u8; 32] = hasher.finalize().into();
-                if actual != expected {
+                sha256_verifier.expect(expected);
+                if !sha256_verifier.validate() {
                     return Err(FetchError::ChecksumMismatch {
                         url: Box::new(resolved.url.clone()),
-                        expected: base16::encode_lower(&expected).into(),
-                        actual: base16::encode_lower(&actual).into(),
+                        expected: sha256_verifier.expected_hex().unwrap_or_default().into(),
+                        actual: sha256_verifier.actual_hex().unwrap_or_default().into(),
                     });
                 }
                 info!(
