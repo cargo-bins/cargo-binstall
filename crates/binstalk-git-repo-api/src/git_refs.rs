@@ -24,22 +24,51 @@ use url::Url;
 
 use crate::gh_api_client::{GhApiError, check_http_status_and_header};
 
-/// The tag of the release `url` downloads an asset of, if it is one of `repo`.
-///
-/// Knows the release asset URLs of GitHub and Codeberg
-/// (`{repo}/releases/download/{tag}/…`) and GitLab
-/// (`{repo}/-/releases/{tag}/downloads/…`).
-pub fn release_tag(repo: &str, url: &Url) -> Option<CompactString> {
-    let rest = url.as_str().strip_prefix(repo.trim_end_matches('/'))?;
+/// A release tag of a git repository.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct ReleaseTag {
+    /// The repository, see [`ReleaseTag::of_asset`].
+    pub repo: Url,
+    pub tag: CompactString,
+}
 
-    let tag = if let Some(rest) = rest.strip_prefix("/releases/download/") {
-        rest.split_once('/')?.0
-    } else {
-        let (tag, rest) = rest.strip_prefix("/-/releases/")?.split_once('/')?;
-        rest.starts_with("downloads/").then_some(tag)?
-    };
+impl ReleaseTag {
+    /// The release `url` downloads an asset of, if it looks like one.
+    ///
+    /// Knows the release asset URLs of GitHub and Codeberg
+    /// (`{repo}/releases/download/{tag}/…`) and GitLab
+    /// (`{repo}/-/releases/{tag}/downloads/…`), on any host.
+    ///
+    /// The repository is written the same way for every asset of it: on
+    /// github.com, which ignores the case of owner and repository names, in
+    /// lower case.
+    pub fn of_asset(url: &Url) -> Option<Self> {
+        let path = url.path();
+        let (repo_path, tag) = if let Some((repo_path, rest)) = path.split_once("/-/releases/") {
+            let (tag, rest) = rest.split_once('/')?;
+            (repo_path, rest.starts_with("downloads/").then_some(tag)?)
+        } else {
+            let (repo_path, rest) = path.split_once("/releases/download/")?;
+            (repo_path, rest.split_once('/')?.0)
+        };
+        if repo_path.trim_matches('/').is_empty() {
+            return None;
+        }
 
-    Some(percent_decode_str(tag).decode_utf8().ok()?.into())
+        let mut repo = url.clone();
+        repo.set_query(None);
+        repo.set_fragment(None);
+        if url.domain() == Some("github.com") {
+            repo.set_path(&repo_path.to_ascii_lowercase());
+        } else {
+            repo.set_path(repo_path);
+        }
+
+        Some(Self {
+            repo,
+            tag: percent_decode_str(tag).decode_utf8().ok()?.into(),
+        })
+    }
 }
 
 /// The tags [`list_tags`] was asked about, and which of them exist.
@@ -185,52 +214,58 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_release_tag() {
-        let tag = |repo, url| release_tag(repo, &Url::parse(url).unwrap());
+    fn test_release_tag_of_asset() {
+        let tag = |url| {
+            ReleaseTag::of_asset(&Url::parse(url).unwrap())
+                .map(|ReleaseTag { repo, tag }| (repo.to_string(), tag))
+        };
+        let some = |repo: &str, tag: &str| Some((repo.to_owned(), CompactString::from(tag)));
 
         assert_eq!(
             tag(
-                "https://github.com/cargo-bins/cargo-binstall",
                 "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.28.0/cargo-binstall-x86_64-unknown-linux-gnu.tgz"
             ),
-            Some("v1.28.0".into())
+            some("https://github.com/cargo-bins/cargo-binstall", "v1.28.0")
+        );
+        // Another repository, written in another case.
+        assert_eq!(
+            tag(
+                "https://github.com/Cargo-Bins/Cargo-QuickInstall/releases/download/ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz"
+            ),
+            some(
+                "https://github.com/cargo-bins/cargo-quickinstall",
+                "ripgrep-14.1.1"
+            )
         );
         assert_eq!(
             tag(
-                "https://github.com/rustsec/rustsec/",
                 "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv0.17.6/cargo-audit.tgz"
             ),
-            Some("cargo-audit/v0.17.6".into())
+            some("https://github.com/rustsec/rustsec", "cargo-audit/v0.17.6")
         );
         assert_eq!(
             tag(
-                "https://gitlab.com/group/sub/project",
                 "https://gitlab.com/group/sub/project/-/releases/v1.0.0/downloads/binaries/project.tgz"
             ),
-            Some("v1.0.0".into())
+            some("https://gitlab.com/group/sub/project", "v1.0.0")
+        );
+        assert_eq!(
+            tag("https://codeberg.org/owner/repo/releases/download/v1.0.0/repo.tgz"),
+            some("https://codeberg.org/owner/repo", "v1.0.0")
         );
         // Not a release asset.
         assert_eq!(
-            tag(
-                "https://gitlab.com/group/project",
-                "https://gitlab.com/group/project/-/releases/v1.0.0/evidence.json"
-            ),
+            tag("https://gitlab.com/group/project/-/releases/v1.0.0/evidence.json"),
             None
         );
-        // Not in the repository.
+        // No repository.
         assert_eq!(
-            tag(
-                "https://github.com/cargo-bins/cargo-binstall",
-                "https://example.com/releases/download/v1.28.0/cargo-binstall.tgz"
-            ),
+            tag("https://example.com/releases/download/v1.28.0/cargo-binstall.tgz"),
             None
         );
         // Bitbucket has no tag in its download URLs.
         assert_eq!(
-            tag(
-                "https://bitbucket.org/owner/repo",
-                "https://bitbucket.org/owner/repo/downloads/repo.tgz"
-            ),
+            tag("https://bitbucket.org/owner/repo/downloads/repo.tgz"),
             None
         );
     }

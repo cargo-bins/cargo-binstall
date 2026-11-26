@@ -301,6 +301,18 @@ impl Data {
 
     #[instrument(skip(client))]
     async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
+        RepoInfo::get(&self.repo_info, self.repo.as_deref(), client).await
+    }
+}
+
+impl RepoInfo {
+    /// What is known about the repository `repo`, kept in `cell`, `None` if
+    /// there is none.
+    async fn get<'a>(
+        cell: &'a OnceCell<Option<RepoInfo>>,
+        repo: Option<&str>,
+        client: &GhApiClient,
+    ) -> Result<Option<&'a RepoInfo>, FetchError> {
         async fn gh_get_repo_info(
             client: &GhApiClient,
             gh_repo: &GhRepo,
@@ -383,26 +395,23 @@ impl Data {
             })
         }
 
-        self.repo_info
-            .get_or_try_init(move || {
-                Box::pin(async move {
-                    let Some(repo) = self.repo.as_deref() else {
-                        return Ok(None);
-                    };
+        cell.get_or_try_init(move || {
+            Box::pin(async move {
+                let Some(repo) = repo else {
+                    return Ok(None);
+                };
 
-                    let repo_info = get_repo_info_inner(repo, client).await?;
+                let repo_info = get_repo_info_inner(repo, client).await?;
 
-                    debug!("Resolved repo_info = {repo_info:#?}");
+                debug!("Resolved repo_info = {repo_info:#?}");
 
-                    Ok(Some(repo_info))
-                })
+                Ok(Some(repo_info))
             })
-            .await
-            .map(Option::as_ref)
+        })
+        .await
+        .map(Option::as_ref)
     }
-}
 
-impl RepoInfo {
     /// If `repo` contains a subcrate, then extracts and returns it.
     /// It will also remove that subcrate path from `repo` to match
     /// `scheme:/{repo_owner}/{repo_name}`
