@@ -156,6 +156,7 @@ async fn resolve_inner(
         };
 
     let data = Data::new(
+        opts.fetch_context.clone(),
         package_info.name.clone(),
         package_info.version_str.clone(),
         package_info.repo.clone(),
@@ -294,9 +295,11 @@ async fn download_extract_and_verify(
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
-    // Download and extract it.
+    // Download and extract it, unless another crate did already: then it is
+    // somewhere else than `bin_path`.
     // If that fails, then ignore this fetcher.
-    let extracted_files = found.fetch_and_extract(bin_path).await?;
+    let extracted = found.fetch_and_extract(bin_path).await?;
+    let (bin_path, extracted_files) = (extracted.dir(), extracted.files());
     debug!("extracted_files = {extracted_files:#?}");
 
     // Verify that all non-optional bin_files exist
@@ -306,7 +309,7 @@ async fn download_extract_and_verify(
         bin_path,
         install_path,
         no_symlinks,
-        &extracted_files,
+        extracted_files,
     )?;
 
     let name = &package_info.name;

@@ -6,7 +6,7 @@ use compact_str::CompactString;
 
 use crate::{
     DesiredTargets,
-    fetchers::{Data, Fetcher, SignaturePolicy, TargetDataErased},
+    fetchers::{Data, FetchContext, Fetcher, SignaturePolicy, TargetDataErased},
     helpers::{
         gh_api_client::GhApiClient, jobserver_client::LazyJobserverClient,
         lazy_gh_api_client::LazyGhApiClient, remote::Client,
@@ -79,4 +79,8 @@ pub struct Options {
     pub disable_telemetry: bool,
 
     pub maximum_resolution_timeout: Duration,
+
+    /// Shared by the fetchers of all crates, so that crates in the same
+    /// repository look it up once.
+    pub fetch_context: Arc<FetchContext>,
 }
