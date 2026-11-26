@@ -166,7 +166,9 @@ impl Probe {
     /// Check all the remaining candidates, returning the first one found:
     ///
     /// 1. Drop the candidates of the release tags that don't exist, see
-    ///    [`Probe::drop_missing_tags`].
+    ///    [`Probe::drop_missing_tags`]. Before and after, the only candidate
+    ///    of a public repository is checked with GET right away, see
+    ///    [`Probe::check_only_candidate`].
     /// 2. For a public GitHub repository, check the candidates github.com's
     ///    asset lists have, and drop the ones they don't, see
     ///    [`Probe::check_on_web`].
@@ -174,10 +176,16 @@ impl Probe {
     ///    could not tell about in one GraphQL query.
     /// 4. Check the rest at once.
     pub(super) async fn resolve(mut self) -> Result<Option<Resolved>, FetchError> {
+        if let Some(resolved) = self.check_only_candidate().await? {
+            return Ok(resolved);
+        }
         self.drop_missing_tags().await;
         if self.candidates.is_empty() {
             debug!("No release tag of any candidate exists");
             return Ok(None);
+        }
+        if let Some(resolved) = self.check_only_candidate().await? {
+            return Ok(resolved);
         }
 
         if !self.shared.is_repo_private {
@@ -199,6 +207,33 @@ impl Probe {
             async move { shared.check(candidate).await }
         }));
         Ok(resolver.resolve().await)
+    }
+
+    /// Check the only candidate left of a public repository with GET, e.g.
+    /// of a `pkg-url` pointing at cargo-quickinstall: one request, as many
+    /// as ls-refs or github.com's asset list take to tell whether it may
+    /// exist, and the GET is the download if found.
+    ///
+    /// `None` if there are more, or its tag is known not to exist already,
+    /// so that [`Probe::drop_missing_tags`] drops it without a request.
+    async fn check_only_candidate(&mut self) -> Result<Option<Option<Resolved>>, FetchError> {
+        let Self { shared, candidates } = self;
+        let [candidate] = &candidates[..] else {
+            return Ok(None);
+        };
+        let is_tag_missing = match (&candidate.tag, shared.data.repo_info.get()) {
+            (Some(tag), Some(Some(info))) => {
+                let tags = shared.data.context.repo_tags(&info.repo);
+                tags.lock().await.exists(tag) == Some(false)
+            }
+            _ => false,
+        };
+        if shared.is_repo_private || is_tag_missing {
+            return Ok(None);
+        }
+
+        let candidate = candidates.pop().expect("one candidate");
+        shared.check_with_get(candidate).await.map(Some)
     }
 
     /// Find out which release tags of the candidates exist, with one request
@@ -921,6 +956,75 @@ mod test {
             .await,
             not_found(1, 1)
         );
+    }
+
+    /// The only candidate, as of a `pkg-url` pointing at cargo-quickinstall,
+    /// is checked with GET, without ls-refs or github.com's asset list: one
+    /// request, which is the download if found.
+    #[tokio::test]
+    async fn test_resolve_only_candidate() {
+        let repo_tags = |data: &Data| {
+            let info = data.repo_info.get().unwrap().as_ref().unwrap();
+            data.context.repo_tags(&info.repo)
+        };
+        let gh_api_client = GhApiClient::new(client(), None);
+        const GNU: &str = "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz";
+        let resolve = |repo: &'static str, assets: &'static [&'static str]| {
+            let gh_api_client = gh_api_client.clone();
+            async move {
+                let candidates = assets
+                    .iter()
+                    .map(|asset| new_candidate(repo, asset, OTHER_TEMPLATE))
+                    .collect();
+                let probe = new_probe(&gh_api_client, repo, candidates).await;
+                let data = Arc::clone(&probe.shared.data);
+                (probe.resolve().await.unwrap(), data)
+            }
+        };
+
+        let (found, data) = resolve(QUICKINSTALL, &[GNU]).await;
+        let found = found.unwrap();
+        assert!(found.response.is_some());
+        assert_eq!(asset(Some(found)).as_deref(), Some(GNU));
+        assert_eq!(data.context.release_assets_pages_len(), 0);
+        assert_eq!(repo_tags(&data).lock().await.exists("ripgrep-14.1.1"), None);
+
+        // Not found.
+        let (found, data) = resolve(
+            QUICKINSTALL,
+            &["ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tar.gz"],
+        )
+        .await;
+        assert!(found.is_none());
+        assert_eq!(data.context.release_assets_pages_len(), 0);
+
+        // The only one ls-refs leaves.
+        let (found, data) = resolve(
+            QUICKINSTALL,
+            &[
+                "ripgrep-14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-gnu.tar.gz",
+                GNU,
+            ],
+        )
+        .await;
+        assert_eq!(asset(found).as_deref(), Some(GNU));
+        assert_eq!(data.context.release_assets_pages_len(), 0);
+        assert_eq!(
+            repo_tags(&data).lock().await.exists("ripgrep-14.1.0"),
+            Some(false)
+        );
+
+        // Two left: github.com's asset list is used.
+        let (found, data) = resolve(
+            QUICKINSTALL,
+            &[
+                "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
+                GNU,
+            ],
+        )
+        .await;
+        assert_eq!(asset(found).as_deref(), Some(GNU));
+        assert_eq!(data.context.release_assets_pages_len(), 1);
     }
 
     #[tokio::test]
