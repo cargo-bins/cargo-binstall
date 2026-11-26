@@ -1,12 +1,18 @@
-//! What the fetchers learn about a crate's repository, kept for as long as
-//! the crate is being resolved: by all its targets, which are tried one
-//! after another, by their overrides, and under both the names it is looked
-//! up with, see [`Data::with_name`](crate::Data::with_name).
+//! What the fetchers learn about repositories, shared by all crates
+//! resolved in one run (see [`FetchContext`]): by all targets of a crate,
+//! which are tried one after another, by their overrides, under both the
+//! names a crate is looked up with (see [`Data::with_name`](crate::Data::with_name)),
+//! and by other crates in the same repository, such as a workspace's crates
+//! released together.
 //!
-//! [`binstalk_git_repo_api`] caches nothing, so nothing outlives the crate.
+//! [`binstalk_git_repo_api`] caches nothing, so nothing outlives the
+//! [`FetchContext`].
 
 use std::{
+    borrow::Borrow,
     collections::{HashMap, HashSet},
+    fmt,
+    hash::Hash,
     sync::{Arc, RwLock},
 };
 
@@ -16,19 +22,44 @@ use binstalk_git_repo_api::{
 };
 use compact_str::CompactString;
 use tokio::sync::{Mutex, OnceCell};
+use url::Url;
 
 use crate::RepoInfo;
 
-#[derive(Debug, Default)]
-pub(crate) struct RepoCache {
-    pub(crate) info: OnceCell<Option<RepoInfo>>,
+/// Shared by the fetchers of all crates resolved together, through
+/// [`Data::new`](crate::Data::new), so that what one crate's fetchers asked
+/// about a repository isn't asked again for another crate.
+#[derive(Default)]
+pub struct FetchContext {
+    /// By the `repository` of the crates' manifests.
+    repo_infos: Cells<String, OnceCell<Option<RepoInfo>>>,
+    /// By [`RepoInfo::repo`], so that crates whose `repository` points at
+    /// a subdirectory of the same repository share them.
+    ///
     /// Locked while the git server is asked, so a tag is asked once.
-    pub(crate) tags: Mutex<Tags>,
-    release_assets_pages: Cells<ReleaseAssetsPage>,
-    release_artifacts: Cells<Option<ReleaseArtifacts>>,
+    repo_tags: Cells<Url, Mutex<Tags>>,
+    release_assets_pages: Cells<GhRelease, OnceCell<ReleaseAssetsPage>>,
+    release_artifacts: Cells<GhRelease, OnceCell<Option<ReleaseArtifacts>>>,
 }
 
-impl RepoCache {
+impl fmt::Debug for FetchContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FetchContext").finish_non_exhaustive()
+    }
+}
+
+impl FetchContext {
+    /// Where what is known about the repository `repo` is kept, `None` if
+    /// it is no repository the fetchers can use.
+    pub(crate) fn repo_info(&self, repo: &str) -> Arc<OnceCell<Option<RepoInfo>>> {
+        self.repo_infos.get(repo)
+    }
+
+    /// Which release tags exist in `repo`, see [`RepoInfo::repo`].
+    pub(crate) fn repo_tags(&self, repo: &Url) -> Arc<Mutex<Tags>> {
+        self.repo_tags.get(repo)
+    }
+
     /// Where github.com's asset list of `release` is kept.
     pub(crate) fn release_assets_page(
         &self,
@@ -48,12 +79,12 @@ impl RepoCache {
 
     #[cfg(test)]
     pub(crate) fn release_assets_pages_len(&self) -> usize {
-        self.release_assets_pages.0.read().unwrap().len()
+        self.release_assets_pages.len()
     }
 
     #[cfg(test)]
     pub(crate) fn release_artifacts_len(&self) -> usize {
-        self.release_artifacts.0.read().unwrap().len()
+        self.release_artifacts.len()
     }
 }
 
@@ -97,22 +128,32 @@ impl Tags {
     }
 }
 
-/// A value per release, each fetched once however many look it up at once.
-#[derive(Debug)]
-struct Cells<V>(RwLock<HashMap<GhRelease, Arc<OnceCell<V>>>>);
+/// A `V` per key, created on first use and shared by everyone who looks it
+/// up, so that what it holds is fetched once however many look it up at
+/// once.
+struct Cells<K, V>(RwLock<HashMap<K, Arc<V>>>);
 
-impl<V> Default for Cells<V> {
+impl<K, V> Default for Cells<K, V> {
     fn default() -> Self {
         Self(RwLock::default())
     }
 }
 
-impl<V> Cells<V> {
-    fn get(&self, release: &GhRelease) -> Arc<OnceCell<V>> {
-        if let Some(cell) = self.0.read().unwrap().get(release) {
+impl<K: Eq + Hash, V: Default> Cells<K, V> {
+    fn get<Q>(&self, key: &Q) -> Arc<V>
+    where
+        K: Borrow<Q>,
+        Q: Eq + Hash + ToOwned<Owned = K> + ?Sized,
+    {
+        if let Some(cell) = self.0.read().unwrap().get(key) {
             return Arc::clone(cell);
         }
-        Arc::clone(self.0.write().unwrap().entry(release.clone()).or_default())
+        Arc::clone(self.0.write().unwrap().entry(key.to_owned()).or_default())
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.0.read().unwrap().len()
     }
 }
 

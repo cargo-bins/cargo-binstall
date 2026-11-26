@@ -9,7 +9,7 @@ use binstalk_types::{
     crate_info::PkgUrlHint,
 };
 use thiserror::Error as ThisError;
-use tokio::{task::JoinError, time::sleep};
+use tokio::{sync::OnceCell, task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -28,8 +28,8 @@ use signing::*;
 
 mod futures_resolver;
 
-mod repo_cache;
-use repo_cache::RepoCache;
+mod fetch_context;
+pub use fetch_context::FetchContext;
 
 use gh_crate_meta::hosting::RepositoryHost;
 
@@ -230,19 +230,33 @@ pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
-    /// Shared by all targets, and with [`Data::with_name`].
-    repo_cache: Arc<RepoCache>,
+    /// Shared with the other crates being resolved.
+    context: Arc<FetchContext>,
+    /// Kept in `context`, by `repo`.
+    repo_info: Arc<OnceCell<Option<RepoInfo>>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
 
 impl Data {
-    pub fn new(name: CompactString, version: CompactString, repo: Option<String>) -> Self {
+    /// `context` is shared by all crates resolved together, so that what
+    /// is learnt about a repository is asked only once.
+    pub fn new(
+        context: Arc<FetchContext>,
+        name: CompactString,
+        version: CompactString,
+        repo: Option<String>,
+    ) -> Self {
+        let repo_info = match repo.as_deref() {
+            Some(repo) => context.repo_info(repo),
+            None => Arc::default(),
+        };
         Self {
             name,
             version,
             repo,
-            repo_cache: Arc::default(),
+            context,
+            repo_info,
             pkg_url_hint: None,
         }
     }
@@ -256,7 +270,8 @@ impl Data {
             name,
             version: self.version.clone(),
             repo: self.repo.clone(),
-            repo_cache: Arc::clone(&self.repo_cache),
+            context: Arc::clone(&self.context),
+            repo_info: Arc::clone(&self.repo_info),
             pkg_url_hint: None,
         }
     }
@@ -363,8 +378,7 @@ impl Data {
             })
         }
 
-        self.repo_cache
-            .info
+        self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
                     let Some(repo) = self.repo.as_deref() else {
@@ -540,7 +554,12 @@ mod test {
         let url_without_git = "https://github.com/cargo-bins/cargo-binstall";
         let url_with_git = format!("{}.git", url_without_git);
 
-        let data = Data::new("cargo-binstall".into(), "v1.2.3".into(), Some(url_with_git));
+        let data = Data::new(
+            Default::default(),
+            "cargo-binstall".into(),
+            "v1.2.3".into(),
+            Some(url_with_git),
+        );
 
         let gh_client = GhApiClient::new(
             Client::new(

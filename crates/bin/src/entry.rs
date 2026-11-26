@@ -273,6 +273,8 @@ pub fn install_crates(
         maximum_resolution_timeout: Duration::from_secs(
             args.maximum_resolution_timeout.get().into(),
         ),
+
+        fetch_context: Default::default(),
     });
 
     // Destruct args before any async function to reduce size of the future

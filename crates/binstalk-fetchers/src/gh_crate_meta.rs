@@ -654,6 +654,7 @@ mod test {
     #[test]
     fn target_arch_aliases_are_tried_after_own_name() {
         let data = Data::new(
+            Default::default(),
             "redu".to_compact_string(),
             "0.2.12".to_compact_string(),
             Some("https://github.com/drdo/redu".to_string()),
@@ -704,6 +705,7 @@ mod test {
     fn defaults() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-binstall".to_compact_string(),
                 "1.2.3".to_compact_string(),
                 Some("https://github.com/ryankurte/cargo-binstall".to_string()),
@@ -719,6 +721,7 @@ mod test {
     fn no_repo_but_full_url() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-binstall".to_compact_string(),
                 "1.2.3".to_compact_string(),
                 None,
@@ -734,6 +737,7 @@ mod test {
     fn different_url() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "radio-sx128x".to_compact_string(),
                 "0.14.1-alpha.5".to_compact_string(),
                 Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
@@ -749,6 +753,7 @@ mod test {
     fn deprecated_format() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "radio-sx128x".to_compact_string(),
                 "0.14.1-alpha.5".to_compact_string(),
                 Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
@@ -764,6 +769,7 @@ mod test {
     fn different_ext() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-watch".to_compact_string(),
                 "9.0.0".to_compact_string(),
                 Some("https://github.com/watchexec/cargo-watch".to_string()),
@@ -779,6 +785,7 @@ mod test {
     fn no_archive() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-watch".to_compact_string(),
                 "9.0.0".to_compact_string(),
                 Some("https://github.com/watchexec/cargo-watch".to_string()),

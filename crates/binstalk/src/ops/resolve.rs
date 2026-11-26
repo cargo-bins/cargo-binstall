@@ -156,6 +156,7 @@ async fn resolve_inner(
         };
 
     let data = Data::new(
+        opts.fetch_context.clone(),
         package_info.name.clone(),
         package_info.version_str.clone(),
         package_info.repo.clone(),
