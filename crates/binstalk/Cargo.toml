@@ -31,7 +31,7 @@ leon = "3.0.0"
 maybe-owned = "0.3.4"
 miette = "7.0.0"
 semver = { version = "1.0.28", features = ["serde"] }
-simple-git = { version = "0.2.18", optional = true }
+simple-git = { version = "0.2.40", optional = true }
 strum = "0.28.0"
 tempfile = "3.5.0"
 thiserror = "2.0.11"

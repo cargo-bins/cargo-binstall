@@ -4497,8 +4497,9 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "simple-git"
-version = "0.2.39"
-source = "git+https://github.com/cargo-bins/simple-git?branch=main#6cd6acb64d7d629cf977c44a181333082c0228b6"
+version = "0.2.40"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cf2d76c7e1556615f927f0d1548f656fa663d0d06f61b070c2628c60336d199"
 dependencies = [
  "compact_str",
  "derive_destructure2",
