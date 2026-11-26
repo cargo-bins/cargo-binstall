@@ -360,16 +360,16 @@ struct GhCrateMetaFound {
 
 impl GhCrateMetaFound {
     /// What [`GhCrateMetaFound::download_and_extract`] downloads, and how
-    /// it verifies it, `None` if it would fail.
-    fn package_id(&self) -> Option<PackageId> {
+    /// it verifies it.
+    fn package_id(&self) -> Result<PackageId, FetchError> {
         let Self { fetcher, resolved } = self;
         // The same verifier as `download_and_extract`.
         let signing = match (fetcher.signature_policy, &fetcher.target_data.meta.signing) {
             (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => None,
-            (SignaturePolicy::Require, None) => return None,
+            (SignaturePolicy::Require, None) => return Err(FetchError::MissingSignature),
             (_, Some(config)) => Some((config.algorithm, config.pubkey.as_ref().into())),
         };
-        Some(PackageId {
+        Ok(PackageId {
             url: resolved.url.clone(),
             pkg_fmt: resolved.pkg_fmt,
             signing,
@@ -457,31 +457,11 @@ impl GhCrateMetaFound {
 #[async_trait::async_trait]
 impl Found for GhCrateMetaFound {
     async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError> {
-        let data = Arc::clone(&self.fetcher.data);
-        let Some(id) = self.package_id() else {
-            let files = self.download_and_extract(dst).await?;
-            return Ok(Arc::new(Extracted::new(
-                data.name.clone(),
-                dst.to_path_buf(),
-                files,
-            )));
-        };
-
-        let extracted = data
-            .context
-            .extract_once(id, &data.name, dst, async || {
-                self.download_and_extract(dst).await
-            })
-            .await?;
-        if extracted.crate_name() != data.name {
-            info!(
-                "Reusing {} for {}, it was downloaded for {} already",
-                self.resolved.url,
-                data.name,
-                extracted.crate_name(),
-            );
-        }
-        Ok(extracted)
+        let id = self.package_id()?;
+        let context = Arc::clone(&self.fetcher.data.context);
+        context
+            .extract_once(id, dst, async || self.download_and_extract(dst).await)
+            .await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

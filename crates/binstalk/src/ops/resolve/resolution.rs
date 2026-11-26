@@ -21,7 +21,7 @@ use tracing::{debug, error, info, warn};
 use crate::{
     bins,
     errors::BinstallError,
-    fetchers::{Extracted, Found},
+    fetchers::Found,
     manifests::crate_info::{CrateInfo, CrateSource},
     ops::Options,
 };
@@ -29,8 +29,6 @@ use crate::{
 pub struct ResolutionFetch {
     /// The package found, already downloaded and extracted.
     pub found: Box<dyn Found>,
-    /// Where `bin_files` were extracted to, maybe for other crates too.
-    pub extracted: Arc<Extracted>,
     pub new_version: Version,
     /// Publish time (RFC 3339) from the registry index, if known
     pub pubtime: Option<CompactString>,
@@ -77,14 +75,8 @@ impl ResolutionFetch {
     fn install_inner(self, opts: &Options) -> Result<CrateInfo, BinstallError> {
         type InstallFp = fn(&bins::BinFile) -> Result<(), bins::Error>;
 
-        // Called once per install, whichever way it installs.
-        let may_move_files = self.extracted.may_move_files();
         let (install_bin, install_link): (InstallFp, InstallFp) = match (opts.no_track, opts.force)
         {
-            (true, true) | (false, _) if !may_move_files => {
-                // Other crates install from the same files.
-                (bins::BinFile::install_bin_copy, bins::BinFile::install_link)
-            }
             (true, true) | (false, _) => (bins::BinFile::install_bin, bins::BinFile::install_link),
             (true, false) => (
                 bins::BinFile::install_bin_noclobber,

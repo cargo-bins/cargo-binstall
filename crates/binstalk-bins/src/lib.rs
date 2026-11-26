@@ -7,7 +7,7 @@ use std::{
 };
 
 use atomic_file_install::{
-    atomic_install, atomic_install_copy, atomic_install_noclobber, atomic_symlink_file,
+    atomic_install_keep_src, atomic_install_noclobber, atomic_symlink_file,
     atomic_symlink_file_noclobber,
 };
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
@@ -395,6 +395,8 @@ impl BinFile {
         Ok(source)
     }
 
+    /// The source is left where it is, as it may be installed by other
+    /// crates in the same package too.
     pub fn install_bin(&self) -> Result<(), Error> {
         let source = self.pre_install_bin()?;
 
@@ -404,23 +406,7 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install(&source, &self.dest)?;
-
-        Ok(())
-    }
-
-    /// Like [`BinFile::install_bin`], but copies the source instead of
-    /// moving it, for when another crate installs it too.
-    pub fn install_bin_copy(&self) -> Result<(), Error> {
-        let source = self.pre_install_bin()?;
-
-        debug!(
-            "Atomically install a copy of '{}' to '{}'",
-            self.source.display(),
-            self.dest.display()
-        );
-
-        atomic_install_copy(&source, &self.dest)?;
+        atomic_install_keep_src(&source, &self.dest)?;
 
         Ok(())
     }

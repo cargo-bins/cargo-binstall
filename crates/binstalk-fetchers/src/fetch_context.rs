@@ -84,38 +84,28 @@ impl FetchContext {
         self.release_artifacts.get(release)
     }
 
-    /// Extract the package `id` with `extract` for `crate_name`, unless it
-    /// was already extracted for another crate, or is being extracted, in
-    /// which case that one is given to `crate_name` too once ready.
+    /// Extract the package `id` to `dst` with `extract`, unless it was
+    /// extracted for another crate already, or is being extracted: then
+    /// that one is returned once ready.
     ///
     /// If extracting it for another crate failed, it is tried again.
     pub(crate) async fn extract_once<F>(
         &self,
         id: PackageId,
-        crate_name: &CompactString,
         dst: &Path,
         extract: F,
     ) -> Result<Arc<Extracted>, FetchError>
     where
         F: AsyncFnOnce() -> Result<ExtractedFiles, FetchError>,
     {
-        let cell = self.packages.get(&id);
-        let mut extracted_here = false;
-        let extracted = cell
+        self.packages
+            .get(&id)
             .get_or_try_init(async || {
-                extracted_here = true;
                 let files = extract().await?;
-                Ok::<_, FetchError>(Arc::new(Extracted::new(
-                    crate_name.clone(),
-                    dst.to_path_buf(),
-                    files,
-                )))
+                Ok(Arc::new(Extracted::new(dst.to_path_buf(), files)))
             })
-            .await?;
-        if !extracted_here {
-            extracted.add_crate();
-        }
-        Ok(Arc::clone(extracted))
+            .await
+            .cloned()
     }
 
     /// How many of github.com's asset lists were fetched.

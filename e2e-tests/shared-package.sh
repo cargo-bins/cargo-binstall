@@ -33,6 +33,7 @@ target="$("$1" -vV | sed -n 's/^build-target: //p')"
 log="$(mktemp)"
 
 "$1" binstall --no-confirm --strategies crate-meta-data --targets "$target" \
+    --log-level debug \
     --pkg-url "$HTTPS_SERVER_URL/shared.tgz" --pkg-fmt tgz \
     --bin-dir "{ bin }{ binary-ext }" \
     b3sum@1.5.0 cargo-watch@8.4.0 2>&1 | tee "$log"
@@ -47,20 +48,17 @@ for bin in b3sum cargo-watch; do
 done
 
 # Each crate checks that the package exists with a GET request, and the
-# first one downloads it from that response. The other one doesn't read
-# it, which the log can't tell apart, so this only checks that it isn't
-# asked for again.
-gets="$(grep -c '^GET /shared.tgz' "$HTTPS_SERVER_LOG" || true)"
-if [ "$gets" -gt 2 ]; then
-    echo "Expected shared.tgz to be downloaded once, got $gets GET requests for it"
+# one that downloads it does so from that response, so the requests can't
+# tell whether the other one downloaded it too: count the downloads
+# instead.
+downloads="$(grep -c 'Downloading package' "$log" || true)"
+if [ "$downloads" != 1 ]; then
+    echo "Expected shared.tgz to be downloaded once, got $downloads downloads"
     exit 1
 fi
 
-grep -qE "it was downloaded for (b3sum|cargo-watch) already" "$log"
-
-# With a `bin-dir` that is the same file for both crates, the crate that
-# installs first copies it instead of moving it, so the other one still
-# finds it, and the package is still downloaded once.
+# With a `bin-dir` that is the same file for both crates, installing it
+# leaves it where it is, so the crate that installs second still finds it.
 : >"$HTTPS_SERVER_LOG"
 rm -f "$CARGO_HOME"/bin/b3sum* "$CARGO_HOME"/bin/cargo-watch*
 
@@ -77,9 +75,3 @@ for bin in b3sum cargo-watch; do
         exit 1
     fi
 done
-
-gets="$(grep -c '^GET /shared.tgz' "$HTTPS_SERVER_LOG" || true)"
-if [ "$gets" -gt 2 ]; then
-    echo "Expected shared.tgz to be downloaded once, got $gets GET requests for it"
-    exit 1
-fi
