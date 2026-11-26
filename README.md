@@ -251,8 +251,14 @@ You can find a full description of errors including exit codes here:
 ### Are debug symbols available?
 
 Yes! Extra pre-built packages with a `.full` suffix are available and contain
-split debuginfo, documentation files, and extra binaries like the `detect-wasi`
-utility.
+debug symbols (line tables), documentation files, and extra binaries like the
+`detect-wasi` and `detect-targets` utilities. The binaries in them are the same
+stripped ones as in the plain packages, with the debug symbols next to them:
+
+- Linux: `<binary>.debug`, found by gdb and lldb through the binary's
+  `.gnu_debuglink` when it sits in the same directory.
+- macOS: `<binary>.dSYM` bundles.
+- Windows: `<binary>.pdb` files (with underscores, like `cargo_binstall.pdb`).
 
 ## Telemetry collection
 
