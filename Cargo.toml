@@ -80,8 +80,3 @@ inherits = "check-only"
 extend-ignore-words-re = [
     '^[a-zA-Z]{1,2}$' # ignore words up to length 2
 ]
-
-[patch.crates-io]
-# TODO: drop once cargo-bins/simple-git#168 is released, and bump
-# binstalk-registry's simple-git requirement to that version.
-simple-git = { git = "https://github.com/cargo-bins/simple-git", branch = "shallow-fetch-head" }
