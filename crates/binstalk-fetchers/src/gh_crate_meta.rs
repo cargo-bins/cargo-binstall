@@ -166,15 +166,22 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
-        let info = self.data.get_repo_info(&self.gh_api_client).await?;
+        let meta = &self.target_data.meta;
+        let pkg_url = meta.pkg_url.as_deref().map(Template::parse).transpose()?;
+
+        let info = if needs_repo_info(pkg_url.as_ref(), meta)? {
+            self.data.get_repo_info(&self.gh_api_client).await?
+        } else {
+            None
+        };
 
         let repo = info.map(|info| &info.repo);
         let subcrate = info.and_then(|info| info.subcrate.as_deref());
 
         let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-        let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-            let template = Template::parse(pkg_url)?;
+        let pkg_urls = if let Some(template) = pkg_url {
+            let pkg_url = meta.pkg_url.as_deref().expect("parsed above");
 
             if pkg_fmt.is_none()
                 && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
@@ -511,6 +518,29 @@ impl Found for GhCrateMetaFound {
         } else {
             url.to_compact_string()
         }
+    }
+}
+
+/// Whether the crate's repository is needed: for the default templates, and
+/// to render `{ repo }` and `{ subcrate }` in `pkg-url` or the signature
+/// file, which go by the URL it redirects to. A `pkg-url` pointing elsewhere,
+/// e.g. at cargo-quickinstall, needs no request for it: each candidate is
+/// checked in its own repository, see [`Probe`].
+fn needs_repo_info(pkg_url: Option<&Template<'_>>, meta: &PkgMeta) -> Result<bool, FetchError> {
+    let uses_repo = |template: &Template<'_>| template.has_any_of_keys(&["repo", "subcrate"]);
+    let Some(pkg_url) = pkg_url else {
+        return Ok(true);
+    };
+    if uses_repo(pkg_url) {
+        return Ok(true);
+    }
+    match meta
+        .signing
+        .as_ref()
+        .and_then(|signing| signing.file.as_deref())
+    {
+        Some(file) => Ok(uses_repo(&Template::parse(file)?)),
+        None => Ok(false),
     }
 }
 
@@ -864,5 +894,39 @@ mod test {
                 .unwrap(),
             r"{ a } \"
         );
+    }
+
+    #[test]
+    fn repo_info_is_needed() {
+        use crate::gh_crate_meta::{PkgMeta, needs_repo_info};
+        use binstalk_types::cargo_toml_binstall::{PkgSigning, SigningAlgorithm};
+
+        let needs = |pkg_url: Option<&str>, sig_file: Option<&str>| {
+            let meta = PkgMeta {
+                signing: sig_file.map(|file| PkgSigning {
+                    algorithm: SigningAlgorithm::Minisign,
+                    pubkey: "".into(),
+                    file: Some(file.to_owned()),
+                }),
+                ..Default::default()
+            };
+            let pkg_url = pkg_url.map(|pkg_url| Template::parse(pkg_url).unwrap());
+            needs_repo_info(pkg_url.as_ref(), &meta).unwrap()
+        };
+        const QUICKINSTALL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download/{ name }-{ version }/{ name }-{ version }-{ target }.tar.gz";
+
+        // The default templates.
+        assert!(needs(None, None));
+        assert!(needs(
+            Some("{ repo }/releases/download/v{ version }/a.tgz"),
+            None
+        ));
+        assert!(needs(Some("https://a.example/{ subcrate }/a.tgz"), None));
+        assert!(!needs(Some(QUICKINSTALL), None));
+        assert!(!needs(Some(QUICKINSTALL), Some("{ url }.sig")));
+        assert!(needs(
+            Some(QUICKINSTALL),
+            Some("{ repo }/releases/download/a.sig")
+        ));
     }
 }
