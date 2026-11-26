@@ -1,5 +1,10 @@
 # Cargo B(inary)Install
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/assets/cargo-binstall-logo.svg"
+       alt="cargo-binstall logo" width="400">
+</p>
+
 Binstall provides a low-complexity mechanism for installing Rust binaries as an
 alternative to building from source (via `cargo install`) or manually
 downloading packages. This is intended to work with existing CI artifacts and
@@ -159,6 +164,10 @@ $ cargo-binstall \
   crate_name
 ```
 
+A project that is not on crates.io, or not written in Rust, can be installed too,
+from a `Cargo.toml` you write for it, see
+[Installing a project that is not on crates.io](https://github.com/cargo-bins/cargo-binstall/blob/main/SUPPORT.md#installing-a-project-that-is-not-on-cratesio).
+
 Maintainers wanting to make their users' life easier can add
 [explicit Binstall metadata](https://github.com/cargo-bins/cargo-binstall/blob/main/SUPPORT.md)
 to `Cargo.toml` to locate the appropriate binary package for a given version and
@@ -210,6 +219,30 @@ Compared to something like a `curl ... | sh` script, we're not running arbitrary
 code, but of course the crate you're downloading a package for might itself be
 malicious!
 
+### Does it work behind a proxy?
+
+Yes, the proxy is read from the `HTTPS_PROXY`, `HTTP_PROXY` and `ALL_PROXY`
+environment variables (or their lowercase forms), with hosts to reach directly
+in `NO_PROXY`. A proxy that needs a login takes it in the URL, like
+`HTTPS_PROXY=http://user:password@proxy.example.com:8080`, with special
+characters in the user or password percent-encoded. `socks5://` and
+`socks5h://` proxies work too. On macOS and Windows, the system proxy settings
+are used when none of these are set.
+
+As with Cargo, Cargo's `http.proxy` setting (or the `CARGO_HTTP_PROXY`
+environment variable) takes precedence over all of these, and is used for every
+request except to hosts in `NO_PROXY`. It takes libcurl's format, like
+`proxy.example.com:8080` or `http://user:password@proxy.example.com:8080`.
+Cargo also reads `http.proxy` from your git configuration, which binstall does
+not.
+
+If the proxy or network re-signs HTTPS traffic with its own certificate
+authority, pass its certificate with `--root-certificates` (or
+`BINSTALL_HTTPS_ROOT_CERTS`), or set Cargo's `http.cainfo` to it.
+
+To install from a private registry instead of crates.io, pass `--registry` or
+`--index`, as with `cargo install`.
+
 ### What do the error codes mean?
 
 You can find a full description of errors including exit codes here:
@@ -218,8 +251,14 @@ You can find a full description of errors including exit codes here:
 ### Are debug symbols available?
 
 Yes! Extra pre-built packages with a `.full` suffix are available and contain
-split debuginfo, documentation files, and extra binaries like the `detect-wasi`
-utility.
+debug symbols (line tables), documentation files, and extra binaries like the
+`detect-wasi` and `detect-targets` utilities. The binaries in them are the same
+stripped ones as in the plain packages, with the debug symbols next to them:
+
+- Linux: `<binary>.debug`, found by gdb and lldb through the binary's
+  `.gnu_debuglink` when it sits in the same directory.
+- macOS: `<binary>.dSYM` bundles.
+- Windows: `<binary>.pdb` files (with underscores, like `cargo_binstall.pdb`).
 
 ## Telemetry collection
 

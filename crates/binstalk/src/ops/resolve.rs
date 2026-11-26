@@ -17,11 +17,10 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, TargetArchOverride, TargetData},
+    fetchers::{BinInfo, Data, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
-        tasks::AutoAbortJoinHandle,
     },
     manifests::cargo_toml_binstall::{Meta, PkgMeta, PkgOverrides},
     ops::{CargoTomlFetchOverride, Options},
@@ -128,9 +127,24 @@ async fn resolve_inner(
 
     let gh_api_client = opts.gh_api_client.get().await?;
 
-    let with_pkg_url_hint = |data: Data| match pkg_url_hint.clone() {
-        Some((target, hint)) => data.with_pkg_url_hint(target, hint),
-        None => data,
+    // The binaries the user asked for, for a `pkg-url` with one package per
+    // binary.
+    let bin_infos: Vec<BinInfo> = package_info
+        .binaries
+        .iter()
+        .filter(|bin| is_requested(&opts.bins, bin))
+        .map(|bin| BinInfo {
+            name: bin.name.as_str().into(),
+            optional: !bin.required_features.is_empty(),
+        })
+        .collect();
+
+    let with_pkg_url_hint = |data: Data| {
+        let data = data.with_bins(bin_infos.clone());
+        match pkg_url_hint.clone() {
+            Some((target, hint)) => data.with_pkg_url_hint(target, hint),
+            None => data,
+        }
     };
 
     let mut handles_fn =
@@ -146,6 +160,7 @@ async fn resolve_inner(
                             data.clone(),
                             target_data.clone(),
                             opts.signature_policy,
+                            !opts.disable_telemetry,
                         );
 
                         if let Some(disabled_strategies) =
@@ -161,6 +176,7 @@ async fn resolve_inner(
         };
 
     let data = Data::new(
+        opts.fetch_context.clone(),
         package_info.name.clone(),
         package_info.version_str.clone(),
         package_info.repo.clone(),
@@ -177,91 +193,70 @@ async fn resolve_inner(
     }
 
     for fetcher in &handles {
-        match timeout(
-            opts.maximum_resolution_timeout,
-            AutoAbortJoinHandle::new(fetcher.clone().find()).flattened_join(),
-        )
-        .await
+        let mut found = match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await
         {
-            Ok(ret) => match ret {
-                Ok(true) => {
-                    // Generate temporary binary path
-                    let bin_path = opts.temp_dir.join(format!(
-                        "bin-{}-{}-{}",
-                        package_info.name,
-                        fetcher.target(),
-                        fetcher.fetcher_name()
-                    ));
-
-                    match download_extract_and_verify(
-                        fetcher.as_ref(),
-                        &bin_path,
-                        &package_info,
-                        &opts.install_path,
-                        opts.no_symlinks,
-                        &opts.bins,
-                        check_host_compat,
-                    )
-                    .await
-                    {
-                        Ok(bin_files) => {
-                            if !bin_files.is_empty() {
-                                if !opts.disable_telemetry {
-                                    fetcher.clone().report_to_upstream();
-                                }
-                                return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
-                                    fetcher: fetcher.clone(),
-                                    new_version: package_info.version,
-                                    pubtime: package_info.pubtime,
-                                    name: package_info.name,
-                                    version_req: version_req_str,
-                                    source: package_info.source,
-                                    bin_files,
-                                })));
-                            } else {
-                                warn!(
-                                    "Error when checking binaries provided by fetcher {}: \
-                                The fetcher does not provide any optional binary",
-                                    fetcher.source_name(),
-                                );
-                            }
-                        }
-                        Err(err) => {
-                            if let BinstallError::UserAbort = err {
-                                return Err(err);
-                            }
-                            warn!(
-                                "Error while downloading and extracting from fetcher {}: {}",
-                                fetcher.source_name(),
-                                err
-                            );
-                        }
-                    }
-                }
-                Ok(false) => (),
-                Err(err) => {
-                    warn!(
-                        "Error while checking fetcher {}: {}",
-                        fetcher.source_name(),
-                        err
-                    );
-                }
-            },
+            Ok(Ok(Some(found))) => found,
+            Ok(Ok(None)) => continue,
+            Ok(Err(err)) => {
+                warn!(
+                    "Error while checking fetcher {}: {}",
+                    fetcher.fetcher_name(),
+                    err
+                );
+                continue;
+            }
             Err(err) => {
                 warn!(
                     "Timeout reached while checking fetcher {}: {}",
-                    fetcher.source_name(),
+                    fetcher.fetcher_name(),
                     err
                 );
+                continue;
             }
-        }
-    }
+        };
 
-    // At this point, we don't know whether fallback to cargo install is allowed, or whether it will
-    // succeed, but things start to get convoluted when try to include that data, so this will do.
-    if !opts.disable_telemetry {
-        for fetcher in handles {
-            fetcher.report_to_upstream();
+        // Generate temporary binary path
+        let bin_path = opts.temp_dir.join(format!(
+            "bin-{}-{}-{}",
+            package_info.name,
+            found.target(),
+            fetcher.fetcher_name()
+        ));
+
+        let ret = download_extract_and_verify(
+            found.as_mut(),
+            &bin_path,
+            &package_info,
+            &opts.install_path,
+            opts.no_symlinks,
+            &opts.bins,
+            check_host_compat,
+        )
+        .await;
+
+        match ret {
+            Ok(bin_files) if !bin_files.is_empty() => {
+                return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
+                    found,
+                    new_version: package_info.version,
+                    pubtime: package_info.pubtime,
+                    name: package_info.name,
+                    version_req: version_req_str,
+                    source: package_info.source,
+                    bin_files,
+                })));
+            }
+            Ok(_) => warn!(
+                "Error when checking binaries provided by fetcher {}: \
+                The fetcher does not provide any optional binary",
+                found.source_name(),
+            ),
+            Err(BinstallError::UserAbort) => return Err(BinstallError::UserAbort),
+            Err(err) => warn!(
+                "Error while downloading and extracting from fetcher {}: {}",
+                found.source_name(),
+                err
+            ),
         }
     }
 
@@ -309,14 +304,14 @@ async fn resolve_inner(
     }))
 }
 
-///  * `fetcher` - `fetcher.find()` must have returned `Ok(true)`.
+///  * `found` - What a fetcher's `find()` returned.
 ///  * `check_host_compat` - check that the binaries can run on this host,
 ///    see [`detect_targets::compat`].
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
 async fn download_extract_and_verify(
-    fetcher: &dyn Fetcher,
+    found: &mut dyn Found,
     bin_path: &Path,
     package_info: &PackageInfo,
     install_path: &Path,
@@ -324,40 +319,87 @@ async fn download_extract_and_verify(
     bins: &Option<Vec<CompactString>>,
     check_host_compat: bool,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
-    // Download and extract it.
+    // Download and extract it, unless another crate did already: then it is
+    // somewhere else than `bin_path`.
     // If that fails, then ignore this fetcher.
-    let extracted_files = fetcher.fetch_and_extract(bin_path).await?;
-    debug!("extracted_files = {extracted_files:#?}");
+    let packages = found.fetch_and_extract(bin_path).await?;
+    debug!("packages = {packages:#?}");
 
-    // Build final metadata
-    let meta = fetcher.target_meta();
+    let mut bin_files = Vec::with_capacity(package_info.binaries.len());
 
-    // Verify that all non-optional bin_files exist
-    let bin_files = collect_bin_files(
-        fetcher,
-        package_info,
-        meta,
-        bin_path,
-        install_path,
-        no_symlinks,
-        &extracted_files,
-    )?;
+    for package in packages {
+        // The binaries in this package: all of them, or its own one.
+        let binaries = package_info
+            .binaries
+            .iter()
+            .filter(|bin| package.bin.as_deref().is_none_or(|name| name == bin.name))
+            .collect::<Vec<_>>();
+        let extracted = &package.extracted;
 
+        let files = collect_bin_files(
+            found,
+            package_info,
+            &binaries,
+            package.meta,
+            extracted.dir(),
+            install_path,
+            no_symlinks,
+            extracted.files(),
+        )?;
+
+        bin_files.extend(verify_bin_files(
+            package_info,
+            &binaries,
+            files,
+            extracted.files(),
+            bins,
+        )?);
+    }
+
+    bins::check_aliases_unique(&bin_files)?;
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if check_host_compat {
+        for bin_file in &bin_files {
+            if let Err(reason) = detect_targets::compat::check(&bin_file.source).await {
+                return Err(BinstallError::IncompatibleBinary {
+                    bin: bin_file.base_name.clone(),
+                    target: found.target().into(),
+                    reason,
+                });
+            }
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let _ = check_host_compat;
+
+    Ok(bin_files)
+}
+
+/// Whether the user asked for `bin`, with `--bin`.
+fn is_requested(bins: &Option<Vec<CompactString>>, bin: &Bin) -> bool {
+    bins.as_ref()
+        .is_none_or(|bins| bins.iter().any(|b| b == bin.name))
+}
+
+/// Verify that all non-optional `bin_files`, made for `binaries`, exist.
+fn verify_bin_files(
+    package_info: &PackageInfo,
+    binaries: &[&Bin],
+    bin_files: Vec<bins::BinFile>,
+    extracted_files: &ExtractedFiles,
+    bins: &Option<Vec<CompactString>>,
+) -> Result<Vec<bins::BinFile>, BinstallError> {
     let name = &package_info.name;
 
-    let bin_files = package_info
-        .binaries
+    binaries
         .iter()
         .zip(bin_files)
         .filter_map(|(bin, bin_file)| {
             // skip binaries that were not requested by user
-            if bins
-                .as_ref()
-                .is_some_and(|bins| !bins.iter().any(|b| b == bin.name))
-            {
+            if !is_requested(bins, bin) {
                 return None;
             }
-
             match bin_file.check_source_exists(&mut |p| extracted_files.has_file(p)) {
                 Ok(()) => Some(Ok(bin_file)),
 
@@ -386,29 +428,15 @@ But since it requires features {features}, this bin is ignored."
                 }
             }
         })
-        .collect::<Result<Vec<bins::BinFile>, bins::Error>>()?;
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if check_host_compat {
-        for bin_file in &bin_files {
-            if let Err(reason) = detect_targets::compat::check(&bin_file.source).await {
-                return Err(BinstallError::IncompatibleBinary {
-                    bin: bin_file.base_name.clone(),
-                    target: fetcher.target().into(),
-                    reason,
-                });
-            }
-        }
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    let _ = check_host_compat;
-
-    Ok(bin_files)
+        .collect::<Result<Vec<bins::BinFile>, bins::Error>>()
+        .map_err(BinstallError::from)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_bin_files(
-    fetcher: &dyn Fetcher,
+    found: &dyn Found,
     package_info: &PackageInfo,
+    binaries: &[&Bin],
     meta: PkgMeta,
     bin_path: &Path,
     install_path: &Path,
@@ -418,15 +446,15 @@ fn collect_bin_files(
     // `bin-dir` must use the same `{ target-arch }` as the URL the package
     // was found at.
     let target_related_info = TargetArchOverride {
-        values: &fetcher.target_data().target_related_info,
-        target_arch: fetcher.resolved_target_arch(),
+        values: &found.target_data().target_related_info,
+        target_arch: found.resolved_target_arch(),
     };
 
     // List files to be installed
     // based on those found via Cargo.toml
     let bin_data = bins::Data {
         name: &package_info.name,
-        target: fetcher.target(),
+        target: found.target(),
         version: &package_info.version_str,
         repo: package_info.repo.as_deref(),
         meta,
@@ -441,7 +469,16 @@ fn collect_bin_files(
         .as_deref()
         .map(Cow::Borrowed)
         .unwrap_or_else(|| {
-            bins::infer_bin_dir_template(&bin_data, &mut |p| extracted_files.get_dir(p).is_some())
+            let sole_root_dir = extracted_files
+                .get_dir(Path::new("."))
+                .and_then(|names| names.iter().exactly_one().ok())
+                .filter(|name| extracted_files.get_dir(Path::new(name)).is_some())
+                .and_then(|name| name.to_str());
+            bins::infer_bin_dir_template(
+                &bin_data,
+                &mut |p| extracted_files.get_dir(p).is_some(),
+                sole_root_dir,
+            )
         });
 
     let template = Template::parse(&bin_dir)?;
@@ -456,8 +493,7 @@ fn collect_bin_files(
     }
 
     // Create bin_files
-    let bin_files = package_info
-        .binaries
+    let bin_files = binaries
         .iter()
         .map(|bin| {
             let aliases = bin_data
@@ -541,7 +577,7 @@ impl PackageInfo {
                 None,
             ),
             #[cfg(feature = "git")]
-            Some(Git(git_url)) => {
+            Some(Git(git_url, reference)) => {
                 use crate::helpers::git::{GitCancellationToken, Repository as GitRepository};
 
                 let cancellation_token = GitCancellationToken::default();
@@ -550,12 +586,14 @@ impl PackageInfo {
 
                 let (ret, commit_hash) = spawn_blocking({
                     let git_url = git_url.clone();
+                    let reference = reference.clone();
                     let name = name.clone();
                     move || {
                         let dir = tempfile::TempDir::new()?;
-                        let repo = GitRepository::shallow_clone(
+                        let repo = GitRepository::shallow_clone_reference(
                             git_url,
                             dir.as_ref(),
+                            reference.as_borrowed(),
                             Some(cancellation_token),
                         )?;
 
@@ -575,18 +613,34 @@ impl PackageInfo {
                     ret,
                     CrateSource {
                         source_type: SourceType::Git,
-                        url: MaybeOwned::Owned(Url::parse(&format!("{git_url}#{commit_hash}"))?),
+                        url: MaybeOwned::Owned(git_source_url(
+                            git_url,
+                            reference.as_borrowed(),
+                            commit_hash,
+                        )?),
                     },
                     None,
                 )
             }
             None => {
-                let (manifest, pubtime) = Box::pin(opts.registry.fetch_crate_matched(
-                    client,
-                    &name,
-                    version_req,
-                ))
-                .await?;
+                let matched =
+                    Box::pin(opts.registry.find_crate_matched(client, &name, version_req)).await?;
+
+                // The registry index already says which version would be
+                // installed, so don't download the crate just to find out
+                // it is up to date.
+                if let Some(curr_version) = &curr_version
+                    && Version::parse(matched.version()).is_ok_and(|v| v == *curr_version)
+                {
+                    info!(
+                        "{} v{curr_version} is already installed, use --force to override",
+                        name
+                    );
+                    return Ok(None);
+                }
+
+                let pubtime = matched.pubtime().map(CompactString::from);
+                let manifest = Box::pin(matched.fetch_manifest()).await?;
 
                 (manifest, opts.registry.crate_source()?, pubtime)
             }
@@ -711,6 +765,31 @@ fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
     }
 }
 
+/// The source url of a crate installed from git, in the format cargo writes
+/// to `.crates.toml`: `{url}?branch={branch}#{commit}` (or `tag=`/`rev=`,
+/// nothing for the default branch).
+#[cfg(feature = "git")]
+fn git_source_url(
+    git_url: &crate::helpers::git::GitUrl,
+    reference: crate::helpers::git::GitReference<'_>,
+    commit_hash: impl std::fmt::Display,
+) -> Result<Url, BinstallError> {
+    use crate::helpers::git::GitReference::*;
+
+    let mut url = Url::parse(&git_url.to_string())?;
+    let query = match reference {
+        Branch(branch) => Some(("branch", branch)),
+        Tag(tag) => Some(("tag", tag)),
+        Rev(rev) => Some(("rev", rev)),
+        _ => None,
+    };
+    if let Some((key, value)) = query {
+        url.query_pairs_mut().append_pair(key, value);
+    }
+    url.set_fragment(Some(&commit_hash.to_string()));
+    Ok(url)
+}
+
 /// Load binstall metadata from the crate `Cargo.toml` at the provided path
 ///
 /// This is a blocking function.
@@ -732,4 +811,32 @@ pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
     }
 
     inner(manifest_path.as_ref(), name.as_ref())
+}
+
+#[cfg(all(test, feature = "git"))]
+mod tests {
+    use super::*;
+    use crate::helpers::git::{GitReference, GitUrl};
+
+    #[test]
+    fn git_source_url_matches_cargo() {
+        let url: GitUrl = "https://github.com/cargo-bins/cargo-binstall"
+            .parse()
+            .unwrap();
+        let commit = "0123456789abcdef0123456789abcdef01234567";
+
+        for (reference, expected) in [
+            (GitReference::DefaultBranch, ""),
+            (GitReference::Branch("main"), "?branch=main"),
+            (GitReference::Tag("v1.0.0"), "?tag=v1.0.0"),
+            (GitReference::Rev("abc123"), "?rev=abc123"),
+            (GitReference::Branch("a b/c&d"), "?branch=a+b%2Fc%26d"),
+        ] {
+            assert_eq!(
+                git_source_url(&url, reference, commit).unwrap().as_str(),
+                format!("https://github.com/cargo-bins/cargo-binstall{expected}#{commit}"),
+                "{reference:?}"
+            );
+        }
+    }
 }

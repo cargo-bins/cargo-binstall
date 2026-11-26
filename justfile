@@ -88,9 +88,19 @@ cargo-features := trim_end_match(if override-features != "" { override-features 
     } else { ""
 }, ",")
 
-# it seems we can't split debuginfo for non-buildstd builds
-# errors with: "Found a record with an unknown abbreviation code"
-cargo-split-debuginfo := if cargo-buildstd != "" { " --config='profile.release.split-debuginfo=\"packed\"' --config=profile.release.debug=2" } else { "" }
+# Release builds carry line tables so the `.full` packages can ship debug
+# symbols; the binaries in the plain packages stay stripped:
+# - linux: debuginfo stays in the binary and `split-debuginfo` (below) moves it
+#   into `<bin>.debug`, leaving a `.gnu_debuglink`.
+# - macos: rustc runs dsymutil (packed) before stripping, giving `<bin>.dSYM`.
+# - windows: `strip = "none"` makes rustc pass `/DEBUG`, giving `<crate>.pdb`;
+#   the exe itself never contains debuginfo or symbols with msvc.
+cargo-debuginfo := if for-release == "" { ""
+    } else if target-os == "linux" { " --config='profile.release.debug=\"line-tables-only\"' --config='profile.release.split-debuginfo=\"off\"' --config='profile.release.strip=\"none\"'"
+    } else if target-os == "macos" { " --config='profile.release.debug=\"line-tables-only\"' --config='profile.release.split-debuginfo=\"packed\"'"
+    } else if target-os == "windows" { " --config='profile.release.debug=\"line-tables-only\"' --config='profile.release.split-debuginfo=\"packed\"' --config='profile.release.strip=\"none\"'"
+    } else { ""
+}
 
 # MIR optimisation level (defaults to 2, bring it up to 4 for release builds)
 # **DISABLED because it's buggy**
@@ -157,8 +167,8 @@ cargo-nightly-args := if toolchain-name == "nightly" {
     ""
 }
 
-cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" }) + (cargo-split-debuginfo)
-cargo-build-args := (if for-release != "" { " --release" } else { "" }) + cargo-nightly-args + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" })
+cargo-check-args := (" --target ") + (target) + (target-glibc-ver-postfix) + (cargo-buildstd) + (if extra-build-args != "" { " " + extra-build-args } else { "" })
+cargo-build-args := (if for-release != "" { " --release" } else { "" }) + cargo-nightly-args + (cargo-check-args) + (cargo-no-default-features) + (if cargo-features != "" { " --features " + cargo-features } else { "" }) + (if timings != "" { " --timings" } else { "" }) + cargo-debuginfo
 export RUSTFLAGS := (linker-plugin-lto) + (rustc-gcclibs) + (rustc-miropt) + (rust-lld) + (rustc-icf) + (if enable-h3 != "" { " --cfg reqwest_unstable" } else { "" })
 
 
@@ -242,6 +252,8 @@ e2e-test-http-faults: (e2e-test "http-faults")
 e2e-test-target-arch: (e2e-test "target-arch")
 e2e-test-pkg-url-hint: (e2e-test "pkg-url-hint")
 e2e-test-manifest-lock: (e2e-test "manifest-lock")
+e2e-test-shared-package: (e2e-test "shared-package")
+e2e-test-candidate-repos: (e2e-test "candidate-repos")
 
 # WinTLS (Windows in CI) does not have TLS 1.3 support
 [windows]
@@ -259,6 +271,9 @@ e2e-test-compressed-bin: (e2e-test "compressed-bin")
 [windows]
 e2e-test-compressed-bin:
 
+e2e-test-per-bin-pkg-url: (e2e-test "per-bin-pkg-url")
+e2e-test-per-bin-sccache: (e2e-test "per-bin-sccache")
+
 # Linux-only: checks glibc/musl compatibility of downloaded ELF binaries.
 [linux]
 e2e-test-host-compat: (e2e-test "host-compat")
@@ -267,7 +282,7 @@ e2e-test-host-compat: (e2e-test "host-compat")
 e2e-test-host-compat:
 
 [parallel]
-e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-crates2-json e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune e2e-test-aliases e2e-test-shadowed-bin e2e-test-http-faults e2e-test-target-arch e2e-test-compressed-bin e2e-test-pkg-url-hint e2e-test-manifest-lock e2e-test-host-compat
+e2e-tests: e2e-test-live e2e-test-manifest-path e2e-test-git e2e-test-other-repos e2e-test-strategies e2e-test-version-syntax e2e-test-upgrade e2e-test-tls e2e-test-self-upgrade-no-symlink e2e-test-uninstall e2e-test-crates2-json e2e-test-subcrate e2e-test-no-track e2e-test-registries e2e-test-signing e2e-test-continue-on-failure e2e-test-private-github-repo e2e-test-specific-binaries e2e-test-skipping-required-bin e2e-test-telemetry-confirm e2e-test-self-install e2e-test-features e2e-test-list-and-prune e2e-test-auto-prune e2e-test-aliases e2e-test-shadowed-bin e2e-test-http-faults e2e-test-target-arch e2e-test-compressed-bin e2e-test-pkg-url-hint e2e-test-manifest-lock e2e-test-shared-package e2e-test-candidate-repos e2e-test-per-bin-pkg-url e2e-test-per-bin-sccache e2e-test-host-compat
 
 unit-tests: print-env
     cargo test --no-run --target {{target}}
@@ -324,45 +339,60 @@ package-dir:
     cp README.md packages/prep
     -cp minisign.pub packages/prep
 
+# Move the debuginfo of an ELF binary into `<bin>.debug` next to it, then
+# strip the binary and point it at that file with a `.gnu_debuglink`, which
+# gdb and lldb look up in the binary's directory. llvm-objcopy from rustup
+# handles every target we cross-compile to, unlike the host's binutils.
+[linux]
+split-debuginfo bin:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    rustup component add llvm-tools
+    objcopy="$(rustc --print sysroot)/lib/rustlib/{{target-host}}/bin/llvm-objcopy"
+    cd "$(dirname '{{bin}}')"
+    name="$(basename '{{bin}}')"
+    "$objcopy" --only-keep-debug "$name" "$name.debug"
+    "$objcopy" --strip-all --add-gnu-debuglink="$name.debug" "$name"
+    ls -l "$name" "$name.debug"
+
+# The package recipes expect JUST_FOR_RELEASE, which is what produces the
+# debug files (see cargo-debuginfo).
 [macos]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -just get-output cargo-binstall.dSYM packages/prep
+    just get-output cargo-binstall.dSYM packages/prep
 
     just get-output detect-wasi{{output-ext}} packages/prep
-    -just get-output detect-wasi.dSYM packages/prep
+    just get-output detect-wasi.dSYM packages/prep
 
     just get-output detect-targets{{output-ext}} packages/prep
-    -just get-output detect-targets.dSYM packages/prep
+    just get-output detect-targets.dSYM packages/prep
 
-# when https://github.com/rust-lang/cargo/pull/11384 lands, we can use
-# -just get-output cargo_binstall.dwp packages/prep
-# underscored dwp name needs to remain for debuggers to find the file properly
 [linux]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -cp {{output-folder}}/deps/cargo_binstall-*.dwp packages/prep/cargo_binstall.dwp
+    just split-debuginfo packages/prep/cargo-binstall
 
     just get-output detect-wasi packages/prep
-    -cp {{output-folder}}/deps/detect_wasi-*.dwp packages/prep/detect_wasi.dwp
+    just split-debuginfo packages/prep/detect-wasi
 
     just get-output detect-targets packages/prep
-    -cp {{output-folder}}/deps/detect_target-*.dwp packages/prep/detect_target.dwp
+    just split-debuginfo packages/prep/detect-targets
 
 # underscored pdb name needs to remain for debuggers to find the file properly
-# read from deps because sometimes cargo doesn't copy the pdb to the output folder
+# (cargo uplifts it under that name; since the build-dir layout v2 of cargo
+# 1.100 the deps folder is no longer next to the output folder)
 [windows]
 package-prepare: build package-dir
     just get-binary packages/prep
-    -just get-output deps/cargo_binstall.pdb packages/prep
+    just get-output cargo_binstall.pdb packages/prep
 
     just get-output detect-wasi.exe packages/prep
-    -just get-output deps/detect_wasi.pdb packages/prep
+    just get-output detect_wasi.pdb packages/prep
 
     just get-output detect-targets.exe packages/prep
-    -just get-output deps/detect_target.pdb packages/prep
+    just get-output detect_targets.pdb packages/prep
 
-# we don't get dSYM bundles for universal binaries; unsure if it's even a thing
 [macos]
 lipo-prepare: package-dir
     just target=aarch64-apple-darwin build get-binary packages/prep/arm64
@@ -416,8 +446,23 @@ repackage-lipo: package-dir
     lipo -create -output packages/prep/detect-wasi packages/prep/{arm64,x64}/detect-wasi
     lipo -create -output packages/prep/detect-targets packages/prep/{arm64,x64}/detect-targets
 
+    just lipo-dsym cargo-binstall
+    just lipo-dsym detect-wasi
+    just lipo-dsym detect-targets
+
     ./packages/prep/{{output-filename}} -vV
 
     rm -rf packages/prep/{arm64,x64}
     cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.zip" {{output-filename}}
-    cd packages/prep && zip -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
+    cd packages/prep && zip -r -9 "../cargo-binstall-universal-apple-darwin.full.zip" *
+
+# Merge the per-arch dSYM bundles of an extracted .full package into a
+# universal one; lldb picks the slice by the binary's UUID. The DWARF file in
+# a bundle is named after the crate (cargo_binstall), not the binary.
+[macos]
+lipo-dsym bin:
+    rm -rf packages/prep/{{bin}}.dSYM
+    cp -R packages/prep/arm64/{{bin}}.dSYM packages/prep/{{bin}}.dSYM
+    -cp -R packages/prep/x64/{{bin}}.dSYM/Contents/Resources/Relocations/. packages/prep/{{bin}}.dSYM/Contents/Resources/Relocations/
+    cd packages/prep && for dwarf in {{bin}}.dSYM/Contents/Resources/DWARF/*; do lipo -create -output "$dwarf" "arm64/$dwarf" "x64/$dwarf"; done
+    dwarfdump --uuid packages/prep/{{bin}} packages/prep/{{bin}}.dSYM

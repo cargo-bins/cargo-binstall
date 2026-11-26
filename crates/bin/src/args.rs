@@ -141,6 +141,48 @@ pub struct Args {
     )]
     pub(crate) git: Option<binstalk::registry::GitUrl>,
 
+    #[cfg(feature = "git")]
+    /// Branch to use when installing from git.
+    ///
+    /// Requires `--git`. Only the tip of the branch is fetched.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        requires("git"),
+        conflicts_with_all = ["tag", "rev"],
+        value_name = "BRANCH"
+    )]
+    pub(crate) branch: Option<CompactString>,
+
+    #[cfg(feature = "git")]
+    /// Tag to use when installing from git.
+    ///
+    /// Requires `--git`. Only the tagged commit is fetched.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        requires("git"),
+        conflicts_with_all = ["branch", "rev"],
+        value_name = "TAG"
+    )]
+    pub(crate) tag: Option<CompactString>,
+
+    #[cfg(feature = "git")]
+    /// Specific commit to use when installing from git.
+    ///
+    /// Requires `--git`. A full commit hash or a full ref name such as
+    /// `refs/pull/1/head` is fetched on its own; anything else, e.g. an
+    /// abbreviated commit hash, needs the whole history of every branch and
+    /// tag, which is much slower.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        requires("git"),
+        conflicts_with_all = ["branch", "tag"],
+        value_name = "SHA"
+    )]
+    pub(crate) rev: Option<CompactString>,
+
     /// Path template for binary files in packages
     ///
     /// It is the path of the binary inside of the package, or of the dir

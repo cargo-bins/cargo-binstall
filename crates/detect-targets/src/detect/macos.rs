@@ -21,16 +21,28 @@ const X86H: &str = "x86_64h-apple-darwin";
 const UNIVERSAL: &str = "universal-apple-darwin";
 const UNIVERSAL2: &str = "universal2-apple-darwin";
 
-async fn is_arch_supported(arch_name: &str) -> bool {
-    Command::new("arch")
+/// Start checking whether `arch_name` can be run, returning a future of the
+/// answer.
+///
+/// The check runs from the moment this is called, so several of them run at
+/// once without spawning tasks.
+fn is_arch_supported(arch_name: &str) -> impl Future<Output = bool> + use<> {
+    let child = Command::new("arch")
         .args(["-arch", arch_name, "/usr/bin/true"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()
-        .await
-        .map(|exit_status| exit_status.success())
-        .unwrap_or(false)
+        .spawn();
+
+    async move {
+        match child {
+            Ok(mut child) => child
+                .wait()
+                .await
+                .is_ok_and(|exit_status| exit_status.success()),
+            Err(_) => false,
+        }
+    }
 }
 
 pub(super) async fn detect_alternative_targets(
@@ -38,20 +50,19 @@ pub(super) async fn detect_alternative_targets(
 ) -> impl Iterator<Item = String> + use<> {
     match target {
         AARCH64 => {
-            // Spawn `arch` in parallel (probably from different threads if
-            // mutlti-thread runtime is used).
-            //
-            // These two tasks are never cancelled, so it can only fail due to
-            // panic, in which cause we would propagate by also panic here.
-            let x86_64h_task = tokio::spawn(is_arch_supported("x86_64h"));
-            let x86_64_task = tokio::spawn(is_arch_supported("x86_64"));
+            // Both `arch` run at once. They are not spawned as tasks: the
+            // runtime cancels those when it shuts down, e.g. when a crate is
+            // not found before detection is done, and unwrapping the
+            // `JoinError` of a cancelled one panicked.
+            let x86_64h = is_arch_supported("x86_64h");
+            let x86_64 = is_arch_supported("x86_64");
             [
                 // Prefer universal as it provides native arm executable
                 Some(UNIVERSAL),
                 Some(UNIVERSAL2),
                 // Prefer x86h since it is more optimized
-                x86_64h_task.await.unwrap().then_some(X86H),
-                x86_64_task.await.unwrap().then_some(X86),
+                x86_64h.await.then_some(X86H),
+                x86_64.await.then_some(X86),
             ]
         }
         X86 => [

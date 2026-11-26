@@ -14,7 +14,7 @@ use binstalk::{
     helpers::{
         jobserver_client::LazyJobserverClient,
         lazy_gh_api_client::LazyGhApiClient,
-        remote::{Certificate, Client},
+        remote::{Certificate, Client, ClientBuilderExt},
         tasks::AutoAbortJoinHandle,
     },
     ops::{
@@ -38,12 +38,18 @@ use tokio::task::block_in_place;
 use tracing::{debug, info, warn};
 
 use crate::registry_auth::{get_registry_env_var, resolve_registry_auth};
-use crate::{args::Args, gh_token, git_credentials, initialise::Init, ui::confirm};
+use crate::{
+    args::Args,
+    gh_token, git_credentials,
+    initialise::Init,
+    ui::{TimeInPrompts, confirm},
+};
 
 pub fn install_crates(
     args: Args,
     cli_overrides: PkgOverride,
     jobserver_client: LazyJobserverClient,
+    time_in_prompts: TimeInPrompts,
 ) -> Result<Option<AutoAbortJoinHandle<Result<()>>>> {
     let Init {
         mut cargo_config,
@@ -53,7 +59,7 @@ pub fn install_crates(
         install_path,
         manifests,
         temp_dir,
-    } = crate::initialise::initialise(&args)?;
+    } = crate::initialise::initialise(&args, &time_in_prompts)?;
 
     let mut cargo_install_fallback = false;
     let resolvers: Vec<_> = settings
@@ -97,17 +103,36 @@ pub fn install_crates(
 
     let mut http = cargo_config.http.clone();
 
-    let client = Client::new(
+    let mut client_builder = Client::default_builder(
         concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
         args.min_tls_version.map(|v| v.into()),
         args.allow_insecure_http,
         args.dns.into(),
-        rate_limit.duration,
-        rate_limit.request_count,
-        read_root_certs(
+        &mut read_root_certs(
             args.root_certificates,
             http.as_mut().and_then(|http| http.cainfo.take()),
         ),
+    );
+
+    // As in Cargo, `CARGO_HTTP_PROXY` and then `http.proxy` take precedence
+    // over the proxy environment variables reqwest reads otherwise.
+    if let Some(proxy) = env::var("CARGO_HTTP_PROXY")
+        .ok()
+        .filter(|proxy| !proxy.is_empty())
+        .map(CompactString::from)
+        .or_else(|| http.as_mut().and_then(|http| http.proxy.take()))
+        .filter(|proxy| !proxy.is_empty())
+    {
+        debug!("Using the proxy from Cargo's http.proxy");
+        client_builder = client_builder
+            .cargo_http_proxy(&proxy)
+            .map_err(BinstallError::from)?;
+    }
+
+    let client = Client::from_builder(
+        client_builder,
+        rate_limit.duration,
+        rate_limit.request_count,
     )
     .map_err(BinstallError::from)?;
 
@@ -143,7 +168,8 @@ pub fn install_crates(
         let cargo_home = cargo_home.as_deref().unwrap_or(&cargo_root);
 
         if let Some(index) = args.index.clone() {
-            let resolved_registry = binstalk::registry::ResolvedRegistry::new(index, None);
+            let resolved_registry =
+                binstalk::registry::ResolvedRegistry::new(index.with_cargo_home(cargo_home), None);
             let cargo_install_index = resolved_registry.cargo_install_index_arg().into();
 
             (resolved_registry, None, Some(cargo_install_index))
@@ -181,7 +207,10 @@ pub fn install_crates(
             );
 
             (
-                binstalk::registry::ResolvedRegistry::new(registry, registry_auth),
+                binstalk::registry::ResolvedRegistry::new(
+                    registry.with_cargo_home(cargo_home),
+                    registry_auth,
+                ),
                 registry_name.filter(|name| !name.eq_ignore_ascii_case("crates-io")),
                 None,
             )
@@ -204,7 +233,18 @@ pub fn install_crates(
         #[cfg(feature = "git")]
         cargo_toml_fetch_override: match (args.manifest_path, args.git) {
             (Some(manifest_path), None) => Some(CargoTomlFetchOverride::Path(manifest_path)),
-            (None, Some(git_url)) => Some(CargoTomlFetchOverride::Git(git_url)),
+            (None, Some(git_url)) => {
+                use binstalk::ops::GitReference;
+
+                let reference = match (args.branch, args.tag, args.rev) {
+                    (Some(branch), None, None) => GitReference::Branch(branch),
+                    (None, Some(tag), None) => GitReference::Tag(tag),
+                    (None, None, Some(rev)) => GitReference::Rev(rev),
+                    (None, None, None) => GitReference::DefaultBranch,
+                    _ => unreachable!("--branch, --tag and --rev conflict with each other"),
+                };
+                Some(CargoTomlFetchOverride::Git(git_url, reference))
+            }
             (None, None) => None,
             _ => unreachable!("manifest_path and git cannot be specified at the same time"),
         },
@@ -248,6 +288,8 @@ pub fn install_crates(
         maximum_resolution_timeout: Duration::from_secs(
             args.maximum_resolution_timeout.get().into(),
         ),
+
+        fetch_context: Default::default(),
     });
 
     // Destruct args before any async function to reduce size of the future
@@ -306,7 +348,7 @@ pub fn install_crates(
             // Confirm
             if !dry_run
                 && !no_confirm
-                && let Err(abort_err) = confirm().await
+                && let Err(abort_err) = confirm(&time_in_prompts).await
             {
                 return if let Some(err) = BinstallError::crate_errors(errors) {
                     Err(Report::new(abort_err).wrap_err(err))
@@ -374,7 +416,7 @@ pub fn install_crates(
 
             // Confirm
             if !dry_run && !no_confirm {
-                confirm().await?;
+                confirm(&time_in_prompts).await?;
             }
 
             do_install_fetches(
@@ -618,7 +660,7 @@ pub fn self_install(args: Args) -> Result<()> {
         install_path,
         manifests,
         ..
-    } = crate::initialise::initialise(&args)?;
+    } = crate::initialise::initialise(&args, &TimeInPrompts::default())?;
 
     let mut dest = install_path.join("cargo-binstall");
     if cfg!(windows) {
@@ -652,7 +694,7 @@ fn print_divider(width: usize) {
 }
 
 fn load_manifests(args: &Args) -> Result<Option<Manifests>> {
-    let Init { manifests, .. } = crate::initialise::initialise(args)?;
+    let Init { manifests, .. } = crate::initialise::initialise(args, &TimeInPrompts::default())?;
 
     let Some(manifests) = manifests else {
         if args.json_output {

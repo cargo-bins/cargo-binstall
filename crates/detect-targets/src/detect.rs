@@ -22,6 +22,9 @@ cfg_select! {
     _ => {}
 }
 
+#[cfg(any(target_os = "windows", test))]
+mod windows_targets;
+
 /// Detect the targets supported at runtime,
 /// which might be different from `TARGET` which is detected
 /// at compile-time.
@@ -40,9 +43,12 @@ pub async fn detect_targets() -> Vec<String> {
     #[cfg(feature = "tracing")]
     debug!("get_target_from_rustc()={target:?}");
     let target = target.unwrap_or_else(|| {
-        let target = guess_host_triple::guess_host_triple();
+        let target = cfg_select! {
+            target_os = "windows" => { windows::guess_host_triple() }
+            _ => { guess_host_triple::guess_host_triple() }
+        };
         #[cfg(feature = "tracing")]
-        debug!("guess_host_triple::guess_host_triple()={target:?}");
+        debug!("guess_host_triple()={target:?}");
         target.unwrap_or(crate::TARGET).to_string()
     });
 

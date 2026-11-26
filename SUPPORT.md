@@ -41,7 +41,8 @@ with the following variables available:
 - `version` is the crate version (per `--version` and the crate manifest)
 - `repo` is the repository linked in `Cargo.toml`
 - `subcrate` is the crate's directory when `repo` points at a crate inside a repository, see [Defaults](#defaults); templates using it are skipped otherwise
-- `bin` is the name of a specific binary, inferred from the crate configuration
+- `bin` is the name of a specific binary, inferred from the crate configuration.
+  In `pkg-url`, it makes each binary be downloaded from its own package, see [One package per binary](#one-package-per-binary)
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required)
 - `archive-suffix` is the filename extension of the package archive format that includes the prefix `.`, e.g. `.tgz` for tgz or `.exe`/`""` for bin.
 - `archive-format` is the soft-deprecated filename extension of the package archive format that does not include the prefix `.`, e.g. `tgz` for tgz or `exe`/`""` for bin.
@@ -132,6 +133,25 @@ They are only created for prebuilt binaries, not when falling back to installing
 
 An entry under `overrides.TARGET.binary` replaces the entry for the same binary, and `--aliases BIN:ALIAS` on the command line replaces both for each `BIN` it names.
 
+### One package per binary
+
+If each binary of the crate is released in its own package, use `{ bin }` in `pkg-url`:
+
+```toml
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ bin }-{ target }{ archive-suffix }"
+```
+
+`binstall` then downloads one package per binary (only the ones passed to `--bin`, if any), each from `pkg-url` rendered with that binary's name.
+Each package only has to provide its own binary, and any `pkg-fmt` works:
+
+- with `bin`, or a single binary compressed without an archive (`gz`, `bz2`, `xz` or `zst`), the downloaded file is the binary and `bin-dir` is not used;
+- with an archive, the binary is found in it with `bin-dir`, inferred as described in [Defaults](#defaults) if not set.
+
+`signing.file` is rendered for each package, so the default `{ url }.sig` gives each package its own signature.
+
+All the packages must be found for the same target, except those of binaries with `required-features`, which are skipped with a warning if missing.
+
 ### Defaults
 
 By default, `binstall` will try all supported package formats and would do the same for `bin-dir`.
@@ -149,6 +169,8 @@ that exists:
 - `{ name }-v{ version }`
 - `{ name }`
 <!-- END generated:default-bin-dirs -->
+
+If none of them exists and the archive holds a single dir at its top, that dir is used.
 
 Then it will concat the dir with `"{ bin }{ binary-ext }"` and use that as the final `bin-dir`.
 
@@ -297,3 +319,53 @@ bin-dir = "{ name }-{ target }/bin"
 ```
 
 Versions of cargo-binstall up to v1.27.0 do not support this and fail to find the binary, so use the full path if users may be on those.
+
+### Installing a project that is not on crates.io
+
+`binstall` takes the metadata above from a crate's `Cargo.toml`, so a project that
+is not published on crates.io, or is not written in Rust at all, can still be
+installed from its release downloads: write a `Cargo.toml` for it yourself and
+pass it with `--manifest-path`.
+
+For example, say the `v1.2.3` release of `https://github.com/example/mytool` has
+the downloads `mytool-1.2.3-linux_amd64.tar.gz`, `mytool-1.2.3-darwin_arm64.tar.gz`
+and `mytool-1.2.3-windows_amd64.zip`, each holding the `mytool` binary at the top:
+
+```toml
+[package]
+name = "mytool"
+version = "1.2.3"
+repository = "https://github.com/example/mytool"
+
+# Every binary to install needs a `[[bin]]` entry, since there are no sources
+# to infer them from. `path` must be set, but the file does not need to exist.
+[[bin]]
+name = "mytool"
+path = "main.rs"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ os-name }_{ target-arch }{ archive-suffix }"
+pkg-fmt = "tgz"
+disabled-strategies = ["quick-install", "compile"]
+
+[package.metadata.binstall.overrides.'cfg(target_os = "macos")']
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-darwin_{ target-arch }{ archive-suffix }"
+
+[package.metadata.binstall.overrides.'cfg(target_os = "windows")']
+pkg-fmt = "zip"
+```
+
+```console
+$ cargo binstall --manifest-path path/to/Cargo.toml mytool
+```
+
+`{ target-arch }` becomes `amd64` and `arm64` here through the aliases listed for it above,
+and `disabled-strategies` stops `binstall` from looking the name up on QuickInstall
+or trying to build it with `cargo install`, which cannot work without sources.
+
+The crate name on the command line must be the `name` in the file. The `version`
+in the file is installed unless an exact version is given, like `mytool@1.2.4`
+or `--version 1.2.4`, which is then used for `{ version }` instead, so the same
+file installs any release named the same way. A version requirement such as
+`^1.2` is not resolved, since there is no registry to list versions: the `version`
+in the file is used, with a warning if it does not match.

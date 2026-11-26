@@ -82,6 +82,25 @@ impl ResolvedRegistry {
             .await
     }
 
+    /// Find the latest version of `crate_name` matching `version_req`,
+    /// without downloading the crate.
+    pub async fn find_crate_matched(
+        &self,
+        client: binstalk_downloader::remote::Client,
+        crate_name: &str,
+        version_req: &semver::VersionReq,
+    ) -> Result<crate::MatchedCrate, crate::RegistryError> {
+        self.registry
+            .find_crate_matched_with_auth(
+                client,
+                self.auth.as_ref(),
+                crate_name,
+                version_req,
+                self.min_publish_age,
+            )
+            .await
+    }
+
     /// Return the min-publish-age set by [`ResolvedRegistry::with_min_publish_age`].
     pub fn min_publish_age(&self) -> Option<Duration> {
         self.min_publish_age
