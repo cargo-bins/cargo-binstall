@@ -250,6 +250,11 @@ impl Probe {
     /// costs no API quota. The ones it lists are checked with GET right away,
     /// returning the first one found; the ones it doesn't are dropped.
     ///
+    /// A release with only one candidate, e.g. of a `pkg-url` pointing at
+    /// cargo-quickinstall, is checked with GET instead: one request either
+    /// way, and the GET is the download if found. Unless the page is already
+    /// there, from another target.
+    ///
     /// Only for a public repository, github.com answers 404 for a private
     /// one. The list comes from a page meant for people, so a release's
     /// candidates are kept to check some other way if it lists none of them
@@ -272,10 +277,20 @@ impl Probe {
                 })
                 .collect();
 
+            let page = self.shared.data.repo_cache.release_assets_page(&release);
+            if let [_] = of_release[..]
+                && !page.initialized()
+            {
+                let candidate = of_release.pop().expect("one candidate");
+                if let Some(resolved) = self.shared.check_with_get(candidate).await? {
+                    return Ok(Some(resolved));
+                }
+                continue;
+            }
+
             let names = of_release.iter().filter_map(|candidate| {
                 Some(candidate.gh_artifact.as_ref()?.artifact_name.as_str())
             });
-            let page = self.shared.data.repo_cache.release_assets_page(&release);
             let page = page
                 .get_or_init(|| ReleaseAssetsPage::fetch(&self.shared.client, &release))
                 .await;
@@ -766,12 +781,16 @@ mod test {
             }
         };
 
-        // A target v0.20.1 has no build for.
+        // A target v0.20.1 has no build for. Two candidates of the release,
+        // so github.com's asset list is used.
         let riscv = [
             "v0.20.1/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
+            "v0.20.1/cargo-binstall-riscv64gc-unknown-linux-gnu.zip",
             "v0.18.2/cargo-binstall-riscv64gc-unknown-linux-gnu.tgz",
         ];
         assert!(probe(&data, &riscv).await.is_none());
+        // Its one candidate of the release is looked up in the asset list
+        // already there, instead of with GET.
         let musl_tgz = "v0.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz";
         let musl = [
             musl_tgz,
@@ -875,11 +894,71 @@ mod test {
         assert_eq!(
             probe(
                 QUICKINSTALL,
-                &["ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tar.gz"],
+                &[
+                    "ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tar.gz",
+                    "ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tgz",
+                ],
             )
             .await,
-            not_found(1, 1)
+            not_found(2, 2)
         );
+    }
+
+    /// The only candidate of a release, as for a `pkg-url` pointing at
+    /// cargo-quickinstall, is checked with GET, without github.com's asset
+    /// list: one request, which is the download if found.
+    #[tokio::test]
+    async fn test_probe_one_candidate() {
+        let gh_api_client = GhApiClient::new(client(), None);
+        let probe = |assets: &'static [&'static str]| {
+            let gh_api_client = gh_api_client.clone();
+            async move {
+                // The crate's own repository is another one.
+                let candidates = assets
+                    .iter()
+                    .map(|asset| {
+                        let url = Url::parse(&format!("{QUICKINSTALL}/releases/download/{asset}"));
+                        Candidate::new(
+                            url.unwrap(),
+                            PkgFmt::Tgz,
+                            None,
+                            None,
+                            OTHER_TEMPLATE.into(),
+                            Some(BINSTALL),
+                        )
+                    })
+                    .collect();
+                let mut probe = new_probe(&gh_api_client, BINSTALL, candidates).await;
+                probe.drop_missing_tags().await;
+                assert_eq!(probe.candidates.len(), assets.len());
+                let repo_cache = Arc::clone(&probe.shared.data.repo_cache);
+                let found = probe.check_on_web().await.unwrap();
+                (found, probe.candidates.len(), repo_cache)
+            }
+        };
+
+        const GNU: &str = "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz";
+        let (found, _, repo_cache) = probe(&[GNU]).await;
+        let found = found.unwrap();
+        assert!(found.response.is_some());
+        assert_eq!(asset(Some(found)).as_deref(), Some(GNU));
+        assert_eq!(repo_cache.release_assets_pages_len(), 0);
+
+        // Not found: nothing left to check some other way.
+        let (found, left, repo_cache) =
+            probe(&["ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tar.gz"]).await;
+        assert!(found.is_none());
+        assert_eq!(left, 0);
+        assert_eq!(repo_cache.release_assets_pages_len(), 0);
+
+        // One candidate in each of two releases: both checked with GET.
+        let (found, _, repo_cache) = probe(&[
+            "ripgrep-14.1.0/ripgrep-14.1.0-riscv64gc-unknown-none-elf.tar.gz",
+            GNU,
+        ])
+        .await;
+        assert_eq!(asset(found).as_deref(), Some(GNU));
+        assert_eq!(repo_cache.release_assets_pages_len(), 0);
     }
 
     #[tokio::test]
