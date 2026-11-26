@@ -108,8 +108,8 @@ impl FetchContext {
             .cloned()
     }
 
-    /// How many of github.com's asset lists were fetched.
     #[cfg(test)]
+    /// How many of github.com's asset lists were fetched.
     pub(crate) fn release_assets_pages_len(&self) -> usize {
         self.release_assets_pages
             .0
