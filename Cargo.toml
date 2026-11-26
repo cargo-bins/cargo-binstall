@@ -82,6 +82,6 @@ extend-ignore-words-re = [
 ]
 
 [patch.crates-io]
-# TODO: drop once cargo-bins/simple-git#169 is released, and bump
+# TODO: drop once simple-git 0.2.40 (cargo-bins/simple-git#172) is released, and bump
 # binstalk's simple-git requirement to that version.
-simple-git = { git = "https://github.com/cargo-bins/simple-git", branch = "git-ref" }
+simple-git = { git = "https://github.com/cargo-bins/simple-git", branch = "main" }
