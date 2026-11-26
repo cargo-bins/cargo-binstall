@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, Found, TargetArchOverride, TargetData},
+    fetchers::{BinInfo, Data, Fetched, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -122,9 +122,24 @@ async fn resolve_inner(
 
     let gh_api_client = opts.gh_api_client.get().await?;
 
-    let with_pkg_url_hint = |data: Data| match pkg_url_hint.clone() {
-        Some((target, hint)) => data.with_pkg_url_hint(target, hint),
-        None => data,
+    // The binaries the user asked for, for a `pkg-url` with one package per
+    // binary.
+    let bin_infos: Vec<BinInfo> = package_info
+        .binaries
+        .iter()
+        .filter(|bin| is_requested(&opts.bins, bin))
+        .map(|bin| BinInfo {
+            name: bin.name.as_str().into(),
+            optional: !bin.required_features.is_empty(),
+        })
+        .collect();
+
+    let with_pkg_url_hint = |data: Data| {
+        let data = data.with_bins(bin_infos.clone());
+        match pkg_url_hint.clone() {
+            Some((target, hint)) => data.with_pkg_url_hint(target, hint),
+            None => data,
+        }
     };
 
     let mut handles_fn =
@@ -298,35 +313,100 @@ async fn download_extract_and_verify(
     // Download and extract it, unless another crate did already: then it is
     // somewhere else than `bin_path`.
     // If that fails, then ignore this fetcher.
-    let extracted = found.fetch_and_extract(bin_path).await?;
-    let (bin_path, extracted_files) = (extracted.dir(), extracted.files());
-    debug!("extracted_files = {extracted_files:#?}");
+    let fetched = found.fetch_and_extract(bin_path).await?;
+    debug!("fetched = {fetched:#?}");
 
-    // Verify that all non-optional bin_files exist
-    let bin_files = collect_bin_files(
-        found,
-        package_info,
-        bin_path,
-        install_path,
-        no_symlinks,
-        extracted_files,
-    )?;
+    let meta = found.target_meta();
 
+    match fetched {
+        Fetched::Package(extracted) => {
+            let binaries = package_info.binaries.iter().collect::<Vec<_>>();
+
+            let bin_files = collect_bin_files(
+                found,
+                package_info,
+                &binaries,
+                meta,
+                extracted.dir(),
+                install_path,
+                no_symlinks,
+                extracted.files(),
+            )?;
+
+            verify_bin_files(package_info, &binaries, bin_files, extracted.files(), bins)
+        }
+        Fetched::PerBin(packages) => {
+            let mut bin_files = Vec::with_capacity(packages.len());
+
+            for bin in &package_info.binaries {
+                let Some(package) = packages.get(bin.name.as_str()) else {
+                    // Left out because the user did not ask for it, or because
+                    // it is optional and its package was not found.
+                    if bin.required_features.is_empty() && is_requested(bins, bin) {
+                        return Err(
+                            bins::Error::BinFileNotFound(bin_path.join(&bin.name).into()).into(),
+                        );
+                    }
+                    continue;
+                };
+
+                let mut meta = meta.clone();
+                meta.pkg_fmt = Some(package.pkg_fmt);
+
+                let binaries = [bin];
+                let extracted = &package.extracted;
+
+                let files = collect_bin_files(
+                    found,
+                    package_info,
+                    &binaries,
+                    meta,
+                    extracted.dir(),
+                    install_path,
+                    no_symlinks,
+                    extracted.files(),
+                )?;
+
+                bin_files.extend(verify_bin_files(
+                    package_info,
+                    &binaries,
+                    files,
+                    extracted.files(),
+                    bins,
+                )?);
+            }
+
+            bins::check_aliases_unique(&bin_files)?;
+
+            Ok(bin_files)
+        }
+    }
+}
+
+/// Whether the user asked for `bin`, with `--bin`.
+fn is_requested(bins: &Option<Vec<CompactString>>, bin: &Bin) -> bool {
+    bins.as_ref()
+        .is_none_or(|bins| bins.iter().any(|b| b == bin.name))
+}
+
+/// Verify that all non-optional `bin_files`, made for `binaries`, exist.
+fn verify_bin_files(
+    package_info: &PackageInfo,
+    binaries: &[&Bin],
+    bin_files: Vec<bins::BinFile>,
+    extracted_files: &ExtractedFiles,
+    bins: &Option<Vec<CompactString>>,
+) -> Result<Vec<bins::BinFile>, BinstallError> {
     let name = &package_info.name;
 
-    package_info
-        .binaries
+    binaries
         .iter()
         .zip(bin_files)
         .filter_map(|(bin, bin_file)| {
             // skip binaries that were not requested by user
-            if bins
-                .as_ref()
-                .is_some_and(|bins| !bins.iter().any(|b| b == bin.name))
-            {
+            if !is_requested(bins, bin) {
                 return None;
             }
-
             match bin_file.check_source_exists(&mut |p| extracted_files.has_file(p)) {
                 Ok(()) => Some(Ok(bin_file)),
 
@@ -359,9 +439,12 @@ But since it requires features {features}, this bin is ignored."
         .map_err(BinstallError::from)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_bin_files(
     found: &dyn Found,
     package_info: &PackageInfo,
+    binaries: &[&Bin],
+    meta: PkgMeta,
     bin_path: &Path,
     install_path: &Path,
     no_symlinks: bool,
@@ -381,7 +464,7 @@ fn collect_bin_files(
         target: found.target(),
         version: &package_info.version_str,
         repo: package_info.repo.as_deref(),
-        meta: found.target_meta(),
+        meta,
         bin_path,
         install_path,
         target_related_info: &target_related_info,
@@ -417,8 +500,7 @@ fn collect_bin_files(
     }
 
     // Create bin_files
-    let bin_files = package_info
-        .binaries
+    let bin_files = binaries
         .iter()
         .map(|bin| {
             let aliases = bin_data
