@@ -17,8 +17,36 @@ use crate::{
 
 pub mod resolve;
 
+/// Which commit `--git` checks out: the owned version of
+/// [`simple_git::GitReference`], so it can be kept in [`Options`].
 #[cfg(feature = "git")]
-pub use crate::helpers::git::GitReference;
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum GitReference {
+    /// The commit the remote `HEAD` points to.
+    #[default]
+    DefaultBranch,
+    /// `--branch`
+    Branch(CompactString),
+    /// `--tag`
+    Tag(CompactString),
+    /// `--rev`
+    Rev(CompactString),
+}
+
+#[cfg(feature = "git")]
+impl GitReference {
+    pub(crate) fn as_borrowed(&self) -> crate::helpers::git::GitReference<'_> {
+        use crate::helpers::git::GitReference as Borrowed;
+
+        match self {
+            Self::DefaultBranch => Borrowed::DefaultBranch,
+            Self::Branch(branch) => Borrowed::Branch(branch),
+            Self::Tag(tag) => Borrowed::Tag(tag),
+            Self::Rev(rev) => Borrowed::Rev(rev),
+        }
+    }
+}
 
 /// [`Fetcher::new`]
 pub type Resolver = fn(
@@ -35,10 +63,7 @@ pub type Resolver = fn(
 pub enum CargoTomlFetchOverride {
     /// Clone the repository at the url and check out the reference.
     #[cfg(feature = "git")]
-    Git(
-        crate::helpers::git::GitUrl,
-        crate::helpers::git::GitReference,
-    ),
+    Git(crate::helpers::git::GitUrl, GitReference),
     Path(PathBuf),
 }
 

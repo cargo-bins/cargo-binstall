@@ -518,7 +518,7 @@ impl PackageInfo {
                         let repo = GitRepository::shallow_clone_reference(
                             git_url,
                             dir.as_ref(),
-                            &reference,
+                            reference.as_borrowed(),
                             Some(cancellation_token),
                         )?;
 
@@ -538,7 +538,11 @@ impl PackageInfo {
                     ret,
                     CrateSource {
                         source_type: SourceType::Git,
-                        url: MaybeOwned::Owned(git_source_url(git_url, reference, commit_hash)?),
+                        url: MaybeOwned::Owned(git_source_url(
+                            git_url,
+                            reference.as_borrowed(),
+                            commit_hash,
+                        )?),
                     },
                     None,
                 )
@@ -692,7 +696,7 @@ fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
 #[cfg(feature = "git")]
 fn git_source_url(
     git_url: &crate::helpers::git::GitUrl,
-    reference: &crate::helpers::git::GitReference,
+    reference: crate::helpers::git::GitReference<'_>,
     commit_hash: impl std::fmt::Display,
 ) -> Result<Url, BinstallError> {
     use crate::helpers::git::GitReference::*;
@@ -748,16 +752,13 @@ mod tests {
 
         for (reference, expected) in [
             (GitReference::DefaultBranch, ""),
-            (GitReference::Branch("main".into()), "?branch=main"),
-            (GitReference::Tag("v1.0.0".into()), "?tag=v1.0.0"),
-            (GitReference::Rev("abc123".into()), "?rev=abc123"),
-            (
-                GitReference::Branch("a b/c&d".into()),
-                "?branch=a+b%2Fc%26d",
-            ),
+            (GitReference::Branch("main"), "?branch=main"),
+            (GitReference::Tag("v1.0.0"), "?tag=v1.0.0"),
+            (GitReference::Rev("abc123"), "?rev=abc123"),
+            (GitReference::Branch("a b/c&d"), "?branch=a+b%2Fc%26d"),
         ] {
             assert_eq!(
-                git_source_url(&url, &reference, commit).unwrap().as_str(),
+                git_source_url(&url, reference, commit).unwrap().as_str(),
                 format!("https://github.com/cargo-bins/cargo-binstall{expected}#{commit}"),
                 "{reference:?}"
             );
