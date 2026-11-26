@@ -54,7 +54,7 @@ pub(super) struct Candidate {
     /// The GitHub release asset it is.
     gh_artifact: Option<GhReleaseArtifact>,
     /// Whether it is in a private GitHub repository, see
-    /// [`Probe::find_private_repos`].
+    /// [`Probe::find_gh_repos`].
     is_private: bool,
 }
 
@@ -77,12 +77,41 @@ impl Candidate {
             pkg_url,
         }
     }
+
+    /// Move the GitHub release asset to repository `to`, which its own
+    /// redirects to.
+    fn move_to(&mut self, to: &GhRepo) {
+        // `/{owner}/{repo}/releases/download/{tag}/{name}`, see
+        // `GhReleaseArtifact::try_extract_from_url`.
+        let Some(rest) = self.url.path().splitn(4, '/').nth(3) else {
+            return;
+        };
+        let mut url = self.url.clone();
+        url.set_path(&format!("/{}/{}/{rest}", to.owner, to.repo));
+        debug!("{} redirects to {url}", self.url);
+        self.release_tag = ReleaseTag::of_asset(&url);
+        self.gh_artifact = GhReleaseArtifact::try_extract_from_url(&url);
+        self.url = url;
+    }
 }
 
-/// Whether `a` and `b` are the same repository: GitHub ignores the case of
-/// owner and repository names.
-fn same_gh_repo(a: &GhRepo, b: &GhRepo) -> bool {
-    a.owner.eq_ignore_ascii_case(&b.owner) && a.repo.eq_ignore_ascii_case(&b.repo)
+/// What [`Probe::find_gh_repos`] needs of a [`RepoInfo`].
+#[derive(Clone, Default)]
+struct GhRepoInfo {
+    /// The repository it redirects to, if not itself.
+    moved_to: Option<GhRepo>,
+    is_private: bool,
+}
+
+impl GhRepoInfo {
+    fn new(gh_repo: &GhRepo, info: Option<&RepoInfo>) -> Self {
+        Self {
+            moved_to: info
+                .and_then(|info| GhRepo::try_extract_from_url(&info.repo))
+                .filter(|to| to != gh_repo),
+            is_private: info.is_some_and(|info| info.is_private),
+        }
+    }
 }
 
 /// What the API says about a GitHub release asset.
@@ -129,45 +158,50 @@ impl Probe {
             },
             candidates,
         };
-        probe.find_private_repos().await;
+        probe.find_gh_repos().await;
         probe
     }
 
-    /// Find out which candidates are in a private GitHub repository, whose
-    /// assets can only be checked and downloaded with the API.
+    /// Look up the GitHub repository of each candidate:
     ///
-    /// The crate's repository is known already. Another one is only asked
-    /// about with a token, once per run, see
-    /// [`FetchContext`](crate::FetchContext): without one, its assets can
-    /// only be checked as public ones anyway.
-    async fn find_private_repos(&mut self) {
+    /// - whether it is private, so that its assets can only be checked and
+    ///   downloaded with the API;
+    /// - where it redirects to, if it was renamed or transferred, so that the
+    ///   candidates are checked there without a redirect for each request.
+    ///
+    /// The crate's repository is known already. Another one is looked up
+    /// once per run, see [`FetchContext`](crate::FetchContext).
+    async fn find_gh_repos(&mut self) {
         let Self { shared, candidates } = self;
         let crate_repo = shared.data.repo_info.get().and_then(Option::as_ref);
-        let crate_gh_repo = crate_repo.and_then(|info| GhRepo::try_extract_from_url(&info.repo));
 
         // Normally one or two repositories.
-        let mut private = Vec::<(GhRepo, bool)>::new();
+        let mut repos = Vec::<(GhRepo, GhRepoInfo)>::new();
         for candidate in candidates.iter_mut() {
             let Some(artifact) = &candidate.gh_artifact else {
                 continue;
             };
             let gh_repo = &artifact.release.repo;
-            candidate.is_private = match private.iter().find(|(r, _)| same_gh_repo(r, gh_repo)) {
-                Some((_, is_private)) => *is_private,
+            let info = match repos.iter().find(|(r, _)| r == gh_repo) {
+                Some((_, info)) => info.clone(),
                 None => {
-                    let is_private = match (&crate_gh_repo, crate_repo) {
-                        (Some(crate_gh_repo), Some(info))
-                            if same_gh_repo(crate_gh_repo, gh_repo) =>
+                    let info = match crate_repo {
+                        Some(info)
+                            if GhRepo::try_extract_from_url(&info.repo).as_ref()
+                                == Some(gh_repo) =>
                         {
-                            info.is_private
+                            GhRepoInfo::new(gh_repo, Some(info))
                         }
-                        _ if !shared.gh_api_client.has_gh_token() => false,
-                        _ => shared.is_other_repo_private(gh_repo).await,
+                        _ => shared.other_gh_repo_info(gh_repo).await,
                     };
-                    private.push((gh_repo.clone(), is_private));
-                    is_private
+                    repos.push((gh_repo.clone(), info.clone()));
+                    info
                 }
             };
+            if let Some(to) = &info.moved_to {
+                candidate.move_to(to);
+            }
+            candidate.is_private = info.is_private;
         }
     }
 
@@ -485,19 +519,20 @@ impl Probe {
 }
 
 impl Shared {
-    /// Whether `gh_repo`, which is not the crate's repository, is private.
-    /// Kept in the [`FetchContext`](crate::FetchContext), so asked once per
-    /// run. If it can't be told, its assets are checked as public ones.
-    async fn is_other_repo_private(&self, gh_repo: &GhRepo) -> bool {
+    /// [`GhRepoInfo`] of `gh_repo`, which is not the crate's repository.
+    /// Kept in the [`FetchContext`](crate::FetchContext), so looked up once
+    /// per run. If it can't be, its assets are checked as public ones where
+    /// they are.
+    async fn other_gh_repo_info(&self, gh_repo: &GhRepo) -> GhRepoInfo {
         let Ok(repo) = gh_repo.repo_url() else {
-            return false;
+            return GhRepoInfo::default();
         };
         let info = self.data.context.repo_info(repo.as_str());
         match RepoInfo::get(&info, Some(repo.as_str()), &self.gh_api_client).await {
-            Ok(info) => info.is_some_and(|info| info.is_private),
+            Ok(info) => GhRepoInfo::new(gh_repo, info),
             Err(err) => {
-                debug!("Failed to find out whether {repo} is private: {err}");
-                false
+                debug!("Failed to look up {repo}: {err}");
+                GhRepoInfo::default()
             }
         }
     }
@@ -1171,7 +1206,7 @@ mod test {
                 is_private: true,
             }))
             .unwrap();
-        // Without a token, nothing is asked about cargo-quickinstall.
+        // cargo-quickinstall is looked up, and public.
         let probe = Probe::new(
             Arc::new(data),
             client(),
@@ -1192,6 +1227,55 @@ mod test {
         .await;
         let is_private: Vec<_> = probe.candidates.iter().map(|c| c.is_private).collect();
         assert_eq!(is_private, [true, true, false]);
+    }
+
+    #[test]
+    fn test_candidate_move_to() {
+        let mut candidate = new_candidate(
+            "https://github.com/alsuren/cargo-quickinstall",
+            "a-1.0.0+b/a-1.0.0+b-x.tar.gz",
+            OTHER_TEMPLATE,
+        );
+        let to = GhRepo::try_extract_from_url(&Url::parse(QUICKINSTALL).unwrap()).unwrap();
+        candidate.move_to(&to);
+        assert_eq!(
+            candidate.url.as_str(),
+            format!("{QUICKINSTALL}/releases/download/a-1.0.0+b/a-1.0.0+b-x.tar.gz")
+        );
+        let artifact = candidate.gh_artifact.unwrap();
+        assert_eq!(artifact.release.repo, to);
+        assert_eq!(artifact.release.tag, "a-1.0.0+b");
+        assert_eq!(artifact.artifact_name, "a-1.0.0+b-x.tar.gz");
+        let tag = candidate.release_tag.unwrap();
+        assert_eq!(
+            (tag.repo.as_str(), tag.tag.as_str()),
+            (QUICKINSTALL, "a-1.0.0+b")
+        );
+    }
+
+    /// A candidate in a repository that was transferred is checked where it
+    /// is now, without a redirect for each request.
+    ///
+    /// github.com answers 403 for the pages of repositories that aren't
+    /// attached to Claude Code sessions, so this only passes in CI.
+    #[tokio::test]
+    async fn test_candidate_redirected() {
+        let gh_api_client = GhApiClient::new(client(), None);
+        let probe = new_probe(
+            &gh_api_client,
+            BINSTALL,
+            vec![new_candidate(
+                "https://github.com/alsuren/cargo-quickinstall",
+                "a-1.0.0/a.tgz",
+                OTHER_TEMPLATE,
+            )],
+        )
+        .await;
+        assert_eq!(
+            probe.candidates[0].url.as_str(),
+            format!("{QUICKINSTALL}/releases/download/a-1.0.0/a.tgz")
+        );
+        assert!(!probe.candidates[0].is_private);
     }
 
     #[tokio::test]
