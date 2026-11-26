@@ -112,8 +112,10 @@ fn dist_table(file: &[u8], name: &str, path: &[&str]) -> Option<DistMeta> {
         .ok()
 }
 
-/// Merge the dist config of the workspace root `dir` into `manifest`, of
-/// a crate in it, see [`WorkspaceDistConfig`].
+/// Merge the [dist](https://github.com/axodotdev/cargo-dist) config of the
+/// workspace root `dir` into the `[package.metadata.dist]` of `manifest`, a
+/// crate in it: `[workspace.metadata.dist]` of `dir/Cargo.toml`, and the
+/// `[dist]` of `dir/dist-workspace.toml` and `dir/dist.toml`.
 ///
 /// This is a blocking function.
 pub fn merge_workspace_dist_meta(dir: &Path, manifest: &mut Manifest<Meta>) {
