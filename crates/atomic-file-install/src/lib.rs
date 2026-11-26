@@ -112,6 +112,20 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Atomically install a copy of `src`, this atomically replace `dst` if it
+/// exists. Unlike [`atomic_install`], `src` is left as it is.
+///
+/// This is a blocking function, must be called in `block_in_place` mode.
+pub fn atomic_install_copy(src: &Path, dst: &Path) -> io::Result<()> {
+    debug!(
+        "Atomically installing a copy of '{}' to '{}'",
+        src.display(),
+        dst.display()
+    );
+
+    persist(copy_to_tempfile(src, dst)?.into_temp_path(), dst)
+}
+
 /// Create a symlink at `link` to `dest`, this fails if the `link`
 /// already exists.
 ///

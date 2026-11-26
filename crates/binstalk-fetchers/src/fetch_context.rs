@@ -13,9 +13,11 @@ use std::{
     collections::{HashMap, HashSet},
     fmt,
     hash::Hash,
+    path::Path,
     sync::{Arc, RwLock},
 };
 
+use binstalk_downloader::download::ExtractedFiles;
 use binstalk_git_repo_api::{
     gh_api_client::{GhRelease, ReleaseArtifacts, ReleaseAssetsPage},
     git_refs::RepoTags,
@@ -24,7 +26,9 @@ use compact_str::CompactString;
 use tokio::sync::{Mutex, OnceCell};
 use url::Url;
 
-use crate::RepoInfo;
+use binstalk_types::cargo_toml_binstall::{PkgFmt, SigningAlgorithm};
+
+use crate::{Extracted, FetchError, RepoInfo};
 
 /// Shared by the fetchers of all crates resolved together, through
 /// [`Data::new`](crate::Data::new), so that what one crate's fetchers asked
@@ -40,6 +44,9 @@ pub struct FetchContext {
     repo_tags: Cells<Url, Mutex<Tags>>,
     release_assets_pages: Cells<GhRelease, OnceCell<ReleaseAssetsPage>>,
     release_artifacts: Cells<GhRelease, OnceCell<Option<ReleaseArtifacts>>>,
+    /// Packages extracted so far, so that crates in the same package
+    /// download and extract it once.
+    packages: Cells<PackageId, OnceCell<Arc<Extracted>>>,
 }
 
 impl fmt::Debug for FetchContext {
@@ -77,6 +84,40 @@ impl FetchContext {
         self.release_artifacts.get(release)
     }
 
+    /// Extract the package `id` with `extract` for `crate_name`, unless it
+    /// was already extracted for another crate, or is being extracted, in
+    /// which case that one is given to `crate_name` too once ready.
+    ///
+    /// If extracting it for another crate failed, it is tried again.
+    pub(crate) async fn extract_once<F>(
+        &self,
+        id: PackageId,
+        crate_name: &CompactString,
+        dst: &Path,
+        extract: F,
+    ) -> Result<Arc<Extracted>, FetchError>
+    where
+        F: AsyncFnOnce() -> Result<ExtractedFiles, FetchError>,
+    {
+        let cell = self.packages.get(&id);
+        let mut extracted_here = false;
+        let extracted = cell
+            .get_or_try_init(async || {
+                extracted_here = true;
+                let files = extract().await?;
+                Ok::<_, FetchError>(Arc::new(Extracted::new(
+                    crate_name.clone(),
+                    dst.to_path_buf(),
+                    files,
+                )))
+            })
+            .await?;
+        if !extracted_here {
+            extracted.add_crate();
+        }
+        Ok(Arc::clone(extracted))
+    }
+
     #[cfg(test)]
     pub(crate) fn release_assets_pages_len(&self) -> usize {
         self.release_assets_pages.len()
@@ -86,6 +127,18 @@ impl FetchContext {
     pub(crate) fn release_artifacts_len(&self) -> usize {
         self.release_artifacts.len()
     }
+}
+
+/// What [`FetchContext::extract_once`] extracts: two packages with the same id
+/// extract to the same files, and only after the same verification, so a
+/// package checked against a signing key isn't given to a crate that would
+/// check it against another key or not at all.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct PackageId {
+    pub(crate) url: Url,
+    pub(crate) pkg_fmt: PkgFmt,
+    /// The algorithm and public key its signature is checked with, if it is.
+    pub(crate) signing: Option<(SigningAlgorithm, Box<str>)>,
 }
 
 /// Which release tags exist, from the repository's git server.

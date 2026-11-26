@@ -7,7 +7,7 @@ use tracing::{error, info, trace};
 use url::Url;
 
 use crate::{
-    Data, FetchError, Found, SignaturePolicy, SignatureVerifier, SigningAlgorithm,
+    Data, Extracted, FetchError, Found, SignaturePolicy, SignatureVerifier, SigningAlgorithm,
     TargetDataErased, common::*,
 };
 
@@ -311,9 +311,16 @@ impl QuickInstallFound {
 
 #[async_trait::async_trait]
 impl Found for QuickInstallFound {
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError> {
         let response = self.response.take();
-        let ret = self.download_and_extract(response, dst).await;
+        // Its URLs are per crate, so it is never shared with other crates.
+        let ret = self.download_and_extract(response, dst).await.map(|files| {
+            Arc::new(Extracted::new(
+                self.fetcher.data.name.clone(),
+                dst.to_path_buf(),
+                files,
+            ))
+        });
 
         self.fetcher.clone().send_report(match &ret {
             Ok(_) => Status::InstalledFromTarball,

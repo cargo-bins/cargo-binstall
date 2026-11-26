@@ -31,6 +31,9 @@ mod futures_resolver;
 mod fetch_context;
 pub use fetch_context::FetchContext;
 
+mod extracted;
+pub use extracted::Extracted;
+
 use gh_crate_meta::hosting::RepositoryHost;
 
 static DEFAULT_GH_API_RETRY_DURATION: Duration = Duration::from_secs(1);
@@ -149,8 +152,10 @@ pub trait Fetcher: Send + Sync {
 /// A package [`Fetcher::find`] found.
 #[async_trait::async_trait]
 pub trait Found: Send + Sync {
-    /// Fetch the package and extract it to `dst`.
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError>;
+    /// Fetch the package and extract it to `dst`, unless it was extracted
+    /// for another crate already, see [`FetchContext`]: then that one is
+    /// returned, which is somewhere else.
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError>;
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;

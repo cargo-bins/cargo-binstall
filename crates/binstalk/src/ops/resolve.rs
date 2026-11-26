@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{Data, Fetcher, Found, TargetArchOverride, TargetData},
+    fetchers::{Data, Extracted, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -214,9 +214,10 @@ async fn resolve_inner(
         .await;
 
         match ret {
-            Ok(bin_files) if !bin_files.is_empty() => {
+            Ok((extracted, bin_files)) if !bin_files.is_empty() => {
                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                     found,
+                    extracted,
                     new_version: package_info.version,
                     pubtime: package_info.pubtime,
                     name: package_info.name,
@@ -294,10 +295,12 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
-) -> Result<Vec<bins::BinFile>, BinstallError> {
-    // Download and extract it.
+) -> Result<(Arc<Extracted>, Vec<bins::BinFile>), BinstallError> {
+    // Download and extract it, unless another crate did already: then it is
+    // somewhere else than `bin_path`.
     // If that fails, then ignore this fetcher.
-    let extracted_files = found.fetch_and_extract(bin_path).await?;
+    let extracted = found.fetch_and_extract(bin_path).await?;
+    let (bin_path, extracted_files) = (extracted.dir(), extracted.files());
     debug!("extracted_files = {extracted_files:#?}");
 
     // Verify that all non-optional bin_files exist
@@ -307,7 +310,7 @@ async fn download_extract_and_verify(
         bin_path,
         install_path,
         no_symlinks,
-        &extracted_files,
+        extracted_files,
     )?;
 
     let name = &package_info.name;
@@ -354,6 +357,7 @@ But since it requires features {features}, this bin is ignored."
             }
         })
         .collect::<Result<Vec<bins::BinFile>, bins::Error>>()
+        .map(|bin_files| (Arc::clone(&extracted), bin_files))
         .map_err(BinstallError::from)
 }
 
