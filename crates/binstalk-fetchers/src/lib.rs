@@ -32,7 +32,7 @@ mod fetch_context;
 pub use fetch_context::FetchContext;
 
 mod extracted;
-pub use extracted::Extracted;
+pub use extracted::{Extracted, Fetched};
 
 use gh_crate_meta::hosting::RepositoryHost;
 
@@ -155,7 +155,10 @@ pub trait Found: Send + Sync {
     /// Fetch the package and extract it to `dst`, unless it was extracted
     /// for another crate already, see [`FetchContext`]: then that one is
     /// returned, which is somewhere else.
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError>;
+    ///
+    /// Returns one package, or one per binary when `pkg-url` contains
+    /// `{ bin }`, each in its own dir under `dst`.
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Vec<Fetched>, FetchError>;
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
@@ -241,6 +244,16 @@ pub struct Data {
     repo_info: Arc<OnceCell<Option<RepoInfo>>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
+    /// See [`Data::with_bins`].
+    bins: Vec<BinInfo>,
+}
+
+/// A binary to install, see [`Data::with_bins`].
+#[derive(Clone, Debug)]
+pub struct BinInfo {
+    pub name: CompactString,
+    /// Whether the binary may be missing, e.g. if it has `required-features`.
+    pub optional: bool,
 }
 
 impl Data {
@@ -263,6 +276,7 @@ impl Data {
             context,
             repo_info,
             pkg_url_hint: None,
+            bins: Vec::new(),
         }
     }
 
@@ -278,7 +292,18 @@ impl Data {
             context: Arc::clone(&self.context),
             repo_info: Arc::clone(&self.repo_info),
             pkg_url_hint: None,
+            bins: self.bins.clone(),
         }
+    }
+
+    /// The binaries to install.
+    ///
+    /// Fetchers that find one package per binary, like [`GhCrateMeta`] with
+    /// `{ bin }` in `pkg-url`, need them to know which packages to look for,
+    /// and find nothing without them.
+    pub fn with_bins(mut self, bins: Vec<BinInfo>) -> Self {
+        self.bins = bins;
+        self
     }
 
     /// Have fetchers try how a previous version was found on `target` first,

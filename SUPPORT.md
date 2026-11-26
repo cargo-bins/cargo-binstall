@@ -41,7 +41,8 @@ with the following variables available:
 - `version` is the crate version (per `--version` and the crate manifest)
 - `repo` is the repository linked in `Cargo.toml`
 - `subcrate` is the crate's directory when `repo` points at a crate inside a repository, see [Defaults](#defaults); templates using it are skipped otherwise
-- `bin` is the name of a specific binary, inferred from the crate configuration
+- `bin` is the name of a specific binary, inferred from the crate configuration.
+  In `pkg-url`, it makes each binary be downloaded from its own package, see [One package per binary](#one-package-per-binary)
 - `target` is the rust target name (defaults to your architecture, but can be overridden using the `--target` command line option if required)
 - `archive-suffix` is the filename extension of the package archive format that includes the prefix `.`, e.g. `.tgz` for tgz or `.exe`/`""` for bin.
 - `archive-format` is the soft-deprecated filename extension of the package archive format that does not include the prefix `.`, e.g. `tgz` for tgz or `exe`/`""` for bin.
@@ -131,6 +132,25 @@ Aliases are removed on uninstall like the binary itself.
 They are only created for prebuilt binaries, not when falling back to installing from source with `cargo install`, which warns about it. With `--aliases` on the command line, that fallback is an error instead.
 
 An entry under `overrides.TARGET.binary` replaces the entry for the same binary, and `--aliases BIN:ALIAS` on the command line replaces both for each `BIN` it names.
+
+### One package per binary
+
+If each binary of the crate is released in its own package, use `{ bin }` in `pkg-url`:
+
+```toml
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ bin }-{ target }{ archive-suffix }"
+```
+
+`binstall` then downloads one package per binary (only the ones passed to `--bin`, if any), each from `pkg-url` rendered with that binary's name.
+Each package only has to provide its own binary, and any `pkg-fmt` works:
+
+- with `bin`, or a single binary compressed without an archive (`gz`, `bz2`, `xz` or `zst`), the downloaded file is the binary and `bin-dir` is not used;
+- with an archive, the binary is found in it with `bin-dir`, inferred as described in [Defaults](#defaults) if not set.
+
+`signing.file` is rendered for each package, so the default `{ url }.sig` gives each package its own signature.
+
+All the packages must be found for the same target, except those of binaries with `required-features`, which are skipped with a warning if missing.
 
 ### Defaults
 

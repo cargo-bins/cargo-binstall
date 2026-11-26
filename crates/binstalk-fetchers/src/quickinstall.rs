@@ -7,8 +7,8 @@ use tracing::{error, info, trace};
 use url::Url;
 
 use crate::{
-    Data, Extracted, FetchError, Found, SignaturePolicy, SignatureVerifier, SigningAlgorithm,
-    TargetDataErased, common::*,
+    Data, Extracted, FetchError, Fetched, Found, SignaturePolicy, SignatureVerifier,
+    SigningAlgorithm, TargetDataErased, common::*,
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
@@ -311,13 +311,16 @@ impl QuickInstallFound {
 
 #[async_trait::async_trait]
 impl Found for QuickInstallFound {
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError> {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Vec<Fetched>, FetchError> {
         let response = self.response.take();
         // Its URLs are per crate, so it is never shared with other crates.
-        let ret = self
-            .download_and_extract(response, dst)
-            .await
-            .map(|files| Arc::new(Extracted::new(dst.to_path_buf(), files)));
+        let ret = self.download_and_extract(response, dst).await.map(|files| {
+            vec![Fetched {
+                bin: None,
+                meta: self.target_meta(),
+                extracted: Arc::new(Extracted::new(dst.to_path_buf(), files)),
+            }]
+        });
 
         self.fetcher.clone().send_report(match &ret {
             Ok(_) => Status::InstalledFromTarball,

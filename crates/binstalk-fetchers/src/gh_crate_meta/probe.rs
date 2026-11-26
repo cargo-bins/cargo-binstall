@@ -591,6 +591,7 @@ impl Shared {
             target_arch: candidate.target_arch,
             pkg_url: candidate.pkg_url,
             response,
+            bin: None,
         }
     }
 
