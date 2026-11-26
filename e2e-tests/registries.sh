@@ -61,6 +61,32 @@ grep -F "cargo-binstall 0.12.0 (registry+file:" <"$CARGO_HOME/.crates.toml"
 
 test_cargo_binstall_install
 
+# t1 is a local git index, which binstall reads in place: it leaves no clone
+# in cargo's registry/index, and sees new commits right away. Removing the
+# crate must make the next run fail to find it, and adding it back must make
+# it installable again.
+[ ! -e "$CARGO_HOME/registry/index" ]
+
+git -C "$INDEX" rm -q ca/rg/cargo-binstall
+git -C "$INDEX" -c user.email='test@example.com' -c user.name='test' commit -q -m "Remove crate"
+
+set +e
+"$1" binstall --force -y cargo-binstall@0.12.0
+exit_code="$?"
+set -e
+
+if [ "$exit_code" = 0 ]; then
+    echo "Expected the crate removed from the git index to not be found"
+    exit 1
+fi
+
+git -C "$INDEX" -c user.email='test@example.com' -c user.name='test' revert --no-edit HEAD
+"$1" binstall --force -y cargo-binstall@0.12.0
+
+test_cargo_binstall_install
+
+[ ! -e "$CARGO_HOME/registry/index" ]
+
 # Install binaries using registry t2 in config
 "$1" binstall --force --registry t2 -y cargo-binstall@0.12.0
 

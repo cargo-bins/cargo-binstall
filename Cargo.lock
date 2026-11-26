@@ -394,11 +394,13 @@ dependencies = [
  "binstalk-types",
  "cargo-toml-workspace",
  "compact_str",
+ "fs-lock",
  "jiff",
  "leon",
  "miette",
  "normalize-path",
  "once_cell",
+ "rustc-stable-hash",
  "semver",
  "serde",
  "serde_json",
@@ -4208,6 +4210,12 @@ name = "rustc-hash"
 version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
+
+[[package]]
+name = "rustc-stable-hash"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "781442f29170c5c93b7185ad559492601acdc71d5bb0706f5868094f45cfcd08"
 
 [[package]]
 name = "rustc_version"

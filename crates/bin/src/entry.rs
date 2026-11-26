@@ -168,7 +168,8 @@ pub fn install_crates(
         let cargo_home = cargo_home.as_deref().unwrap_or(&cargo_root);
 
         if let Some(index) = args.index.clone() {
-            let resolved_registry = binstalk::registry::ResolvedRegistry::new(index, None);
+            let resolved_registry =
+                binstalk::registry::ResolvedRegistry::new(index.with_cargo_home(cargo_home), None);
             let cargo_install_index = resolved_registry.cargo_install_index_arg().into();
 
             (resolved_registry, None, Some(cargo_install_index))
@@ -206,7 +207,10 @@ pub fn install_crates(
             );
 
             (
-                binstalk::registry::ResolvedRegistry::new(registry, registry_auth),
+                binstalk::registry::ResolvedRegistry::new(
+                    registry.with_cargo_home(cargo_home),
+                    registry_auth,
+                ),
                 registry_name.filter(|name| !name.eq_ignore_ascii_case("crates-io")),
                 None,
             )
