@@ -27,9 +27,12 @@ use crate::{
     crate_prefix_components, publish_age::publish_cutoff, render_dl_template,
 };
 
-/// Where the clone of the index lives.
+/// Where the index is read from.
 #[derive(Debug)]
 enum IndexDir {
+    /// The index's own repository on this machine (a `file://` index), read
+    /// in place at its `HEAD`, the commit cargo would fetch from it.
+    Local,
     /// A fresh clone in a temporary directory, removed on drop.
     Temp(#[allow(dead_code)] TempDir),
     /// A clone in cargo's `$CARGO_HOME/registry/index/`, shared with cargo.
@@ -45,8 +48,24 @@ struct GitIndex {
 }
 
 impl GitIndex {
+    /// Read a `file://` index in place, and clone any other one.
+    ///
     /// WARNING: This is a blocking operation.
     fn new(
+        url: GitUrl,
+        cargo_url: Option<&Url>,
+        cargo_home: Option<&Path>,
+        cancellation_token: GitCancellationToken,
+    ) -> Result<Self, RegistryError> {
+        if let Some(repo) = cargo_url.and_then(open_local) {
+            return Self::with_repo(&url, IndexDir::Local, repo);
+        }
+
+        Self::cloned(url, cargo_url, cargo_home, cancellation_token)
+    }
+
+    /// WARNING: This is a blocking operation.
+    fn cloned(
         url: GitUrl,
         cargo_url: Option<&Url>,
         cargo_home: Option<&Path>,
@@ -74,10 +93,15 @@ impl GitIndex {
             None => clone_to_tempdir(&url, cancellation_token)?,
         };
 
+        Self::with_repo(&url, dir, repo)
+    }
+
+    /// WARNING: This is a blocking operation.
+    fn with_repo(url: &GitUrl, dir: IndexDir, repo: Repository) -> Result<Self, RegistryError> {
         let config: RegistryConfig = {
             let _lock = dir.lock()?;
             let config = repo
-                .get_entry_data_by_ref_and_path(Repository::FETCHED_HEAD, "config.json")?
+                .get_entry_data_by_ref_and_path(dir.reference(), "config.json")?
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
@@ -98,10 +122,38 @@ impl IndexDir {
     /// WARNING: This is a blocking operation.
     fn lock(&self) -> io::Result<Option<PackageCacheLock>> {
         match self {
-            Self::Temp(_) => Ok(None),
+            Self::Local | Self::Temp(_) => Ok(None),
             Self::Cargo { cargo_home } => lock_package_cache(cargo_home).map(Some),
         }
     }
+
+    /// The reference to read the index at.
+    fn reference(&self) -> &'static str {
+        match self {
+            Self::Local => "HEAD",
+            Self::Temp(_) | Self::Cargo { .. } => Repository::FETCHED_HEAD,
+        }
+    }
+}
+
+/// Open the repository of a `file://` index, which is already on this
+/// machine, so there is nothing to clone or cache.
+///
+/// WARNING: This is a blocking operation.
+fn open_local(url: &Url) -> Option<Repository> {
+    if url.scheme() != "file" {
+        return None;
+    }
+    let path = url.to_file_path().ok()?;
+
+    Repository::open(&path)
+        .inspect_err(|err| {
+            debug!(
+                "Cannot read git index {url} in place from {}: {err}, cloning it instead",
+                path.display()
+            )
+        })
+        .ok()
 }
 
 /// WARNING: This is a blocking operation.
@@ -367,7 +419,8 @@ struct GitRegistryInner {
 pub struct GitRegistry(Arc<GitRegistryInner>);
 
 impl GitRegistry {
-    /// Clone the index to a temporary directory on first use.
+    /// Clone the index to a temporary directory on first use, or read it in
+    /// place for a `file://` index.
     pub fn new(url: GitUrl) -> Self {
         let cargo_url = Url::parse(&url.to_compact_string()).ok();
         Self::new_inner(url, cargo_url, None)
@@ -386,6 +439,8 @@ impl GitRegistry {
     ///
     /// Takes cargo's package cache lock while updating or reading the clone,
     /// so it waits for, and blocks, cargo resolving or downloading meanwhile.
+    ///
+    /// A `file://` index is not cloned at all, it is read in place.
     pub fn with_cargo_home(self, cargo_home: impl Into<PathBuf>) -> Self {
         Self::new_inner(
             self.0.url.clone(),
@@ -410,6 +465,7 @@ impl GitRegistry {
     /// WARNING: This is a blocking operation.
     fn find_crate_matched_ver(
         repo: &Repository,
+        reference: &str,
         crate_name: &str,
         (c1, c2): &(CompactString, Option<CompactString>),
         version_req: &VersionReq,
@@ -423,7 +479,7 @@ impl GitRegistry {
 
         path.push(&*crate_name.to_lowercase());
         let crate_versions = repo
-            .get_entry_data_by_ref_and_path(Repository::FETCHED_HEAD, path)?
+            .get_entry_data_by_ref_and_path(reference, path)?
             .ok_or_else(|| RegistryError::NotFound(crate_name.into()))?;
 
         MatchedVersion::find(
@@ -470,6 +526,7 @@ impl GitRegistry {
 
             let matched_version = Self::find_crate_matched_ver(
                 repo,
+                dir.reference(),
                 &crate_name,
                 &crate_prefix,
                 &version_req,
@@ -556,13 +613,15 @@ mod tests {
         }
     }
 
-    /// Open the index in `cargo_home` like a new process would.
+    /// Open the index in `cargo_home` like a new process would, cloning it as
+    /// for a remote index although `upstream` is a local one.
     async fn read_foo(upstream: &Upstream, cargo_home: &Path) -> Option<Vec<u8>> {
         let (url, cargo_url) = (upstream.url.clone(), upstream.cargo_url.clone());
         let cargo_home = cargo_home.to_owned();
         spawn_blocking(move || {
-            let index = GitIndex::new(url, Some(&cargo_url), Some(&cargo_home), Default::default())
-                .unwrap();
+            let index =
+                GitIndex::cloned(url, Some(&cargo_url), Some(&cargo_home), Default::default())
+                    .unwrap();
             assert!(matches!(index.dir, IndexDir::Cargo { .. }));
             assert_eq!(index.config.dl, "https://example.com");
             let _lock = index.dir.lock().unwrap();
@@ -639,6 +698,44 @@ mod tests {
         assert_eq!(read_foo(&upstream, cargo_home).await.unwrap(), b"v2");
         assert_eq!(index_entries(cargo_home), [&*name]);
         assert!(!Repository::open(&full).unwrap().is_shallow().unwrap());
+    }
+
+    /// A `file://` index is read in place, so cargo's directory is untouched
+    /// and new commits are seen without fetching.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn local_index_is_read_in_place() {
+        let upstream = upstream();
+        let cargo_home = TempDir::new().unwrap();
+        let read_foo = || {
+            let registry =
+                GitRegistry::new(upstream.url.clone()).with_cargo_home(cargo_home.path());
+            spawn_blocking(move || {
+                let index = registry
+                    .0
+                    .git_index
+                    .get_or_try_init(|| {
+                        GitIndex::new(
+                            registry.0.url.clone(),
+                            registry.0.cargo_url.as_ref(),
+                            registry.0.cargo_home.as_deref(),
+                            Default::default(),
+                        )
+                    })
+                    .unwrap();
+                assert!(matches!(index.dir, IndexDir::Local));
+                assert_eq!(index.config.dl, "https://example.com");
+                index
+                    .repo
+                    .get_entry_data_by_ref_and_path(index.dir.reference(), "fo/o/foo")
+                    .unwrap()
+            })
+        };
+
+        assert_eq!(read_foo().await.unwrap().unwrap(), b"v1");
+        commit(upstream.dir.path(), Some("v2"));
+        assert_eq!(read_foo().await.unwrap().unwrap(), b"v2");
+        assert!(!cargo_home.path().join("registry").exists());
+        assert!(!cargo_home.path().join(".package-cache").exists());
     }
 
     #[test]

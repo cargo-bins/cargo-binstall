@@ -61,15 +61,11 @@ grep -F "cargo-binstall 0.12.0 (registry+file:" <"$CARGO_HOME/.crates.toml"
 
 test_cargo_binstall_install
 
-# Without a clone of the git index from cargo, binstall leaves a shallow one
-# where `cargo -Zgit=shallow-index` keeps it, and later runs only fetch what
-# changed: removing the crate upstream must make the next run fail to find
-# it, and adding it back must make it installable again.
-index_entries() {
-    find "$CARGO_HOME/registry/index" -mindepth 1 -maxdepth 1
-}
-index_entries | grep -- '-shallow$'
-[ "$(index_entries | wc -l)" -eq 1 ]
+# t1 is a local git index, which binstall reads in place: it leaves no clone
+# in cargo's registry/index, and sees new commits right away. Removing the
+# crate must make the next run fail to find it, and adding it back must make
+# it installable again.
+[ ! -e "$CARGO_HOME/registry/index" ]
 
 git -C "$INDEX" rm -q ca/rg/cargo-binstall
 git -C "$INDEX" -c user.email='test@example.com' -c user.name='test' commit -q -m "Remove crate"
@@ -89,23 +85,7 @@ git -C "$INDEX" -c user.email='test@example.com' -c user.name='test' revert --no
 
 test_cargo_binstall_install
 
-[ "$(index_entries | wc -l)" -eq 1 ]
-
-# binstall shares the full clone cargo makes instead of cloning again.
-rm -rf "$CARGO_HOME/registry/index"
-# Outside of this repository's workspace, which cargo would resolve too.
-(
-  cd "$(mktemp -d 2>/dev/null || mktemp -d -t 'cargo-info')"
-  cargo info --registry t1 cargo-binstall@0.12.0 >/dev/null
-)
-full_clone="$(index_entries)"
-[ "$(index_entries | wc -l)" -eq 1 ]
-
-"$1" binstall --force -y cargo-binstall@0.12.0
-
-test_cargo_binstall_install
-
-[ "$(index_entries)" = "$full_clone" ]
+[ ! -e "$CARGO_HOME/registry/index" ]
 
 # Install binaries using registry t2 in config
 "$1" binstall --force --registry t2 -y cargo-binstall@0.12.0
