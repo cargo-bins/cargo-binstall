@@ -1,8 +1,6 @@
 use std::time::Duration;
 
 use binstalk_downloader::remote::{Client, StatusCode};
-use binstalk_types::cargo_toml_binstall::Meta;
-use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::CompactString;
 use jiff::Timestamp;
 use semver::VersionReq;
@@ -12,8 +10,8 @@ use tracing::instrument;
 use url::Url;
 
 use crate::{
-    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, apply_auth,
-    crate_prefix_components, parse_manifest, publish_age::publish_cutoff, render_dl_template,
+    MatchedCrate, MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, apply_auth,
+    crate_prefix_components, publish_age::publish_cutoff, render_dl_template,
 };
 
 #[derive(Debug)]
@@ -118,14 +116,14 @@ impl SparseRegistry {
             version_req = format_args!("{version_req}"),
         )
     )]
-    pub async fn fetch_crate_matched(
+    pub async fn find_crate_matched(
         &self,
         client: Client,
         auth: Option<&RegistryAuth>,
         crate_name: &str,
         version_req: &VersionReq,
         min_publish_age: Option<Duration>,
-    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<MatchedCrate, RegistryError> {
         let cutoff = min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age));
         let crate_prefix = crate_prefix_components(crate_name)?;
         let registry_config = self.get_config(&client, auth).await?;
@@ -140,7 +138,7 @@ impl SparseRegistry {
         } else {
             None
         };
-        let mut matched_version = Self::find_crate_matched_ver(
+        let matched_version = Self::find_crate_matched_ver(
             &client,
             self.url.clone(),
             auth,
@@ -157,9 +155,12 @@ impl SparseRegistry {
             &matched_version,
         )?)?;
 
-        let pubtime = matched_version.pubtime.take();
-        let manifest = parse_manifest(client, crate_name, dl_url, matched_version, auth).await?;
-
-        Ok((manifest, pubtime))
+        Ok(MatchedCrate::new(
+            client,
+            crate_name,
+            dl_url,
+            matched_version,
+            auth,
+        ))
     }
 }

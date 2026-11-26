@@ -6,8 +6,6 @@ use std::{
 };
 
 use binstalk_downloader::remote::Client;
-use binstalk_types::cargo_toml_binstall::Meta;
-use cargo_toml_workspace::cargo_toml::Manifest;
 use compact_str::{CompactString, ToCompactString};
 use fs_lock::FileLock;
 use jiff::Timestamp;
@@ -22,8 +20,8 @@ use tracing::{debug, info, instrument, warn};
 use url::Url;
 
 use crate::{
-    MatchedVersion, RegistryAuth, RegistryConfig, RegistryError, crate_prefix_components,
-    parse_manifest, publish_age::publish_cutoff, render_dl_template,
+    MatchedCrate, MatchedVersion, RegistryAuth, RegistryConfig, RegistryError,
+    crate_prefix_components, publish_age::publish_cutoff, render_dl_template,
 };
 
 /// Keeps the on-disk clone alive (and other processes away from it) for as
@@ -317,14 +315,14 @@ impl GitRegistry {
             version_req = format_args!("{version_req}"),
         ),
     )]
-    pub async fn fetch_crate_matched(
+    pub async fn find_crate_matched(
         &self,
         client: Client,
         auth: Option<&RegistryAuth>,
         name: &str,
         version_req: &VersionReq,
         min_publish_age: Option<Duration>,
-    ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+    ) -> Result<MatchedCrate, RegistryError> {
         let cutoff = min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age));
         let crate_prefix = crate_prefix_components(name)?;
         let crate_name = name.to_compact_string();
@@ -335,7 +333,7 @@ impl GitRegistry {
         // Cancel git operation if the future is cancelled (dropped).
         let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
-        let (mut matched_version, dl_url, auth_required) = spawn_blocking(move || {
+        let (matched_version, dl_url, auth_required) = spawn_blocking(move || {
             let GitIndex {
                 _dir: _,
                 repo,
@@ -382,10 +380,13 @@ impl GitRegistry {
             None
         };
 
-        let pubtime = matched_version.pubtime.take();
-        let manifest = parse_manifest(client, name, dl_url, matched_version, auth).await?;
-
-        Ok((manifest, pubtime))
+        Ok(MatchedCrate::new(
+            client,
+            name,
+            dl_url,
+            matched_version,
+            auth,
+        ))
     }
 }
 

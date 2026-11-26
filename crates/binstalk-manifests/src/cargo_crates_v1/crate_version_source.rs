@@ -69,11 +69,14 @@ impl FromStr for CrateVersionSource {
         match s.splitn(3, ' ').collect::<Vec<_>>()[..] {
             [name, version, source] => {
                 let version = version.parse()?;
-                let source = match source
-                    .trim_matches(&['(', ')'][..])
-                    .splitn(2, '+')
-                    .collect::<Vec<_>>()[..]
-                {
+                // Strip exactly one outer pair of parentheses, like Cargo's
+                // `PackageId` parser: the url itself may end with `)`, e.g. a
+                // `cargo install --path` from a directory named `dir (1)`.
+                let source = source
+                    .strip_prefix('(')
+                    .and_then(|source| source.strip_suffix(')'))
+                    .ok_or(CvsParseError::BadSource)?;
+                let source = match source.splitn(2, '+').collect::<Vec<_>>()[..] {
                     ["git", url] => Source::Git(Url::parse(url)?.into()),
                     ["path", url] => Source::Path(Url::parse(url)?.into()),
                     ["registry", url] => Source::Registry(Url::parse(url)?.into()),
@@ -162,5 +165,65 @@ impl<'de> Deserialize<'de> for CrateVersionSource {
     {
         let s = Cow::<'_, str>::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn roundtrip(source: Source<'static>) {
+        let cvs = CrateVersionSource {
+            name: "cargo-watch".into(),
+            version: Version::new(8, 5, 3),
+            source,
+        };
+        let encoded = cvs.to_string();
+        assert_eq!(
+            CrateVersionSource::from_str(&encoded).unwrap(),
+            cvs,
+            "{encoded}"
+        );
+    }
+
+    #[test]
+    fn parens_in_url_roundtrip() {
+        roundtrip(Source::Path(
+            Url::parse("file:///work/dir(1)").unwrap().into(),
+        ));
+        roundtrip(Source::Path(
+            Url::parse("file:///work/dir%20(1)").unwrap().into(),
+        ));
+        roundtrip(Source::Git(
+            Url::parse("https://example.com/repo(x)?rev=(1)#abc")
+                .unwrap()
+                .into(),
+        ));
+    }
+
+    #[test]
+    fn parses_cargo_written_source_with_space_and_parens() {
+        let cvs = CrateVersionSource::from_str("foo 0.1.0 (path+file:///work/dir%20(1))").unwrap();
+        assert_eq!(
+            cvs.source,
+            Source::Path(Url::parse("file:///work/dir%20(1)").unwrap().into())
+        );
+    }
+
+    #[test]
+    fn rejects_unparenthesized_source() {
+        for s in [
+            "foo 0.1.0 path+file:///work/dir",
+            "foo 0.1.0 (path+file:///work/dir",
+            "foo 0.1.0 path+file:///work/dir)",
+        ] {
+            assert!(
+                matches!(
+                    CrateVersionSource::from_str(s),
+                    Err(CvsParseError::BadSource)
+                ),
+                "{s}"
+            );
+        }
     }
 }

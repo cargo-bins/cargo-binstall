@@ -21,13 +21,14 @@ use tracing::{debug, error, info, warn};
 use crate::{
     bins,
     errors::BinstallError,
-    fetchers::Fetcher,
+    fetchers::Found,
     manifests::crate_info::{CrateInfo, CrateSource},
     ops::Options,
 };
 
 pub struct ResolutionFetch {
-    pub fetcher: Arc<dyn Fetcher>,
+    /// The package found, already downloaded and extracted.
+    pub found: Box<dyn Found>,
     pub new_version: Version,
     /// Publish time (RFC 3339) from the registry index, if known
     pub pubtime: Option<CompactString>,
@@ -99,9 +100,9 @@ impl ResolutionFetch {
             version_req: self.version_req,
             current_version: self.new_version,
             source: self.source,
-            target: self.fetcher.target().to_compact_string(),
+            target: self.found.target().to_compact_string(),
             bins: Self::resolve_bins(&opts.bins, self.bin_files),
-            pkg_url_hint: self.fetcher.pkg_url_hint(),
+            pkg_url_hint: self.found.pkg_url_hint(),
         })
     }
 
@@ -135,11 +136,11 @@ impl ResolutionFetch {
     }
 
     pub fn print(&self, opts: &Options) {
-        let fetcher = &self.fetcher;
+        let found = &self.found;
         let bin_files = &self.bin_files;
         let name = &self.name;
         let new_version = &self.new_version;
-        let target = fetcher.target();
+        let target = found.target();
         let released = self
             .pubtime
             .as_deref()
@@ -148,17 +149,17 @@ impl ResolutionFetch {
 
         debug!(
             "Found a binary install source: {} ({target})",
-            fetcher.source_name(),
+            found.source_name(),
         );
 
         warn!(
             "The package {name} v{new_version} ({target}{released}) has been downloaded from {}{}",
-            if fetcher.is_third_party() {
+            if found.is_third_party() {
                 "third-party source "
             } else {
                 ""
             },
-            fetcher.source_name()
+            found.source_name()
         );
 
         info!("This will install the following binaries:");

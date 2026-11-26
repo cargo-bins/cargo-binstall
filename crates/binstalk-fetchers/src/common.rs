@@ -4,7 +4,7 @@ use std::{future::Future, sync::Once};
 
 pub(super) use binstalk_downloader::{
     download::{Download, ExtractedFiles},
-    remote::{Client, Url},
+    remote::{Client, GetResponse, Url},
 };
 pub(super) use binstalk_git_repo_api::gh_api_client::GhApiClient;
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRelease, ReleaseArtifacts};
@@ -54,10 +54,16 @@ pub(super) async fn get_gh_release_artifacts(
 ///
 /// It costs no API quota, unlike asking the GitHub API.
 ///
+/// The response is returned with its body unread, to be converted into a
+/// [`Download`] instead of asking again.
+///
 /// This function returns a future where its size should be at most size of
 /// 2-4 pointers.
-pub(super) async fn does_url_exist(client: &Client, url: &Url) -> Result<bool, FetchError> {
-    Ok(Box::pin(client.remote_gettable(url.clone())).await?)
+pub(super) async fn get_if_exists(
+    client: &Client,
+    url: &Url,
+) -> Result<Option<GetResponse>, FetchError> {
+    Ok(Box::pin(client.get_if_exists(url.clone())).await?)
 }
 
 #[derive(Debug)]
