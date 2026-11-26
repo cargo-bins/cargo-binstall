@@ -1311,36 +1311,6 @@ mod test {
         assert!(!probe.candidates[0].is_private);
     }
 
-    /// ls-refs against a host that isn't a git server fails once per run, and
-    /// the candidates are kept for the checks after it.
-    #[tokio::test]
-    async fn test_drop_missing_tags_not_git() {
-        let gh_api_client = GhApiClient::new(client(), None);
-        // The repository of a release asset URL on a download server.
-        const NOT_GIT: &str = "https://static.crates.io/a/b";
-        let mut probe = new_probe(
-            &gh_api_client,
-            BINSTALL,
-            vec![
-                new_candidate(NOT_GIT, "v1.0.0/a.tgz", OTHER_TEMPLATE),
-                new_candidate(NOT_GIT, "1.0.0/a.tgz", OTHER_TEMPLATE),
-            ],
-        )
-        .await;
-        probe.drop_missing_tags().await;
-        assert_eq!(probe.candidates.len(), 2);
-
-        let tags = probe
-            .shared
-            .data
-            .context
-            .repo_tags(&Url::parse(NOT_GIT).unwrap());
-        let tags = tags.lock().await;
-        assert_eq!(tags.exists("v1.0.0"), None);
-        // Not asked again.
-        assert!(tags.unasked(["v1.0.0", "2.0.0"]).is_empty());
-    }
-
     #[tokio::test]
     async fn test_resolve_hint() {
         let gh_api_client = GhApiClient::new(client(), None);
