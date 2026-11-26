@@ -14,8 +14,8 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    Data, FetchError, Found, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
-    TargetDataErased, common::*,
+    Data, Extracted, FetchError, Found, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
+    SignatureVerifier, TargetDataErased, common::*, fetch_context::PackageId,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -359,9 +359,25 @@ struct GhCrateMetaFound {
     resolved: Resolved,
 }
 
-#[async_trait::async_trait]
-impl Found for GhCrateMetaFound {
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+impl GhCrateMetaFound {
+    /// What [`GhCrateMetaFound::download_and_extract`] downloads, and how
+    /// it verifies it.
+    fn package_id(&self) -> Result<PackageId, FetchError> {
+        let Self { fetcher, resolved } = self;
+        // The same verifier as `download_and_extract`.
+        let signing = match (fetcher.signature_policy, &fetcher.target_data.meta.signing) {
+            (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => None,
+            (SignaturePolicy::Require, None) => return Err(FetchError::MissingSignature),
+            (_, Some(config)) => Some((config.algorithm, config.pubkey.as_ref().into())),
+        };
+        Ok(PackageId {
+            url: resolved.url.clone(),
+            pkg_fmt: resolved.pkg_fmt,
+            signing,
+        })
+    }
+
+    async fn download_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
         let Self { fetcher, resolved } = self;
         trace!(?resolved, "preparing to fetch");
 
@@ -436,6 +452,17 @@ impl Found for GhCrateMetaFound {
         } else {
             Err(FetchError::InvalidSignature)
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl Found for GhCrateMetaFound {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError> {
+        let id = self.package_id()?;
+        let context = Arc::clone(&self.fetcher.data.context);
+        context
+            .extract_once(id, dst, async || self.download_and_extract(dst).await)
+            .await
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
@@ -654,6 +681,7 @@ mod test {
     #[test]
     fn target_arch_aliases_are_tried_after_own_name() {
         let data = Data::new(
+            Default::default(),
             "redu".to_compact_string(),
             "0.2.12".to_compact_string(),
             Some("https://github.com/drdo/redu".to_string()),
@@ -704,6 +732,7 @@ mod test {
     fn defaults() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-binstall".to_compact_string(),
                 "1.2.3".to_compact_string(),
                 Some("https://github.com/ryankurte/cargo-binstall".to_string()),
@@ -719,6 +748,7 @@ mod test {
     fn no_repo_but_full_url() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-binstall".to_compact_string(),
                 "1.2.3".to_compact_string(),
                 None,
@@ -734,6 +764,7 @@ mod test {
     fn different_url() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "radio-sx128x".to_compact_string(),
                 "0.14.1-alpha.5".to_compact_string(),
                 Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
@@ -749,6 +780,7 @@ mod test {
     fn deprecated_format() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "radio-sx128x".to_compact_string(),
                 "0.14.1-alpha.5".to_compact_string(),
                 Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
@@ -764,6 +796,7 @@ mod test {
     fn different_ext() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-watch".to_compact_string(),
                 "9.0.0".to_compact_string(),
                 Some("https://github.com/watchexec/cargo-watch".to_string()),
@@ -779,6 +812,7 @@ mod test {
     fn no_archive() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-watch".to_compact_string(),
                 "9.0.0".to_compact_string(),
                 Some("https://github.com/watchexec/cargo-watch".to_string()),

@@ -23,6 +23,9 @@
 # - HTTPS_SERVER_LOG, a file the server appends `METHOD PATH` (and
 #   ` Range: ...`, if any) to for every request, so that a test can check
 #   what was requested, and how often
+# - HTTPS_SERVER_SENT_LOG, a file the server appends the path to once it
+#   has sent the whole body of a GET, so that a test can tell how often a
+#   file was downloaded rather than only asked for
 #
 # The server is stopped when the test script exits.
 
@@ -94,12 +97,14 @@ start_https_server() {
 
     local port_file="$cert_dir/port"
     HTTPS_SERVER_LOG="$cert_dir/requests.log"
+    HTTPS_SERVER_SENT_LOG="$cert_dir/sent.log"
     : >"$HTTPS_SERVER_LOG"
+    : >"$HTTPS_SERVER_SENT_LOG"
     # -I -S: skip the environment, user site and site-packages, which the
     # server doesn't need, to start faster.
     "$(_https_server_python)" -I -S lib/https_server.py \
         "$serve_dir" "$cert_dir/server.pem" "$cert_dir/server.key" "$port_file" \
-        "$HTTPS_SERVER_LOG" ${routes:+"$routes"} &
+        "$HTTPS_SERVER_LOG" "$HTTPS_SERVER_SENT_LOG" ${routes:+"$routes"} &
     HTTPS_SERVER_PID=$!
     # shellcheck disable=SC2064
     trap "kill $HTTPS_SERVER_PID 2>/dev/null || true" EXIT
