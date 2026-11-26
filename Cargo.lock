@@ -406,6 +406,7 @@ dependencies = [
  "miette",
  "normalize-path",
  "once_cell",
+ "rustc-stable-hash",
  "semver",
  "serde",
  "serde_json",
@@ -4215,6 +4216,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
+name = "rustc-stable-hash"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "781442f29170c5c93b7185ad559492601acdc71d5bb0706f5868094f45cfcd08"
+
+[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4503,7 +4510,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 [[package]]
 name = "simple-git"
 version = "0.2.38"
-source = "git+https://github.com/cargo-bins/simple-git?branch=shallow-fetch-head#1a6ce578f71dcf2ab69c2fdf0f69f0fad1dc51bc"
+source = "git+https://github.com/cargo-bins/simple-git?branch=shallow-fetch-head#04ac5b78afb3ac27cbec5de0e82e995e4f76e667"
 dependencies = [
  "compact_str",
  "derive_destructure2",

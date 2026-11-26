@@ -166,15 +166,10 @@ pub fn install_crates(
 
     let (resolved_registry, cargo_install_registry, cargo_install_index) = {
         let cargo_home = cargo_home.as_deref().unwrap_or(&cargo_root);
-        // Git indexes are cloned here and updated with a shallow fetch on
-        // later runs, laid out like cargo's `registry/index`.
-        let git_index_cache = cargo_home.join("binstall").join("registry").join("index");
 
         if let Some(index) = args.index.clone() {
-            let resolved_registry = binstalk::registry::ResolvedRegistry::new(
-                index.with_git_index_cache(git_index_cache),
-                None,
-            );
+            let resolved_registry =
+                binstalk::registry::ResolvedRegistry::new(index.with_cargo_home(cargo_home), None);
             let cargo_install_index = resolved_registry.cargo_install_index_arg().into();
 
             (resolved_registry, None, Some(cargo_install_index))
@@ -213,7 +208,7 @@ pub fn install_crates(
 
             (
                 binstalk::registry::ResolvedRegistry::new(
-                    registry.with_git_index_cache(git_index_cache),
+                    registry.with_cargo_home(cargo_home),
                     registry_auth,
                 ),
                 registry_name.filter(|name| !name.eq_ignore_ascii_case("crates-io")),

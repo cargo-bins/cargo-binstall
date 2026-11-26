@@ -1,7 +1,10 @@
 use std::{
-    fs, io,
+    fs,
+    hash::{Hash, Hasher},
+    io,
     path::{Path, PathBuf},
-    sync::Arc,
+    process::Command,
+    sync::{Arc, Mutex, MutexGuard, PoisonError},
     time::Duration,
 };
 
@@ -10,9 +13,9 @@ use compact_str::{CompactString, ToCompactString};
 use fs_lock::FileLock;
 use jiff::Timestamp;
 use once_cell::sync::OnceCell;
+use rustc_stable_hash::StableSipHasher128;
 use semver::VersionReq;
 use serde_json::{Deserializer as JsonDeserializer, from_slice as json_from_slice};
-use sha2::{Digest, Sha256};
 use simple_git::{GitCancellationToken, GitUrl, Repository};
 use tempfile::TempDir;
 use tokio::task::spawn_blocking;
@@ -24,37 +27,57 @@ use crate::{
     crate_prefix_components, publish_age::publish_cutoff, render_dl_template,
 };
 
-/// Keeps the on-disk clone alive (and other processes away from it) for as
-/// long as the [`GitIndex`] lives.
+/// Where the clone of the index lives.
 #[derive(Debug)]
 enum IndexDir {
     /// A fresh clone in a temporary directory, removed on drop.
     Temp(#[allow(dead_code)] TempDir),
-    /// A clone in the cache directory, reused by later runs.
-    Cached(#[allow(dead_code)] FileLock),
+    /// A clone in cargo's `$CARGO_HOME/registry/index/`, shared with cargo.
+    /// It must only be used while holding [`lock_package_cache`].
+    Cargo { cargo_home: PathBuf },
 }
 
 #[derive(Debug)]
 struct GitIndex {
-    _dir: IndexDir,
+    dir: IndexDir,
     repo: Repository,
     config: RegistryConfig,
 }
 
 impl GitIndex {
+    /// WARNING: This is a blocking operation.
     fn new(
         url: GitUrl,
-        cache_root: Option<&Path>,
+        cargo_url: Option<&Url>,
+        cargo_home: Option<&Path>,
         cancellation_token: GitCancellationToken,
     ) -> Result<Self, RegistryError> {
-        let (dir, repo) = match cache_root {
-            Some(cache_root) => open_cached(&url, cache_root, cancellation_token)?,
+        let shared = cargo_home.and_then(|cargo_home| {
+            match open_cargo_clone(&url, cargo_url, cargo_home, cancellation_token.clone()) {
+                Ok(repo) => repo.map(|repo| {
+                    let dir = IndexDir::Cargo {
+                        cargo_home: cargo_home.to_owned(),
+                    };
+                    (dir, repo)
+                }),
+                Err(err) => {
+                    warn!(
+                        "Failed to use cargo's clone of git index {url} in {}: {err}, cloning to a temporary directory instead",
+                        cargo_home.display()
+                    );
+                    None
+                }
+            }
+        });
+        let (dir, repo) = match shared {
+            Some(shared) => shared,
             None => clone_to_tempdir(&url, cancellation_token)?,
         };
 
         let config: RegistryConfig = {
+            let _lock = dir.lock()?;
             let config = repo
-                .get_head_commit_entry_data_by_path("config.json")?
+                .get_entry_data_by_ref_and_path(Repository::FETCHED_HEAD, "config.json")?
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
@@ -65,11 +88,19 @@ impl GitIndex {
             json_from_slice(&config).map_err(RegistryError::from)?
         };
 
-        Ok(Self {
-            _dir: dir,
-            repo,
-            config,
-        })
+        Ok(Self { dir, repo, config })
+    }
+}
+
+impl IndexDir {
+    /// Lock what needs locking before reading the clone.
+    ///
+    /// WARNING: This is a blocking operation.
+    fn lock(&self) -> io::Result<Option<PackageCacheLock>> {
+        match self {
+            Self::Temp(_) => Ok(None),
+            Self::Cargo { cargo_home } => lock_package_cache(cargo_home).map(Some),
+        }
     }
 }
 
@@ -79,154 +110,229 @@ fn clone_to_tempdir(
     cancellation_token: GitCancellationToken,
 ) -> Result<(IndexDir, Repository), RegistryError> {
     let tempdir = TempDir::new()?;
-    let repo =
-        Repository::shallow_clone_bare(url.clone(), tempdir.as_ref(), Some(cancellation_token))?;
+    let repo = Repository::init(tempdir.path())?;
+    repo.fetch_head(url.clone(), true, Some(cancellation_token))?;
 
     Ok((IndexDir::Temp(tempdir), repo))
 }
 
-/// Open the clone of `url` cached in `cache_root`, updating it with a shallow
-/// fetch, or clone it there if there is none yet.
+/// Open and update cargo's clone of the index `url`, the same one
+/// `cargo install`/`cargo build` use, cloning it if cargo has none yet.
 ///
-/// Falls back to a clone in a temporary directory if the cache directory
-/// cannot be used, e.g. because it is read-only.
+/// Like cargo, this uses `$CARGO_HOME/registry/index/{host}-{hash}` if it
+/// exists, which is a full clone unless `-Zgit=shallow-index` was used to
+/// create it, and otherwise the shallow clone in `{host}-{hash}-shallow`,
+/// which is what cargo uses with `-Zgit=shallow-index`. A new clone is always
+/// a shallow one, because a full clone can be orders of magnitude larger.
 ///
-/// WARNING: This is a blocking operation.
-fn open_cached(
-    url: &GitUrl,
-    cache_root: &Path,
-    cancellation_token: GitCancellationToken,
-) -> Result<(IndexDir, Repository), RegistryError> {
-    let name = cache_dir_name(url);
-
-    let lock = match lock_cache_dir(cache_root, &name) {
-        Ok(lock) => lock,
-        Err(err) => {
-            warn!(
-                "Failed to use git index cache in {}: {err}, cloning to a temporary directory instead",
-                cache_root.display()
-            );
-            return clone_to_tempdir(url, cancellation_token);
-        }
-    };
-
-    let path = cache_root.join(&*name);
-
-    if path.exists() {
-        match update_cached(url, &path, cancellation_token.clone()) {
-            Ok(Some(repo)) => return Ok((IndexDir::Cached(lock), repo)),
-            Ok(None) => (),
-            Err(err) => warn!(
-                "Failed to update cached git index {}: {err}, cloning it again",
-                path.display()
-            ),
-        }
-
-        fs::remove_dir_all(&path)?;
-    }
-
-    // Clone into a temporary directory first and then move it into place, so
-    // that an interrupted clone never ends up in the cache.
-    let tempdir = tempfile::Builder::new()
-        .prefix(&*format!("{name}.tmp"))
-        .tempdir_in(cache_root)?;
-    drop(Repository::shallow_clone_bare(
-        url.clone(),
-        tempdir.as_ref(),
-        Some(cancellation_token),
-    )?);
-    fs::rename(tempdir.path(), &path)?;
-    // Nothing is left at the temporary path for `TempDir` to remove.
-    drop(tempdir);
-
-    Ok((IndexDir::Cached(lock), Repository::open(&path)?))
-}
-
-/// Returns `Ok(None)` if the cached clone should be replaced with a new one.
+/// Returns `Ok(None)` if `url` cannot be mapped to cargo's directory name.
 ///
 /// WARNING: This is a blocking operation.
-fn update_cached(
+fn open_cargo_clone(
     url: &GitUrl,
-    path: &Path,
+    cargo_url: Option<&Url>,
+    cargo_home: &Path,
     cancellation_token: GitCancellationToken,
 ) -> Result<Option<Repository>, RegistryError> {
-    if has_too_much_garbage(path)? {
-        debug!(
-            "Cached git index {} holds too many outdated objects, cloning it again",
-            path.display()
-        );
+    let Some(name) = cargo_url.and_then(|cargo_url| cargo_index_dir_name(cargo_url.clone())) else {
+        debug!("Cannot share cargo's clone of git index {url}: not a URL cargo accepts");
         return Ok(None);
+    };
+    let index_root = cargo_home.join("registry").join("index");
+
+    let _lock = lock_package_cache(cargo_home)?;
+
+    let full = index_root.join(&*name);
+    if full.exists() {
+        match fetch_existing(url, &full, cancellation_token.clone()) {
+            Ok(repo) => return Ok(Some(repo)),
+            // It is cargo's to repair, a full clone is too expensive for us.
+            Err(err) => warn!(
+                "Failed to update cargo's clone of git index {url} in {}: {err}",
+                full.display()
+            ),
+        }
     }
 
-    let repo = Repository::open(path)?;
-    repo.shallow_fetch_head(url.clone(), Some(cancellation_token))?;
+    let shallow = index_root.join(format!("{name}-shallow"));
+    if shallow.exists() {
+        if has_too_much_garbage(&shallow) {
+            debug!(
+                "Shallow clone {} holds too many outdated objects, cloning it again",
+                shallow.display()
+            );
+        } else {
+            match fetch_existing(url, &shallow, cancellation_token.clone()) {
+                Ok(repo) => return Ok(Some(repo)),
+                Err(err) => warn!(
+                    "Failed to update shallow clone of git index {url} in {}: {err}, cloning it again",
+                    shallow.display()
+                ),
+            }
+        }
+
+        // Cargo does the same when it cannot open the clone.
+        fs::remove_dir_all(&shallow)?;
+    }
+
+    fs::create_dir_all(&shallow)?;
+    let repo = Repository::init(&shallow)?;
+    repo.fetch_head(url.clone(), true, Some(cancellation_token))?;
 
     Ok(Some(repo))
 }
 
-/// A shallow fetch only adds objects, it never removes the outdated ones and
-/// there is no `git gc` in gix, so clone again once the packs added by
-/// fetches outgrow the one from the initial clone.
+/// Fetch into an existing clone, keeping it shallow or full like cargo does.
 ///
-/// That bounds the cache to about twice the size of a fresh clone, while the
-/// full clone is only downloaded again after about as many bytes have been
-/// fetched.
-fn has_too_much_garbage(path: &Path) -> io::Result<bool> {
+/// WARNING: This is a blocking operation.
+fn fetch_existing(
+    url: &GitUrl,
+    path: &Path,
+    cancellation_token: GitCancellationToken,
+) -> Result<Repository, RegistryError> {
+    let repo = Repository::open(path)?;
+    let shallow = repo.is_shallow()?;
+    if repo.fetch_head(url.clone(), shallow, Some(cancellation_token))? {
+        maybe_gc(&repo);
+    }
+
+    Ok(repo)
+}
+
+/// Run `git gc --auto` after a fetch, as cargo does, so that packs do not
+/// pile up. If git is not installed this does nothing, and
+/// [`has_too_much_garbage`] bounds the size of shallow clones instead.
+fn maybe_gc(repo: &Repository) {
+    let git_dir = repo.git_dir();
+    match Command::new("git")
+        .args(["gc", "--auto", "--quiet"])
+        // Like cargo, so `safe.bareRepository=explicit` doesn't reject it.
+        .env("GIT_DIR", git_dir)
+        .current_dir(git_dir)
+        .output()
+    {
+        Ok(output) if output.status.success() => (),
+        Ok(output) => debug!(
+            "git gc --auto failed with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ),
+        Err(err) => debug!("Failed to run git gc --auto: {err}"),
+    }
+}
+
+/// A fetch only adds objects, it never removes the outdated ones, so once
+/// the packs added by fetches outgrow the largest one, i.e. the one from the
+/// initial clone, clone again.
+///
+/// That bounds a shallow clone to about twice the size of a fresh one when
+/// `git gc` is not available.
+fn has_too_much_garbage(path: &Path) -> bool {
+    let pack_dir = path.join(".git").join("objects").join("pack");
+    let Ok(entries) = fs::read_dir(pack_dir) else {
+        return false;
+    };
+
     let mut largest = 0;
     let mut total = 0;
-
-    for entry in fs::read_dir(path.join("objects").join("pack"))? {
-        let entry = entry?;
+    for entry in entries.flatten() {
         if entry.path().extension().is_some_and(|ext| ext == "pack") {
-            let size = entry.metadata()?.len();
+            let size = entry.metadata().map(|metadata| metadata.len()).unwrap_or(0);
             largest = largest.max(size);
             total += size;
         }
     }
 
-    Ok(total - largest > largest)
+    total - largest > largest
 }
 
-/// Directory name for the clone of `url`, `{host}-{hash}` like cargo's
-/// `registry/index/` entries, though the hash differs from cargo's.
-fn cache_dir_name(url: &GitUrl) -> CompactString {
-    let url = url.to_compact_string();
+/// Cargo's directory name in `$CARGO_HOME/registry/index/` for the git
+/// index `url`: `{host}-{hash}`, where `hash` is cargo's `short_hash` of the
+/// registry's `SourceId`.
+///
+/// Cargo promises to keep this stable, see `short_name` in cargo's
+/// `sources/registry/mod.rs` and its `test_stable_hash` test, whose values
+/// the tests here check against.
+fn cargo_index_dir_name(url: Url) -> Option<CompactString> {
+    let url = canonicalize_url(url)?;
 
-    let host = Url::parse(&url)
-        .ok()
-        .and_then(|url| {
-            url.host_str()
-                .filter(|host| !host.is_empty())
-                .map(CompactString::from)
-        })
-        .unwrap_or_else(|| "local".into());
-    let host: CompactString = host
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
+    // `SourceId`'s `Hash`: its `SourceKind` (a fieldless variant hashes just
+    // its discriminant, `Registry` is the third one), then its canonical URL.
+    let mut hasher = StableSipHasher128::new();
+    2isize.hash(&mut hasher);
+    url.as_str().hash(&mut hasher);
+    let hash = Hasher::finish(&hasher).to_le_bytes();
 
-    let hash = Sha256::digest(url.as_bytes());
-
-    format!("{host}-{}", base16::encode_lower(&hash[..8])).into()
+    Some(
+        format!(
+            "{}-{}",
+            url.host_str().unwrap_or(""),
+            base16::encode_lower(&hash)
+        )
+        .into(),
+    )
 }
 
-/// Take an exclusive lock on the clone named `name` in `cache_root`, waiting
-/// for other processes using it to finish.
+/// cargo's `CanonicalUrl::new`.
+fn canonicalize_url(mut url: Url) -> Option<Url> {
+    if url.cannot_be_a_base() {
+        return None;
+    }
+
+    if url.path().ends_with('/') {
+        url.path_segments_mut().ok()?.pop_if_empty();
+    }
+
+    if !url.scheme().contains('+') {
+        if url.host_str() == Some("github.com") {
+            url = format!("https{}", &url[url::Position::AfterScheme..])
+                .parse()
+                .ok()?;
+            let path = url.path().to_lowercase();
+            url.set_path(&path);
+        }
+
+        if let Some(last) = url
+            .path_segments()
+            .and_then(|mut segments| segments.next_back())
+            .and_then(|last| last.strip_suffix(".git"))
+        {
+            let last = last.to_owned();
+            url.path_segments_mut().ok()?.pop().push(&last);
+        }
+    }
+
+    Some(url)
+}
+
+/// Cargo's package cache lock, see [`lock_package_cache`].
+struct PackageCacheLock {
+    _file: FileLock,
+    _guard: MutexGuard<'static, ()>,
+}
+
+/// Take cargo's package cache lock (`CacheLockMode::DownloadExclusive`),
+/// which cargo holds while resolving and downloading, including when
+/// updating and reading its registry index clones.
+///
+/// It also keeps cargo's cache garbage collection away, which takes this
+/// lock as well before deleting anything.
 ///
 /// WARNING: This is a blocking operation.
-fn lock_cache_dir(cache_root: &Path, name: &str) -> io::Result<FileLock> {
-    fs::create_dir_all(cache_root)?;
+fn lock_package_cache(cargo_home: &Path) -> io::Result<PackageCacheLock> {
+    // The file lock is per open file, so serialise this process's users
+    // first: they would block each other on it anyway, and the message
+    // below is only meant for waiting on other processes.
+    static IN_PROCESS: Mutex<()> = Mutex::new(());
+    let guard = IN_PROCESS.lock().unwrap_or_else(PoisonError::into_inner);
 
-    let lock_path = cache_root.join(format!("{name}.lock"));
+    fs::create_dir_all(cargo_home)?;
+
+    let lock_path = cargo_home.join(".package-cache");
     let file = fs::OpenOptions::new()
         .create(true)
         .truncate(false)
+        .read(true)
         .write(true)
         .open(&lock_path)?;
 
@@ -234,7 +340,7 @@ fn lock_cache_dir(cache_root: &Path, name: &str) -> io::Result<FileLock> {
         Ok(lock) => lock,
         Err((file, None)) => {
             info!(
-                "Waiting for another process to finish using git index cache {}",
+                "Waiting for cargo's package cache lock {}",
                 lock_path.display()
             );
             FileLock::new_exclusive(file)?
@@ -242,13 +348,18 @@ fn lock_cache_dir(cache_root: &Path, name: &str) -> io::Result<FileLock> {
         Err((_, Some(err))) => return Err(err),
     };
 
-    Ok(lock.set_file_path(lock_path))
+    Ok(PackageCacheLock {
+        _file: lock.set_file_path(lock_path),
+        _guard: guard,
+    })
 }
 
 #[derive(Debug)]
 struct GitRegistryInner {
     url: GitUrl,
-    cache_root: Option<PathBuf>,
+    /// The URL as cargo would parse it, for [`cargo_index_dir_name`].
+    cargo_url: Option<Url>,
+    cargo_home: Option<PathBuf>,
     git_index: OnceCell<GitIndex>,
 }
 
@@ -258,23 +369,36 @@ pub struct GitRegistry(Arc<GitRegistryInner>);
 impl GitRegistry {
     /// Clone the index to a temporary directory on first use.
     pub fn new(url: GitUrl) -> Self {
-        Self::new_inner(url, None)
+        let cargo_url = Url::parse(&url.to_compact_string()).ok();
+        Self::new_inner(url, cargo_url, None)
     }
 
-    /// Keep the clone of the index in a subdirectory of `cache_root`, shared
-    /// by all `GitRegistry`s using the same `cache_root`, and only fetch
-    /// what changed upstream on later uses.
+    /// Like [`GitRegistry::new`], keeping `index` as written by the user
+    /// (e.g. in cargo's config) so that it maps to the same directory in
+    /// `$CARGO_HOME/registry/index/` as for cargo.
+    pub(crate) fn from_index_str(url: GitUrl, index: &str) -> Self {
+        Self::new_inner(url, Url::parse(index).ok(), None)
+    }
+
+    /// Share cargo's clone of the index in `cargo_home`
+    /// (`$CARGO_HOME/registry/index/`), only fetching what changed upstream,
+    /// and leave a shallow clone there for later runs if cargo has none.
     ///
-    /// Concurrent users of the same index wait for each other with a lock
-    /// file in `cache_root`.
-    pub fn with_cache(url: GitUrl, cache_root: impl Into<PathBuf>) -> Self {
-        Self::new_inner(url, Some(cache_root.into()))
+    /// Takes cargo's package cache lock while updating or reading the clone,
+    /// so it waits for, and blocks, cargo resolving or downloading meanwhile.
+    pub fn with_cargo_home(self, cargo_home: impl Into<PathBuf>) -> Self {
+        Self::new_inner(
+            self.0.url.clone(),
+            self.0.cargo_url.clone(),
+            Some(cargo_home.into()),
+        )
     }
 
-    fn new_inner(url: GitUrl, cache_root: Option<PathBuf>) -> Self {
+    fn new_inner(url: GitUrl, cargo_url: Option<Url>, cargo_home: Option<PathBuf>) -> Self {
         Self(Arc::new(GitRegistryInner {
             url,
-            cache_root,
+            cargo_url,
+            cargo_home,
             git_index: Default::default(),
         }))
     }
@@ -299,7 +423,7 @@ impl GitRegistry {
 
         path.push(&*crate_name.to_lowercase());
         let crate_versions = repo
-            .get_head_commit_entry_data_by_path(path)?
+            .get_entry_data_by_ref_and_path(Repository::FETCHED_HEAD, path)?
             .ok_or_else(|| RegistryError::NotFound(crate_name.into()))?;
 
         MatchedVersion::find(
@@ -334,17 +458,15 @@ impl GitRegistry {
         let cancel_on_drop = cancellation_token.clone().cancel_on_drop();
 
         let (matched_version, dl_url, auth_required) = spawn_blocking(move || {
-            let GitIndex {
-                _dir: _,
-                repo,
-                config,
-            } = this.0.git_index.get_or_try_init(|| {
+            let GitIndex { dir, repo, config } = this.0.git_index.get_or_try_init(|| {
                 GitIndex::new(
                     this.0.url.clone(),
-                    this.0.cache_root.as_deref(),
+                    this.0.cargo_url.as_ref(),
+                    this.0.cargo_home.as_deref(),
                     cancellation_token,
                 )
             })?;
+            let _lock = dir.lock()?;
 
             let matched_version = Self::find_crate_matched_ver(
                 repo,
@@ -392,8 +514,6 @@ impl GitRegistry {
 
 #[cfg(test)]
 mod tests {
-    use std::process::Command;
-
     use super::*;
 
     fn git(dir: &Path, args: &[&str]) {
@@ -417,24 +537,46 @@ mod tests {
         git(dir, &["commit", "-q", "-m", "update"]);
     }
 
-    /// Open the cached index like a new process would.
-    async fn read_foo(url: &GitUrl, cache_root: &Path) -> Option<Vec<u8>> {
-        let (url, cache_root) = (url.clone(), cache_root.to_owned());
+    struct Upstream {
+        dir: TempDir,
+        url: GitUrl,
+        cargo_url: Url,
+    }
+
+    fn upstream() -> Upstream {
+        let dir = TempDir::new().unwrap();
+        git(dir.path(), &["init", "-q"]);
+        commit(dir.path(), Some("v1"));
+        let cargo_url = Url::from_directory_path(dir.path()).unwrap();
+        let url = cargo_url.as_str().parse().unwrap();
+        Upstream {
+            dir,
+            url,
+            cargo_url,
+        }
+    }
+
+    /// Open the index in `cargo_home` like a new process would.
+    async fn read_foo(upstream: &Upstream, cargo_home: &Path) -> Option<Vec<u8>> {
+        let (url, cargo_url) = (upstream.url.clone(), upstream.cargo_url.clone());
+        let cargo_home = cargo_home.to_owned();
         spawn_blocking(move || {
-            let index = GitIndex::new(url, Some(&cache_root), Default::default()).unwrap();
-            assert!(matches!(index._dir, IndexDir::Cached(_)));
+            let index = GitIndex::new(url, Some(&cargo_url), Some(&cargo_home), Default::default())
+                .unwrap();
+            assert!(matches!(index.dir, IndexDir::Cargo { .. }));
             assert_eq!(index.config.dl, "https://example.com");
+            let _lock = index.dir.lock().unwrap();
             index
                 .repo
-                .get_head_commit_entry_data_by_path("fo/o/foo")
+                .get_entry_data_by_ref_and_path(Repository::FETCHED_HEAD, "fo/o/foo")
                 .unwrap()
         })
         .await
         .unwrap()
     }
 
-    fn cache_entries(cache_root: &Path) -> Vec<String> {
-        let mut entries: Vec<_> = fs::read_dir(cache_root)
+    fn index_entries(cargo_home: &Path) -> Vec<String> {
+        let mut entries: Vec<_> = fs::read_dir(cargo_home.join("registry").join("index"))
             .unwrap()
             .map(|entry| entry.unwrap().file_name().into_string().unwrap())
             .collect();
@@ -443,56 +585,66 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn cached_git_index_is_updated() {
-        let upstream = TempDir::new().unwrap();
-        let cache_root = TempDir::new().unwrap();
-        let cache_root = cache_root.path();
-        let url: GitUrl = upstream.path().to_str().unwrap().parse().unwrap();
-        let name = cache_dir_name(&url);
-        assert!(name.starts_with("local-"), "{name}");
+    async fn new_shallow_clone_is_updated() {
+        let upstream = upstream();
+        let cargo_home = TempDir::new().unwrap();
+        let cargo_home = cargo_home.path();
+        let name = cargo_index_dir_name(upstream.cargo_url.clone()).unwrap();
+        // A `file://` URL has no host.
+        assert!(name.starts_with('-'), "{name}");
+        let shallow_name = format!("{name}-shallow");
 
-        git(upstream.path(), &["init", "-q"]);
-        commit(upstream.path(), Some("v1"));
-        assert_eq!(
-            read_foo(&url, cache_root).await.as_deref(),
-            Some(&b"v1"[..])
-        );
-        assert_eq!(
-            cache_entries(cache_root),
-            [name.to_string(), format!("{name}.lock")]
-        );
+        assert_eq!(read_foo(&upstream, cargo_home).await.unwrap(), b"v1");
+        assert_eq!(index_entries(cargo_home), [&*shallow_name]);
+        assert!(cargo_home.join(".package-cache").exists());
+        let shallow = cargo_home.join("registry/index").join(&shallow_name);
+        assert!(Repository::open(&shallow).unwrap().is_shallow().unwrap());
 
         // A later run sees upstream changes, including removals.
-        commit(upstream.path(), Some("v2"));
-        assert_eq!(
-            read_foo(&url, cache_root).await.as_deref(),
-            Some(&b"v2"[..])
-        );
-        commit(upstream.path(), None);
-        assert_eq!(read_foo(&url, cache_root).await, None);
-        commit(upstream.path(), Some("v3"));
-        assert_eq!(
-            read_foo(&url, cache_root).await.as_deref(),
-            Some(&b"v3"[..])
+        commit(upstream.dir.path(), Some("v2"));
+        assert_eq!(read_foo(&upstream, cargo_home).await.unwrap(), b"v2");
+        commit(upstream.dir.path(), None);
+        assert_eq!(read_foo(&upstream, cargo_home).await, None);
+        commit(upstream.dir.path(), Some("v3"));
+        assert_eq!(read_foo(&upstream, cargo_home).await.unwrap(), b"v3");
+
+        // A broken clone is replaced with a fresh one.
+        fs::remove_file(shallow.join(".git").join("HEAD")).unwrap();
+        assert_eq!(read_foo(&upstream, cargo_home).await.unwrap(), b"v3");
+        assert_eq!(index_entries(cargo_home), [&*shallow_name]);
+    }
+
+    /// A full clone made the way cargo makes one is used, and kept full.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cargo_full_clone_is_reused() {
+        let upstream = upstream();
+        let cargo_home = TempDir::new().unwrap();
+        let cargo_home = cargo_home.path();
+        let name = cargo_index_dir_name(upstream.cargo_url.clone()).unwrap();
+
+        let full = cargo_home.join("registry/index").join(&*name);
+        fs::create_dir_all(&full).unwrap();
+        git(&full, &["init", "-q"]);
+        git(
+            &full,
+            &[
+                "fetch",
+                "-q",
+                &upstream.url.to_string(),
+                "+HEAD:refs/remotes/origin/HEAD",
+            ],
         );
 
-        // A broken cache is replaced with a fresh clone.
-        let cached = cache_root.join(&*name);
-        fs::remove_file(cached.join("HEAD")).unwrap();
-        assert_eq!(
-            read_foo(&url, cache_root).await.as_deref(),
-            Some(&b"v3"[..])
-        );
-        assert_eq!(
-            cache_entries(cache_root),
-            [name.to_string(), format!("{name}.lock")]
-        );
+        commit(upstream.dir.path(), Some("v2"));
+        assert_eq!(read_foo(&upstream, cargo_home).await.unwrap(), b"v2");
+        assert_eq!(index_entries(cargo_home), [&*name]);
+        assert!(!Repository::open(&full).unwrap().is_shallow().unwrap());
     }
 
     #[test]
     fn garbage_is_bounded_by_the_clone_size() {
         let dir = TempDir::new().unwrap();
-        let pack_dir = dir.path().join("objects").join("pack");
+        let pack_dir = dir.path().join(".git").join("objects").join("pack");
         fs::create_dir_all(&pack_dir).unwrap();
 
         let add_pack = |name: &str, size: usize| {
@@ -501,22 +653,38 @@ mod tests {
         };
 
         add_pack("clone", 100);
-        assert!(!has_too_much_garbage(dir.path()).unwrap());
+        assert!(!has_too_much_garbage(dir.path()));
         add_pack("fetch1", 60);
-        assert!(!has_too_much_garbage(dir.path()).unwrap());
+        assert!(!has_too_much_garbage(dir.path()));
         add_pack("fetch2", 41);
-        assert!(has_too_much_garbage(dir.path()).unwrap());
+        assert!(has_too_much_garbage(dir.path()));
     }
 
+    /// The values from cargo's `test_stable_hash` (`SourceId::for_registry`
+    /// and `for_alt_registry` hash the same way), and the crates.io git
+    /// index's well known `github.com-25cdd57fae9f0462`.
     #[test]
-    fn cache_dir_names() {
-        let name = |url: &str| cache_dir_name(&url.parse().unwrap());
+    fn cargo_index_dir_names() {
+        let name = |url: &str| cargo_index_dir_name(Url::parse(url).unwrap());
 
-        let crates_io = name("https://github.com/rust-lang/crates.io-index");
-        assert!(crates_io.starts_with("github.com-"), "{crates_io}");
-        assert_eq!(crates_io.len(), "github.com-".len() + 16);
-        assert_ne!(crates_io, name("https://github.com/rust-lang/other-index"));
-        assert!(name("file:///tmp/index").starts_with("local-"));
-        assert!(name("ssh://git@example.com:22/index").starts_with("example.com-"));
+        let crates_io = "github.com-25cdd57fae9f0462";
+        assert_eq!(
+            name("https://github.com/rust-lang/crates.io-index").unwrap(),
+            crates_io
+        );
+        assert_eq!(
+            name("https://github.com/Rust-Lang/crates.io-index.git/").unwrap(),
+            crates_io
+        );
+        assert_eq!(
+            name("https://my-crates.io").unwrap(),
+            "my-crates.io-b2d65deb64f05373"
+        );
+        assert_eq!(
+            name("https://your-crates.io").unwrap(),
+            "your-crates.io-755952de063f5dc4"
+        );
+        // scp-like, not a URL cargo accepts.
+        assert!(Url::parse("git@github.com:rust-lang/crates.io-index").is_err());
     }
 }

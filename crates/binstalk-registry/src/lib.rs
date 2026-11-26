@@ -177,17 +177,16 @@ impl Registry {
         )))
     }
 
-    /// Keep clones of a git index in `cache_root` across runs instead of
-    /// cloning it again every time, see [`GitRegistry::with_cache`].
+    /// Share cargo's clones of git indexes in `cargo_home` instead of
+    /// cloning the index again on every run, see
+    /// [`GitRegistry::with_cargo_home`].
     ///
     /// Does nothing for a sparse registry.
     #[cfg_attr(not(feature = "git"), allow(unused_variables))]
-    pub fn with_git_index_cache(self, cache_root: impl Into<std::path::PathBuf>) -> Self {
+    pub fn with_cargo_home(self, cargo_home: impl Into<std::path::PathBuf>) -> Self {
         match self {
             #[cfg(feature = "git")]
-            Self::Git(registry) => {
-                Self::Git(GitRegistry::with_cache(registry.url().clone(), cache_root))
-            }
+            Self::Git(registry) => Self::Git(registry.with_cargo_home(cargo_home)),
             registry => registry,
         }
     }
@@ -210,7 +209,7 @@ impl Registry {
             #[cfg(feature = "git")]
             {
                 let url = GitUrl::from_str(s).map_err(Box::new)?;
-                Ok(Self::Git(GitRegistry::new(url)))
+                Ok(Self::Git(GitRegistry::from_index_str(url, s)))
             }
         }
     }
