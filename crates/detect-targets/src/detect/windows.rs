@@ -7,10 +7,8 @@ use windows_sys::{
         System::{
             LibraryLoader::{GetProcAddress, LoadLibraryA},
             SystemInformation::{
-                GetNativeSystemInfo, IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64,
-                IMAGE_FILE_MACHINE_ARM, IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
-                PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64,
-                PROCESSOR_ARCHITECTURE_INTEL,
+                IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM,
+                IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_I386,
             },
             Threading::{
                 GetCurrentProcess, GetMachineTypeAttributes, IsWow64Process2, MACHINE_ATTRIBUTES,
@@ -82,46 +80,31 @@ const _: () = {
 
 /// The machine that Windows itself runs on.
 ///
-/// `GetNativeSystemInfo` reports x64 to x64 and Arm64EC processes on ARM64,
-/// since both run under the x64 emulation, so it is only a fallback for
-/// `IsWow64Process2`, which reports the real machine.
+/// Unlike `GetNativeSystemInfo`, which reports x64 to x64 and Arm64EC
+/// processes on ARM64 (both run under the x64 emulation), `IsWow64Process2`
+/// reports the real machine.
+///
+/// Returns `None` on Windows 10 before 1511, which lacks `IsWow64Process2`;
+/// the caller then falls back to the compile-time target.
 fn native_machine() -> Option<IMAGE_FILE_MACHINE> {
     // IsWow64Process2 is only available on Win10 1511+, so dynamically load it.
-    let is_wow64_process2 = LibraryHandle::new(b"kernel32.dll\0").and_then(|kernel32| {
-        // SAFETY: IsWow64Process2FuncType is checked to match the real function signature.
-        unsafe { kernel32.get_proc_address::<IsWow64Process2FuncType>(b"IsWow64Process2\0") }
-    });
-    if let Some(is_wow64_process2) = is_wow64_process2 {
-        let mut process_machine = 0;
-        let mut native_machine = 0;
-        // SAFETY: both pointers are valid for writes, and the pseudo handle
-        // returned by GetCurrentProcess needs no closing.
-        let ret = unsafe {
-            is_wow64_process2(
-                GetCurrentProcess(),
-                &mut process_machine,
-                &mut native_machine,
-            )
-        };
-        if ret != 0 {
-            return Some(native_machine);
-        }
-    }
+    let kernel32 = LibraryHandle::new(b"kernel32.dll\0")?;
+    // SAFETY: IsWow64Process2FuncType is checked to match the real function signature.
+    let is_wow64_process2 =
+        unsafe { kernel32.get_proc_address::<IsWow64Process2FuncType>(b"IsWow64Process2\0") }?;
 
-    let mut system_info = mem::MaybeUninit::uninit();
-    // SAFETY: GetNativeSystemInfo cannot fail and always fills in system_info.
-    let system_info = unsafe {
-        GetNativeSystemInfo(system_info.as_mut_ptr());
-        system_info.assume_init()
+    let mut process_machine = 0;
+    let mut native_machine = 0;
+    // SAFETY: both pointers are valid for writes, and the pseudo handle
+    // returned by GetCurrentProcess needs no closing.
+    let ret = unsafe {
+        is_wow64_process2(
+            GetCurrentProcess(),
+            &mut process_machine,
+            &mut native_machine,
+        )
     };
-    // SAFETY: wProcessorArchitecture is the only member of the union that is
-    // ever set.
-    match unsafe { system_info.Anonymous.Anonymous.wProcessorArchitecture } {
-        PROCESSOR_ARCHITECTURE_AMD64 => Some(IMAGE_FILE_MACHINE_AMD64),
-        PROCESSOR_ARCHITECTURE_INTEL => Some(IMAGE_FILE_MACHINE_I386),
-        PROCESSOR_ARCHITECTURE_ARM64 => Some(IMAGE_FILE_MACHINE_ARM64),
-        _ => None,
-    }
+    (ret != 0).then_some(native_machine)
 }
 
 /// Guess the host target from the machine Windows runs on, rather than from
