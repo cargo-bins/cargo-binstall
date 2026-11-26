@@ -4,8 +4,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 /// Given multiple futures with output = `Result<Option<T>, E>`,
-/// returns the the first one that returns either `Err(_)` or
-/// `Ok(Some(_))`.
+/// returns the first `Ok(Some(_))`, logging any `Err(_)`.
 pub struct FuturesResolver<T, E> {
     rx: mpsc::Receiver<Result<T, E>>,
     tx: mpsc::Sender<Result<T, E>>,
@@ -47,14 +46,10 @@ impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
         };
 
         if let Some(res) = res.transpose() {
-            // try_send can only fail due to being full or being closed.
-            //
-            // In both cases, this could means some other future has
-            // completed first.
-            //
-            // For closed, it could additionally means that the task
-            // is cancelled.
-            tx.try_send(res).ok();
+            // Wait for the slot: an error queued first must not displace a
+            // success. Sending fails only once the receiver is dropped,
+            // i.e. after resolution or cancellation.
+            tx.send(res).await.ok();
         }
     }
 
@@ -82,5 +77,26 @@ impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::pin::pin;
+
+    use super::*;
+
+    /// A failed candidate's error holding the channel's only slot must not
+    /// make a later success get dropped.
+    #[tokio::test]
+    async fn success_after_queued_error() {
+        let resolver = FuturesResolver::<u8, &str>::default();
+        resolver.tx.send(Err("failed")).await.unwrap();
+
+        let success = pin!(async { Ok(Some(42)) });
+        let send = FuturesResolver::spawn_inner(success, resolver.tx.clone());
+        // Poll the success before resolve frees the slot.
+        let ((), resolved) = tokio::join!(biased; send, resolver.resolve());
+        assert_eq!(resolved, Some(42));
     }
 }
