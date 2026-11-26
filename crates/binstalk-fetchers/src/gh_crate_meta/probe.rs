@@ -278,29 +278,20 @@ impl Probe {
     /// as ls-refs or github.com's asset list take to tell whether it may
     /// exist, and the GET is the download if found.
     ///
-    /// `None` if there are more, or what is known already tells without a
-    /// request: that its tag doesn't exist, or github.com's asset list of
-    /// its release, from another target.
+    /// `None` if there are more, or its tag is known not to exist already,
+    /// so that [`Probe::drop_missing_tags`] drops it without a request.
     async fn check_only_candidate(&mut self) -> Result<Option<Option<Resolved>>, FetchError> {
         let Self { shared, candidates } = self;
         let [candidate] = &candidates[..] else {
             return Ok(None);
         };
-        if candidate.is_private {
-            return Ok(None);
-        }
-        if let Some(ReleaseTag { repo, tag }) = &candidate.release_tag
-            && shared.data.context.repo_tags(repo).lock().await.exists(tag) == Some(false)
-        {
-            return Ok(None);
-        }
-        if let Some(artifact) = &candidate.gh_artifact
-            && shared
-                .data
-                .context
-                .release_assets_page(&artifact.release)
-                .initialized()
-        {
+        let is_tag_missing = match &candidate.release_tag {
+            Some(ReleaseTag { repo, tag }) => {
+                shared.data.context.repo_tags(repo).lock().await.exists(tag) == Some(false)
+            }
+            None => false,
+        };
+        if candidate.is_private || is_tag_missing {
             return Ok(None);
         }
 
