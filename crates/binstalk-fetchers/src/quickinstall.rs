@@ -311,13 +311,16 @@ impl QuickInstallFound {
 
 #[async_trait::async_trait]
 impl Found for QuickInstallFound {
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Fetched, FetchError> {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Vec<Fetched>, FetchError> {
         let response = self.response.take();
         // Its URLs are per crate, so it is never shared with other crates.
-        let ret = self
-            .download_and_extract(response, dst)
-            .await
-            .map(|files| Fetched::Package(Arc::new(Extracted::new(dst.to_path_buf(), files))));
+        let ret = self.download_and_extract(response, dst).await.map(|files| {
+            vec![Fetched {
+                bin: None,
+                meta: self.target_meta(),
+                extracted: Arc::new(Extracted::new(dst.to_path_buf(), files)),
+            }]
+        });
 
         self.fetcher.clone().send_report(match &ret {
             Ok(_) => Status::InstalledFromTarball,

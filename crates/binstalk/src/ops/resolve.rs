@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     bins,
     errors::{BinstallError, VersionParseError},
-    fetchers::{BinInfo, Data, Fetched, Fetcher, Found, TargetArchOverride, TargetData},
+    fetchers::{BinInfo, Data, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
         cargo_toml::Manifest, cargo_toml_workspace::load_manifest_from_workspace,
         download::ExtractedFiles, remote::Client, target_triple::TargetTriple,
@@ -313,74 +313,43 @@ async fn download_extract_and_verify(
     // Download and extract it, unless another crate did already: then it is
     // somewhere else than `bin_path`.
     // If that fails, then ignore this fetcher.
-    let fetched = found.fetch_and_extract(bin_path).await?;
-    debug!("fetched = {fetched:#?}");
+    let packages = found.fetch_and_extract(bin_path).await?;
+    debug!("packages = {packages:#?}");
 
-    let meta = found.target_meta();
+    let mut bin_files = Vec::with_capacity(package_info.binaries.len());
 
-    match fetched {
-        Fetched::Package(extracted) => {
-            let binaries = package_info.binaries.iter().collect::<Vec<_>>();
+    for package in packages {
+        // The binaries in this package: all of them, or its own one.
+        let binaries = package_info
+            .binaries
+            .iter()
+            .filter(|bin| package.bin.as_deref().is_none_or(|name| name == bin.name))
+            .collect::<Vec<_>>();
+        let extracted = &package.extracted;
 
-            let bin_files = collect_bin_files(
-                found,
-                package_info,
-                &binaries,
-                meta,
-                extracted.dir(),
-                install_path,
-                no_symlinks,
-                extracted.files(),
-            )?;
+        let files = collect_bin_files(
+            found,
+            package_info,
+            &binaries,
+            package.meta,
+            extracted.dir(),
+            install_path,
+            no_symlinks,
+            extracted.files(),
+        )?;
 
-            verify_bin_files(package_info, &binaries, bin_files, extracted.files(), bins)
-        }
-        Fetched::PerBin(packages) => {
-            let mut bin_files = Vec::with_capacity(packages.len());
-
-            for bin in &package_info.binaries {
-                let Some(package) = packages.get(bin.name.as_str()) else {
-                    // Left out because the user did not ask for it, or because
-                    // it is optional and its package was not found.
-                    if bin.required_features.is_empty() && is_requested(bins, bin) {
-                        return Err(
-                            bins::Error::BinFileNotFound(bin_path.join(&bin.name).into()).into(),
-                        );
-                    }
-                    continue;
-                };
-
-                let mut meta = meta.clone();
-                meta.pkg_fmt = Some(package.pkg_fmt);
-
-                let binaries = [bin];
-                let extracted = &package.extracted;
-
-                let files = collect_bin_files(
-                    found,
-                    package_info,
-                    &binaries,
-                    meta,
-                    extracted.dir(),
-                    install_path,
-                    no_symlinks,
-                    extracted.files(),
-                )?;
-
-                bin_files.extend(verify_bin_files(
-                    package_info,
-                    &binaries,
-                    files,
-                    extracted.files(),
-                    bins,
-                )?);
-            }
-
-            bins::check_aliases_unique(&bin_files)?;
-
-            Ok(bin_files)
-        }
+        bin_files.extend(verify_bin_files(
+            package_info,
+            &binaries,
+            files,
+            extracted.files(),
+            bins,
+        )?);
     }
+
+    bins::check_aliases_unique(&bin_files)?;
+
+    Ok(bin_files)
 }
 
 /// Whether the user asked for `bin`, with `--bin`.

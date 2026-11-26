@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::BTreeMap, fmt, iter, path::Path, sync::Arc};
+use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_downloader::download::DownloadError;
 use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
@@ -15,8 +15,8 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    BinPackage, Data, Extracted, FetchError, Fetched, Found, InvalidPkgFmtError, RepoInfo,
-    SignaturePolicy, SignatureVerifier, TargetDataErased, common::*, fetch_context::PackageId,
+    Data, Extracted, FetchError, Fetched, Found, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
+    SignatureVerifier, TargetDataErased, common::*, fetch_context::PackageId,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -53,7 +53,7 @@ struct Resolved {
     /// `fetch_and_extract` downloads instead of asking again.
     response: Option<GetResponse>,
     /// The binary it is the package of, if each binary is in its own
-    /// package, see [`Fetched::PerBin`].
+    /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
 }
 
@@ -603,8 +603,12 @@ impl GhCrateMetaFound {
 
 #[async_trait::async_trait]
 impl Found for GhCrateMetaFound {
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Fetched, FetchError> {
-        self.extract(dst).await.map(Fetched::Package)
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Vec<Fetched>, FetchError> {
+        Ok(vec![Fetched {
+            bin: self.resolved.bin.clone(),
+            meta: self.target_meta(),
+            extracted: self.extract(dst).await?,
+        }])
     }
 
     fn pkg_fmt(&self) -> PkgFmt {
@@ -682,7 +686,7 @@ fn needs_repo_info(pkg_url: Option<&Template<'_>>, meta: &PkgMeta) -> Result<boo
 }
 
 /// The packages [`GhCrateMeta`] found when each binary is in its own
-/// package, see [`Fetched::PerBin`].
+/// package, see [`Fetched::bin`].
 ///
 /// Never empty. Everything but the packages themselves is the same for all
 /// of them, and is taken from the first.
@@ -697,26 +701,19 @@ impl PerBinFound {
 #[async_trait::async_trait]
 impl Found for PerBinFound {
     /// Each package is extracted to `dst/BIN`.
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Fetched, FetchError> {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Vec<Fetched>, FetchError> {
         std::fs::create_dir_all(dst).map_err(DownloadError::from)?;
 
-        let mut packages = BTreeMap::new();
+        let mut packages = Vec::with_capacity(self.0.len());
         for found in &mut self.0 {
             let bin = found
                 .resolved
                 .bin
-                .clone()
+                .as_deref()
                 .expect("PerBinFound is only made of packages of a binary");
-            let extracted = found.extract(&dst.join(&*bin)).await?;
-            packages.insert(
-                bin,
-                BinPackage {
-                    pkg_fmt: found.resolved.pkg_fmt,
-                    extracted,
-                },
-            );
+            packages.extend(found.fetch_and_extract(&dst.join(bin)).await?);
         }
-        Ok(Fetched::PerBin(packages))
+        Ok(packages)
     }
 
     fn pkg_fmt(&self) -> PkgFmt {

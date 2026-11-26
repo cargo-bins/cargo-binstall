@@ -32,7 +32,7 @@ mod fetch_context;
 pub use fetch_context::FetchContext;
 
 mod extracted;
-pub use extracted::{BinPackage, Extracted, Fetched};
+pub use extracted::{Extracted, Fetched};
 
 use gh_crate_meta::hosting::RepositoryHost;
 
@@ -155,7 +155,10 @@ pub trait Found: Send + Sync {
     /// Fetch the package and extract it to `dst`, unless it was extracted
     /// for another crate already, see [`FetchContext`]: then that one is
     /// returned, which is somewhere else.
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Fetched, FetchError>;
+    ///
+    /// Returns one package, or one per binary when `pkg-url` contains
+    /// `{ bin }`, each in its own dir under `dst`.
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Vec<Fetched>, FetchError>;
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
