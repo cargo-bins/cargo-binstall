@@ -55,11 +55,11 @@ impl Eq for GhRepo {}
 impl Hash for GhRepo {
     fn hash<H: Hasher>(&self, state: &mut H) {
         for name in [&self.owner, &self.repo] {
+            // What `Hasher::write_length_prefix`, still unstable, does by
+            // default, so that the names are kept apart.
+            state.write_usize(name.len());
             name.bytes()
-                .map(|b| b.to_ascii_lowercase())
-                .for_each(|b| state.write_u8(b));
-            // Separates the names, as `str`'s `Hash` does.
-            state.write_u8(0xff);
+                .for_each(|b| state.write_u8(b.to_ascii_lowercase()));
         }
     }
 }
