@@ -3,7 +3,7 @@ use strum_macros::{Display, EnumIter, EnumString};
 
 /// Binary format enumeration
 #[derive(
-    Debug, Display, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, EnumString, EnumIter,
+    Debug, Display, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, EnumString, EnumIter,
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive)]

@@ -9,6 +9,7 @@ use crate::{
     bin_util::{MainExit, run_tokio_main},
     entry,
     logging::logging,
+    ui::TimeInPrompts,
 };
 
 pub fn do_main() -> impl Termination {
@@ -59,11 +60,23 @@ rustc-llvm-version: {rustc_llvm_version}"#
 
         let jobserver_client = LazyJobserverClient::new();
 
-        let result =
-            run_tokio_main(|| entry::install_crates(args, cli_overrides, jobserver_client));
+        let time_in_prompts = TimeInPrompts::default();
 
-        let done = start.elapsed();
-        debug!("run time: {done:?}");
+        let result = run_tokio_main(|| {
+            entry::install_crates(
+                args,
+                cli_overrides,
+                jobserver_client,
+                time_in_prompts.clone(),
+            )
+        });
+
+        let elapsed = start.elapsed();
+        let in_prompts = time_in_prompts.get();
+        debug!("run time: {elapsed:?}, waiting for user input: {in_prompts:?}");
+
+        // Don't count the time the user took to answer the prompts.
+        let done = elapsed.saturating_sub(in_prompts);
 
         MainExit::new(result, Some(done))
     }

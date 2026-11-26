@@ -64,7 +64,7 @@ impl DataVerifier for Sha256Digest {
         crate_url = format_args!("{crate_url}"),
     ),
 )]
-pub(super) async fn parse_manifest(
+async fn parse_manifest(
     client: Client,
     crate_name: &str,
     crate_url: Url,
@@ -92,6 +92,61 @@ pub(super) async fn parse_manifest(
         })
     } else {
         manifest_visitor.load_manifest()
+    }
+}
+
+/// A crate version found in the registry index.
+///
+/// Its manifest is only downloaded by [`MatchedCrate::fetch_manifest`], so the
+/// version can be checked first, e.g. to skip a crate that is already
+/// installed without downloading it.
+#[derive(Debug)]
+pub struct MatchedCrate {
+    client: Client,
+    name: CompactString,
+    crate_url: Url,
+    matched_version: MatchedVersion,
+    auth: Option<RegistryAuth>,
+}
+
+impl MatchedCrate {
+    pub(super) fn new(
+        client: Client,
+        name: &str,
+        crate_url: Url,
+        matched_version: MatchedVersion,
+        auth: Option<&RegistryAuth>,
+    ) -> Self {
+        Self {
+            client,
+            name: name.into(),
+            crate_url,
+            matched_version,
+            auth: auth.cloned(),
+        }
+    }
+
+    /// The matched version, as written in the registry index.
+    pub fn version(&self) -> &str {
+        &self.matched_version.version
+    }
+
+    /// Publish time (RFC 3339) of the matched version, if the registry index
+    /// records it.
+    pub fn pubtime(&self) -> Option<&str> {
+        self.matched_version.pubtime.as_deref()
+    }
+
+    /// Download the crate and read its manifest, inferring all its bins.
+    pub async fn fetch_manifest(self) -> Result<Manifest<Meta>, RegistryError> {
+        parse_manifest(
+            self.client,
+            &self.name,
+            self.crate_url,
+            self.matched_version,
+            self.auth.as_ref(),
+        )
+        .await
     }
 }
 
@@ -178,6 +233,7 @@ pub(super) struct RegistryIndexEntry {
     pub(super) pubtime: Option<CompactString>,
 }
 
+#[derive(Debug)]
 pub(super) struct MatchedVersion {
     pub(super) version: CompactString,
     /// sha256 checksum encoded in base16

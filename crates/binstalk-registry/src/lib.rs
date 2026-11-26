@@ -33,6 +33,7 @@ mod vfs;
 mod visitor;
 
 mod common;
+pub use common::MatchedCrate;
 use common::*;
 
 mod publish_age;
@@ -222,16 +223,44 @@ impl Registry {
         version_req: &VersionReq,
         min_publish_age: Option<Duration>,
     ) -> Result<(Manifest<Meta>, Option<CompactString>), RegistryError> {
+        let matched = self
+            .find_crate_matched_with_auth(client, auth, crate_name, version_req, min_publish_age)
+            .await?;
+        let pubtime = matched.pubtime().map(CompactString::from);
+
+        Ok((matched.fetch_manifest().await?, pubtime))
+    }
+
+    /// Find the latest version of `crate_name` matching `version_req`,
+    /// without downloading the crate.
+    pub async fn find_crate_matched(
+        &self,
+        client: Client,
+        crate_name: &str,
+        version_req: &VersionReq,
+    ) -> Result<MatchedCrate, RegistryError> {
+        self.find_crate_matched_with_auth(client, None, crate_name, version_req, None)
+            .await
+    }
+
+    pub(crate) async fn find_crate_matched_with_auth(
+        &self,
+        client: Client,
+        auth: Option<&RegistryAuth>,
+        crate_name: &str,
+        version_req: &VersionReq,
+        min_publish_age: Option<Duration>,
+    ) -> Result<MatchedCrate, RegistryError> {
         match self {
             Self::Sparse(sparse_registry) => {
                 sparse_registry
-                    .fetch_crate_matched(client, auth, crate_name, version_req, min_publish_age)
+                    .find_crate_matched(client, auth, crate_name, version_req, min_publish_age)
                     .await
             }
             #[cfg(feature = "git")]
             Self::Git(git_registry) => {
                 git_registry
-                    .fetch_crate_matched(client, auth, crate_name, version_req, min_publish_age)
+                    .find_crate_matched(client, auth, crate_name, version_req, min_publish_age)
                     .await
             }
         }

@@ -12,7 +12,10 @@ use miette::{Result, WrapErr, bail};
 use tempfile::TempDir;
 use tracing::{debug, info};
 
-use crate::{args::Args, ui::confirm_sync};
+use crate::{
+    args::Args,
+    ui::{TimeInPrompts, confirm_sync},
+};
 
 pub(crate) struct Init {
     pub(crate) cargo_config: CargoConfig,
@@ -24,7 +27,7 @@ pub(crate) struct Init {
     pub(crate) temp_dir: TempDir,
 }
 
-pub(crate) fn initialise(args: &Args) -> Result<Init> {
+pub(crate) fn initialise(args: &Args, time_in_prompts: &TimeInPrompts) -> Result<Init> {
     let (cargo_config, cargo_home) = if let Ok(home) = cargo_home() {
         (
             Some(CargoConfig::load_from_path(home.join("config.toml"))?),
@@ -104,7 +107,11 @@ pub(crate) fn initialise(args: &Args) -> Result<Init> {
             "If you agree, please type 'yes'. If you disagree, telemetry will not be sent.",
             "You can change this at any time by editing the binstall settings file.",
         );
-        settings.telemetry_consent(confirm_sync("Opt in to telemetry? yes/[no] ", false));
+        settings.telemetry_consent(confirm_sync(
+            "Opt in to telemetry? yes/[no] ",
+            false,
+            time_in_prompts,
+        ));
         settings.save(&settings_path)?;
         info!(path=?settings_path, "Settings saved");
     }

@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    path::Path,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::{borrow::Cow, path::Path, sync::Arc};
 
 use binstalk_downloader::remote::Method;
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta, PkgSigning, Strategy};
@@ -11,8 +7,8 @@ use tracing::{error, info, trace};
 use url::Url;
 
 use crate::{
-    Data, FetchError, SignaturePolicy, SignatureVerifier, SigningAlgorithm, TargetDataErased,
-    common::*,
+    Data, Extracted, FetchError, Found, SignaturePolicy, SignatureVerifier, SigningAlgorithm,
+    TargetDataErased, common::*,
 };
 
 const BASE_URL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download";
@@ -66,15 +62,14 @@ pub struct QuickInstall {
 
     target_data: Arc<TargetDataErased>,
 
-    signature_verifier: OnceLock<SignatureVerifier>,
-    status: Mutex<Status>,
+    /// Send [`Status`] to quickinstall's stats server.
+    telemetry: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Status {
     Start,
     NotFound,
-    Found,
     AttemptingInstall,
     InvalidSignature,
     InstalledFromTarball,
@@ -85,7 +80,6 @@ impl Status {
         match self {
             Status::Start => "start",
             Status::NotFound => "not-found",
-            Status::Found => "found",
             Status::AttemptingInstall => "attempting-install",
             Status::InvalidSignature => "invalid-signature",
             Status::InstalledFromTarball => "installed-from-tarball",
@@ -162,17 +156,55 @@ impl QuickInstall {
                 signed = signed.unwrap_or("<none>"),
                 "Signature is for a different file"
             );
-            self.set_status(Status::InvalidSignature);
             Err(FetchError::InvalidSignature)
         }
     }
 
-    fn get_status(&self) -> Status {
-        *self.status.lock().unwrap()
+    async fn find_package(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
+        if !self.is_supported().await? {
+            return Ok(None);
+        }
+
+        let download_signature_task = self.clone().download_signature();
+
+        debug!("Checking for package at: '{}'", self.package_url);
+        let Some(response) = get_if_exists(&self.client, &self.package_url).await? else {
+            return Ok(None);
+        };
+        let verifier = download_signature_task.flattened_join().await?;
+
+        Ok(Some(Box::new(QuickInstallFound {
+            fetcher: self,
+            verifier,
+            response: Some(response),
+        }) as Box<dyn Found>))
     }
 
-    fn set_status(&self, status: Status) {
-        *self.status.lock().unwrap() = status;
+    /// Sends `status` to quickinstall's stats server in the background.
+    fn send_report(self: Arc<Self>, status: Status) {
+        if !self.telemetry {
+            return;
+        }
+
+        if cfg!(debug_assertions) {
+            debug!("Not sending quickinstall report in debug mode");
+        } else if is_universal_macos(&self.target_data.target) {
+            debug!(
+                r#"Not sending quickinstall report for universal-apple-darwin
+and universal2-apple-darwin.
+Quickinstall does not support these targets, it only supports targets supported
+by rust officially."#,
+            );
+        } else if self.is_supported_v.get().copied() != Some(false) {
+            tokio::spawn(async move {
+                if let Err(err) = self.report(status).await {
+                    warn!(
+                        "Failed to send quickinstall report for package {} (NOTE that this does not affect package resolution): {err}",
+                        self.package
+                    )
+                }
+            });
+        }
     }
 }
 
@@ -184,6 +216,7 @@ impl super::Fetcher for QuickInstall {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        telemetry: bool,
     ) -> Arc<dyn super::Fetcher> {
         let crate_name = &data.name;
         let version = &data.version;
@@ -206,104 +239,25 @@ impl super::Fetcher for QuickInstall {
             signature_policy,
 
             target_data,
-
-            signature_verifier: OnceLock::new(),
-            status: Mutex::new(Status::Start),
+            telemetry,
         })
     }
 
-    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>> {
-        tokio::spawn(async move {
-            if !self.is_supported().await? {
-                return Ok(false);
-            }
+    async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
+        let ret = self.clone().find_package().await;
 
-            let download_signature_task = self.clone().download_signature();
-
-            debug!("Checking for package at: '{}'", self.package_url);
-            let is_found = does_url_exist(&self.client, &self.package_url).await?;
-
-            if !is_found {
-                self.set_status(Status::NotFound);
-                return Ok(false);
-            }
-
-            if self
-                .signature_verifier
-                .set(download_signature_task.flattened_join().await?)
-                .is_err()
-            {
-                panic!("<QuickInstall as Fetcher>::find is run twice");
-            }
-
-            self.set_status(Status::Found);
-            Ok(true)
-        })
-    }
-
-    fn report_to_upstream(self: Arc<Self>) {
-        if cfg!(debug_assertions) {
-            debug!("Not sending quickinstall report in debug mode");
-        } else if is_universal_macos(&self.target_data.target) {
-            debug!(
-                r#"Not sending quickinstall report for universal-apple-darwin
-and universal2-apple-darwin.
-Quickinstall does not support these targets, it only supports targets supported
-by rust officially."#,
-            );
-        } else if self.is_supported_v.get().copied() != Some(false) {
-            tokio::spawn(async move {
-                if let Err(err) = self.report().await {
-                    warn!(
-                        "Failed to send quickinstall report for package {} (NOTE that this does not affect package resolution): {err}",
-                        self.package
-                    )
-                }
-            });
-        }
-    }
-
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
-        self.set_status(Status::AttemptingInstall);
-        let Some(verifier) = self.signature_verifier.get() else {
-            panic!("<QuickInstall as Fetcher>::find has not been called yet!")
+        let status = match &ret {
+            // Reported by `QuickInstallFound::fetch_and_extract`.
+            Ok(Some(_)) => None,
+            Ok(None) => Some(Status::NotFound),
+            Err(FetchError::InvalidSignature) => Some(Status::InvalidSignature),
+            Err(_) => Some(Status::Start),
         };
-
-        debug!(url=%self.package_url, "Downloading package");
-        let mut data_verifier = verifier.data_verifier()?;
-        let files = Download::new_with_data_verifier(
-            self.client.clone(),
-            self.package_url.clone(),
-            data_verifier.as_mut(),
-        )
-        .and_extract(self.pkg_fmt(), dst)
-        .await?;
-        trace!("validating signature (if any)");
-        if data_verifier.validate() {
-            if let Some(info) = verifier.info() {
-                info!("Verified signature for package '{}': {info}", self.package);
-            }
-            self.set_status(Status::InstalledFromTarball);
-            Ok(files)
-        } else {
-            self.set_status(Status::InvalidSignature);
-            Err(FetchError::InvalidSignature)
+        if let Some(status) = status {
+            self.send_report(status);
         }
-    }
 
-    fn pkg_fmt(&self) -> PkgFmt {
-        PkgFmt::Tgz
-    }
-
-    fn target_meta(&self) -> PkgMeta {
-        let mut meta = self.target_data.meta.clone();
-        meta.pkg_fmt = Some(self.pkg_fmt());
-        meta.bin_dir = Some("{ bin }{ binary-ext }".to_string());
-        meta
-    }
-
-    fn source_name(&self) -> CompactString {
-        CompactString::from("QuickInstall")
+        ret
     }
 
     fn fetcher_name(&self) -> &'static str {
@@ -313,22 +267,97 @@ by rust officially."#,
     fn strategy(&self) -> Strategy {
         Strategy::QuickInstall
     }
+}
+
+/// The package [`QuickInstall`] found.
+struct QuickInstallFound {
+    fetcher: Arc<QuickInstall>,
+    verifier: SignatureVerifier,
+    /// The response to the GET that found the package, its body unread,
+    /// which `fetch_and_extract` downloads instead of asking again.
+    response: Option<GetResponse>,
+}
+
+impl QuickInstallFound {
+    async fn download_and_extract(
+        &self,
+        response: Option<GetResponse>,
+        dst: &Path,
+    ) -> Result<ExtractedFiles, FetchError> {
+        let fetcher = &self.fetcher;
+
+        debug!(url=%fetcher.package_url, "Downloading package");
+        let mut data_verifier = self.verifier.data_verifier()?;
+        let files = response
+            .map(Download::from)
+            .unwrap_or_else(|| Download::new(fetcher.client.clone(), fetcher.package_url.clone()))
+            .with_data_verifier(data_verifier.as_mut())
+            .and_extract(self.pkg_fmt(), dst)
+            .await?;
+        trace!("validating signature (if any)");
+        if data_verifier.validate() {
+            if let Some(info) = self.verifier.info() {
+                info!(
+                    "Verified signature for package '{}': {info}",
+                    fetcher.package
+                );
+            }
+            Ok(files)
+        } else {
+            Err(FetchError::InvalidSignature)
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Found for QuickInstallFound {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError> {
+        let response = self.response.take();
+        // Its URLs are per crate, so it is never shared with other crates.
+        let ret = self
+            .download_and_extract(response, dst)
+            .await
+            .map(|files| Arc::new(Extracted::new(dst.to_path_buf(), files)));
+
+        self.fetcher.clone().send_report(match &ret {
+            Ok(_) => Status::InstalledFromTarball,
+            Err(FetchError::InvalidSignature) => Status::InvalidSignature,
+            Err(_) => Status::AttemptingInstall,
+        });
+
+        ret
+    }
+
+    fn pkg_fmt(&self) -> PkgFmt {
+        PkgFmt::Tgz
+    }
+
+    fn target_meta(&self) -> PkgMeta {
+        let mut meta = self.fetcher.target_data.meta.clone();
+        meta.pkg_fmt = Some(self.pkg_fmt());
+        meta.bin_dir = Some("{ bin }{ binary-ext }".to_string());
+        meta
+    }
 
     fn is_third_party(&self) -> bool {
         true
     }
 
     fn target(&self) -> &str {
-        &self.target_data.target
+        &self.fetcher.target_data.target
     }
 
     fn target_data(&self) -> &Arc<TargetDataErased> {
-        &self.target_data
+        &self.fetcher.target_data
+    }
+
+    fn source_name(&self) -> CompactString {
+        CompactString::from("QuickInstall")
     }
 }
 
 impl QuickInstall {
-    pub async fn report(&self) -> Result<(), FetchError> {
+    async fn report(&self, status: Status) -> Result<(), FetchError> {
         if !self.is_supported().await? {
             debug!(
                 "Not sending quickinstall report for {} since Quickinstall does not support these targets.",
@@ -348,7 +377,7 @@ impl QuickInstall {
                 "agent",
                 concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             )
-            .append_pair("status", self.get_status().as_str());
+            .append_pair("status", status.as_str());
         debug!("Sending installation report to quickinstall ({url})");
 
         self.client.request(Method::POST, url).send(true).await?;

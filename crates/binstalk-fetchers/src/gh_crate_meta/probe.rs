@@ -166,7 +166,9 @@ impl Probe {
     /// Check all the remaining candidates, returning the first one found:
     ///
     /// 1. Drop the candidates of the release tags that don't exist, see
-    ///    [`Probe::drop_missing_tags`].
+    ///    [`Probe::drop_missing_tags`]. Before and after, the only candidate
+    ///    of a public repository is checked with GET right away, see
+    ///    [`Probe::check_only_candidate`].
     /// 2. For a public GitHub repository, check the candidates github.com's
     ///    asset lists have, and drop the ones they don't, see
     ///    [`Probe::check_on_web`].
@@ -174,10 +176,16 @@ impl Probe {
     ///    could not tell about in one GraphQL query.
     /// 4. Check the rest at once.
     pub(super) async fn resolve(mut self) -> Result<Option<Resolved>, FetchError> {
+        if let Some(resolved) = self.check_only_candidate().await? {
+            return Ok(resolved);
+        }
         self.drop_missing_tags().await;
         if self.candidates.is_empty() {
             debug!("No release tag of any candidate exists");
             return Ok(None);
+        }
+        if let Some(resolved) = self.check_only_candidate().await? {
+            return Ok(resolved);
         }
 
         if !self.shared.is_repo_private {
@@ -201,30 +209,62 @@ impl Probe {
         Ok(resolver.resolve().await)
     }
 
+    /// Check the only candidate left of a public repository with GET, e.g.
+    /// of a `pkg-url` pointing at cargo-quickinstall: one request, as many
+    /// as ls-refs or github.com's asset list take to tell whether it may
+    /// exist, and the GET is the download if found.
+    ///
+    /// `None` if there are more, or its tag is known not to exist already,
+    /// so that [`Probe::drop_missing_tags`] drops it without a request.
+    async fn check_only_candidate(&mut self) -> Result<Option<Option<Resolved>>, FetchError> {
+        let Self { shared, candidates } = self;
+        let [candidate] = &candidates[..] else {
+            return Ok(None);
+        };
+        let is_tag_missing = match (&candidate.tag, shared.data.repo_info.get()) {
+            (Some(tag), Some(Some(info))) => {
+                let tags = shared.data.context.repo_tags(&info.repo);
+                tags.lock().await.exists(tag) == Some(false)
+            }
+            _ => false,
+        };
+        if shared.is_repo_private || is_tag_missing {
+            return Ok(None);
+        }
+
+        let candidate = candidates.pop().expect("one candidate");
+        shared.check_with_get(candidate).await.map(Some)
+    }
+
     /// Find out which release tags of the candidates exist, with one request
     /// to the repository's git server, and drop the candidates of the other
     /// ones. If the git server can't tell, every candidate is kept.
     ///
     /// A private repository on github.com is asked with the token.
     ///
-    /// The answer is kept in [`Data`]: only tags no target asked about yet
-    /// are asked, normally none after the first target.
+    /// The answer is kept in the [`FetchContext`](crate::FetchContext): only
+    /// tags no target or crate asked about yet are asked, normally none
+    /// after the first target.
     async fn drop_missing_tags(&mut self) {
         let Self { shared, candidates } = self;
         let data = &shared.data;
 
-        let mut tags = data.repo_cache.tags.lock().await;
+        // Set by `get_repo_info`, which `find` calls first.
+        let Some(Some(RepoInfo {
+            repo, is_private, ..
+        })) = data.repo_info.get()
+        else {
+            return;
+        };
+
+        let tags = data.context.repo_tags(repo);
+        let mut tags = tags.lock().await;
         let unasked = tags.unasked(
             candidates
                 .iter()
                 .filter_map(|candidate| candidate.tag.as_deref()),
         );
-        // Set by `get_repo_info`, which `find` calls first.
-        if !unasked.is_empty()
-            && let Some(Some(RepoInfo {
-                repo, is_private, ..
-            })) = data.repo_cache.info.get()
-        {
+        if !unasked.is_empty() {
             let listed = match GhRepo::try_extract_from_url(repo) {
                 Some(gh_repo) if *is_private => {
                     shared
@@ -275,7 +315,7 @@ impl Probe {
             let names = of_release.iter().filter_map(|candidate| {
                 Some(candidate.gh_artifact.as_ref()?.artifact_name.as_str())
             });
-            let page = self.shared.data.repo_cache.release_assets_page(&release);
+            let page = self.shared.data.context.release_assets_page(&release);
             let page = page
                 .get_or_init(|| ReleaseAssetsPage::fetch(&self.shared.client, &release))
                 .await;
@@ -335,7 +375,7 @@ impl Probe {
                         repo: gh_repo.clone(),
                         tag: tag.clone(),
                     };
-                    let cell = data.repo_cache.release_artifacts(&release);
+                    let cell = data.context.release_artifacts(&release);
                     (release.tag, cell)
                 })
                 .filter(|(_, cell)| !cell.initialized())
@@ -378,7 +418,9 @@ impl Shared {
 
         debug!("Checking for package with the API: '{}'", candidate.url);
         match self.check_gh_artifact(artifact).await? {
-            GhAsset::Found(artifact_url) => Ok(Some(self.resolved(candidate, Some(artifact_url)))),
+            GhAsset::Found(artifact_url) => {
+                Ok(Some(self.resolved(candidate, Some(artifact_url), None)))
+            }
             GhAsset::Missing => Ok(None),
             GhAsset::Unknown => self.check_with_get(candidate).await,
         }
@@ -386,15 +428,18 @@ impl Shared {
 
     async fn check_with_get(&self, candidate: Candidate) -> Result<Option<Resolved>, FetchError> {
         debug!("Checking for package at: '{}'", candidate.url);
-        Ok(does_url_exist(&self.client, &candidate.url)
+        Ok(get_if_exists(&self.client, &candidate.url)
             .await?
-            .then(|| self.resolved(candidate, None)))
+            .map(|response| self.resolved(candidate, None, Some(response))))
     }
 
+    /// * `response` - The response to the GET that found `candidate`, to
+    ///   download it from.
     fn resolved(
         &self,
         candidate: Candidate,
         gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
+        response: Option<GetResponse>,
     ) -> Resolved {
         Resolved {
             url: candidate.url,
@@ -406,13 +451,14 @@ impl Shared {
             is_repo_private: self.is_repo_private,
             target_arch: candidate.target_arch,
             pkg_url: candidate.pkg_url,
+            response,
         }
     }
 
     /// Check a GitHub release asset with the API, which is asked once per
     /// release.
     async fn check_gh_artifact(&self, artifact: &GhReleaseArtifact) -> Result<GhAsset, FetchError> {
-        let cell = self.data.repo_cache.release_artifacts(&artifact.release);
+        let cell = self.data.context.release_artifacts(&artifact.release);
         loop {
             let artifacts = cell
                 .get_or_try_init(|| {
@@ -524,7 +570,12 @@ mod test {
         repo: &str,
         candidates: Vec<Candidate>,
     ) -> Probe {
-        let data = Data::new("test".into(), "0.0.0".into(), Some(repo.into()));
+        let data = Data::new(
+            Default::default(),
+            "test".into(),
+            "0.0.0".into(),
+            Some(repo.into()),
+        );
         let info = data.get_repo_info(gh_api_client).await.unwrap().unwrap();
         let is_repo_private = info.is_private;
         Probe::new(
@@ -734,11 +785,18 @@ mod test {
     }
 
     /// The next target, tried when one has nothing, reuses what the first
-    /// one asked the git server and github.com.
+    /// one asked the git server and github.com, and so do other crates of
+    /// the same repository.
     #[tokio::test]
     async fn test_probe_next_target() {
         let gh_api_client = GhApiClient::new(client(), None);
-        let data = Data::new("test".into(), "0.0.0".into(), Some(BINSTALL.into()));
+        let context = Arc::<crate::FetchContext>::default();
+        let data = Data::new(
+            context.clone(),
+            "test".into(),
+            "0.0.0".into(),
+            Some(BINSTALL.into()),
+        );
         data.get_repo_info(&gh_api_client).await.unwrap();
         let data = Arc::new(data);
         let probe = |data: &Arc<Data>, assets: &[&str]| {
@@ -774,17 +832,19 @@ mod test {
         assert_eq!(asset(probe(&data, &musl).await).as_deref(), Some(musl_tgz));
 
         // One ls-refs answer, one page.
-        let tags = data.repo_cache.tags.lock().await;
+        let repo = &data.repo_info.get().unwrap().as_ref().unwrap().repo;
+        let repo_tags = context.repo_tags(repo);
+        let tags = repo_tags.lock().await;
         assert_eq!(tags.exists("v0.20.1"), Some(true));
         assert_eq!(tags.exists("v0.18.2"), Some(false));
         assert!(tags.unasked(["v0.20.1", "v0.18.2"]).is_empty());
         drop(tags);
-        assert_eq!(data.repo_cache.release_assets_pages_len(), 1);
+        assert_eq!(context.release_assets_pages_len(), 1);
 
         // The crate looked up by its binary's name shares all of it: only
         // the tags not asked yet are asked.
         let binary_data = Arc::new(data.with_name("binary".into()));
-        assert!(binary_data.repo_cache.info.get().is_some());
+        assert!(binary_data.repo_info.get().is_some());
         let found = probe(
             &binary_data,
             &[
@@ -794,11 +854,33 @@ mod test {
         )
         .await;
         assert_eq!(asset(found).as_deref(), Some(musl_tgz));
-        let tags = data.repo_cache.tags.lock().await;
+        let tags = repo_tags.lock().await;
         assert_eq!(tags.exists("binary-v0.20.1"), Some(false));
         assert_eq!(tags.exists("v0.20.1"), Some(true));
         drop(tags);
-        assert_eq!(data.repo_cache.release_assets_pages_len(), 1);
+        assert_eq!(context.release_assets_pages_len(), 1);
+
+        // Another crate, whose `repository` is a subdirectory of the same
+        // repository, shares the tags and pages too.
+        let other = Data::new(
+            context.clone(),
+            "other".into(),
+            "0.0.0".into(),
+            Some(format!("{BINSTALL}/tree/main/crates/bin")),
+        );
+        let info = other.get_repo_info(&gh_api_client).await.unwrap().unwrap();
+        assert_eq!(info.subcrate.as_deref(), Some("bin"));
+        assert!(Arc::ptr_eq(&context.repo_tags(&info.repo), &repo_tags));
+        let found = probe(&Arc::new(other), &musl).await;
+        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+        assert!(
+            repo_tags
+                .lock()
+                .await
+                .unasked(["v0.20.1", "v0.18.2"])
+                .is_empty()
+        );
+        assert_eq!(context.release_assets_pages_len(), 1);
     }
 
     /// A public repository needs no API even with a token.
@@ -874,6 +956,75 @@ mod test {
             .await,
             not_found(1, 1)
         );
+    }
+
+    /// The only candidate, as of a `pkg-url` pointing at cargo-quickinstall,
+    /// is checked with GET, without ls-refs or github.com's asset list: one
+    /// request, which is the download if found.
+    #[tokio::test]
+    async fn test_resolve_only_candidate() {
+        let repo_tags = |data: &Data| {
+            let info = data.repo_info.get().unwrap().as_ref().unwrap();
+            data.context.repo_tags(&info.repo)
+        };
+        let gh_api_client = GhApiClient::new(client(), None);
+        const GNU: &str = "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tar.gz";
+        let resolve = |repo: &'static str, assets: &'static [&'static str]| {
+            let gh_api_client = gh_api_client.clone();
+            async move {
+                let candidates = assets
+                    .iter()
+                    .map(|asset| new_candidate(repo, asset, OTHER_TEMPLATE))
+                    .collect();
+                let probe = new_probe(&gh_api_client, repo, candidates).await;
+                let data = Arc::clone(&probe.shared.data);
+                (probe.resolve().await.unwrap(), data)
+            }
+        };
+
+        let (found, data) = resolve(QUICKINSTALL, &[GNU]).await;
+        let found = found.unwrap();
+        assert!(found.response.is_some());
+        assert_eq!(asset(Some(found)).as_deref(), Some(GNU));
+        assert_eq!(data.context.release_assets_pages_len(), 0);
+        assert_eq!(repo_tags(&data).lock().await.exists("ripgrep-14.1.1"), None);
+
+        // Not found.
+        let (found, data) = resolve(
+            QUICKINSTALL,
+            &["ripgrep-14.1.1/ripgrep-14.1.1-riscv64gc-unknown-none-elf.tar.gz"],
+        )
+        .await;
+        assert!(found.is_none());
+        assert_eq!(data.context.release_assets_pages_len(), 0);
+
+        // The only one ls-refs leaves.
+        let (found, data) = resolve(
+            QUICKINSTALL,
+            &[
+                "ripgrep-14.1.0/ripgrep-14.1.0-x86_64-unknown-linux-gnu.tar.gz",
+                GNU,
+            ],
+        )
+        .await;
+        assert_eq!(asset(found).as_deref(), Some(GNU));
+        assert_eq!(data.context.release_assets_pages_len(), 0);
+        assert_eq!(
+            repo_tags(&data).lock().await.exists("ripgrep-14.1.0"),
+            Some(false)
+        );
+
+        // Two left: github.com's asset list is used.
+        let (found, data) = resolve(
+            QUICKINSTALL,
+            &[
+                "ripgrep-14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-gnu.tgz",
+                GNU,
+            ],
+        )
+        .await;
+        assert_eq!(asset(found).as_deref(), Some(GNU));
+        assert_eq!(data.context.release_assets_pages_len(), 1);
     }
 
     #[tokio::test]
@@ -1060,12 +1211,12 @@ mod test {
         );
         assert!(probe.resolve_hint(&exact).await.unwrap().is_none());
         assert_eq!(probe.candidates.len(), 4);
-        assert_eq!(probe.shared.data.repo_cache.release_artifacts_len(), 0);
+        assert_eq!(probe.shared.data.context.release_artifacts_len(), 0);
 
-        let repo_cache = Arc::clone(&probe.shared.data.repo_cache);
+        let context = Arc::clone(&probe.shared.data.context);
         let found = probe.resolve().await.unwrap().unwrap();
         assert!(found.gh_release_artifact_url.is_some());
         assert_eq!(asset(Some(found)).as_deref(), Some(assets[2]));
-        assert_eq!(repo_cache.release_artifacts_len(), 1);
+        assert_eq!(context.release_artifacts_len(), 1);
     }
 }

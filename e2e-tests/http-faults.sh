@@ -28,9 +28,9 @@ cat >"$routes" <<'JSON'
         {"status": 503}, {"status": 503}, {"status": 503}
     ],
     "/moved.tar": [{"redirect": "/moved-to.tar"}, {"redirect": "/moved-to.tar"}],
-    "/truncated.tar": [{"truncate": 1000}, {"truncate": 1000}],
+    "/truncated.tar": [{"truncate": 1000}],
     "/truncated-no-range.tar": [
-        {"truncate": 1000}, {"truncate": 1000},
+        {"truncate": 1000},
         {"ignore_range": true}, {"ignore_range": true}, {"ignore_range": true},
         {"ignore_range": true}, {"ignore_range": true}, {"ignore_range": true}
     ]
@@ -87,9 +87,11 @@ echo "down.tar was requested $down_requests times"
 install "$1" moved.tar
 [ "$(requests_for moved-to.tar)" -ge 1 ]
 
-# A download cut short is continued with a Range request.
+# A download cut short is continued with a Range request. The GET that found
+# the package is the download, so that is the only other request.
 install "$1" truncated.tar
 grep -E "^GET /truncated.tar Range: bytes=[1-9][0-9]*-$" "$HTTPS_SERVER_LOG"
+[ "$(requests_for truncated.tar)" -eq 2 ]
 
 # One that can't be continued, since the server answers the Range request
 # with the whole file again, fails, and installs nothing.

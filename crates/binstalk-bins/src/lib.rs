@@ -7,7 +7,8 @@ use std::{
 };
 
 use atomic_file_install::{
-    atomic_install, atomic_install_noclobber, atomic_symlink_file, atomic_symlink_file_noclobber,
+    atomic_install_keep_src, atomic_install_noclobber, atomic_symlink_file,
+    atomic_symlink_file_noclobber,
 };
 use binstalk_types::cargo_toml_binstall::{PkgFmt, PkgMeta};
 use compact_str::{CompactString, format_compact};
@@ -162,9 +163,16 @@ pub fn possible_bin_dirs<'a>(
 
 /// Must be called after the archive is downloaded and extracted.
 /// This function might uses blocking I/O.
+///
+/// * `sole_root_dir` - the name of the only entry at the top of the
+///   extracted archive, if it is a dir. It is tried after
+///   [`possible_bin_dirs`], as archives named in other ways, such as
+///   `foo_1.2.3_x86_64-unknown-linux-gnu.tar.gz`, usually hold a dir named
+///   like them.
 pub fn infer_bin_dir_template(
     data: &Data,
     has_dir: &mut dyn FnMut(&Path) -> bool,
+    sole_root_dir: Option<&str>,
 ) -> Cow<'static, str> {
     let name = data.name;
     let target = data.target;
@@ -174,6 +182,17 @@ pub fn infer_bin_dir_template(
 
     possible_bin_dirs(name, target, version)
         .find(|dirname| has_dir(Path::new(&dirname)))
+        .or_else(|| {
+            // It is a file name in the archive, not a template.
+            let mut dir = String::new();
+            for c in sole_root_dir?.chars() {
+                if matches!(c, '\\' | '{' | '}') {
+                    dir.push('\\');
+                }
+                dir.push(c);
+            }
+            Some(dir)
+        })
         .map(|mut dir| {
             dir.reserve_exact(1 + default_bin_dir_template.len());
             dir += "/";
@@ -376,6 +395,8 @@ impl BinFile {
         Ok(source)
     }
 
+    /// The source is left where it is, as it may be installed by other
+    /// crates in the same package too.
     pub fn install_bin(&self) -> Result<(), Error> {
         let source = self.pre_install_bin()?;
 
@@ -385,7 +406,7 @@ impl BinFile {
             self.dest.display()
         );
 
-        atomic_install(&source, &self.dest)?;
+        atomic_install_keep_src(&source, &self.dest)?;
 
         Ok(())
     }
@@ -515,6 +536,53 @@ impl fmt::Display for OptionalLazyFormat<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn infer_bin_dir() {
+        let data = Data {
+            name: "foo",
+            target: "x86_64-unknown-linux-gnu",
+            version: "1.2.3",
+            repo: None,
+            meta: PkgMeta::default(),
+            bin_path: Path::new("/tmp/pkg"),
+            install_path: Path::new("/tmp/bin"),
+            target_related_info: &leon::vals(|_| None),
+        };
+        let infer = |dirs: &[&str], sole_root_dir| {
+            infer_bin_dir_template(
+                &data,
+                &mut |path| dirs.iter().any(|dir| Path::new(dir) == path),
+                sole_root_dir,
+            )
+        };
+
+        assert_eq!(infer(&[], None), "{ bin }{ binary-ext }");
+        assert_eq!(
+            infer(&["foo-x86_64-unknown-linux-gnu"], None),
+            "foo-x86_64-unknown-linux-gnu/{ bin }{ binary-ext }"
+        );
+        // The dirs named after the crate come first.
+        assert_eq!(
+            infer(&["foo-v1.2.3"], Some("foo_1.2.3_x86_64-unknown-linux-gnu")),
+            "foo-v1.2.3/{ bin }{ binary-ext }"
+        );
+        assert_eq!(
+            infer(&[], Some("foo_1.2.3_x86_64-unknown-linux-gnu")),
+            "foo_1.2.3_x86_64-unknown-linux-gnu/{ bin }{ binary-ext }"
+        );
+
+        // It is not a template.
+        let template = infer(&[], Some(r"{ name }\"));
+        assert_eq!(template, r"\{ name \}\\/{ bin }{ binary-ext }");
+        assert_eq!(
+            Template::parse(&template)
+                .unwrap()
+                .render(&[("bin", "foo"), ("binary-ext", "")])
+                .unwrap(),
+            r"{ name }\/foo"
+        );
+    }
 
     #[test]
     fn valid_bin_names() {

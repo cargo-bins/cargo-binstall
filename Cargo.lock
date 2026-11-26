@@ -4498,7 +4498,7 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 [[package]]
 name = "simple-git"
 version = "0.2.39"
-source = "git+https://github.com/cargo-bins/simple-git?branch=git-ref#407add68fafe008d8925a9b389d14476ff72d982"
+source = "git+https://github.com/cargo-bins/simple-git?branch=git-ref#314bcf005c111612250443c9c3eb9b8b778d2bf5"
 dependencies = [
  "compact_str",
  "derive_destructure2",

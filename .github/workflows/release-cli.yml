@@ -93,7 +93,10 @@ jobs:
       env:
         crate: ${{ fromJSON(inputs.info).crate }}
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      run: cargo publish -p "$crate" --allow-dirty  --no-default-features
+      # The release PR's merge queue run already did the same publish as a
+      # dry-run, which builds the packaged crate, and the package jobs above
+      # just built it again for every target; skip a third build here.
+      run: cargo publish -p "$crate" --allow-dirty --no-default-features --no-verify
 
     - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:

@@ -112,6 +112,28 @@ pub fn atomic_install(src: &Path, dst: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Like [`atomic_install`], but `src` is left where it is: a hard link to it
+/// is made next to it and installed instead, or a reflink or copy if hard
+/// links aren't supported there.
+///
+/// This is a blocking function, must be called in `block_in_place` mode.
+pub fn atomic_install_keep_src(src: &Path, dst: &Path) -> io::Result<()> {
+    let parent = parent(src)?;
+    // Removed when dropped, if `atomic_install` copied it rather than
+    // moved it.
+    let link = NamedTempFile::new_in(parent)?.into_temp_path();
+    fs::remove_file(&link)?;
+
+    debug!("Hard linking '{}' to '{}'", src.display(), link.display());
+    if let Err(err) = fs::hard_link(src, &link) {
+        debug!("Hard linking failed: {err}, fallback to reflink or copy");
+        reflink_or_copy(src, &link)?;
+        fs::set_permissions(&link, src.metadata()?.permissions())?;
+    }
+
+    atomic_install(&link, dst)
+}
+
 /// Create a symlink at `link` to `dest`, this fails if the `link`
 /// already exists.
 ///

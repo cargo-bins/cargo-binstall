@@ -9,7 +9,7 @@ use binstalk_types::{
     crate_info::PkgUrlHint,
 };
 use thiserror::Error as ThisError;
-use tokio::{task::JoinError, time::sleep};
+use tokio::{sync::OnceCell, task::JoinError, time::sleep};
 pub use url::ParseError as UrlParseError;
 
 mod gh_crate_meta;
@@ -28,8 +28,11 @@ use signing::*;
 
 mod futures_resolver;
 
-mod repo_cache;
-use repo_cache::RepoCache;
+mod fetch_context;
+pub use fetch_context::FetchContext;
+
+mod extracted;
+pub use extracted::Extracted;
 
 use gh_crate_meta::hosting::RepositoryHost;
 
@@ -110,7 +113,10 @@ impl From<InvalidPkgFmtError> for FetchError {
 
 #[async_trait::async_trait]
 pub trait Fetcher: Send + Sync {
-    /// Create a new fetcher from some data
+    /// Create a new fetcher from some data.
+    ///
+    /// `telemetry`: whether the fetcher may report to its upstream how
+    /// finding and installing the package went (only QuickInstall does).
     #[allow(clippy::new_ret_no_self)]
     fn new(
         client: Client,
@@ -118,26 +124,38 @@ pub trait Fetcher: Send + Sync {
         data: Arc<Data>,
         target_data: Arc<TargetDataErased>,
         signature_policy: SignaturePolicy,
+        telemetry: bool,
     ) -> Arc<dyn Fetcher>
     where
         Self: Sized;
 
-    /// Fetch a package and extract
-    async fn fetch_and_extract(&self, dst: &Path) -> Result<ExtractedFiles, FetchError>;
-
-    /// Find the package, if it is available for download
+    /// Find the package, if it is available for download.
     ///
-    /// This may look for multiple remote targets, but must write (using some form of interior
-    /// mutability) the best one to the implementing struct in some way so `fetch_and_extract` can
-    /// proceed without additional work.
+    /// This may look for multiple remote targets, and returns the best one,
+    /// which [`Found::fetch_and_extract`] downloads without additional work.
     ///
-    /// Must return `true` if a package is available, `false` if none is, and reserve errors to
+    /// Must return `None` if no package is available, and reserve errors to
     /// fatal conditions only.
-    fn find(self: Arc<Self>) -> JoinHandle<Result<bool, FetchError>>;
+    async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError>;
 
-    /// Report to upstream that cargo-binstall tries to use this fetcher.
-    /// Currently it is only overridden by [`quickinstall::QuickInstall`].
-    fn report_to_upstream(self: Arc<Self>) {}
+    /// A short human-readable name, must contains only characters
+    /// and numbers and it also must be unique.
+    ///
+    /// It is used to create a temporary dir where it is used for
+    /// [`Found::fetch_and_extract`].
+    fn fetcher_name(&self) -> &'static str;
+
+    /// The strategy used by this fetcher
+    fn strategy(&self) -> Strategy;
+}
+
+/// A package [`Fetcher::find`] found.
+#[async_trait::async_trait]
+pub trait Found: Send + Sync {
+    /// Fetch the package and extract it to `dst`, unless it was extracted
+    /// for another crate already, see [`FetchContext`]: then that one is
+    /// returned, which is somewhere else.
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError>;
 
     /// Return the package format
     fn pkg_fmt(&self) -> PkgFmt;
@@ -148,30 +166,20 @@ pub trait Fetcher: Send + Sync {
     /// A short human-readable name or descriptor for the package source
     fn source_name(&self) -> CompactString;
 
-    /// A short human-readable name, must contains only characters
-    /// and numbers and it also must be unique.
-    ///
-    /// It is used to create a temporary dir where it is used for
-    /// [`Fetcher::fetch_and_extract`].
-    fn fetcher_name(&self) -> &'static str;
-
-    /// The strategy used by this fetcher
-    fn strategy(&self) -> Strategy;
-
     /// Should return true if the remote is from a third-party source
     fn is_third_party(&self) -> bool;
 
-    /// Return the target for this fetcher
+    /// Return the target of the package
     fn target(&self) -> &str;
 
     fn target_data(&self) -> &Arc<TargetDataErased>;
 
-    /// The name `{ target-arch }` was rendered as in the found package's
-    /// URL, if [`Fetcher::find`] picked an alias rather than the name from
+    /// The name `{ target-arch }` was rendered as in the package's URL, if
+    /// [`Fetcher::find`] picked an alias rather than the name from
     /// [`TargetData::target_related_info`].
     ///
-    /// Templates rendered for the found package, such as `bin-dir`, should
-    /// use it too, see [`TargetArchOverride`].
+    /// Templates rendered for the package, such as `bin-dir`, should use it
+    /// too, see [`TargetArchOverride`].
     fn resolved_target_arch(&self) -> Option<&str> {
         None
     }
@@ -184,7 +192,7 @@ pub trait Fetcher: Send + Sync {
 }
 
 /// [`leon::Values`] that gives `target-arch` from
-/// [`Fetcher::resolved_target_arch`] when it is set, and everything else
+/// [`Found::resolved_target_arch`] when it is set, and everything else
 /// from `values`.
 pub struct TargetArchOverride<'a> {
     pub values: &'a dyn leon::Values,
@@ -227,19 +235,33 @@ pub struct Data {
     name: CompactString,
     version: CompactString,
     repo: Option<String>,
-    /// Shared by all targets, and with [`Data::with_name`].
-    repo_cache: Arc<RepoCache>,
+    /// Shared with the other crates being resolved.
+    context: Arc<FetchContext>,
+    /// Kept in `context`, by `repo`.
+    repo_info: Arc<OnceCell<Option<RepoInfo>>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 }
 
 impl Data {
-    pub fn new(name: CompactString, version: CompactString, repo: Option<String>) -> Self {
+    /// `context` is shared by all crates resolved together, so that what
+    /// is learnt about a repository is asked only once.
+    pub fn new(
+        context: Arc<FetchContext>,
+        name: CompactString,
+        version: CompactString,
+        repo: Option<String>,
+    ) -> Self {
+        let repo_info = match repo.as_deref() {
+            Some(repo) => context.repo_info(repo),
+            None => Arc::default(),
+        };
         Self {
             name,
             version,
             repo,
-            repo_cache: Arc::default(),
+            context,
+            repo_info,
             pkg_url_hint: None,
         }
     }
@@ -253,7 +275,8 @@ impl Data {
             name,
             version: self.version.clone(),
             repo: self.repo.clone(),
-            repo_cache: Arc::clone(&self.repo_cache),
+            context: Arc::clone(&self.context),
+            repo_info: Arc::clone(&self.repo_info),
             pkg_url_hint: None,
         }
     }
@@ -360,8 +383,7 @@ impl Data {
             })
         }
 
-        self.repo_cache
-            .info
+        self.repo_info
             .get_or_try_init(move || {
                 Box::pin(async move {
                     let Some(repo) = self.repo.as_deref() else {
@@ -426,9 +448,11 @@ impl RepoInfo {
             //
             // scheme:/{addr}/{repo_owner}/{repo_name}
             //
-            // path_segments() succeeds, so path_segments_mut()
-            // must also succeeds.
-            let mut paths = repo.path_segments_mut().unwrap();
+            let Ok(mut paths) = repo.path_segments_mut() else {
+                // Unreachable: path_segments() succeeded above, so the url
+                // can be a base.
+                return None;
+            };
 
             paths.pop(); // pop subcrate
             if is_crate_present {
@@ -535,7 +559,12 @@ mod test {
         let url_without_git = "https://github.com/cargo-bins/cargo-binstall";
         let url_with_git = format!("{}.git", url_without_git);
 
-        let data = Data::new("cargo-binstall".into(), "v1.2.3".into(), Some(url_with_git));
+        let data = Data::new(
+            Default::default(),
+            "cargo-binstall".into(),
+            "v1.2.3".into(),
+            Some(url_with_git),
+        );
 
         let gh_client = GhApiClient::new(
             Client::new(

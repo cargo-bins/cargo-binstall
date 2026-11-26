@@ -1,6 +1,6 @@
 """Serve a directory over HTTPS on localhost, for e2e tests.
 
-Usage: https_server.py DIR CERT KEY PORT_FILE REQUEST_LOG [ROUTES]
+Usage: https_server.py DIR CERT KEY PORT_FILE REQUEST_LOG SENT_LOG [ROUTES]
 
 Listens on an OS-chosen port, on both ::1 and 127.0.0.1 where the OS allows
 it, so that `localhost` works whichever address it resolves to first.
@@ -11,6 +11,11 @@ ssl can take seconds. Connections made meanwhile wait in the listen backlog.
 
 Every request is appended to REQUEST_LOG as `METHOD PATH`, followed by
 ` Range: ...` when it asks for a range.
+
+Once the whole body of a file has been sent for a GET (or the rest of it,
+for a range), its path is appended to SENT_LOG, so that a test can tell a
+download from a request whose response wasn't read: for a file larger than
+the socket buffers hold, that one isn't logged.
 
 ROUTES, if given, is a JSON file mapping a path to a list of responses to
 give, in order, to the requests for that path (HEAD and GET alike); once the
@@ -50,7 +55,7 @@ def listen():
     return sock
 
 
-def serve(sock, directory, cert, key, request_log, routes_file):
+def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
     import functools
     import http.server
     import json
@@ -59,11 +64,17 @@ def serve(sock, directory, cert, key, request_log, routes_file):
     from email.utils import formatdate
 
     class Handler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *args, routes, lock, request_log, **kwargs):
+        def __init__(self, *args, routes, lock, request_log, sent_log, **kwargs):
             self.routes = routes
             self.lock = lock
             self.request_log = request_log
+            self.sent_log = sent_log
             super().__init__(*args, **kwargs)
+
+        def log_sent(self):
+            with self.lock:
+                with open(self.sent_log, "a", newline="\n") as f:
+                    f.write(f"{self.path.split('?', 1)[0]}\n")
 
         def next_action(self):
             path = self.path.split("?", 1)[0]
@@ -74,6 +85,11 @@ def serve(sock, directory, cert, key, request_log, routes_file):
                     f.write(f"{self.command} {path}{suffix}\n")
                 actions = self.routes.get(path)
                 return actions.pop(0) if actions else None
+
+        def copyfile(self, source, outputfile):
+            super().copyfile(source, outputfile)
+            outputfile.flush()
+            self.log_sent()
 
         def handle_action(self, action):
             if action is None:
@@ -138,6 +154,8 @@ def serve(sock, directory, cert, key, request_log, routes_file):
             self.send_header("Last-Modified", last_modified)
             self.end_headers()
             self.wfile.write(data[start:])
+            self.wfile.flush()
+            self.log_sent()
             return True
 
         def do_GET(self):
@@ -161,6 +179,7 @@ def serve(sock, directory, cert, key, request_log, routes_file):
         routes=routes,
         lock=threading.Lock(),
         request_log=request_log,
+        sent_log=sent_log,
     )
 
     class Server(http.server.ThreadingHTTPServer):
@@ -180,8 +199,8 @@ def serve(sock, directory, cert, key, request_log, routes_file):
 
 
 def main():
-    directory, cert, key, port_file, request_log = sys.argv[1:6]
-    routes_file = sys.argv[6] if len(sys.argv) > 6 else None
+    directory, cert, key, port_file, request_log, sent_log = sys.argv[1:7]
+    routes_file = sys.argv[7] if len(sys.argv) > 7 else None
 
     sock = listen()
     port = sock.getsockname()[1]
@@ -191,7 +210,7 @@ def main():
     os.replace(tmp, port_file)
     print(f"https_server.py: listening on port {port}", file=sys.stderr, flush=True)
 
-    serve(sock, directory, cert, key, request_log, routes_file)
+    serve(sock, directory, cert, key, request_log, sent_log, routes_file)
 
 
 if __name__ == "__main__":
