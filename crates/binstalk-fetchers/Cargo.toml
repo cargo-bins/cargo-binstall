@@ -15,14 +15,18 @@ async-trait = "0.1.88"
 binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader", default-features = false }
 binstalk-git-repo-api = { version = "0.5.54", path = "../binstalk-git-repo-api" }
 binstalk-types = { version = "0.11.0", path = "../binstalk-types" }
+base16 = "0.2.1"
 bytes = "1.11.1"
-compact_str = { version = "0.10.0" }
+compact_str = { version = "0.10.0", features = ["serde"] }
 either = "1.11.0"
 itertools = "0.15.0"
 leon = "3.0.0"
 leon-macros = "1.0.1"
 miette = "7.0.0"
 minisign-verify = "0.3.0"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.149"
+sha2 = "0.11.0"
 strum = "0.28.0"
 thiserror = "2.0.11"
 tokio = { version = "1.52.3", features = [

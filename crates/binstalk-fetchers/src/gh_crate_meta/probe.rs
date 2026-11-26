@@ -216,6 +216,10 @@ impl Probe {
         }
     }
 
+    pub(super) fn candidates(&self) -> &[Candidate] {
+        &self.candidates
+    }
+
     /// Check the candidates of the `pkg_url` and `pkg_fmt` a previous
     /// version was found with with GET, one at a time, before any other
     /// request. A hint that records what else the URL was rendered with has
@@ -256,7 +260,33 @@ impl Probe {
             return Ok(None);
         }
 
-        while let Some(i) = self.candidates.iter().position(is_hinted) {
+        self.check_one_at_a_time(is_hinted).await
+    }
+
+    /// Like [`Probe::resolve_hint`], for the candidates rendered from
+    /// `pkg_url`, whatever else they were rendered with.
+    pub(super) async fn resolve_pkg_url(
+        &mut self,
+        pkg_url: &str,
+    ) -> Result<Option<Resolved>, FetchError> {
+        let is_chosen = |candidate: &Candidate| *candidate.pkg_url == *pkg_url;
+        if self
+            .candidates
+            .iter()
+            .any(|candidate| candidate.is_private && is_chosen(candidate))
+        {
+            return Ok(None);
+        }
+        self.check_one_at_a_time(is_chosen).await
+    }
+
+    /// Check the candidates `is_chosen` picks with GET, one at a time, and
+    /// drop the ones not found.
+    async fn check_one_at_a_time(
+        &mut self,
+        is_chosen: impl Fn(&Candidate) -> bool,
+    ) -> Result<Option<Resolved>, FetchError> {
+        while let Some(i) = self.candidates.iter().position(&is_chosen) {
             let candidate = self.candidates.swap_remove(i);
             let resolved = self.shared.check_with_get(candidate).await?;
             if resolved.is_some() {
@@ -592,6 +622,7 @@ impl Shared {
             pkg_url: candidate.pkg_url,
             response,
             bin: None,
+            sha256: None,
         }
     }
 

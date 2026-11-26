@@ -136,6 +136,8 @@ pub(crate) struct PackageId {
     pub(crate) pkg_fmt: PkgFmt,
     /// The algorithm and public key its signature is checked with, if it is.
     pub(crate) signing: Option<(SigningAlgorithm, Box<str>)>,
+    /// The sha256 checksum it is checked against, if it is.
+    pub(crate) sha256: Option<[u8; 32]>,
 }
 
 /// Which release tags exist, from the repository's git server.

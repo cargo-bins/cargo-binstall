@@ -117,6 +117,21 @@ impl RepositoryHost {
         })
     }
 
+    /// The urls the `dist-manifest.json` uploaded by
+    /// [dist](https://github.com/axodotdev/cargo-dist) may be at, one for each
+    /// release path, if dist supports this host.
+    pub(crate) fn dist_manifest_url_templates(
+        self,
+    ) -> Option<impl Iterator<Item = Template<'static>> + Clone + 'static> {
+        (self == RepositoryHost::GitHub).then(|| {
+            GITHUB_RELEASE_PATHS.iter().map(|path| {
+                let mut template = path.clone();
+                template += Item::Text("/dist-manifest.json");
+                template
+            })
+        })
+    }
+
     pub fn get_default_pkg_url_template(
         self,
     ) -> Option<impl Iterator<Item = Template<'static>> + Clone + 'static> {

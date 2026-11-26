@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
-use binstalk_downloader::download::DownloadError;
+use binstalk_downloader::download::{DataVerifier, DownloadError};
 use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
 use binstalk_types::{
     cargo_toml_binstall::Strategy,
@@ -20,6 +20,12 @@ use crate::{
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
+
+mod dist_manifest;
+use dist_manifest::{
+    DIST_MANIFEST, DistManifest, MAX_CHECKSUM_FILE_SIZE, MAX_MANIFEST_SIZE, Sha256Source,
+    Sha256Verifier, download_release_asset, parse_sha256_file,
+};
 
 pub(crate) mod hosting;
 mod probe;
@@ -48,6 +54,10 @@ struct Resolved {
     target_arch: Option<&'static str>,
     /// The `pkg-url` that `url` was rendered from, see
     /// [`PkgUrlHint::pkg_url`].
+    ///
+    /// If `url` was found in a `dist-manifest.json`, it is the template of
+    /// that manifest's url instead, which versions without dist-manifest
+    /// support never match.
     pkg_url: Arc<str>,
     /// The response to the GET that found `url`, its body unread, which
     /// `fetch_and_extract` downloads instead of asking again.
@@ -55,6 +65,31 @@ struct Resolved {
     /// The binary it is the package of, if each binary is in its own
     /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
+    /// The sha256 checksum the package must have.
+    sha256: Option<[u8; 32]>,
+}
+
+/// Feeds the data to the signature verifier and to the sha256 checksum
+/// verifier, if any.
+struct Verifiers<'a, 'b> {
+    signature: &'a mut (dyn DataVerifier + 'b),
+    sha256: Option<&'a mut Sha256Verifier>,
+}
+
+impl DataVerifier for Verifiers<'_, '_> {
+    fn update(&mut self, data: &bytes::Bytes) {
+        self.signature.update(data);
+        if let Some(sha256) = &mut self.sha256 {
+            sha256.update(data);
+        }
+    }
+
+    /// Not used: each verifier is validated on its own, to tell which one
+    /// failed. Fails closed if called anyway.
+    fn validate(&mut self) -> bool {
+        debug_assert!(false, "validate each verifier on its own");
+        false
+    }
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -296,8 +331,9 @@ impl super::Fetcher for GhCrateMeta {
         }
 
         let candidates = self.candidates(&pkg_urls, pkg_fmts, None, repo, subcrate);
+        let manifest_candidates = self.dist_manifest_candidates(info, repo, subcrate);
         Ok(self
-            .probe(candidates, repo, subcrate)
+            .probe(candidates, manifest_candidates, repo, subcrate)
             .await?
             .map(|resolved| self.found(resolved)))
     }
@@ -358,14 +394,13 @@ impl GhCrateMeta {
             .collect()
     }
 
-    /// Check `candidates`, returning the first one found.
-    async fn probe(
+    async fn new_probe(
         &self,
         candidates: Vec<Candidate>,
         repo: Option<&str>,
         subcrate: Option<&str>,
-    ) -> Result<Option<Resolved>, FetchError> {
-        let mut probe = Probe::new(
+    ) -> Probe {
+        Probe::new(
             self.data.clone(),
             self.client.clone(),
             self.gh_api_client.clone(),
@@ -373,7 +408,46 @@ impl GhCrateMeta {
             subcrate,
             candidates,
         )
-        .await;
+        .await
+    }
+
+    /// Check `candidates`, returning the first one found.
+    ///
+    /// * `manifest_candidates` - The urls the `dist-manifest.json` of the
+    ///   release may be at, see [`GhCrateMeta::dist_manifest_candidates`].
+    ///   If one names the package, that is used instead.
+    async fn probe(
+        &self,
+        candidates: Vec<Candidate>,
+        manifest_candidates: Vec<Candidate>,
+        repo: Option<&str>,
+        subcrate: Option<&str>,
+    ) -> Result<Option<Resolved>, FetchError> {
+        let mut probe = self.new_probe(candidates, repo, subcrate).await;
+
+        // A release made by dist names the archive for each target in its
+        // `dist-manifest.json`, along with its checksum: look for that
+        // first. It is found the same way as the package, so the release
+        // tags and asset lists asked for it are reused for the package if
+        // there is none.
+        let mut manifest_probe = if manifest_candidates.is_empty() {
+            None
+        } else {
+            Some(self.new_probe(manifest_candidates, repo, subcrate).await)
+        };
+
+        let hint = self.data.pkg_url_hint(&self.target_data.target);
+
+        // If a previous version was found under one release path, then
+        // check for the manifest there first, with one request.
+        if let (Some(manifest_probe), Some(hint)) = (&mut manifest_probe, hint)
+            && let Some(template) = Self::hinted_dist_manifest(hint, manifest_probe.candidates())
+            && let Some(found) = manifest_probe.resolve_pkg_url(&template).await?
+            && let Some(resolved) = self.read_dist_manifest(found, repo, subcrate).await?
+        {
+            debug!(?resolved, "Found package in {DIST_MANIFEST}");
+            return Ok(Some(resolved));
+        }
 
         // Try how a previous version was found first, before any other
         // request: normally one URL, instead of all of them. See
@@ -381,7 +455,7 @@ impl GhCrateMeta {
         //
         // Only a hint that is still one of the crate's templates is used,
         // and only if it agrees with the crate's pkg-fmt, if any.
-        if let Some(hint) = self.data.pkg_url_hint(&self.target_data.target) {
+        if let Some(hint) = hint {
             if let Some(resolved) = probe.resolve_hint(hint).await? {
                 debug!(
                     ?resolved,
@@ -396,11 +470,216 @@ impl GhCrateMeta {
             );
         }
 
+        if let Some(manifest_probe) = manifest_probe
+            && let Some(found) = manifest_probe.resolve().await?
+            && let Some(resolved) = self.read_dist_manifest(found, repo, subcrate).await?
+        {
+            debug!(?resolved, "Found package in {DIST_MANIFEST}");
+            return Ok(Some(resolved));
+        }
+
         let resolved = probe.resolve().await?;
         if let Some(resolved) = &resolved {
             debug!(?resolved, "Winning URL found!");
         }
         Ok(resolved)
+    }
+
+    /// The urls the `dist-manifest.json` of the release may be at, if the
+    /// crate doesn't set `pkg-url` and dist supports its repository's host.
+    fn dist_manifest_candidates(
+        &self,
+        info: Option<&RepoInfo>,
+        repo: Option<&str>,
+        subcrate: Option<&str>,
+    ) -> Vec<Candidate> {
+        if self.target_data.meta.pkg_url.is_some() {
+            return Vec::new();
+        }
+        let Some(templates) =
+            info.and_then(|info| info.repository_host.dist_manifest_url_templates())
+        else {
+            return Vec::new();
+        };
+
+        let ctx = Context::from_data_with_repo(
+            &self.data,
+            &self.target_data.target,
+            &self.target_data.target_related_info,
+            None,
+            repo,
+            subcrate,
+        );
+        let mut buf = String::new();
+        templates
+            .filter(|template| subcrate.is_some() || !template.has_key("subcrate"))
+            .filter_map(|template| {
+                let url = ctx
+                    .render_url_with(&template)
+                    .inspect_err(|err| warn!("Failed to render url for {ctx:#?}: {err}"))
+                    .ok()?;
+                write_template(&template, &mut buf);
+                // The pkg-fmt is that of the archive the manifest names, it
+                // is only known once it is read.
+                Some(Candidate::new(
+                    url,
+                    PkgFmt::Bin,
+                    None,
+                    None,
+                    buf.as_str().into(),
+                ))
+            })
+            .collect()
+    }
+
+    /// The template of the manifest url that a previous version of the
+    /// crate was found under, if it was found from the manifest, or with a
+    /// default pkg-url of the same release path.
+    fn hinted_dist_manifest(hint: &PkgUrlHint, candidates: &[Candidate]) -> Option<Arc<str>> {
+        candidates
+            .iter()
+            .map(|candidate| &candidate.pkg_url)
+            .find(|template| {
+                let release_path = template
+                    .strip_suffix(DIST_MANIFEST)
+                    .expect("dist manifest url template ends with its filename");
+                *hint.pkg_url == ***template || hint.pkg_url.starts_with(release_path)
+            })
+            .cloned()
+    }
+
+    /// The API url of release asset `url` of a private repository.
+    async fn private_asset_url(
+        &self,
+        url: Url,
+        repo: Option<&str>,
+        subcrate: Option<&str>,
+    ) -> Result<Option<GhReleaseArtifactUrl>, FetchError> {
+        let candidate = Candidate::new(url, PkgFmt::Bin, None, None, "".into());
+        Ok(self
+            .new_probe(vec![candidate], repo, subcrate)
+            .await
+            .resolve()
+            .await?
+            .and_then(|found| found.gh_release_artifact_url))
+    }
+
+    /// Read the `dist-manifest.json` `found` by a [`Probe`], and find the
+    /// archive for the target in it.
+    async fn read_dist_manifest(
+        &self,
+        found: Resolved,
+        repo: Option<&str>,
+        subcrate: Option<&str>,
+    ) -> Result<Option<Resolved>, FetchError> {
+        let Resolved {
+            url,
+            gh_release_artifact_url,
+            is_repo_private,
+            pkg_url: manifest_template,
+            response,
+            ..
+        } = found;
+        let (client, gh_api_client) = (&self.client, &self.gh_api_client);
+
+        debug!("Reading {DIST_MANIFEST} at: '{url}'");
+        let artifact_url = gh_release_artifact_url.filter(|_| is_repo_private);
+        let Some(json) = download_release_asset(
+            client,
+            gh_api_client,
+            &url,
+            artifact_url,
+            response,
+            MAX_MANIFEST_SIZE,
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        let manifest = match DistManifest::parse(&json) {
+            Ok(manifest) => manifest,
+            Err(err) => {
+                warn!("Ignoring invalid {url}: {err}");
+                return Ok(None);
+            }
+        };
+
+        let (name, version, target) = (
+            &*self.data.name,
+            &*self.data.version,
+            &*self.target_data.target,
+        );
+        let Some(artifact) =
+            manifest.find_artifact(name, version, target, self.target_data.meta.pkg_fmt)
+        else {
+            debug!("{url} has no archive of {name}@{version} for {target}");
+            return Ok(None);
+        };
+
+        let pkg_url = url.join(artifact.filename)?;
+
+        let sha256 = match artifact.sha256 {
+            Some(Sha256Source::Inline(sha256)) => Some(sha256),
+            Some(Sha256Source::File(filename)) => {
+                let checksum_url = url.join(filename)?;
+                let artifact_url = if is_repo_private {
+                    self.private_asset_url(checksum_url.clone(), repo, subcrate)
+                        .await?
+                } else {
+                    None
+                };
+                let sha256 = if is_repo_private && artifact_url.is_none() {
+                    None
+                } else {
+                    download_release_asset(
+                        client,
+                        gh_api_client,
+                        &checksum_url,
+                        artifact_url,
+                        None,
+                        MAX_CHECKSUM_FILE_SIZE,
+                    )
+                    .await?
+                    .as_deref()
+                    .and_then(parse_sha256_file)
+                };
+                if sha256.is_none() {
+                    warn!("Cannot read the sha256 checksum of {pkg_url} from {checksum_url}");
+                }
+                sha256
+            }
+            None => None,
+        };
+
+        // The manifest lists the archive, so only a private repository, whose
+        // archive can only be downloaded with the API, needs to look it up.
+        let gh_release_artifact_url = if is_repo_private {
+            let artifact_url = self
+                .private_asset_url(pkg_url.clone(), repo, subcrate)
+                .await?;
+            if artifact_url.is_none() {
+                warn!("{pkg_url} listed in {url} does not exist");
+                return Ok(None);
+            }
+            artifact_url
+        } else {
+            None
+        };
+
+        Ok(Some(Resolved {
+            url: pkg_url,
+            pkg_fmt: artifact.pkg_fmt,
+            archive_suffix: Some(artifact.archive_suffix.to_string()),
+            repo: repo.map(CompactString::from),
+            subcrate: subcrate.map(CompactString::from),
+            gh_release_artifact_url,
+            is_repo_private,
+            target_arch: None,
+            pkg_url: manifest_template,
+            response: None,
+            bin: None,
+            sha256,
+        }))
     }
 
     /// Find the package of each binary of [`Data::with_bins`], for a
@@ -438,7 +717,7 @@ impl GhCrateMeta {
                 let repo = repo_owned.clone();
                 let subcrate = subcrate_owned.clone();
                 AutoAbortJoinHandle::spawn(async move {
-                    this.probe(candidates, repo.as_deref(), subcrate.as_deref())
+                    this.probe(candidates, Vec::new(), repo.as_deref(), subcrate.as_deref())
                         .await
                 })
             })
@@ -502,6 +781,7 @@ impl GhCrateMetaFound {
             url: resolved.url.clone(),
             pkg_fmt: resolved.pkg_fmt,
             signing,
+            sha256: resolved.sha256,
         })
     }
 
@@ -554,21 +834,42 @@ impl GhCrateMetaFound {
             "Downloading package",
         );
         let mut data_verifier = verifier.data_verifier()?;
+        let mut sha256_verifier = resolved.sha256.map(Sha256Verifier::new);
+        let mut verifiers = Verifiers {
+            signature: data_verifier.as_mut(),
+            sha256: sha256_verifier.as_mut(),
+        };
         let files = match resolved.gh_release_artifact_url.as_ref() {
             Some(artifact_url) if resolved.is_repo_private => fetcher
                 .gh_api_client
                 .download_artifact(artifact_url.clone())
                 .await?
-                .with_data_verifier(data_verifier.as_mut()),
+                .with_data_verifier(&mut verifiers),
             _ => resolved
                 .response
                 .take()
                 .map(Download::from)
                 .unwrap_or_else(|| Download::new(fetcher.client.clone(), resolved.url.clone()))
-                .with_data_verifier(data_verifier.as_mut()),
+                .with_data_verifier(&mut verifiers),
         }
         .and_extract(resolved.pkg_fmt, dst)
         .await?;
+
+        if let Some(sha256_verifier) = &mut sha256_verifier {
+            trace!("validating sha256 checksum");
+            if !sha256_verifier.validate() {
+                return Err(FetchError::ChecksumMismatch {
+                    url: Box::new(resolved.url.clone()),
+                    expected: sha256_verifier.expected_hex().into(),
+                    actual: sha256_verifier.actual_hex().unwrap_or_default().into(),
+                });
+            }
+            info!(
+                "Verified sha256 checksum of package '{}' from {DIST_MANIFEST}",
+                fetcher.data.name
+            );
+        }
+
         trace!("validating signature (if any)");
         if data_verifier.validate() {
             if let Some(info) = verifier.info() {
