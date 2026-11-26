@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     future::Future,
+    hash::{Hash, Hasher},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering::Relaxed},
@@ -33,11 +34,36 @@ pub use web::{ReleaseAssets, ReleaseAssetsPage};
 /// default retry duration if x-ratelimit-reset is not found in response header
 const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(10 * 60);
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+/// A GitHub repository.
+///
+/// GitHub ignores the case of owner and repository names, so does
+/// comparing and hashing it.
+#[derive(Clone, Debug)]
 pub struct GhRepo {
     pub owner: CompactString,
     pub repo: CompactString,
 }
+
+impl PartialEq for GhRepo {
+    fn eq(&self, other: &Self) -> bool {
+        self.owner.eq_ignore_ascii_case(&other.owner) && self.repo.eq_ignore_ascii_case(&other.repo)
+    }
+}
+
+impl Eq for GhRepo {}
+
+impl Hash for GhRepo {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for name in [&self.owner, &self.repo] {
+            // What `Hasher::write_length_prefix`, still unstable, does by
+            // default, so that the names are kept apart.
+            state.write_usize(name.len());
+            name.bytes()
+                .for_each(|b| state.write_u8(b.to_ascii_lowercase()));
+        }
+    }
+}
+
 impl GhRepo {
     pub fn repo_url(&self) -> Result<Url, url::ParseError> {
         Url::parse(&format_compact!(
@@ -406,6 +432,27 @@ mod test {
     use tracing_subscriber::{filter::LevelFilter, fmt::fmt};
 
     static DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(1);
+
+    #[test]
+    fn test_gh_repo_ignores_case() {
+        use std::hash::BuildHasher;
+
+        let repo = |owner: &str, repo: &str| GhRepo {
+            owner: owner.into(),
+            repo: repo.into(),
+        };
+        let a = repo("cargo-bins", "cargo-binstall");
+        let b = repo("Cargo-Bins", "Cargo-Binstall");
+        assert_eq!(a, b);
+        let hasher = std::collections::hash_map::RandomState::new();
+        assert_eq!(hasher.hash_one(&a), hasher.hash_one(&b));
+        assert_ne!(a, repo("cargo-bins", "cargo-quickinstall"));
+        // The names are kept apart.
+        assert_ne!(
+            hasher.hash_one(repo("ab", "c")),
+            hasher.hash_one(repo("a", "bc"))
+        );
+    }
 
     #[test]
     fn test_sanitize_auth_token() {

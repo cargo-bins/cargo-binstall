@@ -14,8 +14,8 @@ use tracing::{debug, info, trace, warn};
 use url::Url;
 
 use crate::{
-    Data, FetchError, Found, InvalidPkgFmtError, RepoInfo, SignaturePolicy, SignatureVerifier,
-    TargetDataErased, common::*,
+    Data, Extracted, FetchError, Found, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
+    SignatureVerifier, TargetDataErased, common::*, fetch_context::PackageId,
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -166,16 +166,22 @@ impl super::Fetcher for GhCrateMeta {
     }
 
     async fn find(self: Arc<Self>) -> Result<Option<Box<dyn Found>>, FetchError> {
-        let info = self.data.get_repo_info(&self.gh_api_client).await?;
+        let meta = &self.target_data.meta;
+        let pkg_url = meta.pkg_url.as_deref().map(Template::parse).transpose()?;
+
+        let info = if needs_repo_info(pkg_url.as_ref(), meta)? {
+            self.data.get_repo_info(&self.gh_api_client).await?
+        } else {
+            None
+        };
 
         let repo = info.map(|info| &info.repo);
         let subcrate = info.and_then(|info| info.subcrate.as_deref());
-        let is_repo_private = info.map(|info| info.is_private).unwrap_or_default();
 
         let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
-        let pkg_urls = if let Some(pkg_url) = self.target_data.meta.pkg_url.as_deref() {
-            let template = Template::parse(pkg_url)?;
+        let pkg_urls = if let Some(template) = pkg_url {
+            let pkg_url = meta.pkg_url.as_deref().expect("parsed above");
 
             if pkg_fmt.is_none()
                 && !template.has_any_of_keys(&["format", "archive-format", "archive-suffix"])
@@ -291,7 +297,6 @@ impl super::Fetcher for GhCrateMeta {
                         archive_suffix,
                         target_arch,
                         pkg_url_str.clone(),
-                        repo,
                     )
                 })
             })
@@ -303,9 +308,9 @@ impl super::Fetcher for GhCrateMeta {
             self.gh_api_client.clone(),
             repo,
             subcrate,
-            is_repo_private,
             candidates,
-        );
+        )
+        .await;
 
         // Try how a previous version was found first, before any other
         // request: normally one URL, instead of all of them. See
@@ -359,9 +364,25 @@ struct GhCrateMetaFound {
     resolved: Resolved,
 }
 
-#[async_trait::async_trait]
-impl Found for GhCrateMetaFound {
-    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
+impl GhCrateMetaFound {
+    /// What [`GhCrateMetaFound::download_and_extract`] downloads, and how
+    /// it verifies it.
+    fn package_id(&self) -> Result<PackageId, FetchError> {
+        let Self { fetcher, resolved } = self;
+        // The same verifier as `download_and_extract`.
+        let signing = match (fetcher.signature_policy, &fetcher.target_data.meta.signing) {
+            (SignaturePolicy::Ignore, _) | (SignaturePolicy::IfPresent, None) => None,
+            (SignaturePolicy::Require, None) => return Err(FetchError::MissingSignature),
+            (_, Some(config)) => Some((config.algorithm, config.pubkey.as_ref().into())),
+        };
+        Ok(PackageId {
+            url: resolved.url.clone(),
+            pkg_fmt: resolved.pkg_fmt,
+            signing,
+        })
+    }
+
+    async fn download_and_extract(&mut self, dst: &Path) -> Result<ExtractedFiles, FetchError> {
         let Self { fetcher, resolved } = self;
         trace!(?resolved, "preparing to fetch");
 
@@ -437,6 +458,17 @@ impl Found for GhCrateMetaFound {
             Err(FetchError::InvalidSignature)
         }
     }
+}
+
+#[async_trait::async_trait]
+impl Found for GhCrateMetaFound {
+    async fn fetch_and_extract(&mut self, dst: &Path) -> Result<Arc<Extracted>, FetchError> {
+        let id = self.package_id()?;
+        let context = Arc::clone(&self.fetcher.data.context);
+        context
+            .extract_once(id, dst, async || self.download_and_extract(dst).await)
+            .await
+    }
 
     fn pkg_fmt(&self) -> PkgFmt {
         self.resolved.pkg_fmt
@@ -486,6 +518,29 @@ impl Found for GhCrateMetaFound {
         } else {
             url.to_compact_string()
         }
+    }
+}
+
+/// Whether the crate's repository is needed: for the default templates, and
+/// to render `{ repo }` and `{ subcrate }` in `pkg-url` or the signature
+/// file, which go by the URL it redirects to. A `pkg-url` pointing elsewhere,
+/// e.g. at cargo-quickinstall, needs no request for it: each candidate is
+/// checked in its own repository, see [`Probe`].
+fn needs_repo_info(pkg_url: Option<&Template<'_>>, meta: &PkgMeta) -> Result<bool, FetchError> {
+    let uses_repo = |template: &Template<'_>| template.has_any_of_keys(&["repo", "subcrate"]);
+    let Some(pkg_url) = pkg_url else {
+        return Ok(true);
+    };
+    if uses_repo(pkg_url) {
+        return Ok(true);
+    }
+    match meta
+        .signing
+        .as_ref()
+        .and_then(|signing| signing.file.as_deref())
+    {
+        Some(file) => Ok(uses_repo(&Template::parse(file)?)),
+        None => Ok(false),
     }
 }
 
@@ -654,6 +709,7 @@ mod test {
     #[test]
     fn target_arch_aliases_are_tried_after_own_name() {
         let data = Data::new(
+            Default::default(),
             "redu".to_compact_string(),
             "0.2.12".to_compact_string(),
             Some("https://github.com/drdo/redu".to_string()),
@@ -704,6 +760,7 @@ mod test {
     fn defaults() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-binstall".to_compact_string(),
                 "1.2.3".to_compact_string(),
                 Some("https://github.com/ryankurte/cargo-binstall".to_string()),
@@ -719,6 +776,7 @@ mod test {
     fn no_repo_but_full_url() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-binstall".to_compact_string(),
                 "1.2.3".to_compact_string(),
                 None,
@@ -734,6 +792,7 @@ mod test {
     fn different_url() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "radio-sx128x".to_compact_string(),
                 "0.14.1-alpha.5".to_compact_string(),
                 Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
@@ -749,6 +808,7 @@ mod test {
     fn deprecated_format() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "radio-sx128x".to_compact_string(),
                 "0.14.1-alpha.5".to_compact_string(),
                 Some("https://github.com/rust-iot/rust-radio-sx128x".to_string()),
@@ -764,6 +824,7 @@ mod test {
     fn different_ext() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-watch".to_compact_string(),
                 "9.0.0".to_compact_string(),
                 Some("https://github.com/watchexec/cargo-watch".to_string()),
@@ -779,6 +840,7 @@ mod test {
     fn no_archive() {
         assert_context_rendering(
             &Data::new(
+                Default::default(),
                 "cargo-watch".to_compact_string(),
                 "9.0.0".to_compact_string(),
                 Some("https://github.com/watchexec/cargo-watch".to_string()),
@@ -832,5 +894,39 @@ mod test {
                 .unwrap(),
             r"{ a } \"
         );
+    }
+
+    #[test]
+    fn repo_info_is_needed() {
+        use crate::gh_crate_meta::{PkgMeta, needs_repo_info};
+        use binstalk_types::cargo_toml_binstall::{PkgSigning, SigningAlgorithm};
+
+        let needs = |pkg_url: Option<&str>, sig_file: Option<&str>| {
+            let meta = PkgMeta {
+                signing: sig_file.map(|file| PkgSigning {
+                    algorithm: SigningAlgorithm::Minisign,
+                    pubkey: "".into(),
+                    file: Some(file.to_owned()),
+                }),
+                ..Default::default()
+            };
+            let pkg_url = pkg_url.map(|pkg_url| Template::parse(pkg_url).unwrap());
+            needs_repo_info(pkg_url.as_ref(), &meta).unwrap()
+        };
+        const QUICKINSTALL: &str = "https://github.com/cargo-bins/cargo-quickinstall/releases/download/{ name }-{ version }/{ name }-{ version }-{ target }.tar.gz";
+
+        // The default templates.
+        assert!(needs(None, None));
+        assert!(needs(
+            Some("{ repo }/releases/download/v{ version }/a.tgz"),
+            None
+        ));
+        assert!(needs(Some("https://a.example/{ subcrate }/a.tgz"), None));
+        assert!(!needs(Some(QUICKINSTALL), None));
+        assert!(!needs(Some(QUICKINSTALL), Some("{ url }.sig")));
+        assert!(needs(
+            Some(QUICKINSTALL),
+            Some("{ repo }/releases/download/a.sig")
+        ));
     }
 }
