@@ -25,7 +25,7 @@ mod certificate;
 pub use certificate::Certificate;
 
 mod dns_resolver;
-pub use dns_resolver::DnsResolver;
+pub use dns_resolver::{DnsResolver, HickoryDnsError};
 
 mod proxy;
 pub use proxy::ClientBuilderExt;
