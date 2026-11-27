@@ -31,6 +31,11 @@ of:
         100 bytes of it before the connection is closed
     {"ignore_range": true}
         the whole file from DIR with a 200, even if a range was asked for
+    {"stall": 100}
+        the file from DIR with its full Content-Length, but only the first
+        100 bytes of it, then nothing more until the client hangs up
+    {"stall": null}
+        no response at all until the client hangs up
 
 Otherwise a `Range: bytes=N-` request for a file is answered with a 206 and
 the rest of the file from byte N, unless an `If-Range` doesn't match the
@@ -91,6 +96,14 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
             outputfile.flush()
             self.log_sent()
 
+        def wait_for_hang_up(self):
+            """Send nothing (more), until the client closes the connection."""
+            try:
+                while self.rfile.read(1):
+                    pass
+            except OSError:
+                pass
+
         def handle_action(self, action):
             if action is None:
                 return False
@@ -103,7 +116,10 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
             elif action.get("ignore_range"):
                 del self.headers["Range"]
                 return False
-            elif "truncate" in action:
+            elif action.get("stall", 0) is None:
+                self.wait_for_hang_up()
+                self.close_connection = True
+            elif "truncate" in action or "stall" in action:
                 path = self.translate_path(self.path)
                 with open(path, "rb") as f:
                     data = f.read()
@@ -115,8 +131,10 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
                 )
                 self.end_headers()
                 if self.command != "HEAD":
-                    self.wfile.write(data[: action["truncate"]])
+                    self.wfile.write(data[: action.get("truncate", action.get("stall"))])
                     self.wfile.flush()
+                    if "stall" in action:
+                        self.wait_for_hang_up()
                 self.close_connection = True
             else:
                 self.send_response(action["status"])

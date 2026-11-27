@@ -11,7 +11,7 @@ set -euxo pipefail
 source lib/https-server.sh
 
 serve_dir="$(mktemp -d 2>/dev/null || mktemp -d -t 'http-faults')"
-for name in retry bad-gateway ratelimit down moved-to truncated truncated-no-range; do
+for name in retry bad-gateway ratelimit down moved-to truncated truncated-no-range silent stalled; do
     cp signing/signing-test.tar "$serve_dir/$name.tar"
 done
 
@@ -33,7 +33,9 @@ cat >"$routes" <<'JSON'
         {"truncate": 1000},
         {"ignore_range": true}, {"ignore_range": true}, {"ignore_range": true},
         {"ignore_range": true}, {"ignore_range": true}, {"ignore_range": true}
-    ]
+    ],
+    "/silent.tar": [{"stall": null}],
+    "/stalled.tar": [{"stall": 1000}]
 }
 JSON
 
@@ -102,5 +104,14 @@ if [ -n "$(ls -A "$root/bin" 2>/dev/null)" ]; then
     ls -la "$root/bin"
     exit 1
 fi
+
+# A server that accepts the request and never answers it, and one that stops
+# sending partway through the body: given up on after Cargo's `http.timeout`
+# instead of waiting forever, then retried, and installed.
+CARGO_HTTP_TIMEOUT=2 install "$1" silent.tar
+[ "$(requests_for silent.tar)" -ge 2 ]
+
+CARGO_HTTP_TIMEOUT=2 install "$1" stalled.tar
+grep -E "^GET /stalled.tar Range: bytes=[1-9][0-9]*-$" "$HTTPS_SERVER_LOG"
 
 cat "$HTTPS_SERVER_LOG"

@@ -129,6 +129,13 @@ pub fn install_crates(
             .map_err(BinstallError::from)?;
     }
 
+    let timeout = http_timeout(http.as_ref().and_then(|http| http.timeout));
+    if !timeout.is_zero() {
+        client_builder = client_builder
+            .connect_timeout(timeout)
+            .read_timeout(timeout);
+    }
+
     let client = Client::from_builder(
         client_builder,
         rate_limit.duration,
@@ -468,6 +475,21 @@ fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> 
     file.read_to_end(&mut buffer)?;
 
     open_cert(&buffer).map_err(From::from).map(Some)
+}
+
+/// As in Cargo, how long to wait for a connection, and for a response or a
+/// download to make progress, before giving up on a request:
+/// `CARGO_HTTP_TIMEOUT`, then `http.timeout`, then `HTTP_TIMEOUT`, in seconds,
+/// and 30 seconds otherwise. 0 turns it off.
+fn http_timeout(config: Option<u64>) -> Duration {
+    let env = |name| env::var(name).ok().and_then(|secs| secs.parse().ok());
+
+    Duration::from_secs(
+        env("CARGO_HTTP_TIMEOUT")
+            .or(config)
+            .or_else(|| env("HTTP_TIMEOUT"))
+            .unwrap_or(30),
+    )
 }
 
 fn read_root_certs(
