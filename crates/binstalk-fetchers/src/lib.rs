@@ -369,11 +369,20 @@ fn is_github_com(url: &Url) -> bool {
 /// github.com answers `X.git` with a redirect to `X`, and a private `X.git`
 /// 404s like `X`, so asking for `X` right away saves a request either way.
 fn strip_github_dot_git(url: &mut Url) {
-    if is_github_com(url)
-        && let Some(path) = url.path().strip_suffix(".git")
-    {
-        let path = path.to_owned();
-        url.set_path(&path);
+    if !is_github_com(url) {
+        return;
+    }
+    let Some(name) = url
+        .path_segments()
+        .and_then(|mut segments| segments.next_back())
+        .and_then(|name| name.strip_suffix(".git"))
+        .map(CompactString::from)
+    else {
+        return;
+    };
+    // github.com repository names are `[A-Za-z0-9._-]`: nothing to escape.
+    if let Ok(mut segments) = url.path_segments_mut() {
+        segments.pop().push(&name);
     }
 }
 
