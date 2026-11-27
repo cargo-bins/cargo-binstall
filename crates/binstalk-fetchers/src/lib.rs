@@ -437,17 +437,6 @@ impl RepoInfo {
 
             let subcrate = RepoInfo::detect_subcrate(&mut repo, repository_host);
 
-            if is_hidden {
-                debug!("{repo} is private or doesn't exist, and there is no token to tell");
-                return Ok(RepoInfo {
-                    subcrate,
-                    repository_host,
-                    repo,
-                    is_private: false,
-                    is_hidden,
-                });
-            }
-
             if let Some(repo) = repo
                 .as_str()
                 .strip_suffix(".git")
@@ -490,7 +479,7 @@ impl RepoInfo {
                 subcrate,
                 repo,
                 repository_host,
-                is_hidden: false,
+                is_hidden,
             })
         }
 
@@ -835,24 +824,19 @@ mod test {
             .unwrap(),
             None,
         );
-        for repo in [
-            "https://github.com/cargo-bins/private-repo-for-testing.git",
-            "https://github.com/cargo-bins/this-repo-does-not-exist",
-        ] {
-            let data = Data::new(
-                Default::default(),
-                "cargo-binstall".into(),
-                "0.12.0".into(),
-                Some(repo.into()),
-            );
-            let info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
-            assert!(info.is_hidden, "{repo}");
-            assert_eq!(
-                info.repo.as_str(),
-                repo.strip_suffix(".git").unwrap_or(repo),
-                "{repo}"
-            );
-        }
+        let data = Data::new(
+            Default::default(),
+            "cargo-binstall".into(),
+            "0.12.0".into(),
+            Some("https://github.com/cargo-bins/private-repo-for-testing.git".into()),
+        );
+        let info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
+        assert!(info.is_hidden);
+        assert!(!info.is_private);
+        assert_eq!(
+            info.repo.as_str(),
+            "https://github.com/cargo-bins/private-repo-for-testing"
+        );
     }
 
     #[test]

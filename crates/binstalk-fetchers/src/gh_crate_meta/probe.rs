@@ -15,6 +15,7 @@
 
 use std::{
     collections::{BTreeSet, HashSet},
+    mem,
     sync::Arc,
 };
 
@@ -207,48 +208,34 @@ impl Probe {
 
         // Normally one or two repositories.
         let mut repos = Vec::<(Url, CandidateRepo)>::new();
-        for candidate in candidates.iter_mut() {
-            let Some(release_tag) = &candidate.release_tag else {
-                continue;
-            };
-            let repo = release_tag.repo.clone();
-            let info = match repos.iter().find(|(r, _)| *r == repo) {
-                Some((_, info)) => info.clone(),
-                None => {
-                    let info = match crate_repo {
-                        Some(info) if same_repo(&info.repo, &repo) => {
-                            CandidateRepo::new(&repo, Some(info))
-                        }
-                        _ => shared.other_repo_info(&repo).await,
-                    };
-                    repos.push((repo.clone(), info.clone()));
-                    info
+        let mut kept = Vec::with_capacity(candidates.len());
+        for mut candidate in mem::take(candidates) {
+            if let Some(release_tag) = &candidate.release_tag {
+                let repo = release_tag.repo.clone();
+                let info = match repos.iter().find(|(r, _)| *r == repo) {
+                    Some((_, info)) => info.clone(),
+                    None => {
+                        let info = match crate_repo {
+                            Some(info) if same_repo(&info.repo, &repo) => {
+                                CandidateRepo::new(&repo, Some(info))
+                            }
+                            _ => shared.other_repo_info(&repo).await,
+                        };
+                        repos.push((repo.clone(), info.clone()));
+                        info
+                    }
+                };
+                if info.is_hidden {
+                    continue;
                 }
-            };
-            if info.is_hidden {
-                continue;
+                if let Some(to) = &info.moved_to {
+                    candidate.move_to(&repo, to);
+                }
+                candidate.is_private = info.is_private;
             }
-            if let Some(to) = &info.moved_to {
-                candidate.move_to(&repo, to);
-            }
-            candidate.is_private = info.is_private;
+            kept.push(candidate);
         }
-
-        // Not moved above, so still in the repository looked up.
-        candidates.retain(|candidate| {
-            let is_hidden = candidate.release_tag.as_ref().is_some_and(|tag| {
-                repos
-                    .iter()
-                    .any(|(repo, info)| info.is_hidden && *repo == tag.repo)
-            });
-            if is_hidden {
-                debug!(
-                    "Dropping {}: github.com hides its repository",
-                    candidate.url
-                );
-            }
-            !is_hidden
-        });
+        *candidates = kept;
     }
 
     /// Check the candidates of the `pkg_url` and `pkg_fmt` a previous
