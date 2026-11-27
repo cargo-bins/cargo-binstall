@@ -3,7 +3,7 @@ description: 'Install cargo-binstall tool'
 
 inputs:
   version:
-    description: 'Version of cargo-binstall to install (e.g. 1.2.3 or v1.2.3). Defaults to the version of the action checkout, or the latest release if that version has no release.'
+    description: 'Version of cargo-binstall to install (e.g. 1.2.3 or v1.2.3). Defaults to the version of the checked-out action, else the latest release.'
     required: false
     default: ''
 

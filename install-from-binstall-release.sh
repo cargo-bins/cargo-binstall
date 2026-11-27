@@ -66,9 +66,8 @@ fi
 # shellcheck disable=SC3040
 (set -o pipefail 2> /dev/null) && set -o pipefail
 
-# With no version given, default to the version of this checkout, so a pinned action
-# installs the binstall it is pinned to. Skipped when the script runs outside a
-# checkout (e.g. piped from curl), and when that version has no release (yet).
+# Default to this checkout's version, so a pinned action installs what it is pinned to.
+# Without a Cargo.toml (piped from curl) or a release for that version, use latest.
 if [ -z "${BINSTALL_VERSION:-}" ]; then
     cargo_toml="$(dirname "$0")/crates/bin/Cargo.toml"
     if [ -f "$cargo_toml" ]; then

@@ -2,21 +2,19 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
 $tmpdir = $Env:TEMP
 $BINSTALL_VERSION = $Env:BINSTALL_VERSION
-# With no version given, default to the version of this checkout, so a pinned action
-# installs the binstall it is pinned to. Skipped when the script runs outside a
-# checkout, and when that version has no release (yet).
-if (-not $BINSTALL_VERSION) {
+# Default to this checkout's version, as in the shell script.
+if (-not $BINSTALL_VERSION -and $PSScriptRoot) {
     $cargo_toml = Join-Path $PSScriptRoot "crates\bin\Cargo.toml"
-    if ($PSScriptRoot -and (Test-Path $cargo_toml)) {
-        $match = Select-String -Path $cargo_toml -Pattern '^version = "(.*)"$' | Select-Object -First 1
-        if ($match) {
-            $checkout_version = $match.Matches[0].Groups[1].Value
-            try {
-                Invoke-WebRequest -Uri "https://github.com/cargo-bins/cargo-binstall/releases/tag/v$checkout_version" -UseBasicParsing -Method Head | Out-Null
-                $BINSTALL_VERSION = $checkout_version
-            } catch {
-                # no release for this version yet, fall back to latest
-            }
+    $match = if (Test-Path $cargo_toml) {
+        Select-String -Path $cargo_toml -Pattern '^version = "(.*)"$' | Select-Object -First 1
+    }
+    if ($match) {
+        $checkout_version = $match.Matches[0].Groups[1].Value
+        try {
+            Invoke-WebRequest -Uri "https://github.com/cargo-bins/cargo-binstall/releases/tag/v$checkout_version" -UseBasicParsing -Method Head | Out-Null
+            $BINSTALL_VERSION = $checkout_version
+        } catch {
+            # No release for this version yet, use latest
         }
     }
 }
