@@ -47,13 +47,22 @@ for bin in b3sum cargo-watch; do
     fi
 done
 
-# Each crate checks that the package exists with a GET request, and the one
-# that downloads it reads that response, the other one doesn't.
-downloads="$(grep -c '^/shared.tgz$' "$HTTPS_SERVER_SENT_LOG" || true)"
-if [ "$downloads" != 1 ]; then
-    echo "Expected shared.tgz to be downloaded once, got $downloads downloads"
-    exit 1
-fi
+check_one_download() {
+    # The GET that checks that the package exists is sent once for both
+    # crates, and is the download.
+    requests="$(grep -c '^GET /shared.tgz' "$HTTPS_SERVER_LOG" || true)"
+    if [ "$requests" != 1 ]; then
+        echo "Expected one GET of shared.tgz, got $requests"
+        exit 1
+    fi
+    downloads="$(grep -c '^/shared.tgz$' "$HTTPS_SERVER_SENT_LOG" || true)"
+    if [ "$downloads" != 1 ]; then
+        echo "Expected shared.tgz to be downloaded once, got $downloads downloads"
+        exit 1
+    fi
+}
+
+check_one_download
 
 # With a `bin-dir` that is the same file for both crates, installing it
 # leaves it where it is, so the crate that installs second still finds it.
@@ -75,8 +84,4 @@ for bin in b3sum cargo-watch; do
     fi
 done
 
-downloads="$(grep -c '^/shared.tgz$' "$HTTPS_SERVER_SENT_LOG" || true)"
-if [ "$downloads" != 1 ]; then
-    echo "Expected shared.tgz to be downloaded once, got $downloads downloads"
-    exit 1
-fi
+check_one_download

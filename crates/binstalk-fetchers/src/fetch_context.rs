@@ -44,6 +44,10 @@ pub struct FetchContext {
     repo_tags: Cells<Url, Mutex<Tags>>,
     release_assets_pages: Cells<GhRelease, OnceCell<ReleaseAssetsPage>>,
     release_artifacts: Cells<GhRelease, OnceCell<Option<ReleaseArtifacts>>>,
+    /// Whether a package exists, by its URL, from the GET that checked it,
+    /// so that crates in the same package send one GET for it, see
+    /// [`FetchContext::check_once`].
+    package_urls: Cells<Url, OnceCell<bool>>,
     /// Packages extracted so far, so that crates in the same package
     /// download and extract it once.
     packages: Cells<PackageId, OnceCell<Arc<Extracted>>>,
@@ -82,6 +86,28 @@ impl FetchContext {
         release: &GhRelease,
     ) -> Arc<OnceCell<Option<ReleaseArtifacts>>> {
         self.release_artifacts.get(release)
+    }
+
+    /// Check whether the package at `url` exists with `check`, unless it
+    /// was checked for another crate already, or is being checked: then
+    /// that answer is returned once ready.
+    ///
+    /// `check` gives whether it exists, and is the only one to see the
+    /// response it gets, to download the package from: the crates that
+    /// get the answer from another one download it, if at all, through
+    /// [`FetchContext::extract_once`], which the one that checked it
+    /// normally is in already.
+    ///
+    /// If checking it for another crate failed, it is tried again.
+    pub(crate) async fn check_once<F>(&self, url: &Url, check: F) -> Result<bool, FetchError>
+    where
+        F: AsyncFnOnce() -> Result<bool, FetchError>,
+    {
+        self.package_urls
+            .get(url)
+            .get_or_try_init(async || check().await)
+            .await
+            .copied()
     }
 
     /// Extract the package `id` to `dst` with `extract`, unless it was
@@ -221,5 +247,40 @@ mod test {
         tags.add(None);
         assert!(tags.unasked(["v1.0.0", "v2.0.0"]).is_empty());
         assert_eq!(tags.exists("v1.0.0"), None);
+    }
+
+    /// Crates in the same package check it once, and again only if that
+    /// failed.
+    #[tokio::test]
+    async fn test_check_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+
+        let context = FetchContext::default();
+        let url = Url::parse("https://example.com/pkg.tgz").unwrap();
+        let checks = AtomicUsize::new(0);
+
+        let failing = async || {
+            checks.fetch_add(1, Relaxed);
+            Err(FetchError::InvalidSignature)
+        };
+        assert!(context.check_once(&url, failing).await.is_err());
+
+        let check = async || {
+            checks.fetch_add(1, Relaxed);
+            tokio::task::yield_now().await;
+            Ok(true)
+        };
+        let (a, b) = tokio::join!(
+            context.check_once(&url, check),
+            context.check_once(&url, check)
+        );
+        assert!(a.unwrap() && b.unwrap());
+        assert_eq!(checks.load(Relaxed), 2);
+
+        let other = Url::parse("https://example.com/other.tgz").unwrap();
+        let missing = async || Ok(false);
+        assert!(!context.check_once(&other, missing).await.unwrap());
+        assert!(context.check_once(&url, check).await.unwrap());
+        assert_eq!(checks.load(Relaxed), 2);
     }
 }

@@ -565,11 +565,26 @@ impl Shared {
         }
     }
 
+    /// Check `candidate` with GET, which is sent once per run for crates in
+    /// the same package, see [`FetchContext::check_once`](crate::FetchContext::check_once).
     async fn check_with_get(&self, candidate: Candidate) -> Result<Option<Resolved>, FetchError> {
-        debug!("Checking for package at: '{}'", candidate.url);
-        Ok(get_if_exists(&self.client, &candidate.url)
-            .await?
-            .map(|response| self.resolved(candidate, None, Some(response))))
+        let mut response = None;
+        let exists = self
+            .data
+            .context
+            .check_once(&candidate.url, async || {
+                debug!("Checking for package at: '{}'", candidate.url);
+                response = get_if_exists(&self.client, &candidate.url).await?;
+                Ok(response.is_some())
+            })
+            .await?;
+        if exists && response.is_none() {
+            debug!(
+                "Package at '{}' was found for another crate already",
+                candidate.url
+            );
+        }
+        Ok(exists.then(|| self.resolved(candidate, None, response)))
     }
 
     /// * `response` - The response to the GET that found `candidate`, to
