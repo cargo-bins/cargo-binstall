@@ -397,8 +397,9 @@ impl GhCrateMeta {
     /// Check `candidates`, returning the first one found.
     ///
     /// * `dist_manifest_candidates` - The urls the `dist-manifest.json` of
-    ///   the release may be at, see [`GhCrateMeta::dist_manifest_candidates`].
-    ///   If one names the package, that is used instead.
+    ///   the release may be at on dist's simple host, see
+    ///   [`GhCrateMeta::dist_manifest_candidates`]. If one names the package,
+    ///   that is used instead.
     async fn probe(
         self: &Arc<Self>,
         candidates: Vec<Candidate>,
@@ -408,11 +409,9 @@ impl GhCrateMeta {
     ) -> Result<Option<Resolved>, FetchError> {
         let mut probe = self.new_probe(candidates, repo, subcrate).await;
 
-        // A release made by dist names the archive for each target in its
-        // `dist-manifest.json`, along with its checksum: look for that
-        // first. It is found the same way as the package, so the release
-        // tags and asset lists asked for it are reused for the package if
-        // there is none.
+        // A release that dist's config puts on a simple host names the
+        // archive for each target in its `dist-manifest.json`, along with
+        // its checksum: look for that first.
         let mut manifest_probe = if dist_manifest_candidates.is_empty() {
             None
         } else {
@@ -424,11 +423,10 @@ impl GhCrateMeta {
 
         let hint = self.data.pkg_url_hint(&self.target_data.target);
 
-        // If a previous version was found under one release path, then
-        // check for the manifest there first, with one request.
+        // If a previous version was found from the manifest, then check for
+        // it there first, with one request.
         if let (Some(manifest_probe), Some(hint)) = (&mut manifest_probe, hint)
-            && let Some(template) = Self::hinted_dist_manifest(hint, manifest_probe.candidates())
-            && let Some(found) = manifest_probe.resolve_pkg_url(&template).await?
+            && let Some(found) = manifest_probe.resolve_pkg_url(&hint.pkg_url).await?
             && let Some(resolved) = self.read_dist_manifest(found, repo, subcrate).await?
         {
             debug!(?resolved, "Found package in {DIST_MANIFEST}");
@@ -471,15 +469,14 @@ impl GhCrateMeta {
         Ok(resolved)
     }
 
-    /// The urls the `dist-manifest.json` of the release may be at, if the
-    /// crate doesn't set `pkg-url`:
+    /// The urls the `dist-manifest.json` of the release may be at, under
+    /// dist's `simple-download-url`, if the crate's dist config sets one,
+    /// its `hosting` doesn't leave out `simple` and the crate doesn't set
+    /// `pkg-url`.
     ///
-    /// - under dist's `simple-download-url`, if the crate's dist config
-    ///   sets one and its `hosting` doesn't leave out `simple`;
-    /// - under the GitHub release paths, if its repository is on GitHub.
-    ///
-    /// Ordered as `hosting` prefers them, the simple host first by default.
-    /// None if the config sets `dist = false`.
+    /// None if the url is under the crate's own repository on a host the
+    /// default `pkg-url` templates cover, e.g. its GitHub releases: they
+    /// find the package there without the manifest.
     fn dist_manifest_candidates(
         &self,
         info: Option<&RepoInfo>,
@@ -489,15 +486,9 @@ impl GhCrateMeta {
         if self.target_data.meta.pkg_url.is_some() {
             return Vec::new();
         }
-        let dist = self.data.dist.as_ref();
-        if dist.and_then(|dist| dist.dist) == Some(false) {
-            debug!("Not looking for {DIST_MANIFEST}: the crate sets `dist = false`");
+        let Some(simple_download_url) = self.dist_simple_download_url() else {
             return Vec::new();
-        }
-
-        let hosting = dist.and_then(|dist| dist.hosting.as_deref());
-        let position =
-            |host: &str| hosting.and_then(|hosting| hosting.iter().position(|h| h == host));
+        };
 
         let ctx = Context::from_data_with_repo(
             &self.data,
@@ -508,46 +499,41 @@ impl GhCrateMeta {
             subcrate,
         );
         let mut buf = String::new();
-        let mut candidate = |template: &Template<'_>| {
-            if subcrate.is_none() && template.has_key("subcrate") {
-                return None;
-            }
-            let url = ctx
-                .render_url_with(template)
-                .inspect_err(|err| warn!("Failed to render url for {ctx:#?}: {err}"))
-                .ok()?;
-            write_template(template, &mut buf);
-            // The pkg-fmt is that of the archive the manifest names, it is
-            // only known once it is read.
-            Some(Candidate::new(
-                url,
-                PkgFmt::Bin,
-                None,
-                None,
-                buf.as_str().into(),
-            ))
-        };
+        let covered_repo = info
+            .filter(|info| {
+                info.repository_host
+                    .get_default_pkg_url_template()
+                    .is_some()
+            })
+            .and(repo);
 
-        let simple: Vec<_> = self
-            .dist_simple_download_url()
-            .into_iter()
-            .flat_map(dist_simple_manifest_url_templates)
-            .filter_map(|template| candidate(&template))
-            .collect();
-        // GitHub, even if `hosting` leaves it out: dist still uploads there
-        // with `ci = "github"`.
-        let github: Vec<_> = info
-            .and_then(|info| info.repository_host.dist_manifest_url_templates())
-            .into_iter()
-            .flatten()
-            .filter_map(|template| candidate(&template))
-            .collect();
-
-        let (first, second) = match (position("simple"), position("github")) {
-            (Some(simple_pos), Some(github_pos)) if github_pos < simple_pos => (github, simple),
-            _ => (simple, github),
-        };
-        first.into_iter().chain(second).collect()
+        dist_simple_manifest_url_templates(simple_download_url)
+            .filter_map(|template| {
+                let url = ctx
+                    .render_url_with(&template)
+                    .inspect_err(|err| warn!("Failed to render url for {ctx:#?}: {err}"))
+                    .ok()?;
+                if let Some(repo) = covered_repo
+                    && is_under(&url, repo)
+                {
+                    debug!(
+                        "Not looking for {url}: it is under repository {repo}, which the \
+                        default pkg-urls already cover"
+                    );
+                    return None;
+                }
+                write_template(&template, &mut buf);
+                // The pkg-fmt is that of the archive the manifest names, it
+                // is only known once it is read.
+                Some(Candidate::new(
+                    url,
+                    PkgFmt::Bin,
+                    None,
+                    None,
+                    buf.as_str().into(),
+                ))
+            })
+            .collect()
     }
 
     /// dist's `simple-download-url` of the crate, unless its `hosting`
@@ -561,22 +547,6 @@ impl GhCrateMeta {
         dist.simple_download_url
             .as_deref()
             .filter(|_| uses_simple && dist.dist != Some(false))
-    }
-
-    /// The template of the manifest url that a previous version of the
-    /// crate was found under, if it was found from the manifest, or with a
-    /// default pkg-url of the same release path.
-    fn hinted_dist_manifest(hint: &PkgUrlHint, candidates: &[Candidate]) -> Option<Arc<str>> {
-        candidates
-            .iter()
-            .map(|candidate| &candidate.pkg_url)
-            .find(|template| {
-                let release_path = template
-                    .strip_suffix(DIST_MANIFEST)
-                    .expect("dist manifest url template ends with its filename");
-                *hint.pkg_url == ***template || hint.pkg_url.starts_with(release_path)
-            })
-            .cloned()
     }
 
     /// The API url of release asset `url` of a private repository.
@@ -1024,6 +994,14 @@ impl Found for GhCrateMetaFound {
 /// file, which go by the URL it redirects to. A `pkg-url` pointing elsewhere,
 /// e.g. at cargo-quickinstall, needs no request for it: each candidate is
 /// checked in its own repository, see [`Probe`].
+/// Whether `url` is `repo`, or in a directory under it.
+fn is_under(url: &Url, repo: &str) -> bool {
+    let repo = repo.trim_end_matches('/');
+    url.as_str()
+        .strip_prefix(repo)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
 fn needs_repo_info(pkg_url: Option<&Template<'_>>, meta: &PkgMeta) -> Result<bool, FetchError> {
     let uses_repo = |template: &Template<'_>| template.has_any_of_keys(&["repo", "subcrate"]);
     let Some(pkg_url) = pkg_url else {
@@ -1243,7 +1221,7 @@ impl<'c> Context<'c> {
 
 #[cfg(test)]
 mod test {
-    use super::{super::Data, Context, candidate_urls};
+    use super::{super::Data, Context, candidate_urls, is_under};
     use binstalk_types::cargo_toml_binstall::PkgFmt;
     use compact_str::ToCompactString;
     use leon::Template;
@@ -1515,6 +1493,32 @@ mod test {
                 .unwrap(),
             r"{ a } \"
         );
+    }
+
+    #[test]
+    fn url_is_under_repo() {
+        let url = |s| Url::parse(s).unwrap();
+        let repo = "https://github.com/cargo-bins/cargo-binstall";
+        assert!(is_under(
+            &url(
+                "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.0.0/dist-manifest.json"
+            ),
+            repo
+        ));
+        assert!(is_under(
+            &url(
+                "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.0.0/dist-manifest.json"
+            ),
+            "https://github.com/cargo-bins/cargo-binstall/"
+        ));
+        assert!(!is_under(
+            &url("https://github.com/cargo-bins/cargo-binstall-releases/v1.0.0/dist-manifest.json"),
+            repo
+        ));
+        assert!(!is_under(
+            &url("https://static.example.com/v1.0.0/dist-manifest.json"),
+            repo
+        ));
     }
 
     #[test]

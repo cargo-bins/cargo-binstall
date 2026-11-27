@@ -220,34 +220,6 @@ crate's directory (`foo`) and `{ repo }` is the repository itself
 - `{ repo }/releases/download/{ name }-{ version }/`
 <!-- END generated:pkg-url-paths-github -->
 
-##### Releases made by dist
-
-If a release made by [dist](https://github.com/axodotdev/cargo-dist) has the
-`dist-manifest.json` that dist uploads to it, under any of the paths above,
-`binstall` takes the archive for the target from it, instead of trying every
-filename above. The archive is then also checked against the sha256 checksum
-the manifest lists for it.
-
-This is only done when the crate doesn't set `pkg-url`: dist's default archive
-names and layout already match the defaults above, so nothing needs to be set
-for such a release.
-
-dist's own config is read too, from the published crate: `dist-workspace.toml`
-or `dist.toml` next to its `Cargo.toml`, `[workspace.metadata.dist]` in the
-`Cargo.toml` as written (cargo keeps it as `Cargo.toml.orig`), and
-`[package.metadata.dist]`. The crate's directory has to be the workspace root
-for the first two, so this is only the case for a single-package workspace,
-or with `--manifest-path`/`--git` pointing at the root. With it:
-
-- [`simple-download-url`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#simple-download-url)
-  is looked under too, with `{tag}` as each of `{ version }`, `v{ version }`,
-  `{ name }-v{ version }` and `{ name }-{ version }`. This happens before the
-  GitHub release paths, unless
-  [`hosting`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#hosting)
-  lists `github` first, or leaves out `simple`. The crate's repository may be
-  on any host, or not be set at all.
-- `dist = false` skips looking for `dist-manifest.json`.
-
 #### for GitLab
 
 <!-- BEGIN generated:pkg-url-paths-gitlab from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
@@ -301,6 +273,34 @@ Binary must be uploaded to the "File" page of your project, under the directory
 
 For all other situations, `binstall` does not provide a default `pkg-url` and
 you need to manually specify it.
+
+#### Releases made by dist on a simple host
+
+A release made by [dist](https://github.com/axodotdev/cargo-dist) on GitHub is
+found by the defaults above, as dist's archive names and layout match them.
+
+dist can also put a release on any static file server, set with
+[`simple-download-url`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#simple-download-url).
+`binstall` reads that from dist's config in the published crate:
+`dist-workspace.toml` or `dist.toml` next to its `Cargo.toml`,
+`[workspace.metadata.dist]` in the `Cargo.toml` as written (cargo keeps it as
+`Cargo.toml.orig`), or `[package.metadata.dist]`. The crate's directory has to
+be the workspace root for the first two, so this is only the case for a
+single-package workspace, or with `--manifest-path`/`--git` pointing at the
+root.
+
+If the crate doesn't set `pkg-url`, `binstall` then looks for the
+`dist-manifest.json` that dist writes under `simple-download-url`, with
+`{tag}` as each of `{ version }`, `v{ version }`, `{ name }-v{ version }` and
+`{ name }-{ version }`, before the defaults above. It takes the archive for
+the target from it, and checks the archive against the sha256 checksum the
+manifest lists for it. The crate's repository may be on any host, or not be set
+at all.
+
+It isn't looked for if `simple-download-url` is under the crate's own
+repository on one of the hosts above, as the defaults find the release there,
+if [`hosting`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#hosting)
+leaves out `simple`, or if the config sets `dist = false`.
 
 ### QuickInstall
 

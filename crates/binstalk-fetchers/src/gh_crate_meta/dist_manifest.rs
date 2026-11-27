@@ -1,9 +1,10 @@
 //! Find a package from the `dist-manifest.json` that
-//! [dist](https://github.com/axodotdev/cargo-dist) uploads to each release.
+//! [dist](https://github.com/axodotdev/cargo-dist) uploads to each release,
+//! for a release on the simple host of its `simple-download-url`.
 //!
 //! The manifest names the exact archive for every target, along with its
-//! sha256 checksum, so one request per candidate release tag replaces probing
-//! every default `pkg-url` template for every package format.
+//! sha256 checksum, so it is all that needs to be found on a host whose
+//! files can't be listed.
 //!
 //! Only the few fields needed are parsed, and unknown fields and kinds are
 //! ignored, so that new versions of dist don't break this.

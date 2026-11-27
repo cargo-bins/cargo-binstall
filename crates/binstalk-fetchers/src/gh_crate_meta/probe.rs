@@ -216,10 +216,6 @@ impl Probe {
         }
     }
 
-    pub(super) fn candidates(&self) -> &[Candidate] {
-        &self.candidates
-    }
-
     /// Check the candidates of the `pkg_url` and `pkg_fmt` a previous
     /// version was found with with GET, one at a time, before any other
     /// request. A hint that records what else the URL was rendered with has
