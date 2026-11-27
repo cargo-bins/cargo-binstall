@@ -539,12 +539,10 @@ fn filter_out_installed_crates<'a>(
                 None
             }
 
-            // A newer version that is still wanted could exist: any, or one
-            // the version req accepts as well.
-            (false, Some(curr_version), version_req)
-                if version_req
-                    .as_ref()
-                    .is_none_or(|version_req| version_req.matches(curr_version)) =>
+            // The installed version satisfies the version req, but a newer
+            // one might too.
+            (false, Some(curr_version), req)
+                if req.as_ref().is_none_or(|r| r.matches(curr_version)) =>
             {
                 let pkg_url_hint = pkg_url_hint(manifests, name);
                 Some(Ok((crate_name, Some(curr_version.clone()), pkg_url_hint)))
