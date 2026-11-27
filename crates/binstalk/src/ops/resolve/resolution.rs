@@ -18,6 +18,8 @@ use semver::Version;
 use tokio::process::Command;
 use tracing::{debug, error, info, warn};
 
+#[cfg(feature = "git")]
+use crate::ops::{CargoTomlFetchOverride, GitReference};
 use crate::{
     bins,
     errors::BinstallError,
@@ -294,21 +296,29 @@ impl ResolutionSource {
 
         let mut cmd = Command::new(cargo);
 
-        cmd.arg("install")
-            .arg(name)
-            .arg("--version")
-            .arg(version)
-            .kill_on_drop(true);
+        cmd.arg("install").arg(name).kill_on_drop(true);
 
         // Do not leak tokens to build scripts via environment variables.
         cmd.env_remove("GITHUB_TOKEN").env_remove("GH_TOKEN");
 
-        apply_registry_selection(
-            &mut cmd,
-            opts.cargo_install_registry.as_deref(),
-            opts.cargo_install_index.as_deref(),
-            opts.registry.min_publish_age(),
-        );
+        match &opts.cargo_toml_fetch_override {
+            // No `--version`: the reference decides what is built, and the
+            // version may differ from the one in the repository, see
+            // `PackageInfo::resolve`.
+            #[cfg(feature = "git")]
+            Some(CargoTomlFetchOverride::Git(git_url, reference)) => {
+                apply_git_selection(&mut cmd, git_url, reference)
+            }
+            _ => {
+                cmd.arg("--version").arg(version);
+                apply_registry_selection(
+                    &mut cmd,
+                    opts.cargo_install_registry.as_deref(),
+                    opts.cargo_install_index.as_deref(),
+                    opts.registry.min_publish_age(),
+                );
+            }
+        }
 
         if let Some(target) = target {
             cmd.arg("--target").arg(target);
@@ -453,6 +463,25 @@ fn apply_registry_selection(
     }
 }
 
+/// Make `cargo install` build the crate from the repository `--git` points
+/// to, instead of the crate with the same name in the registry.
+#[cfg(feature = "git")]
+fn apply_git_selection(
+    cmd: &mut Command,
+    git_url: &crate::helpers::git::GitUrl,
+    reference: &GitReference,
+) {
+    cmd.arg("--git").arg(git_url.to_string());
+
+    let (flag, value) = match reference {
+        GitReference::DefaultBranch => return,
+        GitReference::Branch(branch) => ("--branch", branch),
+        GitReference::Tag(tag) => ("--tag", tag),
+        GitReference::Rev(rev) => ("--rev", rev),
+    };
+    cmd.arg(flag).arg(value);
+}
+
 fn format_cmd(cmd: &Command) -> impl fmt::Display + '_ {
     let cmd = cmd.as_std();
 
@@ -504,6 +533,29 @@ mod tests {
             args,
             ["--index", "sparse+https://registry.example.com/index/"]
         );
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
+    fn test_apply_git_selection() {
+        let url = "https://github.com/cargo-bins/cargo-binstall";
+
+        for (reference, expected) in [
+            (GitReference::DefaultBranch, &[][..]),
+            (GitReference::Branch("main".into()), &["--branch", "main"]),
+            (GitReference::Tag("v1.0.0".into()), &["--tag", "v1.0.0"]),
+            (GitReference::Rev("abc123".into()), &["--rev", "abc123"]),
+        ] {
+            let mut cmd = Command::new("cargo");
+            apply_git_selection(&mut cmd, &url.parse().unwrap(), &reference);
+
+            let args: Vec<_> = cmd
+                .as_std()
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(args, [&["--git", url], expected].concat(), "{reference:?}");
+        }
     }
 
     #[test]
