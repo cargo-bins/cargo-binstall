@@ -5,6 +5,10 @@ use memmap2::Mmap;
 use tokio::task::spawn_blocking;
 
 use super::Incompatible;
+use crate::{
+    TARGET,
+    probe::{Probe, find},
+};
 
 /// Check whether the executable at `path` can run on this system, see
 /// the [module docs](super).
@@ -21,10 +25,17 @@ pub async fn check(path: &Path) -> Result<(), Incompatible> {
 fn check_blocking(path: &Path) -> Result<(), Incompatible> {
     // A static binary has no loader: target detection already established
     // that the kernel runs it.
-    let Some((Some(interp), needed)) = parse(path, |elf| (interp(elf), needed_glibc(elf))) else {
+    let Some((machine, Some(interp), needed)) = parse(path, |elf| {
+        (elf.header.e_machine, interp(elf), needed_glibc(elf))
+    }) else {
         return Ok(());
     };
-    if !Path::new(&interp).exists() {
+    // A foreign binary may run under an emulator that looks up its loader
+    // and libraries in a sysroot of its own.
+    if Some(machine) != find(TARGET).map(Probe::e_machine) {
+        return Ok(());
+    }
+    if matches!(Path::new(&interp).try_exists(), Ok(false)) {
         return Err(Incompatible::Loader { interp });
     }
 
@@ -76,6 +87,9 @@ fn glibc_version(name: &str) -> Option<Vec<u32>> {
 fn needed_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
     let required = elf.verneed.iter().flat_map(|section| section.iter());
     required
+        // Other glibc libraries define versions libc.so.6 doesn't, e.g.
+        // libm.so.6's GLIBC_2.40 in glibc 2.40.
+        .filter(|need| elf.dynstrtab.get_at(need.vn_file) == Some("libc.so.6"))
         .flat_map(|need| need.iter().collect::<Vec<_>>())
         // A weak version is only required if available.
         .filter(|aux| aux.vna_flags & goblin::elf::symver::VER_FLG_WEAK == 0)
@@ -169,6 +183,19 @@ mod tests {
                 interp: "/nonexistent/ld.so".into()
             })
         );
+    }
+
+    /// A binary for another architecture is not checked.
+    #[tokio::test]
+    #[cfg(target_env = "gnu")]
+    async fn foreign_machine_not_checked() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = patched_exe(dir.path(), b"GLIBC_2.", b"GLIBC_9.");
+        let mut bytes = std::fs::read(&exe).unwrap();
+        // `e_machine`, with a value no probe has.
+        bytes[18..20].fill(0xff);
+        std::fs::write(&exe, bytes).unwrap();
+        check(&exe).await.unwrap();
     }
 
     /// Targets given explicitly are not checked.

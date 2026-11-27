@@ -67,7 +67,7 @@ make_tar "$gnu" GLIBC_2. GLIBC_9.
 make_tar "$musl"
 root="$(mktemp -d)"
 binstall "$1" --root "$root" 2>&1 | tee "$root/log"
-grep -q "can't run on this system: it needs glibc 9\." "$root/log"
+grep -q "can't run on this system: it needs GLIBC_9\." "$root/log"
 cmp "$root/bin/signing-test" "$true_bin"
 
 # Given explicitly, the target is trusted: the gnu build is installed as is.

@@ -45,8 +45,8 @@ impl Class {
     pub(crate) fn ctx(self, endian: Endian) -> Ctx {
         Ctx::new(
             match self {
-                Class::Elf32 => Container::Little,
-                Class::Elf64 => Container::Big,
+                Class::Elf32 => Container::Little, // 32-bit
+                Class::Elf64 => Container::Big,    // 64-bit
             },
             match endian {
                 Endian::Little => scroll::Endian::Little,

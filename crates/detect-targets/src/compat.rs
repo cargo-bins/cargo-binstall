@@ -6,9 +6,10 @@
 //! musl binary linked dynamically on a glibc host), or a newer glibc than
 //! the host's. [`check`] reads both from the binary without running
 //! anything. Shared libraries other than glibc aren't checked: the user
-//! may be expected to install them. When something can't be determined,
-//! the binary passes. The check only does something on Linux and
-//! Android.
+//! may be expected to install them. Binaries for another architecture
+//! aren't checked either, as an emulator may give them a sysroot of their
+//! own. When something can't be determined, the binary passes. The check
+//! only does something on Linux and Android.
 
 use std::{error::Error, fmt};
 
@@ -32,8 +33,9 @@ cfg_select! {
 pub enum Incompatible {
     /// The binary's dynamic loader (its `PT_INTERP`) isn't installed.
     Loader { interp: String },
-    /// The binary needs a newer glibc than the host's, e.g. `needed` is
-    /// `2.39` and `available` is `2.35`.
+    /// The binary needs a newer `GLIBC_*` version than the host's
+    /// `libc.so.6` defines, e.g. `needed` is `2.39` and `available` is
+    /// `2.35`.
     Glibc { needed: String, available: String },
 }
 
@@ -47,7 +49,7 @@ impl fmt::Display for Incompatible {
             Self::Loader { interp } => write!(f, "its dynamic loader {interp} is missing"),
             Self::Glibc { needed, available } => write!(
                 f,
-                "it needs glibc {needed}, but this system has glibc {available}"
+                "it needs GLIBC_{needed}, but the newest this system has is GLIBC_{available}"
             ),
         }
     }
