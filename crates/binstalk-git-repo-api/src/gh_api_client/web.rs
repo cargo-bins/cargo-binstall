@@ -5,10 +5,10 @@
 //! They only work for public repositories, github.com answers 404 for a
 //! private one without the user's cookies.
 
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 use binstalk_downloader::remote;
-use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 use tracing::debug;
 use url::Url;
 
@@ -86,7 +86,7 @@ impl ReleaseAssetsPage {
     /// The list comes from a page meant for people, so an asset missing from
     /// it may still exist, and a listed one should be checked before it is
     /// used.
-    pub fn names(&self) -> Option<Vec<&str>> {
+    pub fn names(&self) -> Option<Vec<Cow<'_, str>>> {
         match &self.0 {
             Page::NotFound => Some(Vec::new()),
             Page::Found(assets) => Some(assets.names()),
@@ -184,11 +184,12 @@ impl ReleaseAssetList {
         })
     }
 
-    /// The names of all the assets it links to, in the order it does.
-    fn names(&self) -> Vec<&str> {
+    /// The names of all the assets it links to, in the order it does,
+    /// percent-decoded like the API's, should github.com encode any.
+    fn names(&self) -> Vec<Cow<'_, str>> {
         let path = release_download_path(&self.release.tag);
         let html = self.html.as_str();
-        let mut names: Vec<&str> = Vec::new();
+        let mut names: Vec<Cow<'_, str>> = Vec::new();
         for (i, _) in html.match_indices(path.as_str()) {
             if !is_link_to_repo(&html[..i], &self.release.repo) {
                 continue;
@@ -197,7 +198,13 @@ impl ReleaseAssetList {
             let Some(name) = rest.find('"').map(|end| &rest[..end]) else {
                 continue;
             };
-            if !name.is_empty() && !name.contains('/') && !names.contains(&name) {
+            if name.is_empty() || name.contains('/') {
+                continue;
+            }
+            let Ok(name) = percent_decode_str(name).decode_utf8() else {
+                continue;
+            };
+            if !names.contains(&name) {
                 names.push(name);
             }
         }

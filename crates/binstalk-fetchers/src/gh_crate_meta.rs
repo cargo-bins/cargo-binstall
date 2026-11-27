@@ -64,8 +64,7 @@ struct Resolved {
 /// [`GhCrateMeta::find_sibling`].
 struct SiblingPattern {
     release: GhRelease,
-    /// What is before and after the name in the asset name.
-    prefix: CompactString,
+    /// What is after the name in the asset name, which starts with it.
     suffix: CompactString,
     /// The URL, with a placeholder for the name.
     url: Url,
@@ -81,6 +80,9 @@ const SIBLING_PLACEHOLDER: &str = "binstall0sibling0name";
 
 /// The asset names the default templates `pkg_urls` render to for another
 /// crate than `data`'s, in the release tags not named after a crate.
+///
+/// Only archives: a single-file package is installed as the binary whatever
+/// it is, so another crate's would be installed under this crate's name.
 fn sibling_patterns(
     data: &Data,
     target: &str,
@@ -92,7 +94,7 @@ fn sibling_patterns(
 ) -> Vec<SiblingPattern> {
     let mut patterns = Vec::new();
     for ((pkg_url_str, pkg_url), pkg_fmt) in pkg_urls.iter().cartesian_product(pkg_fmts) {
-        if pkg_url.has_key("subcrate") {
+        if pkg_url.has_key("subcrate") || pkg_fmt.is_single_file() {
             continue;
         }
         for (url, archive_suffix, target_arch) in candidate_urls(
@@ -116,12 +118,11 @@ fn sibling_patterns(
             if release.tag.contains(SIBLING_PLACEHOLDER) {
                 continue;
             }
-            let Some((prefix, suffix)) = artifact_name.split_once(SIBLING_PLACEHOLDER) else {
+            let Some(suffix) = artifact_name.strip_prefix(SIBLING_PLACEHOLDER) else {
                 continue;
             };
             patterns.push(SiblingPattern {
                 release,
-                prefix: prefix.into(),
                 suffix: suffix.into(),
                 url,
                 pkg_fmt,
@@ -136,43 +137,40 @@ fn sibling_patterns(
 
 /// The name of the only other crate whose packages `releases` have, by
 /// matching their asset names against `patterns`, with the patterns its
-/// packages match. `None` if there is none, if the assets are named after
-/// several names, e.g. of several tools in a release, or if a release has a
-/// package of the crate's own for any target.
+/// packages match.
 ///
-/// * `own_name` - the crate's name, which is not looked for: its packages
-///   were looked for already. Packages named after one of its binaries are
-///   not excluded: wasm-bindgen-cli's are named after `wasm-bindgen`.
+/// Only a name that the crate's starts with, followed by `-` or `_`, is
+/// taken, like `nu` of `nu_plugin_inc`: not `coreutils` of `uu_ls`, whose
+/// package has only a multicall binary. `None` if there is none, if the
+/// assets are named after several such names, or if a release has a package
+/// of the crate's own for any target.
+///
+/// * `own_name` - the crate's name. Packages named after one of its
+///   binaries are not its own: wasm-bindgen-cli 0.2.87 and older, without
+///   `pkg-url`, are in packages named after its `wasm-bindgen` binary.
 /// * `releases` - the asset names of each release.
 fn sibling_name<'p>(
     own_name: &str,
     patterns: &'p [SiblingPattern],
     releases: &[(GhRelease, Vec<CompactString>)],
 ) -> Option<(CompactString, Vec<&'p SiblingPattern>)> {
+    let is_prefix_of = |name: &str, of: &str| {
+        of.strip_prefix(name)
+            .is_some_and(|rest| rest.starts_with(['-', '_']))
+    };
+
     // A release with a package of the crate's own, for any target, e.g.
     // only for musl while this is for gnu: it is for another target to find,
-    // not for this one to look past.
-    let is_own = |asset: &str| {
-        asset
-            .strip_prefix(own_name)
-            .is_some_and(|rest| rest.starts_with(['-', '_', '.']))
-    };
+    // not for this one to look past. All default file names start with the
+    // name, then `-` or `_`.
     if releases
         .iter()
-        .any(|(_, assets)| assets.iter().any(|asset| is_own(asset)))
+        .any(|(_, assets)| assets.iter().any(|asset| is_prefix_of(own_name, asset)))
     {
         return None;
     }
 
-    // The crate's own packages for this target, e.g.
-    // `nu-0.117.0-{ target }.tar.gz` of `nu`, which `{ name }-{ target }`
-    // matches as named after `nu-0.117.0`.
-    let own: Vec<String> = patterns
-        .iter()
-        .map(|pattern| format!("{}{own_name}{}", pattern.prefix, pattern.suffix))
-        .collect();
-
-    // Every other asset matching a pattern, with the name it is after.
+    // Every asset matching a pattern, with the name it is after.
     let matched: Vec<(&str, &str, &SiblingPattern)> = patterns
         .iter()
         .flat_map(|pattern| {
@@ -181,22 +179,15 @@ fn sibling_name<'p>(
                 .find(|(release, _)| *release == pattern.release)
                 .map(|(_, assets)| assets.as_slice())
                 .unwrap_or_default();
-            let own = &own;
             assets.iter().filter_map(move |asset| {
-                if own.iter().any(|own| own == asset) {
-                    return None;
-                }
-                let name = asset
-                    .strip_prefix(pattern.prefix.as_str())?
-                    .strip_suffix(pattern.suffix.as_str())?;
-                (!name.is_empty()).then_some((name, asset.as_str(), pattern))
+                let name = asset.strip_suffix(pattern.suffix.as_str())?;
+                is_prefix_of(name, own_name).then_some((name, asset.as_str(), pattern))
             })
         })
         .collect();
 
-    // The first name, if all the assets are named after it: not only after
-    // `nu-0.117.0`, say, which `{ name }-{ target }` matches too in
-    // `nu-0.117.0-{ target }`.
+    // The first name, if all the assets are named after it: not after both
+    // `nu` and `nu_plugin`, say.
     let (name, _, _) = matched.first()?;
     let is_of_name = |asset: &str| {
         matched
@@ -677,7 +668,12 @@ impl GhCrateMeta {
         }
         let page = context.release_assets_page(release);
         let names = page.get()?.names()?;
-        Some(names.into_iter().map(CompactString::from).collect())
+        Some(
+            names
+                .iter()
+                .map(|name| CompactString::from(&**name))
+                .collect(),
+        )
     }
 
     /// Find the package of each binary of [`Data::with_bins`], for a
@@ -1559,18 +1555,19 @@ mod test {
     }
 
     /// wasm-bindgen-cli's binaries are in packages named after one of them,
-    /// `wasm-bindgen`, which is no reason not to use them.
+    /// `wasm-bindgen`, which is no reason not to use them. 0.2.87 is its last
+    /// version without `pkg-url`.
     #[test]
     fn sibling_package_named_after_bin() {
         let assets = [
-            "wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz",
-            "wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz.sha256",
-            "wasm-bindgen-0.2.130-x86_64-pc-windows-msvc.tar.gz",
+            "wasm-bindgen-0.2.87-x86_64-unknown-linux-musl.tar.gz",
+            "wasm-bindgen-0.2.87-x86_64-unknown-linux-musl.tar.gz.sha256",
+            "wasm-bindgen-0.2.87-x86_64-pc-windows-msvc.tar.gz",
         ];
         let find = |target| {
             sibling_in(
-                "wasm-bindgen/wasm-bindgen",
-                "0.2.130",
+                "rustwasm/wasm-bindgen",
+                "0.2.87",
                 "wasm-bindgen-cli",
                 target,
                 &assets,
@@ -1581,8 +1578,8 @@ mod test {
             Some((
                 "wasm-bindgen".into(),
                 vec![
-                    "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.130/\
-                    wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz"
+                    "https://github.com/rustwasm/wasm-bindgen/releases/download/0.2.87/\
+                    wasm-bindgen-0.2.87-x86_64-unknown-linux-musl.tar.gz"
                         .into()
                 ]
             ))
@@ -1614,15 +1611,27 @@ mod test {
         assert_eq!(sibling("nu_plugin_inc", "aarch64-apple-darwin", &[]), None);
         // The crate's own packages were looked for already.
         assert_eq!(sibling("nu", GNU, &[]), None);
-        // Several other crates have packages: which one has the binaries is
-        // not known.
+        // Several names the crate's starts with have packages: which one has
+        // the binaries is not known.
+        assert_eq!(
+            sibling(
+                "nu_plugin_inc",
+                GNU,
+                &[&format!("nu_plugin-0.117.0-{GNU}.tgz")]
+            ),
+            None
+        );
+        // Other tools' packages don't matter.
         assert_eq!(
             sibling(
                 "nu_plugin_inc",
                 GNU,
                 &[&format!("nu-lsp-0.117.0-{GNU}.tgz")]
             ),
-            None
+            Some((
+                "nu".into(),
+                vec![format!("{download}/nu-0.117.0-{GNU}.tar.gz")]
+            ))
         );
         // The crate has a package of its own, for another target: that
         // target finds it.
@@ -1689,12 +1698,12 @@ mod test {
         let find = |repo: &str, context: Arc<FetchContext>| {
             let data = Data::new(
                 context,
-                "sibling-package-test".into(),
+                "cargo-binstall-sibling-test".into(),
                 "1.28.0".into(),
                 Some(repo.into()),
             )
             .with_bins(vec![BinInfo {
-                name: "sibling-package-test".into(),
+                name: "cargo-binstall-sibling-test".into(),
                 optional: false,
             }]);
             GhCrateMeta::new(
@@ -1710,7 +1719,7 @@ mod test {
 
         let context = Arc::new(FetchContext::default());
         let found = find(
-            "https://github.com/cargo-bins/cargo-binstall/tree/main/crates/sibling-package-test",
+            "https://github.com/cargo-bins/cargo-binstall/tree/main/crates/cargo-binstall-sibling-test",
             Arc::clone(&context),
         )
         .await
@@ -1732,5 +1741,47 @@ mod test {
         .await
         .unwrap();
         assert!(found.is_none());
+    }
+
+    /// Not the package of a crate whose name the crate's doesn't start with:
+    /// uutils' `coreutils-{ version }-{ target }.tar.gz` has only the
+    /// multicall `coreutils`, not `ls` of crate `uu_ls`.
+    #[test]
+    fn sibling_package_not_unrelated() {
+        const GNU: &str = "x86_64-unknown-linux-gnu";
+        let assets = [format!("coreutils-0.13.0-{GNU}.tar.gz")];
+        let assets: Vec<&str> = assets.iter().map(String::as_str).collect();
+        assert_eq!(
+            sibling_in("uutils/coreutils", "0.13.0", "uu_ls", GNU, &assets),
+            None
+        );
+    }
+
+    /// A single-file package is installed as the binary whatever it is, so
+    /// another crate's is never used.
+    #[test]
+    fn sibling_package_not_single_file() {
+        const GNU: &str = "x86_64-unknown-linux-gnu";
+        for asset in [
+            format!("foo-{GNU}"),
+            format!("foo-v1.2.0-{GNU}.gz"),
+            format!("foo-1.2.0-{GNU}.exe"),
+        ] {
+            assert_eq!(
+                sibling_in("foo/foo", "1.2.0", "foo-helper", GNU, &[&asset]),
+                None,
+                "{asset}"
+            );
+        }
+        assert!(
+            sibling_in(
+                "foo/foo",
+                "1.2.0",
+                "foo-helper",
+                GNU,
+                &[&format!("foo-1.2.0-{GNU}.tar.gz")]
+            )
+            .is_some()
+        );
     }
 }
