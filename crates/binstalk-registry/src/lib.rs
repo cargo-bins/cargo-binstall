@@ -532,6 +532,19 @@ mod test {
 
     #[cfg(feature = "git")]
     #[test]
+    fn test_git_registry_cargo_install_index_arg_keeps_password() {
+        for index in [
+            "https://user:secret@example.com/index.git",
+            "https://token@example.com/index.git",
+            "https://github.com/rust-lang/crates.io-index",
+        ] {
+            let registry: Registry = index.parse().unwrap();
+            assert_eq!(registry.cargo_install_index_arg(), index);
+        }
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
     fn test_git_registry_crate_source() {
         let registry: Registry = "file:///tmp/index".parse().unwrap();
         let source = registry.crate_source().unwrap();
