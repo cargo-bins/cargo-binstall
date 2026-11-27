@@ -125,47 +125,21 @@ impl RepositoryHost {
             filenames,
             suffix,
         } = self.default_pkg_urls()?;
-        Some(apply_filenames_to_paths(paths, filenames, suffix, "name"))
-    }
-
-    /// The default `pkg-url` templates for a package named after one of the
-    /// crate's binaries instead of the crate: the file names have `{ bin }`
-    /// in place of `{ name }`, e.g. `fd-v{ version }-{ target }.tar.gz` of
-    /// crate `fd-find`.
-    ///
-    /// The release paths keep `{ name }`: release tags are named after the
-    /// crate, if at all.
-    pub fn get_default_bin_pkg_url_template(
-        self,
-    ) -> Option<impl Iterator<Item = Template<'static>> + Clone + 'static> {
-        let DefaultPkgUrls {
-            paths,
-            filenames,
-            suffix,
-        } = self.default_pkg_urls()?;
-        Some(apply_filenames_to_paths(paths, filenames, suffix, "bin"))
+        Some(apply_filenames_to_paths(paths, filenames, suffix))
     }
 }
 
-/// * `name_key` - the key the file names have in place of `{ name }`.
 fn apply_filenames_to_paths(
     paths: &'static [Template<'static>],
     filenames: &'static [&'static [Template<'static>]],
     suffix: &'static str,
-    name_key: &'static str,
 ) -> impl Iterator<Item = Template<'static>> + Clone + 'static {
     filenames
         .iter()
         .flat_map(|fs| fs.iter())
         .cartesian_product(paths.iter())
         .map(move |(filename, path)| {
-            let mut template = path.clone();
-            for item in filename.items.iter() {
-                match item {
-                    Item::Key("name") => template += Item::Key(name_key),
-                    item => template += item,
-                }
-            }
+            let mut template = path.clone() + filename;
             template += Item::Text(suffix);
             template
         })
@@ -230,31 +204,6 @@ mod tests {
                 "{doc} was out of date and has been regenerated, commit the changes"
             );
         }
-    }
-
-    #[test]
-    fn bin_pkg_url_templates() {
-        let templates = RepositoryHost::GitHub
-            .get_default_bin_pkg_url_template()
-            .unwrap()
-            .map(|template| render(&template))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            templates.len(),
-            RepositoryHost::GitHub
-                .get_default_pkg_url_template()
-                .unwrap()
-                .count()
-        );
-        // The release tags are still named after the crate.
-        assert!(templates.contains(
-            &"{ repo }/releases/download/{ name }-v{ version }/{ bin }-{ target }-v{ version }{ archive-suffix }"
-                .to_owned()
-        ));
-        assert!(templates.iter().all(|template| {
-            let filename = template.rsplit_once('/').unwrap().1;
-            filename.starts_with("{ bin }") && !filename.contains("{ name }")
-        }));
     }
 
     #[test]

@@ -56,6 +56,9 @@ pub(super) struct Candidate {
     /// Whether it is in a private GitHub repository, see
     /// [`Probe::find_repos`].
     is_private: bool,
+    /// What `{ name }` was rendered as, if not the crate's name, see
+    /// [`PkgUrlHint::name`].
+    name: Option<CompactString>,
 }
 
 impl Candidate {
@@ -70,12 +73,19 @@ impl Candidate {
             release_tag: ReleaseTag::of_asset(&url),
             gh_artifact: GhReleaseArtifact::try_extract_from_url(&url),
             is_private: false,
+            name: None,
             url,
             pkg_fmt,
             archive_suffix,
             target_arch,
             pkg_url,
         }
+    }
+
+    /// `{ name }` was rendered as `name`, if not the crate's name.
+    pub(super) fn with_name(mut self, name: Option<&str>) -> Self {
+        self.name = name.map(CompactString::from);
+        self
     }
 
     /// Move the release asset from repository `from`, its
@@ -235,8 +245,10 @@ impl Probe {
         &mut self,
         hint: &PkgUrlHint,
     ) -> Result<Option<Resolved>, FetchError> {
+        let crate_name = &self.shared.data.name;
         let is_hinted = |candidate: &Candidate| {
             candidate.pkg_fmt == hint.pkg_fmt
+                && *candidate.name.as_ref().unwrap_or(crate_name) == hint.name
                 && *candidate.pkg_url == *hint.pkg_url
                 && hint.rendered_with.as_ref().is_none_or(|rendered_with| {
                     candidate.archive_suffix == rendered_with.archive_suffix.as_deref()
@@ -587,6 +599,7 @@ impl Shared {
             pkg_url: candidate.pkg_url,
             response,
             bin: None,
+            name: candidate.name,
         }
     }
 
@@ -689,10 +702,10 @@ pub(super) mod test {
         Candidate::new(url, pkg_fmt, archive_suffix, target_arch, pkg_url.into())
     }
 
-    /// A hint of [`TEMPLATE`].
+    /// A hint of [`TEMPLATE`], for [`new_probe`]'s crate.
     fn hint(pkg_fmt: PkgFmt, rendered_with: Option<RenderedWith>) -> PkgUrlHint {
         PkgUrlHint {
-            name: "cargo-binstall".into(),
+            name: "test".into(),
             pkg_url: TEMPLATE.into(),
             pkg_fmt,
             rendered_with,

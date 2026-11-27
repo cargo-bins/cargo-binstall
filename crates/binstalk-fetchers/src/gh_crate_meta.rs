@@ -24,7 +24,6 @@ pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
 pub(crate) mod hosting;
 mod probe;
 
-use hosting::RepositoryHost;
 use probe::{Candidate, Probe};
 
 pub struct GhCrateMeta {
@@ -56,6 +55,8 @@ struct Resolved {
     /// The binary it is the package of, if each binary is in its own
     /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
+    /// What `{ name }` was rendered as in `url`, if not the crate's name.
+    name: Option<CompactString>,
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -98,10 +99,13 @@ pub(crate) fn target_arch_aliases(target_arch: &str) -> &'static [&'static str] 
 /// All URLs `pkg_url` may render to for this target, with the archive suffix
 /// and the `{ target-arch }` alias each was rendered with.
 ///
+/// * `name` - what to render `{ name }` as instead of the crate's name, if
+///   anything.
 /// * `bin` - the binary to render `{ bin }` as, if any.
 #[allow(clippy::too_many_arguments)]
 fn candidate_urls(
     data: &Data,
+    name: Option<&str>,
     bin: Option<&str>,
     target: &str,
     target_related_info: &dyn leon::Values,
@@ -114,6 +118,9 @@ fn candidate_urls(
         let mut ctx =
             Context::from_data_with_repo(data, target, target_related_info, ext, repo, subcrate);
         ctx.target_arch = target_arch;
+        if let Some(name) = name {
+            ctx.name = name;
+        }
         ctx.bin = bin;
         match ctx.render_url_with(pkg_url) {
             Ok(url) => Some((url, ext, target_arch)),
@@ -156,31 +163,6 @@ fn candidate_urls(
         .collect()
 }
 
-/// Only the templates without key `subcrate`, unless the crate is in a
-/// subdirectory of its repository.
-fn filter_subcrate<'t>(
-    templates: impl Iterator<Item = Template<'static>> + 't,
-    subcrate: Option<&str>,
-) -> impl Iterator<Item = Template<'t>> + 't {
-    let has_subcrate = subcrate.is_some();
-    templates
-        .map(Template::cast)
-        .filter(move |template| has_subcrate || !template.has_key("subcrate"))
-}
-
-/// Every pkg-url, with how it is written for `PkgUrlHint::pkg_url`.
-fn with_written_form<'t>(
-    pkg_urls: &mut dyn Iterator<Item = Template<'t>>,
-) -> Vec<(Arc<str>, Template<'t>)> {
-    let mut buf = String::new();
-    pkg_urls
-        .map(|pkg_url| {
-            write_template(&pkg_url, &mut buf);
-            (buf.as_str().into(), pkg_url)
-        })
-        .collect()
-}
-
 #[async_trait::async_trait]
 impl super::Fetcher for GhCrateMeta {
     fn new(
@@ -219,7 +201,7 @@ impl super::Fetcher for GhCrateMeta {
         // Whether the default templates on github.com are used.
         let mut is_default_on_github_com = false;
 
-        let mut pkg_urls = if let Some(template) = pkg_url {
+        let pkg_urls = if let Some(template) = pkg_url {
             let pkg_url = meta.pkg_url.as_deref().expect("parsed above");
             is_per_bin = template.has_key("bin");
 
@@ -269,7 +251,16 @@ impl super::Fetcher for GhCrateMeta {
         {
             if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
                 is_default_on_github_com = repo.domain() == Some("github.com");
-                Either::Right(filter_subcrate(pkg_urls, subcrate))
+                let has_subcrate = subcrate.is_some();
+
+                Either::Right(
+                    pkg_urls
+                        .map(Template::cast)
+                        // If subcrate is Some, then all templates will be included.
+                        // Otherwise, only templates without key "subcrate" will be
+                        // included.
+                        .filter(move |template| has_subcrate || !template.has_key("subcrate")),
+                )
             } else {
                 warn!(
                     concat!(
@@ -302,20 +293,29 @@ impl super::Fetcher for GhCrateMeta {
             Either::Right(PkgFmt::iter())
         };
 
-        let pkg_urls = with_written_form(&mut pkg_urls);
+        // Every pkg-url, with how it is written for `PkgUrlHint::pkg_url`.
+        let mut buf = String::new();
+        let pkg_urls: Vec<(Arc<str>, Template<'_>)> = pkg_urls
+            .map(|pkg_url| {
+                write_template(&pkg_url, &mut buf);
+                (buf.as_str().into(), pkg_url)
+            })
+            .collect();
 
         if is_per_bin {
             return self.find_per_bin(&pkg_urls, pkg_fmts, repo, subcrate).await;
         }
 
-        let mut candidates = self.candidates(&pkg_urls, pkg_fmts.clone(), None, repo, subcrate);
+        let mut candidates =
+            self.candidates(&pkg_urls, pkg_fmts.clone(), None, None, repo, subcrate);
 
-        // Then the default templates for a package named after the only
-        // binary to install, if it is named otherwise than the crate. They
-        // are assets of the same releases, so the probe checks them with the
-        // same tags and asset lists, after the crate's own, and the hint of
-        // either first. Before any other fetcher, so that the upstream
-        // package wins over third-party ones such as cargo-quickinstall's.
+        // Then the default templates with the name of the only binary to
+        // install as `{ name }`, if it is named otherwise than the crate.
+        // They are mostly assets of the same releases, so the probe checks
+        // them with the same tags and asset lists, after the crate's own, and
+        // the hint of either first. Before any other fetcher, so that the
+        // upstream package wins over third-party ones such as
+        // cargo-quickinstall's.
         //
         // Only on github.com, whose asset lists tell whether they exist
         // without a request. On other hosts each would be checked with a
@@ -323,13 +323,12 @@ impl super::Fetcher for GhCrateMeta {
         if let [bin] = &self.data.bins[..]
             && is_default_on_github_com
             && bin.name != self.data.name
-            && let Some(bin_pkg_urls) = RepositoryHost::GitHub.get_default_bin_pkg_url_template()
         {
-            let bin_pkg_urls = with_written_form(&mut filter_subcrate(bin_pkg_urls, subcrate));
             candidates.extend(self.candidates(
-                &bin_pkg_urls,
+                &pkg_urls,
                 pkg_fmts,
                 Some(&bin.name),
+                None,
                 repo,
                 subcrate,
             ));
@@ -360,11 +359,14 @@ impl GhCrateMeta {
 
     /// Every URL the package may be at, rendered once.
     ///
+    /// * `name` - what to render `{ name }` as instead of the crate's name, if
+    ///   anything.
     /// * `bin` - the binary to render `{ bin }` as, if any.
     fn candidates(
         &self,
         pkg_urls: &[(Arc<str>, Template<'_>)],
         pkg_fmts: impl Iterator<Item = PkgFmt> + Clone,
+        name: Option<&str>,
         bin: Option<&str>,
         repo: Option<&str>,
         subcrate: Option<&str>,
@@ -375,6 +377,7 @@ impl GhCrateMeta {
             .flat_map(|((pkg_url_str, pkg_url), pkg_fmt)| {
                 candidate_urls(
                     &self.data,
+                    name,
                     bin,
                     &self.target_data.target,
                     &self.target_data.target_related_info,
@@ -392,6 +395,7 @@ impl GhCrateMeta {
                         target_arch,
                         pkg_url_str.clone(),
                     )
+                    .with_name(name)
                 })
             })
             .collect()
@@ -471,8 +475,14 @@ impl GhCrateMeta {
         let handles: Vec<_> = bins
             .iter()
             .map(|bin| {
-                let candidates =
-                    self.candidates(pkg_urls, pkg_fmts.clone(), Some(&bin.name), repo, subcrate);
+                let candidates = self.candidates(
+                    pkg_urls,
+                    pkg_fmts.clone(),
+                    None,
+                    Some(&bin.name),
+                    repo,
+                    subcrate,
+                );
                 let this = Arc::clone(self);
                 let repo = repo_owned.clone();
                 let subcrate = subcrate_owned.clone();
@@ -667,7 +677,10 @@ impl Found for GhCrateMetaFound {
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
         let resolved = &self.resolved;
         Some(PkgUrlHint {
-            name: self.fetcher.data.name.clone(),
+            name: resolved
+                .name
+                .clone()
+                .unwrap_or_else(|| self.fetcher.data.name.clone()),
             pkg_url: resolved.pkg_url.as_ref().into(),
             pkg_fmt: resolved.pkg_fmt,
             rendered_with: Some(RenderedWith {
@@ -973,6 +986,7 @@ mod test {
         let urls = |template: &str| {
             candidate_urls(
                 &data,
+                None,
                 None,
                 "aarch64-apple-darwin",
                 &target_info,
@@ -1290,10 +1304,10 @@ mod test {
             .unwrap()
             .unwrap();
         let hint = found.pkg_url_hint().unwrap();
-        assert_eq!(hint.name, "bin-named-package-test");
+        assert_eq!(hint.name, "cargo-binstall");
         assert_eq!(
             hint.pkg_url,
-            "{ repo }/releases/download/v{ version }/{ bin }-{ target }{ archive-suffix }"
+            "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
         );
 
         // Found that way again, it is looked for under the binary's name

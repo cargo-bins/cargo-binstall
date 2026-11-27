@@ -282,8 +282,7 @@ impl Data {
     /// Fetchers that find one package per binary, like [`GhCrateMeta`] with
     /// `{ bin }` in `pkg-url`, need them to know which packages to look for,
     /// and find nothing without them. [`GhCrateMeta`] also looks for a
-    /// package named after the only one, if none named after the crate is
-    /// found.
+    /// package named after the only one.
     pub fn with_bins(mut self, bins: Vec<BinInfo>) -> Self {
         self.bins = bins;
         self
@@ -292,9 +291,11 @@ impl Data {
     /// Have fetchers try how a previous version was found on `target` first,
     /// before probing everything else.
     ///
-    /// It is ignored unless it was found with this [`Data`]'s name.
+    /// It is ignored unless it was found with this [`Data`]'s name, or the
+    /// name of its only binary (see [`Data::with_bins`]).
     pub fn with_pkg_url_hint(mut self, target: CompactString, hint: PkgUrlHint) -> Self {
-        if hint.name == self.name {
+        let is_only_bin = matches!(&self.bins[..], [bin] if bin.name == hint.name);
+        if hint.name == self.name || is_only_bin {
             self.pkg_url_hint = Some((target, hint));
         }
         self

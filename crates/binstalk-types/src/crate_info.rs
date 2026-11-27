@@ -39,8 +39,8 @@ pub struct CrateInfo {
 /// usage for an update whose asset naming almost never changes.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PkgUrlHint {
-    /// The name `{ name }` was rendered with. A hint is only used to look
-    /// for the package under the same name.
+    /// The name `{ name }` was rendered with: the crate's, or its only
+    /// binary's.
     pub name: CompactString,
     /// The template, in the same syntax as `pkg-url` in `Cargo.toml`.
     pub pkg_url: CompactString,

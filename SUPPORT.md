@@ -279,9 +279,9 @@ you need to manually specify it.
 If the crate's repository is on github.com, it has one binary to install (or
 one is chosen with `--bin`), named otherwise than the crate, and no package
 named after the crate is found, `binstall` looks for a package named after the
-binary: the same filenames with `{ bin }` in place of `{ name }`, e.g.
+binary: the same URLs with the binary's name as `{ name }`, e.g.
 `fd-v{ version }-{ target }.tar.gz` for the binary `fd` of the crate
-`fd-find`, in the same paths.
+`fd-find`.
 
 It is looked for by the same strategy as the packages named after the crate
 (`crate-meta-data`), before QuickInstall is tried, so it is preferred over
