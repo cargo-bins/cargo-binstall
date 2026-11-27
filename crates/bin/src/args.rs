@@ -659,14 +659,9 @@ pub struct Args {
     pub(crate) markdown_help: bool,
 }
 
-#[derive(Clone)]
+/// `Debug` does not print the token: `Zeroizing`'s does not since 1.9.1.
+#[derive(Debug, Clone)]
 pub(crate) struct GithubToken(pub(crate) Zeroizing<Box<str>>);
-
-impl fmt::Debug for GithubToken {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("<redacted>")
-    }
-}
 
 impl From<&str> for GithubToken {
     fn from(s: &str) -> Self {
