@@ -25,17 +25,13 @@ impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
     where
         Fut: Future<Output = Result<Option<T>, E>> + Send + 'static,
     {
-        let tx = self.tx.clone();
-
-        tokio::spawn(async move {
-            tokio::pin!(fut);
-
-            Self::spawn_inner(fut, tx).await;
-        });
+        // Boxed, so that the task is the same for every `Fut`, and `fut` is
+        // not moved again to be pinned, which would keep room for it twice.
+        tokio::spawn(Self::spawn_inner(Box::pin(fut), self.tx.clone()));
     }
 
     async fn spawn_inner(
-        fut: Pin<&mut (dyn Future<Output = Result<Option<T>, E>> + Send)>,
+        fut: Pin<Box<dyn Future<Output = Result<Option<T>, E>> + Send>>,
         tx: mpsc::Sender<Result<T, E>>,
     ) {
         let res = tokio::select! {
@@ -82,8 +78,6 @@ impl<T: Send + 'static, E: Send + Debug + 'static> FuturesResolver<T, E> {
 
 #[cfg(test)]
 mod test {
-    use std::pin::pin;
-
     use super::*;
 
     /// A failed candidate's error holding the channel's only slot must not
@@ -93,7 +87,7 @@ mod test {
         let resolver = FuturesResolver::<u8, &str>::default();
         resolver.tx.send(Err("failed")).await.unwrap();
 
-        let success = pin!(async { Ok(Some(42)) });
+        let success = Box::pin(async { Ok(Some(42)) });
         let send = FuturesResolver::spawn_inner(success, resolver.tx.clone());
         // Poll the success before resolve frees the slot.
         let ((), resolved) = tokio::join!(biased; send, resolver.resolve());
