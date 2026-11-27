@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, path::PathBuf};
 
 use detect_targets::detect_targets;
 use tokio::runtime;
@@ -18,9 +18,9 @@ fn main() -> io::Result<()> {
         return probe_all(rt);
     }
 
-    let mut args = std::env::args().skip(1);
-    if args.next().as_deref() == Some("--check") {
-        return check(rt, args.collect());
+    let mut args = std::env::args_os().skip(1);
+    if args.next().is_some_and(|arg| arg == "--check") {
+        return check(rt, args.map(PathBuf::from).collect());
     }
 
     let targets = rt.block_on(detect_targets());
@@ -65,13 +65,13 @@ fn probe_all(rt: runtime::Runtime) -> io::Result<()> {
 
 /// Check whether each given executable can run here, printing
 /// `path: ok` or `path: <reason>` for each.
-fn check(rt: runtime::Runtime, paths: Vec<String>) -> io::Result<()> {
+fn check(rt: runtime::Runtime, paths: Vec<PathBuf>) -> io::Result<()> {
     rt.block_on(async {
         let host = detect_targets::detect().await.host;
         for path in paths {
-            match host.check(path.as_ref()).await {
-                Ok(()) => println!("{path}: ok"),
-                Err(err) => println!("{path}: {err}"),
+            match host.check(&path).await {
+                Ok(()) => println!("{}: ok", path.display()),
+                Err(err) => println!("{}: {err}", path.display()),
             }
         }
     });

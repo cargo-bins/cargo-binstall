@@ -14,16 +14,17 @@
 //! - newer versions of those libraries than the host has, most commonly a
 //!   gnu binary built against a newer glibc than the host's.
 //!
-//! [`Host::check`] reads the binary's `PT_INTERP` and dynamic section, the same
-//! things the loader looks at, and checks them against what target
-//! detection found out about the host, the way the loader would. The loader is tested by running the matching
-//! probe, never the binary itself, as nothing downloaded
-//! may run before the user has confirmed the installation.
+//! [`Host::check`] reads the binary's `PT_INTERP` and dynamic section, the
+//! same things the loader looks at, and checks them against the host the
+//! way the loader would. The loader is tested by running the matching
+//! probe, never the binary itself, as nothing downloaded may run before
+//! the user has confirmed the installation. Libraries are looked up the
+//! way glibc's or musl's loader would look them up.
 //!
 //! The check only fails on what the loader would certainly reject. When
-//! something can't be determined (a library search path relative to the
-//! binary, a glibc without `/etc/ld.so.conf`, a foreign architecture run
-//! through binfmt, a file that isn't ELF), that part is skipped.
+//! something can't be determined (a binary or library with an rpath, a
+//! glibc without `/etc/ld.so.conf`, a foreign architecture run through
+//! binfmt, a file that isn't ELF), that part is skipped.
 //!
 //! A [`Host`] comes from [`crate::detect`], and
 //! [`DesiredTargets::check_binary`](crate::DesiredTargets::check_binary)
@@ -36,6 +37,7 @@ cfg_select! {
     any(target_os = "linux", target_os = "android") => {
         mod elf;
         mod linux;
+        mod search;
         pub use linux::Host;
     }
     _ => {

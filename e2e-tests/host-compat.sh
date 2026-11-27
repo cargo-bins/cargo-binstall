@@ -28,23 +28,7 @@ open(path, "wb").write(data.replace(old, new.ljust(len(old), b"\0")))
 PY
 }
 
-# The PT_INTERP of a 64-bit little-endian ELF file, or nothing.
-interp_of() {
-    "$python" - "$1" <<'PY'
-import struct, sys
-data = open(sys.argv[1], "rb").read()
-if data[:6] != b"\x7fELF\x02\x01":
-    sys.exit()
-phoff, = struct.unpack_from("<Q", data, 32)
-phentsize, phnum = struct.unpack_from("<HH", data, 54)
-for i in range(phnum):
-    p_type, _, p_offset, _, _, p_filesz = struct.unpack_from("<IIQQQQ", data, phoff + i * phentsize)
-    if p_type == 3:
-        print(data[p_offset:p_offset + p_filesz].rstrip(b"\0").decode())
-PY
-}
-
-glibc_interp="$(interp_of "$true_bin")"
+glibc_interp="$(readelf -l "$true_bin" | sed -n 's/.*interpreter: \(.*\)]$/\1/p')"
 if [ -z "$glibc_interp" ] || ! grep -q 'GLIBC_2\.' "$true_bin"; then
     echo "$true_bin is not a dynamically linked glibc program, skipping"
     exit 0

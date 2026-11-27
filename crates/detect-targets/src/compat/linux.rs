@@ -1,12 +1,7 @@
 //! The check on Linux and Android.
 
-use std::{
-    env,
-    path::{Path, PathBuf},
-    sync::OnceLock,
-};
+use std::path::Path;
 
-use lddtree::DependencyAnalyzer;
 use tokio::{sync::OnceCell, task::spawn_blocking};
 #[cfg(feature = "tracing")]
 use tracing::debug;
@@ -14,7 +9,7 @@ use tracing::debug;
 use super::{
     Incompatible,
     elf::{self, Elf, Ident},
-    file_name,
+    search::{self, Flavor, SystemPath},
 };
 use crate::probe::{self, Probe, ProbeResult};
 
@@ -28,21 +23,34 @@ pub struct Host {
 }
 
 impl Host {
-    /// A host nothing is known about yet. Probes are recorded with
-    /// [`Self::record`] as detection runs them, and run on demand by
-    /// [`Self::check`] otherwise.
+    /// A host nothing is known about yet: probes run on demand, see
+    /// [`Self::run_probe`].
     pub(crate) fn new() -> Self {
         Self {
             probes: probe::probes().iter().map(|_| OnceCell::new()).collect(),
         }
     }
 
-    /// Record the result of a dynamic (`PT_INTERP`) probe run during
-    /// detection, so that checking a binary for that loader reuses it.
-    pub(crate) fn record(&self, probe: &Probe, result: &ProbeResult) {
-        if let Some(index) = probe::probes().iter().position(|p| std::ptr::eq(p, probe)) {
-            let _ = self.probes[index].set(summarize(probe, result));
-        }
+    /// Run the dynamic (`PT_INTERP`) probe `probe` once for this host:
+    /// `Some(runnable)`, or `None` if inconclusive.
+    pub(crate) async fn run_probe(&self, probe: &'static Probe) -> Option<bool> {
+        let index = probe::probes()
+            .iter()
+            .position(|p| std::ptr::eq(p, probe))
+            .expect("probes come from the probe table");
+        *self.probes[index]
+            .get_or_init(|| async {
+                match probe.run().await {
+                    ProbeResult::Runnable => Some(true),
+                    ProbeResult::NotRunnable => Some(false),
+                    ProbeResult::Inconclusive(_err) => {
+                        #[cfg(feature = "tracing")]
+                        debug!("probe {} inconclusive: {_err}", probe.target);
+                        None
+                    }
+                }
+            })
+            .await
     }
 
     /// Check whether the executable at `path` can run on this system.
@@ -50,6 +58,9 @@ impl Host {
     /// Returns `Ok` if it can, or if that can't be determined, including
     /// when `path` is not an ELF file or can't be read.
     pub async fn check(&self, path: &Path) -> Result<(), Incompatible> {
+        // The blocking parts run on the blocking pool. A `JoinError` from
+        // it, i.e. a panic, skips the check, but only in builds that
+        // unwind: cargo-binstall's release builds abort on panic.
         let elf = {
             let path = path.to_owned();
             spawn_blocking(move || elf::parse(&path)).await.ok()
@@ -78,8 +89,7 @@ impl Host {
             return Err(Incompatible::Loader { interp });
         }
 
-        let path = path.to_owned();
-        spawn_blocking(move || check_libraries(&path, &elf, &interp))
+        spawn_blocking(move || check_libraries(&elf, &interp))
             .await
             .unwrap_or(Ok(()))
     }
@@ -87,15 +97,10 @@ impl Host {
     /// Whether the loader at `interp` can run programs of this identity.
     async fn loader_runs(&self, interp: &str, ident: Ident) -> bool {
         match find_probe(interp, ident) {
-            Some((index, probe)) => {
-                let runnable = self.probes[index]
-                    .get_or_init(|| async { summarize(probe, &probe.run().await) })
-                    .await;
-                match runnable {
-                    Some(runnable) => *runnable,
-                    None => Path::new(interp).is_file(),
-                }
-            }
+            Some(probe) => match self.run_probe(probe).await {
+                Some(runnable) => runnable,
+                None => Path::new(interp).is_file(),
+            },
             // Not a standard loader path, so there is no probe for it.
             // Running a probe with an arbitrary `PT_INTERP` would run
             // whatever program the archive names, so just check that it
@@ -105,20 +110,8 @@ impl Host {
     }
 }
 
-fn summarize(_probe: &Probe, result: &ProbeResult) -> Option<bool> {
-    match result {
-        ProbeResult::Runnable => Some(true),
-        ProbeResult::NotRunnable => Some(false),
-        ProbeResult::Inconclusive(_err) => {
-            #[cfg(feature = "tracing")]
-            debug!("compat: probe {} inconclusive: {_err}", _probe.target);
-            None
-        }
-    }
-}
-
-fn find_probe(interp: &str, ident: Ident) -> Option<(usize, &'static Probe)> {
-    probe::probes().iter().enumerate().find(|(_, p)| {
+fn find_probe(interp: &str, ident: Ident) -> Option<&'static Probe> {
+    probe::probes().iter().find(|p| {
         p.spec.interp == interp
             && p.spec.class == ident.class
             && p.spec.endian == ident.endian
@@ -126,30 +119,14 @@ fn find_probe(interp: &str, ident: Ident) -> Option<(usize, &'static Probe)> {
     })
 }
 
-/// How a loader looks up libraries.
-enum Flavor {
-    Glibc,
-    Musl,
-}
-
-fn flavor(interp: &str) -> Option<Flavor> {
-    let name = file_name(interp);
-    if name.starts_with("ld-musl-") {
-        Some(Flavor::Musl)
-    } else if name.starts_with("ld-linux") || name.starts_with("ld64.so.") || name == "ld.so.1" {
-        Some(Flavor::Glibc)
-    } else {
-        None
-    }
-}
-
-/// The identity of this process's own executable, for telling native
-/// binaries from ones run through compat mode or binfmt.
+/// The identity of the target this was built for, for telling native
+/// binaries from ones run through compat mode or binfmt. `None` for a
+/// target without a probe, which is never sure.
 fn host_ident() -> Option<Ident> {
-    static HOST: OnceLock<Option<Ident>> = OnceLock::new();
-    *HOST.get_or_init(|| {
-        let exe = env::current_exe().ok()?;
-        Some(elf::parse(&exe).ok()??.ident)
+    probe::find(crate::TARGET).map(|probe| Ident {
+        class: probe.spec.class,
+        endian: probe.spec.endian,
+        machine: probe.spec.e_machine,
     })
 }
 
@@ -162,55 +139,25 @@ fn is_musl_builtin(name: &str) -> bool {
         })
 }
 
-/// Check the libraries the binary at `path` needs, `elf`, against those
-/// installed.
-fn check_libraries(path: &Path, elf: &Elf, interp: &str) -> Result<(), Incompatible> {
-    let Some(flavor) = flavor(interp) else {
+/// Check the libraries `elf` needs against those installed.
+fn check_libraries(elf: &Elf, interp: &str) -> Result<(), Incompatible> {
+    let Some(flavor) = Flavor::of(interp) else {
         // bionic, uClibc, ...: only the loader was checked.
         return Ok(());
     };
-    let musl = matches!(flavor, Flavor::Musl);
+    let musl = matches!(flavor, Flavor::Musl { .. });
 
-    // Find every library the loader would load, recursively, the way it
-    // would: rpath/runpath, `LD_LIBRARY_PATH`, then `/etc/ld.so.conf` or
-    // musl's `/etc/ld-musl-$ARCH.path`, then the default directories.
-    let tree = match DependencyAnalyzer::new(PathBuf::from("/")).analyze(path) {
-        Ok(tree) => tree,
-        Err(_err) => {
-            #[cfg(feature = "tracing")]
-            debug!("compat {}: can't resolve libraries: {_err}", path.display());
-            return Ok(());
-        }
-    };
-
-    // A library not found may still be found by the loader when:
-    //
-    // - the binary is for another architecture, e.g. run through
-    //   qemu-user, whose libraries may live in a sysroot only the
-    //   emulator knows about;
-    // - an rpath depends on where the binary ends up (`$ORIGIN` and
-    //   friends), not where it was downloaded to;
-    // - glibc is configured without `/etc/ld.so.conf`, e.g. NixOS'
-    //   nix-ld, which takes its library path from the environment.
-    let can_tell_missing = host_ident() == Some(elf.ident)
-        && !elf.rpaths.iter().any(|rpath| rpath.contains('$'))
-        && (musl || Path::new("/etc/ld.so.conf").exists());
-
-    let mut missing: Vec<_> = tree
-        .libraries
-        .values()
-        .filter(|lib| !lib.found() && !(musl && is_musl_builtin(&lib.name)))
-        .map(|lib| &lib.name)
-        .collect();
-    missing.sort_unstable();
-    if let Some(name) = missing.first() {
-        if can_tell_missing {
-            return Err(Incompatible::Library {
-                name: (*name).clone(),
-            });
-        }
-        #[cfg(feature = "tracing")]
-        debug!("compat: {missing:?} not found, but the loader may find them");
+    // A library not found may still be found by the loader when the
+    // binary is for another architecture, e.g. run through qemu-user,
+    // whose libraries may live in a sysroot only the emulator knows
+    // about. The search itself also doesn't conclude on what it can't
+    // follow: rpaths, and configuration it can't read.
+    let can_tell_missing = host_ident() == Some(elf.ident);
+    let libraries = search::libraries(elf, &SystemPath::read(&flavor), can_tell_missing, |name| {
+        musl && is_musl_builtin(name)
+    });
+    if let Some(name) = libraries.missing {
+        return Err(Incompatible::Library { name });
     }
 
     // musl doesn't implement symbol versioning.
@@ -219,11 +166,7 @@ fn check_libraries(path: &Path, elf: &Elf, interp: &str) -> Result<(), Incompati
     }
 
     for verneed in &elf.verneed {
-        let Some(lib) = tree
-            .libraries
-            .get(&verneed.file)
-            .and_then(|lib| lib.realpath.as_deref())
-        else {
+        let Some(lib) = libraries.found.get(&verneed.file) else {
             continue;
         };
         let Some(provided) = elf::parse(lib).ok().flatten().map(|lib| lib.verdef) else {
@@ -311,28 +254,10 @@ mod tests {
         assert!(!is_musl_builtin("libmagic.so.1"));
     }
 
-    #[test]
-    fn flavors() {
-        assert!(matches!(
-            flavor("/lib64/ld-linux-x86-64.so.2"),
-            Some(Flavor::Glibc)
-        ));
-        assert!(matches!(
-            flavor("/lib/ld-linux-aarch64.so.1"),
-            Some(Flavor::Glibc)
-        ));
-        assert!(matches!(flavor("/lib64/ld64.so.2"), Some(Flavor::Glibc)));
-        assert!(matches!(
-            flavor("/lib/ld-musl-x86_64.so.1"),
-            Some(Flavor::Musl)
-        ));
-        assert!(flavor("/system/bin/linker64").is_none());
-    }
-
     /// This test binary runs, so it must pass the check.
     #[tokio::test]
     async fn own_executable_compatible() {
-        check(&env::current_exe().unwrap()).await.unwrap();
+        check(&std::env::current_exe().unwrap()).await.unwrap();
     }
 
     /// A copy of this test binary with `from` replaced by `to`, which
@@ -341,12 +266,12 @@ mod tests {
         target_env = "gnu",
         any(target_arch = "x86_64", target_arch = "aarch64")
     ))]
-    fn patched_exe(dir: &Path, from: &[u8], to: &[u8]) -> PathBuf {
+    fn patched_exe(dir: &Path, from: &[u8], to: &[u8]) -> std::path::PathBuf {
         assert!(to.len() <= from.len());
         let mut to = to.to_vec();
         to.resize(from.len(), 0);
 
-        let mut exe = std::fs::read(env::current_exe().unwrap()).unwrap();
+        let mut exe = std::fs::read(std::env::current_exe().unwrap()).unwrap();
         let mut replaced = 0;
         let mut i = 0;
         while let Some(pos) = exe[i..].windows(from.len()).position(|w| w == from) {
@@ -447,23 +372,18 @@ mod tests {
         );
     }
 
-    /// Detection runs the native glibc and musl loader probes, and keeps
-    /// their results for checking binaries.
+    /// Detection runs the native glibc loader probe, and keeps its
+    /// result for checking binaries.
     #[tokio::test]
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-    async fn detection_records_native_loaders() {
+    async fn detection_records_native_loader() {
         let host = crate::detect().await.host;
-        let arch = std::env::consts::ARCH;
-        for target in [
-            format!("{arch}-unknown-linux-gnu"),
-            format!("{arch}-unknown-linux-musl"),
-        ] {
-            let index = probe::probes()
-                .iter()
-                .position(|p| p.target == target)
-                .unwrap();
-            assert!(host.probes[index].initialized(), "{target}");
-        }
+        let target = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
+        let index = probe::probes()
+            .iter()
+            .position(|p| p.target == target)
+            .unwrap();
+        assert!(host.probes[index].initialized(), "{target}");
     }
 
     /// Targets given explicitly are not checked.

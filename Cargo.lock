@@ -1166,7 +1166,6 @@ version = "0.1.98"
 dependencies = [
  "goblin",
  "guess_host_triple",
- "lddtree",
  "memmap2",
  "rustix",
  "scroll",
@@ -1402,15 +1401,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "fs-err"
-version = "3.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5c95b673b8f6f7235229ae11c5642d81b04c2e64c1e2fb417bc0cf73ca45f29"
-dependencies = [
- "autocfg",
 ]
 
 [[package]]
@@ -3235,18 +3225,6 @@ name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
-
-[[package]]
-name = "lddtree"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62b602caaaa7782b416e6f819fe721822045a9163aa03083e6309c260f1ce9b3"
-dependencies = [
- "fs-err",
- "glob",
- "goblin",
- "memmap2",
-]
 
 [[package]]
 name = "leon"

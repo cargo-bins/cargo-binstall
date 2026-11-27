@@ -457,7 +457,10 @@ pub enum BinstallError {
     ///
     /// - Code: `binstall::incompatible_binary`
     /// - Exit: 102
-    #[error("{bin} for {target} can't run on this system: {reason}")]
+    #[error(
+        "{bin} for {target} can't run on this system: {reason} \
+         (pass `--targets {target}` to install it anyway)"
+    )]
     #[diagnostic(severity(error), code(binstall::incompatible_binary))]
     IncompatibleBinary {
         bin: CompactString,

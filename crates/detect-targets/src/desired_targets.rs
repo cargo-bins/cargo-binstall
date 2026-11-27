@@ -54,7 +54,7 @@ impl DesiredTargets {
     }
 
     /// The host the targets were detected from, if they were.
-    pub async fn host(&self) -> Option<&Host> {
+    async fn host(&self) -> Option<&Host> {
         match &self.0 {
             DesiredTargetsInner::Initialized(_) => None,
             DesiredTargetsInner::AutoDetect(set_once) => Some(&set_once.wait().await.host),

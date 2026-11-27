@@ -1,7 +1,12 @@
 //! What the check needs from an ELF file, read with goblin: its identity,
 //! `PT_INTERP`, and its GNU symbol version requirements and definitions.
 
-use std::{fs::File, io, path::Path};
+use std::{
+    fs::{File, OpenOptions},
+    io,
+    os::unix::fs::OpenOptionsExt,
+    path::Path,
+};
 
 use goblin::{
     elf::{
@@ -12,6 +17,7 @@ use goblin::{
     options::ParseOptions,
 };
 use memmap2::Mmap;
+use rustix::fs::OFlags;
 
 use crate::probe::elf::{Class, Endian};
 
@@ -36,6 +42,8 @@ pub(crate) struct Verneed {
 pub(crate) struct Elf {
     pub(crate) ident: Ident,
     pub(crate) interp: Option<String>,
+    /// `DT_NEEDED` entries: the libraries it links to.
+    pub(crate) needed: Vec<String>,
     /// `DT_RPATH` and `DT_RUNPATH` entries.
     pub(crate) rpaths: Vec<String>,
     pub(crate) verneed: Vec<Verneed>,
@@ -60,10 +68,14 @@ fn ident(elf: &GoblinElf<'_>) -> Option<Ident> {
     })
 }
 
-/// Map `path` if it is a regular file: opening a FIFO, which an archive
-/// may link to, would block.
+/// Map `path` if it is a regular file. It is opened non-blocking, as
+/// opening a FIFO without a writer, which an archive or a library path
+/// may point to, would block.
 fn map(path: &Path) -> io::Result<Mmap> {
-    let file = File::open(path)?;
+    let file: File = OpenOptions::new()
+        .read(true)
+        .custom_flags(OFlags::NONBLOCK.bits() as i32)
+        .open(path)?;
     if !file.metadata()?.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -72,9 +84,8 @@ fn map(path: &Path) -> io::Result<Mmap> {
     }
     // SAFETY: the mapping is read-only and only read from. A file
     // modified while mapped may read inconsistently, which goblin's
-    // bounds-checked parsing tolerates; truncation is the caller's
-    // risk, as with every other reader of these files (lddtree maps
-    // them too).
+    // bounds-checked parsing tolerates; a file truncated while mapped
+    // would fault, the same risk every mmap-based ELF reader takes.
     unsafe { Mmap::map(&file) }
 }
 
@@ -125,6 +136,7 @@ pub(crate) fn parse(path: &Path) -> io::Result<Option<Elf>> {
         interp: elf
             .interpreter
             .map(|interp| interp.split('\0').next().unwrap_or_default().to_owned()),
+        needed: elf.libraries.iter().map(|lib| (*lib).to_owned()).collect(),
         rpaths: elf
             .rpaths
             .iter()
