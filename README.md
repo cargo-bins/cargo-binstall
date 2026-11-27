@@ -121,7 +121,7 @@ We provide a first-party, minimal action that installs Binstall:
 ```yml
 - uses: cargo-bins/cargo-binstall@main
   with:
-      version: "1.2.3" # optional; defaults to latest
+      version: "1.2.3" # optional, or "latest"; defaults to the action's own version
 ```
 
 For more features, we recommend the excellent

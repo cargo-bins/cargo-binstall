@@ -16,7 +16,10 @@ if (-not $BINSTALL_VERSION -and $Env:BINSTALL_ACTION_PATH) {
         Write-Host "::warning::Could not read the version from $cargo_toml, installing the latest release"
     }
 }
-if ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
+if ($BINSTALL_VERSION -eq 'latest') {
+    # the latest release, not the action's own version
+    $BINSTALL_VERSION = $null
+} elseif ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
     # prefix version with v
     $BINSTALL_VERSION = "v$BINSTALL_VERSION"
 }

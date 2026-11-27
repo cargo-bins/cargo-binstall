@@ -81,6 +81,7 @@ fi
 
 case "${BINSTALL_VERSION:-}" in
     "") ;; # unset
+    latest) BINSTALL_VERSION= ;; # the latest release, not the action's own version
     v*) ;; # already includes the `v`
     *) BINSTALL_VERSION="v$BINSTALL_VERSION" ;; # Add a leading `v`
 esac
