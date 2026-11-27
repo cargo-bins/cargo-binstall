@@ -1006,12 +1006,8 @@ fn log_level(
 ) -> Option<LevelFilter> {
     if quiet {
         Some(LevelFilter::Off)
-    } else if log_level.is_some() {
-        log_level
-    } else if verbose {
-        Some(LevelFilter::Debug)
     } else {
-        env
+        log_level.or(verbose.then_some(LevelFilter::Debug)).or(env)
     }
 }
 
