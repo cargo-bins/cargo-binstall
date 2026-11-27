@@ -1,10 +1,7 @@
 use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_downloader::download::DownloadError;
-use binstalk_git_repo_api::{
-    gh_api_client::{GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, ReleaseAssetsPage},
-    git_refs::ReleaseTag,
-};
+use binstalk_git_repo_api::gh_api_client::{GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl};
 use binstalk_types::{
     cargo_toml_binstall::Strategy,
     crate_info::{PkgUrlHint, RenderedWith},
@@ -58,6 +55,9 @@ struct Resolved {
     /// The binary it is the package of, if each binary is in its own
     /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
+    /// Whether it is the package of another crate, see
+    /// [`GhCrateMeta::find_sibling`].
+    sibling: bool,
 }
 
 /// An asset name a default template renders to for another crate, see
@@ -90,14 +90,14 @@ fn sibling_patterns(
     repo: Option<&str>,
     subcrate: Option<&str>,
 ) -> Vec<SiblingPattern> {
-    let data = data.with_name(SIBLING_PLACEHOLDER.into());
     let mut patterns = Vec::new();
     for ((pkg_url_str, pkg_url), pkg_fmt) in pkg_urls.iter().cartesian_product(pkg_fmts) {
         if pkg_url.has_key("subcrate") {
             continue;
         }
         for (url, archive_suffix, target_arch) in candidate_urls(
-            &data,
+            data,
+            Some(SIBLING_PLACEHOLDER),
             None,
             target,
             target_related_info,
@@ -136,22 +136,45 @@ fn sibling_patterns(
 
 /// The name of the only other crate whose packages `releases` have, by
 /// matching their asset names against `patterns`, with the patterns its
-/// packages match. `None` if there is none, or the assets are named after
-/// several names, e.g. of several tools in a release.
+/// packages match. `None` if there is none, if the assets are named after
+/// several names, e.g. of several tools in a release, or if a release has a
+/// package of the crate's own for any target.
 ///
-/// * `own_name` - the crate's name, which is not looked for: its packages
-///   were looked for already.
+/// * `own_names` - the crate's name and its binaries', which are not looked
+///   for: packages named after them are found without this.
 /// * `releases` - the asset names of each release.
 fn sibling_name<'p>(
-    own_name: &str,
+    own_names: &[&str],
     patterns: &'p [SiblingPattern],
     releases: &[(GhRelease, Vec<CompactString>)],
 ) -> Option<(CompactString, Vec<&'p SiblingPattern>)> {
-    // The crate's own packages, e.g. `nu-0.117.0-{ target }.tar.gz` of
-    // `nu`, which `{ name }-{ target }` matches as named after `nu-0.117.0`.
+    // A release with a package of the crate's own, for any target, e.g.
+    // only for musl while this is for gnu: it is for another target to find,
+    // not for this one to look past.
+    let is_own = |asset: &str| {
+        own_names.iter().any(|own| {
+            asset
+                .strip_prefix(own)
+                .is_some_and(|rest| rest.starts_with(['-', '_', '.']))
+        })
+    };
+    if releases
+        .iter()
+        .any(|(_, assets)| assets.iter().any(|asset| is_own(asset)))
+    {
+        return None;
+    }
+
+    // The crate's own packages for this target, e.g.
+    // `nu-0.117.0-{ target }.tar.gz` of `nu`, which `{ name }-{ target }`
+    // matches as named after `nu-0.117.0`.
     let own: Vec<String> = patterns
         .iter()
-        .map(|pattern| format!("{}{own_name}{}", pattern.prefix, pattern.suffix))
+        .flat_map(|pattern| {
+            own_names
+                .iter()
+                .map(move |own| format!("{}{own}{}", pattern.prefix, pattern.suffix))
+        })
         .collect();
 
     // Every other asset matching a pattern, with the name it is after.
@@ -239,10 +262,13 @@ pub(crate) fn target_arch_aliases(target_arch: &str) -> &'static [&'static str] 
 /// All URLs `pkg_url` may render to for this target, with the archive suffix
 /// and the `{ target-arch }` alias each was rendered with.
 ///
+/// * `name` - what to render `{ name }` as instead of the crate's name, if
+///   anything, see [`GhCrateMeta::find_sibling`].
 /// * `bin` - the binary to render `{ bin }` as, if any.
 #[allow(clippy::too_many_arguments)]
 fn candidate_urls(
     data: &Data,
+    name: Option<&str>,
     bin: Option<&str>,
     target: &str,
     target_related_info: &dyn leon::Values,
@@ -256,6 +282,9 @@ fn candidate_urls(
             Context::from_data_with_repo(data, target, target_related_info, ext, repo, subcrate);
         ctx.target_arch = target_arch;
         ctx.bin = bin;
+        if let Some(name) = name {
+            ctx.name = name;
+        }
         match ctx.render_url_with(pkg_url) {
             Ok(url) => Some((url, ext, target_arch)),
             Err(err) => {
@@ -443,7 +472,11 @@ impl super::Fetcher for GhCrateMeta {
             return Ok(Some(self.found(resolved)));
         }
 
-        if !is_default {
+        // Only for a crate in a subdirectory of its repository, such as a
+        // workspace's: one whose `repository` is a whole repository, e.g. a
+        // fork's that kept its upstream's, could be given upstream's binary
+        // of the same name.
+        if !is_default || subcrate.is_none() {
             return Ok(None);
         }
         // Before any other fetcher, so that an upstream package wins over
@@ -485,6 +518,7 @@ impl GhCrateMeta {
             .flat_map(|((pkg_url_str, pkg_url), pkg_fmt)| {
                 candidate_urls(
                     &self.data,
+                    None,
                     bin,
                     &self.target_data.target,
                     &self.target_data.target_related_info,
@@ -558,9 +592,9 @@ impl GhCrateMeta {
     /// the binaries of its plugins, crates `nu_plugin_*`, which have no
     /// packages of their own.
     ///
-    /// The asset lists of the releases of the default templates, which the
-    /// probe got already, are searched for assets named like one of them
-    /// but after another name, so no request is needed for that. Only if
+    /// The asset lists of the releases of the default templates that the
+    /// probe got are searched for assets named like one of them but after
+    /// another name: no request is sent for that. Only if
     /// all such assets for this target are named after one name is that
     /// package looked for. Whether it has the crate's binaries is only
     /// known once it is extracted: if not, the next fetcher is tried.
@@ -595,19 +629,15 @@ impl GhCrateMeta {
             {
                 continue;
             }
-            // The probe dropped the candidates of missing tags without
-            // getting their asset lists, nor should this.
-            if let Some(ReleaseTag { repo, tag }) = ReleaseTag::of_asset(&pattern.url)
-                && self.data.context.repo_tags(&repo).lock().await.exists(&tag) == Some(false)
-            {
-                continue;
-            }
-            if let Some(names) = self.release_asset_names(&pattern.release).await {
+            if let Some(names) = self.release_asset_names(&pattern.release) {
                 releases.push((pattern.release.clone(), names));
             }
         }
 
-        let Some((name, matched)) = sibling_name(&self.data.name, &patterns, &releases) else {
+        let own_names: Vec<&str> = iter::once(self.data.name.as_str())
+            .chain(self.data.bins.iter().map(|bin| bin.name.as_str()))
+            .collect();
+        let Some((name, matched)) = sibling_name(&own_names, &patterns, &releases) else {
             debug!(
                 "No package of another crate found for {} on target {target}, \
                 or of several",
@@ -636,39 +666,26 @@ impl GhCrateMeta {
             })
             .collect();
 
-        let sibling = Arc::new(Self {
-            client: self.client.clone(),
-            gh_api_client: self.gh_api_client.clone(),
-            data: Arc::new(self.data.with_name(name)),
-            target_data: Arc::clone(&self.target_data),
-            signature_policy: self.signature_policy,
-        });
-        Ok(sibling
+        Ok(self
             .probe(candidates, repo, subcrate)
             .await?
-            .map(|resolved| sibling.found(resolved)))
+            .map(|mut resolved| {
+                resolved.sibling = true;
+                self.found(resolved)
+            }))
     }
 
-    /// The names of the assets of `release`, from the API's answer if it was
-    /// asked already, from github.com's asset list otherwise. `None` if it
-    /// can't tell.
-    async fn release_asset_names(&self, release: &GhRelease) -> Option<Vec<CompactString>> {
+    /// The names of the assets of `release` the probe got, from the API's
+    /// answer or github.com's asset list, `None` if it got neither, e.g. as
+    /// the release tag doesn't exist. Nothing is asked here.
+    fn release_asset_names(&self, release: &GhRelease) -> Option<Vec<CompactString>> {
         let context = &self.data.context;
         if let Some(Some(artifacts)) = context.release_artifacts(release).get() {
             return Some(artifacts.names().map(CompactString::from).collect());
         }
-        // github.com has no page for it, only the API, which the probe
-        // asked already if it could.
-        if let Some(Some(info)) = self.data.repo_info.get()
-            && info.is_private
-        {
-            return None;
-        }
         let page = context.release_assets_page(release);
-        let page = page
-            .get_or_init(|| ReleaseAssetsPage::fetch(&self.client, release))
-            .await;
-        Some(page.names()?.into_iter().map(CompactString::from).collect())
+        let names = page.get()?.names()?;
+        Some(names.into_iter().map(CompactString::from).collect())
     }
 
     /// Find the package of each binary of [`Data::with_bins`], for a
@@ -895,6 +912,12 @@ impl Found for GhCrateMetaFound {
 
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
         let resolved = &self.resolved;
+        // The templates render the crate's name, not the other crate's: the
+        // hint would point at a package that doesn't exist, costing a
+        // request at every update.
+        if resolved.sibling {
+            return None;
+        }
         Some(PkgUrlHint {
             name: self.fetcher.data.name.clone(),
             pkg_url: resolved.pkg_url.as_ref().into(),
@@ -1202,6 +1225,7 @@ mod test {
         let urls = |template: &str| {
             candidate_urls(
                 &data,
+                None,
                 None,
                 "aarch64-apple-darwin",
                 &target_info,
@@ -1527,7 +1551,7 @@ mod test {
             Some("https://github.com/nushell/nushell"),
             Some(name),
         );
-        let (name, matched) = sibling_name(name, &patterns, &nushell_release(extra))?;
+        let (name, matched) = sibling_name(&[name], &patterns, &nushell_release(extra))?;
         let urls = matched
             .iter()
             .map(|pattern| {
@@ -1574,6 +1598,16 @@ mod test {
             ),
             None
         );
+        // The crate has a package of its own, for another target: that
+        // target finds it.
+        assert_eq!(
+            sibling(
+                "nu_plugin_inc",
+                GNU,
+                &["nu_plugin_inc-0.117.0-x86_64-unknown-linux-musl.tar.gz"]
+            ),
+            None
+        );
         // Nor do other files, or packages for other targets.
         assert_eq!(
             sibling(
@@ -1591,5 +1625,86 @@ mod test {
                 vec![format!("{download}/nu-0.117.0-{GNU}.tar.gz")]
             ))
         );
+    }
+
+    /// A crate without packages of its own, in a subdirectory of the
+    /// repository, is found in the package of another crate of the same
+    /// release, without any more requests.
+    #[tokio::test]
+    async fn sibling_package_found() {
+        use std::{
+            num::{NonZeroU16, NonZeroU64},
+            sync::Arc,
+        };
+
+        use crate::{
+            BinInfo, FetchContext, Fetcher, GhCrateMeta, SignaturePolicy, TargetData,
+            common::{Client, GhApiClient},
+        };
+
+        let client = Client::new(
+            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+            None,
+            false,
+            Default::default(),
+            NonZeroU16::new(300).unwrap(),
+            NonZeroU64::new(1).unwrap(),
+            [],
+        )
+        .unwrap();
+        let gh_api_client = GhApiClient::new(client.clone(), None);
+        let target_data = Arc::new(TargetData {
+            target: "x86_64-unknown-linux-musl".into(),
+            meta: Default::default(),
+            target_related_info: leon::vals(|_| None),
+        });
+
+        // cargo-binstall's own releases, looked for as another crate's.
+        let find = |repo: &str, context: Arc<FetchContext>| {
+            let data = Data::new(
+                context,
+                "sibling-package-test".into(),
+                "1.28.0".into(),
+                Some(repo.into()),
+            )
+            .with_bins(vec![BinInfo {
+                name: "sibling-package-test".into(),
+                optional: false,
+            }]);
+            GhCrateMeta::new(
+                client.clone(),
+                gh_api_client.clone(),
+                Arc::new(data),
+                target_data.clone(),
+                SignaturePolicy::IfPresent,
+                false,
+            )
+            .find()
+        };
+
+        let context = Arc::new(FetchContext::default());
+        let found = find(
+            "https://github.com/cargo-bins/cargo-binstall/tree/main/crates/sibling-package-test",
+            Arc::clone(&context),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(found.source_name(), "github.com");
+        assert_eq!(found.pkg_fmt(), PkgFmt::Tgz);
+        // The templates render the crate's name, not cargo-binstall's.
+        assert!(found.pkg_url_hint().is_none());
+        // Only the asset list the probe got: tag `v1.28.0` exists, `1.28.0`
+        // doesn't.
+        assert_eq!(context.release_assets_pages_len(), 1);
+
+        // Not for a crate whose `repository` is the whole repository.
+        let found = find(
+            "https://github.com/cargo-bins/cargo-binstall",
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        assert!(found.is_none());
     }
 }

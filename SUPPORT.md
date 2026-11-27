@@ -220,6 +220,19 @@ crate's directory (`foo`) and `{ repo }` is the repository itself
 - `{ repo }/releases/download/{ name }-{ version }/`
 <!-- END generated:pkg-url-paths-github -->
 
+If none of these is found for a crate whose `repository` points at a
+directory of a GitHub repository, such as a workspace member's
+`https://github.com/nushell/nushell/tree/main/crates/nu_plugin_inc`, its
+binaries may be in the package of another crate of the same release:
+nushell's `nu-{ version }-{ target }.tar.gz` also has the binaries of its
+plugins. `binstall` then looks at the assets of the release tagged
+`{ version }` or `v{ version }`. If none is named after the crate or one of
+its binaries, for any target, and the ones for this target that are named like
+one of the file names above are all named after the same other name, it uses
+that package, if it has the crate's binaries. Its signature is checked with the
+crate's own `signing` settings, if any. Crates installed together download such
+a package once.
+
 #### for GitLab
 
 <!-- BEGIN generated:pkg-url-paths-gitlab from crates/binstalk-fetchers/src/gh_crate_meta/hosting.rs, run `just update-docs` to update -->
@@ -273,18 +286,6 @@ Binary must be uploaded to the "File" page of your project, under the directory
 
 For all other situations, `binstall` does not provide a default `pkg-url` and
 you need to manually specify it.
-
-#### Packages of another crate in the same release
-
-If none of these is found for a crate in a GitHub repository, its binaries
-may be in the package of another crate released with it, such as nushell's
-`nu-{ version }-{ target }.tar.gz`, which also has the binaries of its plugins
-(crates `nu_plugin_*`). `binstall` then looks at the asset list of the
-release tagged `{ version }` or `v{ version }`, and if every asset there named
-like one of the file names above for this target is named after the same
-other name, it uses that package, if it has the crate's binaries.
-
-Installed together, such crates download the package once.
 
 ### QuickInstall
 

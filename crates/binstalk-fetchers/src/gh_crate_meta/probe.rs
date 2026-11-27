@@ -592,6 +592,7 @@ impl Shared {
             pkg_url: candidate.pkg_url,
             response,
             bin: None,
+            sibling: false,
         }
     }
 
