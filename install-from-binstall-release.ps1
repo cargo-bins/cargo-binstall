@@ -62,7 +62,6 @@ if (-not $downloaded) {
     } catch {
         throw "Failed to download: $_"
     }
-    # empty for the latest
     $downloaded_version = $BINSTALL_VERSION -replace '^v', ''
 }
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
@@ -73,7 +72,6 @@ Write-Verbose -Verbose -Message "Download: $($sw.Elapsed.Seconds) seconds"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall.exe" "--self-install"
 if ($ps.ExitCode -ne 0) {
-    # Install the downloaded version, so a pin holds.
     $crate = if ($downloaded_version) { "cargo-binstall@$downloaded_version" } else { "cargo-binstall" }
     Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force $crate"
 }
