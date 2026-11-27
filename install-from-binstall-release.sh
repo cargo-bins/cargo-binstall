@@ -66,8 +66,22 @@ fi
 # shellcheck disable=SC3040
 (set -o pipefail 2> /dev/null) && set -o pipefail
 
+# Without a `version`, the action installs its own version. It passes its path
+# because `GITHUB_ACTION_PATH` is that of whichever action runs this script.
+checkout_version=
+if [ -z "${BINSTALL_VERSION:-}" ] && [ -n "${BINSTALL_ACTION_PATH:-}" ]; then
+    cargo_toml="$BINSTALL_ACTION_PATH/crates/bin/Cargo.toml"
+    if [ -f "$cargo_toml" ]; then
+        checkout_version="$(sed -n '/^version = "\([^"]*\)".*/{s//\1/p;q;}' "$cargo_toml")"
+    fi
+    if [ -z "$checkout_version" ]; then
+        echo "::warning::Could not read the version from $cargo_toml, installing the latest release"
+    fi
+fi
+
 case "${BINSTALL_VERSION:-}" in
     "") ;; # unset
+    latest) BINSTALL_VERSION= ;; # the latest release, not the action's own version
     v*) ;; # already includes the `v`
     *) BINSTALL_VERSION="v$BINSTALL_VERSION" ;; # Add a leading `v`
 esac
@@ -78,15 +92,26 @@ cd "$(mktemp -d)"
 # given, otherwise from `[..]/releases/download/VERSION/[..]`. Note the shifted
 # location of '/download'.
 if [ -z "${BINSTALL_VERSION:-}" ]; then
-    base_url="https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
+    base_url="https://github.com/cargo-bins/cargo-binstall/releases/latest/download/"
 else
-    base_url="https://github.com/cargo-bins/cargo-binstall/releases/download/${BINSTALL_VERSION}/cargo-binstall-"
+    base_url="https://github.com/cargo-bins/cargo-binstall/releases/download/${BINSTALL_VERSION}/"
 fi
+
+# `fetch ASSET` downloads ASSET into the current directory, from the checkout's
+# version if it has a release, else from the latest.
+fetch() {
+    if [ -n "$checkout_version" ]; then
+        if download "https://github.com/cargo-bins/cargo-binstall/releases/download/v${checkout_version}/$1" > "$1"; then
+            return
+        fi
+        echo "Could not download v${checkout_version}, installing the latest release" >&2
+    fi
+    download "${base_url}$1" > "$1"
+}
 
 os="$(uname -s)"
 if [ "$os" = "Darwin" ]; then
-    url="${base_url}universal-apple-darwin.zip"
-    download "$url" > cargo-binstall-universal-apple-darwin.zip
+    fetch cargo-binstall-universal-apple-darwin.zip
     unzip cargo-binstall-universal-apple-darwin.zip
 elif [ "$os" = "Linux" ]; then
     machine="$(uname -m)"
@@ -101,14 +126,12 @@ elif [ "$os" = "Linux" ]; then
         target="${target}eabihf"
     fi
 
-    url="${base_url}${target}.tgz"
-    download "$url" > "cargo-binstall-${target}.tgz"
+    fetch "cargo-binstall-${target}.tgz"
     tar -xvzf "cargo-binstall-${target}.tgz"
 elif [ "${OS-}" = "Windows_NT" ]; then
     machine="$(uname -m)"
     target="${machine}-pc-windows-msvc"
-    url="${base_url}${target}.zip"
-    download "$url" > "cargo-binstall-${target}.zip"
+    fetch "cargo-binstall-${target}.zip"
     unzip "cargo-binstall-${target}.zip"
 else
     echo "Unsupported OS ${os}"
