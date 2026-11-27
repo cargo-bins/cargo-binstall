@@ -2,11 +2,11 @@
 
 use std::{
     env,
-    fs::{self, File},
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock},
+    sync::OnceLock,
 };
 
+use lddtree::DependencyAnalyzer;
 use tokio::{sync::OnceCell, task::spawn_blocking};
 #[cfg(feature = "tracing")]
 use tracing::debug;
@@ -14,41 +14,26 @@ use tracing::debug;
 use super::{
     Incompatible,
     elf::{self, Elf, Ident},
-    file_name, ldcache,
+    file_name,
 };
 use crate::probe::{self, Probe, ProbeResult};
 
 /// What target detection found out about this host, to check binaries
-/// against: the loader probes it ran and the libraries `ldconfig` knows.
+/// against: the loader probes it ran.
 #[derive(Debug)]
 pub struct Host {
     /// Results of the probes run so far, in [`probe::probes`] order:
     /// `Some(runnable)`, or `None` if inconclusive.
     probes: Vec<OnceCell<Option<bool>>>,
-    /// `/etc/ld.so.cache`, or `None` if it can't be read.
-    ld_cache: Option<Arc<[(String, PathBuf)]>>,
 }
 
 impl Host {
-    /// Read what doesn't need a probe. Probes are recorded with
+    /// A host nothing is known about yet. Probes are recorded with
     /// [`Self::record`] as detection runs them, and run on demand by
     /// [`Self::check`] otherwise.
-    pub(crate) async fn load() -> Self {
-        let ld_cache = spawn_blocking(|| match ldcache::read(ldcache::PATH) {
-            Ok(cache) => Some(Arc::from(cache)),
-            Err(_err) => {
-                #[cfg(feature = "tracing")]
-                debug!("compat: can't read {}: {_err}", ldcache::PATH);
-                None
-            }
-        })
-        .await
-        .ok()
-        .flatten();
-
+    pub(crate) fn new() -> Self {
         Self {
             probes: probe::probes().iter().map(|_| OnceCell::new()).collect(),
-            ld_cache,
         }
     }
 
@@ -67,9 +52,7 @@ impl Host {
     pub async fn check(&self, path: &Path) -> Result<(), Incompatible> {
         let elf = {
             let path = path.to_owned();
-            spawn_blocking(move || open_regular(&path).and_then(|file| elf::parse(&file)))
-                .await
-                .ok()
+            spawn_blocking(move || elf::parse(&path)).await.ok()
         };
         let elf = match elf {
             Some(Ok(Some(elf))) => elf,
@@ -95,8 +78,8 @@ impl Host {
             return Err(Incompatible::Loader { interp });
         }
 
-        let ld_cache = self.ld_cache.clone();
-        spawn_blocking(move || check_libraries(&elf, &interp, ld_cache.as_deref()))
+        let path = path.to_owned();
+        spawn_blocking(move || check_libraries(&path, &elf, &interp))
             .await
             .unwrap_or(Ok(()))
     }
@@ -134,19 +117,6 @@ fn summarize(_probe: &Probe, result: &ProbeResult) -> Option<bool> {
     }
 }
 
-/// Open `path` if it is a regular file: opening a FIFO, which an archive
-/// may link to, would block.
-fn open_regular(path: &Path) -> std::io::Result<File> {
-    if fs::metadata(path)?.is_file() {
-        File::open(path)
-    } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "not a regular file",
-        ))
-    }
-}
-
 fn find_probe(interp: &str, ident: Ident) -> Option<(usize, &'static Probe)> {
     probe::probes().iter().enumerate().find(|(_, p)| {
         p.spec.interp == interp
@@ -159,17 +129,13 @@ fn find_probe(interp: &str, ident: Ident) -> Option<(usize, &'static Probe)> {
 /// How a loader looks up libraries.
 enum Flavor {
     Glibc,
-    /// musl, with the `$ARCH` from its loader name `ld-musl-$ARCH.so.1`.
-    Musl(String),
+    Musl,
 }
 
 fn flavor(interp: &str) -> Option<Flavor> {
     let name = file_name(interp);
-    if let Some(arch) = name
-        .strip_prefix("ld-musl-")
-        .and_then(|rest| rest.strip_suffix(".so.1"))
-    {
-        Some(Flavor::Musl(arch.to_owned()))
+    if name.starts_with("ld-musl-") {
+        Some(Flavor::Musl)
     } else if name.starts_with("ld-linux") || name.starts_with("ld64.so.") || name == "ld.so.1" {
         Some(Flavor::Glibc)
     } else {
@@ -183,129 +149,8 @@ fn host_ident() -> Option<Ident> {
     static HOST: OnceLock<Option<Ident>> = OnceLock::new();
     *HOST.get_or_init(|| {
         let exe = env::current_exe().ok()?;
-        elf::read_ident(&File::open(exe).ok()?).ok()?
+        Some(elf::parse(&exe).ok()??.ident)
     })
-}
-
-/// Where the loader would look for the libraries `elf` needs.
-struct SearchPath<'a> {
-    /// Directories searched before the cache.
-    dirs: Vec<PathBuf>,
-    /// `/etc/ld.so.cache`, consulted after `dirs`.
-    cache: Option<&'a [(String, PathBuf)]>,
-    /// Directories searched last.
-    defaults: Vec<PathBuf>,
-    /// Whether some directory couldn't be determined, so that a library
-    /// not found may still be found by the loader.
-    incomplete: bool,
-}
-
-impl<'a> SearchPath<'a> {
-    fn new(
-        elf: &Elf,
-        interp: &str,
-        flavor: &Flavor,
-        ld_cache: Option<&'a [(String, PathBuf)]>,
-    ) -> Self {
-        let mut path = Self {
-            dirs: Vec::new(),
-            cache: None,
-            defaults: Vec::new(),
-            incomplete: false,
-        };
-
-        let ld_library_path = env::var("LD_LIBRARY_PATH").ok();
-        match flavor {
-            Flavor::Glibc => {
-                // DT_RPATH is ignored when DT_RUNPATH is present.
-                if elf.runpath.is_none() {
-                    path.push_list(elf.rpath.as_deref());
-                }
-                path.push_list(ld_library_path.as_deref());
-                path.push_list(elf.runpath.as_deref());
-
-                path.cache = ld_cache;
-                if ld_cache.is_none() {
-                    path.incomplete = true;
-                }
-
-                // glibc's built-in directories; distros using a multiarch
-                // layout add theirs, which is where the loader lives.
-                if let Some(dir) = fs::canonicalize(interp)
-                    .ok()
-                    .and_then(|interp| Some(interp.parent()?.to_owned()))
-                {
-                    path.defaults.push(dir);
-                }
-                if elf.ident.class == probe::elf::Class::Elf64 {
-                    path.defaults.extend(["/lib64".into(), "/usr/lib64".into()]);
-                }
-                path.defaults.extend(["/lib".into(), "/usr/lib".into()]);
-            }
-            Flavor::Musl(arch) => {
-                path.push_list(ld_library_path.as_deref());
-                path.push_list(elf.rpath.as_deref());
-                path.push_list(elf.runpath.as_deref());
-
-                match fs::read_to_string(format!("/etc/ld-musl-{arch}.path")) {
-                    Ok(list) => path.defaults.extend(
-                        list.split(['\n', ':'])
-                            .filter(|d| !d.is_empty())
-                            .map(Into::into),
-                    ),
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                        path.defaults
-                            .extend(["/lib", "/usr/local/lib", "/usr/lib"].map(PathBuf::from));
-                    }
-                    Err(_) => path.incomplete = true,
-                }
-            }
-        }
-
-        path
-    }
-
-    fn push_list(&mut self, list: Option<&str>) {
-        for dir in list.into_iter().flat_map(|list| list.split(':')) {
-            // `$ORIGIN` and friends depend on where the binary ends up,
-            // and relative entries on the working directory at run time.
-            if dir.contains('$') || !dir.starts_with('/') {
-                if !dir.is_empty() {
-                    self.incomplete = true;
-                }
-            } else {
-                self.dirs.push(dir.into());
-            }
-        }
-    }
-
-    /// Find `name` the way the loader would, returning the path of the
-    /// first library with the same identity as the program.
-    fn find(&self, name: &str, ident: Ident) -> Option<PathBuf> {
-        let matches = |path: &Path| {
-            open_regular(path)
-                .ok()
-                .and_then(|file| elf::read_ident(&file).ok().flatten())
-                == Some(ident)
-        };
-
-        let in_dirs = |dirs: &[PathBuf]| {
-            dirs.iter()
-                .map(|dir| dir.join(name))
-                .find(|path| matches(path))
-        };
-
-        in_dirs(&self.dirs)
-            .or_else(|| {
-                self.cache?
-                    .iter()
-                    .filter(|(soname, _)| soname == name)
-                    .map(|(_, path)| path)
-                    .find(|path| matches(path))
-                    .cloned()
-            })
-            .or_else(|| in_dirs(&self.defaults))
-    }
 }
 
 /// musl's loader provides these itself: `libc.so`, `libpthread.so.0`, ...
@@ -317,63 +162,71 @@ fn is_musl_builtin(name: &str) -> bool {
         })
 }
 
-fn check_libraries(
-    elf: &Elf,
-    interp: &str,
-    ld_cache: Option<&[(String, PathBuf)]>,
-) -> Result<(), Incompatible> {
+/// Check the libraries the binary at `path` needs, `elf`, against those
+/// installed.
+fn check_libraries(path: &Path, elf: &Elf, interp: &str) -> Result<(), Incompatible> {
     let Some(flavor) = flavor(interp) else {
         // bionic, uClibc, ...: only the loader was checked.
         return Ok(());
     };
-    let path = SearchPath::new(elf, interp, &flavor, ld_cache);
+    let musl = matches!(flavor, Flavor::Musl);
 
-    // Libraries for another architecture, e.g. run through qemu-user,
-    // may live in a sysroot only the emulator knows about.
-    let native = host_ident() == Some(elf.ident);
-    let can_tell_missing = native && !path.incomplete;
-
-    let find = |name: &str| -> Option<PathBuf> {
-        if name.contains('/') {
-            return Path::new(name).is_absolute().then(|| name.into());
+    // Find every library the loader would load, recursively, the way it
+    // would: rpath/runpath, `LD_LIBRARY_PATH`, then `/etc/ld.so.conf` or
+    // musl's `/etc/ld-musl-$ARCH.path`, then the default directories.
+    let tree = match DependencyAnalyzer::new(PathBuf::from("/")).analyze(path) {
+        Ok(tree) => tree,
+        Err(_err) => {
+            #[cfg(feature = "tracing")]
+            debug!("compat {}: can't resolve libraries: {_err}", path.display());
+            return Ok(());
         }
-        if file_name(interp) == name {
-            return Some(interp.into());
-        }
-        path.find(name, elf.ident)
     };
 
-    let mut found = Vec::with_capacity(elf.needed.len());
-    for name in &elf.needed {
-        if matches!(flavor, Flavor::Musl(_)) && is_musl_builtin(name) {
-            continue;
+    // A library not found may still be found by the loader when:
+    //
+    // - the binary is for another architecture, e.g. run through
+    //   qemu-user, whose libraries may live in a sysroot only the
+    //   emulator knows about;
+    // - an rpath depends on where the binary ends up (`$ORIGIN` and
+    //   friends), not where it was downloaded to;
+    // - glibc is configured without `/etc/ld.so.conf`, e.g. NixOS'
+    //   nix-ld, which takes its library path from the environment.
+    let can_tell_missing = host_ident() == Some(elf.ident)
+        && !elf.rpaths.iter().any(|rpath| rpath.contains('$'))
+        && (musl || Path::new("/etc/ld.so.conf").exists());
+
+    let mut missing: Vec<_> = tree
+        .libraries
+        .values()
+        .filter(|lib| !lib.found() && !(musl && is_musl_builtin(&lib.name)))
+        .map(|lib| &lib.name)
+        .collect();
+    missing.sort_unstable();
+    if let Some(name) = missing.first() {
+        if can_tell_missing {
+            return Err(Incompatible::Library {
+                name: (*name).clone(),
+            });
         }
-        match find(name) {
-            Some(lib) => found.push((name.as_str(), lib)),
-            None if can_tell_missing => {
-                return Err(Incompatible::Library { name: name.clone() });
-            }
-            None => {
-                #[cfg(feature = "tracing")]
-                debug!("compat: {name} not found, but the search path is incomplete");
-            }
-        }
+        #[cfg(feature = "tracing")]
+        debug!("compat: {missing:?} not found, but the loader may find them");
     }
 
     // musl doesn't implement symbol versioning.
-    if matches!(flavor, Flavor::Musl(_)) {
+    if musl {
         return Ok(());
     }
 
     for verneed in &elf.verneed {
-        let Some((_, lib)) = found.iter().find(|(name, _)| *name == verneed.file) else {
+        let Some(lib) = tree
+            .libraries
+            .get(&verneed.file)
+            .and_then(|lib| lib.realpath.as_deref())
+        else {
             continue;
         };
-        let Some(provided) = open_regular(lib)
-            .ok()
-            .and_then(|file| elf::parse(&file).ok().flatten())
-            .map(|lib| lib.verdef)
-        else {
+        let Some(provided) = elf::parse(lib).ok().flatten().map(|lib| lib.verdef) else {
             continue;
         };
         // glibc only warns about a library without version definitions.
@@ -434,7 +287,7 @@ mod tests {
     use super::*;
 
     async fn check(path: &Path) -> Result<(), Incompatible> {
-        Host::load().await.check(path).await
+        Host::new().check(path).await
     }
 
     #[test]
@@ -469,9 +322,10 @@ mod tests {
             Some(Flavor::Glibc)
         ));
         assert!(matches!(flavor("/lib64/ld64.so.2"), Some(Flavor::Glibc)));
-        assert!(
-            matches!(flavor("/lib/ld-musl-x86_64.so.1"), Some(Flavor::Musl(arch)) if arch == "x86_64")
-        );
+        assert!(matches!(
+            flavor("/lib/ld-musl-x86_64.so.1"),
+            Some(Flavor::Musl)
+        ));
         assert!(flavor("/system/bin/linker64").is_none());
     }
 
@@ -492,7 +346,7 @@ mod tests {
         let mut to = to.to_vec();
         to.resize(from.len(), 0);
 
-        let mut exe = fs::read(env::current_exe().unwrap()).unwrap();
+        let mut exe = std::fs::read(env::current_exe().unwrap()).unwrap();
         let mut replaced = 0;
         let mut i = 0;
         while let Some(pos) = exe[i..].windows(from.len()).position(|w| w == from) {
@@ -503,7 +357,7 @@ mod tests {
         assert!(replaced > 0);
 
         let path = dir.join("patched");
-        fs::write(&path, exe).unwrap();
+        std::fs::write(&path, exe).unwrap();
         path
     }
 
@@ -549,7 +403,7 @@ mod tests {
         any(target_arch = "x86_64", target_arch = "aarch64")
     ))]
     async fn missing_library_rejected() {
-        if Host::load().await.ld_cache.is_none() {
+        if !Path::new("/etc/ld.so.conf").exists() {
             return;
         }
         let dir = tempfile::tempdir().unwrap();

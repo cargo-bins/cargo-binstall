@@ -22,7 +22,7 @@
 //!
 //! The check only fails on what the loader would certainly reject. When
 //! something can't be determined (a library search path relative to the
-//! binary, a host without `/etc/ld.so.cache`, a foreign architecture run
+//! binary, a glibc without `/etc/ld.so.conf`, a foreign architecture run
 //! through binfmt, a file that isn't ELF), that part is skipped.
 //!
 //! A [`Host`] comes from [`crate::detect`], and
@@ -35,7 +35,6 @@ use std::{error::Error, fmt};
 cfg_select! {
     any(target_os = "linux", target_os = "android") => {
         mod elf;
-        mod ldcache;
         mod linux;
         pub use linux::Host;
     }

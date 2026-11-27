@@ -52,7 +52,7 @@ pub(super) async fn detect_targets(target: String) -> (Vec<String>, Host) {
             let gnu_target = format!("{cpu_arch}-unknown-linux-gnu{abi}");
             let musl_target = musl_fallback_target();
 
-            let host = Host::load().await;
+            let host = Host::new();
 
             let has_glibc = async {
                 match probe::find(&gnu_target) {
@@ -98,10 +98,9 @@ pub(super) async fn detect_targets(target: String) -> (Vec<String>, Host) {
                 .collect();
             (targets, host)
         }
-        Libc::Android | Libc::Unknown => (
-            vec![target.clone(), musl_fallback_target()],
-            Host::load().await,
-        ),
+        Libc::Android | Libc::Unknown => {
+            (vec![target.clone(), musl_fallback_target()], Host::new())
+        }
     }
 }
 
