@@ -66,16 +66,13 @@ fi
 # shellcheck disable=SC3040
 (set -o pipefail 2> /dev/null) && set -o pipefail
 
-# Default to this checkout's version, so a pinned action installs what it is pinned to.
-# Without a Cargo.toml (piped from curl) or a release for that version, use latest.
-if [ -z "${BINSTALL_VERSION:-}" ]; then
-    cargo_toml="$(dirname "$0")/crates/bin/Cargo.toml"
-    if [ -f "$cargo_toml" ]; then
-        checkout_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$cargo_toml" | head -n 1)"
-        if [ -n "$checkout_version" ] && download "https://github.com/cargo-bins/cargo-binstall/releases/tag/v${checkout_version}" > /dev/null 2>&1; then
-            BINSTALL_VERSION="$checkout_version"
-        fi
-    fi
+# Run as the action without a `version`, try the version of the action's own
+# checkout first, so a pinned action installs what it is pinned to. Only the
+# action sets `GITHUB_ACTION_PATH`: piped from curl, `$0` is the shell, and a
+# `crates/bin/Cargo.toml` in the working directory belongs to someone else.
+checkout_version=
+if [ -z "${BINSTALL_VERSION:-}" ] && [ -f "${GITHUB_ACTION_PATH:-}/crates/bin/Cargo.toml" ]; then
+    checkout_version="$(sed -n '/^version = "\(.*\)"$/{s//\1/p;q;}' "$GITHUB_ACTION_PATH/crates/bin/Cargo.toml")"
 fi
 
 case "${BINSTALL_VERSION:-}" in
@@ -90,15 +87,30 @@ cd "$(mktemp -d)"
 # given, otherwise from `[..]/releases/download/VERSION/[..]`. Note the shifted
 # location of '/download'.
 if [ -z "${BINSTALL_VERSION:-}" ]; then
-    base_url="https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
+    base_url="https://github.com/cargo-bins/cargo-binstall/releases/latest/download/"
 else
-    base_url="https://github.com/cargo-bins/cargo-binstall/releases/download/${BINSTALL_VERSION}/cargo-binstall-"
+    base_url="https://github.com/cargo-bins/cargo-binstall/releases/download/${BINSTALL_VERSION}/"
 fi
+
+# `fetch ASSET` downloads ASSET into the current directory. The checkout's
+# version has no release between its release commit and the release being
+# published, or under `uses: ./` in this repository, so fall back to latest.
+# Downloading the asset is the check: a release is a draft, invisible, until
+# its assets are uploaded.
+fetch() {
+    if [ -n "$checkout_version" ] &&
+        download "https://github.com/cargo-bins/cargo-binstall/releases/download/v${checkout_version}/$1" > "$1"; then
+        return
+    fi
+    if [ -n "$checkout_version" ]; then
+        echo "No release of v${checkout_version} to download, installing the latest release" >&2
+    fi
+    download "${base_url}$1" > "$1"
+}
 
 os="$(uname -s)"
 if [ "$os" = "Darwin" ]; then
-    url="${base_url}universal-apple-darwin.zip"
-    download "$url" > cargo-binstall-universal-apple-darwin.zip
+    fetch cargo-binstall-universal-apple-darwin.zip
     unzip cargo-binstall-universal-apple-darwin.zip
 elif [ "$os" = "Linux" ]; then
     machine="$(uname -m)"
@@ -113,14 +125,12 @@ elif [ "$os" = "Linux" ]; then
         target="${target}eabihf"
     fi
 
-    url="${base_url}${target}.tgz"
-    download "$url" > "cargo-binstall-${target}.tgz"
+    fetch "cargo-binstall-${target}.tgz"
     tar -xvzf "cargo-binstall-${target}.tgz"
 elif [ "${OS-}" = "Windows_NT" ]; then
     machine="$(uname -m)"
     target="${machine}-pc-windows-msvc"
-    url="${base_url}${target}.zip"
-    download "$url" > "cargo-binstall-${target}.zip"
+    fetch "cargo-binstall-${target}.zip"
     unzip "cargo-binstall-${target}.zip"
 else
     echo "Unsupported OS ${os}"

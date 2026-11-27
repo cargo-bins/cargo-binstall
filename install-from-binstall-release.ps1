@@ -2,20 +2,16 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
 $tmpdir = $Env:TEMP
 $BINSTALL_VERSION = $Env:BINSTALL_VERSION
-# Default to this checkout's version, as in the shell script.
-if (-not $BINSTALL_VERSION -and $PSScriptRoot) {
-    $cargo_toml = Join-Path $PSScriptRoot "crates\bin\Cargo.toml"
+# Run as the action without a `version`, try the version of the action's own
+# checkout first, as in the shell script.
+$checkout_version = $null
+if (-not $BINSTALL_VERSION -and $Env:GITHUB_ACTION_PATH) {
+    $cargo_toml = Join-Path $Env:GITHUB_ACTION_PATH "crates\bin\Cargo.toml"
     $match = if (Test-Path $cargo_toml) {
         Select-String -Path $cargo_toml -Pattern '^version = "(.*)"$' | Select-Object -First 1
     }
     if ($match) {
         $checkout_version = $match.Matches[0].Groups[1].Value
-        try {
-            Invoke-WebRequest -Uri "https://github.com/cargo-bins/cargo-binstall/releases/tag/v$checkout_version" -UseBasicParsing -Method Head | Out-Null
-            $BINSTALL_VERSION = $checkout_version
-        } catch {
-            # No release for this version yet, use latest
-        }
     }
 }
 if ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
@@ -26,9 +22,9 @@ if ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
 # given, otherwise from `[..]/releases/download/VERSION/[..]`. Note the shifted
 # location of '/download'.
 $base_url = if (-not $BINSTALL_VERSION) {
-    "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-"
+    "https://github.com/cargo-bins/cargo-binstall/releases/latest/download/"
 } else {
-    "https://github.com/cargo-bins/cargo-binstall/releases/download/$BINSTALL_VERSION/cargo-binstall-"
+    "https://github.com/cargo-bins/cargo-binstall/releases/download/$BINSTALL_VERSION/"
 }
 
 $proc_arch = [Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE", [EnvironmentVariableTarget]::Machine)
@@ -40,14 +36,27 @@ if ($proc_arch -eq "AMD64") {
     throw "Unsupported Architecture: $proc_arch"
 }
 
-$url = "$base_url$arch-pc-windows-msvc.zip"
+$asset = "cargo-binstall-$arch-pc-windows-msvc.zip"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 # create temp with zip extension (or Expand will complain)
 $zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } -PassThru
-try {
-    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-} catch {
-    throw "Failed to download: $_"
+# Downloading the asset is the check that the checkout's version has a
+# release, falling back to latest as in the shell script.
+$downloaded = $false
+if ($checkout_version) {
+    try {
+        Invoke-WebRequest -Uri "https://github.com/cargo-bins/cargo-binstall/releases/download/v$checkout_version/$asset" -OutFile $zip -UseBasicParsing
+        $downloaded = $true
+    } catch {
+        Write-Verbose -Verbose -Message "No release of v$checkout_version to download, installing the latest release"
+    }
+}
+if (-not $downloaded) {
+    try {
+        Invoke-WebRequest -Uri "$base_url$asset" -OutFile $zip -UseBasicParsing
+    } catch {
+        throw "Failed to download: $_"
+    }
 }
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 $sw.Stop()
