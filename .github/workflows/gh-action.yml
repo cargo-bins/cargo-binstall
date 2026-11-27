@@ -30,15 +30,52 @@ jobs:
   test-gha-installer:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
+        # The checkout's version is normally the latest release, so set it to
+        # the previous one to tell the two apart.
+        # - released: the action installs the checkout's version.
+        # - unreleased: it has no release, so the action installs the latest.
+        # - latest: `version: latest` overrides the checkout's version.
+        case: [released, unreleased, latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set the checkout's version
+        shell: bash
+        env:
+          CASE: ${{ matrix.case }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo=cargo-bins/cargo-binstall
+          latest="$(gh api "repos/$repo/releases/latest" --jq .tag_name)"
+          # Other crates in this repository have releases too.
+          previous="$(gh release list --repo "$repo" --exclude-drafts --exclude-pre-releases --limit 100 \
+              --json tagName --jq '[.[].tagName | select(test("^v[0-9]"))][1]')"
+          case "$CASE" in
+              released) checkout="${previous#v}" expected="${previous#v}" ;;
+              unreleased) checkout=9999.0.0 expected="${latest#v}" ;;
+              latest) checkout="${previous#v}" expected="${latest#v}" ;;
+          esac
+          # No `$` anchor: the Windows checkout may have CRLF line endings.
+          sed -i.bak "s/^version = \"[^\"]*\"/version = \"$checkout\"/" crates/bin/Cargo.toml
+          grep -m 1 '^version = ' crates/bin/Cargo.toml
+          echo "EXPECTED_VERSION=$expected" >> "$GITHUB_ENV"
+
       - name: Install cargo-binstall
         uses: ./ # uses action.yml from root of the repo
+        with:
+          version: ${{ matrix.case == 'latest' && 'latest' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.CI_RELEASE_TEST_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Verify the installed version
+        shell: bash
+        run: |
+          installed="$(cargo binstall -V)"
+          echo "Installed $installed, expected $EXPECTED_VERSION"
+          [ "$installed" = "$EXPECTED_VERSION" ]
 
       - name: Verify successful installation - display cargo-binstall's help
         run: cargo binstall --help
