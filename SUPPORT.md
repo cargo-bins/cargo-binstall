@@ -274,6 +274,32 @@ Binary must be uploaded to the "File" page of your project, under the directory
 For all other situations, `binstall` does not provide a default `pkg-url` and
 you need to manually specify it.
 
+#### Releases made by dist on a simple host
+
+A release made by [dist](https://github.com/axodotdev/cargo-dist) on GitHub is
+found by the defaults above, as dist's archive names and layout match them.
+
+dist can also put a release on any static file server, set with
+[`simple-download-url`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#simple-download-url).
+`binstall` reads that from dist's config in the published crate:
+`dist-workspace.toml` or `dist.toml` next to its `Cargo.toml`,
+`[workspace.metadata.dist]` in the `Cargo.toml` as written (cargo keeps it as
+`Cargo.toml.orig`), or `[package.metadata.dist]`. The crate's directory has to
+be the workspace root for the first two, so this is only the case for a
+single-package workspace, or with `--manifest-path`/`--git` pointing at the
+root.
+
+If the crate doesn't set `pkg-url`, `binstall` then looks for dist's archive,
+`{ name }-{ target }` with `.tar.xz`, `.tar.gz`, `.tar.zst` or `.zip`, under
+`simple-download-url`, with `{tag}` as each of `{ version }`, `v{ version }`,
+`{ name }-v{ version }` and `{ name }-{ version }`, before the defaults above.
+The crate's repository may be on any host, or not be set at all.
+
+It isn't looked for if `simple-download-url` is under the crate's own
+repository on one of the hosts above, as the defaults find the release there,
+if [`hosting`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#hosting)
+leaves out `simple`, or if the config sets `dist = false`.
+
 ### QuickInstall
 
 [QuickInstall](https://github.com/alsuren/cargo-quickinstall) is an unofficial repository of prebuilt binaries for Crates, and `binstall` has built-in support for it! If your crate is built by QuickInstall, it will already work with `binstall`. However, binaries as configured above take precedence when they exist.

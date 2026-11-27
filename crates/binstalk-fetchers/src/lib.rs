@@ -5,7 +5,7 @@ use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::{
-    cargo_toml_binstall::{SigningAlgorithm, Strategy},
+    cargo_toml_binstall::{DistMeta, SigningAlgorithm, Strategy},
     crate_info::PkgUrlHint,
 };
 use thiserror::Error as ThisError;
@@ -246,6 +246,8 @@ pub struct Data {
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
     /// See [`Data::with_bins`].
     bins: Vec<BinInfo>,
+    /// See [`Data::with_dist_meta`].
+    dist: Option<DistMeta>,
 }
 
 /// A binary to install, see [`Data::with_bins`].
@@ -277,6 +279,7 @@ impl Data {
             repo_info,
             pkg_url_hint: None,
             bins: Vec::new(),
+            dist: None,
         }
     }
 
@@ -293,6 +296,7 @@ impl Data {
             repo_info: Arc::clone(&self.repo_info),
             pkg_url_hint: None,
             bins: self.bins.clone(),
+            dist: self.dist.clone(),
         }
     }
 
@@ -303,6 +307,16 @@ impl Data {
     /// and find nothing without them.
     pub fn with_bins(mut self, bins: Vec<BinInfo>) -> Self {
         self.bins = bins;
+        self
+    }
+
+    /// The crate's [dist] config, for [`GhCrateMeta`] to find its releases
+    /// on dist's simple host, see [`Meta::dist`].
+    ///
+    /// [dist]: https://github.com/axodotdev/cargo-dist
+    /// [`Meta::dist`]: binstalk_types::cargo_toml_binstall::Meta::dist
+    pub fn with_dist_meta(mut self, dist: Option<DistMeta>) -> Self {
+        self.dist = dist;
         self
     }
 

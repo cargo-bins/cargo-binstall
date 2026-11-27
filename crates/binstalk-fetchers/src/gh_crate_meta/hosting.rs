@@ -59,6 +59,53 @@ const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
     template!("{ repo }/files/binaries/v{ version }"),
 ];
 
+/// The release tags that dist's `{tag}` in `simple-download-url` is tried
+/// as: those of [`GITHUB_RELEASE_PATHS`] that need no repository or
+/// subcrate.
+const DIST_SIMPLE_TAGS: &[Template<'_>] = &[
+    template!("{ version }"),
+    template!("v{ version }"),
+    template!("{ name }-v{ version }"),
+    template!("{ name }-{ version }"),
+];
+
+/// The filename of the archive dist makes for a target.
+const DIST_FILENAME: Template<'_> = template!("/{ name }-{ target }{ archive-suffix }");
+
+/// The `pkg-url` a release made by dist may be at, if dist's
+/// `simple-download-url` is `simple_download_url`, e.g.
+/// `https://static.myapp.com/{tag}`: the directory the release's files
+/// are uploaded to, with `{tag}` for its git tag.
+///
+/// Only dist's own filename is tried, as a simple host can't list the files
+/// of a release, so each url tried is a request.
+///
+/// See <https://axodotdev.github.io/cargo-dist/book/reference/config.html#simple-download-url>.
+pub(crate) fn dist_simple_pkg_url_templates(
+    simple_download_url: &str,
+) -> impl Iterator<Item = Template<'_>> {
+    let dir = simple_download_url.trim_end_matches('/');
+    // Without `{tag}`, every tag has the same url.
+    let tags = if dir.contains("{tag}") {
+        DIST_SIMPLE_TAGS
+    } else {
+        &DIST_SIMPLE_TAGS[..1]
+    };
+    tags.iter().map(move |tag| {
+        let mut template = Template::new(&[], None);
+        for (i, text) in dir.split("{tag}").enumerate() {
+            if i > 0 {
+                template += tag;
+            }
+            if !text.is_empty() {
+                template += Item::Text(text);
+            }
+        }
+        template += &DIST_FILENAME;
+        template
+    })
+}
+
 /// Every filename is appended to every release path, followed by `suffix`.
 struct DefaultPkgUrls {
     paths: &'static [Template<'static>],
@@ -150,6 +197,37 @@ mod tests {
     use std::{env, fs, path::Path};
 
     use super::*;
+
+    #[test]
+    fn dist_simple_pkg_urls() {
+        let urls = |url| {
+            dist_simple_pkg_url_templates(url)
+                .map(|template| render(&template))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            urls("https://static.example.com/{tag}/"),
+            [
+                "https://static.example.com/{ version }/{ name }-{ target }{ archive-suffix }",
+                "https://static.example.com/v{ version }/{ name }-{ target }{ archive-suffix }",
+                "https://static.example.com/{ name }-v{ version }/{ name }-{ target }{ archive-suffix }",
+                "https://static.example.com/{ name }-{ version }/{ name }-{ target }{ archive-suffix }",
+            ]
+        );
+        assert_eq!(
+            urls("https://example.com/releases/{tag}/files"),
+            [
+                "https://example.com/releases/{ version }/files/{ name }-{ target }{ archive-suffix }",
+                "https://example.com/releases/v{ version }/files/{ name }-{ target }{ archive-suffix }",
+                "https://example.com/releases/{ name }-v{ version }/files/{ name }-{ target }{ archive-suffix }",
+                "https://example.com/releases/{ name }-{ version }/files/{ name }-{ target }{ archive-suffix }",
+            ]
+        );
+        assert_eq!(
+            urls("https://example.com/latest"),
+            ["https://example.com/latest/{ name }-{ target }{ archive-suffix }"]
+        );
+    }
 
     /// Renders `template` back into the syntax used in `Cargo.toml`.
     fn render(template: &Template<'_>) -> String {
