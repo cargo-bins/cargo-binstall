@@ -137,10 +137,10 @@ fn deserialize_url_without_credentials<'de, D: serde::Deserializer<'de>>(
 }
 
 impl CrateSource {
-    /// A source for the install records, without the credentials of `url`
-    /// (see [`strip_credentials`]): cargo keeps them in `.crates.toml` and
+    /// A source for the install records, without the password of `url`, nor
+    /// its user name over HTTP(S): cargo keeps them in `.crates.toml` and
     /// `.crates2.json`, but they are often a token, which should not be
-    /// stored in plain text.
+    /// stored in plain text. Over SSH the user name is the login (`git@`).
     pub fn new(source_type: SourceType, mut url: Url) -> Self {
         strip_credentials(&mut url);
         Self {
