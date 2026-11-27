@@ -16,7 +16,7 @@ if (-not $BINSTALL_VERSION -and $Env:BINSTALL_ACTION_PATH) {
         Write-Host "::warning::Could not read the version from $cargo_toml, installing the latest release"
     }
 }
-if ($BINSTALL_VERSION -eq 'latest') {
+if ($BINSTALL_VERSION -ceq 'latest') {
     # the latest release, not the action's own version
     $BINSTALL_VERSION = $null
 } elseif ($BINSTALL_VERSION -and $BINSTALL_VERSION -notlike 'v*') {
@@ -45,22 +45,23 @@ $asset = "cargo-binstall-$arch-pc-windows-msvc.zip"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 # create temp with zip extension (or Expand will complain)
 $zip = New-TemporaryFile | Rename-Item -NewName { $_ -replace 'tmp$', 'zip' } -PassThru
-$downloaded = $false
+$downloaded_version = $null
 if ($checkout_version) {
     try {
         Invoke-WebRequest -Uri "https://github.com/cargo-bins/cargo-binstall/releases/download/v$checkout_version/$asset" -OutFile $zip -UseBasicParsing
-        $downloaded = $true
+        $downloaded_version = $checkout_version
         Write-Verbose -Verbose -Message "Installing v$checkout_version, the version of the action's checkout"
     } catch {
         Write-Verbose -Verbose -Message "Could not download v$checkout_version, installing the latest release: $_"
     }
 }
-if (-not $downloaded) {
+if (-not $downloaded_version) {
     try {
         Invoke-WebRequest -Uri "$base_url$asset" -OutFile $zip -UseBasicParsing
     } catch {
         throw "Failed to download: $_"
     }
+    $downloaded_version = $BINSTALL_VERSION -replace '^v', ''
 }
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 $sw.Stop()
@@ -70,7 +71,8 @@ Write-Verbose -Verbose -Message "Download: $($sw.Elapsed.Seconds) seconds"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall.exe" "--self-install"
 if ($ps.ExitCode -ne 0) {
-    Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force cargo-binstall"
+    $crate = if ($downloaded_version) { "cargo-binstall@$downloaded_version" } else { "cargo-binstall" }
+    & "$tmpdir\cargo-binstall.exe" -y --force $crate
 }
 $zip | Remove-Item
 $sw.Stop()
