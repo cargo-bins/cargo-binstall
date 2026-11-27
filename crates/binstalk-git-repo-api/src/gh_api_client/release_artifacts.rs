@@ -61,6 +61,11 @@ pub struct Artifacts {
 }
 
 impl Artifacts {
+    /// The names of all the assets.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.assets.iter().map(|artifact| artifact.name.as_str())
+    }
+
     /// get url for downloading the artifact using GitHub API (for private repository).
     pub(super) fn get_artifact_url(&self, artifact_name: &str) -> Option<Url> {
         self.assets

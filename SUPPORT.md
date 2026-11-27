@@ -274,6 +274,18 @@ Binary must be uploaded to the "File" page of your project, under the directory
 For all other situations, `binstall` does not provide a default `pkg-url` and
 you need to manually specify it.
 
+#### Packages of another crate in the same release
+
+If none of these is found for a crate in a GitHub repository, its binaries
+may be in the package of another crate released with it, such as nushell's
+`nu-{ version }-{ target }.tar.gz`, which also has the binaries of its plugins
+(crates `nu_plugin_*`). `binstall` then looks at the asset list of the
+release tagged `{ version }` or `v{ version }`, and if every asset there named
+like one of the file names above for this target is named after the same
+other name, it uses that package, if it has the crate's binaries.
+
+Installed together, such crates download the package once.
+
 ### QuickInstall
 
 [QuickInstall](https://github.com/alsuren/cargo-quickinstall) is an unofficial repository of prebuilt binaries for Crates, and `binstall` has built-in support for it! If your crate is built by QuickInstall, it will already work with `binstall`. However, binaries as configured above take precedence when they exist.

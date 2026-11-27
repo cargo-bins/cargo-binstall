@@ -1,7 +1,10 @@
 use std::{borrow::Cow, fmt, iter, path::Path, sync::Arc};
 
 use binstalk_downloader::download::DownloadError;
-use binstalk_git_repo_api::gh_api_client::GhReleaseArtifactUrl;
+use binstalk_git_repo_api::{
+    gh_api_client::{GhRelease, GhReleaseArtifact, GhReleaseArtifactUrl, ReleaseAssetsPage},
+    git_refs::ReleaseTag,
+};
 use binstalk_types::{
     cargo_toml_binstall::Strategy,
     crate_info::{PkgUrlHint, RenderedWith},
@@ -55,6 +58,145 @@ struct Resolved {
     /// The binary it is the package of, if each binary is in its own
     /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
+}
+
+/// An asset name a default template renders to for another crate, see
+/// [`GhCrateMeta::find_sibling`].
+struct SiblingPattern {
+    release: GhRelease,
+    /// What is before and after the name in the asset name.
+    prefix: CompactString,
+    suffix: CompactString,
+    /// The URL, with a placeholder for the name.
+    url: Url,
+    pkg_fmt: PkgFmt,
+    archive_suffix: Option<&'static str>,
+    target_arch: Option<&'static str>,
+    pkg_url: Arc<str>,
+}
+
+/// What `{ name }` is rendered as in a [`SiblingPattern`], to tell where the
+/// name is in an asset name: something no asset name has.
+const SIBLING_PLACEHOLDER: &str = "binstall0sibling0name";
+
+/// The asset names the default templates `pkg_urls` render to for another
+/// crate than `data`'s, in the release tags not named after a crate.
+fn sibling_patterns(
+    data: &Data,
+    target: &str,
+    target_related_info: &dyn leon::Values,
+    pkg_urls: &[(Arc<str>, Template<'_>)],
+    pkg_fmts: impl Iterator<Item = PkgFmt> + Clone,
+    repo: Option<&str>,
+    subcrate: Option<&str>,
+) -> Vec<SiblingPattern> {
+    let data = data.with_name(SIBLING_PLACEHOLDER.into());
+    let mut patterns = Vec::new();
+    for ((pkg_url_str, pkg_url), pkg_fmt) in pkg_urls.iter().cartesian_product(pkg_fmts) {
+        if pkg_url.has_key("subcrate") {
+            continue;
+        }
+        for (url, archive_suffix, target_arch) in candidate_urls(
+            &data,
+            None,
+            target,
+            target_related_info,
+            pkg_fmt,
+            pkg_url,
+            repo,
+            subcrate,
+        ) {
+            let Some(GhReleaseArtifact {
+                release,
+                artifact_name,
+            }) = GhReleaseArtifact::try_extract_from_url(&url)
+            else {
+                continue;
+            };
+            if release.tag.contains(SIBLING_PLACEHOLDER) {
+                continue;
+            }
+            let Some((prefix, suffix)) = artifact_name.split_once(SIBLING_PLACEHOLDER) else {
+                continue;
+            };
+            patterns.push(SiblingPattern {
+                release,
+                prefix: prefix.into(),
+                suffix: suffix.into(),
+                url,
+                pkg_fmt,
+                archive_suffix,
+                target_arch,
+                pkg_url: Arc::clone(pkg_url_str),
+            });
+        }
+    }
+    patterns
+}
+
+/// The name of the only other crate whose packages `releases` have, by
+/// matching their asset names against `patterns`, with the patterns its
+/// packages match. `None` if there is none, or the assets are named after
+/// several names, e.g. of several tools in a release.
+///
+/// * `own_name` - the crate's name, which is not looked for: its packages
+///   were looked for already.
+/// * `releases` - the asset names of each release.
+fn sibling_name<'p>(
+    own_name: &str,
+    patterns: &'p [SiblingPattern],
+    releases: &[(GhRelease, Vec<CompactString>)],
+) -> Option<(CompactString, Vec<&'p SiblingPattern>)> {
+    // The crate's own packages, e.g. `nu-0.117.0-{ target }.tar.gz` of
+    // `nu`, which `{ name }-{ target }` matches as named after `nu-0.117.0`.
+    let own: Vec<String> = patterns
+        .iter()
+        .map(|pattern| format!("{}{own_name}{}", pattern.prefix, pattern.suffix))
+        .collect();
+
+    // Every other asset matching a pattern, with the name it is after.
+    let matched: Vec<(&str, &str, &SiblingPattern)> = patterns
+        .iter()
+        .flat_map(|pattern| {
+            let assets = releases
+                .iter()
+                .find(|(release, _)| *release == pattern.release)
+                .map(|(_, assets)| assets.as_slice())
+                .unwrap_or_default();
+            let own = &own;
+            assets.iter().filter_map(move |asset| {
+                if own.iter().any(|own| own == asset) {
+                    return None;
+                }
+                let name = asset
+                    .strip_prefix(pattern.prefix.as_str())?
+                    .strip_suffix(pattern.suffix.as_str())?;
+                (!name.is_empty()).then_some((name, asset.as_str(), pattern))
+            })
+        })
+        .collect();
+
+    // The first name, if all the assets are named after it: not only after
+    // `nu-0.117.0`, say, which `{ name }-{ target }` matches too in
+    // `nu-0.117.0-{ target }`.
+    let (name, _, _) = matched.first()?;
+    let is_of_name = |asset: &str| {
+        matched
+            .iter()
+            .any(|(other, other_asset, _)| other == name && *other_asset == asset)
+    };
+    if !matched.iter().all(|(_, asset, _)| is_of_name(asset)) {
+        return None;
+    }
+
+    Some((
+        CompactString::from(*name),
+        matched
+            .iter()
+            .filter(|(other, _, _)| other == name)
+            .map(|(_, _, pattern)| *pattern)
+            .collect(),
+    ))
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -190,6 +332,7 @@ impl super::Fetcher for GhCrateMeta {
         let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
         let mut is_per_bin = false;
+        let is_default = pkg_url.is_none();
 
         let pkg_urls = if let Some(template) = pkg_url {
             let pkg_url = meta.pkg_url.as_deref().expect("parsed above");
@@ -295,11 +438,17 @@ impl super::Fetcher for GhCrateMeta {
             return self.find_per_bin(&pkg_urls, pkg_fmts, repo, subcrate).await;
         }
 
-        let candidates = self.candidates(&pkg_urls, pkg_fmts, None, repo, subcrate);
-        Ok(self
-            .probe(candidates, repo, subcrate)
-            .await?
-            .map(|resolved| self.found(resolved)))
+        let candidates = self.candidates(&pkg_urls, pkg_fmts.clone(), None, repo, subcrate);
+        if let Some(resolved) = self.probe(candidates, repo, subcrate).await? {
+            return Ok(Some(self.found(resolved)));
+        }
+
+        if !is_default {
+            return Ok(None);
+        }
+        // Before any other fetcher, so that an upstream package wins over
+        // third-party ones such as cargo-quickinstall's.
+        self.find_sibling(&pkg_urls, pkg_fmts, repo, subcrate).await
     }
 
     fn fetcher_name(&self) -> &'static str {
@@ -401,6 +550,125 @@ impl GhCrateMeta {
             debug!(?resolved, "Winning URL found!");
         }
         Ok(resolved)
+    }
+
+    /// Find the package of another crate in the same release, which may
+    /// have this crate's binaries too, for a crate the default templates
+    /// found nothing of: e.g. nushell's `nu-{version}-{target}.tar.gz` has
+    /// the binaries of its plugins, crates `nu_plugin_*`, which have no
+    /// packages of their own.
+    ///
+    /// The asset lists of the releases of the default templates, which the
+    /// probe got already, are searched for assets named like one of them
+    /// but after another name, so no request is needed for that. Only if
+    /// all such assets for this target are named after one name is that
+    /// package looked for. Whether it has the crate's binaries is only
+    /// known once it is extracted: if not, the next fetcher is tried.
+    ///
+    /// Only release tags that are not named after a crate are searched,
+    /// i.e. `{ version }` and `v{ version }`: those of a workspace's
+    /// release, not of one of its crates.
+    async fn find_sibling(
+        self: &Arc<Self>,
+        pkg_urls: &[(Arc<str>, Template<'_>)],
+        pkg_fmts: impl Iterator<Item = PkgFmt> + Clone,
+        repo: Option<&str>,
+        subcrate: Option<&str>,
+    ) -> Result<Option<Box<dyn Found>>, FetchError> {
+        let target = &self.target_data.target;
+        let patterns = sibling_patterns(
+            &self.data,
+            target,
+            &self.target_data.target_related_info,
+            pkg_urls,
+            pkg_fmts,
+            repo,
+            subcrate,
+        );
+
+        // The asset names of each release, got once.
+        let mut releases = Vec::<(GhRelease, Vec<CompactString>)>::new();
+        for pattern in &patterns {
+            if releases
+                .iter()
+                .any(|(release, _)| *release == pattern.release)
+            {
+                continue;
+            }
+            // The probe dropped the candidates of missing tags without
+            // getting their asset lists, nor should this.
+            if let Some(ReleaseTag { repo, tag }) = ReleaseTag::of_asset(&pattern.url)
+                && self.data.context.repo_tags(&repo).lock().await.exists(&tag) == Some(false)
+            {
+                continue;
+            }
+            if let Some(names) = self.release_asset_names(&pattern.release).await {
+                releases.push((pattern.release.clone(), names));
+            }
+        }
+
+        let Some((name, matched)) = sibling_name(&self.data.name, &patterns, &releases) else {
+            debug!(
+                "No package of another crate found for {} on target {target}, \
+                or of several",
+                self.data.name
+            );
+            return Ok(None);
+        };
+
+        info!(
+            "No package of crate {} found on target {target}, looking for it in the package \
+            of {name} of the same release",
+            self.data.name
+        );
+        let candidates = matched
+            .into_iter()
+            .filter_map(|pattern| {
+                let url = pattern.url.as_str().replacen(SIBLING_PLACEHOLDER, &name, 1);
+                let url = Url::parse(&url).ok()?;
+                Some(Candidate::new(
+                    url,
+                    pattern.pkg_fmt,
+                    pattern.archive_suffix,
+                    pattern.target_arch,
+                    Arc::clone(&pattern.pkg_url),
+                ))
+            })
+            .collect();
+
+        let sibling = Arc::new(Self {
+            client: self.client.clone(),
+            gh_api_client: self.gh_api_client.clone(),
+            data: Arc::new(self.data.with_name(name)),
+            target_data: Arc::clone(&self.target_data),
+            signature_policy: self.signature_policy,
+        });
+        Ok(sibling
+            .probe(candidates, repo, subcrate)
+            .await?
+            .map(|resolved| sibling.found(resolved)))
+    }
+
+    /// The names of the assets of `release`, from the API's answer if it was
+    /// asked already, from github.com's asset list otherwise. `None` if it
+    /// can't tell.
+    async fn release_asset_names(&self, release: &GhRelease) -> Option<Vec<CompactString>> {
+        let context = &self.data.context;
+        if let Some(Some(artifacts)) = context.release_artifacts(release).get() {
+            return Some(artifacts.names().map(CompactString::from).collect());
+        }
+        // github.com has no page for it, only the API, which the probe
+        // asked already if it could.
+        if let Some(Some(info)) = self.data.repo_info.get()
+            && info.is_private
+        {
+            return None;
+        }
+        let page = context.release_assets_page(release);
+        let page = page
+            .get_or_init(|| ReleaseAssetsPage::fetch(&self.client, release))
+            .await;
+        Some(page.names()?.into_iter().map(CompactString::from).collect())
     }
 
     /// Find the package of each binary of [`Data::with_bins`], for a
@@ -1192,5 +1460,136 @@ mod test {
             Some(QUICKINSTALL),
             Some("{ repo }/releases/download/a.sig")
         ));
+    }
+
+    /// The asset names of nushell 0.117.0 for x86_64 Linux and Windows.
+    fn nushell_release(
+        extra: &[&str],
+    ) -> Vec<(
+        binstalk_git_repo_api::gh_api_client::GhRelease,
+        Vec<compact_str::CompactString>,
+    )> {
+        use binstalk_git_repo_api::gh_api_client::{GhRelease, GhRepo};
+
+        let release = GhRelease {
+            repo: GhRepo {
+                owner: "nushell".into(),
+                repo: "nushell".into(),
+            },
+            tag: "0.117.0".into(),
+        };
+        let assets = [
+            "nu-0.117.0-x86_64-unknown-linux-gnu.tar.gz",
+            "nu-0.117.0-x86_64-unknown-linux-musl.tar.gz",
+            "nu-0.117.0-x86_64-pc-windows-msvc.zip",
+            "nu-0.117.0-x86_64-pc-windows-msvc.msi",
+        ]
+        .iter()
+        .chain(extra)
+        .map(|&asset| asset.into())
+        .collect();
+        vec![(release, assets)]
+    }
+
+    /// What [`super::sibling_name`] finds for crate `name` in
+    /// `nushell/nushell/tree/main/crates/{name}` on `target`, with the
+    /// URLs of the packages.
+    fn sibling(name: &str, target: &str, extra: &[&str]) -> Option<(String, Vec<String>)> {
+        use std::sync::Arc;
+
+        use strum::IntoEnumIterator;
+
+        use super::{hosting::RepositoryHost, sibling_name, sibling_patterns, write_template};
+
+        let data = Data::new(
+            Default::default(),
+            name.into(),
+            "0.117.0".into(),
+            Some(format!(
+                "https://github.com/nushell/nushell/tree/main/crates/{name}"
+            )),
+        );
+        let mut buf = String::new();
+        let pkg_urls: Vec<(Arc<str>, Template<'_>)> = RepositoryHost::GitHub
+            .get_default_pkg_url_template()
+            .unwrap()
+            .map(|pkg_url| {
+                write_template(&pkg_url, &mut buf);
+                (buf.as_str().into(), pkg_url)
+            })
+            .collect();
+        let patterns = sibling_patterns(
+            &data,
+            target,
+            &leon::vals(|_| None),
+            &pkg_urls,
+            PkgFmt::iter(),
+            Some("https://github.com/nushell/nushell"),
+            Some(name),
+        );
+        let (name, matched) = sibling_name(name, &patterns, &nushell_release(extra))?;
+        let urls = matched
+            .iter()
+            .map(|pattern| {
+                pattern
+                    .url
+                    .as_str()
+                    .replacen(super::SIBLING_PLACEHOLDER, &name, 1)
+            })
+            .collect();
+        Some((name.into(), urls))
+    }
+
+    #[test]
+    fn sibling_package() {
+        const GNU: &str = "x86_64-unknown-linux-gnu";
+        let download = "https://github.com/nushell/nushell/releases/download/0.117.0";
+
+        // Also matched by `{ name }-{ target }` as named after `nu-0.117.0`.
+        assert_eq!(
+            sibling("nu_plugin_inc", GNU, &[]),
+            Some((
+                "nu".into(),
+                vec![format!("{download}/nu-0.117.0-{GNU}.tar.gz")]
+            ))
+        );
+        assert_eq!(
+            sibling("nu_plugin_inc", "x86_64-pc-windows-msvc", &[]),
+            Some((
+                "nu".into(),
+                vec![format!("{download}/nu-0.117.0-x86_64-pc-windows-msvc.zip")]
+            ))
+        );
+        // No package for the target.
+        assert_eq!(sibling("nu_plugin_inc", "aarch64-apple-darwin", &[]), None);
+        // The crate's own packages were looked for already.
+        assert_eq!(sibling("nu", GNU, &[]), None);
+        // Several other crates have packages: which one has the binaries is
+        // not known.
+        assert_eq!(
+            sibling(
+                "nu_plugin_inc",
+                GNU,
+                &[&format!("nu-lsp-0.117.0-{GNU}.tgz")]
+            ),
+            None
+        );
+        // Nor do other files, or packages for other targets.
+        assert_eq!(
+            sibling(
+                "nu_plugin_inc",
+                GNU,
+                &[
+                    &format!("nu-0.117.0-{GNU}.tar.gz.sha256"),
+                    "SHA256SUMS",
+                    &format!("nu-lsp-0.117.0-{GNU}-debug.tgz"),
+                    "nu-lsp-0.117.0-aarch64-unknown-linux-gnu.tgz",
+                ]
+            ),
+            Some((
+                "nu".into(),
+                vec![format!("{download}/nu-0.117.0-{GNU}.tar.gz")]
+            ))
+        );
     }
 }

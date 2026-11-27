@@ -80,6 +80,19 @@ impl ReleaseAssetsPage {
             Page::Unknown => ReleaseAssets::Unknown,
         }
     }
+
+    /// The names of all the assets it lists, `None` if it can't tell.
+    ///
+    /// The list comes from a page meant for people, so an asset missing from
+    /// it may still exist, and a listed one should be checked before it is
+    /// used.
+    pub fn names(&self) -> Option<Vec<&str>> {
+        match &self.0 {
+            Page::NotFound => Some(Vec::new()),
+            Page::Found(assets) => Some(assets.names()),
+            Page::Unknown => None,
+        }
+    }
 }
 
 /// The asset list github.com shows on the page of a release.
@@ -131,15 +144,20 @@ fn strip_suffix_ignore_case<'s>(s: &'s str, suffix: &str) -> Option<&'s str> {
 /// `href="/{owner}/{repo}{path}`, or with `https://github.com` before it.
 ///
 /// GitHub ignores the case of owner and repository names.
-fn links_to(html: &str, GhRepo { owner, repo }: &GhRepo, path: &str) -> bool {
-    html.match_indices(path).any(|(i, _)| {
-        strip_suffix_ignore_case(&html[..i], repo)
-            .and_then(|s| s.strip_suffix('/'))
-            .and_then(|s| strip_suffix_ignore_case(s, owner))
-            .and_then(|s| s.strip_suffix('/'))
-            .map(|s| s.strip_suffix("https://github.com").unwrap_or(s))
-            .is_some_and(|s| s.ends_with("href=\""))
-    })
+fn links_to(html: &str, repo: &GhRepo, path: &str) -> bool {
+    html.match_indices(path)
+        .any(|(i, _)| is_link_to_repo(&html[..i], repo))
+}
+
+/// Whether `before` ends with `href="/{owner}/{repo}`, or with
+/// `https://github.com` before `/{owner}`.
+fn is_link_to_repo(before: &str, GhRepo { owner, repo }: &GhRepo) -> bool {
+    strip_suffix_ignore_case(before, repo)
+        .and_then(|s| s.strip_suffix('/'))
+        .and_then(|s| strip_suffix_ignore_case(s, owner))
+        .and_then(|s| s.strip_suffix('/'))
+        .map(|s| s.strip_suffix("https://github.com").unwrap_or(s))
+        .is_some_and(|s| s.ends_with("href=\""))
 }
 
 impl ReleaseAssetList {
@@ -164,6 +182,26 @@ impl ReleaseAssetList {
             html,
             is_empty,
         })
+    }
+
+    /// The names of all the assets it links to, in the order it does.
+    fn names(&self) -> Vec<&str> {
+        let path = release_download_path(&self.release.tag);
+        let html = self.html.as_str();
+        let mut names: Vec<&str> = Vec::new();
+        for (i, _) in html.match_indices(path.as_str()) {
+            if !is_link_to_repo(&html[..i], &self.release.repo) {
+                continue;
+            }
+            let rest = &html[i + path.len()..];
+            let Some(name) = rest.find('"').map(|end| &rest[..end]) else {
+                continue;
+            };
+            if !name.is_empty() && !name.contains('/') && !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        names
     }
 
     /// The indices of `names` it lists, by searching for the link to each.
@@ -342,6 +380,34 @@ mod test {
             ]),
             [0]
         );
+    }
+
+    #[test]
+    fn test_release_asset_list_names() {
+        let release = gh_release("nushell", "nushell", "0.117.0");
+        let html = [
+            "/nushell/nushell/releases/download/0.117.0/nu-0.117.0-x86_64-unknown-linux-gnu.tar.gz",
+            // Listed twice, with the host.
+            "https://github.com/nushell/nushell/releases/download/0.117.0/nu-0.117.0-x86_64-unknown-linux-gnu.tar.gz",
+            "/nushell/nushell/releases/download/0.117.0/nu-0.117.0-x86_64-pc-windows-msvc.zip",
+            // Of another release, and another repository.
+            "/nushell/nushell/releases/download/0.117.0-rc.1/nu-0.117.0-rc.1-x86_64-unknown-linux-gnu.tar.gz",
+            "/other/nushell/releases/download/0.117.0/other-0.117.0-x86_64-unknown-linux-gnu.tar.gz",
+            "/nushell/nushell/archive/refs/tags/0.117.0.zip",
+        ]
+        .map(asset_link)
+        .concat();
+        let assets = ReleaseAssetsPage(Page::Found(ReleaseAssetList::new(&release, html).unwrap()));
+        assert_eq!(
+            assets.names().unwrap(),
+            [
+                "nu-0.117.0-x86_64-unknown-linux-gnu.tar.gz",
+                "nu-0.117.0-x86_64-pc-windows-msvc.zip",
+            ]
+        );
+
+        assert_eq!(ReleaseAssetsPage(Page::NotFound).names().unwrap(), [""; 0]);
+        assert_eq!(ReleaseAssetsPage(Page::Unknown).names(), None);
     }
 
     #[test]
