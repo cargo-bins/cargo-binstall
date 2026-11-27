@@ -312,8 +312,8 @@ impl super::Fetcher for GhCrateMeta {
         // Then the default templates with the name of the only binary to
         // install as `{ name }`, if it is named otherwise than the crate.
         // They are mostly assets of the same releases, so the probe checks
-        // them with the same tags and asset lists, after the crate's own, and
-        // the hint of either first. Before any other fetcher, so that the
+        // them with the same tags and asset lists, after the crate's own of
+        // the same release, and the hint of either first. Before any other fetcher, so that the
         // upstream package wins over third-party ones such as
         // cargo-quickinstall's.
         //

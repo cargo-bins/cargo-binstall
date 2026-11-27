@@ -291,13 +291,9 @@ impl Data {
     /// Have fetchers try how a previous version was found on `target` first,
     /// before probing everything else.
     ///
-    /// It is ignored unless it was found with this [`Data`]'s name, or the
-    /// name of its only binary (see [`Data::with_bins`]).
+    /// Only candidates rendered with the hint's name match it.
     pub fn with_pkg_url_hint(mut self, target: CompactString, hint: PkgUrlHint) -> Self {
-        let is_only_bin = matches!(&self.bins[..], [bin] if bin.name == hint.name);
-        if hint.name == self.name || is_only_bin {
-            self.pkg_url_hint = Some((target, hint));
-        }
+        self.pkg_url_hint = Some((target, hint));
         self
     }
 
