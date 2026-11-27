@@ -14,6 +14,8 @@ binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader", def
     "json",
 ] }
 compact_str = "0.10.0"
+# Already a dependency of binstalk-downloader.
+futures-util = "0.3.30"
 # Already a dependency of gix, which binstalk uses for git registries.
 gix-packetline = { version = "0.24.1", features = ["blocking-io"] }
 percent-encoding = "2.2.0"
