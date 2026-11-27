@@ -347,6 +347,29 @@ impl Data {
     }
 }
 
+/// Whether `url`'s server answers `HEAD` like `GET`, so a 404 to the `HEAD`
+/// needs no `GET` to confirm it.
+///
+/// github.com does: a private repository's page is 404 to both.
+///
+/// The exact host match is deliberate, like `GhRepo::try_extract_from_url`
+/// and unlike `RepositoryHost::GitHub`, which also takes GitHub Enterprise
+/// hosts: they may not answer `HEAD` the same way.
+fn trusts_head(url: &Url) -> bool {
+    url.domain() == Some("github.com")
+}
+
+/// Where `url` redirects to.
+fn redirected_final_url(
+    client: &GhApiClient,
+    url: Url,
+) -> impl Future<Output = Result<Url, RemoteError>> + '_ {
+    let get_after_404 = !trusts_head(&url);
+    client
+        .remote_client()
+        .get_redirected_final_url(url, get_after_404)
+}
+
 impl RepoInfo {
     /// What is known about the repository `repo`, kept in `cell`, `None` if
     /// there is none.
@@ -379,10 +402,7 @@ impl RepoInfo {
             client: &GhApiClient,
         ) -> Result<RepoInfo, FetchError> {
             let repo = Url::parse(repo)?;
-            let redirected = client
-                .remote_client()
-                .get_redirected_final_url(repo.clone())
-                .await;
+            let redirected = redirected_final_url(client, repo.clone()).await;
             // github.com shows a private repository only to its members
             // signed in with a browser, so one whose page loads is public:
             // no need to spend the API on it.
@@ -410,9 +430,7 @@ impl RepoInfo {
                         }
                     }
                     _ => {
-                        if let Ok(repo) =
-                            client.remote_client().get_redirected_final_url(repo).await
-                        {
+                        if let Ok(repo) = redirected_final_url(client, repo).await {
                             return Ok(RepoInfo {
                                 subcrate,
                                 repository_host: RepositoryHost::guess_git_hosting_services(&repo),
@@ -650,6 +668,20 @@ mod test {
         let repo_info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
 
         assert_eq!(url_without_git, repo_info.repo.as_str());
+    }
+
+    #[test]
+    fn test_trusts_head() {
+        for (url, trusted) in [
+            ("https://github.com/cargo-bins/cargo-binstall", true),
+            ("https://github.com/cargo-bins/cargo-binstall.git", true),
+            // GitHub Enterprise and other hosts may still need the GET.
+            ("https://github.example.com/a/b", false),
+            ("https://gitlab.com/a/b", false),
+            ("https://codeberg.org/a/b", false),
+        ] {
+            assert_eq!(trusts_head(&Url::parse(url).unwrap()), trusted, "{url}");
+        }
     }
 
     #[test]

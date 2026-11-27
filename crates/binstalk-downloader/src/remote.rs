@@ -359,10 +359,13 @@ impl Client {
             })
     }
 
+    /// * `get_after_404` - Whether a 404 to the `HEAD` is asked again with
+    ///   `GET`: some servers answer `HEAD` with 404 for a page `GET` finds.
     async fn head_or_fallback_to_get(
         &self,
         url: Url,
         error_for_status: bool,
+        get_after_404: bool,
     ) -> Result<reqwest::Response, Error> {
         let res = self
             .send_request(Request::new(Method::HEAD, url.clone()), error_for_status)
@@ -375,16 +378,14 @@ impl Client {
                 .await
         };
 
-        let is_retryable = |status| {
-            matches!(
-                status,
-                StatusCode::BAD_REQUEST              // 400
-                    | StatusCode::UNAUTHORIZED       // 401
-                    | StatusCode::FORBIDDEN          // 403
-                    | StatusCode::NOT_FOUND          // 404
-                    | StatusCode::METHOD_NOT_ALLOWED // 405
-                    | StatusCode::GONE // 410
-            )
+        let is_retryable = |status| match status {
+            StatusCode::NOT_FOUND => get_after_404,
+            StatusCode::BAD_REQUEST              // 400
+            | StatusCode::UNAUTHORIZED           // 401
+            | StatusCode::FORBIDDEN              // 403
+            | StatusCode::METHOD_NOT_ALLOWED     // 405
+            | StatusCode::GONE => true,          // 410
+            _ => false,
         };
 
         match res {
@@ -420,8 +421,17 @@ impl Client {
 
     /// Attempt to get final redirected url using `Method::HEAD` or fallback
     /// to `Method::GET`.
-    pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        self.head_or_fallback_to_get(url, true)
+    ///
+    /// * `get_after_404` - Whether a 404 to the `HEAD` is asked again with
+    ///   `GET`. Pass `false` for servers known to answer `HEAD` like `GET`,
+    ///   such as github.com. Other failing statuses always fall back to
+    ///   `GET`, since a proxy in between may be the one rejecting `HEAD`.
+    pub async fn get_redirected_final_url(
+        &self,
+        url: Url,
+        get_after_404: bool,
+    ) -> Result<Url, Error> {
+        self.head_or_fallback_to_get(url, true, get_after_404)
             .await
             .map(|response| response.url().clone())
     }
@@ -784,6 +794,92 @@ mod tests {
             .unwrap();
         assert_eq!(&body[..], b"ok");
         assert_eq!(server.join().unwrap(), 1);
+    }
+
+    /// A 404 for the `HEAD`, then a 200 for a `GET` asking again.
+    const NOT_FOUND_THEN_OK: &[&[u8]] = &[
+        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    ];
+
+    #[tokio::test]
+    async fn get_redirected_final_url_asks_again_with_get_after_head_404() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = serve_responses(listener, NOT_FOUND_THEN_OK);
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        test_client(true)
+            .get_redirected_final_url(url, true)
+            .await
+            .unwrap();
+        assert_eq!(server.join().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn get_redirected_final_url_without_get_after_404_does_not_ask_again() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Only the 404: a GET asking again finds nobody listening.
+        let server = serve_responses(listener, &NOT_FOUND_THEN_OK[..1]);
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let err = test_client(true)
+            .get_redirected_final_url(url, false)
+            .await
+            .unwrap_err();
+        let Error::Http(err) = err else {
+            panic!("expected an http error, got {err:?}")
+        };
+        assert_eq!(err.method, Method::HEAD);
+        assert_eq!(err.err.status(), Some(StatusCode::NOT_FOUND));
+        assert_eq!(server.join().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_redirected_final_url_without_get_after_404_still_gets_after_405() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Like a proxy that rejects HEAD.
+        let server = serve_responses(
+            listener,
+            &[
+                b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            ],
+        );
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        test_client(true)
+            .get_redirected_final_url(url, false)
+            .await
+            .unwrap();
+        assert_eq!(server.join().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn get_redirected_final_url_without_get_after_404_follows_redirects() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let redirect: &'static [u8] = format!(
+            "HTTP/1.1 301 Moved Permanently\r\nLocation: http://{addr}/new\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .into_bytes()
+        .leak();
+        let responses: &'static [&'static [u8]] = vec![
+            redirect,
+            b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        ]
+        .leak();
+        let server = serve_responses(listener, responses);
+
+        let url = Url::parse(&format!("http://{addr}/old")).unwrap();
+        let final_url = test_client(true)
+            .get_redirected_final_url(url, false)
+            .await
+            .unwrap();
+        assert_eq!(final_url.path(), "/new");
+        assert_eq!(server.join().unwrap(), 2);
     }
 
     #[tokio::test]
