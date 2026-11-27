@@ -10,6 +10,7 @@ use std::{
 };
 
 use binstalk_bins::BinFile;
+use binstalk_types::redact_url_userinfo;
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
 use compact_str::{CompactString, ToCompactString};
 use either::Either;
@@ -487,9 +488,10 @@ fn format_cmd(cmd: &Command) -> impl fmt::Display + '_ {
 
     let program = Either::Left(Path::new(cmd.get_program()).display());
 
+    // An index passed to cargo may hold a token.
     let program_args = cmd
         .get_args()
-        .map(OsStr::to_string_lossy)
+        .map(|arg| redact_url_userinfo(&arg.to_string_lossy()).into_owned())
         .map(Either::Right);
 
     iter::once(program).chain(program_args).format(" ")
@@ -511,6 +513,24 @@ mod tests {
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
         assert_eq!(args, ["--registry", "private-test"]);
+    }
+
+    #[test]
+    fn test_format_cmd_redacts_index_credentials() {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("install").arg("a");
+
+        apply_registry_selection(
+            &mut cmd,
+            None,
+            Some("sparse+https://user:secret-token@registry.example.com/index/"),
+            None,
+        );
+
+        assert_eq!(
+            format_cmd(&cmd).to_string(),
+            "cargo install a --index sparse+https://<redacted>@registry.example.com/index/"
+        );
     }
 
     #[test]

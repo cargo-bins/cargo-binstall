@@ -24,7 +24,7 @@ thiserror = "2.0.11"
 tokio = { version = "1.52.3", features = ["sync"], default-features = false }
 tracing = "0.1.43"
 url = "2.5.8"
-zeroize = "1.8.1"
+zeroize = "1.9.1"
 
 [dev-dependencies]
 binstalk-downloader = { version = "0.14.2", path = "../binstalk-downloader" }
