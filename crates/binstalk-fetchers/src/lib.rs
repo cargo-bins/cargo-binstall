@@ -351,12 +351,39 @@ impl Data {
 /// needs no `GET` to confirm it.
 ///
 /// github.com does: a private repository's page is 404 to both.
+fn trusts_head(url: &Url) -> bool {
+    is_github_com(url)
+}
+
+/// Whether `url` is on github.com itself.
 ///
 /// The exact host match is deliberate, like `GhRepo::try_extract_from_url`
 /// and unlike `RepositoryHost::GitHub`, which also takes GitHub Enterprise
-/// hosts: they may not answer `HEAD` the same way.
-fn trusts_head(url: &Url) -> bool {
+/// hosts: they may not behave like github.com.
+fn is_github_com(url: &Url) -> bool {
     url.domain() == Some("github.com")
+}
+
+/// Drop a trailing `.git` from a github.com repository url.
+///
+/// github.com answers `X.git` with a redirect to `X`, and a private `X.git`
+/// 404s like `X`, so asking for `X` right away saves a request either way.
+fn strip_github_dot_git(url: &mut Url) {
+    if !is_github_com(url) {
+        return;
+    }
+    let Some(name) = url
+        .path_segments()
+        .and_then(|mut segments| segments.next_back())
+        .and_then(|name| name.strip_suffix(".git"))
+        .map(CompactString::from)
+    else {
+        return;
+    };
+    // github.com repository names are `[A-Za-z0-9._-]`: nothing to escape.
+    if let Ok(mut segments) = url.path_segments_mut() {
+        segments.pop().push(&name);
+    }
 }
 
 /// Where `url` redirects to.
@@ -401,7 +428,8 @@ impl RepoInfo {
             repo: &str,
             client: &GhApiClient,
         ) -> Result<RepoInfo, FetchError> {
-            let repo = Url::parse(repo)?;
+            let mut repo = Url::parse(repo)?;
+            strip_github_dot_git(&mut repo);
             let redirected = redirected_final_url(client, repo.clone()).await;
             // github.com shows a private repository only to its members
             // signed in with a browser, so one whose page loads is public:
@@ -681,6 +709,30 @@ mod test {
             ("https://codeberg.org/a/b", false),
         ] {
             assert_eq!(trusts_head(&Url::parse(url).unwrap()), trusted, "{url}");
+        }
+    }
+
+    #[test]
+    fn test_strip_github_dot_git() {
+        for (url, stripped) in [
+            (
+                "https://github.com/cargo-bins/cargo-binstall.git",
+                "https://github.com/cargo-bins/cargo-binstall",
+            ),
+            (
+                "https://github.com/cargo-bins/cargo-binstall",
+                "https://github.com/cargo-bins/cargo-binstall",
+            ),
+            // Other hosts may need the `.git`.
+            ("https://gitlab.com/a/b.git", "https://gitlab.com/a/b.git"),
+            (
+                "https://github.example.com/a/b.git",
+                "https://github.example.com/a/b.git",
+            ),
+        ] {
+            let mut url = Url::parse(url).unwrap();
+            strip_github_dot_git(&mut url);
+            assert_eq!(url.as_str(), stripped);
         }
     }
 
