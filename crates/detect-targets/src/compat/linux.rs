@@ -1,255 +1,142 @@
-//! The check on Linux and Android.
+use std::{fs::File, path::Path, process::Stdio, time::Duration};
 
-use std::path::Path;
+use goblin::elf::Elf;
+use memmap2::Mmap;
+use tokio::{process::Command, task::spawn_blocking, time::timeout};
 
-use tokio::{sync::OnceCell, task::spawn_blocking};
-#[cfg(feature = "tracing")]
-use tracing::debug;
+use super::Incompatible;
+use crate::probe;
 
-use super::{
-    Incompatible,
-    elf::{self, Elf, Ident},
-    search::{self, Flavor, SystemPath},
-};
-use crate::probe::{self, Probe, ProbeResult};
-
-/// What target detection found out about this host, to check binaries
-/// against: the loader probes it ran.
-#[derive(Debug)]
-pub struct Host {
-    /// Results of the probes run so far, in [`probe::probes`] order:
-    /// `Some(runnable)`, or `None` if inconclusive.
-    probes: Vec<OnceCell<Option<bool>>>,
-}
-
-impl Host {
-    /// A host nothing is known about yet: probes run on demand, see
-    /// [`Self::run_probe`].
-    pub(crate) fn new() -> Self {
-        Self {
-            probes: probe::probes().iter().map(|_| OnceCell::new()).collect(),
-        }
-    }
-
-    /// Run the dynamic (`PT_INTERP`) probe `probe` once for this host:
-    /// `Some(runnable)`, or `None` if inconclusive.
-    pub(crate) async fn run_probe(&self, probe: &'static Probe) -> Option<bool> {
-        let index = probe::probes()
-            .iter()
-            .position(|p| std::ptr::eq(p, probe))
-            .expect("probes come from the probe table");
-        *self.probes[index]
-            .get_or_init(|| async {
-                match probe.run().await {
-                    ProbeResult::Runnable => Some(true),
-                    ProbeResult::NotRunnable => Some(false),
-                    ProbeResult::Inconclusive(_err) => {
-                        #[cfg(feature = "tracing")]
-                        debug!("probe {} inconclusive: {_err}", probe.target);
-                        None
-                    }
-                }
-            })
-            .await
-    }
-
-    /// Check whether the executable at `path` can run on this system.
-    ///
-    /// Returns `Ok` if it can, or if that can't be determined, including
-    /// when `path` is not an ELF file or can't be read.
-    pub async fn check(&self, path: &Path) -> Result<(), Incompatible> {
-        // The blocking parts run on the blocking pool. A `JoinError` from
-        // it, i.e. a panic, skips the check, but only in builds that
-        // unwind: cargo-binstall's release builds abort on panic.
-        let elf = {
-            let path = path.to_owned();
-            spawn_blocking(move || elf::parse(&path)).await.ok()
-        };
-        let elf = match elf {
-            Some(Ok(Some(elf))) => elf,
-            _other => {
-                #[cfg(feature = "tracing")]
-                debug!(
-                    "compat {}: skipped, not a readable ELF: {_other:?}",
-                    path.display()
-                );
-                return Ok(());
-            }
-        };
-        #[cfg(feature = "tracing")]
-        debug!("compat {}: {elf:?}", path.display());
-
-        // A static executable only needs the kernel to support its
-        // architecture, which target detection already established.
-        let Some(interp) = elf.interp.clone() else {
-            return Ok(());
-        };
-
-        if !self.loader_runs(&interp, elf.ident).await {
-            return Err(Incompatible::Loader { interp });
-        }
-
-        spawn_blocking(move || check_libraries(&elf, &interp))
-            .await
-            .unwrap_or(Ok(()))
-    }
-
-    /// Whether the loader at `interp` can run programs of this identity.
-    async fn loader_runs(&self, interp: &str, ident: Ident) -> bool {
-        match find_probe(interp, ident) {
-            Some(probe) => match self.run_probe(probe).await {
-                Some(runnable) => runnable,
-                None => Path::new(interp).is_file(),
-            },
-            // Not a standard loader path, so there is no probe for it.
-            // Running a probe with an arbitrary `PT_INTERP` would run
-            // whatever program the archive names, so just check that it
-            // exists.
-            None => Path::new(interp).is_file(),
-        }
-    }
-}
-
-fn find_probe(interp: &str, ident: Ident) -> Option<&'static Probe> {
-    probe::probes().iter().find(|p| {
-        p.spec.interp == interp
-            && p.spec.class == ident.class
-            && p.spec.endian == ident.endian
-            && p.spec.e_machine == ident.machine
-    })
-}
-
-/// The identity of the target this was built for, for telling native
-/// binaries from ones run through compat mode or binfmt. `None` for a
-/// target without a probe, which is never sure.
-fn host_ident() -> Option<Ident> {
-    probe::find(crate::TARGET).map(|probe| Ident {
-        class: probe.spec.class,
-        endian: probe.spec.endian,
-        machine: probe.spec.e_machine,
-    })
-}
-
-/// musl's loader provides these itself: `libc.so`, `libpthread.so.0`, ...
-fn is_musl_builtin(name: &str) -> bool {
-    name.strip_prefix("lib")
-        .and_then(|rest| rest.split_once('.'))
-        .is_some_and(|(lib, _)| {
-            matches!(lib, "c" | "pthread" | "rt" | "m" | "dl" | "util" | "xnet")
-        })
-}
-
-/// Check the libraries `elf` needs against those installed.
-fn check_libraries(elf: &Elf, interp: &str) -> Result<(), Incompatible> {
-    let Some(flavor) = Flavor::of(interp) else {
-        // bionic, uClibc, ...: only the loader was checked.
+/// Check whether the executable at `path` can run on this system, see
+/// the [module docs](super).
+///
+/// Returns `Ok` if it can, or if that can't be determined, including when
+/// `path` is not an ELF file or can't be read.
+pub async fn check(path: &Path) -> Result<(), Incompatible> {
+    let binary = path.to_owned();
+    // `None` for a static binary: target detection already established
+    // that the kernel runs it.
+    let Ok(Some(Some(interp))) = spawn_blocking(move || read_interp(&binary)).await else {
         return Ok(());
     };
-    let musl = matches!(flavor, Flavor::Musl { .. });
 
-    // A library not found may still be found by the loader when the
-    // binary is for another architecture, e.g. run through qemu-user,
-    // whose libraries may live in a sysroot only the emulator knows
-    // about. The search itself also doesn't conclude on what it can't
-    // follow: rpaths, and configuration it can't read.
-    let can_tell_missing = host_ident() == Some(elf.ident);
-    let libraries = search::libraries(elf, &SystemPath::read(&flavor), can_tell_missing, |name| {
-        musl && is_musl_builtin(name)
-    });
-    if let Some(name) = libraries.missing {
-        return Err(Incompatible::Library { name });
+    if !Path::new(&interp).exists() {
+        return Err(Incompatible::Loader { interp });
     }
-
-    // musl doesn't implement symbol versioning.
-    if musl {
+    // Only run a loader known to be one: a standard path, holding a real
+    // loader (one with no loader of its own, unlike e.g. gcompat's shim,
+    // which runs the program).
+    let loader = interp.clone();
+    let trusted = probe::probes().iter().any(|p| p.spec.interp == interp)
+        && spawn_blocking(move || read_interp(Path::new(&loader)) == Some(None))
+            .await
+            .unwrap_or(false);
+    if !trusted {
         return Ok(());
     }
 
-    for verneed in &elf.verneed {
-        // The library the search found, so the one the loader would load.
-        let Some((_, provided)) = libraries.found.get(&verneed.file) else {
-            continue;
-        };
-        // glibc only warns about a library without version definitions.
-        if provided.is_empty() {
-            continue;
-        }
+    // A path without a `/` would be looked up like a library name.
+    let Ok(path) = std::path::absolute(path) else {
+        return Ok(());
+    };
+    let output = Command::new(&interp)
+        .arg("--list")
+        .arg(path)
+        .stdin(Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    match timeout(Duration::from_secs(10), output).await {
+        Ok(Ok(output)) => parse_list(&String::from_utf8_lossy(&output.stderr))
+            .or_else(|| parse_list(&String::from_utf8_lossy(&output.stdout)))
+            .map_or(Ok(()), Err),
+        // Can't run it (noexec, seccomp, a foreign arch without binfmt):
+        // inconclusive.
+        _ => Ok(()),
+    }
+}
 
-        let missing = verneed
-            .versions
-            .iter()
-            .filter(|(version, weak)| !weak && !provided.contains(version))
-            .map(|(version, _)| version)
-            .max_by(|a, b| version_cmp(a, b));
-        if let Some(version) = missing {
-            let series = series(version);
-            let newest = provided
-                .iter()
-                .filter(|v| series.is_some() && series == self::series(v))
-                .max_by(|a, b| version_cmp(a, b))
-                .cloned();
-            return Err(Incompatible::Version {
-                library: verneed.file.clone(),
-                version: version.clone(),
-                provided: newest,
+/// `Some(PT_INTERP)` of the ELF file at `path`, `Some(None)` for one
+/// without, `None` if it is not an ELF file or can't be read.
+fn read_interp(path: &Path) -> Option<Option<String>> {
+    // Archives may hold FIFOs and device nodes: opening a FIFO would
+    // block, and opening a device can be an action of its own.
+    if !std::fs::metadata(path).ok()?.is_file() {
+        return None;
+    }
+    let file = File::open(path).ok()?;
+    // SAFETY: read-only mapping, only read by goblin's bounds-checked
+    // parser.
+    let bytes = unsafe { Mmap::map(&file) }.ok()?;
+    let elf = Elf::parse(&bytes).ok()?;
+    Some(
+        elf.interpreter
+            .map(|interp| interp.split('\0').next().unwrap_or_default().into()),
+    )
+}
+
+/// The first problem the loader reports in its `--list` output, if any.
+fn parse_list(output: &str) -> Option<Incompatible> {
+    output.lines().find_map(|line| {
+        // glibc: "BIN: LIB: version `GLIBC_2.39' not found (required by BIN)"
+        if let Some((before, rest)) = line.split_once(": version `") {
+            let (version, _) = rest.split_once("' not found")?;
+            let library = before.rsplit_once(": ")?.1;
+            let library = library.rsplit_once('/').map_or(library, |(_, name)| name);
+            return Some(Incompatible::Version {
+                library: library.into(),
+                version: version.into(),
             });
         }
-    }
-
-    Ok(())
-}
-
-/// The series of a version name: `GLIBC_` for `GLIBC_2.39`.
-fn series(version: &str) -> Option<&str> {
-    let (series, number) = version.rsplit_once('_')?;
-    number
-        .split('.')
-        .all(|n| n.parse::<u64>().is_ok())
-        .then_some(series)
-}
-
-/// Order version names by series, then numerically: `GLIBC_2.9` comes
-/// before `GLIBC_2.10`.
-fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    let key = |v: &str| -> (String, Vec<u64>) {
-        match v.rsplit_once('_') {
-            Some((series, number)) => (
-                series.to_owned(),
-                number.split('.').map(|n| n.parse().unwrap_or(0)).collect(),
-            ),
-            None => (v.to_owned(), Vec::new()),
-        }
-    };
-    key(a).cmp(&key(b))
+        let name = if let Some(rest) = line.split_once("error while loading shared libraries: ") {
+            // glibc: "BIN: error while loading shared libraries: LIB: cannot open ..."
+            rest.1.split_once(": ")?.0
+        } else if let Some(rest) = line.strip_prefix("Error loading shared library ") {
+            // musl: "Error loading shared library LIB: No such file ... (needed by BIN)"
+            rest.split_once(": ")?.0
+        } else {
+            // glibc, for a library needed by another: "\tLIB => not found"
+            line.trim().strip_suffix(" => not found")?
+        };
+        Some(Incompatible::Library { name: name.into() })
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    async fn check(path: &Path) -> Result<(), Incompatible> {
-        Host::new().check(path).await
-    }
-
     #[test]
-    fn version_order() {
-        assert!(version_cmp("GLIBC_2.9", "GLIBC_2.10").is_lt());
-        assert!(version_cmp("GLIBC_2.39", "GLIBC_2.4").is_gt());
-        assert!(version_cmp("GLIBC_2.2.5", "GLIBC_2.3").is_lt());
-        assert_eq!(series("GLIBC_2.39"), Some("GLIBC"));
-        assert_eq!(series("GLIBCXX_3.4.32"), Some("GLIBCXX"));
-        assert_eq!(series("GLIBC_PRIVATE"), None);
-    }
-
-    #[test]
-    fn musl_builtins() {
-        assert!(is_musl_builtin("libc.so"));
-        assert!(is_musl_builtin("libc.musl-x86_64.so.1"));
-        assert!(is_musl_builtin("libpthread.so.0"));
-        assert!(is_musl_builtin("libm.so.6"));
-        assert!(!is_musl_builtin("libgcc_s.so.1"));
-        assert!(!is_musl_builtin("libcrypto.so.3"));
-        assert!(!is_musl_builtin("libmagic.so.1"));
+    fn list_output() {
+        assert_eq!(
+            parse_list(
+                "./t: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_9.3' not found (required by ./t)\n"
+            ),
+            Some(Incompatible::Version {
+                library: "libc.so.6".into(),
+                version: "GLIBC_9.3".into()
+            })
+        );
+        let library = |name: &str| Some(Incompatible::Library { name: name.into() });
+        assert_eq!(
+            parse_list(
+                "./t: error while loading shared libraries: libQ.so.6: cannot open shared object file: No such file or directory\n"
+            ),
+            library("libQ.so.6")
+        );
+        assert_eq!(
+            parse_list(
+                "Error loading shared library libfoo.so: No such file or directory (needed by /t)\n"
+            ),
+            library("libfoo.so")
+        );
+        assert_eq!(
+            parse_list("\tlibz.so.1 => /lib/libz.so.1 (0x1)\n\tlibQ.so.6 => not found\n"),
+            library("libQ.so.6")
+        );
+        assert_eq!(
+            parse_list("\tlinux-vdso.so.1 (0x1)\n\tlibc.so.6 => /lib/libc.so.6 (0x2)\n"),
+            None
+        );
     }
 
     /// This test binary runs, so it must pass the check.
@@ -258,148 +145,7 @@ mod tests {
         check(&std::env::current_exe().unwrap()).await.unwrap();
     }
 
-    /// A copy of this test binary with `from` replaced by `to`, which
-    /// must be no longer, NUL-padded to keep every offset in place.
-    #[cfg(all(
-        target_env = "gnu",
-        any(target_arch = "x86_64", target_arch = "aarch64")
-    ))]
-    fn patched_exe(dir: &Path, from: &[u8], to: &[u8]) -> std::path::PathBuf {
-        assert!(to.len() <= from.len());
-        let mut to = to.to_vec();
-        to.resize(from.len(), 0);
-
-        let mut exe = std::fs::read(std::env::current_exe().unwrap()).unwrap();
-        let mut replaced = 0;
-        let mut i = 0;
-        while let Some(pos) = exe[i..].windows(from.len()).position(|w| w == from) {
-            exe[i + pos..i + pos + from.len()].copy_from_slice(&to);
-            i += pos + from.len();
-            replaced += 1;
-        }
-        assert!(replaced > 0);
-
-        let path = dir.join("patched");
-        std::fs::write(&path, exe).unwrap();
-        path
-    }
-
-    #[cfg(all(target_env = "gnu", target_arch = "x86_64"))]
-    const GLIBC_LOADER: &[u8] = b"/lib64/ld-linux-x86-64.so.2\0";
-    #[cfg(all(target_env = "gnu", target_arch = "aarch64"))]
-    const GLIBC_LOADER: &[u8] = b"/lib/ld-linux-aarch64.so.1\0";
-    #[cfg(all(target_env = "gnu", target_arch = "x86_64"))]
-    const MUSL_LOADER: &[u8] = b"/lib/ld-musl-x86_64.so.1\0";
-    #[cfg(all(target_env = "gnu", target_arch = "aarch64"))]
-    const MUSL_LOADER: &[u8] = b"/lib/ld-musl-aarch64.so.1\0";
-
-    /// A binary needing a newer glibc than the host's is rejected, and
-    /// the error names the host's newest version.
-    #[tokio::test]
-    #[cfg(all(
-        target_env = "gnu",
-        any(target_arch = "x86_64", target_arch = "aarch64")
-    ))]
-    async fn newer_glibc_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let exe = patched_exe(dir.path(), b"GLIBC_2.", b"GLIBC_9.");
-        match check(&exe).await {
-            Err(Incompatible::Version {
-                library,
-                version,
-                provided: Some(provided),
-            }) => {
-                // Whichever glibc library comes first among the
-                // binary's version requirements: libc, libm, ...
-                assert!(library.contains(".so"), "{library}");
-                assert!(version.starts_with("GLIBC_9."), "{version}");
-                assert!(provided.starts_with("GLIBC_2."), "{provided}");
-            }
-            res => panic!("expected a version error, got {res:?}"),
-        }
-    }
-
-    /// A binary linking to a library the host lacks is rejected.
-    #[tokio::test]
-    #[cfg(all(
-        target_env = "gnu",
-        any(target_arch = "x86_64", target_arch = "aarch64")
-    ))]
-    async fn missing_library_rejected() {
-        if !Path::new("/etc/ld.so.conf").exists() || !Path::new("/etc/ld.so.cache").exists() {
-            return;
-        }
-        let dir = tempfile::tempdir().unwrap();
-        let exe = patched_exe(dir.path(), b"libc.so.6\0", b"libQ.so.6\0");
-        assert_eq!(
-            check(&exe).await,
-            Err(Incompatible::Library {
-                name: "libQ.so.6".into()
-            })
-        );
-    }
-
-    /// A binary dynamically linked against musl is rejected on a host
-    /// without the musl loader (#1466), and so is one whose loader is
-    /// at a path that doesn't exist.
-    #[tokio::test]
-    #[cfg(all(
-        target_env = "gnu",
-        any(target_arch = "x86_64", target_arch = "aarch64")
-    ))]
-    async fn missing_loader_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-
-        let musl = std::str::from_utf8(&MUSL_LOADER[..MUSL_LOADER.len() - 1]).unwrap();
-        if !Path::new(musl).exists() {
-            let exe = patched_exe(dir.path(), GLIBC_LOADER, MUSL_LOADER);
-            assert_eq!(
-                check(&exe).await,
-                Err(Incompatible::Loader {
-                    interp: musl.into()
-                })
-            );
-        }
-
-        let exe = patched_exe(dir.path(), GLIBC_LOADER, b"/nonexistent/ld.so\0");
-        assert_eq!(
-            check(&exe).await,
-            Err(Incompatible::Loader {
-                interp: "/nonexistent/ld.so".into()
-            })
-        );
-    }
-
-    /// Detection runs the native glibc loader probe, and keeps its
-    /// result for checking binaries.
-    #[tokio::test]
-    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-    async fn detection_records_native_loader() {
-        let host = crate::detect().await.host;
-        let target = format!("{}-unknown-linux-gnu", std::env::consts::ARCH);
-        let index = probe::probes()
-            .iter()
-            .position(|p| p.target == target)
-            .unwrap();
-        assert!(host.probes[index].initialized(), "{target}");
-    }
-
-    /// Targets given explicitly are not checked.
-    #[tokio::test]
-    #[cfg(all(
-        target_env = "gnu",
-        any(target_arch = "x86_64", target_arch = "aarch64")
-    ))]
-    async fn explicit_targets_not_checked() {
-        let dir = tempfile::tempdir().unwrap();
-        let exe = patched_exe(dir.path(), b"GLIBC_2.", b"GLIBC_9.");
-        assert!(check(&exe).await.is_err());
-
-        let targets = crate::get_desired_targets(Some(vec![crate::TARGET.into()]));
-        targets.check_binary(&exe).await.unwrap();
-    }
-
-    /// Not an ELF file: nothing to check.
+    /// Not an ELF file, or missing: nothing to check.
     #[tokio::test]
     async fn non_elf_skipped() {
         check(Path::new(concat!(
@@ -409,5 +155,67 @@ mod tests {
         .await
         .unwrap();
         check(Path::new("/nonexistent/binary")).await.unwrap();
+    }
+
+    /// A copy of this test binary with `from` replaced by `to`, NUL-padded
+    /// to keep every offset in place.
+    #[cfg(target_env = "gnu")]
+    fn patched_exe(dir: &Path, from: &[u8], to: &[u8]) -> std::path::PathBuf {
+        let mut to = to.to_vec();
+        to.resize(from.len(), 0);
+        let mut exe = std::fs::read(std::env::current_exe().unwrap()).unwrap();
+        let mut i = 0;
+        while let Some(pos) = exe[i..].windows(from.len()).position(|w| w == from) {
+            exe[i + pos..][..from.len()].copy_from_slice(&to);
+            i += pos + from.len();
+        }
+        assert!(i > 0, "nothing to patch");
+        let path = dir.join("patched");
+        std::fs::write(&path, exe).unwrap();
+        path
+    }
+
+    /// A binary needing a newer glibc than the host's, linking to a
+    /// library the host lacks, or using a missing loader is rejected.
+    #[tokio::test]
+    #[cfg(target_env = "gnu")]
+    async fn incompatible_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let exe = patched_exe(dir.path(), b"GLIBC_2.", b"GLIBC_9.");
+        assert!(
+            matches!(check(&exe).await, Err(Incompatible::Version { version, .. }) if version.starts_with("GLIBC_9.")),
+        );
+
+        let exe = patched_exe(dir.path(), b"libc.so.6\0", b"libQ.so.6\0");
+        assert_eq!(
+            check(&exe).await,
+            Err(Incompatible::Library {
+                name: "libQ.so.6".into()
+            })
+        );
+
+        let interp = read_interp(&std::env::current_exe().unwrap())
+            .unwrap()
+            .unwrap();
+        let exe = patched_exe(dir.path(), interp.as_bytes(), b"/nonexistent/ld.so");
+        assert_eq!(
+            check(&exe).await,
+            Err(Incompatible::Loader {
+                interp: "/nonexistent/ld.so".into()
+            })
+        );
+    }
+
+    /// Targets given explicitly are not checked.
+    #[tokio::test]
+    #[cfg(target_env = "gnu")]
+    async fn explicit_targets_not_checked() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = patched_exe(dir.path(), b"GLIBC_2.", b"GLIBC_9.");
+        assert!(check(&exe).await.is_err());
+
+        let targets = crate::get_desired_targets(Some(vec![crate::TARGET.into()]));
+        targets.check_binary(&exe).await.unwrap();
     }
 }

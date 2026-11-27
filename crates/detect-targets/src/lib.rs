@@ -70,7 +70,7 @@
 //! ```
 
 mod detect;
-pub use detect::{Detected, detect, detect_targets};
+pub use detect::detect_targets;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod probe;

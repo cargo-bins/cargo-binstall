@@ -39,7 +39,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    Binstall is able to look for binaries for several targets, installing the first one it finds in the order the targets were given. For example, on a 64-bit glibc Linux distribution, the default is to look first for a `x86_64-unknown-linux-gnu` binary, then for a `x86_64-unknown-linux-musl` binary. However, on a musl system, the gnu version will not be considered.
 
-   On Linux, a binary found for a detected target is skipped if it can't run on this system: if it needs a newer glibc (or other library version) than the system has, a shared library that isn't installed, or a dynamic loader the system lacks, e.g. a musl binary linked dynamically on a glibc system. Targets given with this option are not checked.
+   On Linux, a binary found for a detected target is skipped if it can't run on this system: if its dynamic loader is missing (e.g. a dynamically linked musl binary on a glibc system), or the system's loader reports a missing library or library version (e.g. a newer glibc). Targets given with this option are not checked.
 
    This option takes a comma-separated list of target triples, which will be tried in order. They override the default list, which is detected automatically from the current platform.
 

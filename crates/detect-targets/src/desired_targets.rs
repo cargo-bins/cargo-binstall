@@ -1,8 +1,4 @@
-use crate::{
-    Detected,
-    compat::{Host, Incompatible},
-    detect,
-};
+use crate::{compat, detect_targets};
 
 use std::{path::Path, sync::Arc};
 
@@ -10,7 +6,7 @@ use tokio::sync::SetOnce;
 
 #[derive(Debug)]
 enum DesiredTargetsInner {
-    AutoDetect(Arc<SetOnce<Detected>>),
+    AutoDetect(Arc<SetOnce<Vec<String>>>),
     Initialized(Vec<String>),
 }
 
@@ -27,7 +23,7 @@ impl DesiredTargets {
 
         let set_once = arc.clone();
         tokio::spawn(async move {
-            set_once.set(detect().await).unwrap();
+            set_once.set(detect_targets().await).unwrap();
         });
 
         Self(DesiredTargetsInner::AutoDetect(arc))
@@ -38,7 +34,7 @@ impl DesiredTargets {
 
         match &self.0 {
             Initialized(targets) => targets,
-            AutoDetect(set_once) => &set_once.wait().await.targets,
+            AutoDetect(set_once) => set_once.wait().await,
         }
     }
 
@@ -53,24 +49,15 @@ impl DesiredTargets {
         }
     }
 
-    /// The host the targets were detected from, if they were.
-    async fn host(&self) -> Option<&Host> {
-        match &self.0 {
-            DesiredTargetsInner::Initialized(_) => None,
-            DesiredTargetsInner::AutoDetect(set_once) => Some(&set_once.wait().await.host),
-        }
-    }
-
     /// Check whether the executable at `path`, a binary for one of the
-    /// targets, can run on this host, see [`Host::check`].
+    /// targets, can run on this host, see [`compat::check`].
     ///
     /// Targets given explicitly are not checked, as they may be meant for
-    /// another machine, e.g. when installing into a sysroot: this then
-    /// always returns `Ok`.
-    pub async fn check_binary(&self, path: &Path) -> Result<(), Incompatible> {
-        match self.host().await {
-            Some(host) => host.check(path).await,
-            None => Ok(()),
+    /// another machine, e.g. when installing into a sysroot.
+    pub async fn check_binary(&self, path: &Path) -> Result<(), compat::Incompatible> {
+        match self.0 {
+            DesiredTargetsInner::Initialized(_) => Ok(()),
+            DesiredTargetsInner::AutoDetect(_) => compat::check(path).await,
         }
     }
 }

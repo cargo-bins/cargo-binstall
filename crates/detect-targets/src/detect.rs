@@ -6,8 +6,6 @@ use std::{
 };
 
 use tokio::process::Command;
-
-use crate::compat::Host;
 #[cfg(feature = "tracing")]
 use tracing::debug;
 
@@ -40,31 +38,7 @@ mod windows_targets;
 ///
 /// Check [this issue](https://github.com/ryankurte/cargo-binstall/issues/155)
 /// for more information.
-///
-/// Use [`detect`] to also check binaries against this host.
 pub async fn detect_targets() -> Vec<String> {
-    detect().await.targets
-}
-
-/// The result of [`detect`].
-#[derive(Debug)]
-#[non_exhaustive]
-pub struct Detected {
-    /// The targets supported, as returned by [`detect_targets`].
-    pub targets: Vec<String>,
-    /// What else detection found out about this host, to check binaries
-    /// for these targets against with [`Host::check`].
-    pub host: Host,
-}
-
-/// Detect the targets supported at runtime, like [`detect_targets`], and
-/// what a binary for them needs from this host to run here.
-///
-/// On Linux, this also records whether the glibc and musl dynamic loaders
-/// work and which libraries are installed, so that [`Host::check`] can
-/// tell whether a downloaded binary needs a newer glibc, a missing
-/// library, or a loader the host lacks.
-pub async fn detect() -> Detected {
     let target = get_target_from_rustc().await;
     #[cfg(feature = "tracing")]
     debug!("get_target_from_rustc()={target:?}");
@@ -78,26 +52,24 @@ pub async fn detect() -> Detected {
         target.unwrap_or(crate::TARGET).to_string()
     });
 
-    let (targets, host) = cfg_select! {
-        target_os = "macos" => {{
+    cfg_select! {
+        target_os = "macos" => {
             let mut targets = vec![target];
             targets.extend(macos::detect_alternative_targets(&targets[0]).await);
-            (targets, Host::default())
-        }}
-        target_os = "windows" => {{
+            targets
+        }
+        target_os = "windows" => {
             let mut targets = vec![target];
             targets.extend(windows::detect_alternative_targets(&targets[0]));
-            (targets, Host::default())
-        }}
+            targets
+        }
         any(target_os = "linux", target_os = "android") => {
             // Linux is a bit special, since the result from `guess_host_triple`
             // might be wrong about whether glibc or musl is used.
             linux::detect_targets(target).await
         }
-        _ => { (vec![target], Host::default()) }
-    };
-
-    Detected { targets, host }
+        _ => vec![target],
+    }
 }
 
 /// Figure out what the host target is using `rustc`.

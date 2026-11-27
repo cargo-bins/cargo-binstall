@@ -67,9 +67,8 @@ fn probe_all(rt: runtime::Runtime) -> io::Result<()> {
 /// `path: ok` or `path: <reason>` for each.
 fn check(rt: runtime::Runtime, paths: Vec<PathBuf>) -> io::Result<()> {
     rt.block_on(async {
-        let host = detect_targets::detect().await.host;
         for path in paths {
-            match host.check(&path).await {
+            match detect_targets::compat::check(&path).await {
                 Ok(()) => println!("{}: ok", path.display()),
                 Err(err) => println!("{}: {err}", path.display()),
             }

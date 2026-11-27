@@ -1,58 +1,31 @@
-//! Check that a downloaded executable can run on this system, without
-//! running it.
+//! Check that a downloaded executable can run on this system, before it
+//! is installed.
 //!
-//! Detecting the host's targets (see [`crate::detect_targets`]) says
-//! which *kinds* of binaries run here, but a given binary can still need
-//! more than its target implies:
+//! Detecting the host's targets says which *kinds* of binaries run here,
+//! but a given binary can still need a dynamic loader the host lacks (a
+//! musl binary linked dynamically on a glibc host), a shared library that
+//! isn't installed, or a newer glibc than the host's.
 //!
-//! - a dynamic loader the host lacks. Rust's musl targets link statically
-//!   today, so they are offered on every Linux host, but a musl binary
-//!   linked dynamically (`-C target-feature=-crt-static`, or a future
-//!   default) needs `/lib/ld-musl-$ARCH.so.1`, which glibc hosts don't
-//!   have;
-//! - shared libraries the host doesn't have installed;
-//! - newer versions of those libraries than the host has, most commonly a
-//!   gnu binary built against a newer glibc than the host's.
-//!
-//! [`Host::check`] reads the binary's `PT_INTERP` and dynamic section, the
-//! same things the loader looks at, and checks them against the host the
-//! way the loader would. The loader is tested by running the matching
-//! probe, never the binary itself, as nothing downloaded may run before
-//! the user has confirmed the installation. Libraries are looked up the
-//! way glibc's or musl's loader would look them up.
-//!
-//! The check only fails on what the loader would certainly reject. When
-//! something can't be determined (a binary or library with an rpath, a
-//! glibc without `/etc/ld.so.cache` or `/etc/ld.so.conf`, a foreign
-//! architecture run through binfmt, a file that isn't ELF), that part is
-//! skipped.
-//!
-//! A [`Host`] comes from [`crate::detect`], and
-//! [`DesiredTargets::check_binary`](crate::DesiredTargets::check_binary)
-//! uses the one its detection produced. The check only does something on
-//! Linux and Android; elsewhere every binary passes.
+//! [`check`] asks the host's own dynamic loader: it runs it in list mode
+//! (`ld.so --list`, what `ldd` does) on the binary, which resolves its
+//! libraries and symbol versions without running any of its code. Only
+//! loaders at the standard paths of the probe table are run, and only if
+//! they are real loaders, never a `PT_INTERP` the binary makes up. When
+//! the answer isn't clear, the binary passes. The check only does
+//! something on Linux and Android.
 
 use std::{error::Error, fmt};
 
 cfg_select! {
     any(target_os = "linux", target_os = "android") => {
-        mod elf;
         mod linux;
-        mod search;
-        pub use linux::Host;
+        pub use linux::check;
     }
     _ => {
-        /// What target detection found out about this host, to check
-        /// binaries against. Off Linux there is nothing to check.
-        #[derive(Debug, Default)]
-        pub struct Host(());
-
-        impl Host {
-            /// Check whether the executable at `path` can run here: always
-            /// `Ok` on this OS.
-            pub async fn check(&self, _path: &std::path::Path) -> Result<(), Incompatible> {
-                Ok(())
-            }
+        /// Check whether the executable at `path` can run here: always
+        /// `Ok` on this OS.
+        pub async fn check(_path: &std::path::Path) -> Result<(), Incompatible> {
+            Ok(())
         }
     }
 }
@@ -61,89 +34,32 @@ cfg_select! {
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Incompatible {
-    /// The binary's dynamic loader (its `PT_INTERP`) is missing, or
-    /// can't run here.
+    /// The binary's dynamic loader (its `PT_INTERP`) isn't installed.
     Loader { interp: String },
-    /// A shared library the binary links to isn't installed.
+    /// A shared library it needs isn't installed.
     Library { name: String },
-    /// A library is installed, but doesn't provide a symbol version the
-    /// binary requires, e.g. the binary needs `GLIBC_2.39` and the host's
-    /// glibc is 2.35.
-    Version {
-        library: String,
-        version: String,
-        /// The newest version of the same series the host's library
-        /// provides, if any, e.g. `GLIBC_2.35`.
-        provided: Option<String>,
-    },
+    /// An installed library lacks a symbol version it needs, e.g. it
+    /// needs `GLIBC_2.39` and the host's glibc is 2.35.
+    Version { library: String, version: String },
 }
 
 impl fmt::Display for Incompatible {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Loader { interp } => {
+            Self::Loader { interp } if interp.contains("ld-musl-") => write!(
+                f,
+                "its dynamic loader {interp} is missing (it is dynamically linked against musl libc)"
+            ),
+            Self::Loader { interp } => write!(f, "its dynamic loader {interp} is missing"),
+            Self::Library { name } => write!(f, "it needs {name}, which is not installed"),
+            Self::Version { library, version } => {
                 write!(
                     f,
-                    "its dynamic loader {interp} is missing or can't run here"
-                )?;
-                if is_musl_loader(interp) {
-                    f.write_str(" (it is dynamically linked against musl libc)")?;
-                }
-                Ok(())
+                    "it needs {version} from {library}, which this system lacks"
+                )
             }
-            Self::Library { name } => write!(f, "it needs {name}, which is not installed"),
-            Self::Version {
-                library,
-                version,
-                provided: Some(provided),
-            } => write!(
-                f,
-                "it needs {version} from {library}, but this system only has up to {provided}"
-            ),
-            Self::Version {
-                library,
-                version,
-                provided: None,
-            } => write!(
-                f,
-                "it needs {version} from {library}, which this system lacks"
-            ),
         }
     }
 }
 
 impl Error for Incompatible {}
-
-fn is_musl_loader(interp: &str) -> bool {
-    file_name(interp).starts_with("ld-musl-")
-}
-
-fn file_name(path: &str) -> &str {
-    path.rsplit_once('/').map_or(path, |(_, name)| name)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn display() {
-        assert_eq!(
-            Incompatible::Loader {
-                interp: "/lib/ld-musl-x86_64.so.1".into()
-            }
-            .to_string(),
-            "its dynamic loader /lib/ld-musl-x86_64.so.1 is missing or can't run here \
-             (it is dynamically linked against musl libc)"
-        );
-        assert_eq!(
-            Incompatible::Version {
-                library: "libc.so.6".into(),
-                version: "GLIBC_2.39".into(),
-                provided: Some("GLIBC_2.35".into()),
-            }
-            .to_string(),
-            "it needs GLIBC_2.39 from libc.so.6, but this system only has up to GLIBC_2.35"
-        );
-    }
-}
