@@ -33,6 +33,7 @@ if grep -F cargo-quickinstall <<<"$output"; then
     echo "QuickInstall was tried before the package named after the binary"
     exit 1
 fi
+grep -F "releases/download/v0.12.0/cargo-binstall-" <<<"$output"
 
 cargo_binstall_version="$(cargo binstall -V)"
 echo "$cargo_binstall_version"

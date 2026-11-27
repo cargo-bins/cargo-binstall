@@ -638,7 +638,7 @@ impl Shared {
 }
 
 #[cfg(test)]
-mod test {
+pub(super) mod test {
     use std::{
         env,
         num::{NonZeroU16, NonZeroU64},
@@ -653,7 +653,7 @@ mod test {
     const QUICKINSTALL: &str = "https://github.com/cargo-bins/cargo-quickinstall";
     const PRIVATE: &str = "https://github.com/cargo-bins/private-repo-for-testing";
 
-    fn client() -> Client {
+    pub(in crate::gh_crate_meta) fn client() -> Client {
         Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
