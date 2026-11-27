@@ -66,6 +66,19 @@ fi
 # shellcheck disable=SC3040
 (set -o pipefail 2> /dev/null) && set -o pipefail
 
+# With no version given, default to the version of this checkout, so a pinned action
+# installs the binstall it is pinned to. Skipped when the script runs outside a
+# checkout (e.g. piped from curl), and when that version has no release (yet).
+if [ -z "${BINSTALL_VERSION:-}" ]; then
+    cargo_toml="$(dirname "$0")/crates/bin/Cargo.toml"
+    if [ -f "$cargo_toml" ]; then
+        checkout_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$cargo_toml" | head -n 1)"
+        if [ -n "$checkout_version" ] && download "https://github.com/cargo-bins/cargo-binstall/releases/tag/v${checkout_version}" > /dev/null 2>&1; then
+            BINSTALL_VERSION="$checkout_version"
+        fi
+    fi
+fi
+
 case "${BINSTALL_VERSION:-}" in
     "") ;; # unset
     v*) ;; # already includes the `v`
