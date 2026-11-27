@@ -307,7 +307,7 @@ impl ResolutionSource {
             // version may differ from the one in the repository, see
             // `PackageInfo::resolve`.
             #[cfg(feature = "git")]
-            Some(CargoTomlFetchOverride::Git(git_url, reference)) => {
+            Some(CargoTomlFetchOverride::Git(_, reference, git_url)) => {
                 apply_git_selection(&mut cmd, git_url, reference)
             }
             _ => {
@@ -466,13 +466,12 @@ fn apply_registry_selection(
 
 /// Make `cargo install` build the crate from the repository `--git` points
 /// to, instead of the crate with the same name in the registry.
+///
+/// `git_url` is the url as it was given, with its password if it has one.
+/// `format_cmd` hides it when the command is printed.
 #[cfg(feature = "git")]
-fn apply_git_selection(
-    cmd: &mut Command,
-    git_url: &crate::helpers::git::GitUrl,
-    reference: &GitReference,
-) {
-    cmd.arg("--git").arg(git_url.to_string());
+fn apply_git_selection(cmd: &mut Command, git_url: &str, reference: &GitReference) {
+    cmd.arg("--git").arg(git_url);
 
     let (flag, value) = match reference {
         GitReference::DefaultBranch => return,
@@ -567,7 +566,7 @@ mod tests {
             (GitReference::Rev("abc123".into()), &["--rev", "abc123"]),
         ] {
             let mut cmd = Command::new("cargo");
-            apply_git_selection(&mut cmd, &url.parse().unwrap(), &reference);
+            apply_git_selection(&mut cmd, url, &reference);
 
             let args: Vec<_> = cmd
                 .as_std()
@@ -576,6 +575,33 @@ mod tests {
                 .collect();
             assert_eq!(args, [&["--git", url], expected].concat(), "{reference:?}");
         }
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
+    fn test_apply_git_selection_keeps_password_but_hides_it_in_logs() {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("install").arg("a");
+        apply_git_selection(
+            &mut cmd,
+            "https://user:secret-token@example.com/o/r",
+            &GitReference::DefaultBranch,
+        );
+
+        let args: Vec<_> = cmd.as_std().get_args().collect();
+        assert_eq!(
+            args,
+            [
+                "install",
+                "a",
+                "--git",
+                "https://user:secret-token@example.com/o/r"
+            ]
+        );
+        assert_eq!(
+            format_cmd(&cmd).to_string(),
+            "cargo install a --git https://<redacted>@example.com/o/r"
+        );
     }
 
     #[test]

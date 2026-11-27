@@ -520,7 +520,7 @@ impl PackageInfo {
                 None,
             ),
             #[cfg(feature = "git")]
-            Some(Git(git_url, reference)) => {
+            Some(Git(git_url, reference, _)) => {
                 use crate::helpers::git::{GitCancellationToken, Repository as GitRepository};
 
                 let cancellation_token = GitCancellationToken::default();
