@@ -558,6 +558,8 @@ pub struct Args {
         help_heading = "Options",
         long,
         env = "GITHUB_TOKEN",
+        // Otherwise `--help` prints the token.
+        hide_env_values = true,
         value_name = "TOKEN"
     )]
     pub(crate) github_token: Option<GithubToken>,
@@ -657,8 +659,14 @@ pub struct Args {
     pub(crate) markdown_help: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct GithubToken(pub(crate) Zeroizing<Box<str>>);
+
+impl fmt::Debug for GithubToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<redacted>")
+    }
+}
 
 impl From<&str> for GithubToken {
     fn from(s: &str) -> Self {
@@ -1010,6 +1018,19 @@ mod test {
     #[test]
     fn verify_cli() {
         Args::command().debug_assert()
+    }
+
+    #[test]
+    fn github_token_is_not_printed() {
+        let command = Args::command();
+        let arg = command
+            .get_arguments()
+            .find(|arg| arg.get_id() == "github_token")
+            .unwrap();
+        assert!(arg.is_hide_env_values_set());
+
+        let token = GithubToken::from("ghp_secret-token");
+        assert!(!format!("{token:?}").contains("secret-token"));
     }
 
     #[test]

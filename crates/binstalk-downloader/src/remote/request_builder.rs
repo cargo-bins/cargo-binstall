@@ -42,6 +42,26 @@ impl RequestBuilder {
         }
     }
 
+    /// Set a header whose value is a secret, such as a token.
+    ///
+    /// Unlike with [`RequestBuilder::header`], the value is left out of the
+    /// `Debug` output of the request, so that it does not end up in logs.
+    pub fn sensitive_header(self, key: impl AsRef<str>, value: &str) -> Self {
+        let inner = match header::HeaderValue::from_str(value) {
+            Ok(mut value) => {
+                value.set_sensitive(true);
+                self.inner.header(key.as_ref(), value)
+            }
+            // Let reqwest record the error, which does not hold the value.
+            Err(_) => self.inner.header(key.as_ref(), value),
+        };
+
+        Self {
+            client: self.client,
+            inner,
+        }
+    }
+
     pub fn body(self, body: impl Into<Body>) -> Self {
         Self {
             client: self.client,

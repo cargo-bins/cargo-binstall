@@ -225,9 +225,12 @@ impl Client {
     ///
     /// Return `Ok(ControlFlow::Break(response))` when succeeds and no need
     /// to retry.
+    // `request` is not recorded: its `Debug` output holds every header that
+    // is not marked as sensitive.
     #[instrument(
-        skip(self, url),
+        skip_all,
         fields(
+            method = format_args!("{}", request.method()),
             url = format_args!("{url}"),
         ),
     )]
@@ -577,6 +580,24 @@ mod tests {
             [],
         )
         .unwrap()
+    }
+
+    /// Every log line of a request shows what `Debug` prints for it.
+    #[test]
+    fn sensitive_header_is_not_in_debug_output() {
+        let url = Url::parse("https://example.com").unwrap();
+        let request = test_client(false)
+            .get(url)
+            .header("Accept", "text/plain")
+            .sensitive_header("Authorization", "secret-token");
+
+        let debug = format!("{request:?}");
+        assert!(debug.contains("text/plain"), "{debug}");
+        assert!(!debug.contains("secret-token"), "{debug}");
+
+        let request = request.inner.build().unwrap();
+        assert_eq!(request.headers()["Authorization"], "secret-token");
+        assert!(!format!("{request:?}").contains("secret-token"));
     }
 
     #[cfg(feature = "hickory-dns")]
