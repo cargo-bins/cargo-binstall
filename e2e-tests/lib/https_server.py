@@ -116,7 +116,7 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
             elif action.get("ignore_range"):
                 del self.headers["Range"]
                 return False
-            elif action.get("stall", 0) is None:
+            elif "stall" in action and action["stall"] is None:
                 self.wait_for_hang_up()
                 self.close_connection = True
             elif "truncate" in action or "stall" in action:

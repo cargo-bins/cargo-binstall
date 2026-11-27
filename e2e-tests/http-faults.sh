@@ -113,5 +113,6 @@ CARGO_HTTP_TIMEOUT=2 install "$1" silent.tar
 
 CARGO_HTTP_TIMEOUT=2 install "$1" stalled.tar
 grep -E "^GET /stalled.tar Range: bytes=[1-9][0-9]*-$" "$HTTPS_SERVER_LOG"
+[ "$(requests_for stalled.tar)" -eq 2 ]
 
 cat "$HTTPS_SERVER_LOG"
