@@ -359,10 +359,13 @@ impl Client {
             })
     }
 
+    /// * `get_after_404` - Whether a 404 to the `HEAD` is asked again with
+    ///   `GET`: some servers answer `HEAD` with 404 for a page `GET` finds.
     async fn head_or_fallback_to_get(
         &self,
         url: Url,
         error_for_status: bool,
+        get_after_404: bool,
     ) -> Result<reqwest::Response, Error> {
         let res = self
             .send_request(Request::new(Method::HEAD, url.clone()), error_for_status)
@@ -375,16 +378,14 @@ impl Client {
                 .await
         };
 
-        let is_retryable = |status| {
-            matches!(
-                status,
-                StatusCode::BAD_REQUEST              // 400
-                    | StatusCode::UNAUTHORIZED       // 401
-                    | StatusCode::FORBIDDEN          // 403
-                    | StatusCode::NOT_FOUND          // 404
-                    | StatusCode::METHOD_NOT_ALLOWED // 405
-                    | StatusCode::GONE // 410
-            )
+        let is_retryable = |status| match status {
+            StatusCode::NOT_FOUND => get_after_404,
+            StatusCode::BAD_REQUEST              // 400
+            | StatusCode::UNAUTHORIZED           // 401
+            | StatusCode::FORBIDDEN              // 403
+            | StatusCode::METHOD_NOT_ALLOWED     // 405
+            | StatusCode::GONE => true,          // 410
+            _ => false,
         };
 
         match res {
@@ -421,18 +422,19 @@ impl Client {
     /// Attempt to get final redirected url using `Method::HEAD` or fallback
     /// to `Method::GET`.
     pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        self.head_or_fallback_to_get(url, true)
+        self.head_or_fallback_to_get(url, true, true)
             .await
             .map(|response| response.url().clone())
     }
 
-    /// Get the final redirected url using `Method::HEAD` only.
+    /// Like [`Client::get_redirected_final_url`], except that a 404 to the
+    /// `HEAD` is not asked again with `Method::GET`.
     ///
-    /// Unlike [`Client::get_redirected_final_url`], a failing status is not
-    /// asked again with `Method::GET`. Use it for servers known to answer
-    /// `HEAD` like `GET`, such as github.com.
+    /// Use it for servers known to answer `HEAD` like `GET`, such as
+    /// github.com. Other failing statuses still fall back to `GET`, since a
+    /// proxy in between may be the one rejecting `HEAD`.
     pub async fn head_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        self.send_request(Request::new(Method::HEAD, url), true)
+        self.head_or_fallback_to_get(url, true, false)
             .await
             .map(|response| response.url().clone())
     }
@@ -821,8 +823,8 @@ mod tests {
     async fn head_redirected_final_url_does_not_ask_again_after_404() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
-        // Never joined: it waits for a second request that does not come.
-        let _server = serve_responses(listener, NOT_FOUND_THEN_OK);
+        // Only the 404: a GET asking again finds nobody listening.
+        let server = serve_responses(listener, &NOT_FOUND_THEN_OK[..1]);
 
         let url = Url::parse(&format!("http://{addr}/")).unwrap();
         let err = test_client(true)
@@ -834,6 +836,28 @@ mod tests {
         };
         assert_eq!(err.method, Method::HEAD);
         assert_eq!(err.err.status(), Some(StatusCode::NOT_FOUND));
+        assert_eq!(server.join().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn head_redirected_final_url_asks_again_with_get_after_405() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Like a proxy that rejects HEAD.
+        let server = serve_responses(
+            listener,
+            &[
+                b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            ],
+        );
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        test_client(true)
+            .head_redirected_final_url(url)
+            .await
+            .unwrap();
+        assert_eq!(server.join().unwrap(), 2);
     }
 
     #[tokio::test]

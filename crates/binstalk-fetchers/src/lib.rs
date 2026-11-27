@@ -347,10 +347,14 @@ impl Data {
     }
 }
 
-/// Whether `url`'s server answers `HEAD` like `GET`, so a failing `HEAD`
+/// Whether `url`'s server answers `HEAD` like `GET`, so a 404 to the `HEAD`
 /// needs no `GET` to confirm it.
 ///
 /// github.com does: a private repository's page is 404 to both.
+///
+/// The exact host match is deliberate, like `GhRepo::try_extract_from_url`
+/// and unlike `RepositoryHost::GitHub`, which also takes GitHub Enterprise
+/// hosts: they may not answer `HEAD` the same way.
 fn trusts_head(url: &Url) -> bool {
     url.domain() == Some("github.com")
 }
