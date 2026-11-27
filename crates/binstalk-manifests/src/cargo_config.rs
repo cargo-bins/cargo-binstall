@@ -328,16 +328,22 @@ impl Config {
             Ok(Default::default())
         } else {
             let mut config: Config = toml_edit::de::from_slice(&vec)?;
+
+            // As in Cargo, paths are relative to the parent of the dir the
+            // config file is in, i.e. of `.cargo`. Only `include` is relative
+            // to the dir itself.
+            let base = dir.parent().unwrap_or(dir);
+
             join_if_relative(
                 config
                     .install
                     .as_mut()
                     .and_then(|install| install.root.as_mut()),
-                dir,
+                base,
             );
             join_if_relative(
                 config.http.as_mut().and_then(|http| http.cainfo.as_mut()),
-                dir,
+                base,
             );
             for env in config.env.values_mut() {
                 let Env::WithOptions {
@@ -350,7 +356,7 @@ impl Config {
                 };
                 let path = Path::new(&value);
                 if path.is_relative() {
-                    *value = dir.join(path).to_string_lossy().into();
+                    *value = base.join(path).to_string_lossy().into();
                 }
             }
 
@@ -363,9 +369,8 @@ impl Config {
     }
 
     /// * `dir` - path to the dir where the config.toml is located.
-    ///   For relative path in the config, `Config::load_from_reader`
-    ///   will join the `dir` and the relative path to form the final
-    ///   path.
+    ///   As in Cargo, a relative path in the config is relative to the
+    ///   parent of `dir`, except for `include`, which is relative to `dir`.
     pub fn load_from_reader<R: io::Read>(
         mut reader: R,
         dir: &Path,
@@ -462,7 +467,7 @@ mod tests {
 ENV_VAR_NAME = "value"
 # Set even if already present in environment
 ENV_VAR_NAME_2 = { value = "value", force = true }
-# Value is relative to .cargo directory containing `config.toml`, make absolute
+# Value is relative to the parent of the .cargo directory containing `config.toml`, make absolute
 ENV_VAR_NAME_3 = { value = "relative-path", relative = true }
 
 [http]
@@ -488,8 +493,40 @@ custom = ["cargo-credential-example", "--account", "test"]
     "#;
 
     #[test]
+    fn test_relative_install_root_and_include() {
+        let dir = tempfile::tempdir().unwrap();
+        let cargo_home = dir.path().join(".cargo");
+        std::fs::create_dir(&cargo_home).unwrap();
+        std::fs::write(
+            cargo_home.join("config.toml"),
+            "include = ['extra.toml']\n[install]\nroot = 'tools'\n",
+        )
+        .unwrap();
+        // `include` is relative to the dir of the config file itself.
+        std::fs::write(
+            cargo_home.join("extra.toml"),
+            "[http]\ncainfo = 'cert.pem'\n",
+        )
+        .unwrap();
+
+        let config = Config::load_from_path(cargo_home.join("config.toml")).unwrap();
+
+        assert_eq!(
+            config.install.unwrap().root.unwrap(),
+            dir.path().join("tools")
+        );
+        assert_eq!(
+            config.http.unwrap().cainfo.unwrap(),
+            dir.path().join("cert.pem")
+        );
+    }
+
+    #[test]
     fn test_loading() {
-        let config = Config::load_from_reader(Cursor::new(&CONFIG), Path::new("root")).unwrap();
+        // Relative paths are relative to the parent of the `.cargo` dir.
+        let config =
+            Config::load_from_reader(Cursor::new(&CONFIG), &Path::new("root").join(".cargo"))
+                .unwrap();
 
         assert_eq!(
             config.install.unwrap().root.as_deref().unwrap(),
