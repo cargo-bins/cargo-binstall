@@ -226,8 +226,8 @@ directory of a GitHub repository, such as a workspace member's
 binaries may be in the package of another crate of the same release:
 nushell's `nu-{ version }-{ target }.tar.gz` also has the binaries of its
 plugins. `binstall` then looks at the assets of the release tagged
-`{ version }` or `v{ version }`. If none is named after the crate or one of
-its binaries, for any target, and the ones for this target that are named like
+`{ version }` or `v{ version }`. If none is named after the crate, for any
+target, and the ones for this target that are named like
 one of the file names above are all named after the same other name, it uses
 that package, if it has the crate's binaries. Its signature is checked with the
 crate's own `signing` settings, if any. Crates installed together download such

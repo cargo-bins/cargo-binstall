@@ -140,11 +140,12 @@ fn sibling_patterns(
 /// several names, e.g. of several tools in a release, or if a release has a
 /// package of the crate's own for any target.
 ///
-/// * `own_names` - the crate's name and its binaries', which are not looked
-///   for: packages named after them are found without this.
+/// * `own_name` - the crate's name, which is not looked for: its packages
+///   were looked for already. Packages named after one of its binaries are
+///   not excluded: wasm-bindgen-cli's are named after `wasm-bindgen`.
 /// * `releases` - the asset names of each release.
 fn sibling_name<'p>(
-    own_names: &[&str],
+    own_name: &str,
     patterns: &'p [SiblingPattern],
     releases: &[(GhRelease, Vec<CompactString>)],
 ) -> Option<(CompactString, Vec<&'p SiblingPattern>)> {
@@ -152,11 +153,9 @@ fn sibling_name<'p>(
     // only for musl while this is for gnu: it is for another target to find,
     // not for this one to look past.
     let is_own = |asset: &str| {
-        own_names.iter().any(|own| {
-            asset
-                .strip_prefix(own)
-                .is_some_and(|rest| rest.starts_with(['-', '_', '.']))
-        })
+        asset
+            .strip_prefix(own_name)
+            .is_some_and(|rest| rest.starts_with(['-', '_', '.']))
     };
     if releases
         .iter()
@@ -170,11 +169,7 @@ fn sibling_name<'p>(
     // matches as named after `nu-0.117.0`.
     let own: Vec<String> = patterns
         .iter()
-        .flat_map(|pattern| {
-            own_names
-                .iter()
-                .map(move |own| format!("{}{own}{}", pattern.prefix, pattern.suffix))
-        })
+        .map(|pattern| format!("{}{own_name}{}", pattern.prefix, pattern.suffix))
         .collect();
 
     // Every other asset matching a pattern, with the name it is after.
@@ -634,10 +629,7 @@ impl GhCrateMeta {
             }
         }
 
-        let own_names: Vec<&str> = iter::once(self.data.name.as_str())
-            .chain(self.data.bins.iter().map(|bin| bin.name.as_str()))
-            .collect();
-        let Some((name, matched)) = sibling_name(&own_names, &patterns, &releases) else {
+        let Some((name, matched)) = sibling_name(&self.data.name, &patterns, &releases) else {
             debug!(
                 "No package of another crate found for {} on target {target}, \
                 or of several",
@@ -1487,40 +1479,20 @@ mod test {
     }
 
     /// The asset names of nushell 0.117.0 for x86_64 Linux and Windows.
-    fn nushell_release(
-        extra: &[&str],
-    ) -> Vec<(
-        binstalk_git_repo_api::gh_api_client::GhRelease,
-        Vec<compact_str::CompactString>,
-    )> {
-        use binstalk_git_repo_api::gh_api_client::{GhRelease, GhRepo};
-
-        let release = GhRelease {
-            repo: GhRepo {
-                owner: "nushell".into(),
-                repo: "nushell".into(),
-            },
-            tag: "0.117.0".into(),
-        };
-        let assets = [
-            "nu-0.117.0-x86_64-unknown-linux-gnu.tar.gz",
-            "nu-0.117.0-x86_64-unknown-linux-musl.tar.gz",
-            "nu-0.117.0-x86_64-pc-windows-msvc.zip",
-            "nu-0.117.0-x86_64-pc-windows-msvc.msi",
-        ]
-        .iter()
-        .chain(extra)
-        .map(|&asset| asset.into())
-        .collect();
-        vec![(release, assets)]
-    }
-
-    /// What [`super::sibling_name`] finds for crate `name` in
-    /// `nushell/nushell/tree/main/crates/{name}` on `target`, with the
-    /// URLs of the packages.
-    fn sibling(name: &str, target: &str, extra: &[&str]) -> Option<(String, Vec<String>)> {
+    /// What [`super::sibling_name`] finds for crate `name` version
+    /// `version` in `https://github.com/{repo}/tree/main/crates/{name}` on
+    /// `target`, whose release `version` has `assets`, with the URLs of the
+    /// packages.
+    fn sibling_in(
+        repo: &str,
+        version: &str,
+        name: &str,
+        target: &str,
+        assets: &[&str],
+    ) -> Option<(String, Vec<String>)> {
         use std::sync::Arc;
 
+        use binstalk_git_repo_api::gh_api_client::{GhRelease, GhRepo};
         use strum::IntoEnumIterator;
 
         use super::{hosting::RepositoryHost, sibling_name, sibling_patterns, write_template};
@@ -1528,10 +1500,8 @@ mod test {
         let data = Data::new(
             Default::default(),
             name.into(),
-            "0.117.0".into(),
-            Some(format!(
-                "https://github.com/nushell/nushell/tree/main/crates/{name}"
-            )),
+            version.into(),
+            Some(format!("https://github.com/{repo}/tree/main/crates/{name}")),
         );
         let mut buf = String::new();
         let pkg_urls: Vec<(Arc<str>, Template<'_>)> = RepositoryHost::GitHub
@@ -1548,10 +1518,19 @@ mod test {
             &leon::vals(|_| None),
             &pkg_urls,
             PkgFmt::iter(),
-            Some("https://github.com/nushell/nushell"),
+            Some(&format!("https://github.com/{repo}")),
             Some(name),
         );
-        let (name, matched) = sibling_name(&[name], &patterns, &nushell_release(extra))?;
+        let (owner, repo) = repo.split_once('/').unwrap();
+        let release = GhRelease {
+            repo: GhRepo {
+                owner: owner.into(),
+                repo: repo.into(),
+            },
+            tag: version.into(),
+        };
+        let releases = [(release, assets.iter().map(|&asset| asset.into()).collect())];
+        let (name, matched) = sibling_name(name, &patterns, &releases)?;
         let urls = matched
             .iter()
             .map(|pattern| {
@@ -1562,6 +1541,53 @@ mod test {
             })
             .collect();
         Some((name.into(), urls))
+    }
+
+    /// [`sibling_in`] nushell 0.117.0, whose release has the packages of
+    /// `nu` for x86_64 Linux and Windows, and `extra`.
+    fn sibling(name: &str, target: &str, extra: &[&str]) -> Option<(String, Vec<String>)> {
+        let assets: Vec<&str> = [
+            "nu-0.117.0-x86_64-unknown-linux-gnu.tar.gz",
+            "nu-0.117.0-x86_64-unknown-linux-musl.tar.gz",
+            "nu-0.117.0-x86_64-pc-windows-msvc.zip",
+            "nu-0.117.0-x86_64-pc-windows-msvc.msi",
+        ]
+        .into_iter()
+        .chain(extra.iter().copied())
+        .collect();
+        sibling_in("nushell/nushell", "0.117.0", name, target, &assets)
+    }
+
+    /// wasm-bindgen-cli's binaries are in packages named after one of them,
+    /// `wasm-bindgen`, which is no reason not to use them.
+    #[test]
+    fn sibling_package_named_after_bin() {
+        let assets = [
+            "wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz",
+            "wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz.sha256",
+            "wasm-bindgen-0.2.130-x86_64-pc-windows-msvc.tar.gz",
+        ];
+        let find = |target| {
+            sibling_in(
+                "wasm-bindgen/wasm-bindgen",
+                "0.2.130",
+                "wasm-bindgen-cli",
+                target,
+                &assets,
+            )
+        };
+        assert_eq!(
+            find("x86_64-unknown-linux-musl"),
+            Some((
+                "wasm-bindgen".into(),
+                vec![
+                    "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.130/\
+                    wasm-bindgen-0.2.130-x86_64-unknown-linux-musl.tar.gz"
+                        .into()
+                ]
+            ))
+        );
+        assert_eq!(find("x86_64-unknown-linux-gnu"), None);
     }
 
     #[test]
