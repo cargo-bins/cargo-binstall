@@ -276,11 +276,11 @@ you need to manually specify it.
 
 ### Packages named after a binary
 
-If no package named after the crate is found, `binstall` looks for packages
-named after its binaries: the same filenames with `{ bin }` in place of
-`{ name }`, e.g. `fd-v{ version }-{ target }.tar.gz` for the binary `fd` of the
-crate `fd-find`. They are tried in the same paths, then in the paths containing
-`{ name }` with `{ bin }` in its place, e.g. a release tagged `fd-v{ version }`.
+If the crate's repository is on GitHub and no package named after the crate
+is found, `binstall` looks for packages named after its binaries: the same
+filenames with `{ bin }` in place of `{ name }`, e.g.
+`fd-v{ version }-{ target }.tar.gz` for the binary `fd` of the crate
+`fd-find`, in the same paths.
 
 As with [`{ bin }` in `pkg-url`](#one-package-per-binary), each binary is
 installed from its own package. The packages of all binaries must be found for

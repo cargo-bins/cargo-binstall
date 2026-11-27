@@ -170,7 +170,7 @@ fn filter_subcrate<'t>(
 
 /// Every pkg-url, with how it is written for `PkgUrlHint::pkg_url`.
 fn with_written_form<'t>(
-    pkg_urls: impl Iterator<Item = Template<'t>>,
+    pkg_urls: &mut dyn Iterator<Item = Template<'t>>,
 ) -> Vec<(Arc<str>, Template<'t>)> {
     let mut buf = String::new();
     pkg_urls
@@ -219,7 +219,7 @@ impl super::Fetcher for GhCrateMeta {
         // The host of the default templates, if they are used.
         let mut default_host = None;
 
-        let pkg_urls = if let Some(template) = pkg_url {
+        let mut pkg_urls = if let Some(template) = pkg_url {
             let pkg_url = meta.pkg_url.as_deref().expect("parsed above");
             is_per_bin = template.has_key("bin");
 
@@ -302,7 +302,7 @@ impl super::Fetcher for GhCrateMeta {
             Either::Right(PkgFmt::iter())
         };
 
-        let pkg_urls = with_written_form(pkg_urls);
+        let pkg_urls = with_written_form(&mut pkg_urls);
 
         if is_per_bin {
             return self.find_per_bin(&pkg_urls, pkg_fmts, repo, subcrate).await;
@@ -310,10 +310,15 @@ impl super::Fetcher for GhCrateMeta {
 
         // The default templates for packages named after a binary, if any
         // binary is named otherwise than the crate.
+        //
+        // Only on GitHub, whose asset lists, fetched for the crate's own
+        // templates already, tell whether they exist without a request. On
+        // other hosts each would be checked with a request of its own.
         let bin_pkg_urls = default_host
+            .filter(|host| *host == RepositoryHost::GitHub)
             .filter(|_| self.data.bins.iter().any(|bin| bin.name != self.data.name))
             .and_then(RepositoryHost::get_default_bin_pkg_url_template)
-            .map(|pkg_urls| with_written_form(filter_subcrate(pkg_urls, subcrate)))
+            .map(|pkg_urls| with_written_form(&mut filter_subcrate(pkg_urls, subcrate)))
             .unwrap_or_default();
 
         // Look for them first if that is how a previous version was found.
@@ -341,9 +346,9 @@ impl super::Fetcher for GhCrateMeta {
         }
 
         // Before any other fetcher, so that the upstream packages win over
-        // third-party ones such as cargo-quickinstall's. They are usually
-        // assets of the same releases, which the probes share through
-        // `Data::context`: on GitHub, no more requests are needed.
+        // third-party ones such as cargo-quickinstall's. They are assets of
+        // the same releases, whose tags and asset lists the probes share
+        // through `Data::context`: no more requests are needed.
         debug!(
             "No package named after crate {} found on target {target}, \
             looking for packages named after its binaries",
