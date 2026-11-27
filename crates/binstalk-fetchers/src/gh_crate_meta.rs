@@ -61,6 +61,44 @@ struct Resolved {
     bin: Option<CompactString>,
 }
 
+/// Each of `pkg_urls`, with how it is written for [`PkgUrlHint::pkg_url`].
+fn with_written_form<'a>(
+    pkg_urls: impl IntoIterator<Item = Template<'a>>,
+) -> Vec<(Arc<str>, Template<'a>)> {
+    let mut buf = String::new();
+    pkg_urls
+        .into_iter()
+        .map(|pkg_url| {
+            write_template(&pkg_url, &mut buf);
+            (buf.as_str().into(), pkg_url)
+        })
+        .collect()
+}
+
+/// Whether `candidate`, rendered from dist's `simple-download-url`, is
+/// worth checking: it has the extension dist gives its format, and isn't
+/// under `covered_repo`, a repository whose host the default `pkg-url`
+/// cover, e.g. its GitHub releases, as they find the package there.
+fn is_dist_simple_candidate(candidate: &Candidate, covered_repo: Option<&str>) -> bool {
+    if !candidate
+        .archive_suffix
+        .is_some_and(|suffix| DIST_ARCHIVE_SUFFIXES.contains(&suffix))
+    {
+        return false;
+    }
+    if let Some(repo) = covered_repo
+        && is_under(&candidate.url, repo)
+    {
+        trace!(
+            "Not checking {}: it is under repository {repo}, which the default pkg-urls \
+            already cover",
+            candidate.url
+        );
+        return false;
+    }
+    true
+}
+
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
 ///
 /// `s` is cleared first, so that one buffer can be reused for every
@@ -236,54 +274,75 @@ impl super::Fetcher for GhCrateMeta {
                 );
             }
 
-            Either::Left(Some(template).into_iter())
-        } else if let Some(RepoInfo {
-            repo,
-            repository_host,
-            ..
-        }) = info
-        {
-            if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
-                let has_subcrate = subcrate.is_some();
-
-                Either::Right(
-                    pkg_urls
-                        .map(Template::cast)
-                        // If subcrate is Some, then all templates will be included.
-                        // Otherwise, only templates without key "subcrate" will be
-                        // included.
-                        .filter(move |template| has_subcrate || !template.has_key("subcrate")),
-                )
-            } else if self.dist_simple_download_url().is_some() {
-                debug!("Unknown repository {repo}, looking under dist's simple-download-url only");
-                Either::Left(None.into_iter())
-            } else {
-                warn!(
-                    concat!(
-                        "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
-                        "Please ask the upstream to provide it for target {}."
-                    ),
-                    repo, self.target_data.target
-                );
-
-                return Ok(None);
-            }
-        } else if self.dist_simple_download_url().is_some() {
-            debug!(
-                "Package does not specify repository, looking under dist's simple-download-url only"
-            );
-            Either::Left(None.into_iter())
+            (vec![template], 0)
         } else {
-            warn!(
-                concat!(
-                    "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
-                    "Please ask the upstream to provide it for target {}."
-                ),
-                self.target_data.target
-            );
+            let simple_download_url = self.dist_simple_download_url();
+            let defaults = match info {
+                Some(RepoInfo {
+                    repo,
+                    repository_host,
+                    ..
+                }) => match repository_host.get_default_pkg_url_template() {
+                    Some(defaults) => Some(defaults),
+                    None if simple_download_url.is_some() => {
+                        debug!(
+                            "Unknown repository {repo}, looking under dist's simple-download-url only"
+                        );
+                        None
+                    }
+                    None => {
+                        warn!(
+                            concat!(
+                                "Unknown repository {}, cargo-binstall cannot provide default pkg_url for it.\n",
+                                "Please ask the upstream to provide it for target {}."
+                            ),
+                            repo, self.target_data.target
+                        );
 
-            return Ok(None);
+                        return Ok(None);
+                    }
+                },
+                None if simple_download_url.is_some() => {
+                    debug!(
+                        "Package does not specify repository, looking under dist's simple-download-url only"
+                    );
+                    None
+                }
+                None => {
+                    warn!(
+                        concat!(
+                            "Package does not specify repository, cargo-binstall cannot provide default pkg_url for it.\n",
+                            "Please ask the upstream to provide it for target {}."
+                        ),
+                        self.target_data.target
+                    );
+
+                    return Ok(None);
+                }
+            };
+
+            let has_subcrate = subcrate.is_some();
+            let mut pkg_urls: Vec<_> = defaults
+                .into_iter()
+                .flatten()
+                .map(Template::cast)
+                // If subcrate is Some, then all templates will be included.
+                // Otherwise, only templates without key "subcrate" will be
+                // included.
+                .filter(|template| has_subcrate || !template.has_key("subcrate"))
+                .collect();
+            // dist's simple host last, as a fallback: a release there is
+            // usually also on the repository's host, whose release can be
+            // listed.
+            let simple: Vec<_> = simple_download_url
+                .into_iter()
+                .flat_map(dist_simple_pkg_url_templates)
+                .collect();
+            let simple_len = simple.len();
+            pkg_urls.extend(simple);
+            (pkg_urls, simple_len)
         };
+        let (pkg_urls, simple_len) = pkg_urls;
 
         // Convert Option<Url> to Option<String> to reduce size of future.
         let repo = repo.map(|u| u.as_str().trim_end_matches('/'));
@@ -294,23 +353,29 @@ impl super::Fetcher for GhCrateMeta {
             Either::Right(PkgFmt::iter())
         };
 
-        // Every pkg-url, with how it is written for `PkgUrlHint::pkg_url`.
-        let mut buf = String::new();
-        let pkg_urls: Vec<(Arc<str>, Template<'_>)> = pkg_urls
-            .map(|pkg_url| {
-                write_template(&pkg_url, &mut buf);
-                (buf.as_str().into(), pkg_url)
-            })
-            .collect();
+        let pkg_urls = with_written_form(pkg_urls);
 
         if is_per_bin {
             return self.find_per_bin(&pkg_urls, pkg_fmts, repo, subcrate).await;
         }
 
-        // dist's simple host first: if it is set, that is where dist's
-        // installers download from.
-        let mut candidates = self.dist_simple_candidates(info, repo, subcrate);
-        candidates.extend(self.candidates(&pkg_urls, pkg_fmts, None, repo, subcrate));
+        let mut candidates = self.candidates(&pkg_urls, pkg_fmts, None, repo, subcrate);
+        let simple_pkg_urls = &pkg_urls[pkg_urls.len() - simple_len..];
+        if !simple_pkg_urls.is_empty() {
+            let covered_repo = info
+                .filter(|info| {
+                    info.repository_host
+                        .get_default_pkg_url_template()
+                        .is_some()
+                })
+                .and(repo);
+            candidates.retain(|candidate| {
+                !simple_pkg_urls
+                    .iter()
+                    .any(|(pkg_url, _)| *pkg_url == candidate.pkg_url)
+                    || is_dist_simple_candidate(candidate, covered_repo)
+            });
+        }
         Ok(self
             .probe(candidates, repo, subcrate)
             .await?
@@ -332,78 +397,6 @@ impl GhCrateMeta {
             fetcher: Arc::clone(self),
             resolved,
         })
-    }
-
-    /// The URLs a release made by dist may be at under dist's
-    /// `simple-download-url`, if the crate's dist config sets one, its
-    /// `hosting` doesn't leave out `simple`, and the crate doesn't set
-    /// `pkg-url`.
-    ///
-    /// Only dist's own archive formats are tried, and none under the crate's
-    /// own repository on a host the default `pkg-url` cover, e.g. its GitHub
-    /// releases: they find the package there.
-    fn dist_simple_candidates(
-        &self,
-        info: Option<&RepoInfo>,
-        repo: Option<&str>,
-        subcrate: Option<&str>,
-    ) -> Vec<Candidate> {
-        if self.target_data.meta.pkg_url.is_some() {
-            return Vec::new();
-        }
-        let Some(simple_download_url) = self.dist_simple_download_url() else {
-            return Vec::new();
-        };
-
-        // dist's default for the target first.
-        let pkg_fmts = if self.target_data.target.contains("windows") {
-            [PkgFmt::Zip, PkgFmt::Txz, PkgFmt::Tgz, PkgFmt::Tzstd]
-        } else {
-            [PkgFmt::Txz, PkgFmt::Tgz, PkgFmt::Tzstd, PkgFmt::Zip]
-        };
-        let pkg_fmt = self.target_data.meta.pkg_fmt;
-        let pkg_fmts = pkg_fmts
-            .into_iter()
-            .filter(move |fmt| pkg_fmt.is_none_or(|pkg_fmt| pkg_fmt == *fmt));
-
-        let mut buf = String::new();
-        let pkg_urls: Vec<(Arc<str>, Template<'_>)> =
-            dist_simple_pkg_url_templates(simple_download_url)
-                .map(|pkg_url| {
-                    write_template(&pkg_url, &mut buf);
-                    (buf.as_str().into(), pkg_url)
-                })
-                .collect();
-
-        let covered_repo = info
-            .filter(|info| {
-                info.repository_host
-                    .get_default_pkg_url_template()
-                    .is_some()
-            })
-            .and(repo);
-        let mut candidates = self.candidates(&pkg_urls, pkg_fmts, None, repo, subcrate);
-        candidates.retain(|candidate| {
-            // The extension dist gives each format, e.g. not `.txz`.
-            if !candidate
-                .archive_suffix
-                .is_some_and(|suffix| DIST_ARCHIVE_SUFFIXES.contains(&suffix))
-            {
-                return false;
-            }
-            if let Some(repo) = covered_repo
-                && is_under(&candidate.url, repo)
-            {
-                trace!(
-                    "Not checking {}: it is under repository {repo}, which the default \
-                    pkg-urls already cover",
-                    candidate.url
-                );
-                return false;
-            }
-            true
-        });
-        candidates
     }
 
     /// dist's `simple-download-url` of the crate, unless its `hosting`

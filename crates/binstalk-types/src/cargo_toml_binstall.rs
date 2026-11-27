@@ -71,7 +71,7 @@ pub struct DistMeta {
         deserialize_with = "lenient",
         skip_serializing_if = "Option::is_none"
     )]
-    pub simple_download_url: Option<String>,
+    pub simple_download_url: Option<CompactString>,
 }
 
 impl DistMeta {

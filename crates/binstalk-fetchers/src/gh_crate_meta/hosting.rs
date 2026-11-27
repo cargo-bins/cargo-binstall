@@ -1,3 +1,6 @@
+use std::iter;
+
+use either::Either;
 use itertools::Itertools;
 use leon::{Item, Template};
 use leon_macros::template;
@@ -85,17 +88,11 @@ pub(crate) fn dist_simple_pkg_url_templates(
     simple_download_url: &str,
 ) -> impl Iterator<Item = Template<'_>> {
     let dir = simple_download_url.trim_end_matches('/');
-    // Without `{tag}`, every tag has the same url.
-    let tags = if dir.contains("{tag}") {
-        DIST_SIMPLE_TAGS
-    } else {
-        &DIST_SIMPLE_TAGS[..1]
-    };
-    tags.iter().map(move |tag| {
+    let with_tag = |tag: Option<&'static Template<'static>>| {
         let mut template = Template::new(&[], None);
         for (i, text) in dir.split("{tag}").enumerate() {
             if i > 0 {
-                template += tag;
+                template += tag.expect("only split at `{tag}` if there is one");
             }
             if !text.is_empty() {
                 template += Item::Text(text);
@@ -103,7 +100,15 @@ pub(crate) fn dist_simple_pkg_url_templates(
         }
         template += &DIST_FILENAME;
         template
-    })
+    };
+    // `{tag}` is the git tag the release was made from, which isn't known:
+    // it is tried as each tag dist accepts. Without it, the url is the
+    // only one.
+    if dir.contains("{tag}") {
+        Either::Left(DIST_SIMPLE_TAGS.iter().map(move |tag| with_tag(Some(tag))))
+    } else {
+        Either::Right(iter::once(with_tag(None)))
+    }
 }
 
 /// Every filename is appended to every release path, followed by `suffix`.
