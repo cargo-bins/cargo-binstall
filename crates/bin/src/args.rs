@@ -86,8 +86,8 @@ pub struct Args {
     ///
     /// On Linux, a binary found for a detected target is skipped if it can't run on this system:
     /// if its dynamic loader is missing (e.g. a dynamically linked musl binary on a glibc system),
-    /// or the system's loader reports a missing library or library version (e.g. a newer glibc).
-    /// Targets given with this option are not checked.
+    /// or it needs a newer glibc than the system has. Targets given with this option are not
+    /// checked.
     ///
     /// This option takes a comma-separated list of target triples, which will be tried in order.
     /// They override the default list, which is detected automatically from the current platform.

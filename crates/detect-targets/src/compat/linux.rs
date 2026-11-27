@@ -1,11 +1,10 @@
-use std::{fs::File, path::Path, process::Stdio, time::Duration};
+use std::{fs::File, path::Path};
 
 use goblin::elf::Elf;
 use memmap2::Mmap;
-use tokio::{process::Command, task::spawn_blocking, time::timeout};
+use tokio::task::spawn_blocking;
 
 use super::Incompatible;
-use crate::probe;
 
 /// Check whether the executable at `path` can run on this system, see
 /// the [module docs](super).
@@ -13,51 +12,44 @@ use crate::probe;
 /// Returns `Ok` if it can, or if that can't be determined, including when
 /// `path` is not an ELF file or can't be read.
 pub async fn check(path: &Path) -> Result<(), Incompatible> {
-    let binary = path.to_owned();
-    // `None` for a static binary: target detection already established
+    let path = path.to_owned();
+    spawn_blocking(move || check_blocking(&path))
+        .await
+        .unwrap_or(Ok(()))
+}
+
+fn check_blocking(path: &Path) -> Result<(), Incompatible> {
+    // A static binary has no loader: target detection already established
     // that the kernel runs it.
-    let Ok(Some(Some(interp))) = spawn_blocking(move || read_interp(&binary)).await else {
+    let Some((Some(interp), needed)) = parse(path, |elf| (interp(elf), needed_glibc(elf))) else {
         return Ok(());
     };
-
     if !Path::new(&interp).exists() {
         return Err(Incompatible::Loader { interp });
     }
-    // Only run a loader known to be one: a standard path, holding a real
-    // loader (one with no loader of its own, unlike e.g. gcompat's shim,
-    // which runs the program).
-    let loader = interp.clone();
-    let trusted = probe::probes().iter().any(|p| p.spec.interp == interp)
-        && spawn_blocking(move || read_interp(Path::new(&loader)) == Some(None))
-            .await
-            .unwrap_or(false);
-    if !trusted {
-        return Ok(());
-    }
 
-    // A path without a `/` would be looked up like a library name.
-    let Ok(path) = std::path::absolute(path) else {
+    // glibc installs `libc.so.6` next to its loader.
+    let Some(needed) = needed else {
         return Ok(());
     };
-    let output = Command::new(&interp)
-        .arg("--list")
-        .arg(path)
-        .stdin(Stdio::null())
-        .kill_on_drop(true)
-        .output();
-    match timeout(Duration::from_secs(10), output).await {
-        Ok(Ok(output)) => parse_list(&String::from_utf8_lossy(&output.stderr))
-            .or_else(|| parse_list(&String::from_utf8_lossy(&output.stdout)))
-            .map_or(Ok(()), Err),
-        // Can't run it (noexec, seccomp, a foreign arch without binfmt):
-        // inconclusive.
+    let Some(libc) = std::fs::canonicalize(&interp)
+        .ok()
+        .and_then(|loader| Some(loader.parent()?.join("libc.so.6")))
+    else {
+        return Ok(());
+    };
+    match parse(&libc, available_glibc).flatten() {
+        Some(available) if available < needed => Err(Incompatible::Glibc {
+            needed: display(&needed),
+            available: display(&available),
+        }),
         _ => Ok(()),
     }
 }
 
-/// `Some(PT_INTERP)` of the ELF file at `path`, `Some(None)` for one
-/// without, `None` if it is not an ELF file or can't be read.
-fn read_interp(path: &Path) -> Option<Option<String>> {
+/// Parse the ELF file at `path` with `f`, or `None` if it is not one or
+/// can't be read.
+fn parse<T>(path: &Path, f: impl FnOnce(&Elf<'_>) -> T) -> Option<T> {
     // Archives may hold FIFOs and device nodes: opening a FIFO would
     // block, and opening a device can be an action of its own.
     if !std::fs::metadata(path).ok()?.is_file() {
@@ -67,38 +59,42 @@ fn read_interp(path: &Path) -> Option<Option<String>> {
     // SAFETY: read-only mapping, only read by goblin's bounds-checked
     // parser.
     let bytes = unsafe { Mmap::map(&file) }.ok()?;
-    let elf = Elf::parse(&bytes).ok()?;
-    Some(
-        elf.interpreter
-            .map(|interp| interp.split('\0').next().unwrap_or_default().into()),
-    )
+    Some(f(&Elf::parse(&bytes).ok()?))
 }
 
-/// The first problem the loader reports in its `--list` output, if any.
-fn parse_list(output: &str) -> Option<Incompatible> {
-    output.lines().find_map(|line| {
-        // glibc: "BIN: LIB: version `GLIBC_2.39' not found (required by BIN)"
-        if let Some((before, rest)) = line.split_once(": version `") {
-            let (version, _) = rest.split_once("' not found")?;
-            let library = before.rsplit_once(": ")?.1;
-            let library = library.rsplit_once('/').map_or(library, |(_, name)| name);
-            return Some(Incompatible::Version {
-                library: library.into(),
-                version: version.into(),
-            });
-        }
-        let name = if let Some(rest) = line.split_once("error while loading shared libraries: ") {
-            // glibc: "BIN: error while loading shared libraries: LIB: cannot open ..."
-            rest.1.split_once(": ")?.0
-        } else if let Some(rest) = line.strip_prefix("Error loading shared library ") {
-            // musl: "Error loading shared library LIB: No such file ... (needed by BIN)"
-            rest.split_once(": ")?.0
-        } else {
-            // glibc, for a library needed by another: "\tLIB => not found"
-            line.trim().strip_suffix(" => not found")?
-        };
-        Some(Incompatible::Library { name: name.into() })
-    })
+fn interp(elf: &Elf<'_>) -> Option<String> {
+    Some(elf.interpreter?.split('\0').next()?.to_owned())
+}
+
+/// The version of `GLIBC_2.39`: `[2, 39]`.
+fn glibc_version(name: &str) -> Option<Vec<u32>> {
+    let version = name.strip_prefix("GLIBC_")?;
+    version.split('.').map(|n| n.parse().ok()).collect()
+}
+
+/// The newest glibc version `elf` requires, if any.
+fn needed_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
+    let required = elf.verneed.iter().flat_map(|section| section.iter());
+    required
+        .flat_map(|need| need.iter().collect::<Vec<_>>())
+        // A weak version is only required if available.
+        .filter(|aux| aux.vna_flags & goblin::elf::symver::VER_FLG_WEAK == 0)
+        .filter_map(|aux| glibc_version(elf.dynstrtab.get_at(aux.vna_name)?))
+        .max()
+}
+
+/// The newest glibc version the library `elf` defines, if any.
+fn available_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
+    elf.verdef
+        .iter()
+        .flat_map(|section| section.iter())
+        .filter_map(|def| glibc_version(elf.dynstrtab.get_at(def.iter().next()?.vda_name)?))
+        .max()
+}
+
+fn display(version: &[u32]) -> String {
+    let parts: Vec<_> = version.iter().map(u32::to_string).collect();
+    parts.join(".")
 }
 
 #[cfg(test)]
@@ -106,37 +102,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn list_output() {
-        assert_eq!(
-            parse_list(
-                "./t: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_9.3' not found (required by ./t)\n"
-            ),
-            Some(Incompatible::Version {
-                library: "libc.so.6".into(),
-                version: "GLIBC_9.3".into()
-            })
-        );
-        let library = |name: &str| Some(Incompatible::Library { name: name.into() });
-        assert_eq!(
-            parse_list(
-                "./t: error while loading shared libraries: libQ.so.6: cannot open shared object file: No such file or directory\n"
-            ),
-            library("libQ.so.6")
-        );
-        assert_eq!(
-            parse_list(
-                "Error loading shared library libfoo.so: No such file or directory (needed by /t)\n"
-            ),
-            library("libfoo.so")
-        );
-        assert_eq!(
-            parse_list("\tlibz.so.1 => /lib/libz.so.1 (0x1)\n\tlibQ.so.6 => not found\n"),
-            library("libQ.so.6")
-        );
-        assert_eq!(
-            parse_list("\tlinux-vdso.so.1 (0x1)\n\tlibc.so.6 => /lib/libc.so.6 (0x2)\n"),
-            None
-        );
+    fn versions() {
+        assert_eq!(glibc_version("GLIBC_2.39"), Some(vec![2, 39]));
+        assert_eq!(glibc_version("GLIBC_2.2.5"), Some(vec![2, 2, 5]));
+        assert_eq!(glibc_version("GLIBC_PRIVATE"), None);
+        assert_eq!(glibc_version("GLIBCXX_3.4"), None);
+        assert!(glibc_version("GLIBC_2.9") < glibc_version("GLIBC_2.10"));
+        assert_eq!(display(&[2, 39]), "2.39");
     }
 
     /// This test binary runs, so it must pass the check.
@@ -175,8 +147,8 @@ mod tests {
         path
     }
 
-    /// A binary needing a newer glibc than the host's, linking to a
-    /// library the host lacks, or using a missing loader is rejected.
+    /// A binary needing a newer glibc than the host's, or using a missing
+    /// loader, is rejected.
     #[tokio::test]
     #[cfg(target_env = "gnu")]
     async fn incompatible_rejected() {
@@ -184,19 +156,11 @@ mod tests {
 
         let exe = patched_exe(dir.path(), b"GLIBC_2.", b"GLIBC_9.");
         assert!(
-            matches!(check(&exe).await, Err(Incompatible::Version { version, .. }) if version.starts_with("GLIBC_9.")),
+            matches!(check(&exe).await, Err(Incompatible::Glibc { needed, .. }) if needed.starts_with("9."))
         );
 
-        let exe = patched_exe(dir.path(), b"libc.so.6\0", b"libQ.so.6\0");
-        assert_eq!(
-            check(&exe).await,
-            Err(Incompatible::Library {
-                name: "libQ.so.6".into()
-            })
-        );
-
-        let interp = read_interp(&std::env::current_exe().unwrap())
-            .unwrap()
+        let interp = parse(&std::env::current_exe().unwrap(), interp)
+            .flatten()
             .unwrap();
         let exe = patched_exe(dir.path(), interp.as_bytes(), b"/nonexistent/ld.so");
         assert_eq!(

@@ -35,7 +35,7 @@ memmap2 = "0.9.12"
 rustix = { version = "1.1.6", features = ["fs", "std"], default-features = false }
 scroll = "0.13.0"
 tempfile = "3.5.0"
-tokio = { version = "1.52.3", features = ["fs", "macros", "time"], default-features = false }
+tokio = { version = "1.52.3", features = ["fs", "macros"], default-features = false }
 tokio-util = { version = "0.7.18", features = ["rt"], default-features = false }
 
 # It depends on winapi, which does not compile for arm64ec-pc-windows-msvc,
