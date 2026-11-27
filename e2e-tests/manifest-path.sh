@@ -15,7 +15,8 @@ echo "$cargo_binstall_version"
 [ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
 
 cat "$CARGO_HOME/.crates.toml"
-grep -F "cargo-binstall 0.12.0 (path+file://manifests/github-test-Cargo.toml)" <"$CARGO_HOME/.crates.toml"
+# The source is the absolute path of the directory, as for `cargo install --path`.
+grep -E '^"cargo-binstall 0\.12\.0 \(path\+file:///.+/e2e-tests/manifests\)"' <"$CARGO_HOME/.crates.toml"
 
 # Test default github template with a `{ name }-v{ version }` tag,
 # as release-plz and cargo-release make in a workspace.
@@ -39,7 +40,7 @@ cargo_binstall_version="$(cargo binstall -V)"
 echo "$cargo_binstall_version"
 
 [ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
-grep -F "bin-named-package-test 0.12.0 (path+file://manifests/bin-named-package-test-Cargo.toml)" <"$CARGO_HOME/.crates.toml"
+grep -E '^"bin-named-package-test 0\.12\.0 \(path\+file:///.+/e2e-tests/manifests\)"' <"$CARGO_HOME/.crates.toml"
 
 # Test that `--manifest-path` can handle relative path without parent well
 exe="$(realpath "$1")"
@@ -50,3 +51,4 @@ cargo_binstall_version="$(cargo binstall -V)"
 echo "$cargo_binstall_version"
 
 [ "$cargo_binstall_version" = "cargo-binstall 0.12.0" ]
+grep -E '^"cargo-binstall 0\.12\.0 \(path\+file:///.+/e2e-tests/manifests\)"' <"$CARGO_HOME/.crates.toml"
