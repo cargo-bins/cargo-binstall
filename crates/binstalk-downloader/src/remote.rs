@@ -426,6 +426,17 @@ impl Client {
             .map(|response| response.url().clone())
     }
 
+    /// Get the final redirected url using `Method::HEAD` only.
+    ///
+    /// Unlike [`Client::get_redirected_final_url`], a failing status is not
+    /// asked again with `Method::GET`. Use it for servers known to answer
+    /// `HEAD` like `GET`, such as github.com.
+    pub async fn head_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
+        self.send_request(Request::new(Method::HEAD, url), true)
+            .await
+            .map(|response| response.url().clone())
+    }
+
     /// Create `GET` request to `url` and return a stream of the response data.
     /// On status code other than 200, it will return an error.
     pub async fn get_stream(
@@ -784,6 +795,70 @@ mod tests {
             .unwrap();
         assert_eq!(&body[..], b"ok");
         assert_eq!(server.join().unwrap(), 1);
+    }
+
+    /// A 404 for the `HEAD`, then a 200 for a `GET` asking again.
+    const NOT_FOUND_THEN_OK: &[&[u8]] = &[
+        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    ];
+
+    #[tokio::test]
+    async fn get_redirected_final_url_asks_again_with_get_after_head_404() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = serve_responses(listener, NOT_FOUND_THEN_OK);
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        test_client(true)
+            .get_redirected_final_url(url)
+            .await
+            .unwrap();
+        assert_eq!(server.join().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn head_redirected_final_url_does_not_ask_again_after_404() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        // Never joined: it waits for a second request that does not come.
+        let _server = serve_responses(listener, NOT_FOUND_THEN_OK);
+
+        let url = Url::parse(&format!("http://{addr}/")).unwrap();
+        let err = test_client(true)
+            .head_redirected_final_url(url)
+            .await
+            .unwrap_err();
+        let Error::Http(err) = err else {
+            panic!("expected an http error, got {err:?}")
+        };
+        assert_eq!(err.method, Method::HEAD);
+        assert_eq!(err.err.status(), Some(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn head_redirected_final_url_follows_redirects() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let redirect: &'static [u8] = format!(
+            "HTTP/1.1 301 Moved Permanently\r\nLocation: http://{addr}/new\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .into_bytes()
+        .leak();
+        let responses: &'static [&'static [u8]] = vec![
+            redirect,
+            b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        ]
+        .leak();
+        let server = serve_responses(listener, responses);
+
+        let url = Url::parse(&format!("http://{addr}/old")).unwrap();
+        let final_url = test_client(true)
+            .head_redirected_final_url(url)
+            .await
+            .unwrap();
+        assert_eq!(final_url.path(), "/new");
+        assert_eq!(server.join().unwrap(), 2);
     }
 
     #[tokio::test]
