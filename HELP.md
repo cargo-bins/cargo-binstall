@@ -270,7 +270,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    Set to `off` to disable logging completely, this will also disable output from `cargo-install`.
 
-   If `--log-level` is not specified on cmdline, then cargo-binstall will try to read environment variable `BINSTALL_LOG_LEVEL` and interpret it as a log-level.
+   If none of `--log-level`, `--verbose` and `--quiet` is specified on cmdline, then cargo-binstall will try to read environment variable `BINSTALL_LOG_LEVEL` and interpret it as a log-level.
 * `-v`, `--verbose` — Implies `--log-level debug` and it can also be used with `--version` to print out verbose information,
 * `-q`, `--quiet` — Equivalent to setting `log_level` to `off`.
 

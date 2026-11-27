@@ -607,9 +607,9 @@ pub struct Args {
     /// Set to `off` to disable logging completely, this will also
     /// disable output from `cargo-install`.
     ///
-    /// If `--log-level` is not specified on cmdline, then cargo-binstall
-    /// will try to read environment variable `BINSTALL_LOG_LEVEL` and
-    /// interpret it as a log-level.
+    /// If none of `--log-level`, `--verbose` and `--quiet` is specified on
+    /// cmdline, then cargo-binstall will try to read environment variable
+    /// `BINSTALL_LOG_LEVEL` and interpret it as a log-level.
     #[clap(help_heading = "Meta", long, value_name = "LEVEL")]
     pub log_level: Option<LevelFilter>,
 
@@ -827,18 +827,14 @@ pub fn parse() -> (Args, PkgOverride) {
         return (opts, Default::default());
     }
 
-    if opts.log_level.is_none() {
-        if let Some(log) = env::var("BINSTALL_LOG_LEVEL")
+    opts.log_level = log_level(
+        opts.log_level,
+        opts.quiet,
+        opts.verbose,
+        env::var("BINSTALL_LOG_LEVEL")
             .ok()
-            .and_then(|s| s.parse().ok())
-        {
-            opts.log_level = Some(log);
-        } else if opts.quiet {
-            opts.log_level = Some(LevelFilter::Off);
-        } else if opts.verbose {
-            opts.log_level = Some(LevelFilter::Debug);
-        }
-    }
+            .and_then(|s| s.parse().ok()),
+    );
 
     // Ensure no conflict
     let mut command = Args::command();
@@ -1000,6 +996,25 @@ You cannot use --{feature_option} and specify multiple packages at the same time
     (opts, cli_overrides)
 }
 
+/// The log level to use: what is given on the command line wins over the
+/// environment variable `BINSTALL_LOG_LEVEL`.
+fn log_level(
+    log_level: Option<LevelFilter>,
+    quiet: bool,
+    verbose: bool,
+    env: Option<LevelFilter>,
+) -> Option<LevelFilter> {
+    if quiet {
+        Some(LevelFilter::Off)
+    } else if log_level.is_some() {
+        log_level
+    } else if verbose {
+        Some(LevelFilter::Debug)
+    } else {
+        env
+    }
+}
+
 #[cfg(test)]
 mod test {
     use clap::FromArgMatches;
@@ -1045,6 +1060,27 @@ mod test {
         .unwrap();
         assert!(args.no_default_features);
         assert!(args.all_features);
+    }
+
+    #[test]
+    fn log_level_flags_win_over_env() {
+        use LevelFilter::*;
+
+        // Nothing on the command line: the environment variable is used.
+        assert_eq!(log_level(None, false, false, None), None);
+        assert_eq!(log_level(None, false, false, Some(Warn)), Some(Warn));
+
+        // `--quiet` and `--verbose` win over it.
+        assert_eq!(log_level(None, true, false, Some(Info)), Some(Off));
+        assert_eq!(log_level(None, false, true, Some(Info)), Some(Debug));
+
+        // So does `--log-level`, which `--quiet` overrides.
+        assert_eq!(
+            log_level(Some(Trace), false, false, Some(Info)),
+            Some(Trace)
+        );
+        assert_eq!(log_level(Some(Trace), false, true, None), Some(Trace));
+        assert_eq!(log_level(Some(Trace), true, false, None), Some(Off));
     }
 
     #[test]
