@@ -351,11 +351,16 @@ impl Data {
 /// needs no `GET` to confirm it.
 ///
 /// github.com does: a private repository's page is 404 to both.
+fn trusts_head(url: &Url) -> bool {
+    is_github_com(url)
+}
+
+/// Whether `url` is on github.com itself.
 ///
 /// The exact host match is deliberate, like `GhRepo::try_extract_from_url`
 /// and unlike `RepositoryHost::GitHub`, which also takes GitHub Enterprise
-/// hosts: they may not answer `HEAD` the same way.
-fn trusts_head(url: &Url) -> bool {
+/// hosts: they may not behave like github.com.
+fn is_github_com(url: &Url) -> bool {
     url.domain() == Some("github.com")
 }
 
@@ -364,7 +369,7 @@ fn trusts_head(url: &Url) -> bool {
 /// github.com answers `X.git` with a redirect to `X`, and a private `X.git`
 /// 404s like `X`, so asking for `X` right away saves a request either way.
 fn strip_github_dot_git(url: &mut Url) {
-    if trusts_head(url)
+    if is_github_com(url)
         && let Some(path) = url.path().strip_suffix(".git")
     {
         let path = path.to_owned();
