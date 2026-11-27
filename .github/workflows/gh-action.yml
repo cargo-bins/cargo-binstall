@@ -51,10 +51,9 @@ jobs:
         run: |
           repo=cargo-bins/cargo-binstall
           latest="$(gh api "repos/$repo/releases/latest" --jq .tag_name)"
-          tags="$(gh release list --repo "$repo" --exclude-drafts --exclude-pre-releases --limit 100 \
-              --json tagName --jq '.[].tagName')"
           # Other crates in this repository have releases too.
-          previous="$(printf '%s\n' "$tags" | grep -E '^v[0-9]' | grep -vxF "$latest" | sed -n 1p)" || true
+          previous="$(gh release list --repo "$repo" --exclude-drafts --exclude-pre-releases --limit 100 \
+              --json tagName --jq "[.[].tagName | select(test(\"^v[0-9]\") and . != \"$latest\")][0] // empty")"
           if [ -z "$previous" ]; then
               echo "::error::No cargo-binstall release other than $latest to test with"
               exit 1
