@@ -6,7 +6,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures_util::Stream;
+use futures_util::{Stream, TryFutureExt};
 use httpdate::parse_http_date;
 use reqwest::{
     Request,
@@ -225,18 +225,20 @@ impl Client {
     ///
     /// Return `Ok(ControlFlow::Break(response))` when succeeds and no need
     /// to retry.
+    ///
+    /// * `request` - `Request::try_clone` must always return `Some`.
     #[instrument(
-        skip(self, url),
+        skip(self),
         fields(
-            url = format_args!("{url}"),
+            url = format_args!("{}", request.url()),
         ),
     )]
     async fn do_send_request(
         &self,
-        request: Request,
-        url: &Url,
+        request: &Request,
     ) -> Result<ControlFlow<reqwest::Response, Result<reqwest::Response, ReqwestError>>, ReqwestError>
     {
+        let url = request.url();
         let response = match self.0.service.call(request).await {
             Err(err) if err.is_timeout() || err.is_connect() => {
                 let duration = RETRY_DURATION_FOR_TIMEOUT;
@@ -320,10 +322,7 @@ impl Client {
             // Increment the counter before checking for terminal condition.
             count += 1;
 
-            match self
-                .do_send_request(request.try_clone().unwrap(), request.url())
-                .await?
-            {
+            match self.do_send_request(request).await? {
                 ControlFlow::Break(response) => break Ok(response),
                 ControlFlow::Continue(res) if count >= max_retry_count.get() => {
                     break res;
@@ -336,12 +335,12 @@ impl Client {
     /// * `request` - `Request::try_clone` must always return `Some`.
     async fn send_request(
         &self,
-        request: Request,
+        request: &Request,
         error_for_status: bool,
     ) -> Result<reqwest::Response, Error> {
         debug!("Downloading from: '{}'", request.url());
 
-        self.send_request_inner(&request)
+        self.send_request_inner(request)
             .await
             .and_then(|response| {
                 if error_for_status {
@@ -367,16 +366,8 @@ impl Client {
         error_for_status: bool,
         get_after_404: bool,
     ) -> Result<reqwest::Response, Error> {
-        let res = self
-            .send_request(Request::new(Method::HEAD, url.clone()), error_for_status)
-            .await;
-
-        let retry_with_get = move || async move {
-            // Retry using GET
-            info!("HEAD on {url} is not allowed, fallback to GET");
-            self.send_request(Request::new(Method::GET, url), error_for_status)
-                .await
-        };
+        let mut request = Request::new(Method::HEAD, url);
+        let res = self.send_request(&request, error_for_status).await;
 
         let is_retryable = |status| match status {
             StatusCode::NOT_FOUND => get_after_404,
@@ -388,15 +379,18 @@ impl Client {
             _ => false,
         };
 
-        match res {
-            Err(Error::Http(http_error))
-                if http_error.err.status().map(is_retryable).unwrap_or(false) =>
-            {
-                retry_with_get().await
-            }
-            Ok(response) if is_retryable(response.status()) => retry_with_get().await,
-            res => res,
+        let retry_with_get = match &res {
+            Err(Error::Http(http_error)) => http_error.err.status().is_some_and(is_retryable),
+            Ok(response) => is_retryable(response.status()),
+            Err(_) => false,
+        };
+        if !retry_with_get {
+            return res;
         }
+
+        info!("HEAD on {} is not allowed, fallback to GET", request.url());
+        *request.method_mut() = Method::GET;
+        self.send_request(&request, error_for_status).await
     }
 
     /// Check if remote exists using `Method::GET`.
@@ -426,14 +420,13 @@ impl Client {
     ///   `GET`. Pass `false` for servers known to answer `HEAD` like `GET`,
     ///   such as github.com. Other failing statuses always fall back to
     ///   `GET`, since a proxy in between may be the one rejecting `HEAD`.
-    pub async fn get_redirected_final_url(
+    pub fn get_redirected_final_url(
         &self,
         url: Url,
         get_after_404: bool,
-    ) -> Result<Url, Error> {
+    ) -> impl Future<Output = Result<Url, Error>> {
         self.head_or_fallback_to_get(url, true, get_after_404)
-            .await
-            .map(|response| response.url().clone())
+            .map_ok(|response| response.url().clone())
     }
 
     /// Create `GET` request to `url` and return a stream of the response data.
