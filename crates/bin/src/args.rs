@@ -93,6 +93,7 @@ pub struct Args {
         alias = "target",
         long,
         value_name = "TRIPLE",
+        value_delimiter = ',',
         env = "CARGO_BUILD_TARGET"
     )]
     pub(crate) targets: Option<Vec<String>>,
@@ -1045,6 +1046,27 @@ mod test {
         .unwrap();
         assert!(args.no_default_features);
         assert!(args.all_features);
+    }
+
+    #[test]
+    fn targets_are_comma_separated() {
+        let args = Args::try_parse_from([
+            "cargo-binstall",
+            "--targets",
+            "x86_64-unknown-linux-gnu,x86_64-unknown-linux-musl",
+            "--target",
+            "aarch64-apple-darwin",
+            "ripgrep",
+        ])
+        .unwrap();
+        assert_eq!(
+            args.targets.unwrap(),
+            [
+                "x86_64-unknown-linux-gnu",
+                "x86_64-unknown-linux-musl",
+                "aarch64-apple-darwin"
+            ]
+        );
     }
 
     #[test]
