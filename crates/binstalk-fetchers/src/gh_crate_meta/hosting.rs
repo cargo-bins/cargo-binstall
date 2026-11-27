@@ -127,6 +127,53 @@ impl RepositoryHost {
         } = self.default_pkg_urls()?;
         Some(apply_filenames_to_paths(paths, filenames, suffix))
     }
+
+    /// The default `pkg-url` templates for a package named after one of the
+    /// crate's binaries instead of the crate: the file names have `{ bin }`
+    /// in place of `{ name }`, e.g. `fd-v{ version }-{ target }.tar.gz` of
+    /// crate `fd-find`.
+    ///
+    /// Each file name is tried in the release paths named after the crate
+    /// first, then in those named after the binary, e.g. tag
+    /// `{ bin }-v{ version }`.
+    pub fn get_default_bin_pkg_url_template(
+        self,
+    ) -> Option<impl Iterator<Item = Template<'static>> + Clone + 'static> {
+        let DefaultPkgUrls {
+            paths,
+            filenames,
+            suffix,
+        } = self.default_pkg_urls()?;
+        let bin_paths = paths.iter().filter(|path| path.has_key("name"));
+        Some(
+            filenames
+                .iter()
+                .flat_map(|fs| fs.iter())
+                .map(|filename| rename_key(filename, "name", "bin"))
+                .cartesian_product(
+                    paths
+                        .iter()
+                        .cloned()
+                        .chain(bin_paths.map(|path| rename_key(path, "name", "bin"))),
+                )
+                .map(move |(filename, path)| {
+                    let mut template = path + &filename;
+                    template += Item::Text(suffix);
+                    template
+                }),
+        )
+    }
+}
+
+/// `template` with key `to` in place of key `from`.
+fn rename_key(template: &Template<'static>, from: &str, to: &'static str) -> Template<'static> {
+    let mut template = template.clone();
+    for item in template.items.to_mut() {
+        if *item == Item::Key(from) {
+            *item = Item::Key(to);
+        }
+    }
+    template
 }
 
 fn apply_filenames_to_paths(
@@ -204,6 +251,37 @@ mod tests {
                 "{doc} was out of date and has been regenerated, commit the changes"
             );
         }
+    }
+
+    #[test]
+    fn bin_pkg_url_templates() {
+        let templates = RepositoryHost::GitHub
+            .get_default_bin_pkg_url_template()
+            .unwrap()
+            .map(|template| render(&template))
+            .collect::<Vec<_>>();
+        // Every file name in every path, and in the paths named after the
+        // crate (tags `{ name }-v{ version }` and `{ name }-{ version }`)
+        // renamed after the binary.
+        let default = RepositoryHost::GitHub
+            .get_default_pkg_url_template()
+            .unwrap()
+            .count();
+        assert_eq!(templates.len(), default + default / 6 * 2);
+        assert!(templates.iter().all(|template| {
+            let filename = template.rsplit_once('/').unwrap().1;
+            filename.starts_with("{ bin }") && !filename.contains("{ name }")
+        }));
+
+        // Release tags named after the crate first.
+        let position = |template: &str| templates.iter().position(|t| t == template).unwrap();
+        assert!(
+            position(
+                "{ repo }/releases/download/{ name }-v{ version }/{ bin }-{ target }{ archive-suffix }"
+            ) < position(
+                "{ repo }/releases/download/{ bin }-v{ version }/{ bin }-{ target }{ archive-suffix }"
+            )
+        );
     }
 
     #[test]

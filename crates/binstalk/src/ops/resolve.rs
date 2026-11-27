@@ -1,6 +1,5 @@
 use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromStr, sync::Arc};
 
-use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
     cargo_toml_binstall::{BinaryMeta, Strategy},
     crate_info::{CrateSource, PkgUrlHint, SourceType},
@@ -106,24 +105,10 @@ async fn resolve_inner(
         .collect::<Result<Vec<_>, BinstallError>>()?;
     let resolvers = &opts.resolvers;
 
-    let binary_name = match package_info.binaries.as_slice() {
-        [bin] if bin.name != package_info.name => Some(CompactString::from(bin.name.as_str())),
-        _ => None,
-    };
-
-    let mut handles: Vec<Arc<dyn Fetcher>> = Vec::with_capacity(
-        desired_targets.len() * resolvers.len()
-            + if binary_name.is_some() {
-                desired_targets.len()
-            } else {
-                0
-            },
-    );
-
     let gh_api_client = opts.gh_api_client.get().await?;
 
     // The binaries the user asked for, for a `pkg-url` with one package per
-    // binary.
+    // binary, or packages named after them.
     let bin_infos: Vec<BinInfo> = package_info
         .binaries
         .iter()
@@ -134,58 +119,40 @@ async fn resolve_inner(
         })
         .collect();
 
-    let with_pkg_url_hint = |data: Data| {
-        let data = data.with_bins(bin_infos.clone());
-        match pkg_url_hint.clone() {
-            Some((target, hint)) => data.with_pkg_url_hint(target, hint),
-            None => data,
-        }
-    };
-
-    let mut handles_fn =
-        |data: Arc<Data>, filter_fetcher_by_name_predicate: fn(&'static str) -> bool| {
-            handles.extend(
-                resolvers
-                    .iter()
-                    .cartesian_product(&desired_targets)
-                    .filter_map(|(f, target_data)| {
-                        let fetcher = f(
-                            opts.client.clone(),
-                            gh_api_client.clone(),
-                            data.clone(),
-                            target_data.clone(),
-                            opts.signature_policy,
-                            !opts.disable_telemetry,
-                        );
-
-                        if let Some(disabled_strategies) =
-                            target_data.meta.disabled_strategies.as_deref()
-                            && disabled_strategies.contains(&fetcher.strategy())
-                        {
-                            return None;
-                        }
-
-                        filter_fetcher_by_name_predicate(fetcher.fetcher_name()).then_some(fetcher)
-                    }),
-            )
-        };
-
     let data = Data::new(
         opts.fetch_context.clone(),
         package_info.name.clone(),
         package_info.version_str.clone(),
         package_info.repo.clone(),
-    );
-    // Shares what is known about the repository with `data`.
-    let binary_data = binary_name.map(|binary_name| data.with_name(binary_name));
+    )
+    .with_bins(bin_infos);
+    let data = Arc::new(match pkg_url_hint {
+        Some((target, hint)) => data.with_pkg_url_hint(target, hint),
+        None => data,
+    });
 
-    handles_fn(Arc::new(with_pkg_url_hint(data)), |_| true);
+    let handles: Vec<Arc<dyn Fetcher>> = resolvers
+        .iter()
+        .cartesian_product(&desired_targets)
+        .filter_map(|(f, target_data)| {
+            let fetcher = f(
+                opts.client.clone(),
+                gh_api_client.clone(),
+                data.clone(),
+                target_data.clone(),
+                opts.signature_policy,
+                !opts.disable_telemetry,
+            );
 
-    if let Some(binary_data) = binary_data {
-        handles_fn(Arc::new(with_pkg_url_hint(binary_data)), |name| {
-            name == FETCHER_GH_CRATE_META
-        });
-    }
+            if let Some(disabled_strategies) = target_data.meta.disabled_strategies.as_deref()
+                && disabled_strategies.contains(&fetcher.strategy())
+            {
+                return None;
+            }
+
+            Some(fetcher)
+        })
+        .collect();
 
     for fetcher in &handles {
         let mut found = match timeout(opts.maximum_resolution_timeout, fetcher.clone().find()).await

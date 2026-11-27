@@ -1,0 +1,11 @@
+[package]
+name = "bin-named-package-test"
+repository = "https://github.com/cargo-bins/cargo-binstall"
+version = "0.12.0"
+edition = "2021"
+
+# cargo-binstall's releases, whose packages are named after this binary,
+# not after the crate.
+[[bin]]
+name = "cargo-binstall"
+path = "src/main.rs"

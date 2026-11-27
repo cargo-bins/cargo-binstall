@@ -1009,22 +1009,20 @@ mod test {
         drop(tags);
         assert_eq!(context.release_assets_pages_len(), 1);
 
-        // The crate looked up by its binary's name shares all of it: only
-        // the tags not asked yet are asked.
-        let binary_data = Arc::new(data.with_name("binary".into()));
-        assert!(binary_data.repo_info.get().is_some());
+        // Packages named after a binary of the crate, looked for once none
+        // named after the crate is found, are in the same releases: nothing
+        // is asked again.
         let found = probe(
-            &binary_data,
+            &data,
             &[
-                musl_tgz,
-                "binary-v0.20.1/binary-x86_64-unknown-linux-musl.tgz",
+                "v0.20.1/binary-x86_64-unknown-linux-musl.tgz",
+                "v0.18.2/binary-x86_64-unknown-linux-musl.tgz",
             ],
         )
         .await;
-        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+        assert!(found.is_none());
         let tags = repo_tags.lock().await;
-        assert_eq!(tags.exists("binary-v0.20.1"), Some(false));
-        assert_eq!(tags.exists("v0.20.1"), Some(true));
+        assert!(tags.unasked(["v0.20.1", "v0.18.2"]).is_empty());
         drop(tags);
         assert_eq!(context.release_assets_pages_len(), 1);
 

@@ -280,27 +280,12 @@ impl Data {
         }
     }
 
-    /// The same crate, looked up by another name, e.g. its binary's.
-    ///
-    /// What is known about the repository is shared, so it is asked only
-    /// once.
-    pub fn with_name(&self, name: CompactString) -> Self {
-        Self {
-            name,
-            version: self.version.clone(),
-            repo: self.repo.clone(),
-            context: Arc::clone(&self.context),
-            repo_info: Arc::clone(&self.repo_info),
-            pkg_url_hint: None,
-            bins: self.bins.clone(),
-        }
-    }
-
     /// The binaries to install.
     ///
     /// Fetchers that find one package per binary, like [`GhCrateMeta`] with
     /// `{ bin }` in `pkg-url`, need them to know which packages to look for,
-    /// and find nothing without them.
+    /// and find nothing without them. [`GhCrateMeta`] also looks for
+    /// packages named after them, if none named after the crate is found.
     pub fn with_bins(mut self, bins: Vec<BinInfo>) -> Self {
         self.bins = bins;
         self
