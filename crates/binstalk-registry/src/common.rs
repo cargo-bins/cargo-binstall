@@ -227,6 +227,7 @@ pub(super) fn render_dl_template(
 
 #[derive(Deserialize)]
 pub(super) struct RegistryIndexEntry {
+    pub(super) name: CompactString,
     pub(super) vers: CompactString,
     pub(super) yanked: bool,
     pub(super) cksum: String,
@@ -243,10 +244,12 @@ pub(super) struct MatchedVersion {
 }
 
 impl MatchedVersion {
-    /// Find the highest version matching `version_req` that is not yanked
-    /// and, if `cutoff` is set, was not published after `cutoff`.
+    /// Find the highest version of `crate_name` matching `version_req` that
+    /// is not yanked and, if `cutoff` is set, was not published after
+    /// `cutoff`.
     pub(super) fn find(
         it: &mut dyn Iterator<Item = Result<RegistryIndexEntry, JsonError>>,
+        crate_name: &str,
         version_req: &VersionReq,
         cutoff: Option<Timestamp>,
     ) -> Result<Self, RegistryError> {
@@ -256,6 +259,14 @@ impl MatchedVersion {
 
         for res in it {
             let entry = res.map_err(RegistryError::from)?;
+
+            // The index is looked up by the lowercase name, so this can be
+            // a crate whose name only differs in case. Like for cargo, that
+            // is another crate, and its download url has the name as it is
+            // written here.
+            if entry.name != crate_name {
+                return Err(RegistryError::NotFound(crate_name.into()));
+            }
 
             if entry.yanked {
                 continue;
@@ -325,6 +336,7 @@ mod test {
         let find = |req| {
             MatchedVersion::find(
                 &mut JsonDeserializer::from_slice(index).into_iter(),
+                "foo",
                 &VersionReq::parse(req).unwrap(),
                 None,
             )
@@ -346,13 +358,14 @@ mod test {
 {"name":"foo","vers":"1.2.0","deps":[],"cksum":"22","features":{},"yanked":false,"pubtime":"2026-11-10T00:00:00Z"}
 {"name":"foo","vers":"1.3.0","deps":[],"cksum":"33","features":{},"yanked":false,"pubtime":"2026-11-13T00:00:00Z"}
 {"name":"foo","vers":"2.0.0","deps":[],"cksum":"44","features":{},"yanked":false,"pubtime":"2026-11-13T12:00:00Z"}
-{"name":"bar","vers":"0.1.0","deps":[],"cksum":"55","features":{},"yanked":false}
+{"name":"foo","vers":"0.1.0","deps":[],"cksum":"55","features":{},"yanked":false}
 "#;
         // 7 days before 2026-11-14
         let cutoff = Some("2026-11-07T00:00:00Z".parse().unwrap());
         let find = |req| {
             MatchedVersion::find(
                 &mut JsonDeserializer::from_slice(index).into_iter(),
+                "foo",
                 &VersionReq::parse(req).unwrap(),
                 cutoff,
             )
@@ -383,6 +396,26 @@ mod test {
         assert!(matches!(
             find("=3.0.0").err().unwrap(),
             RegistryError::VersionMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn test_matched_version_name_differs_in_case() {
+        let index = br#"{"name":"ripgrep","vers":"14.1.1","deps":[],"cksum":"00","features":{},"yanked":false}
+"#;
+        let find = |name| {
+            MatchedVersion::find(
+                &mut JsonDeserializer::from_slice(index).into_iter(),
+                name,
+                &VersionReq::STAR,
+                None,
+            )
+        };
+
+        assert_eq!(find("ripgrep").unwrap().version, "14.1.1");
+        assert!(matches!(
+            find("Ripgrep").err().unwrap(),
+            RegistryError::NotFound(name) if name == "Ripgrep"
         ));
     }
 }

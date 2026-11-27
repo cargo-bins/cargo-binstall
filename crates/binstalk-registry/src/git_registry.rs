@@ -484,6 +484,7 @@ impl GitRegistry {
 
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&crate_versions).into_iter(),
+            crate_name,
             version_req,
             cutoff,
         )

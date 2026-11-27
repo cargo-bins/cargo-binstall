@@ -104,6 +104,7 @@ impl SparseRegistry {
         };
         MatchedVersion::find(
             &mut JsonDeserializer::from_slice(&body).into_iter(),
+            crate_name,
             version_req,
             cutoff,
         )

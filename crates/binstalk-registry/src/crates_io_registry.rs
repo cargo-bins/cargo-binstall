@@ -15,6 +15,8 @@ use crate::{
 
 #[derive(Deserialize)]
 struct Version {
+    #[serde(rename = "crate")]
+    name: CompactString,
     num: CompactString,
     yanked: bool,
     checksum: String,
@@ -24,6 +26,7 @@ struct Version {
 impl From<Version> for RegistryIndexEntry {
     fn from(version: Version) -> Self {
         Self {
+            name: version.name,
             vers: version.num,
             yanked: version.yanked,
             cksum: version.checksum,
@@ -122,6 +125,7 @@ pub async fn fetch_crate_cratesio_api(
 
     let matched_version = MatchedVersion::find(
         &mut versions.into_iter().map(|version| Ok(version.into())),
+        name,
         version_req,
         min_publish_age.and_then(|min_age| publish_cutoff(Timestamp::now(), min_age)),
     )?;
