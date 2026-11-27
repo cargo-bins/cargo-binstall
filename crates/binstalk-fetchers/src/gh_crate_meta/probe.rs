@@ -413,9 +413,8 @@ impl Probe {
     /// returning the first one found; the ones it doesn't are dropped.
     ///
     /// Only for a public repository, github.com answers 404 for a private
-    /// one. The list comes from a page meant for people, so a release's
-    /// candidates are kept to check some other way if it lists none of them
-    /// but some other assets.
+    /// one. A release's candidates are kept to check some other way only if
+    /// the page can't be read.
     async fn check_on_web(&mut self) -> Result<Option<Resolved>, FetchError> {
         let mut unknown = Vec::new();
 
@@ -441,10 +440,9 @@ impl Probe {
                 .get_or_init(|| ReleaseAssetsPage::fetch(&self.shared.client, &release))
                 .await;
             match page.lists(names) {
-                // Nothing it could have left out.
                 ReleaseAssets::NotFound | ReleaseAssets::NoAssets => (),
                 // Normally only one is listed, the others are other formats.
-                ReleaseAssets::Listed(listed) if !listed.is_empty() => {
+                ReleaseAssets::Listed(listed) => {
                     let listed = of_release
                         .into_iter()
                         .enumerate()
@@ -455,10 +453,7 @@ impl Probe {
                         }
                     }
                 }
-                // It might not list every asset.
-                ReleaseAssets::Listed(_) | ReleaseAssets::Unknown => {
-                    unknown.append(&mut of_release)
-                }
+                ReleaseAssets::Unknown => unknown.append(&mut of_release),
             }
         }
 
@@ -873,8 +868,8 @@ mod test {
             on_web(musl_tgz, 2)
         );
 
-        // github.com lists none of them: it might not list every asset, so
-        // they are kept and checked some other way.
+        // github.com lists other assets of the release but none of them:
+        // they don't exist, nothing else is asked.
         assert_eq!(
             probe(
                 BINSTALL,
@@ -884,7 +879,7 @@ mod test {
                 ],
             )
             .await,
-            not_found(2, 2)
+            not_found(2, 0)
         );
 
         // A tag without a release: nothing to download.
@@ -926,8 +921,8 @@ mod test {
             found.starts_with("v1.28.0/cargo-binstall-x86_64-unknown-linux-musl.")
         }));
 
-        // Assets of two releases: the one github.com lists is found, though
-        // the other release lists none of its candidates, which are kept.
+        // Assets of two releases: the other release lists none of its
+        // candidates, the one github.com lists is found.
         assert_eq!(
             probe(
                 BINSTALL,
@@ -1115,7 +1110,8 @@ mod test {
             on_web(found, 2)
         );
 
-        // A target it has no build for, so github.com lists other assets.
+        // A target it has no build for, so github.com lists other assets:
+        // nothing else is asked.
         assert_eq!(
             probe(
                 QUICKINSTALL,
@@ -1125,7 +1121,7 @@ mod test {
                 ],
             )
             .await,
-            not_found(2, 2)
+            not_found(2, 0)
         );
     }
 
