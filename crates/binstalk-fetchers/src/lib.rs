@@ -308,7 +308,7 @@ impl Data {
     }
 
     /// The crate's [dist] config, for [`GhCrateMeta`] to find its releases
-    /// on dist's simple host, see [`Meta::dist`].
+    /// on dist's simple host if the default pkg-url don't, see [`Meta::dist`].
     ///
     /// [dist]: https://github.com/axodotdev/cargo-dist
     /// [`Meta::dist`]: binstalk_types::cargo_toml_binstall::Meta::dist

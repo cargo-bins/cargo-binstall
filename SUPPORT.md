@@ -289,16 +289,13 @@ be the workspace root for the first two, so this is only the case for a
 single-package workspace, or with `--manifest-path`/`--git` pointing at the
 root.
 
-If the crate doesn't set `pkg-url`, `binstall` then looks for dist's archive,
-`{ name }-{ target }` with `.tar.xz`, `.tar.gz`, `.tar.zst` or `.zip`, under
-`simple-download-url`, with `{tag}` as each of `{ version }`, `v{ version }`,
-`{ name }-v{ version }` and `{ name }-{ version }`, before the defaults above.
-The crate's repository may be on any host, or not be set at all.
-
-It isn't looked for if `simple-download-url` is under the crate's own
-repository on one of the hosts above, as the defaults find the release there,
-if [`hosting`](https://axodotdev.github.io/cargo-dist/book/reference/config.html#hosting)
-leaves out `simple`, or if the config sets `dist = false`.
+If the crate doesn't set `pkg-url`, and the defaults above find nothing,
+`binstall` then looks for dist's archive, `{ name }-{ target }` with the
+extension dist's `unix-archive` or `windows-archive` sets for the target
+(`.tar.xz` and `.zip` by default), under `simple-download-url`, with `{tag}`
+as `v{ version }` and `{ version }`. The crate's repository may be on any
+host, or not be set at all. This is skipped if the config sets
+`dist = false`.
 
 ### QuickInstall
 

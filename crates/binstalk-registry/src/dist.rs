@@ -15,23 +15,30 @@ use binstalk_types::cargo_toml_binstall::{DistMeta, Meta};
 use cargo_toml_workspace::cargo_toml::Manifest;
 use tracing::debug;
 
-/// The files dist reads its config from, besides `Cargo.toml`, in
-/// increasing precedence.
-pub(crate) const DIST_CONFIG_FILES: [&str; 2] = ["dist-workspace.toml", "dist.toml"];
-
 /// Upper bound on the size of a config file worth reading.
 pub(crate) const MAX_CONFIG_FILE_SIZE: u64 = 1024 * 1024;
 
-/// The dist config of a workspace root.
+/// The dist config of a workspace root: the files dist reads it from.
 #[derive(Debug, Default)]
 pub(crate) struct WorkspaceDistConfig {
     /// The root's `Cargo.toml`, as written: `Cargo.toml.orig` in a `.crate`.
-    pub(crate) root_manifest: Option<Vec<u8>>,
-    /// The contents of each of [`DIST_CONFIG_FILES`] that exists.
-    pub(crate) files: [Option<Vec<u8>>; DIST_CONFIG_FILES.len()],
+    cargo_toml: Option<Vec<u8>>,
+    dist_workspace_toml: Option<Vec<u8>>,
+    dist_toml: Option<Vec<u8>>,
 }
 
 impl WorkspaceDistConfig {
+    /// Where to keep file `name` of a `.crate`, if it is one of the
+    /// config's files.
+    pub(crate) fn file_in_crate(&mut self, name: &Path) -> Option<&mut Option<Vec<u8>>> {
+        match name.to_str()? {
+            "Cargo.toml.orig" => Some(&mut self.cargo_toml),
+            "dist-workspace.toml" => Some(&mut self.dist_workspace_toml),
+            "dist.toml" => Some(&mut self.dist_toml),
+            _ => None,
+        }
+    }
+
     /// Read the config of the workspace root `dir`, a crate's directory.
     fn read_dir(dir: &Path) -> Self {
         let read = |name: &str| {
@@ -45,29 +52,31 @@ impl WorkspaceDistConfig {
                 .ok()
         };
         Self {
-            root_manifest: read("Cargo.toml"),
-            files: DIST_CONFIG_FILES.map(read),
+            cargo_toml: read("Cargo.toml"),
+            dist_workspace_toml: read("dist-workspace.toml"),
+            dist_toml: read("dist.toml"),
         }
     }
 
     /// The settings found, the more preferred ones first, see
     /// <https://axodotdev.github.io/cargo-dist/book/reference/config.html#config>.
     fn dist_meta(&self) -> Option<DistMeta> {
-        let tables = self
-            .files
-            .iter()
-            .rev()
-            .zip(DIST_CONFIG_FILES.iter().rev())
-            .map(|(file, name)| (file.as_deref(), *name, &["dist"][..]))
-            .chain([(
-                self.root_manifest.as_deref(),
+        [
+            (&self.dist_toml, "dist.toml", &["dist"][..]),
+            (
+                &self.dist_workspace_toml,
+                "dist-workspace.toml",
+                &["dist"][..],
+            ),
+            (
+                &self.cargo_toml,
                 "Cargo.toml",
                 &["workspace", "metadata", "dist"][..],
-            )]);
-
-        tables
-            .filter_map(|(file, name, path)| dist_table(file?, name, path))
-            .reduce(DistMeta::or)
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(file, name, path)| dist_table(file.as_deref()?, name, path))
+        .reduce(DistMeta::or)
     }
 
     /// Merge the workspace's settings into the package's
@@ -90,8 +99,18 @@ impl WorkspaceDistConfig {
     }
 }
 
+/// Whether `file` may have dist's config: any of its tables or keys spells
+/// `dist`. Every crate has a `Cargo.toml.orig`, so that only the few with
+/// dist's config are kept and parsed.
+pub(crate) fn may_have_dist_config(file: &[u8]) -> bool {
+    file.windows(4).any(|window| window == b"dist")
+}
+
 /// The table at `path` in toml file `name`, if it is one.
 fn dist_table(file: &[u8], name: &str, path: &[&str]) -> Option<DistMeta> {
+    if !may_have_dist_config(file) {
+        return None;
+    }
     let parsed = std::str::from_utf8(file)
         .ok()
         .and_then(|file| file.parse::<toml::Table>().ok());
@@ -148,35 +167,32 @@ version = "1.0.0"
     #[test]
     fn precedence() {
         let config = WorkspaceDistConfig {
-            root_manifest: Some(
+            cargo_toml: Some(
                 br#"
 [package]
 name = "foo"
 version = "1.0.0"
 
 [workspace.metadata.dist]
-hosting = ["github"]
+unix-archive = ".tar.zst"
 simple-download-url = "https://old.example.com/{tag}"
 dist = false
 "#
                 .to_vec(),
             ),
-            files: [
-                Some(
-                    br#"
+            dist_workspace_toml: Some(
+                br#"
 [workspace]
 members = ["cargo:."]
 
 [dist]
-hosting = ["simple", "github"]
+unix-archive = ".tar.gz"
 "#
-                    .to_vec(),
-                ),
-                Some(
-                    b"[dist]\nsimple-download-url = \"https://static.example.com/{tag}\"\n"
-                        .to_vec(),
-                ),
-            ],
+                .to_vec(),
+            ),
+            dist_toml: Some(
+                b"[dist]\nsimple-download-url = \"https://static.example.com/{tag}\"\n".to_vec(),
+            ),
         };
 
         let mut manifest = parse_manifest("[package.metadata.dist]\ndist = true\n");
@@ -185,8 +201,9 @@ hosting = ["simple", "github"]
             dist_of(&manifest),
             Some(&DistMeta {
                 dist: Some(true),
-                hosting: Some(vec!["simple".into(), "github".into()]),
                 simple_download_url: Some("https://static.example.com/{tag}".into()),
+                unix_archive: Some(".tar.gz".into()),
+                windows_archive: None,
             })
         );
 
@@ -198,8 +215,9 @@ hosting = ["simple", "github"]
     #[test]
     fn invalid_config_is_ignored() {
         let config = WorkspaceDistConfig {
-            root_manifest: Some(b"[workspace.metadata]\ndist = 1\n".to_vec()),
-            files: [Some(b"not toml [".to_vec()), Some(b"dist = 1\n".to_vec())],
+            cargo_toml: Some(b"[workspace.metadata]\ndist = 1\n".to_vec()),
+            dist_workspace_toml: Some(b"not toml [ dist".to_vec()),
+            dist_toml: Some(b"dist = 1\n".to_vec()),
         };
         let mut manifest = parse_manifest("");
         config.merge_into(&mut manifest);
@@ -207,12 +225,25 @@ hosting = ["simple", "github"]
 
         // A table with only invalid settings is kept, as an empty one.
         let config = WorkspaceDistConfig {
-            files: [Some(b"[dist]\nhosting = 1\n".to_vec()), None],
+            dist_workspace_toml: Some(b"[dist]\nunix-archive = 1\n".to_vec()),
             ..Default::default()
         };
         let mut manifest = parse_manifest("");
         config.merge_into(&mut manifest);
         assert_eq!(dist_of(&manifest), Some(&DistMeta::default()));
+    }
+
+    #[test]
+    fn files_in_crate() {
+        let mut config = WorkspaceDistConfig::default();
+        for name in ["Cargo.toml.orig", "dist-workspace.toml", "dist.toml"] {
+            *config.file_in_crate(Path::new(name)).unwrap() =
+                Some(b"[dist]\nunix-archive = \".tar.gz\"\n".to_vec());
+        }
+        assert!(config.file_in_crate(Path::new("Cargo.toml")).is_none());
+        assert!(config.file_in_crate(Path::new("src/dist.toml")).is_none());
+        assert_eq!(config.cargo_toml, config.dist_toml);
+        assert_eq!(config.dist_workspace_toml, config.dist_toml);
     }
 
     #[test]

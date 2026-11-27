@@ -56,14 +56,6 @@ pub struct DistMeta {
         skip_serializing_if = "Option::is_none"
     )]
     pub dist: Option<bool>,
-    /// The hosting providers installers download from, in order of
-    /// preference, e.g. `["simple", "github"]`.
-    #[serde(
-        default,
-        deserialize_with = "lenient_one_or_many",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub hosting: Option<Vec<CompactString>>,
     /// The url of the directory a release's files are uploaded to, with
     /// `{tag}` for its git tag, e.g. `https://static.myapp.com/{tag}`.
     #[serde(
@@ -72,6 +64,21 @@ pub struct DistMeta {
         skip_serializing_if = "Option::is_none"
     )]
     pub simple_download_url: Option<CompactString>,
+    /// The extension of the archives for targets other than Windows, e.g.
+    /// `.tar.gz`: `.tar.xz` if not set.
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub unix_archive: Option<CompactString>,
+    /// The extension of the archives for Windows targets: `.zip` if not set.
+    #[serde(
+        default,
+        deserialize_with = "lenient",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub windows_archive: Option<CompactString>,
 }
 
 impl DistMeta {
@@ -80,9 +87,35 @@ impl DistMeta {
     pub fn or(self, other: Self) -> Self {
         Self {
             dist: self.dist.or(other.dist),
-            hosting: self.hosting.or(other.hosting),
             simple_download_url: self.simple_download_url.or(other.simple_download_url),
+            unix_archive: self.unix_archive.or(other.unix_archive),
+            windows_archive: self.windows_archive.or(other.windows_archive),
         }
+    }
+
+    /// `simple-download-url`, unless the config sets `dist = false`.
+    pub fn simple_download_url(&self) -> Option<&str> {
+        self.simple_download_url
+            .as_deref()
+            .filter(|_| self.dist != Some(false))
+    }
+
+    /// The format of the archives dist makes for a Windows target or for
+    /// another one, and their extension, or `None` if dist doesn't know it.
+    pub fn archive(&self, is_windows: bool) -> Option<(PkgFmt, &'static str)> {
+        let archive = if is_windows {
+            self.windows_archive.as_deref().unwrap_or(".zip")
+        } else {
+            self.unix_archive.as_deref().unwrap_or(".tar.xz")
+        };
+        Some(match archive {
+            ".zip" => (PkgFmt::Zip, ".zip"),
+            ".tar.gz" => (PkgFmt::Tgz, ".tar.gz"),
+            ".tar.xz" => (PkgFmt::Txz, ".tar.xz"),
+            // `.tar.zstd` is the deprecated spelling.
+            ".tar.zst" | ".tar.zstd" => (PkgFmt::Tzstd, ".tar.zst"),
+            _ => return None,
+        })
     }
 }
 
@@ -103,27 +136,6 @@ where
         Lenient::Valid(value) => Some(value),
         Lenient::Invalid(_) => None,
     })
-}
-
-/// Like [`lenient`], for a list that may be written as a single item.
-fn lenient_one_or_many<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum OneOrMany<T> {
-        Many(Vec<T>),
-        One(T),
-    }
-
-    Ok(
-        lenient::<D, OneOrMany<T>>(deserializer)?.map(|value| match value {
-            OneOrMany::Many(values) => values,
-            OneOrMany::One(value) => vec![value],
-        }),
-    )
 }
 
 /// Strategies to use for binary discovery
@@ -405,8 +417,8 @@ mod tests {
         let meta: Meta = serde_json::from_value(json!({
             "dist": {
                 "dist": false,
-                "hosting": "github",
                 "simple-download-url": "https://static.example.com/{tag}",
+                "unix-archive": ".tar.gz",
                 "unknown": 1,
             },
         }))
@@ -415,13 +427,14 @@ mod tests {
             meta.dist,
             Some(DistMeta {
                 dist: Some(false),
-                hosting: Some(vec!["github".into()]),
                 simple_download_url: Some("https://static.example.com/{tag}".into()),
+                unix_archive: Some(".tar.gz".into()),
+                windows_archive: None,
             })
         );
 
         let meta: Meta = serde_json::from_value(json!({
-            "dist": { "dist": "yes", "hosting": [1], "simple-download-url": ["x"] },
+            "dist": { "dist": "yes", "windows-archive": [1], "simple-download-url": ["x"] },
         }))
         .unwrap();
         assert_eq!(meta.dist, Some(DistMeta::default()));
@@ -441,17 +454,37 @@ mod tests {
         };
         let workspace = DistMeta {
             dist: Some(false),
-            hosting: Some(vec!["simple".into()]),
-            simple_download_url: None,
+            unix_archive: Some(".tar.gz".into()),
+            ..DistMeta::default()
         };
         assert_eq!(
             package.or(workspace),
             DistMeta {
                 dist: Some(true),
-                hosting: Some(vec!["simple".into()]),
-                simple_download_url: None,
+                unix_archive: Some(".tar.gz".into()),
+                ..DistMeta::default()
             }
         );
+    }
+
+    #[test]
+    fn dist_meta_settings() {
+        let url = "https://static.example.com/{tag}";
+        let mut dist = DistMeta {
+            simple_download_url: Some(url.into()),
+            ..DistMeta::default()
+        };
+        assert_eq!(dist.simple_download_url(), Some(url));
+        assert_eq!(dist.archive(false), Some((PkgFmt::Txz, ".tar.xz")));
+        assert_eq!(dist.archive(true), Some((PkgFmt::Zip, ".zip")));
+
+        dist.unix_archive = Some(".tar.zstd".into());
+        dist.windows_archive = Some(".7z".into());
+        assert_eq!(dist.archive(false), Some((PkgFmt::Tzstd, ".tar.zst")));
+        assert_eq!(dist.archive(true), None);
+
+        dist.dist = Some(false);
+        assert_eq!(dist.simple_download_url(), None);
     }
 
     #[test]

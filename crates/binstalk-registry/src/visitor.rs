@@ -9,7 +9,7 @@ use tracing::debug;
 
 use crate::{
     RegistryError,
-    dist::{DIST_CONFIG_FILES, MAX_CONFIG_FILE_SIZE, WorkspaceDistConfig},
+    dist::{MAX_CONFIG_FILE_SIZE, WorkspaceDistConfig, may_have_dist_config},
     vfs::Vfs,
 };
 
@@ -69,20 +69,14 @@ impl TarEntriesVisitor for ManifestVisitor {
             entry.read_to_end(&mut self.cargo_toml_content).await?;
         }
 
-        let dist_config = if path == Path::new("Cargo.toml.orig") {
-            Some(&mut self.dist_config.root_manifest)
-        } else {
-            DIST_CONFIG_FILES
-                .iter()
-                .position(|name| path == Path::new(name))
-                .map(|i| &mut self.dist_config.files[i])
-        };
-        if let Some(dist_config) = dist_config {
+        if let Some(dist_config) = self.dist_config.file_in_crate(path) {
             let size = entry.size()?;
             if size <= MAX_CONFIG_FILE_SIZE {
                 let mut content = Vec::with_capacity(size.try_into().unwrap_or(0));
                 entry.read_to_end(&mut content).await?;
-                *dist_config = Some(content);
+                if may_have_dist_config(&content) {
+                    *dist_config = Some(content);
+                }
             } else {
                 debug!(
                     "Ignoring {}: larger than {MAX_CONFIG_FILE_SIZE} bytes",

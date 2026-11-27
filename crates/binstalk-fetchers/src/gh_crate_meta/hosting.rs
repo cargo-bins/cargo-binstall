@@ -63,14 +63,10 @@ const SOURCEFORGE_RELEASE_PATHS: &[Template<'_>] = &[
 ];
 
 /// The release tags that dist's `{tag}` in `simple-download-url` is tried
-/// as: those of [`GITHUB_RELEASE_PATHS`] that need no repository or
-/// subcrate.
-const DIST_SIMPLE_TAGS: &[Template<'_>] = &[
-    template!("{ version }"),
-    template!("v{ version }"),
-    template!("{ name }-v{ version }"),
-    template!("{ name }-{ version }"),
-];
+/// as, the ones dist's docs give: `simple-download-url` is a workspace
+/// setting, which only reaches binstall in the `.crate` of a single-package
+/// workspace, whose tags don't have the package's name.
+const DIST_SIMPLE_TAGS: &[Template<'_>] = &[template!("v{ version }"), template!("{ version }")];
 
 /// The filename of the archive dist makes for a target.
 const DIST_FILENAME: Template<'_> = template!("/{ name }-{ target }{ archive-suffix }");
@@ -102,7 +98,7 @@ pub(crate) fn dist_simple_pkg_url_templates(
         template
     };
     // `{tag}` is the git tag the release was made from, which isn't known:
-    // it is tried as each tag dist accepts. Without it, the url is the
+    // it is tried as each of `DIST_SIMPLE_TAGS`. Without it, the url is the
     // only one.
     if dir.contains("{tag}") {
         Either::Left(DIST_SIMPLE_TAGS.iter().map(move |tag| with_tag(Some(tag))))
@@ -213,19 +209,15 @@ mod tests {
         assert_eq!(
             urls("https://static.example.com/{tag}/"),
             [
-                "https://static.example.com/{ version }/{ name }-{ target }{ archive-suffix }",
                 "https://static.example.com/v{ version }/{ name }-{ target }{ archive-suffix }",
-                "https://static.example.com/{ name }-v{ version }/{ name }-{ target }{ archive-suffix }",
-                "https://static.example.com/{ name }-{ version }/{ name }-{ target }{ archive-suffix }",
+                "https://static.example.com/{ version }/{ name }-{ target }{ archive-suffix }",
             ]
         );
         assert_eq!(
             urls("https://example.com/releases/{tag}/files"),
             [
-                "https://example.com/releases/{ version }/files/{ name }-{ target }{ archive-suffix }",
                 "https://example.com/releases/v{ version }/files/{ name }-{ target }{ archive-suffix }",
-                "https://example.com/releases/{ name }-v{ version }/files/{ name }-{ target }{ archive-suffix }",
-                "https://example.com/releases/{ name }-{ version }/files/{ name }-{ target }{ archive-suffix }",
+                "https://example.com/releases/{ version }/files/{ name }-{ target }{ archive-suffix }",
             ]
         );
         assert_eq!(
