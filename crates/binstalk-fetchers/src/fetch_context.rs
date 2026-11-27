@@ -1,9 +1,9 @@
 //! What the fetchers learn about repositories, shared by all crates
 //! resolved in one run (see [`FetchContext`]): by all targets of a crate,
-//! which are tried one after another, by their overrides, under both the
-//! names a crate is looked up with (see [`Data::with_name`](crate::Data::with_name)),
-//! and by other crates in the same repository, such as a workspace's crates
-//! released together.
+//! which are tried one after another, by their overrides, by the package
+//! named after the crate's binary rather than the crate, and by other
+//! crates in the same repository, such as a workspace's crates released
+//! together.
 //!
 //! [`binstalk_git_repo_api`] caches nothing, so nothing outlives the
 //! [`FetchContext`].

@@ -55,6 +55,8 @@ struct Resolved {
     /// The binary it is the package of, if each binary is in its own
     /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
+    /// What `{ name }` was rendered as in `url`, if not the crate's name.
+    name: Option<CompactString>,
 }
 
 /// Write `template` back to `s`, in the syntax [`Template::parse`] reads.
@@ -97,10 +99,13 @@ pub(crate) fn target_arch_aliases(target_arch: &str) -> &'static [&'static str] 
 /// All URLs `pkg_url` may render to for this target, with the archive suffix
 /// and the `{ target-arch }` alias each was rendered with.
 ///
+/// * `name` - what to render `{ name }` as instead of the crate's name, if
+///   anything.
 /// * `bin` - the binary to render `{ bin }` as, if any.
 #[allow(clippy::too_many_arguments)]
 fn candidate_urls(
     data: &Data,
+    name: Option<&str>,
     bin: Option<&str>,
     target: &str,
     target_related_info: &dyn leon::Values,
@@ -113,6 +118,9 @@ fn candidate_urls(
         let mut ctx =
             Context::from_data_with_repo(data, target, target_related_info, ext, repo, subcrate);
         ctx.target_arch = target_arch;
+        if let Some(name) = name {
+            ctx.name = name;
+        }
         ctx.bin = bin;
         match ctx.render_url_with(pkg_url) {
             Ok(url) => Some((url, ext, target_arch)),
@@ -190,6 +198,8 @@ impl super::Fetcher for GhCrateMeta {
         let mut pkg_fmt = self.target_data.meta.pkg_fmt;
 
         let mut is_per_bin = false;
+        // Whether the default templates on github.com are used.
+        let mut is_default_on_github_com = false;
 
         let pkg_urls = if let Some(template) = pkg_url {
             let pkg_url = meta.pkg_url.as_deref().expect("parsed above");
@@ -240,6 +250,7 @@ impl super::Fetcher for GhCrateMeta {
         }) = info
         {
             if let Some(pkg_urls) = repository_host.get_default_pkg_url_template() {
+                is_default_on_github_com = repo.domain() == Some("github.com");
                 let has_subcrate = subcrate.is_some();
 
                 Either::Right(
@@ -295,7 +306,34 @@ impl super::Fetcher for GhCrateMeta {
             return self.find_per_bin(&pkg_urls, pkg_fmts, repo, subcrate).await;
         }
 
-        let candidates = self.candidates(&pkg_urls, pkg_fmts, None, repo, subcrate);
+        let mut candidates =
+            self.candidates(&pkg_urls, pkg_fmts.clone(), None, None, repo, subcrate);
+
+        // Then the default templates with the name of the only binary to
+        // install as `{ name }`, if it is named otherwise than the crate.
+        // They are mostly assets of the same releases, so the probe checks
+        // them with the same tags and asset lists, after the crate's own of
+        // the same release, and the hint of either first. Before any other fetcher, so that the
+        // upstream package wins over third-party ones such as
+        // cargo-quickinstall's.
+        //
+        // Only on github.com, whose asset lists tell whether they exist
+        // without a request. On other hosts each would be checked with a
+        // request of its own.
+        if let [bin] = &self.data.bins[..]
+            && is_default_on_github_com
+            && bin.name != self.data.name
+        {
+            candidates.extend(self.candidates(
+                &pkg_urls,
+                pkg_fmts,
+                Some(&bin.name),
+                None,
+                repo,
+                subcrate,
+            ));
+        }
+
         Ok(self
             .probe(candidates, repo, subcrate)
             .await?
@@ -321,11 +359,14 @@ impl GhCrateMeta {
 
     /// Every URL the package may be at, rendered once.
     ///
+    /// * `name` - what to render `{ name }` as instead of the crate's name, if
+    ///   anything.
     /// * `bin` - the binary to render `{ bin }` as, if any.
     fn candidates(
         &self,
         pkg_urls: &[(Arc<str>, Template<'_>)],
         pkg_fmts: impl Iterator<Item = PkgFmt> + Clone,
+        name: Option<&str>,
         bin: Option<&str>,
         repo: Option<&str>,
         subcrate: Option<&str>,
@@ -336,6 +377,7 @@ impl GhCrateMeta {
             .flat_map(|((pkg_url_str, pkg_url), pkg_fmt)| {
                 candidate_urls(
                     &self.data,
+                    name,
                     bin,
                     &self.target_data.target,
                     &self.target_data.target_related_info,
@@ -353,6 +395,7 @@ impl GhCrateMeta {
                         target_arch,
                         pkg_url_str.clone(),
                     )
+                    .with_name(name)
                 })
             })
             .collect()
@@ -432,8 +475,14 @@ impl GhCrateMeta {
         let handles: Vec<_> = bins
             .iter()
             .map(|bin| {
-                let candidates =
-                    self.candidates(pkg_urls, pkg_fmts.clone(), Some(&bin.name), repo, subcrate);
+                let candidates = self.candidates(
+                    pkg_urls,
+                    pkg_fmts.clone(),
+                    None,
+                    Some(&bin.name),
+                    repo,
+                    subcrate,
+                );
                 let this = Arc::clone(self);
                 let repo = repo_owned.clone();
                 let subcrate = subcrate_owned.clone();
@@ -628,7 +677,10 @@ impl Found for GhCrateMetaFound {
     fn pkg_url_hint(&self) -> Option<PkgUrlHint> {
         let resolved = &self.resolved;
         Some(PkgUrlHint {
-            name: self.fetcher.data.name.clone(),
+            name: resolved
+                .name
+                .clone()
+                .unwrap_or_else(|| self.fetcher.data.name.clone()),
             pkg_url: resolved.pkg_url.as_ref().into(),
             pkg_fmt: resolved.pkg_fmt,
             rendered_with: Some(RenderedWith {
@@ -935,6 +987,7 @@ mod test {
             candidate_urls(
                 &data,
                 None,
+                None,
                 "aarch64-apple-darwin",
                 &target_info,
                 PkgFmt::Bin,
@@ -1192,5 +1245,96 @@ mod test {
             Some(QUICKINSTALL),
             Some("{ repo }/releases/download/a.sig")
         ));
+    }
+
+    /// A crate whose packages are named after its binary, not after it, is
+    /// found under the binary's name by the default templates.
+    #[tokio::test]
+    async fn bin_named_package() {
+        use std::sync::Arc;
+
+        use binstalk_types::crate_info::PkgUrlHint;
+
+        use crate::{
+            BinInfo, FetchContext, Fetcher, GhCrateMeta, SignaturePolicy, TargetData,
+            common::GhApiClient,
+        };
+
+        let client = super::probe::test::client();
+        let gh_api_client = GhApiClient::new(client.clone(), None);
+        let target_data = Arc::new(TargetData {
+            target: "x86_64-unknown-linux-musl".into(),
+            meta: Default::default(),
+            target_related_info: leon::vals(|_| None),
+        });
+
+        // cargo-binstall's own releases, looked for as another crate's.
+        let find = |context: &Arc<FetchContext>, bins: &[&str], hint: Option<PkgUrlHint>| {
+            let data = Data::new(
+                context.clone(),
+                "bin-named-package-test".into(),
+                "1.28.0".into(),
+                Some("https://github.com/cargo-bins/cargo-binstall".into()),
+            )
+            .with_bins(
+                bins.iter()
+                    .map(|&name| BinInfo {
+                        name: name.into(),
+                        optional: false,
+                    })
+                    .collect(),
+            );
+            let data = match hint {
+                Some(hint) => data.with_pkg_url_hint(target_data.target.as_str().into(), hint),
+                None => data,
+            };
+            GhCrateMeta::new(
+                client.clone(),
+                gh_api_client.clone(),
+                Arc::new(data),
+                target_data.clone(),
+                SignaturePolicy::IfPresent,
+                false,
+            )
+            .find()
+        };
+
+        let found = find(&Default::default(), &["cargo-binstall"], None)
+            .await
+            .unwrap()
+            .unwrap();
+        let hint = found.pkg_url_hint().unwrap();
+        assert_eq!(hint.name, "cargo-binstall");
+        assert_eq!(
+            hint.pkg_url,
+            "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
+        );
+
+        // Found that way again, it is looked for under the binary's name
+        // first: the asset list of the release isn't needed.
+        let context = Arc::<FetchContext>::default();
+        let found = find(&context, &["cargo-binstall"], Some(hint.clone()))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.pkg_url_hint().unwrap(), hint);
+        assert_eq!(context.release_assets_pages_len(), 0);
+        assert_eq!(context.release_artifacts_len(), 0);
+
+        // Not for a crate with more than one binary.
+        assert!(
+            find(&Default::default(), &["cargo-binstall", "other"], None)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // Without the binary, nothing is found.
+        assert!(
+            find(&Default::default(), &["other"], None)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 }

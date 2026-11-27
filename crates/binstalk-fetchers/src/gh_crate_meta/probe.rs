@@ -56,6 +56,9 @@ pub(super) struct Candidate {
     /// Whether it is in a private GitHub repository, see
     /// [`Probe::find_repos`].
     is_private: bool,
+    /// What `{ name }` was rendered as, if not the crate's name, see
+    /// [`PkgUrlHint::name`].
+    name: Option<CompactString>,
 }
 
 impl Candidate {
@@ -70,12 +73,19 @@ impl Candidate {
             release_tag: ReleaseTag::of_asset(&url),
             gh_artifact: GhReleaseArtifact::try_extract_from_url(&url),
             is_private: false,
+            name: None,
             url,
             pkg_fmt,
             archive_suffix,
             target_arch,
             pkg_url,
         }
+    }
+
+    /// `{ name }` was rendered as `name`, if not the crate's name.
+    pub(super) fn with_name(mut self, name: Option<&str>) -> Self {
+        self.name = name.map(CompactString::from);
+        self
     }
 
     /// Move the release asset from repository `from`, its
@@ -235,8 +245,10 @@ impl Probe {
         &mut self,
         hint: &PkgUrlHint,
     ) -> Result<Option<Resolved>, FetchError> {
+        let crate_name = &self.shared.data.name;
         let is_hinted = |candidate: &Candidate| {
             candidate.pkg_fmt == hint.pkg_fmt
+                && *candidate.name.as_ref().unwrap_or(crate_name) == hint.name
                 && *candidate.pkg_url == *hint.pkg_url
                 && hint.rendered_with.as_ref().is_none_or(|rendered_with| {
                     candidate.archive_suffix == rendered_with.archive_suffix.as_deref()
@@ -587,6 +599,7 @@ impl Shared {
             pkg_url: candidate.pkg_url,
             response,
             bin: None,
+            name: candidate.name,
         }
     }
 
@@ -638,7 +651,7 @@ impl Shared {
 }
 
 #[cfg(test)]
-mod test {
+pub(super) mod test {
     use std::{
         env,
         num::{NonZeroU16, NonZeroU64},
@@ -653,7 +666,7 @@ mod test {
     const QUICKINSTALL: &str = "https://github.com/cargo-bins/cargo-quickinstall";
     const PRIVATE: &str = "https://github.com/cargo-bins/private-repo-for-testing";
 
-    fn client() -> Client {
+    pub(in crate::gh_crate_meta) fn client() -> Client {
         Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
             None,
@@ -689,10 +702,10 @@ mod test {
         Candidate::new(url, pkg_fmt, archive_suffix, target_arch, pkg_url.into())
     }
 
-    /// A hint of [`TEMPLATE`].
+    /// A hint of [`TEMPLATE`], for [`new_probe`]'s crate.
     fn hint(pkg_fmt: PkgFmt, rendered_with: Option<RenderedWith>) -> PkgUrlHint {
         PkgUrlHint {
-            name: "cargo-binstall".into(),
+            name: "test".into(),
             pkg_url: TEMPLATE.into(),
             pkg_fmt,
             rendered_with,
@@ -1004,22 +1017,20 @@ mod test {
         drop(tags);
         assert_eq!(context.release_assets_pages_len(), 1);
 
-        // The crate looked up by its binary's name shares all of it: only
-        // the tags not asked yet are asked.
-        let binary_data = Arc::new(data.with_name("binary".into()));
-        assert!(binary_data.repo_info.get().is_some());
+        // Packages named after a binary of the crate, looked for once none
+        // named after the crate is found, are in the same releases: nothing
+        // is asked again.
         let found = probe(
-            &binary_data,
+            &data,
             &[
-                musl_tgz,
-                "binary-v0.20.1/binary-x86_64-unknown-linux-musl.tgz",
+                "v0.20.1/binary-x86_64-unknown-linux-musl.tgz",
+                "v0.18.2/binary-x86_64-unknown-linux-musl.tgz",
             ],
         )
         .await;
-        assert_eq!(asset(found).as_deref(), Some(musl_tgz));
+        assert!(found.is_none());
         let tags = repo_tags.lock().await;
-        assert_eq!(tags.exists("binary-v0.20.1"), Some(false));
-        assert_eq!(tags.exists("v0.20.1"), Some(true));
+        assert!(tags.unasked(["v0.20.1", "v0.18.2"]).is_empty());
         drop(tags);
         assert_eq!(context.release_assets_pages_len(), 1);
 
