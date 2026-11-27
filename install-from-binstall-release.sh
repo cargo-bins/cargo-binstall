@@ -66,10 +66,8 @@ fi
 # shellcheck disable=SC3040
 (set -o pipefail 2> /dev/null) && set -o pipefail
 
-# Without a `version`, the action installs the version of its own checkout, so
-# that a pinned action installs what it is pinned to. The action passes its path
-# in `BINSTALL_ACTION_PATH`, because `GITHUB_ACTION_PATH` belongs to whichever
-# action runs this script.
+# Without a `version`, the action installs its own version. It passes its path
+# because `GITHUB_ACTION_PATH` is that of whichever action runs this script.
 checkout_version=
 if [ -z "${BINSTALL_VERSION:-}" ] && [ -n "${BINSTALL_ACTION_PATH:-}" ]; then
     cargo_toml="$BINSTALL_ACTION_PATH/crates/bin/Cargo.toml"
@@ -98,10 +96,8 @@ else
     base_url="https://github.com/cargo-bins/cargo-binstall/releases/download/${BINSTALL_VERSION}/"
 fi
 
-# `fetch ASSET` downloads ASSET into the current directory, from the release of
-# the checkout's version if there is one yet and from the latest otherwise. A
-# release stays a draft until its assets are uploaded, so the download is the
-# check.
+# `fetch ASSET` downloads ASSET into the current directory, from the checkout's
+# version if it has a release, else from the latest.
 fetch() {
     if [ -n "$checkout_version" ]; then
         if download "https://github.com/cargo-bins/cargo-binstall/releases/download/v${checkout_version}/$1" > "$1"; then

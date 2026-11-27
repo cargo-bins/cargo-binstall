@@ -2,8 +2,8 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = "Stop"
 $tmpdir = $Env:TEMP
 $BINSTALL_VERSION = $Env:BINSTALL_VERSION
-# Without a `version`, the action installs the version of its own checkout,
-# as in the shell script.
+# Without a `version`, the action installs its own version, as in the shell
+# script.
 $checkout_version = $null
 if (-not $BINSTALL_VERSION -and $Env:BINSTALL_ACTION_PATH) {
     $cargo_toml = Join-Path $Env:BINSTALL_ACTION_PATH "crates\bin\Cargo.toml"
