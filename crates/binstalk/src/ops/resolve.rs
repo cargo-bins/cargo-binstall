@@ -46,11 +46,10 @@ pub fn resolve(
     curr_version: Option<Version>,
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
 ) -> impl Future<Output = Result<Resolution, BinstallError>> {
-    let crate_name_name = crate_name.name.clone();
-
     // Not `#[instrument]`: it awaits the future at two places, with and
     // without the span, and `resolve_inner` got compiled once for each.
     async move {
+        let crate_name_name = crate_name.name.clone();
         resolve_inner(opts, crate_name, curr_version, pkg_url_hint)
             .await
             .map_err(|err| err.crate_context(crate_name_name))
