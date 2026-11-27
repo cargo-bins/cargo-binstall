@@ -23,8 +23,9 @@
 //!
 //! The check only fails on what the loader would certainly reject. When
 //! something can't be determined (a binary or library with an rpath, a
-//! glibc without `/etc/ld.so.conf`, a foreign architecture run through
-//! binfmt, a file that isn't ELF), that part is skipped.
+//! glibc without `/etc/ld.so.cache` or `/etc/ld.so.conf`, a foreign
+//! architecture run through binfmt, a file that isn't ELF), that part is
+//! skipped.
 //!
 //! A [`Host`] comes from [`crate::detect`], and
 //! [`DesiredTargets::check_binary`](crate::DesiredTargets::check_binary)

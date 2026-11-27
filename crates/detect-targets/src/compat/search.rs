@@ -13,10 +13,12 @@ use std::{
 
 use super::elf::{self, Elf};
 
-/// glibc's configuration of where to look.
+/// glibc's configuration of where `ldconfig` looks. The loader doesn't
+/// read it, only [`LD_SO_CACHE`], but a glibc without it may be
+/// configured another way, e.g. NixOS' nix-ld.
 const LD_SO_CONF: &str = "/etc/ld.so.conf";
-/// glibc's cache of what `ldconfig` found, including directories given
-/// on its command line rather than in [`LD_SO_CONF`].
+/// glibc's cache of what `ldconfig` found, which the loader looks
+/// libraries up in before its trusted directories.
 const LD_SO_CACHE: &str = "/etc/ld.so.cache";
 /// musl's default path, when `/etc/ld-musl-$ARCH.path` doesn't exist.
 const MUSL_DEFAULT_PATH: &str = "/lib:/usr/local/lib:/usr/lib";
@@ -24,17 +26,14 @@ const MUSL_DEFAULT_PATH: &str = "/lib:/usr/local/lib:/usr/lib";
 /// program needs far fewer, so a longer chain is a malformed or hostile
 /// one.
 const MAX_LIBRARIES: usize = 1024;
-/// How deep `include` directives in [`LD_SO_CONF`] are followed.
-const MAX_INCLUDE_DEPTH: usize = 8;
 
 /// The loader the binary asks for, by how it looks up libraries.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub(crate) enum Flavor {
+    #[default]
     Glibc,
     /// musl, with the `$ARCH` from its loader name `ld-musl-$ARCH.so.1`.
-    Musl {
-        arch: String,
-    },
+    Musl { arch: String },
 }
 
 impl Flavor {
@@ -55,10 +54,11 @@ impl Flavor {
     }
 }
 
-/// The directories the loader searches after the binary's own rpaths
-/// and `LD_LIBRARY_PATH`, and whether that list is complete.
+/// Where the loader searches after the binary's own rpaths and
+/// `LD_LIBRARY_PATH`, and whether that is known completely.
 #[derive(Debug, Default)]
 pub(crate) struct SystemPath {
+    flavor: Flavor,
     /// The contents of [`LD_SO_CACHE`], to look names up in (glibc).
     cache: Vec<u8>,
     dirs: Vec<PathBuf>,
@@ -72,19 +72,17 @@ impl SystemPath {
     pub(crate) fn read(flavor: &Flavor) -> Self {
         match flavor {
             Flavor::Glibc => Self::glibc(),
-            Flavor::Musl { arch } => Self::musl(arch),
+            Flavor::Musl { arch } => Self::musl(arch.clone()),
         }
     }
 
     fn glibc() -> Self {
+        let cache = fs::read(LD_SO_CACHE);
         let mut path = Self {
-            cache: fs::read(LD_SO_CACHE).unwrap_or_default(),
-            complete: true,
+            complete: cache.is_ok() && Path::new(LD_SO_CONF).exists(),
+            cache: cache.unwrap_or_default(),
             ..Self::default()
         };
-        // Without `ld.so.conf`, glibc may be configured another way, e.g.
-        // NixOS' nix-ld, which takes its path from the environment.
-        path.complete &= parse_ld_so_conf(Path::new(LD_SO_CONF), 0, &mut path.dirs);
 
         // The trusted directories, built into glibc: `/lib` and
         // `/usr/lib`, `lib64` on some 64-bit targets, and the multiarch
@@ -112,7 +110,7 @@ impl SystemPath {
         path
     }
 
-    fn musl(arch: &str) -> Self {
+    fn musl(arch: String) -> Self {
         let (path, complete) = match fs::read_to_string(format!("/etc/ld-musl-{arch}.path")) {
             Ok(path) => (path, true),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -127,6 +125,7 @@ impl SystemPath {
                 .map(PathBuf::from)
                 .collect(),
             complete,
+            flavor: Flavor::Musl { arch },
             ..Self::default()
         }
     }
@@ -163,131 +162,34 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
-/// Add the directories `ld.so.conf` at `path` lists to `dirs`, following
-/// its `include`s, and return whether all of it could be read.
-///
-/// The syntax is `ldconfig`'s: `#` starts a comment, surrounding
-/// whitespace is ignored, `include` takes glob patterns relative to the
-/// including file, `hwcap` lines are obsolete and ignored, and anything
-/// else is a directory.
-fn parse_ld_so_conf(path: &Path, depth: usize, dirs: &mut Vec<PathBuf>) -> bool {
-    let Ok(conf) = fs::read_to_string(path) else {
-        return false;
-    };
-    let mut complete = true;
-    for line in conf.lines() {
-        let line = line.split('#').next().unwrap_or_default().trim();
-        if line.is_empty() {
-            continue;
-        }
-        let mut words = line.split_ascii_whitespace();
-        match words.next() {
-            Some("include") => {
-                for pattern in words {
-                    if depth >= MAX_INCLUDE_DEPTH {
-                        complete = false;
-                        break;
-                    }
-                    let pattern = match path.parent() {
-                        Some(parent) => parent.join(pattern),
-                        None => PathBuf::from(pattern),
-                    };
-                    match glob(&pattern) {
-                        Some(files) => {
-                            for file in files {
-                                complete &= parse_ld_so_conf(&file, depth + 1, dirs);
-                            }
-                        }
-                        None => complete = false,
-                    }
-                }
-            }
-            Some("hwcap") => {}
-            // Old versions of ldconfig also split a line on ':', ',' and
-            // whitespace, and allowed a `=TYPE` suffix.
-            _ => dirs.extend(
-                line.split([':', ',', ' ', '\t'])
-                    .map(|dir| dir.split('=').next().unwrap_or_default())
-                    .filter(|dir| dir.starts_with('/'))
-                    .map(PathBuf::from),
-            ),
-        }
-    }
-    complete
-}
-
-/// The files matching `pattern`, sorted, whose wildcards (`*` and `?`)
-/// may only be in its last component, as in `ld.so.conf.d/*.conf`. `None`
-/// if it can't be expanded.
-fn glob(pattern: &Path) -> Option<Vec<PathBuf>> {
-    let name = pattern.file_name()?.to_str()?;
-    let dir = pattern.parent()?;
-    if dir.to_str()?.contains(['*', '?', '[']) || name.contains('[') {
-        return None;
-    }
-    if !name.contains(['*', '?']) {
-        return Some(vec![pattern.to_owned()]);
-    }
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        // A pattern matching nothing is fine.
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Some(Vec::new()),
-        Err(_) => return None,
-    };
-    let mut files: Vec<_> = entries
-        .flatten()
-        .filter(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|file| !file.starts_with('.') && wildcard_match(name, file))
-        })
-        .map(|entry| entry.path())
-        .collect();
-    files.sort();
-    Some(files)
-}
-
-/// Whether `name` matches `pattern`, whose `*` matches any run of
-/// characters and `?` any one.
-fn wildcard_match(pattern: &str, name: &str) -> bool {
-    let (pattern, name): (Vec<char>, Vec<char>) =
-        (pattern.chars().collect(), name.chars().collect());
-    let (mut p, mut n) = (0, 0);
-    let mut star = None;
-    while n < name.len() {
-        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == name[n]) {
-            p += 1;
-            n += 1;
-        } else if p < pattern.len() && pattern[p] == '*' {
-            star = Some((p, n));
-            p += 1;
-        } else if let Some((star_p, star_n)) = star {
-            p = star_p + 1;
-            n = star_n + 1;
-            star = Some((star_p, star_n + 1));
-        } else {
-            return false;
-        }
-    }
-    pattern[p..].iter().all(|&c| c == '*')
-}
-
 /// What the search found.
 #[derive(Debug, Default)]
 pub(crate) struct Libraries {
-    /// The libraries found, by the name they were needed as.
-    pub(crate) found: HashMap<String, PathBuf>,
-    /// A library the loader certainly can't find, if any.
+    /// The libraries found, by the name they were needed as: their
+    /// path, and the version names they define.
+    pub(crate) found: HashMap<String, (PathBuf, Vec<String>)>,
+    /// A library the loader certainly can't find, if any. The search
+    /// stops there, so `found` is then incomplete.
     pub(crate) missing: Option<String>,
 }
 
 /// A loaded object: the binary, or a library found for it.
 struct Object {
-    /// Its rpath and runpath entries.
-    rpaths: Vec<String>,
+    rpath: Vec<String>,
+    runpath: Vec<String>,
     /// The object that needed it, `None` for the binary.
     needed_by: Option<usize>,
+}
+
+/// The directories in the rpath or runpath entries `entries` that don't
+/// depend on where the binary ends up: not `$ORIGIN` and friends, and
+/// not relative.
+fn absolute(entries: &[String]) -> impl Iterator<Item = PathBuf> + '_ {
+    entries
+        .iter()
+        .flat_map(|entry| entry.split(':'))
+        .filter(|dir| dir.starts_with('/') && !dir.contains('$'))
+        .map(PathBuf::from)
 }
 
 /// Find the libraries `binary` needs, recursively.
@@ -314,9 +216,11 @@ pub(crate) fn libraries(
         })
         .unwrap_or_default();
 
+    let musl = matches!(system.flavor, Flavor::Musl { .. });
     let mut libraries = Libraries::default();
     let mut objects = vec![Object {
-        rpaths: binary.rpaths.clone(),
+        rpath: binary.rpath.clone(),
+        runpath: binary.runpath.clone(),
         needed_by: None,
     }];
     let mut seen = HashSet::new();
@@ -330,44 +234,75 @@ pub(crate) fn libraries(
             break;
         }
 
-        // The rpaths of the object needing it, then of the one that
-        // needed that, up to the binary.
-        let mut rpaths = Vec::new();
-        let mut has_rpath = false;
-        let mut object = Some(needed_by);
-        while let Some(index) = object {
-            has_rpath |= !objects[index].rpaths.is_empty();
-            rpaths.extend(
-                objects[index]
-                    .rpaths
-                    .iter()
-                    .flat_map(|rpath| rpath.split(':'))
-                    // `$ORIGIN` and relative entries depend on where the
-                    // binary ends up, not where it is now.
-                    .filter(|dir| dir.starts_with('/') && !dir.contains('$'))
-                    .map(PathBuf::from),
-            );
-            object = objects[index].needed_by;
-        }
-        let candidates: Box<dyn Iterator<Item = PathBuf>> = if name.contains('/') {
+        // The object needing it, then the one that needed that, up to
+        // the binary.
+        let chain: Vec<&Object> = std::iter::successors(Some(&objects[needed_by]), |object| {
+            object.needed_by.map(|index| &objects[index])
+        })
+        .collect();
+        let has_rpath = chain
+            .iter()
+            .any(|object| !object.rpath.is_empty() || !object.runpath.is_empty());
+
+        let dirs: Vec<PathBuf> = if name.contains('/') {
+            Vec::new()
+        } else if musl {
+            // `LD_LIBRARY_PATH`, then the chain's rpaths, a runpath
+            // replacing an object's rpath.
+            let chain_rpaths = chain.iter().flat_map(|object| {
+                absolute(if object.runpath.is_empty() {
+                    &object.rpath
+                } else {
+                    &object.runpath
+                })
+            });
+            ld_library_path
+                .iter()
+                .cloned()
+                .chain(chain_rpaths)
+                .collect()
+        } else if chain[0].runpath.is_empty() {
+            // glibc: the `DT_RPATH` of the needing object and of the
+            // objects above it that have no `DT_RUNPATH`, then
+            // `LD_LIBRARY_PATH`.
+            let chain_rpaths = chain
+                .iter()
+                .filter(|object| object.runpath.is_empty())
+                .flat_map(|object| absolute(&object.rpath));
+            chain_rpaths
+                .chain(ld_library_path.iter().cloned())
+                .collect()
+        } else {
+            // glibc: `LD_LIBRARY_PATH`, then only the needing object's
+            // own `DT_RUNPATH`.
+            ld_library_path
+                .iter()
+                .cloned()
+                .chain(absolute(&chain[0].runpath))
+                .collect()
+        };
+
+        let direct = if name.contains('/') {
             // A path, used as is: relative ones are relative to the
             // working directory the binary will run in.
-            Box::new(
-                Path::new(&name)
-                    .is_absolute()
-                    .then(|| PathBuf::from(&name))
-                    .into_iter(),
-            )
+            Path::new(&name).is_absolute().then(|| PathBuf::from(&name))
         } else {
-            Box::new(
-                rpaths
-                    .iter()
-                    .chain(&ld_library_path)
-                    .map(|dir| dir.join(&name))
-                    .chain(system.cached(&name))
-                    .chain(system.dirs.iter().map(|dir| dir.join(&name))),
-            )
+            None
         };
+        let system_dirs = (!name.contains('/'))
+            .then_some(&system.dirs)
+            .into_iter()
+            .flatten();
+        let candidates = direct
+            .into_iter()
+            .chain(dirs.iter().map(|dir| dir.join(&name)))
+            // Looked up lazily: most libraries are found before.
+            .chain(
+                std::iter::once(())
+                    .filter(|()| !name.contains('/'))
+                    .flat_map(|()| system.cached(&name)),
+            )
+            .chain(system_dirs.map(|dir| dir.join(&name)));
 
         let found = candidates.into_iter().find_map(|path| {
             let lib = elf::parse(&path).ok()??;
@@ -376,20 +311,22 @@ pub(crate) fn libraries(
         match found {
             Some((path, lib)) => {
                 objects.push(Object {
-                    rpaths: lib.rpaths,
+                    rpath: lib.rpath,
+                    runpath: lib.runpath,
                     needed_by: Some(needed_by),
                 });
                 let index = objects.len() - 1;
                 queue.extend(lib.needed.into_iter().map(|name| (name, index)));
-                libraries.found.insert(name, path);
+                libraries.found.insert(name, (path, lib.verdef));
             }
             None => {
                 let certain = can_tell_missing
                     && system.complete
                     && !has_rpath
                     && (!name.contains('/') || Path::new(&name).is_absolute());
-                if certain && libraries.missing.is_none() {
+                if certain {
                     libraries.missing = Some(name);
+                    break;
                 }
             }
         }
@@ -422,66 +359,6 @@ mod tests {
         assert_eq!(Flavor::of("/system/bin/linker64"), None);
     }
 
-    #[test]
-    fn wildcards() {
-        assert!(wildcard_match("*.conf", "libc.conf"));
-        assert!(wildcard_match("*.conf", ".conf"));
-        assert!(!wildcard_match("*.conf", "libc.conf.bak"));
-        assert!(wildcard_match("x86_64-*.conf", "x86_64-linux-gnu.conf"));
-        assert!(wildcard_match("a?c", "abc"));
-        assert!(!wildcard_match("a?c", "ac"));
-        assert!(wildcard_match("*", "anything"));
-    }
-
-    /// `ld.so.conf` is parsed the way `ldconfig` does: comments,
-    /// surrounding whitespace, blank lines, and `include` globs relative
-    /// to the including file.
-    #[test]
-    fn ld_so_conf_syntax() {
-        let dir = tempfile::tempdir().unwrap();
-        let d = dir.path();
-        fs::create_dir(d.join("conf.d")).unwrap();
-        fs::write(
-            d.join("ld.so.conf"),
-            "# comment\n\n   \ninclude conf.d/*.conf\n/opt/top\n",
-        )
-        .unwrap();
-        fs::write(d.join("conf.d/a.conf"), "  /opt/fooA  \n").unwrap();
-        fs::write(d.join("conf.d/b.conf"), "/opt/fooB   # vendor libs\n").unwrap();
-        fs::write(d.join("conf.d/c.conf.bak"), "/opt/ignored\n").unwrap();
-        fs::write(
-            d.join("conf.d/d.conf"),
-            "/opt/d1:/opt/d2,/opt/d3=libc6\nhwcap 0 nosegneg\n",
-        )
-        .unwrap();
-
-        let mut dirs = Vec::new();
-        assert!(parse_ld_so_conf(&d.join("ld.so.conf"), 0, &mut dirs));
-        assert_eq!(
-            dirs,
-            [
-                "/opt/fooA",
-                "/opt/fooB",
-                "/opt/d1",
-                "/opt/d2",
-                "/opt/d3",
-                "/opt/top"
-            ]
-            .map(PathBuf::from)
-        );
-
-        // A file that includes itself is followed only so far, which
-        // makes the configuration incomplete.
-        fs::write(d.join("loop.conf"), "include loop.conf\n").unwrap();
-        assert!(!parse_ld_so_conf(&d.join("loop.conf"), 0, &mut Vec::new()));
-        // A missing configuration is incomplete.
-        assert!(!parse_ld_so_conf(
-            &d.join("missing.conf"),
-            0,
-            &mut Vec::new()
-        ));
-    }
-
     /// Paths are found in the cache whatever its format, by the
     /// name they end with.
     #[test]
@@ -503,7 +380,8 @@ mod tests {
     fn missing_only_when_certain() {
         let mut binary = elf::parse(&env::current_exe().unwrap()).unwrap().unwrap();
         binary.needed = vec!["libQ-not-installed.so.1".into(), "libc.so".into()];
-        binary.rpaths.clear();
+        binary.rpath.clear();
+        binary.runpath.clear();
         let system = SystemPath {
             complete: true,
             ..SystemPath::default()
@@ -523,13 +401,16 @@ mod tests {
         assert_eq!(missing(&binary, &incomplete, true), None);
         // Any rpath, even an absolute one: glibc searches the binary's
         // `DT_RPATH` for its libraries' dependencies too.
-        binary.rpaths = vec!["/opt/rp".into()];
+        binary.rpath = vec!["/opt/rp".into()];
+        assert_eq!(missing(&binary, &system, true), None);
+        binary.rpath.clear();
+        binary.runpath = vec!["/opt/rp".into()];
         assert_eq!(missing(&binary, &system, true), None);
     }
 
     #[test]
     fn musl_path_file() {
-        let path = SystemPath::musl("no-such-arch");
+        let path = SystemPath::musl("no-such-arch".into());
         assert!(path.complete);
         assert_eq!(
             path.dirs,

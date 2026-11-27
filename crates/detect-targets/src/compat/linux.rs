@@ -166,10 +166,8 @@ fn check_libraries(elf: &Elf, interp: &str) -> Result<(), Incompatible> {
     }
 
     for verneed in &elf.verneed {
-        let Some(lib) = libraries.found.get(&verneed.file) else {
-            continue;
-        };
-        let Some(provided) = elf::parse(lib).ok().flatten().map(|lib| lib.verdef) else {
+        // The library the search found, so the one the loader would load.
+        let Some((_, provided)) = libraries.found.get(&verneed.file) else {
             continue;
         };
         // glibc only warns about a library without version definitions.
@@ -328,7 +326,7 @@ mod tests {
         any(target_arch = "x86_64", target_arch = "aarch64")
     ))]
     async fn missing_library_rejected() {
-        if !Path::new("/etc/ld.so.conf").exists() {
+        if !Path::new("/etc/ld.so.conf").exists() || !Path::new("/etc/ld.so.cache").exists() {
             return;
         }
         let dir = tempfile::tempdir().unwrap();

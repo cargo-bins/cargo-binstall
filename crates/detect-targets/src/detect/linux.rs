@@ -163,6 +163,9 @@ async fn detect_extra_targets(cpu_arch: &str, abi: &str) -> Vec<String> {
     let handles: Vec<_> = candidates
         .map(|&candidate| {
             // Abort the probes still running if detection is cancelled.
+            // These don't go through `Host::run_probe`, which would need
+            // an `Arc<Host>` in each task: checking a binary for one of
+            // these targets runs its probe again, about a millisecond.
             AbortOnDropHandle::new(tokio::spawn(async move {
                 let probe = probe::find(candidate)?;
                 let result = if candidate.contains("-musl") {

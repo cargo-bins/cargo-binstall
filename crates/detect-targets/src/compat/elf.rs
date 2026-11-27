@@ -44,8 +44,10 @@ pub(crate) struct Elf {
     pub(crate) interp: Option<String>,
     /// `DT_NEEDED` entries: the libraries it links to.
     pub(crate) needed: Vec<String>,
-    /// `DT_RPATH` and `DT_RUNPATH` entries.
-    pub(crate) rpaths: Vec<String>,
+    /// `DT_RPATH` entries.
+    pub(crate) rpath: Vec<String>,
+    /// `DT_RUNPATH` entries.
+    pub(crate) runpath: Vec<String>,
     pub(crate) verneed: Vec<Verneed>,
     /// Version names this object defines, without the base (soname) one.
     pub(crate) verdef: Vec<String>,
@@ -68,19 +70,25 @@ fn ident(elf: &GoblinElf<'_>) -> Option<Ident> {
     })
 }
 
-/// Map `path` if it is a regular file. It is opened non-blocking, as
-/// opening a FIFO without a writer, which an archive or a library path
-/// may point to, would block.
+/// Map `path` if it is a regular file.
+///
+/// The paths come from downloaded binaries (`DT_NEEDED`, rpaths), so
+/// nothing else is opened: opening a device can be an action of its own
+/// (`/dev/watchdog` arms the watchdog), and opening a FIFO without a
+/// writer blocks. It is checked before opening, and again after, in case
+/// the file was swapped in between; the open is non-blocking and can't
+/// acquire a controlling terminal for the same reason.
 fn map(path: &Path) -> io::Result<Mmap> {
+    let not_regular = || io::Error::new(io::ErrorKind::InvalidInput, "not a regular file");
+    if !std::fs::metadata(path)?.is_file() {
+        return Err(not_regular());
+    }
     let file: File = OpenOptions::new()
         .read(true)
-        .custom_flags(OFlags::NONBLOCK.bits() as i32)
+        .custom_flags((OFlags::NONBLOCK | OFlags::NOCTTY).bits() as i32)
         .open(path)?;
     if !file.metadata()?.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "not a regular file",
-        ));
+        return Err(not_regular());
     }
     // SAFETY: the mapping is read-only and only read from. A file
     // modified while mapped may read inconsistently, which goblin's
@@ -137,12 +145,8 @@ pub(crate) fn parse(path: &Path) -> io::Result<Option<Elf>> {
             .interpreter
             .map(|interp| interp.split('\0').next().unwrap_or_default().to_owned()),
         needed: elf.libraries.iter().map(|lib| (*lib).to_owned()).collect(),
-        rpaths: elf
-            .rpaths
-            .iter()
-            .chain(&elf.runpaths)
-            .map(|path| (*path).to_owned())
-            .collect(),
+        rpath: elf.rpaths.iter().map(|path| (*path).to_owned()).collect(),
+        runpath: elf.runpaths.iter().map(|path| (*path).to_owned()).collect(),
         verneed,
         verdef,
     }))
