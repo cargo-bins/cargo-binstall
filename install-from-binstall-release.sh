@@ -98,15 +98,18 @@ else
 fi
 
 # `fetch ASSET` downloads ASSET into the current directory, from the checkout's
-# version if it has a release, else from the latest.
+# version if it has a release, else from the latest. It sets
+# `downloaded_version`, empty for the latest.
 fetch() {
     if [ -n "$checkout_version" ]; then
         if download "https://github.com/cargo-bins/cargo-binstall/releases/download/v${checkout_version}/$1" > "$1"; then
+            downloaded_version="$checkout_version"
             return
         fi
         echo "Could not download v${checkout_version}, installing the latest release" >&2
     fi
     download "${base_url}$1" > "$1"
+    downloaded_version="${BINSTALL_VERSION#v}"
 }
 
 os="$(uname -s)"
@@ -138,7 +141,8 @@ else
     exit 1
 fi
 
-./cargo-binstall --self-install || ./cargo-binstall -y --force cargo-binstall
+# If `--self-install` fails, install the downloaded version, so a pin holds.
+./cargo-binstall --self-install || ./cargo-binstall -y --force "cargo-binstall${downloaded_version:+@$downloaded_version}"
 
 CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 

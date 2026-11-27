@@ -50,6 +50,7 @@ if ($checkout_version) {
     try {
         Invoke-WebRequest -Uri "https://github.com/cargo-bins/cargo-binstall/releases/download/v$checkout_version/$asset" -OutFile $zip -UseBasicParsing
         $downloaded = $true
+        $downloaded_version = $checkout_version
         Write-Verbose -Verbose -Message "Installing v$checkout_version, the version of the action's checkout"
     } catch {
         Write-Verbose -Verbose -Message "Could not download v$checkout_version, installing the latest release: $_"
@@ -61,6 +62,8 @@ if (-not $downloaded) {
     } catch {
         throw "Failed to download: $_"
     }
+    # empty for the latest
+    $downloaded_version = $BINSTALL_VERSION -replace '^v', ''
 }
 $zip | Expand-Archive -DestinationPath $tmpdir -Force
 $sw.Stop()
@@ -70,7 +73,9 @@ Write-Verbose -Verbose -Message "Download: $($sw.Elapsed.Seconds) seconds"
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $ps = Start-Process -PassThru -Wait "$tmpdir\cargo-binstall.exe" "--self-install"
 if ($ps.ExitCode -ne 0) {
-    Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force cargo-binstall"
+    # Install the downloaded version, so a pin holds.
+    $crate = if ($downloaded_version) { "cargo-binstall@$downloaded_version" } else { "cargo-binstall" }
+    Invoke-Expression "$tmpdir\cargo-binstall.exe -y --force $crate"
 }
 $zip | Remove-Item
 $sw.Stop()
