@@ -123,6 +123,8 @@ struct CandidateRepo {
     /// The repository it redirects to, if not itself.
     moved_to: Option<Url>,
     is_private: bool,
+    /// See [`RepoInfo::is_hidden`].
+    is_hidden: bool,
 }
 
 impl CandidateRepo {
@@ -133,6 +135,7 @@ impl CandidateRepo {
                 .filter(|to| !same_repo(to, repo))
                 .cloned(),
             is_private: info.is_some_and(|info| info.is_private),
+            is_hidden: info.is_some_and(|info| info.is_hidden),
         }
     }
 }
@@ -191,7 +194,10 @@ impl Probe {
     /// - where it redirects to, if it was renamed or moved, so that the
     ///   candidates are checked there without a redirect for each request;
     /// - whether it is a private GitHub repository, whose assets can only be
-    ///   checked and downloaded with the API.
+    ///   checked and downloaded with the API;
+    /// - whether github.com hides it without a token, see
+    ///   [`RepoInfo::is_hidden`]: its candidates are dropped, none of them
+    ///   can be downloaded.
     ///
     /// The crate's repository is known already. Another one is looked up
     /// once per run, see [`FetchContext`](crate::FetchContext).
@@ -219,11 +225,30 @@ impl Probe {
                     info
                 }
             };
+            if info.is_hidden {
+                continue;
+            }
             if let Some(to) = &info.moved_to {
                 candidate.move_to(&repo, to);
             }
             candidate.is_private = info.is_private;
         }
+
+        // Not moved above, so still in the repository looked up.
+        candidates.retain(|candidate| {
+            let is_hidden = candidate.release_tag.as_ref().is_some_and(|tag| {
+                repos
+                    .iter()
+                    .any(|(repo, info)| info.is_hidden && *repo == tag.repo)
+            });
+            if is_hidden {
+                debug!(
+                    "Dropping {}: github.com hides its repository",
+                    candidate.url
+                );
+            }
+            !is_hidden
+        });
     }
 
     /// Check the candidates of the `pkg_url` and `pkg_fmt` a previous
@@ -1220,6 +1245,7 @@ pub(super) mod test {
                 repository_host: RepositoryHost::GitHub,
                 subcrate: None,
                 is_private: true,
+                is_hidden: false,
             }))
             .unwrap();
         // cargo-quickinstall is looked up, and public.
@@ -1243,6 +1269,51 @@ pub(super) mod test {
         .await;
         let is_private: Vec<_> = probe.candidates.iter().map(|c| c.is_private).collect();
         assert_eq!(is_private, [true, true, false]);
+    }
+
+    /// Without a token, nothing is asked about the candidates of a repository
+    /// github.com hides: they are dropped before any request.
+    #[tokio::test]
+    async fn test_hidden_repo_candidates_dropped() {
+        let data = Data::new(
+            Default::default(),
+            "test".into(),
+            "0.0.0".into(),
+            Some(PRIVATE.into()),
+        );
+        // What `get_repo_info` finds without a token.
+        data.repo_info
+            .set(Some(RepoInfo {
+                repo: Url::parse(PRIVATE).unwrap(),
+                repository_host: RepositoryHost::GitHub,
+                subcrate: None,
+                is_private: false,
+                is_hidden: true,
+            }))
+            .unwrap();
+        let probe = Probe::new(
+            Arc::new(data),
+            client(),
+            GhApiClient::new(client(), None),
+            Some(PRIVATE),
+            None,
+            vec![
+                new_candidate(PRIVATE, "0.12.0/a.tgz", OTHER_TEMPLATE),
+                new_candidate(
+                    "https://github.com/Cargo-Bins/Private-Repo-For-Testing",
+                    "0.12.0/a.tgz",
+                    OTHER_TEMPLATE,
+                ),
+                // A `pkg-url` pointing at another, public repository.
+                new_candidate(QUICKINSTALL, "a-0.12.0/a.tgz", OTHER_TEMPLATE),
+            ],
+        )
+        .await;
+        let urls: Vec<_> = probe.candidates.iter().map(|c| c.url.as_str()).collect();
+        assert_eq!(
+            urls,
+            [format!("{QUICKINSTALL}/releases/download/a-0.12.0/a.tgz")]
+        );
     }
 
     #[test]
