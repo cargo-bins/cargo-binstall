@@ -4,7 +4,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures_util::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt, TryFutureExt};
 use reqwest::Method;
 
 use super::{Client, Error, HttpError, StatusCode, Url, header};
@@ -69,13 +69,23 @@ impl RequestBuilder {
         }
     }
 
-    pub async fn send(self, error_for_status: bool) -> Result<Response, Error> {
-        let request = self.inner.build()?;
-        let method = request.method().clone();
-        Ok(Response {
-            inner: self.client.send_request(request, error_for_status).await?,
-            method,
-        })
+    pub fn send(self, error_for_status: bool) -> impl Future<Output = Result<Response, Error>> {
+        let Self { client, inner } = self;
+        // Built here, so that the future holds the request and nothing of
+        // the builder it was built from.
+        let request = inner.build();
+
+        async move {
+            match request {
+                // Borrowed where it is: moving it out would keep room for
+                // it in the future twice.
+                Ok(ref request) => Ok(Response {
+                    inner: client.send_request(request, error_for_status).await?,
+                    method: request.method().clone(),
+                }),
+                Err(err) => Err(err.into()),
+            }
+        }
     }
 }
 
@@ -86,8 +96,8 @@ pub struct Response {
 }
 
 impl Response {
-    pub async fn bytes(self) -> Result<Bytes, Error> {
-        self.inner.bytes().await.map_err(Error::from)
+    pub fn bytes(self) -> impl Future<Output = Result<Bytes, Error>> {
+        self.inner.bytes().map_err(Error::from)
     }
 
     /// The next chunk of the body, or `None` once it has all been read.
@@ -151,12 +161,19 @@ impl Response {
     }
 
     #[cfg(feature = "json")]
-    pub async fn json<T>(self) -> Result<T, Error>
+    pub fn json<T>(self) -> impl Future<Output = Result<T, Error>>
     where
         T: serde::de::DeserializeOwned,
     {
-        let bytes = self.error_for_status()?.bytes().await?;
-        Ok(serde_json::from_slice(&bytes)?)
+        use futures_util::FutureExt;
+
+        /// Not generic, so that reading the body is compiled once for
+        /// every `T`.
+        async fn bytes_of_success(response: Response) -> Result<Bytes, Error> {
+            response.error_for_status()?.bytes().await
+        }
+
+        bytes_of_success(self).map(|bytes| Ok(serde_json::from_slice(&bytes?)?))
     }
 }
 
