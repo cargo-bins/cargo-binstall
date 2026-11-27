@@ -260,10 +260,10 @@ impl MatchedVersion {
         for res in it {
             let entry = res.map_err(RegistryError::from)?;
 
-            // The index is looked up by the lowercase name, so this can be
-            // a crate whose name only differs in case. Like for cargo, that
-            // is another crate, and its download url has the name as it is
-            // written here.
+            // The index is looked up by the lowercase name, and the crates.io
+            // API also treats `-` and `_` as the same, so this can be a crate
+            // whose name is spelled differently. Like for cargo, that is
+            // another crate, and its download url has the name as written here.
             if entry.name != crate_name {
                 return Err(RegistryError::NotFound(crate_name.into()));
             }
