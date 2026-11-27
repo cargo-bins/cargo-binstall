@@ -549,7 +549,8 @@ pub struct Args {
     ///
     /// Fallback to environment variable `GITHUB_TOKEN` if this option is not
     /// specified (which is also shown by clap's auto generated doc below), or
-    /// try environment variable `GH_TOKEN`, which is also used by `gh` cli.
+    /// try environment variable `GH_TOKEN`, which is also used by `gh` cli, if
+    /// that is not specified or is empty.
     ///
     /// If none of them are present, then binstall will try to extract github
     /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
