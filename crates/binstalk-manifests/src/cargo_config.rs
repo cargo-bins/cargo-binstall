@@ -286,7 +286,10 @@ fn iterate_reverse_preorder(
         };
 
         let path = file.get_file_path().unwrap(); // canonicalized path
-        let parent = config_path.path().parent().unwrap(); // original path
+        // Original path, normalized so that `parent()` of it, which relative
+        // paths in the config are relative to, is not taken lexically on a
+        // `..`, e.g. of `include = ["../extra.toml"]`.
+        let parent = config_path.path().parent().unwrap().normalize();
 
         // Use the absolute, canonicalized path (expanded symlink) to track the
         // content of the config being loaded, and use the normalized parent
@@ -295,14 +298,14 @@ fn iterate_reverse_preorder(
         //
         // Even if one config file has two symlinks, the content might be different
         // if relative path is present.
-        if !visited_path.insert((path.to_owned(), parent.normalize())) {
+        if !visited_path.insert((path.to_owned(), parent.clone())) {
             return Err(ConfigLoadError::DeadLoopInLoading {
                 path: path.into(),
                 parent: parent.into(),
             });
         }
 
-        stack.extend(load_config(&mut (&file), parent)?);
+        stack.extend(load_config(&mut (&file), &parent)?);
     }
 
     Ok(())
@@ -331,7 +334,8 @@ impl Config {
 
             // As in Cargo, paths are relative to the parent of the dir the
             // config file is in, i.e. of `.cargo`. Only `include` is relative
-            // to the dir itself.
+            // to the dir itself. A bare `install.root` such as `tools` is still
+            // cwd-relative in Cargo (deprecated), we follow its future behavior.
             let base = dir.parent().unwrap_or(dir);
 
             join_if_relative(
@@ -495,11 +499,12 @@ custom = ["cargo-credential-example", "--account", "test"]
     #[test]
     fn test_relative_install_root_and_include() {
         let dir = tempfile::tempdir().unwrap();
-        let cargo_home = dir.path().join(".cargo");
-        std::fs::create_dir(&cargo_home).unwrap();
+        let home = dir.path().join("home");
+        let cargo_home = home.join(".cargo");
+        std::fs::create_dir_all(&cargo_home).unwrap();
         std::fs::write(
             cargo_home.join("config.toml"),
-            "include = ['extra.toml']\n[install]\nroot = 'tools'\n",
+            "include = ['extra.toml', '../outside.toml']\n[install]\nroot = 'tools'\n",
         )
         .unwrap();
         // `include` is relative to the dir of the config file itself.
@@ -508,16 +513,25 @@ custom = ["cargo-credential-example", "--account", "test"]
             "[http]\ncainfo = 'cert.pem'\n",
         )
         .unwrap();
+        // Paths in a file included from another dir are relative to the
+        // parent of that dir.
+        std::fs::write(
+            home.join("outside.toml"),
+            "[env]\nX = { value = 'x', relative = true }\n",
+        )
+        .unwrap();
 
         let config = Config::load_from_path(cargo_home.join("config.toml")).unwrap();
 
+        assert_eq!(config.install.unwrap().root.unwrap(), home.join("tools"));
+        assert_eq!(config.http.unwrap().cainfo.unwrap(), home.join("cert.pem"));
         assert_eq!(
-            config.install.unwrap().root.unwrap(),
-            dir.path().join("tools")
-        );
-        assert_eq!(
-            config.http.unwrap().cainfo.unwrap(),
-            dir.path().join("cert.pem")
+            config.env.get("X").unwrap(),
+            &Env::WithOptions {
+                value: dir.path().join("x").to_string_lossy().into(),
+                force: None,
+                relative: Some(true),
+            }
         );
     }
 
