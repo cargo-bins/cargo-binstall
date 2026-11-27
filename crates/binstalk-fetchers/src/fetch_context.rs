@@ -121,6 +121,11 @@ impl FetchContext {
     }
 
     #[cfg(test)]
+    pub(crate) fn repo_infos_len(&self) -> usize {
+        self.repo_infos.len()
+    }
+
+    #[cfg(test)]
     pub(crate) fn release_artifacts_len(&self) -> usize {
         self.release_artifacts.len()
     }

@@ -36,8 +36,8 @@ pub enum ReleaseAssets {
     NotFound,
     /// The release has no assets, or it is a tag without a release.
     NoAssets,
-    /// The indices of the names that are listed. The list comes from a page
-    /// meant for people, not from an API, so it may not have every asset.
+    /// The indices of the names that are listed. github.com lists every
+    /// asset of the release on the page, so the others don't exist.
     Listed(Vec<usize>),
     /// The request failed, or the page doesn't look like an asset list:
     /// github.com may have changed it.
@@ -69,9 +69,9 @@ impl ReleaseAssetsPage {
 
     /// Which of the asset `names` it lists.
     ///
-    /// The list comes from a page meant for people, so an asset missing from
-    /// it may still exist, and a listed one should be checked before it is
-    /// used.
+    /// github.com lists every asset of the release on the page, so one
+    /// missing from it doesn't exist. The page is meant for people, so a
+    /// listed one should still be checked before it is used.
     pub fn lists<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> ReleaseAssets {
         match &self.0 {
             Page::NotFound => ReleaseAssets::NotFound,

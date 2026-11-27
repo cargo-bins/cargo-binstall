@@ -240,7 +240,8 @@ pub struct Data {
     repo: Option<String>,
     /// Shared with the other crates being resolved.
     context: Arc<FetchContext>,
-    /// Kept in `context`, by `repo`.
+    /// The crate's own view of what `context` keeps about its repository,
+    /// with its own subcrate, see [`Data::get_repo_info`].
     repo_info: Arc<OnceCell<Option<RepoInfo>>>,
     /// The target the hint was found for, and the hint.
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
@@ -267,16 +268,12 @@ impl Data {
         version: CompactString,
         repo: Option<String>,
     ) -> Self {
-        let repo_info = match repo.as_deref() {
-            Some(repo) => context.repo_info(repo),
-            None => Arc::default(),
-        };
         Self {
             name,
             version,
             repo,
             context,
-            repo_info,
+            repo_info: Arc::default(),
             pkg_url_hint: None,
             bins: Vec::new(),
             dist: None,
@@ -338,9 +335,29 @@ impl Data {
             .map(|(_, hint)| hint)
     }
 
+    /// What is known about the crate's repository.
+    ///
+    /// It is kept in `context` by the repository without the path of the
+    /// subcrate, so that crates in subdirectories of the same repository,
+    /// e.g. nushell's plugins, ask about it once.
     #[instrument(skip(client))]
     async fn get_repo_info(&self, client: &GhApiClient) -> Result<Option<&RepoInfo>, FetchError> {
-        RepoInfo::get(&self.repo_info, self.repo.as_deref(), client).await
+        self.repo_info
+            .get_or_try_init(|| async {
+                let Some(repo) = self.repo.as_deref() else {
+                    return Ok(None);
+                };
+                let (repo, subcrate) = RepoInfo::split_subcrate(repo);
+                let info = self.context.repo_info(&repo);
+                Ok(RepoInfo::get(&info, Some(&repo), client)
+                    .await?
+                    .map(|info| RepoInfo {
+                        subcrate: subcrate.or_else(|| info.subcrate.clone()),
+                        ..info.clone()
+                    }))
+            })
+            .await
+            .map(Option::as_ref)
     }
 }
 
@@ -449,6 +466,22 @@ impl RepoInfo {
         })
         .await
         .map(Option::as_ref)
+    }
+
+    /// `repo` without the path of its subcrate, and the subcrate, if its
+    /// host can be told from it.
+    ///
+    /// Otherwise `repo` is kept as is: [`RepoInfo::get`] looks for the
+    /// subcrate once it has followed the redirects, which may lead to a host
+    /// it knows.
+    fn split_subcrate(repo: &str) -> (Cow<'_, str>, Option<CompactString>) {
+        if let Ok(mut url) = Url::parse(repo) {
+            let repository_host = RepositoryHost::guess_git_hosting_services(&url);
+            if let Some(subcrate) = Self::detect_subcrate(&mut url, repository_host) {
+                return (Cow::Owned(url.into()), Some(subcrate));
+            }
+        }
+        (Cow::Borrowed(repo), None)
     }
 
     /// If `repo` contains a subcrate, then extracts and returns it.
@@ -631,6 +664,76 @@ mod test {
         let repo_info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
 
         assert_eq!(url_without_git, repo_info.repo.as_str());
+    }
+
+    #[test]
+    fn test_split_subcrate() {
+        let split = |repo| {
+            let (repo, subcrate) = RepoInfo::split_subcrate(repo);
+            (repo.into_owned(), subcrate.map(String::from))
+        };
+        let nushell = "https://github.com/nushell/nushell";
+        assert_eq!(
+            split("https://github.com/nushell/nushell/tree/main/crates/nu_plugin_inc"),
+            (nushell.to_owned(), Some("nu_plugin_inc".to_owned()))
+        );
+        assert_eq!(split(nushell), (nushell.to_owned(), None));
+        // A host it can't tell is kept as is, the subcrate is looked for
+        // after the redirects.
+        let unknown = "https://git.example.com/a/b/tree/main/crates/c";
+        assert_eq!(split(unknown), (unknown.to_owned(), None));
+        assert_eq!(split("not a url"), ("not a url".to_owned(), None));
+    }
+
+    /// Crates in subdirectories of one repository ask about it once, and
+    /// each keeps its own subcrate.
+    #[tokio::test]
+    async fn test_repo_info_shared_by_subcrates() {
+        let repo = "https://github.com/cargo-bins/cargo-binstall";
+        let context = Arc::new(FetchContext::default());
+        let data = |subcrate: &str| {
+            Data::new(
+                Arc::clone(&context),
+                subcrate.into(),
+                "1.0.0".into(),
+                Some(format!("{repo}/tree/main/crates/{subcrate}")),
+            )
+        };
+        let (bin, detect_targets, root) = (
+            data("bin"),
+            data("detect-targets"),
+            Data::new(
+                Arc::clone(&context),
+                "cargo-binstall".into(),
+                "1.0.0".into(),
+                Some(repo.into()),
+            ),
+        );
+
+        let gh_client = GhApiClient::new(
+            Client::new(
+                "user-agent",
+                None,
+                false,
+                Default::default(),
+                NonZeroU16::new(1000).unwrap(),
+                NonZeroU64::new(1000).unwrap(),
+                [],
+            )
+            .unwrap(),
+            None,
+        );
+        for (data, subcrate) in [
+            (&bin, Some("bin")),
+            (&detect_targets, Some("detect-targets")),
+            (&root, None),
+        ] {
+            let info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
+            assert_eq!(info.repo.as_str(), repo);
+            assert_eq!(info.subcrate.as_deref(), subcrate);
+            assert!(!info.is_private);
+        }
+        assert_eq!(context.repo_infos_len(), 1);
     }
 
     #[test]
