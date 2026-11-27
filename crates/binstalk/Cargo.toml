@@ -30,6 +30,7 @@ jobslot = { version = "0.2.11", features = ["tokio"] }
 leon = "3.0.0"
 maybe-owned = "0.3.4"
 miette = "7.0.0"
+normalize-path = { version = "0.2.3", path = "../normalize-path" }
 semver = { version = "1.0.28", features = ["serde"] }
 simple-git = { version = "0.2.40", optional = true }
 strum = "0.28.0"

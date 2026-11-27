@@ -8,6 +8,7 @@ use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
+use normalize_path::NormalizePath;
 use semver::{Comparator, Op as ComparatorOp, Version, VersionReq};
 use tokio::{task::spawn_blocking, time::timeout};
 use tracing::{debug, error, info, instrument, warn};
@@ -709,7 +710,8 @@ fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
 /// cargo writes to `.crates.toml` for `cargo install --path`: the absolute
 /// path of the directory.
 fn path_source_url(manifest_path: &Path) -> Result<Url, BinstallError> {
-    let mut path = std::path::absolute(manifest_path)?;
+    // Like cargo, without resolving symlinks.
+    let mut path = std::path::absolute(manifest_path)?.normalize();
     if path.is_file() {
         path.pop();
     }
@@ -784,6 +786,10 @@ mod path_source_tests {
 
         assert_eq!(path_source_url(dir.path()).unwrap(), expected);
         assert_eq!(path_source_url(&manifest).unwrap(), expected);
+        assert_eq!(
+            path_source_url(&dir.path().join("sub/../foo-Cargo.toml")).unwrap(),
+            expected
+        );
 
         // Tests run in the dir of the crate.
         assert_eq!(
