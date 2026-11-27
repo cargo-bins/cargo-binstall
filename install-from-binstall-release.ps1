@@ -8,7 +8,7 @@ $checkout_version = $null
 if (-not $BINSTALL_VERSION -and $Env:BINSTALL_ACTION_PATH) {
     $cargo_toml = Join-Path $Env:BINSTALL_ACTION_PATH "crates\bin\Cargo.toml"
     $match = if (Test-Path $cargo_toml) {
-        Select-String -Path $cargo_toml -Pattern '^version = "(.*)"$' | Select-Object -First 1
+        Select-String -Path $cargo_toml -Pattern '^version = "([^"]*)"' | Select-Object -First 1
     }
     if ($match) {
         $checkout_version = $match.Matches[0].Groups[1].Value

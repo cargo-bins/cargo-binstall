@@ -72,7 +72,7 @@ checkout_version=
 if [ -z "${BINSTALL_VERSION:-}" ] && [ -n "${BINSTALL_ACTION_PATH:-}" ]; then
     cargo_toml="$BINSTALL_ACTION_PATH/crates/bin/Cargo.toml"
     if [ -f "$cargo_toml" ]; then
-        checkout_version="$(sed -n '/^version = "\(.*\)"$/{s//\1/p;q;}' "$cargo_toml")"
+        checkout_version="$(sed -n '/^version = "\([^"]*\)".*/{s//\1/p;q;}' "$cargo_toml")"
     fi
     if [ -z "$checkout_version" ]; then
         echo "::warning::Could not read the version from $cargo_toml, installing the latest release"
