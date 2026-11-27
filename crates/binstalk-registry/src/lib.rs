@@ -358,8 +358,6 @@ mod test {
 
     use super::*;
 
-    /// Mark this as an async fn so that you won't accidentally use it in
-    /// sync context.
     /// The token must not show up in the `Debug` of the request, which is
     /// what logs print.
     #[test]
