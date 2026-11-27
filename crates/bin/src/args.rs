@@ -965,15 +965,7 @@ You cannot use --{feature_option} and specify multiple packages at the same time
             .exit()
     }
 
-    if opts.github_token.is_none()
-        && let Ok(github_token) = env::var("GH_TOKEN")
-    {
-        opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
-    }
-    match opts.github_token.as_ref() {
-        Some(token) if token.0.len() < 10 => opts.github_token = None,
-        _ => (),
-    }
+    opts.github_token = github_token(opts.github_token.take(), env::var("GH_TOKEN").ok());
 
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
@@ -998,6 +990,16 @@ You cannot use --{feature_option} and specify multiple packages at the same time
     };
 
     (opts, cli_overrides)
+}
+
+/// The first of `--github-token`/`GITHUB_TOKEN` and `GH_TOKEN` that can be a
+/// token: a `GITHUB_TOKEN` that is set but empty, as CI often does when the
+/// secret is missing, does not hide `GH_TOKEN`.
+fn github_token(token: Option<GithubToken>, gh_token: Option<String>) -> Option<GithubToken> {
+    token
+        .into_iter()
+        .chain(gh_token.map(|token| GithubToken(Zeroizing::new(token.into()))))
+        .find(|token| token.0.len() >= 10)
 }
 
 #[cfg(test)]
@@ -1045,6 +1047,27 @@ mod test {
         .unwrap();
         assert!(args.no_default_features);
         assert!(args.all_features);
+    }
+
+    #[test]
+    fn gh_token_is_used_if_github_token_cannot_be_a_token() {
+        let token = |token: Option<&str>, gh_token: Option<&str>| {
+            github_token(token.map(GithubToken::from), gh_token.map(String::from))
+                .map(|token| token.0.to_string())
+        };
+        let (a, b) = ("ghp_aaaaaaaaaaaa", "ghp_bbbbbbbbbbbb");
+
+        assert_eq!(token(None, None), None);
+        assert_eq!(token(Some(a), None).as_deref(), Some(a));
+        assert_eq!(token(None, Some(b)).as_deref(), Some(b));
+        assert_eq!(token(Some(a), Some(b)).as_deref(), Some(a));
+
+        // Too short to be a token, e.g. `GITHUB_TOKEN=""`
+        assert_eq!(token(Some(""), Some(b)).as_deref(), Some(b));
+        assert_eq!(token(Some("x"), Some(b)).as_deref(), Some(b));
+        assert_eq!(token(Some(""), None), None);
+        assert_eq!(token(Some(a), Some("")).as_deref(), Some(a));
+        assert_eq!(token(None, Some("")), None);
     }
 
     #[test]
