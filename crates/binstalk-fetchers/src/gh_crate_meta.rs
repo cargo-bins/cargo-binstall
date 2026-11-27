@@ -16,7 +16,9 @@ use url::Url;
 
 use crate::{
     Data, Extracted, FetchError, Fetched, Found, InvalidPkgFmtError, RepoInfo, SignaturePolicy,
-    SignatureVerifier, TargetDataErased, common::*, fetch_context::PackageId,
+    SignatureVerifier, TargetDataErased,
+    common::*,
+    fetch_context::{FoundResponse, PackageId},
 };
 
 pub const FETCHER_GH_CRATE_META: &str = "GhCrateMeta";
@@ -50,8 +52,9 @@ struct Resolved {
     /// [`PkgUrlHint::pkg_url`].
     pkg_url: Arc<str>,
     /// The response to the GET that found `url`, its body unread, which
-    /// `fetch_and_extract` downloads instead of asking again.
-    response: Option<GetResponse>,
+    /// `fetch_and_extract` downloads instead of asking again, unless another
+    /// crate in the package downloaded it already.
+    response: Option<FoundResponse>,
     /// The binary it is the package of, if each binary is in its own
     /// package, see [`Fetched::bin`].
     bin: Option<CompactString>,
@@ -562,7 +565,8 @@ impl GhCrateMetaFound {
                 .with_data_verifier(data_verifier.as_mut()),
             _ => resolved
                 .response
-                .take()
+                .as_ref()
+                .and_then(|response| response.lock().unwrap().take())
                 .map(Download::from)
                 .unwrap_or_else(|| Download::new(fetcher.client.clone(), resolved.url.clone()))
                 .with_data_verifier(data_verifier.as_mut()),

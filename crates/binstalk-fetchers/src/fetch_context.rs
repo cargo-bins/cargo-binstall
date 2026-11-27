@@ -14,10 +14,10 @@ use std::{
     fmt,
     hash::Hash,
     path::Path,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock, Weak},
 };
 
-use binstalk_downloader::download::ExtractedFiles;
+use binstalk_downloader::{download::ExtractedFiles, remote::GetResponse};
 use binstalk_git_repo_api::{
     gh_api_client::{GhRelease, ReleaseArtifacts, ReleaseAssetsPage},
     git_refs::RepoTags,
@@ -47,7 +47,7 @@ pub struct FetchContext {
     /// Whether a package exists, by its URL, from the GET that checked it,
     /// so that crates in the same package send one GET for it, see
     /// [`FetchContext::check_once`].
-    package_urls: Cells<Url, OnceCell<bool>>,
+    package_urls: Cells<Url, OnceCell<Option<Weak<UnreadResponse>>>>,
     /// Packages extracted so far, so that crates in the same package
     /// download and extract it once.
     packages: Cells<PackageId, OnceCell<Arc<Extracted>>>,
@@ -88,26 +88,31 @@ impl FetchContext {
         self.release_artifacts.get(release)
     }
 
-    /// Check whether the package at `url` exists with `check`, unless it
-    /// was checked for another crate already, or is being checked: then
-    /// that answer is returned once ready.
+    /// Check whether the package at `url` exists with `get`, unless it was
+    /// checked for another crate already, or is being checked: then that
+    /// answer is returned once ready. If checking it for another crate
+    /// failed, it is tried again.
     ///
-    /// `check` gives whether it exists, and is the only one to see the
-    /// response it gets, to download the package from: the crates that
-    /// get the answer from another one download it, if at all, through
-    /// [`FetchContext::extract_once`], which the one that checked it
-    /// normally is in already.
-    ///
-    /// If checking it for another crate failed, it is tried again.
-    pub(crate) async fn check_once<F>(&self, url: &Url, check: F) -> Result<bool, FetchError>
+    /// The response, its body unread, is shared by the crates that found
+    /// the package, so that whichever downloads it first reads it; it is
+    /// dropped once they all are.
+    pub(crate) async fn check_once<F>(
+        &self,
+        url: &Url,
+        get: F,
+    ) -> Result<Option<FoundResponse>, FetchError>
     where
-        F: AsyncFnOnce() -> Result<bool, FetchError>,
+        F: AsyncFnOnce() -> Result<Option<GetResponse>, FetchError>,
     {
-        self.package_urls
-            .get(url)
-            .get_or_try_init(async || check().await)
-            .await
-            .copied()
+        let cell = self.package_urls.get(url);
+        let mut found = None;
+        let checked = cell
+            .get_or_try_init(async || {
+                found = get().await?.map(|response| Arc::new(Some(response).into()));
+                Ok::<_, FetchError>(found.as_ref().map(Arc::downgrade))
+            })
+            .await?;
+        Ok(found.or_else(|| Some(checked.as_ref()?.upgrade().unwrap_or_default())))
     }
 
     /// Extract the package `id` to `dst` with `extract`, unless it was
@@ -151,6 +156,12 @@ impl FetchContext {
         self.release_artifacts.len()
     }
 }
+
+/// The response to the GET that found a package, its body unread, for
+/// whichever crate in it downloads it first, see [`FetchContext::check_once`].
+pub(crate) type FoundResponse = Arc<UnreadResponse>;
+
+type UnreadResponse = std::sync::Mutex<Option<GetResponse>>;
 
 /// What [`FetchContext::extract_once`] extracts: two packages with the same id
 /// extract to the same files, and only after the same verification, so a
@@ -265,22 +276,17 @@ mod test {
         };
         assert!(context.check_once(&url, failing).await.is_err());
 
-        let check = async || {
+        let other = Url::parse("https://example.com/other.tgz").unwrap();
+        let missing = async || {
             checks.fetch_add(1, Relaxed);
             tokio::task::yield_now().await;
-            Ok(true)
+            Ok(None)
         };
         let (a, b) = tokio::join!(
-            context.check_once(&url, check),
-            context.check_once(&url, check)
+            context.check_once(&other, missing),
+            context.check_once(&other, missing)
         );
-        assert!(a.unwrap() && b.unwrap());
-        assert_eq!(checks.load(Relaxed), 2);
-
-        let other = Url::parse("https://example.com/other.tgz").unwrap();
-        let missing = async || Ok(false);
-        assert!(!context.check_once(&other, missing).await.unwrap());
-        assert!(context.check_once(&url, check).await.unwrap());
+        assert!(a.unwrap().is_none() && b.unwrap().is_none());
         assert_eq!(checks.load(Relaxed), 2);
     }
 }

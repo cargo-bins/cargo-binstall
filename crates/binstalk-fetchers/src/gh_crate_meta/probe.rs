@@ -34,8 +34,8 @@ use binstalk_types::crate_info::PkgUrlHint;
 
 use super::Resolved;
 use crate::{
-    Data, FetchError, RepoInfo, common::*, futures_resolver::FuturesResolver,
-    gh_api_rate_limit_wait,
+    Data, FetchError, RepoInfo, common::*, fetch_context::FoundResponse,
+    futures_resolver::FuturesResolver, gh_api_rate_limit_wait,
 };
 
 /// A URL the package may be at, rendered from a `pkg-url` template.
@@ -568,23 +568,15 @@ impl Shared {
     /// Check `candidate` with GET, which is sent once per run for crates in
     /// the same package, see [`FetchContext::check_once`](crate::FetchContext::check_once).
     async fn check_with_get(&self, candidate: Candidate) -> Result<Option<Resolved>, FetchError> {
-        let mut response = None;
-        let exists = self
+        let response = self
             .data
             .context
             .check_once(&candidate.url, async || {
                 debug!("Checking for package at: '{}'", candidate.url);
-                response = get_if_exists(&self.client, &candidate.url).await?;
-                Ok(response.is_some())
+                get_if_exists(&self.client, &candidate.url).await
             })
             .await?;
-        if exists && response.is_none() {
-            debug!(
-                "Package at '{}' was found for another crate already",
-                candidate.url
-            );
-        }
-        Ok(exists.then(|| self.resolved(candidate, None, response)))
+        Ok(response.map(|response| self.resolved(candidate, None, Some(response))))
     }
 
     /// * `response` - The response to the GET that found `candidate`, to
@@ -593,7 +585,7 @@ impl Shared {
         &self,
         candidate: Candidate,
         gh_release_artifact_url: Option<GhReleaseArtifactUrl>,
-        response: Option<GetResponse>,
+        response: Option<FoundResponse>,
     ) -> Resolved {
         Resolved {
             url: candidate.url,
@@ -1171,7 +1163,7 @@ mod test {
 
         let (found, context) = resolve(&[GNU]).await;
         let found = found.unwrap();
-        assert!(found.response.is_some());
+        assert!(found.response.as_ref().unwrap().lock().unwrap().is_some());
         assert_eq!(asset(Some(found)).as_deref(), Some(GNU));
         assert_eq!(context.release_assets_pages_len(), 0);
         let tags = context.repo_tags(&quickinstall);
