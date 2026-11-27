@@ -556,14 +556,10 @@ impl PackageInfo {
 
                 (
                     ret,
-                    CrateSource {
-                        source_type: SourceType::Git,
-                        url: MaybeOwned::Owned(git_source_url(
-                            git_url,
-                            reference.as_borrowed(),
-                            commit_hash,
-                        )?),
-                    },
+                    CrateSource::new(
+                        SourceType::Git,
+                        git_source_url(git_url, reference.as_borrowed(), commit_hash)?,
+                    ),
                     None,
                 )
             }

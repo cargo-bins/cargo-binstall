@@ -310,10 +310,7 @@ impl Registry {
             | ("https://github.com/rust-lang/crates.io-index", SourceType::Registry) => {
                 CrateSource::cratesio_registry()
             }
-            _ => CrateSource {
-                source_type,
-                url: MaybeOwned::Owned(registry.into_owned()),
-            },
+            _ => CrateSource::new(source_type, registry.into_owned()),
         })
     }
 
@@ -553,5 +550,24 @@ mod test {
             source.url.as_str(),
             CrateSource::cratesio_registry().url.as_str()
         );
+
+        let registry: Registry = "https://ghp_token:secret@example.com/index.git"
+            .parse()
+            .unwrap();
+        let source = registry.crate_source().unwrap();
+        assert_eq!(source.url.as_str(), "https://example.com/index.git");
+    }
+
+    #[test]
+    fn test_sparse_registry_crate_source_has_no_credentials() {
+        let registry: Registry = "sparse+https://user:secret@example.com/index/"
+            .parse()
+            .unwrap();
+        let source = registry.crate_source().unwrap();
+        assert!(
+            matches!(source.source_type, SourceType::Sparse),
+            "{source:?}"
+        );
+        assert_eq!(source.url.as_str(), "https://example.com/index");
     }
 }

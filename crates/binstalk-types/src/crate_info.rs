@@ -115,6 +115,19 @@ pub struct CrateSource {
 }
 
 impl CrateSource {
+    /// A source for the install records, without the user name and password
+    /// of `url`: cargo keeps them in `.crates.toml` and `.crates2.json`, but
+    /// they are often a token, which should not be stored in plain text.
+    pub fn new(source_type: SourceType, mut url: Url) -> Self {
+        // Fails only for URLs that cannot have credentials.
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+        Self {
+            source_type,
+            url: MaybeOwned::Owned(url),
+        }
+    }
+
     pub fn cratesio_registry() -> CrateSource {
         Self {
             source_type: SourceType::Registry,
@@ -126,6 +139,24 @@ impl CrateSource {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_crate_source_new_strips_credentials() {
+        for (url, expected) in [
+            (
+                "https://user:secret@example.com/index.git",
+                "https://example.com/index.git",
+            ),
+            (
+                "https://ghp_token@github.com/owner/repo?tag=v1#abc",
+                "https://github.com/owner/repo?tag=v1#abc",
+            ),
+            ("https://example.com/index/", "https://example.com/index/"),
+        ] {
+            let source = CrateSource::new(SourceType::Sparse, Url::parse(url).unwrap());
+            assert_eq!(source.url.as_str(), expected);
+        }
+    }
 
     #[test]
     fn test_pkg_url_hint_serde() {
