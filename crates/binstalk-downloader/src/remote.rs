@@ -421,20 +421,17 @@ impl Client {
 
     /// Attempt to get final redirected url using `Method::HEAD` or fallback
     /// to `Method::GET`.
-    pub async fn get_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        self.head_or_fallback_to_get(url, true, true)
-            .await
-            .map(|response| response.url().clone())
-    }
-
-    /// Like [`Client::get_redirected_final_url`], except that a 404 to the
-    /// `HEAD` is not asked again with `Method::GET`.
     ///
-    /// Use it for servers known to answer `HEAD` like `GET`, such as
-    /// github.com. Other failing statuses still fall back to `GET`, since a
-    /// proxy in between may be the one rejecting `HEAD`.
-    pub async fn head_redirected_final_url(&self, url: Url) -> Result<Url, Error> {
-        self.head_or_fallback_to_get(url, true, false)
+    /// * `get_after_404` - Whether a 404 to the `HEAD` is asked again with
+    ///   `GET`. Pass `false` for servers known to answer `HEAD` like `GET`,
+    ///   such as github.com. Other failing statuses always fall back to
+    ///   `GET`, since a proxy in between may be the one rejecting `HEAD`.
+    pub async fn get_redirected_final_url(
+        &self,
+        url: Url,
+        get_after_404: bool,
+    ) -> Result<Url, Error> {
+        self.head_or_fallback_to_get(url, true, get_after_404)
             .await
             .map(|response| response.url().clone())
     }
@@ -813,14 +810,14 @@ mod tests {
 
         let url = Url::parse(&format!("http://{addr}/")).unwrap();
         test_client(true)
-            .get_redirected_final_url(url)
+            .get_redirected_final_url(url, true)
             .await
             .unwrap();
         assert_eq!(server.join().unwrap(), 2);
     }
 
     #[tokio::test]
-    async fn head_redirected_final_url_does_not_ask_again_after_404() {
+    async fn get_redirected_final_url_without_get_after_404_does_not_ask_again() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         // Only the 404: a GET asking again finds nobody listening.
@@ -828,7 +825,7 @@ mod tests {
 
         let url = Url::parse(&format!("http://{addr}/")).unwrap();
         let err = test_client(true)
-            .head_redirected_final_url(url)
+            .get_redirected_final_url(url, false)
             .await
             .unwrap_err();
         let Error::Http(err) = err else {
@@ -840,7 +837,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn head_redirected_final_url_asks_again_with_get_after_405() {
+    async fn get_redirected_final_url_without_get_after_404_still_gets_after_405() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         // Like a proxy that rejects HEAD.
@@ -854,14 +851,14 @@ mod tests {
 
         let url = Url::parse(&format!("http://{addr}/")).unwrap();
         test_client(true)
-            .head_redirected_final_url(url)
+            .get_redirected_final_url(url, false)
             .await
             .unwrap();
         assert_eq!(server.join().unwrap(), 2);
     }
 
     #[tokio::test]
-    async fn head_redirected_final_url_follows_redirects() {
+    async fn get_redirected_final_url_without_get_after_404_follows_redirects() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let redirect: &'static [u8] = format!(
@@ -878,7 +875,7 @@ mod tests {
 
         let url = Url::parse(&format!("http://{addr}/old")).unwrap();
         let final_url = test_client(true)
-            .head_redirected_final_url(url)
+            .get_redirected_final_url(url, false)
             .await
             .unwrap();
         assert_eq!(final_url.path(), "/new");

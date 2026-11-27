@@ -360,13 +360,14 @@ fn trusts_head(url: &Url) -> bool {
 }
 
 /// Where `url` redirects to.
-async fn redirected_final_url(client: &GhApiClient, url: Url) -> Result<Url, RemoteError> {
-    let client = client.remote_client();
-    if trusts_head(&url) {
-        client.head_redirected_final_url(url).await
-    } else {
-        client.get_redirected_final_url(url).await
-    }
+fn redirected_final_url(
+    client: &GhApiClient,
+    url: Url,
+) -> impl Future<Output = Result<Url, RemoteError>> + '_ {
+    let get_after_404 = !trusts_head(&url);
+    client
+        .remote_client()
+        .get_redirected_final_url(url, get_after_404)
 }
 
 impl RepoInfo {
