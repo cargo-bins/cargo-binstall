@@ -227,9 +227,12 @@ impl Client {
     /// to retry.
     ///
     /// * `request` - `Request::try_clone` must always return `Some`.
+    // `request` is not recorded: its `Debug` output holds every header that
+    // is not marked as sensitive.
     #[instrument(
-        skip(self),
+        skip_all,
         fields(
+            method = format_args!("{}", request.method()),
             url = format_args!("{}", request.url()),
         ),
     )]
