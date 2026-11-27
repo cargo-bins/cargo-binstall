@@ -3,7 +3,7 @@ description: 'Install cargo-binstall tool'
 
 inputs:
   version:
-    description: 'Version of cargo-binstall to install (e.g. 1.2.3 or v1.2.3). Defaults to the version of the checked-out action, else the latest release.'
+    description: 'Version of cargo-binstall to install (e.g. 1.2.3 or v1.2.3). Defaults to the version of the action itself, falling back to the latest release.'
     required: false
     default: ''
 
@@ -15,6 +15,7 @@ runs:
       shell: sh
       env:
         BINSTALL_VERSION: ${{ inputs.version }}
+        BINSTALL_ACTION_PATH: ${{ github.action_path }}
       run: |
         set -eu
         bash "$GITHUB_ACTION_PATH/install-from-binstall-release.sh"
@@ -23,4 +24,5 @@ runs:
       shell: powershell
       env:
         BINSTALL_VERSION: ${{ inputs.version }}
+        BINSTALL_ACTION_PATH: ${{ github.action_path }}
       run: Set-ExecutionPolicy Unrestricted -Scope Process; iex "$Env:GITHUB_ACTION_PATH/install-from-binstall-release.ps1"

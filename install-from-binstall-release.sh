@@ -66,13 +66,19 @@ fi
 # shellcheck disable=SC3040
 (set -o pipefail 2> /dev/null) && set -o pipefail
 
-# Run as the action without a `version`, try the version of the action's own
-# checkout first, so a pinned action installs what it is pinned to. Only the
-# action sets `GITHUB_ACTION_PATH`: piped from curl, `$0` is the shell, and a
-# `crates/bin/Cargo.toml` in the working directory belongs to someone else.
+# Without a `version`, the action installs the version of its own checkout, so
+# that a pinned action installs what it is pinned to. The action passes its path
+# in `BINSTALL_ACTION_PATH`, because `GITHUB_ACTION_PATH` belongs to whichever
+# action runs this script.
 checkout_version=
-if [ -z "${BINSTALL_VERSION:-}" ] && [ -f "${GITHUB_ACTION_PATH:-}/crates/bin/Cargo.toml" ]; then
-    checkout_version="$(sed -n '/^version = "\(.*\)"$/{s//\1/p;q;}' "$GITHUB_ACTION_PATH/crates/bin/Cargo.toml")"
+if [ -z "${BINSTALL_VERSION:-}" ] && [ -n "${BINSTALL_ACTION_PATH:-}" ]; then
+    cargo_toml="$BINSTALL_ACTION_PATH/crates/bin/Cargo.toml"
+    if [ -f "$cargo_toml" ]; then
+        checkout_version="$(sed -n '/^version = "\(.*\)"$/{s//\1/p;q;}' "$cargo_toml")"
+    fi
+    if [ -z "$checkout_version" ]; then
+        echo "::warning::Could not read the version from $cargo_toml, installing the latest release"
+    fi
 fi
 
 case "${BINSTALL_VERSION:-}" in
@@ -92,18 +98,16 @@ else
     base_url="https://github.com/cargo-bins/cargo-binstall/releases/download/${BINSTALL_VERSION}/"
 fi
 
-# `fetch ASSET` downloads ASSET into the current directory. The checkout's
-# version has no release between its release commit and the release being
-# published, or under `uses: ./` in this repository, so fall back to latest.
-# Downloading the asset is the check: a release is a draft, invisible, until
-# its assets are uploaded.
+# `fetch ASSET` downloads ASSET into the current directory, from the release of
+# the checkout's version if there is one yet and from the latest otherwise. A
+# release stays a draft until its assets are uploaded, so the download is the
+# check.
 fetch() {
-    if [ -n "$checkout_version" ] &&
-        download "https://github.com/cargo-bins/cargo-binstall/releases/download/v${checkout_version}/$1" > "$1"; then
-        return
-    fi
     if [ -n "$checkout_version" ]; then
-        echo "No release of v${checkout_version} to download, installing the latest release" >&2
+        if download "https://github.com/cargo-bins/cargo-binstall/releases/download/v${checkout_version}/$1" > "$1"; then
+            return
+        fi
+        echo "Could not download v${checkout_version}, installing the latest release" >&2
     fi
     download "${base_url}$1" > "$1"
 }
