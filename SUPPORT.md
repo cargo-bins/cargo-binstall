@@ -274,6 +274,19 @@ Binary must be uploaded to the "File" page of your project, under the directory
 For all other situations, `binstall` does not provide a default `pkg-url` and
 you need to manually specify it.
 
+### Packages named after a binary
+
+If the crate's repository is on github.com, it has one binary to install (or
+one is chosen with `--bin`), named otherwise than the crate, and no package
+named after the crate is found, `binstall` looks for a package named after the
+binary: the same URLs, tags included, with the binary's name as `{ name }`, e.g.
+`fd-v{ version }-{ target }.tar.gz` for the binary `fd` of the crate
+`fd-find`.
+
+It is looked for by the same strategy as the packages named after the crate
+(`crate-meta-data`), before QuickInstall is tried, so it is preferred over
+QuickInstall's.
+
 ### QuickInstall
 
 [QuickInstall](https://github.com/alsuren/cargo-quickinstall) is an unofficial repository of prebuilt binaries for Crates, and `binstall` has built-in support for it! If your crate is built by QuickInstall, it will already work with `binstall`. However, binaries as configured above take precedence when they exist.
@@ -289,7 +302,7 @@ For example, the default configuration (as shown above) for a crate called `radi
 
 ####  If the package name does not match the crate name
 
-As is common with libraries/utilities (and the `radio-sx128x` example), this can be overridden by specifying the `pkg-url`:
+As is common with libraries/utilities (and the `radio-sx128x` example), this can be overridden by specifying the `pkg-url`, unless the package is [named after a binary](#packages-named-after-a-binary):
 
 ```toml
 [package.metadata.binstall]
