@@ -267,6 +267,7 @@ mod tests {
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             }],
         )
         .unwrap();
@@ -294,6 +295,7 @@ mod tests {
                 target: TARGET.into(),
                 bins: vec!["cargo-binstall".into()],
                 pkg_url_hint: None,
+                share_files: Vec::new(),
             }],
         )
         .unwrap();

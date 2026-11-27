@@ -1,6 +1,6 @@
 //! Concrete Binstall operations.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 
 use compact_str::CompactString;
 
@@ -99,6 +99,14 @@ pub struct Options {
     pub install_path: PathBuf,
     pub has_overriden_install_path: bool,
     pub cargo_root: Option<PathBuf>,
+    /// Where to install the man pages and shell completions of packages,
+    /// `{ root }/share`, see [`crate::bins::share`]. `None` to not install
+    /// them.
+    pub share_dir: Option<PathBuf>,
+    /// [`CrateInfo::share_files`](crate::manifests::crate_info::CrateInfo::share_files)
+    /// of the installed crates, by crate name. Only these files are replaced
+    /// without `force`.
+    pub installed_share_files: BTreeMap<CompactString, Vec<CompactString>>,
     pub cargo_install_registry: Option<CompactString>,
     pub cargo_install_index: Option<CompactString>,
 

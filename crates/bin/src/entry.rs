@@ -57,9 +57,29 @@ pub fn install_crates(
         settings,
         cargo_root,
         install_path,
+        custom_install_path,
         manifests,
         temp_dir,
     } = crate::initialise::initialise(&args, &time_in_prompts)?;
+
+    // Man pages and completions go next to `{ cargo_root }/bin`, where
+    // `man` and `bash-completion` find them from `PATH`.
+    let share_dir = (!cfg!(windows) && !custom_install_path && !args.no_share_files)
+        .then(|| cargo_root.join("share"));
+    let installed_share_files = manifests
+        .as_ref()
+        .filter(|_| share_dir.is_some())
+        .map(|manifests| {
+            args.crate_names
+                .iter()
+                .filter_map(|crate_name| {
+                    let record = manifests.binstall_record(&crate_name.name)?;
+                    Some((record.name.clone(), record.share_files.clone()))
+                })
+                .filter(|(_, share_files)| !share_files.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
 
     let mut cargo_install_fallback = false;
     let resolvers: Vec<_> = settings
@@ -268,6 +288,8 @@ pub fn install_crates(
         install_path,
         has_overriden_install_path: args.install_path.is_some(),
         cargo_root: Some(cargo_root),
+        share_dir,
+        installed_share_files,
         cargo_install_registry,
         cargo_install_index,
 
@@ -683,6 +705,7 @@ pub fn self_install(args: Args) -> Result<()> {
             target: CompactString::const_new(TARGET),
             bins: vec![CompactString::const_new("cargo-binstall")],
             pkg_url_hint: None,
+            share_files: Vec::new(),
         }])?;
     }
 

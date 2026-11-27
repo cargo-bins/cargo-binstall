@@ -1,4 +1,11 @@
-use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromStr, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::BTreeSet,
+    iter, mem,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 use binstalk_fetchers::FETCHER_GH_CRATE_META;
 use binstalk_types::{
@@ -225,11 +232,12 @@ async fn resolve_inner(
             &opts.install_path,
             opts.no_symlinks,
             &opts.bins,
+            opts.share_dir.is_some(),
         )
         .await;
 
         match ret {
-            Ok(bin_files) if !bin_files.is_empty() => {
+            Ok((bin_files, share_files)) if !bin_files.is_empty() => {
                 return Ok(Resolution::Fetch(Box::new(ResolutionFetch {
                     found,
                     new_version: package_info.version,
@@ -238,6 +246,7 @@ async fn resolve_inner(
                     version_req: version_req_str,
                     source: package_info.source,
                     bin_files,
+                    share_files,
                 })));
             }
             Ok(_) => warn!(
@@ -309,7 +318,8 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
-) -> Result<Vec<bins::BinFile>, BinstallError> {
+    install_share_files: bool,
+) -> Result<(Vec<bins::BinFile>, Vec<bins::share::ShareFile>), BinstallError> {
     // Download and extract it, unless another crate did already: then it is
     // somewhere else than `bin_path`.
     // If that fails, then ignore this fetcher.
@@ -317,6 +327,17 @@ async fn download_extract_and_verify(
     debug!("packages = {packages:#?}");
 
     let mut bin_files = Vec::with_capacity(package_info.binaries.len());
+
+    // Where the packages were extracted to, to look for man pages and
+    // shell completions in.
+    let extracted_dirs: Vec<_> = if install_share_files {
+        packages
+            .iter()
+            .map(|package| package.extracted.dir().to_owned())
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     for package in packages {
         // The binaries in this package: all of them, or its own one.
@@ -349,7 +370,37 @@ async fn download_extract_and_verify(
 
     bins::check_aliases_unique(&bin_files)?;
 
-    Ok(bin_files)
+    let share_files = if extracted_dirs.is_empty() {
+        Vec::new()
+    } else {
+        collect_share_files(extracted_dirs, &bin_files).await
+    };
+
+    Ok((bin_files, share_files))
+}
+
+/// The man pages and shell completions of `bin_files` in the packages
+/// extracted to `extracted_dirs`, see [`bins::share`].
+async fn collect_share_files(
+    extracted_dirs: Vec<PathBuf>,
+    bin_files: &[bins::BinFile],
+) -> Vec<bins::share::ShareFile> {
+    let bins: Vec<CompactString> = bin_files.iter().map(|bin| bin.base_name.clone()).collect();
+    spawn_blocking(move || {
+        let bins: Vec<&str> = bins.iter().map(|bin| bin.as_str()).collect();
+        let mut files: Vec<bins::share::ShareFile> = Vec::new();
+        for dir in extracted_dirs {
+            for file in bins::share::find_share_files(&dir, &bins) {
+                // With one package per binary, the first one wins.
+                if !files.iter().any(|f| f.dest == file.dest) {
+                    files.push(file);
+                }
+            }
+        }
+        files
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Whether the user asked for `bin`, with `--bin`.

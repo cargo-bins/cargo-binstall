@@ -19,6 +19,8 @@ use normalize_path::NormalizePath;
 use thiserror::Error as ThisError;
 use tracing::debug;
 
+pub mod share;
+
 type SymlinkFp = fn(&Path, &Path) -> io::Result<()>;
 
 #[derive(Debug, ThisError, Diagnostic)]

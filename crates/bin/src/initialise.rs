@@ -23,6 +23,8 @@ pub(crate) struct Init {
     pub(crate) settings: crate::settings::Settings,
     pub(crate) cargo_root: PathBuf,
     pub(crate) install_path: PathBuf,
+    /// Whether `install_path` is not `{ cargo_root }/bin`.
+    pub(crate) custom_install_path: bool,
     pub(crate) manifests: Option<Manifests>,
     pub(crate) temp_dir: TempDir,
 }
@@ -161,6 +163,7 @@ pub(crate) fn initialise(args: &Args, time_in_prompts: &TimeInPrompts) -> Result
         settings,
         cargo_root,
         install_path,
+        custom_install_path,
         manifests,
         temp_dir,
     })
