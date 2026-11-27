@@ -85,3 +85,26 @@ for bin in b3sum cargo-watch; do
 done
 
 check_one_download
+
+# With `{ archive-suffix }` and no `--pkg-fmt`, each crate tries every
+# format: the probes of the crates run concurrently, so the crate that
+# downloads it may not be the one whose GET checked it.
+: >"$HTTPS_SERVER_LOG"
+: >"$HTTPS_SERVER_SENT_LOG"
+rm -f "$CARGO_HOME"/bin/b3sum* "$CARGO_HOME"/bin/cargo-watch*
+
+"$1" binstall --no-confirm --force --strategies crate-meta-data --targets "$target" \
+    --pkg-url "$HTTPS_SERVER_URL/shared{ archive-suffix }" \
+    --bin-dir "{ bin }{ binary-ext }" \
+    b3sum@1.5.0 cargo-watch@8.4.0
+
+cat "$HTTPS_SERVER_LOG" "$HTTPS_SERVER_SENT_LOG"
+
+for bin in b3sum cargo-watch; do
+    if [ ! -e "$CARGO_HOME/bin/$bin" ] && [ ! -e "$CARGO_HOME/bin/$bin.exe" ]; then
+        echo "$bin was not installed"
+        exit 1
+    fi
+done
+
+check_one_download

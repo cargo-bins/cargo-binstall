@@ -44,9 +44,9 @@ pub struct FetchContext {
     repo_tags: Cells<Url, Mutex<Tags>>,
     release_assets_pages: Cells<GhRelease, OnceCell<ReleaseAssetsPage>>,
     release_artifacts: Cells<GhRelease, OnceCell<Option<ReleaseArtifacts>>>,
-    /// Whether a package exists, by its URL, from the GET that checked it,
-    /// so that crates in the same package send one GET for it, see
-    /// [`FetchContext::check_once`].
+    /// The response of the GET that found a package, by its URL, or `None`
+    /// if it is missing, so that crates in the same package send one GET
+    /// for it, see [`FetchContext::check_once`].
     package_urls: Cells<Url, OnceCell<Option<Weak<UnreadResponse>>>>,
     /// Packages extracted so far, so that crates in the same package
     /// download and extract it once.
@@ -108,11 +108,19 @@ impl FetchContext {
         let mut found = None;
         let checked = cell
             .get_or_try_init(async || {
-                found = get().await?.map(|response| Arc::new(Some(response).into()));
+                found = get()
+                    .await?
+                    .map(|response| Arc::new(UnreadResponse(Some(response).into())));
                 Ok::<_, FetchError>(found.as_ref().map(Arc::downgrade))
             })
             .await?;
-        Ok(found.or_else(|| Some(checked.as_ref()?.upgrade().unwrap_or_default())))
+        // `None` means missing; a dead `Weak` means every crate that found it
+        // is done with the response.
+        Ok(found.or_else(|| {
+            checked
+                .as_ref()
+                .map(|weak| weak.upgrade().unwrap_or_default())
+        }))
     }
 
     /// Extract the package `id` to `dst` with `extract`, unless it was
@@ -161,7 +169,15 @@ impl FetchContext {
 /// whichever crate in it downloads it first, see [`FetchContext::check_once`].
 pub(crate) type FoundResponse = Arc<UnreadResponse>;
 
-type UnreadResponse = std::sync::Mutex<Option<GetResponse>>;
+#[derive(Debug, Default)]
+pub(crate) struct UnreadResponse(std::sync::Mutex<Option<GetResponse>>);
+
+impl UnreadResponse {
+    /// The response, unless another crate took it already.
+    pub(crate) fn take(&self) -> Option<GetResponse> {
+        self.0.lock().unwrap().take()
+    }
+}
 
 /// What [`FetchContext::extract_once`] extracts: two packages with the same id
 /// extract to the same files, and only after the same verification, so a

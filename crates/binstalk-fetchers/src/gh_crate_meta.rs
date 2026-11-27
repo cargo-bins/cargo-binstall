@@ -566,7 +566,7 @@ impl GhCrateMetaFound {
             _ => resolved
                 .response
                 .as_ref()
-                .and_then(|response| response.lock().unwrap().take())
+                .and_then(|response| response.take())
                 .map(Download::from)
                 .unwrap_or_else(|| Download::new(fetcher.client.clone(), resolved.url.clone()))
                 .with_data_verifier(data_verifier.as_mut()),

@@ -1163,7 +1163,7 @@ mod test {
 
         let (found, context) = resolve(&[GNU]).await;
         let found = found.unwrap();
-        assert!(found.response.as_ref().unwrap().lock().unwrap().is_some());
+        assert!(found.response.as_ref().unwrap().take().is_some());
         assert_eq!(asset(Some(found)).as_deref(), Some(GNU));
         assert_eq!(context.release_assets_pages_len(), 0);
         let tags = context.repo_tags(&quickinstall);
