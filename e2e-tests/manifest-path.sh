@@ -27,8 +27,12 @@ echo "$release_plz_version"
 [ "$release_plz_version" = "release-plz 0.4.3" ]
 
 # Test default github template with packages named after the binary rather
-# than the crate.
-"$1" binstall --force --manifest-path "manifests/bin-named-package-test-Cargo.toml" --no-confirm --strategies crate-meta-data bin-named-package-test
+# than the crate, which are looked for before QuickInstall.
+output="$("$1" binstall --force --manifest-path "manifests/bin-named-package-test-Cargo.toml" --no-confirm --log-level debug bin-named-package-test 2>&1)"
+if grep -F cargo-quickinstall <<<"$output"; then
+    echo "QuickInstall was tried before the package named after the binary"
+    exit 1
+fi
 
 cargo_binstall_version="$(cargo binstall -V)"
 echo "$cargo_binstall_version"

@@ -276,18 +276,15 @@ you need to manually specify it.
 
 ### Packages named after a binary
 
-If the crate's repository is on GitHub and no package named after the crate
-is found, `binstall` looks for packages named after its binaries: the same
-filenames with `{ bin }` in place of `{ name }`, e.g.
+If the crate's repository is on github.com, it has one binary to install (or
+one is chosen with `--bin`), named otherwise than the crate, and no package
+named after the crate is found, `binstall` looks for a package named after the
+binary: the same filenames with `{ bin }` in place of `{ name }`, e.g.
 `fd-v{ version }-{ target }.tar.gz` for the binary `fd` of the crate
 `fd-find`, in the same paths.
 
-As with [`{ bin }` in `pkg-url`](#one-package-per-binary), each binary is
-installed from its own package. The packages of all binaries must be found for
-the same target, except those of binaries with `required-features`.
-
-They are looked for by the same strategy as the packages named after the crate
-(`crate-meta-data`), before QuickInstall is tried, so they are preferred over
+It is looked for by the same strategy as the packages named after the crate
+(`crate-meta-data`), before QuickInstall is tried, so it is preferred over
 QuickInstall's.
 
 ### QuickInstall

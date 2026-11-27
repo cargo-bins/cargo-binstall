@@ -1,7 +1,7 @@
 //! What the fetchers learn about repositories, shared by all crates
 //! resolved in one run (see [`FetchContext`]): by all targets of a crate,
-//! which are tried one after another, by their overrides, by the packages
-//! named after the crate's binaries rather than the crate, and by other
+//! which are tried one after another, by their overrides, by the package
+//! named after the crate's binary rather than the crate, and by other
 //! crates in the same repository, such as a workspace's crates released
 //! together.
 //!

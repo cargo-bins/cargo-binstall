@@ -284,8 +284,9 @@ impl Data {
     ///
     /// Fetchers that find one package per binary, like [`GhCrateMeta`] with
     /// `{ bin }` in `pkg-url`, need them to know which packages to look for,
-    /// and find nothing without them. [`GhCrateMeta`] also looks for
-    /// packages named after them, if none named after the crate is found.
+    /// and find nothing without them. [`GhCrateMeta`] also looks for a
+    /// package named after the only one, if none named after the crate is
+    /// found.
     pub fn with_bins(mut self, bins: Vec<BinInfo>) -> Self {
         self.bins = bins;
         self
