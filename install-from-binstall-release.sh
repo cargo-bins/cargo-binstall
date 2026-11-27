@@ -109,7 +109,8 @@ fetch() {
         echo "Could not download v${checkout_version}, installing the latest release" >&2
     fi
     download "${base_url}$1" > "$1"
-    downloaded_version="${BINSTALL_VERSION#v}"
+    downloaded_version="${BINSTALL_VERSION:-}"
+    downloaded_version="${downloaded_version#v}"
 }
 
 os="$(uname -s)"
