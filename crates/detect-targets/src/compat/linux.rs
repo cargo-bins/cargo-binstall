@@ -1,5 +1,6 @@
 use std::{fs::File, path::Path};
 
+use compact_str::{CompactString, ToCompactString};
 use goblin::elf::Elf;
 use memmap2::Mmap;
 use tokio::task::spawn_blocking;
@@ -73,8 +74,8 @@ fn parse<T>(path: &Path, f: impl FnOnce(&Elf<'_>) -> T) -> Option<T> {
     Some(f(&Elf::parse(&bytes).ok()?))
 }
 
-fn interp(elf: &Elf<'_>) -> Option<String> {
-    Some(elf.interpreter?.split('\0').next()?.to_owned())
+fn interp(elf: &Elf<'_>) -> Option<CompactString> {
+    Some(elf.interpreter?.split('\0').next()?.into())
 }
 
 /// The version of `GLIBC_2.39`: `[2, 39]`.
@@ -106,9 +107,15 @@ fn available_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
         .max()
 }
 
-fn display(version: &[u32]) -> String {
-    let parts: Vec<_> = version.iter().map(u32::to_string).collect();
-    parts.join(".")
+fn display(version: &[u32]) -> CompactString {
+    let mut s = CompactString::default();
+    for n in version {
+        if !s.is_empty() {
+            s.push('.');
+        }
+        s.push_str(&n.to_compact_string());
+    }
+    s
 }
 
 #[cfg(test)]

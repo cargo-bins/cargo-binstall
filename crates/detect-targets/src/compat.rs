@@ -13,6 +13,8 @@
 
 use std::{error::Error, fmt};
 
+use compact_str::CompactString;
+
 cfg_select! {
     any(target_os = "linux", target_os = "android") => {
         mod linux;
@@ -32,11 +34,14 @@ cfg_select! {
 #[non_exhaustive]
 pub enum Incompatible {
     /// The binary's dynamic loader (its `PT_INTERP`) isn't installed.
-    Loader { interp: String },
+    Loader { interp: CompactString },
     /// The binary needs a newer `GLIBC_*` version than the host's
     /// `libc.so.6` defines, e.g. `needed` is `2.39` and `available` is
     /// `2.35`.
-    Glibc { needed: String, available: String },
+    Glibc {
+        needed: CompactString,
+        available: CompactString,
+    },
 }
 
 impl fmt::Display for Incompatible {

@@ -1164,6 +1164,7 @@ dependencies = [
 name = "detect-targets"
 version = "0.1.98"
 dependencies = [
+ "compact_str",
  "goblin",
  "guess_host_triple",
  "memmap2",
