@@ -81,8 +81,7 @@ impl GitIndex {
                 }),
                 Err(err) => {
                     warn!(
-                        "Failed to use cargo's clone of git index {} in {}: {err}, cloning to a temporary directory instead",
-                        url,
+                        "Failed to use cargo's clone of git index {url} in {}: {err}, cloning to a temporary directory instead",
                         cargo_home.display()
                     );
                     None
@@ -106,7 +105,7 @@ impl GitIndex {
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!("config.json not found in repository `{}`", url),
+                        format!("config.json not found in repository `{url}`"),
                     )
                 })?;
 
@@ -188,10 +187,7 @@ fn open_cargo_clone(
     cancellation_token: GitCancellationToken,
 ) -> Result<Option<Repository>, RegistryError> {
     let Some(name) = cargo_url.and_then(|cargo_url| cargo_index_dir_name(cargo_url.clone())) else {
-        debug!(
-            "Cannot share cargo's clone of git index {}: not a URL cargo accepts",
-            url
-        );
+        debug!("Cannot share cargo's clone of git index {url}: not a URL cargo accepts");
         return Ok(None);
     };
     let index_root = cargo_home.join("registry").join("index");
@@ -204,8 +200,7 @@ fn open_cargo_clone(
             Ok(repo) => return Ok(Some(repo)),
             // It is cargo's to repair, a full clone is too expensive for us.
             Err(err) => warn!(
-                "Failed to update cargo's clone of git index {} in {}: {err}",
-                url,
+                "Failed to update cargo's clone of git index {url} in {}: {err}",
                 full.display()
             ),
         }
@@ -222,8 +217,7 @@ fn open_cargo_clone(
             match fetch_existing(url, &shallow, cancellation_token.clone()) {
                 Ok(repo) => return Ok(Some(repo)),
                 Err(err) => warn!(
-                    "Failed to update shallow clone of git index {} in {}: {err}, cloning it again",
-                    url,
+                    "Failed to update shallow clone of git index {url} in {}: {err}, cloning it again",
                     shallow.display()
                 ),
             }
