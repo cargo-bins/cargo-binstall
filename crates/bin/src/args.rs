@@ -984,6 +984,13 @@ You cannot use --{feature_option} and specify multiple packages at the same time
         _ => (),
     }
 
+    // Not clap's `env`: like Cargo, ignore an empty or invalid value.
+    if opts.http_timeout.is_none() {
+        opts.http_timeout = env::var("CARGO_HTTP_TIMEOUT")
+            .ok()
+            .and_then(|secs| secs.parse().ok());
+    }
+
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
         pkg_fmt: opts.pkg_fmt.take(),

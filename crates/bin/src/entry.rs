@@ -130,14 +130,11 @@ pub fn install_crates(
     }
 
     // As in Cargo: `--http-timeout`/`CARGO_HTTP_TIMEOUT`, then `http.timeout`,
-    // then `HTTP_TIMEOUT`, 30s by default. 0 turns it off. An empty or invalid
-    // environment variable is ignored, as with `CARGO_HTTP_PROXY`.
-    let env_timeout = |name| env::var(name).ok()?.parse().ok();
+    // then `HTTP_TIMEOUT`, 30s by default. 0 turns it off.
     let timeout = args
         .http_timeout
-        .or_else(|| env_timeout("CARGO_HTTP_TIMEOUT"))
         .or(http.as_ref().and_then(|http| http.timeout))
-        .or_else(|| env_timeout("HTTP_TIMEOUT"))
+        .or_else(|| env::var("HTTP_TIMEOUT").ok()?.parse().ok())
         .unwrap_or(30);
     if timeout != 0 {
         let timeout = Duration::from_secs(timeout);
