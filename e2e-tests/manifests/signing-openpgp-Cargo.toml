@@ -1,0 +1,29 @@
+[package]
+name = "signing-test"
+description = "Rust binary package installer for CI integration"
+version = "0.1.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2021"
+license = "GPL-3.0"
+
+[[bin]]
+name = "signing-test"
+path = "src/main.rs"
+
+[package.metadata.binstall]
+# pkg-url is passed by signing.sh, since the local server picks its port.
+pkg-fmt = "tar"
+
+[package.metadata.binstall.signing]
+algorithm = "openpgp"
+pubkey = """
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+mDMEawVX9BYJKwYBBAHaRw8BAQdAo4HHYQ+r05RrwyrN2QQzmt5FF/SqRIHAf3Q7
+9wpD1FO0HmJpbnN0YWxsLWUyZSA8ZTJlQGV4YW1wbGUuY29tPoiTBBMWCgA7FiEE
+YOtsf+COMyrRGBite4Zu09RY2CQFAmsFV/QCGwMFCwkIBwICIgIGFQoJCAsCBBYC
+AwECHgcCF4AACgkQe4Zu09RY2CQpGgEAo/kZ1oWkZ73ZSUuEgni1USJ6U1fG+s3M
+yT7pX1+jAOEBAPcVWlhCJOpo9tEkP1CDywnCNW0e7+313CZQlwKjMQYA
+=+JIF
+-----END PGP PUBLIC KEY BLOCK-----
+"""

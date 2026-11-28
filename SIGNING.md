@@ -1,7 +1,6 @@
 # Signature support
 
-Binstall supports verifying signatures of downloaded files.
-At the moment, only one algorithm is supported, but this is expected to improve as time goes.
+Binstall supports verifying signatures of downloaded files, made with [minisign](#minisign) or [OpenPGP (GnuPG)](#openpgp-gnupg).
 
 This feature requires adding to the Cargo.toml metadata: no autodiscovery here!
 
@@ -74,6 +73,41 @@ The legacy signature format is not supported.
 The `pubkey` must be in the same format as minisign generates.
 It may or may not include the untrusted comment; it's ignored by Binstall so we recommend not.
 
+### OpenPGP (GnuPG)
+
+`algorithm` must be `"openpgp"` (or `"gpg"`).
+
+The `pubkey` is the ASCII-armored public key, as `gpg --armor --export` prints it:
+
+```toml
+[package.metadata.binstall.signing]
+algorithm = "openpgp"
+pubkey = """
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+mDMEawVXwhYJKwYBBAHaRw8BAQdAS8/geE9fslMGYfmX3EqOgx7zQeDVhuk59GWW
+...
+-----END PGP PUBLIC KEY BLOCK-----
+"""
+```
+
+Sign each package with a detached signature:
+
+```console
+gpg --detach-sign package-name.tar.zst
+```
+
+This writes the binary `package-name.tar.zst.sig`, the default signature file name; armored signatures (`--armor`, usually named `.asc`, see `file` above) work too.
+A signature from any key or subkey in `pubkey` is accepted, and when the signature file holds several signatures, one valid signature is enough.
+
+Supported are v4 and v6 (RFC 9580) keys using RSA (2048 bits or more), ECDSA over NIST P-256/384/521, or Ed25519, and signatures over SHA-256/384/512.
+Text-mode (`--textmode`), cleartext and inline signatures are not supported.
+The key is trusted as written in the Cargo.toml: Binstall doesn't check its self-signatures, expiry or revocation, so publish a new release with a new key rather than revoking the old one.
+An expired signature is rejected.
+
+OpenPGP verification is part of the `openpgp-signing` cargo feature of cargo-binstall, which is on by default.
+A build without it treats `algorithm = "openpgp"` as an unsupported algorithm.
+
 ## Just-in-time signing
 
 To reduce the risk of a key being stolen, this scheme supports just-in-time or "keyless" signing.
@@ -93,7 +127,7 @@ The solution here is either:
 - Omit the `[...signing]` section in the source, and write the entire section on publish instead of just filling in the `pubkey`; signatures won't be checked for `--git` installs. Binstall uses this approach.
 - Instruct your users to use `--skip-signatures` if they want to install with `--git`.
 
-## Why not X? (Sigstore, GPG, signify, with SSH keys, ...)
+## Why not X? (Sigstore, signify, with SSH keys, ...)
 
 We're open to pull requests adding algorithms!
 We're especially interested in Sigstore for a better implementation of "just-in-time" signing (which it calls "keyless").

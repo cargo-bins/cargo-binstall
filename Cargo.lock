@@ -330,6 +330,8 @@ name = "binstalk-fetchers"
 version = "0.10.54"
 dependencies = [
  "async-trait",
+ "aws-lc-rs",
+ "base64 0.23.1",
  "binstalk-bins",
  "binstalk-downloader",
  "binstalk-git-repo-api",

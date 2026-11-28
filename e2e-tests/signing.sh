@@ -14,11 +14,20 @@ cp signing/signing-test.tar "$serve_dir/tampered.tar"
 printf 'tampered' >>"$serve_dir/tampered.tar"
 cp signing/signing-test.tar.sig "$serve_dir/tampered.tar.sig"
 cp signing/signing-test.tar "$serve_dir/unsigned.tar"
+# The same package signed with `gpg --detach-sign` by the key in
+# signing/openpgp.asc.
+cp signing/signing-test.tar "$serve_dir/openpgp.tar"
+cp signing/signing-test.tar.gpgsig "$serve_dir/openpgp.tar.sig"
+cp signing/signing-test.tar "$serve_dir/openpgp-tampered.tar"
+printf 'tampered' >>"$serve_dir/openpgp-tampered.tar"
+cp signing/signing-test.tar.gpgsig "$serve_dir/openpgp-tampered.tar.sig"
 
 start_https_server "$serve_dir"
 
+manifest=manifests/signing-Cargo.toml
+
 install() {
-    "$1" binstall --force --manifest-path manifests/signing-Cargo.toml --no-confirm \
+    "$1" binstall --force --manifest-path "$manifest" --no-confirm \
         --strategies crate-meta-data \
         --pkg-url "$HTTPS_SERVER_URL/$2" "${@:3}" signing-test
 }
@@ -53,6 +62,16 @@ install "$1" tampered.tar --skip-signatures
 expect_failure "$1" "unsigned.tar.sig: HTTP status client error (404" unsigned.tar
 expect_failure "$1" "unsigned.tar.sig: HTTP status client error (404" unsigned.tar --only-signed
 install "$1" unsigned.tar --skip-signatures
+
+manifest=manifests/signing-openpgp-Cargo.toml
+
+install "$1" openpgp.tar 2>&1 | tee "$log"
+grep -F "Verified signature for package 'signing-test': OpenPGP key" "$log"
+install "$1" openpgp.tar --only-signed
+
+expect_failure "$1" "OpenPGP signature does not match the package" openpgp-tampered.tar
+# A minisign signature is not an OpenPGP signature.
+expect_failure "$1" "Signature file is invalid" signing-test.tar
 
 # from quick-install
 #"$1" binstall --force --strategies quick-install --no-confirm --only-signed --target x86_64-unknown-linux-musl zellij@0.38.2

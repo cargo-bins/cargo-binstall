@@ -72,10 +72,21 @@ vergen-gitcl = { version = "10.0.0", features = ["build", "cargo", "rustc"] }
 serde_json = "1.0.149"
 
 [features]
-default = ["static", "rustls", "trust-dns", "fancy-no-backtrace", "zstd-thin", "git"]
+default = [
+    "static",
+    "rustls",
+    "trust-dns",
+    "fancy-no-backtrace",
+    "zstd-thin",
+    "git",
+    "openpgp-signing",
+]
 
 git = ["binstalk/git"]
 git-max-perf = ["binstalk/git-max-perf"]
+
+# Verify OpenPGP (GnuPG) signatures of packages (`algorithm = "openpgp"`).
+openpgp-signing = ["binstalk/openpgp-signing"]
 
 mimalloc = ["dep:mimalloc"]
 
