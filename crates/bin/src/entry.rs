@@ -552,8 +552,11 @@ fn filter_out_installed_crates<'a>(
                 None
             }
 
-            // The version req is "*" thus a remote upgraded version could exist
-            (false, Some(curr_version), None) => {
+            // The installed version satisfies the version req, but a newer
+            // one might too.
+            (false, Some(curr_version), req)
+                if req.as_ref().is_none_or(|r| r.matches(curr_version)) =>
+            {
                 let pkg_url_hint = pkg_url_hint(manifests, name);
                 Some(Ok((crate_name, Some(curr_version.clone()), pkg_url_hint)))
             }
@@ -841,4 +844,44 @@ pub fn prune_crates(args: Args) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn installed_version_is_kept_if_it_satisfies_the_version_req() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join(".crates.toml"),
+            r#"[v1]
+"foo 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = ["foo"]
+"#,
+        )
+        .unwrap();
+        let manifests = Manifests::open_exclusive(root.path()).unwrap();
+
+        let curr_version = |name: &str, force| {
+            filter_out_installed_crates(vec![name.parse().unwrap()], force, Some(&manifests), None)
+                .next()
+                .map(|res| res.unwrap().1)
+        };
+        let installed = Some(semver::Version::new(1, 1, 0));
+
+        // The newest version these accept is not known yet: resolving it
+        // decides whether there is anything to install.
+        assert_eq!(curr_version("foo", false), Some(installed.clone()));
+        assert_eq!(curr_version("foo@^1", false), Some(installed.clone()));
+        assert_eq!(curr_version("foo@>=1.0.0", false), Some(installed));
+
+        // Nothing newer than the installed version can match.
+        assert_eq!(curr_version("foo@1.1.0", false), None);
+        assert_eq!(curr_version("foo@<=1.1.0", false), None);
+
+        // Installed, but not what is asked for.
+        assert_eq!(curr_version("foo@^2", false), Some(None));
+        assert_eq!(curr_version("foo@1.0.0", false), Some(None));
+        assert_eq!(curr_version("foo@^1", true), Some(None));
+    }
 }
