@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::BTreeSet, iter, mem, path::Path, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::BTreeSet, io, iter, mem, path::Path, str::FromStr, sync::Arc};
 
 use binstalk_types::{
     cargo_toml_binstall::{BinaryMeta, Strategy},
@@ -8,6 +8,7 @@ use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use leon::Template;
 use maybe_owned::MaybeOwned;
+use normalize_path::NormalizePath;
 use semver::{Comparator, Op as ComparatorOp, Version, VersionReq};
 use tokio::{task::spawn_blocking, time::timeout};
 use tracing::{Instrument, debug, error, info, info_span, warn};
@@ -528,10 +529,7 @@ impl PackageInfo {
                 .await??,
                 CrateSource {
                     source_type: SourceType::Path,
-                    url: MaybeOwned::Owned(Url::parse(&format!(
-                        "file://{}",
-                        manifest_path.display()
-                    ))?),
+                    url: MaybeOwned::Owned(path_source_url(manifest_path)?),
                 },
                 None,
             ),
@@ -720,6 +718,25 @@ fn exact_version_req(version_req: &VersionReq) -> Option<Version> {
     }
 }
 
+/// The source url of a crate installed with `--manifest-path`, like the one
+/// cargo writes to `.crates.toml` for `cargo install --path`: the absolute
+/// path of the directory.
+fn path_source_url(manifest_path: &Path) -> Result<Url, BinstallError> {
+    // Like cargo, without resolving symlinks.
+    let mut path = std::path::absolute(manifest_path)?.normalize();
+    if path.is_file() {
+        path.pop();
+    }
+
+    Url::from_file_path(&path).map_err(|()| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{} cannot be written as a file url", path.display()),
+        )
+        .into()
+    })
+}
+
 /// The source url of a crate installed from git, in the format cargo writes
 /// to `.crates.toml`: `{url}?branch={branch}#{commit}` (or `tag=`/`rev=`,
 /// nothing for the default branch).
@@ -766,6 +783,32 @@ pub fn load_manifest_path<P: AsRef<Path>, N: AsRef<str>>(
     }
 
     inner(manifest_path.as_ref(), name.as_ref())
+}
+
+#[cfg(test)]
+mod path_source_tests {
+    use super::*;
+
+    #[test]
+    fn path_source_url_is_the_absolute_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = dir.path().join("foo-Cargo.toml");
+        std::fs::write(&manifest, "").unwrap();
+        let expected = Url::from_file_path(dir.path()).unwrap();
+
+        assert_eq!(path_source_url(dir.path()).unwrap(), expected);
+        assert_eq!(path_source_url(&manifest).unwrap(), expected);
+        assert_eq!(
+            path_source_url(&dir.path().join("sub/../foo-Cargo.toml")).unwrap(),
+            expected
+        );
+
+        // Tests run in the dir of the crate.
+        assert_eq!(
+            path_source_url(Path::new("Cargo.toml")).unwrap(),
+            Url::from_file_path(std::env::current_dir().unwrap()).unwrap()
+        );
+    }
 }
 
 #[cfg(all(test, feature = "git"))]

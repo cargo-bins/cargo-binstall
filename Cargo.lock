@@ -263,6 +263,7 @@ dependencies = [
  "leon",
  "maybe-owned",
  "miette",
+ "normalize-path",
  "semver",
  "simple-git",
  "strum",
