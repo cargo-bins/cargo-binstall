@@ -88,6 +88,11 @@ pub fn find(target: &str) -> Option<&'static Probe> {
 }
 
 impl Probe {
+    /// The ELF machine (`e_machine`) of this target.
+    pub(crate) fn e_machine(&self) -> u16 {
+        self.spec.e_machine
+    }
+
     /// The synthesized dynamically-linked probe executable.
     pub fn synthesize(&self) -> Vec<u8> {
         elf::synthesize(&self.spec, true)

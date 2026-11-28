@@ -31,6 +31,11 @@ of:
         100 bytes of it before the connection is closed
     {"ignore_range": true}
         the whole file from DIR with a 200, even if a range was asked for
+    {"truncate": 100, "hang": true}
+        the same, but the connection is kept open, with nothing more sent,
+        until the client hangs up
+    {"hang": true}
+        no response at all until the client hangs up
 
 Otherwise a `Range: bytes=N-` request for a file is answered with a 206 and
 the rest of the file from byte N, unless an `If-Range` doesn't match the
@@ -91,6 +96,14 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
             outputfile.flush()
             self.log_sent()
 
+        def wait_for_hang_up(self):
+            """Send nothing (more), until the client closes the connection."""
+            try:
+                while self.rfile.read(1):
+                    pass
+            except OSError:
+                pass
+
         def handle_action(self, action):
             if action is None:
                 return False
@@ -117,6 +130,11 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
                 if self.command != "HEAD":
                     self.wfile.write(data[: action["truncate"]])
                     self.wfile.flush()
+                    if action.get("hang"):
+                        self.wait_for_hang_up()
+                self.close_connection = True
+            elif action.get("hang"):
+                self.wait_for_hang_up()
                 self.close_connection = True
             else:
                 self.send_response(action["status"])

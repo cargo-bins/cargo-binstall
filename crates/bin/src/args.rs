@@ -84,6 +84,11 @@ pub struct Args {
     /// `x86_64-unknown-linux-musl` binary. However, on a musl system, the gnu version will not be
     /// considered.
     ///
+    /// On Linux, a binary found for a detected target is skipped if it can't run on this system:
+    /// if its dynamic loader is missing (e.g. a dynamically linked musl binary on a glibc system),
+    /// or it needs a newer glibc than the system has. Targets given with this option are not
+    /// checked.
+    ///
     /// This option takes a comma-separated list of target triples, which will be tried in order.
     /// They override the default list, which is detected automatically from the current platform.
     ///
@@ -93,6 +98,7 @@ pub struct Args {
         alias = "target",
         long,
         value_name = "TRIPLE",
+        value_delimiter = ',',
         env = "CARGO_BUILD_TARGET"
     )]
     pub(crate) targets: Option<Vec<String>>,
@@ -315,6 +321,14 @@ pub struct Args {
         value_name = "TIMEOUT"
     )]
     pub(crate) maximum_resolution_timeout: NonZeroU16,
+
+    /// How long to wait for a connection, and for a response or a download to
+    /// make progress, before giving up on a request, in seconds. `0` turns it off.
+    ///
+    /// Can also be set with the `CARGO_HTTP_TIMEOUT` environment variable.
+    /// Defaults to Cargo's `http.timeout`, then 30 seconds.
+    #[clap(help_heading = "Overrides", long, value_name = "SECS")]
+    pub(crate) http_timeout: Option<u64>,
 
     /// This flag is now enabled by default thus a no-op.
     ///
@@ -549,7 +563,8 @@ pub struct Args {
     ///
     /// Fallback to environment variable `GITHUB_TOKEN` if this option is not
     /// specified (which is also shown by clap's auto generated doc below), or
-    /// try environment variable `GH_TOKEN`, which is also used by `gh` cli.
+    /// try environment variable `GH_TOKEN`, which is also used by `gh` cli, if
+    /// that is not specified or is empty.
     ///
     /// If none of them are present, then binstall will try to extract github
     /// token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml`
@@ -968,15 +983,13 @@ You cannot use --{feature_option} and specify multiple packages at the same time
             .exit()
     }
 
-    if opts.github_token.is_none()
-        && let Ok(github_token) = env::var("GH_TOKEN")
-    {
-        opts.github_token = Some(GithubToken(Zeroizing::new(github_token.into())));
-    }
-    match opts.github_token.as_ref() {
-        Some(token) if token.0.len() < 10 => opts.github_token = None,
-        _ => (),
-    }
+    opts.github_token = github_token(opts.github_token.take(), env::var("GH_TOKEN").ok());
+
+    // Not clap's `env`, so an empty or invalid value is ignored instead of
+    // failing every run (Cargo rejects it).
+    opts.http_timeout = opts
+        .http_timeout
+        .or_else(|| env::var("CARGO_HTTP_TIMEOUT").ok()?.parse().ok());
 
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
@@ -1001,6 +1014,16 @@ You cannot use --{feature_option} and specify multiple packages at the same time
     };
 
     (opts, cli_overrides)
+}
+
+/// The first of `--github-token`/`GITHUB_TOKEN` and `GH_TOKEN` that can be a
+/// token: a `GITHUB_TOKEN` that is set but empty, as CI often does when the
+/// secret is missing, does not hide `GH_TOKEN`.
+fn github_token(token: Option<GithubToken>, gh_token: Option<String>) -> Option<GithubToken> {
+    token
+        .into_iter()
+        .chain(gh_token.map(|token| GithubToken(Zeroizing::new(token.into()))))
+        .find(|token| token.0.len() >= 10)
 }
 
 #[cfg(test)]
@@ -1061,6 +1084,48 @@ mod test {
         .unwrap();
         assert!(args.no_default_features);
         assert!(args.all_features);
+    }
+
+    #[test]
+    fn gh_token_is_used_if_github_token_cannot_be_a_token() {
+        let token = |token: Option<&str>, gh_token: Option<&str>| {
+            github_token(token.map(GithubToken::from), gh_token.map(String::from))
+                .map(|token| token.0.to_string())
+        };
+        let (a, b) = ("ghp_aaaaaaaaaaaa", "ghp_bbbbbbbbbbbb");
+
+        assert_eq!(token(None, None), None);
+        assert_eq!(token(Some(a), None).as_deref(), Some(a));
+        assert_eq!(token(None, Some(b)).as_deref(), Some(b));
+        assert_eq!(token(Some(a), Some(b)).as_deref(), Some(a));
+
+        // Too short to be a token, e.g. `GITHUB_TOKEN=""`
+        assert_eq!(token(Some(""), Some(b)).as_deref(), Some(b));
+        assert_eq!(token(Some("x"), Some(b)).as_deref(), Some(b));
+        assert_eq!(token(Some(""), None), None);
+        assert_eq!(token(Some(a), Some("")).as_deref(), Some(a));
+        assert_eq!(token(None, Some("")), None);
+    }
+
+    #[test]
+    fn targets_are_comma_separated() {
+        let args = Args::try_parse_from([
+            "cargo-binstall",
+            "--targets",
+            "x86_64-unknown-linux-gnu,x86_64-unknown-linux-musl",
+            "--target",
+            "aarch64-apple-darwin",
+            "ripgrep",
+        ])
+        .unwrap();
+        assert_eq!(
+            args.targets.unwrap(),
+            [
+                "x86_64-unknown-linux-gnu",
+                "x86_64-unknown-linux-musl",
+                "aarch64-apple-darwin"
+            ]
+        );
     }
 
     #[test]

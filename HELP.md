@@ -39,6 +39,8 @@ Some crate installation strategies may collect anonymized usage statistics by de
 
    Binstall is able to look for binaries for several targets, installing the first one it finds in the order the targets were given. For example, on a 64-bit glibc Linux distribution, the default is to look first for a `x86_64-unknown-linux-gnu` binary, then for a `x86_64-unknown-linux-musl` binary. However, on a musl system, the gnu version will not be considered.
 
+   On Linux, a binary found for a detected target is skipped if it can't run on this system: if its dynamic loader is missing (e.g. a dynamically linked musl binary on a glibc system), or it needs a newer glibc than the system has. Targets given with this option are not checked.
+
    This option takes a comma-separated list of target triples, which will be tried in order. They override the default list, which is detected automatically from the current platform.
 
    If falling back to installing from source, the first target will be used.
@@ -141,6 +143,9 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--maximum-resolution-timeout <TIMEOUT>` — Maximum time each resolution (one for each possible target and each strategy), in seconds
 
   Default value: `15`
+* `--http-timeout <SECS>` — How long to wait for a connection, and for a response or a download to make progress, before giving up on a request, in seconds. `0` turns it off.
+
+   Can also be set with the `CARGO_HTTP_TIMEOUT` environment variable. Defaults to Cargo's `http.timeout`, then 30 seconds.
 * `--no-symlinks` — This flag is now enabled by default thus a no-op.
 
    By default, Binstall will install a binary as-is in the install path.
@@ -239,7 +244,7 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--json-output` — Print logs in json format to be parsable
 * `--github-token <TOKEN>` — Provide the github token for accessing the restful API of api.github.com
 
-   Fallback to environment variable `GITHUB_TOKEN` if this option is not specified (which is also shown by clap's auto generated doc below), or try environment variable `GH_TOKEN`, which is also used by `gh` cli.
+   Fallback to environment variable `GITHUB_TOKEN` if this option is not specified (which is also shown by clap's auto generated doc below), or try environment variable `GH_TOKEN`, which is also used by `gh` cli, if that is not specified or is empty.
 
    If none of them are present, then binstall will try to extract github token from `$HOME/.git-credentials` or `$HOME/.config/gh/hosts.yml` unless `--no-discover-github-token` is specified.
 * `--only-signed` — Only install packages that are signed

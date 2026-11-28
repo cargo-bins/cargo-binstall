@@ -75,6 +75,8 @@ pub use detect::detect_targets;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod probe;
 
+pub mod compat;
+
 mod desired_targets;
 pub use desired_targets::{DesiredTargets, get_desired_targets};
 
