@@ -54,17 +54,45 @@ pub type SecretString = Redacted<Zeroizing<String>>;
 /// `https://<token>@github.com/owner/repo` or
 /// `sparse+https://user:<token>@registry.example.com/index/`.
 ///
-/// Nothing is allocated: `url` is formatted twice, once to find the user
-/// name and password and once to write it without them.
-pub fn redact_url_userinfo<T: fmt::Display>(url: T) -> RedactUrlUserinfo<T> {
+/// Takes a string (a `&str`, `Url::as_str`, `Cow<str>`, ...) and writes the
+/// parts around them, without allocating. For a URL that is only
+/// `Display`, see [`redact_displayed_url_userinfo`].
+pub fn redact_url_userinfo<S: AsRef<str>>(url: S) -> RedactUrlUserinfo<S> {
     RedactUrlUserinfo(url)
 }
 
 /// See [`redact_url_userinfo`].
-#[derive(Clone, Copy, Debug)]
-pub struct RedactUrlUserinfo<T>(T);
+#[derive(Clone, Copy)]
+pub struct RedactUrlUserinfo<S>(S);
 
-impl<T: fmt::Display> fmt::Display for RedactUrlUserinfo<T> {
+impl<S: AsRef<str>> fmt::Display for RedactUrlUserinfo<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let url = self.0.as_ref();
+        match UserinfoFinder::find(url) {
+            Some(userinfo) => {
+                f.write_str(&url[..userinfo.start])?;
+                f.write_str("<redacted>")?;
+                f.write_str(&url[userinfo.end..])
+            }
+            None => f.write_str(url),
+        }
+    }
+}
+
+/// Like [`redact_url_userinfo`], for a URL that is only `Display`, such as
+/// a `GitUrl`.
+///
+/// Nothing is allocated: `url` is formatted twice, once to find the user
+/// name and password and once to write the parts around them.
+pub fn redact_displayed_url_userinfo<T: fmt::Display>(url: T) -> RedactDisplayedUrlUserinfo<T> {
+    RedactDisplayedUrlUserinfo(url)
+}
+
+/// See [`redact_displayed_url_userinfo`].
+#[derive(Clone, Copy)]
+pub struct RedactDisplayedUrlUserinfo<T>(T);
+
+impl<T: fmt::Display> fmt::Display for RedactDisplayedUrlUserinfo<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut finder = UserinfoFinder::default();
         // Never fails: `UserinfoFinder::write_str` always succeeds.
@@ -97,6 +125,13 @@ struct UserinfoFinder {
 }
 
 impl UserinfoFinder {
+    fn find(url: &str) -> Option<std::ops::Range<usize>> {
+        let mut finder = Self::default();
+        // Never fails: `UserinfoFinder::write_str` always succeeds.
+        let _ = fmt::Write::write_str(&mut finder, url);
+        finder.userinfo()
+    }
+
     fn userinfo(&self) -> Option<std::ops::Range<usize>> {
         Some(self.authority_start?..self.last_at?)
     }
@@ -178,10 +213,11 @@ mod test {
             ),
         ] {
             assert_eq!(redact_url_userinfo(url).to_string(), expected);
+            assert_eq!(redact_displayed_url_userinfo(url).to_string(), expected);
             // Written in several pieces, as a `Display` impl may do.
             let (a, b) = url.split_at(url.len() / 2);
             let pieces = format_args!("{a}{b}");
-            assert_eq!(redact_url_userinfo(pieces).to_string(), expected);
+            assert_eq!(redact_displayed_url_userinfo(pieces).to_string(), expected);
         }
 
         // Nothing to redact.
@@ -193,6 +229,7 @@ mod test {
             "",
         ] {
             assert_eq!(redact_url_userinfo(url).to_string(), url);
+            assert_eq!(redact_displayed_url_userinfo(url).to_string(), url);
         }
     }
 }
