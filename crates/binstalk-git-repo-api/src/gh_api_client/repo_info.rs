@@ -1,6 +1,7 @@
 use std::{fmt, future::Future};
 
 use compact_str::CompactString;
+use futures_util::TryFutureExt;
 use serde::Deserialize;
 
 use super::{
@@ -83,10 +84,5 @@ query {{
 }}"#
     );
 
-    let future = issue_graphql_query(client, query, auth_token);
-
-    async move {
-        let data: GraphQLData = future.await?;
-        Ok(data.repository)
-    }
+    issue_graphql_query(client, query, auth_token).map_ok(|data: GraphQLData| data.repository)
 }

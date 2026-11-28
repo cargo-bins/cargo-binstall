@@ -356,6 +356,7 @@ version = "0.5.54"
 dependencies = [
  "binstalk-downloader",
  "compact_str",
+ "futures-util",
  "gix-packetline",
  "percent-encoding",
  "serde",
@@ -4515,9 +4516,9 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "simple-git"
-version = "0.2.40"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cf2d76c7e1556615f927f0d1548f656fa663d0d06f61b070c2628c60336d199"
+checksum = "a2d46d06dcf90b9bf0f7d3e2099650207a53c60f359f256f6c00da00e1e2fdb8"
 dependencies = [
  "compact_str",
  "derive_destructure2",
