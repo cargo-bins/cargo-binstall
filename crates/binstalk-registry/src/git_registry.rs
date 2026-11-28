@@ -9,7 +9,7 @@ use std::{
 };
 
 use binstalk_downloader::remote::Client;
-use binstalk_types::redact_displayed_url_userinfo;
+use binstalk_types::redact_url_userinfo;
 use compact_str::{CompactString, ToCompactString};
 use fs_lock::FileLock;
 use jiff::Timestamp;
@@ -83,7 +83,7 @@ impl GitIndex {
                 Err(err) => {
                     warn!(
                         "Failed to use cargo's clone of git index {} in {}: {err}, cloning to a temporary directory instead",
-                        redact_displayed_url_userinfo(&url),
+                        redact_url_userinfo(url.to_string()),
                         cargo_home.display()
                     );
                     None
@@ -109,7 +109,7 @@ impl GitIndex {
                         io::ErrorKind::NotFound,
                         format!(
                             "config.json not found in repository `{}`",
-                            redact_displayed_url_userinfo(url)
+                            redact_url_userinfo(url.to_string())
                         ),
                     )
                 })?;
@@ -194,7 +194,7 @@ fn open_cargo_clone(
     let Some(name) = cargo_url.and_then(|cargo_url| cargo_index_dir_name(cargo_url.clone())) else {
         debug!(
             "Cannot share cargo's clone of git index {}: not a URL cargo accepts",
-            redact_displayed_url_userinfo(url)
+            redact_url_userinfo(url.to_string())
         );
         return Ok(None);
     };
@@ -209,7 +209,7 @@ fn open_cargo_clone(
             // It is cargo's to repair, a full clone is too expensive for us.
             Err(err) => warn!(
                 "Failed to update cargo's clone of git index {} in {}: {err}",
-                redact_displayed_url_userinfo(url),
+                redact_url_userinfo(url.to_string()),
                 full.display()
             ),
         }
@@ -227,7 +227,7 @@ fn open_cargo_clone(
                 Ok(repo) => return Ok(Some(repo)),
                 Err(err) => warn!(
                     "Failed to update shallow clone of git index {} in {}: {err}, cloning it again",
-                    redact_displayed_url_userinfo(url),
+                    redact_url_userinfo(url.to_string()),
                     shallow.display()
                 ),
             }
