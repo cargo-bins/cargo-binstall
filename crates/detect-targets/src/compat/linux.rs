@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use compact_str::{CompactString, ToCompactString};
+use compact_str::{CompactString, format_compact};
 use goblin::elf::Elf;
 use memmap2::Mmap;
 use tokio::task::spawn_blocking;
@@ -52,8 +52,8 @@ fn check_blocking(path: &Path) -> Result<(), Incompatible> {
     };
     match parse(&libc, available_glibc).flatten() {
         Some(available) if available < needed => Err(Incompatible::Glibc {
-            needed: display(&needed),
-            available: display(&available),
+            needed: display(needed),
+            available: display(available),
         }),
         _ => Ok(()),
     }
@@ -78,14 +78,19 @@ fn interp(elf: &Elf<'_>) -> Option<CompactString> {
     Some(elf.interpreter?.split('\0').next()?.into())
 }
 
-/// The version of `GLIBC_2.39`: `[2, 39]`.
-fn glibc_version(name: &str) -> Option<Vec<u32>> {
-    let version = name.strip_prefix("GLIBC_")?;
-    version.split('.').map(|n| n.parse().ok()).collect()
+/// The version of `GLIBC_2.39`: `[2, 39, 0]`. glibc versions have two or
+/// three parts, e.g. `GLIBC_2.2.5`.
+fn glibc_version(name: &str) -> Option<[u32; 3]> {
+    let mut version = [0; 3];
+    let mut parts = name.strip_prefix("GLIBC_")?.split('.');
+    for (n, part) in version.iter_mut().zip(&mut parts) {
+        *n = part.parse().ok()?;
+    }
+    parts.next().is_none().then_some(version)
 }
 
 /// The newest glibc version `elf` requires, if any.
-fn needed_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
+fn needed_glibc(elf: &Elf<'_>) -> Option<[u32; 3]> {
     let required = elf.verneed.iter().flat_map(|section| section.iter());
     required
         // Other glibc libraries define versions libc.so.6 doesn't, e.g.
@@ -99,7 +104,7 @@ fn needed_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
 }
 
 /// The newest glibc version the library `elf` defines, if any.
-fn available_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
+fn available_glibc(elf: &Elf<'_>) -> Option<[u32; 3]> {
     elf.verdef
         .iter()
         .flat_map(|section| section.iter())
@@ -107,15 +112,11 @@ fn available_glibc(elf: &Elf<'_>) -> Option<Vec<u32>> {
         .max()
 }
 
-fn display(version: &[u32]) -> CompactString {
-    let mut s = CompactString::default();
-    for n in version {
-        if !s.is_empty() {
-            s.push('.');
-        }
-        s.push_str(&n.to_compact_string());
+fn display([major, minor, patch]: [u32; 3]) -> CompactString {
+    match patch {
+        0 => format_compact!("{major}.{minor}"),
+        _ => format_compact!("{major}.{minor}.{patch}"),
     }
-    s
 }
 
 #[cfg(test)]
@@ -124,12 +125,16 @@ mod tests {
 
     #[test]
     fn versions() {
-        assert_eq!(glibc_version("GLIBC_2.39"), Some(vec![2, 39]));
-        assert_eq!(glibc_version("GLIBC_2.2.5"), Some(vec![2, 2, 5]));
+        assert_eq!(glibc_version("GLIBC_2.39"), Some([2, 39, 0]));
+        assert_eq!(glibc_version("GLIBC_2.2.5"), Some([2, 2, 5]));
+        assert_eq!(glibc_version("GLIBC_2.1.2.3"), None);
         assert_eq!(glibc_version("GLIBC_PRIVATE"), None);
         assert_eq!(glibc_version("GLIBCXX_3.4"), None);
         assert!(glibc_version("GLIBC_2.9") < glibc_version("GLIBC_2.10"));
-        assert_eq!(display(&[2, 39]), "2.39");
+        assert!(glibc_version("GLIBC_2.2") < glibc_version("GLIBC_2.2.5"));
+        assert!(glibc_version("GLIBC_2.2.5") < glibc_version("GLIBC_2.3"));
+        assert_eq!(display([2, 39, 0]), "2.39");
+        assert_eq!(display([2, 2, 5]), "2.2.5");
     }
 
     /// This test binary runs, so it must pass the check.
