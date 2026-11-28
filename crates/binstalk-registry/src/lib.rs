@@ -251,14 +251,13 @@ impl Registry {
 
     /// Find the latest version of `crate_name` matching `version_req`,
     /// without downloading the crate.
-    pub async fn find_crate_matched(
+    pub fn find_crate_matched(
         &self,
         client: Client,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<MatchedCrate, RegistryError> {
+    ) -> impl Future<Output = Result<MatchedCrate, RegistryError>> {
         self.find_crate_matched_with_auth(client, None, crate_name, version_req, None)
-            .await
     }
 
     pub(crate) async fn find_crate_matched_with_auth(

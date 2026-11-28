@@ -273,14 +273,14 @@ pub(super) enum BatchedRelease {
 /// Fetch the assets of the release `tag` of `repo` after the first page that
 /// [`fetch_releases_artifacts_graphql_api`] returned as
 /// [`BatchedRelease::Incomplete`].
-pub(super) async fn fetch_rest_of_release_artifacts(
+pub(super) fn fetch_rest_of_release_artifacts(
     client: &remote::Client,
     repo: &GhRepo,
     tag: &str,
     auth_token: &str,
     artifacts: Artifacts,
     end_cursor: CompactString,
-) -> Result<Artifacts, GhApiError> {
+) -> impl Future<Output = Result<Artifacts, GhApiError>> {
     fetch_remaining_release_artifacts(
         client,
         repo,
@@ -289,7 +289,6 @@ pub(super) async fn fetch_rest_of_release_artifacts(
         artifacts,
         FilterCondition::After(end_cursor),
     )
-    .await
 }
 
 fn parse_batch(data: GraphQLBatchData, count: usize) -> Result<Vec<BatchedRelease>, GhApiError> {
