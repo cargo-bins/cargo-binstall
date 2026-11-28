@@ -1,7 +1,6 @@
 # Signature support
 
-Binstall supports verifying signatures of downloaded files.
-At the moment, only one algorithm is supported, but this is expected to improve as time goes.
+Binstall supports verifying signatures of downloaded files, made with [minisign](#minisign) or [SSH keys](#ssh).
 
 This feature requires adding to the Cargo.toml metadata: no autodiscovery here!
 
@@ -74,6 +73,27 @@ The legacy signature format is not supported.
 The `pubkey` must be in the same format as minisign generates.
 It may or may not include the untrusted comment; it's ignored by Binstall so we recommend not.
 
+### SSH
+
+`algorithm` must be `"ssh"`.
+
+The `pubkey` is the public key line as found in an `.pub` file or `authorized_keys`, for example `"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... comment"`.
+`ssh-ed25519`, `ecdsa-sha2-nistp256`, `ecdsa-sha2-nistp384`, `ecdsa-sha2-nistp521` and `ssh-rsa` (at least 2048 bits) keys are supported.
+Security keys (`sk-*`) and SSH certificates are not.
+
+Sign each package with the `file` namespace:
+
+```console
+ssh-keygen -Y sign -f signing.key -n file package-name.tar.zst
+```
+
+This writes `package-name.tar.zst.sig`, the default signature file name.
+Binstall rejects signatures made for any other namespace, so that a signature made for something else, like a git commit, can't pass as a package signature.
+At install time, it prints the SHA256 fingerprint of the key, the same as `ssh-keygen -l` prints.
+
+SSH verification is part of the `ssh-signing` cargo feature of cargo-binstall, which is on by default.
+A build without it treats `algorithm = "ssh"` as an unsupported algorithm.
+
 ## Just-in-time signing
 
 To reduce the risk of a key being stolen, this scheme supports just-in-time or "keyless" signing.
@@ -93,7 +113,7 @@ The solution here is either:
 - Omit the `[...signing]` section in the source, and write the entire section on publish instead of just filling in the `pubkey`; signatures won't be checked for `--git` installs. Binstall uses this approach.
 - Instruct your users to use `--skip-signatures` if they want to install with `--git`.
 
-## Why not X? (Sigstore, GPG, signify, with SSH keys, ...)
+## Why not X? (Sigstore, GPG, signify, ...)
 
 We're open to pull requests adding algorithms!
 We're especially interested in Sigstore for a better implementation of "just-in-time" signing (which it calls "keyless").
