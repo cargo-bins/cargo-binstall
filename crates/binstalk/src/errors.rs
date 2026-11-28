@@ -448,6 +448,27 @@ pub enum BinstallError {
     )]
     CargoInstallDoesNotSupportAliases,
 
+    /// A downloaded binary can't run on this host, e.g. it needs a newer
+    /// glibc than the host's, or is dynamically linked against musl on a
+    /// glibc host.
+    ///
+    /// Binstall then tries the binaries of the next target, so this is only
+    /// reported as a warning.
+    ///
+    /// - Code: `binstall::incompatible_binary`
+    /// - Exit: 102
+    #[error(
+        "{bin} for {target} can't run on this system: {reason} \
+         (pass `--targets {target}` to install it anyway)"
+    )]
+    #[diagnostic(severity(error), code(binstall::incompatible_binary))]
+    IncompatibleBinary {
+        bin: CompactString,
+        target: CompactString,
+        #[source]
+        reason: detect_targets::compat::Incompatible,
+    },
+
     /// A wrapped error providing the context of which crate the error is about.
     #[error(transparent)]
     #[diagnostic(transparent)]
@@ -494,6 +515,7 @@ impl BinstallError {
             LoadManifestFromWSError(_) => 99,
             CargoInstallDoesNotSupportInstallPath => 100,
             CargoInstallDoesNotSupportAliases => 101,
+            IncompatibleBinary { .. } => 102,
             CrateContext(context) => context.err.exit_number(),
             Errors(errors) => (errors.0)[0].err.exit_number(),
         };

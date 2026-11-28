@@ -14,7 +14,7 @@ use tracing::{Instrument, debug, error, info, info_span, warn};
 use url::Url;
 
 use crate::{
-    bins,
+    DesiredTargets, bins,
     errors::{BinstallError, VersionParseError},
     fetchers::{BinInfo, Data, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
@@ -194,6 +194,7 @@ async fn resolve_inner(
             &opts.install_path,
             opts.no_symlinks,
             &opts.bins,
+            &opts.desired_targets,
         )
         .await;
 
@@ -268,6 +269,8 @@ async fn resolve_inner(
 }
 
 ///  * `found` - What a fetcher's `find()` returned.
+///  * `desired_targets` - checks that the binaries can run on this host, if
+///    the targets were detected from it.
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
@@ -278,6 +281,7 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
+    desired_targets: &DesiredTargets,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Download and extract it, unless another crate did already: then it is
     // somewhere else than `bin_path`.
@@ -317,6 +321,16 @@ async fn download_extract_and_verify(
     }
 
     bins::check_aliases_unique(&bin_files)?;
+
+    for bin_file in &bin_files {
+        if let Err(reason) = desired_targets.check_binary(&bin_file.source).await {
+            return Err(BinstallError::IncompatibleBinary {
+                bin: bin_file.base_name.clone(),
+                target: found.target().into(),
+                reason,
+            });
+        }
+    }
 
     Ok(bin_files)
 }
