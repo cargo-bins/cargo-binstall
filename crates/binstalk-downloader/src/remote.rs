@@ -92,6 +92,12 @@ impl HttpError {
     pub fn is_status(&self) -> bool {
         self.err.is_status()
     }
+
+    /// The status the server answered with, if the error is from
+    /// [`Response::error_for_status`].
+    pub fn status(&self) -> Option<StatusCode> {
+        self.err.status()
+    }
 }
 
 #[derive(Debug)]
