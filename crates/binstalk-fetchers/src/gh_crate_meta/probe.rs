@@ -15,7 +15,6 @@
 
 use std::{
     collections::{BTreeSet, HashSet},
-    mem,
     sync::Arc,
 };
 
@@ -208,10 +207,11 @@ impl Probe {
 
         // Normally one or two repositories.
         let mut repos = Vec::<(Url, CandidateRepo)>::new();
-        let mut kept = Vec::with_capacity(candidates.len());
-        for mut candidate in mem::take(candidates) {
+        // Their order doesn't matter: the first one found wins.
+        let mut i = 0;
+        while let Some(candidate) = candidates.get_mut(i) {
             let Some(release_tag) = &candidate.release_tag else {
-                kept.push(candidate);
+                i += 1;
                 continue;
             };
             let repo = release_tag.repo.clone();
@@ -229,15 +229,15 @@ impl Probe {
                 }
             };
             if info.is_hidden {
+                candidates.swap_remove(i);
                 continue;
             }
             if let Some(to) = &info.moved_to {
                 candidate.move_to(&repo, to);
             }
             candidate.is_private = info.is_private;
-            kept.push(candidate);
+            i += 1;
         }
-        *candidates = kept;
     }
 
     /// Check the candidates of the `pkg_url` and `pkg_fmt` a previous
