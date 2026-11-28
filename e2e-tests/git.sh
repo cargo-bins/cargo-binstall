@@ -110,7 +110,7 @@ done
 
 # Building from source builds what `--git` points to, not the crate with the
 # same name in the registry.
-output="$("$1" binstall --dry-run --strategies compile --git "file://$GIT" --tag v0.12.0 --no-confirm cargo-binstall 2>&1)"
+output="$("$1" binstall --force --dry-run --strategies compile --git "file://$GIT" --tag v0.12.0 --no-confirm cargo-binstall 2>&1)"
 echo "$output"
 grep -F 'cargo install cargo-binstall --git file://' <<<"$output"
 grep -F -- '--tag v0.12.0' <<<"$output"
