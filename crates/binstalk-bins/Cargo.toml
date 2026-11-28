@@ -1,6 +1,6 @@
 [package]
 name = "binstalk-bins"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 
 description = "The binstall binaries discovery and installation crate."
@@ -11,8 +11,8 @@ authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 license = "GPL-3.0-only"
 
 [dependencies]
-atomic-file-install = { version = "1.0.15", path = "../atomic-file-install" }
-binstalk-types = { version = "0.11.0", path = "../binstalk-types" }
+atomic-file-install = { version = "1.0.16", path = "../atomic-file-install" }
+binstalk-types = { version = "0.12.0", path = "../binstalk-types" }
 compact_str = { version = "0.10.0", features = ["serde"] }
 itertools = "0.15.0"
 leon = "3.0.0"

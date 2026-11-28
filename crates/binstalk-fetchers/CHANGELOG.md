@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.54...binstalk-fetchers-v0.11.0) - 2026-11-28
+
+### Added
+
+- look for packages named after the binaries inside GhCrateMeta, before QuickInstall ([#2859](https://github.com/cargo-bins/cargo-binstall/pull/2859))
+- Download each binary from its own package when pkg-url has `{ bin }` ([#2784](https://github.com/cargo-bins/cargo-binstall/pull/2784))
+
+### Fixed
+
+- *(binstalk-fetchers)* don't let a queued error drop the resolver's success ([#2854](https://github.com/cargo-bins/cargo-binstall/pull/2854))
+
+### Other
+
+- skip a hidden github.com repository's candidates without a token ([#2876](https://github.com/cargo-bins/cargo-binstall/pull/2876))
+- do not keep the GitHub API request future twice ([#2870](https://github.com/cargo-bins/cargo-binstall/pull/2870))
+- drop .git from a github.com repository url before looking it up ([#2868](https://github.com/cargo-bins/cargo-binstall/pull/2868))
+- don't GET a github.com repository page again after its HEAD fails ([#2865](https://github.com/cargo-bins/cargo-binstall/pull/2865))
+- fewer repository requests for crates sharing a repository ([#2860](https://github.com/cargo-bins/cargo-binstall/pull/2860))
+- skip the crate's repository lookup when no template uses it ([#2857](https://github.com/cargo-bins/cargo-binstall/pull/2857))
+- *(binstalk-fetchers)* check each candidate in its own repository ([#2856](https://github.com/cargo-bins/cargo-binstall/pull/2856))
+- *(binstalk-fetchers)* check a release's only candidate with GET ([#2855](https://github.com/cargo-bins/cargo-binstall/pull/2855))
+- Share repository lookups and downloads between crates installed together ([#2839](https://github.com/cargo-bins/cargo-binstall/pull/2839))
+- Make Fetcher::find return what it found ([#2851](https://github.com/cargo-bins/cargo-binstall/pull/2851))
+- Download the package from the GET that found it ([#2818](https://github.com/cargo-bins/cargo-binstall/pull/2818))
+- Hint the exact pkg-url, for a crate's own pkg-url too ([#2814](https://github.com/cargo-bins/cargo-binstall/pull/2814))
+- Cache per crate in the fetchers, not in binstalk-git-repo-api ([#2813](https://github.com/cargo-bins/cargo-binstall/pull/2813))
+- Look up release tags with git ls-refs and GitHub assets without the API ([#2808](https://github.com/cargo-bins/cargo-binstall/pull/2808))
+- fetch the assets of all candidate releases in one GraphQL query ([#2807](https://github.com/cargo-bins/cargo-binstall/pull/2807))
+- skip release tags that don't exist by HEAD-ing their page on github.com ([#2806](https://github.com/cargo-bins/cargo-binstall/pull/2806))
+- check quickinstall with HEAD/GET when there is no GitHub token ([#2805](https://github.com/cargo-bins/cargo-binstall/pull/2805))
+
 ## [0.10.54](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-fetchers-v0.10.53...binstalk-fetchers-v0.10.54) - 2026-11-21
 
 ### Added
