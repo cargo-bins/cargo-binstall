@@ -129,7 +129,7 @@ pub fn install_crates(
             .map_err(BinstallError::from)?;
     }
 
-    // `--http-timeout`/`CARGO_HTTP_TIMEOUT`/`HTTP_TIMEOUT`, then `http.timeout`,
+    // As in Cargo: `--http-timeout`/`CARGO_HTTP_TIMEOUT`, then `http.timeout`,
     // 30s by default. 0 turns it off.
     let timeout = args
         .http_timeout

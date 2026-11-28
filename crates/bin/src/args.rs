@@ -319,8 +319,8 @@ pub struct Args {
     /// How long to wait for a connection, and for a response or a download to
     /// make progress, before giving up on a request, in seconds. `0` turns it off.
     ///
-    /// Can also be set with the `CARGO_HTTP_TIMEOUT` or `HTTP_TIMEOUT`
-    /// environment variable. Defaults to Cargo's `http.timeout`, then 30 seconds.
+    /// Can also be set with the `CARGO_HTTP_TIMEOUT` environment variable.
+    /// Defaults to Cargo's `http.timeout`, then 30 seconds.
     #[clap(help_heading = "Overrides", long, value_name = "SECS")]
     pub(crate) http_timeout: Option<u64>,
 
@@ -984,12 +984,10 @@ You cannot use --{feature_option} and specify multiple packages at the same time
     }
 
     // Not clap's `env`, so an empty or invalid value is ignored instead of
-    // failing every run (Cargo rejects it for `CARGO_HTTP_TIMEOUT`).
-    let env_timeout = |name| env::var(name).ok()?.parse().ok();
+    // failing every run (Cargo rejects it).
     opts.http_timeout = opts
         .http_timeout
-        .or_else(|| env_timeout("CARGO_HTTP_TIMEOUT"))
-        .or_else(|| env_timeout("HTTP_TIMEOUT"));
+        .or_else(|| env::var("CARGO_HTTP_TIMEOUT").ok()?.parse().ok());
 
     let cli_overrides = PkgOverride {
         pkg_url: opts.pkg_url.take(),
