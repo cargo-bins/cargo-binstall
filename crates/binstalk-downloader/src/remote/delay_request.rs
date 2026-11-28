@@ -203,9 +203,15 @@ impl DelayRequest {
         }
     }
 
-    pub(super) async fn call(&self, req: Request) -> RequestResult {
+    /// Send a clone of `req` once it may be sent.
+    ///
+    /// `req` is borrowed, and only cloned once the wait is over, so that
+    /// the future holds no copy of it.
+    ///
+    /// * `req` - `Request::try_clone` must always return `Some`.
+    pub(super) async fn call(&self, req: &Request) -> RequestResult {
         self.wait(req.url().host_str()).await;
-        self.client.execute(req).await
+        self.client.execute(req.try_clone().unwrap()).await
     }
 }
 

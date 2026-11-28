@@ -3,4 +3,4 @@ pub mod crate_info;
 pub mod secrets;
 
 pub use maybe_owned;
-pub use secrets::{Redacted, SecretString};
+pub use secrets::{RedactUrlUserinfo, Redacted, SecretString, redact_url_userinfo};

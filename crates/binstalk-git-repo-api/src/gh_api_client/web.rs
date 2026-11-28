@@ -8,6 +8,7 @@
 use std::fmt;
 
 use binstalk_downloader::remote;
+use futures_util::FutureExt;
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use tracing::debug;
 use url::Url;
@@ -63,8 +64,8 @@ impl ReleaseAssetsPage {
     /// Only use it for a public repository, github.com answers 404 for a
     /// private one. The page is not documented, so anything unexpected
     /// gives [`ReleaseAssets::Unknown`] instead of hiding an asset.
-    pub async fn fetch(client: &remote::Client, release: &GhRelease) -> Self {
-        Self(fetch_release_assets(client, release).await)
+    pub fn fetch(client: &remote::Client, release: &GhRelease) -> impl Future<Output = Self> {
+        fetch_release_assets(client, release).map(Self)
     }
 
     /// Which of the asset `names` it lists.

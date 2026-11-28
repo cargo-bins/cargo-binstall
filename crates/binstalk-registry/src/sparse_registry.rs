@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use binstalk_downloader::remote::{Client, StatusCode};
+use binstalk_types::redact_url_userinfo;
 use compact_str::CompactString;
 use jiff::Timestamp;
 use semver::VersionReq;
@@ -113,7 +114,7 @@ impl SparseRegistry {
     #[instrument(
         skip(self, client, version_req),
         fields(
-            registry_url = format_args!("{}", self.url),
+            registry_url = format_args!("{}", redact_url_userinfo(self.url.as_str())),
             version_req = format_args!("{version_req}"),
         )
     )]

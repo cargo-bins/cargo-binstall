@@ -152,7 +152,7 @@ impl MatchedCrate {
 
 pub(super) fn apply_auth(request: RequestBuilder, auth: Option<&RegistryAuth>) -> RequestBuilder {
     if let Some(auth) = auth {
-        request.header("Authorization", auth.token())
+        request.sensitive_header("Authorization", auth.token())
     } else {
         request
     }

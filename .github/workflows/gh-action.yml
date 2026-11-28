@@ -10,6 +10,7 @@ on:
       - install-from-binstall-release.ps1
       - install-from-binstall-release.sh
       - action.yml
+      - .github/workflows/gh-action.yml
   push:
     branches:
       - main
@@ -52,7 +53,11 @@ jobs:
           latest="$(gh api "repos/$repo/releases/latest" --jq .tag_name)"
           # Other crates in this repository have releases too.
           previous="$(gh release list --repo "$repo" --exclude-drafts --exclude-pre-releases --limit 100 \
-              --json tagName --jq '[.[].tagName | select(test("^v[0-9]"))][1]')"
+              --json tagName --jq "[.[].tagName | select(test(\"^v[0-9]\") and . != \"$latest\")][0] // empty")"
+          if [ -z "$previous" ]; then
+              echo "::error::No cargo-binstall release other than $latest to test with"
+              exit 1
+          fi
           case "$CASE" in
               released) checkout="${previous#v}" expected="${previous#v}" ;;
               unreleased) checkout=9999.0.0 expected="${latest#v}" ;;

@@ -4,7 +4,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures_util::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt, TryFutureExt};
 use reqwest::Method;
 
 use super::{Client, Error, HttpError, StatusCode, Url, header};
@@ -42,6 +42,32 @@ impl RequestBuilder {
         }
     }
 
+    /// Set a header whose value is a secret, such as a token.
+    ///
+    /// Unlike with [`RequestBuilder::header`], the value is left out of the
+    /// `Debug` output of the request, so that it does not end up in logs.
+    pub fn sensitive_header(self, key: impl AsRef<str>, value: &str) -> Self {
+        fn inner(
+            inner: reqwest::RequestBuilder,
+            key: &str,
+            value: &str,
+        ) -> reqwest::RequestBuilder {
+            match header::HeaderValue::from_str(value) {
+                Ok(mut value) => {
+                    value.set_sensitive(true);
+                    inner.header(key, value)
+                }
+                // Let reqwest record the error, which does not hold the value.
+                Err(_) => inner.header(key, value),
+            }
+        }
+
+        Self {
+            client: self.client,
+            inner: inner(self.inner, key.as_ref(), value),
+        }
+    }
+
     pub fn body(self, body: impl Into<Body>) -> Self {
         Self {
             client: self.client,
@@ -49,13 +75,23 @@ impl RequestBuilder {
         }
     }
 
-    pub async fn send(self, error_for_status: bool) -> Result<Response, Error> {
-        let request = self.inner.build()?;
-        let method = request.method().clone();
-        Ok(Response {
-            inner: self.client.send_request(request, error_for_status).await?,
-            method,
-        })
+    pub fn send(self, error_for_status: bool) -> impl Future<Output = Result<Response, Error>> {
+        let Self { client, inner } = self;
+        // Built here, so that the future holds the request and nothing of
+        // the builder it was built from.
+        let request = inner.build();
+
+        async move {
+            match request {
+                // Borrowed where it is: moving it out would keep room for
+                // it in the future twice.
+                Ok(ref request) => Ok(Response {
+                    inner: client.send_request(request, error_for_status).await?,
+                    method: request.method().clone(),
+                }),
+                Err(err) => Err(err.into()),
+            }
+        }
     }
 }
 
@@ -66,8 +102,8 @@ pub struct Response {
 }
 
 impl Response {
-    pub async fn bytes(self) -> Result<Bytes, Error> {
-        self.inner.bytes().await.map_err(Error::from)
+    pub fn bytes(self) -> impl Future<Output = Result<Bytes, Error>> {
+        self.inner.bytes().map_err(Error::from)
     }
 
     /// The next chunk of the body, or `None` once it has all been read.
@@ -131,12 +167,19 @@ impl Response {
     }
 
     #[cfg(feature = "json")]
-    pub async fn json<T>(self) -> Result<T, Error>
+    pub fn json<T>(self) -> impl Future<Output = Result<T, Error>>
     where
         T: serde::de::DeserializeOwned,
     {
-        let bytes = self.error_for_status()?.bytes().await?;
-        Ok(serde_json::from_slice(&bytes)?)
+        use futures_util::FutureExt;
+
+        /// Not generic, so that reading the body is compiled once for
+        /// every `T`.
+        async fn bytes_of_success(response: Response) -> Result<Bytes, Error> {
+            response.error_for_status()?.bytes().await
+        }
+
+        bytes_of_success(self).map(|bytes| Ok(serde_json::from_slice(&bytes?)?))
     }
 }
 

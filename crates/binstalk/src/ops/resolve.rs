@@ -10,7 +10,7 @@ use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Comparator, Op as ComparatorOp, Version, VersionReq};
 use tokio::{task::spawn_blocking, time::timeout};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 use url::Url;
 
 use crate::{
@@ -39,19 +39,21 @@ pub use resolution::{Resolution, ResolutionFetch, ResolutionSource};
 
 /// * `pkg_url_hint` - the target and [`PkgUrlHint`] the installed version was
 ///   found with, if any, see [`Data::with_pkg_url_hint`].
-#[instrument(skip_all)]
-pub async fn resolve(
+pub fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
-) -> Result<Resolution, BinstallError> {
-    let crate_name_name = crate_name.name.clone();
-    let resolution = resolve_inner(opts, crate_name, curr_version, pkg_url_hint)
-        .await
-        .map_err(|err| err.crate_context(crate_name_name))?;
-
-    Ok(resolution)
+) -> impl Future<Output = Result<Resolution, BinstallError>> {
+    // Not `#[instrument]`: it awaits the future at two places, with and
+    // without the span, and `resolve_inner` got compiled once for each.
+    async move {
+        let crate_name_name = crate_name.name.clone();
+        resolve_inner(opts, crate_name, curr_version, pkg_url_hint)
+            .await
+            .map_err(|err| err.crate_context(crate_name_name))
+    }
+    .instrument(info_span!("resolve"))
 }
 
 async fn resolve_inner(
@@ -719,7 +721,7 @@ fn git_source_url(
 ) -> Result<Url, BinstallError> {
     use crate::helpers::git::GitReference::*;
 
-    let mut url = Url::parse(&git_url.to_string())?;
+    let mut url = Url::parse(&git_url.unredacted().to_string())?;
     let query = match reference {
         Branch(branch) => Some(("branch", branch)),
         Tag(tag) => Some(("tag", tag)),
