@@ -3,6 +3,7 @@ use std::{
     io,
     process::{Output, Stdio},
     str,
+    time::Duration,
 };
 
 use tokio::{io::AsyncWriteExt, process::Command};
@@ -55,7 +56,9 @@ impl CommandExt for Command {
         &mut self,
         input: Option<&[u8]>,
     ) -> io::Result<Zeroizing<Box<str>>> {
-        self.stdout(Stdio::piped())
+        // A credential helper can block on a dialog or a passphrase prompt.
+        self.kill_on_drop(true)
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .stdin(if input.is_some() {
                 Stdio::piped()
@@ -69,7 +72,15 @@ impl CommandExt for Command {
             child.stdin.take().unwrap().write_all(input).await?;
         }
 
-        let Output { status, stdout, .. } = child.wait_with_output().await?;
+        let Output { status, stdout, .. } =
+            tokio::time::timeout(Duration::from_secs(5), child.wait_with_output())
+                .await
+                .map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        format!("`{:?}` timed out", self.as_std()),
+                    )
+                })??;
 
         if status.success() {
             let s = String::from_utf8(stdout).map_err(|err| {
@@ -161,7 +172,12 @@ echo password=git-token"#,
     fn no_token() {
         let dir = tempfile::tempdir().unwrap();
         let gh = script(dir.path(), "gh", "exit 1");
-        let git = script(dir.path(), "git", "exit 128");
-        assert!(get_with(&gh, &git).is_err());
+        for (name, body) in [
+            ("git-fails", "exit 128"),
+            ("git-no-password", "echo username=x"),
+        ] {
+            let git = script(dir.path(), name, body);
+            assert!(get_with(&gh, &git).is_err());
+        }
     }
 }
