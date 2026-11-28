@@ -319,14 +319,10 @@ pub struct Args {
     /// How long to wait for a connection, and for a response or a download to
     /// make progress, before giving up on a request, in seconds. `0` turns it off.
     ///
+    /// Can also be set with the `CARGO_HTTP_TIMEOUT` environment variable.
     /// Defaults to Cargo's `http.timeout`, then the `HTTP_TIMEOUT` environment
     /// variable, then 30 seconds.
-    #[clap(
-        help_heading = "Overrides",
-        long,
-        env = "CARGO_HTTP_TIMEOUT",
-        value_name = "SECS"
-    )]
+    #[clap(help_heading = "Overrides", long, value_name = "SECS")]
     pub(crate) http_timeout: Option<u64>,
 
     /// This flag is now enabled by default thus a no-op.

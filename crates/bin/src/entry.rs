@@ -129,11 +129,18 @@ pub fn install_crates(
             .map_err(BinstallError::from)?;
     }
 
-    let timeout = http_timeout(
-        args.http_timeout,
-        http.as_ref().and_then(|http| http.timeout),
-    );
-    if !timeout.is_zero() {
+    // As in Cargo: `--http-timeout`/`CARGO_HTTP_TIMEOUT`, then `http.timeout`,
+    // then `HTTP_TIMEOUT`, 30s by default. 0 turns it off. An empty or invalid
+    // environment variable is ignored, as with `CARGO_HTTP_PROXY`.
+    let env_timeout = |name| env::var(name).ok()?.parse().ok();
+    let timeout = args
+        .http_timeout
+        .or_else(|| env_timeout("CARGO_HTTP_TIMEOUT"))
+        .or(http.as_ref().and_then(|http| http.timeout))
+        .or_else(|| env_timeout("HTTP_TIMEOUT"))
+        .unwrap_or(30);
+    if timeout != 0 {
+        let timeout = Duration::from_secs(timeout);
         client_builder = client_builder
             .connect_timeout(timeout)
             .read_timeout(timeout);
@@ -478,18 +485,6 @@ fn do_read_root_cert(path: &Path) -> Result<Option<Certificate>, BinstallError> 
     file.read_to_end(&mut buffer)?;
 
     open_cert(&buffer).map_err(From::from).map(Some)
-}
-
-/// As in Cargo, how long to wait for a connection, and for a response or a
-/// download to make progress, before giving up on a request:
-/// `--http-timeout` (or `CARGO_HTTP_TIMEOUT`), then `http.timeout`, then
-/// `HTTP_TIMEOUT`, in seconds, and 30 seconds otherwise. 0 turns it off.
-fn http_timeout(arg: Option<u64>, config: Option<u64>) -> Duration {
-    Duration::from_secs(
-        arg.or(config)
-            .or_else(|| env::var("HTTP_TIMEOUT").ok()?.parse().ok())
-            .unwrap_or(30),
-    )
 }
 
 fn read_root_certs(
@@ -850,16 +845,4 @@ pub fn prune_crates(args: Args) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn http_timeout_arg_wins_over_config() {
-        assert_eq!(http_timeout(Some(0), Some(5)), Duration::ZERO);
-        assert_eq!(http_timeout(Some(2), Some(5)), Duration::from_secs(2));
-        assert_eq!(http_timeout(None, Some(5)), Duration::from_secs(5));
-    }
 }

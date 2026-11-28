@@ -34,8 +34,8 @@ cat >"$routes" <<'JSON'
         {"ignore_range": true}, {"ignore_range": true}, {"ignore_range": true},
         {"ignore_range": true}, {"ignore_range": true}, {"ignore_range": true}
     ],
-    "/silent.tar": [{"stall": null}],
-    "/stalled.tar": [{"stall": 1000}]
+    "/silent.tar": [{"hang": true}],
+    "/stalled.tar": [{"truncate": 1000, "hang": true}]
 }
 JSON
 
@@ -109,7 +109,7 @@ fi
 # sending partway through the body: given up on after `--http-timeout` (or
 # `CARGO_HTTP_TIMEOUT`) instead of waiting forever, then retried, and installed.
 install "$1" silent.tar --http-timeout 2
-[ "$(requests_for silent.tar)" -ge 2 ]
+[ "$(requests_for silent.tar)" -eq 2 ]
 
 CARGO_HTTP_TIMEOUT=2 install "$1" stalled.tar
 grep -E "^GET /stalled.tar Range: bytes=[1-9][0-9]*-$" "$HTTPS_SERVER_LOG"

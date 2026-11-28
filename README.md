@@ -245,12 +245,11 @@ To install from a private registry instead of crates.io, pass `--registry` or
 
 ### What if a server stops answering?
 
-As with Cargo, a request is given up on once connecting, or waiting for the
-next part of the response, takes longer than `--http-timeout` (or the
-`CARGO_HTTP_TIMEOUT` environment variable), Cargo's `http.timeout` setting, or
-the `HTTP_TIMEOUT` environment variable, in seconds. It is 30 seconds by
-default, and `0` turns it off. It is then retried a few times, and a download
-is continued from where it stopped.
+As with Cargo, a request is given up on when connecting, or waiting for more of
+the response, takes longer than the timeout. It is read from `--http-timeout`
+(or `CARGO_HTTP_TIMEOUT`), then Cargo's `http.timeout`, then `HTTP_TIMEOUT`, in
+seconds, and is 30 seconds by default. `0` turns it off. A request that timed
+out is retried a few times, and a download is continued from where it stopped.
 
 ### What do the error codes mean?
 

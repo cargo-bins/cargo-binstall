@@ -31,10 +31,10 @@ of:
         100 bytes of it before the connection is closed
     {"ignore_range": true}
         the whole file from DIR with a 200, even if a range was asked for
-    {"stall": 100}
-        the file from DIR with its full Content-Length, but only the first
-        100 bytes of it, then nothing more until the client hangs up
-    {"stall": null}
+    {"truncate": 100, "hang": true}
+        the same, but the connection is kept open, with nothing more sent,
+        until the client hangs up
+    {"hang": true}
         no response at all until the client hangs up
 
 Otherwise a `Range: bytes=N-` request for a file is answered with a 206 and
@@ -116,10 +116,7 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
             elif action.get("ignore_range"):
                 del self.headers["Range"]
                 return False
-            elif "stall" in action and action["stall"] is None:
-                self.wait_for_hang_up()
-                self.close_connection = True
-            elif "truncate" in action or "stall" in action:
+            elif "truncate" in action:
                 path = self.translate_path(self.path)
                 with open(path, "rb") as f:
                     data = f.read()
@@ -131,10 +128,13 @@ def serve(sock, directory, cert, key, request_log, sent_log, routes_file):
                 )
                 self.end_headers()
                 if self.command != "HEAD":
-                    self.wfile.write(data[: action.get("truncate", action.get("stall"))])
+                    self.wfile.write(data[: action["truncate"]])
                     self.wfile.flush()
-                    if "stall" in action:
+                    if action.get("hang"):
                         self.wait_for_hang_up()
+                self.close_connection = True
+            elif action.get("hang"):
+                self.wait_for_hang_up()
                 self.close_connection = True
             else:
                 self.send_response(action["status"])
