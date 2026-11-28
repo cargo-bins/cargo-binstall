@@ -168,8 +168,10 @@ pub fn install_crates(
                     match gh_token::get().await {
                         Ok(token) => Some(token),
                         Err(err) => {
-                            debug!(?err, "Failed to retrieve token from `gh auth token`");
-                            debug!("Failed to read git credential file");
+                            debug!(
+                                ?err,
+                                "Failed to get a token from `gh auth token` or `git credential fill`"
+                            );
                             None
                         }
                     }
