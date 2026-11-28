@@ -132,13 +132,9 @@ pub struct Args {
         help_heading = "Overrides",
         long,
         conflicts_with("manifest_path"),
-        value_name = "URL",
-        value_parser = parse_git_url
+        value_name = "URL"
     )]
-    pub(crate) git: Option<(
-        binstalk::registry::GitUrl,
-        binstalk::manifests::SecretString,
-    )>,
+    pub(crate) git: Option<binstalk::registry::GitUrl>,
 
     #[cfg(feature = "git")]
     /// Branch to use when installing from git.
@@ -1005,26 +1001,6 @@ You cannot use --{feature_option} and specify multiple packages at the same time
     };
 
     (opts, cli_overrides)
-}
-
-/// The url, and the url as it was given, with the password [`GitUrl`]
-/// prints as `redacted`, for `cargo install --git`.
-///
-/// [`GitUrl`]: binstalk::registry::GitUrl
-#[cfg(feature = "git")]
-fn parse_git_url(
-    url: &str,
-) -> Result<
-    (
-        binstalk::registry::GitUrl,
-        binstalk::manifests::SecretString,
-    ),
-    binstalk::registry::GitUrlParseError,
-> {
-    Ok((
-        url.parse()?,
-        binstalk::manifests::SecretString::from_string(url.into()),
-    ))
 }
 
 #[cfg(test)]

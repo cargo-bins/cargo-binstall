@@ -62,18 +62,8 @@ pub type Resolver = fn(
 #[non_exhaustive]
 pub enum CargoTomlFetchOverride {
     /// Clone the repository at the url and check out the reference.
-    ///
-    /// The [`SecretString`](crate::manifests::SecretString) is the url as
-    /// it was given, for `cargo install --git`: [`GitUrl`] prints a password
-    /// in the url as `redacted`.
-    ///
-    /// [`GitUrl`]: crate::helpers::git::GitUrl
     #[cfg(feature = "git")]
-    Git(
-        crate::helpers::git::GitUrl,
-        GitReference,
-        crate::manifests::SecretString,
-    ),
+    Git(crate::helpers::git::GitUrl, GitReference),
     Path(PathBuf),
 }
 

@@ -19,14 +19,17 @@ use semver::Version;
 use tokio::process::Command;
 use tracing::{debug, error, info, warn};
 
-#[cfg(feature = "git")]
-use crate::ops::{CargoTomlFetchOverride, GitReference};
 use crate::{
     bins,
     errors::BinstallError,
     fetchers::Found,
     manifests::crate_info::{CrateInfo, CrateSource},
     ops::Options,
+};
+#[cfg(feature = "git")]
+use crate::{
+    helpers::git::GitUrl,
+    ops::{CargoTomlFetchOverride, GitReference},
 };
 
 pub struct ResolutionFetch {
@@ -307,7 +310,7 @@ impl ResolutionSource {
             // version may differ from the one in the repository, see
             // `PackageInfo::resolve`.
             #[cfg(feature = "git")]
-            Some(CargoTomlFetchOverride::Git(_, reference, git_url)) => {
+            Some(CargoTomlFetchOverride::Git(git_url, reference)) => {
                 apply_git_selection(&mut cmd, git_url, reference)
             }
             _ => {
@@ -467,11 +470,11 @@ fn apply_registry_selection(
 /// Make `cargo install` build the crate from the repository `--git` points
 /// to, instead of the crate with the same name in the registry.
 ///
-/// `git_url` is the url as it was given, with its password if it has one.
-/// `format_cmd` hides it when the command is printed.
+/// The url is passed on with its password, if it has one: `format_cmd` hides
+/// it when the command is printed.
 #[cfg(feature = "git")]
-fn apply_git_selection(cmd: &mut Command, git_url: &str, reference: &GitReference) {
-    cmd.arg("--git").arg(git_url);
+fn apply_git_selection(cmd: &mut Command, git_url: &GitUrl, reference: &GitReference) {
+    cmd.arg("--git").arg(git_url.unredacted().to_string());
 
     let (flag, value) = match reference {
         GitReference::DefaultBranch => return,
@@ -566,7 +569,7 @@ mod tests {
             (GitReference::Rev("abc123".into()), &["--rev", "abc123"]),
         ] {
             let mut cmd = Command::new("cargo");
-            apply_git_selection(&mut cmd, url, &reference);
+            apply_git_selection(&mut cmd, &url.parse().unwrap(), &reference);
 
             let args: Vec<_> = cmd
                 .as_std()
@@ -584,7 +587,7 @@ mod tests {
         cmd.arg("install").arg("a");
         apply_git_selection(
             &mut cmd,
-            "https://user:secret-token@example.com/o/r",
+            &"https://user:secret-token@example.com/o/r".parse().unwrap(),
             &GitReference::DefaultBranch,
         );
 

@@ -233,7 +233,7 @@ pub fn install_crates(
         #[cfg(feature = "git")]
         cargo_toml_fetch_override: match (args.manifest_path, args.git) {
             (Some(manifest_path), None) => Some(CargoTomlFetchOverride::Path(manifest_path)),
-            (None, Some((git_url, full_git_url))) => {
+            (None, Some(git_url)) => {
                 use binstalk::ops::GitReference;
 
                 let reference = match (args.branch, args.tag, args.rev) {
@@ -243,11 +243,7 @@ pub fn install_crates(
                     (None, None, None) => GitReference::DefaultBranch,
                     _ => unreachable!("--branch, --tag and --rev conflict with each other"),
                 };
-                Some(CargoTomlFetchOverride::Git(
-                    git_url,
-                    reference,
-                    full_git_url,
-                ))
+                Some(CargoTomlFetchOverride::Git(git_url, reference))
             }
             (None, None) => None,
             _ => unreachable!("manifest_path and git cannot be specified at the same time"),
