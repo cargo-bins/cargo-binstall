@@ -111,10 +111,44 @@ pub enum SourceType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CrateSource {
     pub source_type: SourceType,
+    /// Records written by older versions may have credentials, see
+    /// [`CrateSource::new`].
+    #[serde(deserialize_with = "deserialize_url_without_credentials")]
     pub url: MaybeOwned<'static, Url>,
 }
 
+/// Drop the password, and the user name over HTTP(S), where it is often a
+/// token. Over SSH the user name is the login (`git@`), needed to fetch and
+/// not a secret.
+fn strip_credentials(url: &mut Url) {
+    // Both fail only for URLs that cannot have credentials.
+    if matches!(url.scheme(), "http" | "https") {
+        let _ = url.set_username("");
+    }
+    let _ = url.set_password(None);
+}
+
+fn deserialize_url_without_credentials<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<MaybeOwned<'static, Url>, D::Error> {
+    let mut url = Url::deserialize(deserializer)?;
+    strip_credentials(&mut url);
+    Ok(MaybeOwned::Owned(url))
+}
+
 impl CrateSource {
+    /// A source for the install records, without the password of `url`, nor
+    /// its user name over HTTP(S): cargo keeps them in `.crates.toml` and
+    /// `.crates2.json`, but they are often a token, which should not be
+    /// stored in plain text. Over SSH the user name is the login (`git@`).
+    pub fn new(source_type: SourceType, mut url: Url) -> Self {
+        strip_credentials(&mut url);
+        Self {
+            source_type,
+            url: MaybeOwned::Owned(url),
+        }
+    }
+
     pub fn cratesio_registry() -> CrateSource {
         Self {
             source_type: SourceType::Registry,
@@ -126,6 +160,33 @@ impl CrateSource {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_crate_source_new_strips_credentials() {
+        for (url, expected) in [
+            (
+                "https://user:secret@example.com/index.git",
+                "https://example.com/index.git",
+            ),
+            (
+                "https://ghp_token@github.com/owner/repo?tag=v1#abc",
+                "https://github.com/owner/repo?tag=v1#abc",
+            ),
+            ("https://example.com/index/", "https://example.com/index/"),
+            // The ssh login is kept.
+            (
+                "ssh://git:secret@github.com/owner/repo",
+                "ssh://git@github.com/owner/repo",
+            ),
+        ] {
+            let source = CrateSource::new(SourceType::Git, Url::parse(url).unwrap());
+            assert_eq!(source.url.as_str(), expected);
+
+            let json = format!(r#"{{"source_type":"Git","url":"{url}"}}"#);
+            let source: CrateSource = serde_json::from_str(&json).unwrap();
+            assert_eq!(source.url.as_str(), expected);
+        }
+    }
 
     #[test]
     fn test_pkg_url_hint_serde() {
