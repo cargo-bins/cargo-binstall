@@ -633,7 +633,7 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         long = "list",
-        conflicts_with_all = ["crate_names", "prune"]
+        conflicts_with_all = ["crate_names", "prune", "uninstall"]
     )]
     pub(crate) list: bool,
 
@@ -641,16 +641,28 @@ pub struct Args {
     #[clap(
         help_heading = "Package selection",
         long = "prune",
-        conflicts_with_all = ["crate_names", "list"]
+        conflicts_with_all = ["crate_names", "list", "uninstall"]
     )]
     pub(crate) prune: bool,
+
+    /// Uninstall the given packages instead of installing them, like `cargo uninstall`.
+    ///
+    /// Removes the binaries of each package from the install path and forgets
+    /// it in `.crates.toml`, `.crates2.json` and binstall's own records, so it
+    /// works whether the package was installed by binstall or by `cargo install`,
+    /// and without cargo being present.
+    ///
+    /// `crate@version` only uninstalls the package if the installed version
+    /// matches. Use `--dry-run` to see what would be removed.
+    #[clap(help_heading = "Package selection", long = "uninstall")]
+    pub(crate) uninstall: bool,
 
     /// Print shell completions for the given shell to stdout and exit.
     #[clap(
         help_heading = "Meta",
         long = "completions",
         value_name = "SHELL",
-        conflicts_with_all = ["crate_names", "list", "prune"]
+        conflicts_with_all = ["crate_names", "list", "prune", "uninstall"]
     )]
     pub(crate) completions: Option<Shell>,
 

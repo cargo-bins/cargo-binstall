@@ -186,6 +186,34 @@ impl Manifests {
         Ok(pruned)
     }
 
+    /// Forget the crates in `names`: remove them from `.crates.toml`,
+    /// `.crates2.json` and binstall's own records.
+    ///
+    /// This only updates the manifests, removing the installed binaries is
+    /// up to the caller.
+    pub fn remove(mut self, names: &[&str]) -> Result<(), ManifestsError> {
+        let mut sorted_names = names.to_vec();
+        sorted_names.sort_unstable();
+
+        self.rewind_cargo_crates_v1()?;
+        let mut v1 = CratesToml::load_from_reader(&mut *self.cargo_crates_v1)?;
+        v1.remove_all(&sorted_names);
+        self.rewind_cargo_crates_v1()?;
+        v1.write_to_file(&mut self.cargo_crates_v1)?;
+
+        if let Some((file, v2)) = &mut self.cargo_crates_v2 {
+            v2.sync_v1(&v1);
+            v2.write_to_file(file)?;
+        }
+
+        for name in sorted_names {
+            self.binstall.remove(name);
+        }
+        self.binstall.overwrite()?;
+
+        Ok(())
+    }
+
     pub fn update(mut self, metadata_vec: Vec<CrateInfo>) -> Result<(), ManifestsError> {
         self.rewind_cargo_crates_v1()?;
 
@@ -332,6 +360,51 @@ mod tests {
         // Second prune should prune 0 crates
         let pruned_again = manifests_after.prune_stale().unwrap();
         assert!(pruned_again.is_empty());
+    }
+
+    #[test]
+    fn test_remove() {
+        let tempdir = TempDir::new().unwrap();
+        let cargo_roots = tempdir.path();
+
+        let crate_info = |name: &str| CrateInfo {
+            name: name.into(),
+            version_req: "*".into(),
+            current_version: Version::new(1, 0, 0),
+            source: CrateSource::cratesio_registry(),
+            target: "x86_64-unknown-linux-gnu".into(),
+            bins: vec![name.into()],
+            pkg_url_hint: None,
+        };
+
+        Manifests::open_exclusive(cargo_roots)
+            .unwrap()
+            .update(vec![crate_info("a"), crate_info("b"), crate_info("c")])
+            .unwrap();
+
+        Manifests::open_exclusive(cargo_roots)
+            .unwrap()
+            .remove(&["c", "a"])
+            .unwrap();
+
+        let manifests = Manifests::open_exclusive(cargo_roots).unwrap();
+        let names: Vec<_> = manifests
+            .list_crates()
+            .into_iter()
+            .map(|info| info.name)
+            .collect();
+        assert_eq!(names, ["b"]);
+        assert!(manifests.binstall_record("a").is_none());
+        assert!(manifests.binstall_record("b").is_some());
+        assert!(manifests.binstall_record("c").is_none());
+
+        let v2: serde_json::Value =
+            serde_json::from_slice(&fs::read(cargo_roots.join(".crates2.json")).unwrap()).unwrap();
+        let ids: Vec<_> = v2["installs"].as_object().unwrap().keys().collect();
+        assert_eq!(
+            ids,
+            ["b 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)"]
+        );
     }
 
     #[test]

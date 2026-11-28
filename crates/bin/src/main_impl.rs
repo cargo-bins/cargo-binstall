@@ -50,6 +50,12 @@ rustc-llvm-version: {rustc_llvm_version}"#
         MainExit::new(entry::list_crates(args), None)
     } else if args.prune {
         MainExit::new(entry::prune_crates(args), None)
+    } else if args.uninstall {
+        logging(
+            args.log_level.unwrap_or(LevelFilter::Info),
+            args.json_output,
+        );
+        MainExit::new(entry::uninstall_crates(args), None)
     } else {
         logging(
             args.log_level.unwrap_or(LevelFilter::Info),

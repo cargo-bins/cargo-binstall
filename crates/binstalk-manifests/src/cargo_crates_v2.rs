@@ -118,7 +118,7 @@ impl CratesV2 {
     /// Same as cargo's `CrateListingV2::sync_v1`: `bins` are copied from
     /// `.crates.toml`, packages missing here get the defaults, and packages
     /// no longer in `.crates.toml` are removed.
-    fn sync_v1(&mut self, v1: &CratesToml<'_>) {
+    pub(crate) fn sync_v1(&mut self, v1: &CratesToml<'_>) {
         let mut installs = BTreeMap::new();
 
         for (id, bins) in v1.entries() {
