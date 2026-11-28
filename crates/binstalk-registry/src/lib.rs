@@ -119,7 +119,7 @@ pub enum RegistryError {
 
     #[error(
         "registry requires authentication: {}",
-        redact_url_userinfo(&.0)
+        redact_url_userinfo(.0.as_str())
     )]
     #[diagnostic(help(
         "Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active."
