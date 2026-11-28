@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.99](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.98...detect-targets-v0.1.99) - 2026-11-28
+
+### Added
+
+- skip downloaded binaries that can't run on this host (glibc version, dynamic musl) ([#2845](https://github.com/cargo-bins/cargo-binstall/pull/2845))
+
+### Other
+
+- Detect arm64ec-pc-windows-msvc on Windows ARM64 ([#2842](https://github.com/cargo-bins/cargo-binstall/pull/2842))
+- Don't panic when the runtime shuts down during macOS target detection ([#2848](https://github.com/cargo-bins/cargo-binstall/pull/2848))
+
 ## [0.1.98](https://github.com/cargo-bins/cargo-binstall/compare/detect-targets-v0.1.97...detect-targets-v0.1.98) - 2026-11-21
 
 ### Added

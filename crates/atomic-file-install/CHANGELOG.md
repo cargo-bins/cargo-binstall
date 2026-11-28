@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.16](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.15...atomic-file-install-v1.0.16) - 2026-11-28
+
+### Other
+
+- Share repository lookups and downloads between crates installed together ([#2839](https://github.com/cargo-bins/cargo-binstall/pull/2839))
+
 ## [1.0.15](https://github.com/cargo-bins/cargo-binstall/compare/atomic-file-install-v1.0.14...atomic-file-install-v1.0.15) - 2026-11-21
 
 ### Fixed

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.13.0...binstalk-registry-v0.14.0) - 2026-11-28
+
+### Added
+
+- share cargo's git registry index clones instead of cloning every run ([#2832](https://github.com/cargo-bins/cargo-binstall/pull/2832))
+
+### Fixed
+
+- report a crate name that differs in case as not found ([#2881](https://github.com/cargo-bins/cargo-binstall/pull/2881))
+- keep credentials out of the install records ([#2884](https://github.com/cargo-bins/cargo-binstall/pull/2884))
+- keep tokens out of logs, error messages and --help ([#2872](https://github.com/cargo-bins/cargo-binstall/pull/2872))
+
+### Other
+
+- a git index keeps its credentials for cargo install ([#2878](https://github.com/cargo-bins/cargo-binstall/pull/2878))
+- bump simple-git to 0.3, pass unredacted git URLs on ([#2885](https://github.com/cargo-bins/cargo-binstall/pull/2885))
+- compile `resolve_inner` once ([#2871](https://github.com/cargo-bins/cargo-binstall/pull/2871))
+- skip the .crate download when already installed ([#2819](https://github.com/cargo-bins/cargo-binstall/pull/2819))
+
 ## [0.13.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-registry-v0.12.13...binstalk-registry-v0.13.0) - 2026-11-21
 
 ### Added

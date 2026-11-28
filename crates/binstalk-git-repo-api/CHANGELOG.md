@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.54...binstalk-git-repo-api-v0.6.0) - 2026-11-28
+
+### Fixed
+
+- keep tokens out of logs, error messages and --help ([#2872](https://github.com/cargo-bins/cargo-binstall/pull/2872))
+
+### Other
+
+- do not keep the GitHub API request future twice ([#2870](https://github.com/cargo-bins/cargo-binstall/pull/2870))
+- fewer repository requests for crates sharing a repository ([#2860](https://github.com/cargo-bins/cargo-binstall/pull/2860))
+- *(binstalk-fetchers)* check each candidate in its own repository ([#2856](https://github.com/cargo-bins/cargo-binstall/pull/2856))
+- Cache per crate in the fetchers, not in binstalk-git-repo-api ([#2813](https://github.com/cargo-bins/cargo-binstall/pull/2813))
+- Look up release tags with git ls-refs and GitHub assets without the API ([#2808](https://github.com/cargo-bins/cargo-binstall/pull/2808))
+- fetch the assets of all candidate releases in one GraphQL query ([#2807](https://github.com/cargo-bins/cargo-binstall/pull/2807))
+- skip release tags that don't exist by HEAD-ing their page on github.com ([#2806](https://github.com/cargo-bins/cargo-binstall/pull/2806))
+
 ## [0.5.54](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-git-repo-api-v0.5.53...binstalk-git-repo-api-v0.5.54) - 2026-11-21
 
 ### Fixed

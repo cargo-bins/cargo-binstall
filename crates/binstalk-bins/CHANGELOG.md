@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.8.0...binstalk-bins-v0.9.0) - 2026-11-28
+
+### Other
+
+- Share repository lookups and downloads between crates installed together ([#2839](https://github.com/cargo-bins/cargo-binstall/pull/2839))
+- Use the sole top dir of an archive as bin-dir ([#2829](https://github.com/cargo-bins/cargo-binstall/pull/2829))
+
 ## [0.8.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-bins-v0.7.0...binstalk-bins-v0.8.0) - 2026-11-21
 
 ### Added

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.31.0...binstalk-v0.32.0) - 2026-11-28
+
+### Added
+
+- skip downloaded binaries that can't run on this host (glibc version, dynamic musl) ([#2845](https://github.com/cargo-bins/cargo-binstall/pull/2845))
+- look for packages named after the binaries inside GhCrateMeta, before QuickInstall ([#2859](https://github.com/cargo-bins/cargo-binstall/pull/2859))
+- Download each binary from its own package when pkg-url has `{ bin }` ([#2784](https://github.com/cargo-bins/cargo-binstall/pull/2784))
+- Implement `--branch`, `--tag` and `--rev` for `--git` ([#2844](https://github.com/cargo-bins/cargo-binstall/pull/2844))
+
+### Fixed
+
+- record the absolute directory as the source of a `--manifest-path` install ([#2883](https://github.com/cargo-bins/cargo-binstall/pull/2883))
+- build from the `--git` repository when falling back to cargo install ([#2874](https://github.com/cargo-bins/cargo-binstall/pull/2874))
+- keep credentials out of the install records ([#2884](https://github.com/cargo-bins/cargo-binstall/pull/2884))
+- keep tokens out of logs, error messages and --help ([#2872](https://github.com/cargo-bins/cargo-binstall/pull/2872))
+
+### Other
+
+- bump simple-git to 0.3, pass unredacted git URLs on ([#2885](https://github.com/cargo-bins/cargo-binstall/pull/2885))
+- compile `resolve_inner` once ([#2871](https://github.com/cargo-bins/cargo-binstall/pull/2871))
+- Detect arm64ec-pc-windows-msvc on Windows ARM64 ([#2842](https://github.com/cargo-bins/cargo-binstall/pull/2842))
+- Share repository lookups and downloads between crates installed together ([#2839](https://github.com/cargo-bins/cargo-binstall/pull/2839))
+- Make Fetcher::find return what it found ([#2851](https://github.com/cargo-bins/cargo-binstall/pull/2851))
+- add cargo-binstall logo to README and docs.rs ([#2787](https://github.com/cargo-bins/cargo-binstall/pull/2787))
+- skip the .crate download when already installed ([#2819](https://github.com/cargo-bins/cargo-binstall/pull/2819))
+- Use the sole top dir of an archive as bin-dir ([#2829](https://github.com/cargo-bins/cargo-binstall/pull/2829))
+- Cache per crate in the fetchers, not in binstalk-git-repo-api ([#2813](https://github.com/cargo-bins/cargo-binstall/pull/2813))
+
 ## [0.31.0](https://github.com/cargo-bins/cargo-binstall/compare/binstalk-v0.30.0...binstalk-v0.31.0) - 2026-11-21
 
 ### Added
