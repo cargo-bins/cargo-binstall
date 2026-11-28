@@ -1,6 +1,5 @@
 use std::{fs::File, path::Path};
 
-use compact_str::{CompactString, format_compact};
 use goblin::elf::Elf;
 use memmap2::Mmap;
 use tokio::task::spawn_blocking;
@@ -74,8 +73,8 @@ fn parse<T>(path: &Path, f: impl FnOnce(&Elf<'_>) -> T) -> Option<T> {
     Some(f(&Elf::parse(&bytes).ok()?))
 }
 
-fn interp(elf: &Elf<'_>) -> Option<CompactString> {
-    Some(elf.interpreter?.split('\0').next()?.into())
+fn interp(elf: &Elf<'_>) -> Option<String> {
+    Some(elf.interpreter?.split('\0').next()?.to_owned())
 }
 
 /// The version of `GLIBC_2.39`: `[2, 39, 0]`. glibc versions have two or
@@ -112,10 +111,10 @@ fn available_glibc(elf: &Elf<'_>) -> Option<[u32; 3]> {
         .max()
 }
 
-fn display([major, minor, patch]: [u32; 3]) -> CompactString {
+fn display([major, minor, patch]: [u32; 3]) -> String {
     match patch {
-        0 => format_compact!("{major}.{minor}"),
-        _ => format_compact!("{major}.{minor}.{patch}"),
+        0 => format!("{major}.{minor}"),
+        _ => format!("{major}.{minor}.{patch}"),
     }
 }
 
