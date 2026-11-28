@@ -90,15 +90,19 @@ fn glibc_version(name: &str) -> Option<[u32; 3]> {
 
 /// The newest glibc version `elf` requires, if any.
 fn needed_glibc(elf: &Elf<'_>) -> Option<[u32; 3]> {
-    let required = elf.verneed.iter().flat_map(|section| section.iter());
-    required
+    elf.verneed
+        .iter()
+        .flat_map(|section| section.iter())
         // Other glibc libraries define versions libc.so.6 doesn't, e.g.
         // libm.so.6's GLIBC_2.40 in glibc 2.40.
         .filter(|need| elf.dynstrtab.get_at(need.vn_file) == Some("libc.so.6"))
-        .flat_map(|need| need.iter().collect::<Vec<_>>())
-        // A weak version is only required if available.
-        .filter(|aux| aux.vna_flags & goblin::elf::symver::VER_FLG_WEAK == 0)
-        .filter_map(|aux| glibc_version(elf.dynstrtab.get_at(aux.vna_name)?))
+        .filter_map(|need| {
+            need.iter()
+                // A weak version is only required if available.
+                .filter(|aux| aux.vna_flags & goblin::elf::symver::VER_FLG_WEAK == 0)
+                .filter_map(|aux| glibc_version(elf.dynstrtab.get_at(aux.vna_name)?))
+                .max()
+        })
         .max()
 }
 
