@@ -112,7 +112,8 @@ done
 # same name in the registry.
 output="$("$1" binstall --force --dry-run --strategies compile --git "file://$GIT" --tag v0.12.0 --no-confirm cargo-binstall 2>&1)"
 echo "$output"
-grep -F 'cargo install cargo-binstall --git file://' <<<"$output"
+# The command may be another cargo, e.g. `cargo-zigbuild` in CI.
+grep -F ' install cargo-binstall --git file://' <<<"$output"
 grep -F -- '--tag v0.12.0' <<<"$output"
 
 # They need `--git` and conflict with each other.
