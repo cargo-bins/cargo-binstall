@@ -106,9 +106,9 @@ if [ -n "$(ls -A "$root/bin" 2>/dev/null)" ]; then
 fi
 
 # A server that accepts the request and never answers it, and one that stops
-# sending partway through the body: given up on after Cargo's `http.timeout`
-# instead of waiting forever, then retried, and installed.
-CARGO_HTTP_TIMEOUT=2 install "$1" silent.tar
+# sending partway through the body: given up on after `--http-timeout` (or
+# `CARGO_HTTP_TIMEOUT`) instead of waiting forever, then retried, and installed.
+install "$1" silent.tar --http-timeout 2
 [ "$(requests_for silent.tar)" -ge 2 ]
 
 CARGO_HTTP_TIMEOUT=2 install "$1" stalled.tar

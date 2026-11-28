@@ -316,6 +316,19 @@ pub struct Args {
     )]
     pub(crate) maximum_resolution_timeout: NonZeroU16,
 
+    /// How long to wait for a connection, and for a response or a download to
+    /// make progress, before giving up on a request, in seconds. `0` turns it off.
+    ///
+    /// Defaults to Cargo's `http.timeout`, then the `HTTP_TIMEOUT` environment
+    /// variable, then 30 seconds.
+    #[clap(
+        help_heading = "Overrides",
+        long,
+        env = "CARGO_HTTP_TIMEOUT",
+        value_name = "SECS"
+    )]
+    pub(crate) http_timeout: Option<u64>,
+
     /// This flag is now enabled by default thus a no-op.
     ///
     /// By default, Binstall will install a binary as-is in the install path.

@@ -141,6 +141,9 @@ Some crate installation strategies may collect anonymized usage statistics by de
 * `--maximum-resolution-timeout <TIMEOUT>` — Maximum time each resolution (one for each possible target and each strategy), in seconds
 
   Default value: `15`
+* `--http-timeout <SECS>` — How long to wait for a connection, and for a response or a download to make progress, before giving up on a request, in seconds. `0` turns it off.
+
+   Defaults to Cargo's `http.timeout`, then the `HTTP_TIMEOUT` environment variable, then 30 seconds.
 * `--no-symlinks` — This flag is now enabled by default thus a no-op.
 
    By default, Binstall will install a binary as-is in the install path.
