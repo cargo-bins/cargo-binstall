@@ -288,7 +288,7 @@ impl Registry {
         match self {
             #[cfg(feature = "git")]
             Registry::Git(registry) => {
-                Url::parse(&registry.url().to_string()).map(MaybeOwned::Owned)
+                Url::parse(&registry.url().unredacted().to_string()).map(MaybeOwned::Owned)
             }
             Registry::Sparse(registry) => Ok(MaybeOwned::Borrowed(registry.url())),
         }
@@ -320,7 +320,7 @@ impl Registry {
     pub fn cargo_install_index_arg(&self) -> String {
         match self {
             #[cfg(feature = "git")]
-            Registry::Git(registry) => registry.url().to_string(),
+            Registry::Git(registry) => registry.url().unredacted().to_string(),
             Registry::Sparse(registry) => format!("sparse+{}", registry.url()),
         }
     }

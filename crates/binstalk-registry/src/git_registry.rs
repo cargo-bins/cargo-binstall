@@ -9,7 +9,6 @@ use std::{
 };
 
 use binstalk_downloader::remote::Client;
-use binstalk_types::redact_url_userinfo;
 use compact_str::{CompactString, ToCompactString};
 use fs_lock::FileLock;
 use jiff::Timestamp;
@@ -83,7 +82,7 @@ impl GitIndex {
                 Err(err) => {
                     warn!(
                         "Failed to use cargo's clone of git index {} in {}: {err}, cloning to a temporary directory instead",
-                        redact_url_userinfo(url.to_string()),
+                        url,
                         cargo_home.display()
                     );
                     None
@@ -107,10 +106,7 @@ impl GitIndex {
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!(
-                            "config.json not found in repository `{}`",
-                            redact_url_userinfo(url.to_string())
-                        ),
+                        format!("config.json not found in repository `{}`", url),
                     )
                 })?;
 
@@ -194,7 +190,7 @@ fn open_cargo_clone(
     let Some(name) = cargo_url.and_then(|cargo_url| cargo_index_dir_name(cargo_url.clone())) else {
         debug!(
             "Cannot share cargo's clone of git index {}: not a URL cargo accepts",
-            redact_url_userinfo(url.to_string())
+            url
         );
         return Ok(None);
     };
@@ -209,7 +205,7 @@ fn open_cargo_clone(
             // It is cargo's to repair, a full clone is too expensive for us.
             Err(err) => warn!(
                 "Failed to update cargo's clone of git index {} in {}: {err}",
-                redact_url_userinfo(url.to_string()),
+                url,
                 full.display()
             ),
         }
@@ -227,7 +223,7 @@ fn open_cargo_clone(
                 Ok(repo) => return Ok(Some(repo)),
                 Err(err) => warn!(
                     "Failed to update shallow clone of git index {} in {}: {err}, cloning it again",
-                    redact_url_userinfo(url.to_string()),
+                    url,
                     shallow.display()
                 ),
             }
@@ -432,7 +428,7 @@ impl GitRegistry {
     /// Clone the index to a temporary directory on first use, or read it in
     /// place for a `file://` index.
     pub fn new(url: GitUrl) -> Self {
-        let cargo_url = Url::parse(&url.to_compact_string()).ok();
+        let cargo_url = Url::parse(&url.unredacted().to_compact_string()).ok();
         Self::new_inner(url, cargo_url, None)
     }
 
@@ -582,6 +578,22 @@ impl GitRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// cargo names its index directory after the URL with its credentials,
+    /// while `GitUrl`'s `Display` hides them.
+    #[test]
+    fn cargo_url_keeps_credentials() {
+        let url: GitUrl = "https://token:secret@example.com/index.git"
+            .parse()
+            .unwrap();
+        assert_eq!(url.to_string(), "https://redacted@example.com/index.git");
+
+        let registry = GitRegistry::new(url);
+        assert_eq!(
+            registry.0.cargo_url.as_ref().unwrap().as_str(),
+            "https://token:secret@example.com/index.git"
+        );
+    }
 
     fn git(dir: &Path, args: &[&str]) {
         let status = Command::new("git")
