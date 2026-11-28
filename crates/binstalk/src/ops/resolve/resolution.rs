@@ -490,7 +490,7 @@ fn format_cmd(cmd: &Command) -> impl fmt::Display + '_ {
     // An index passed to cargo may hold a token.
     let program_args = cmd
         .get_args()
-        .map(|arg| redact_url_userinfo(&arg.to_string_lossy()).into_owned())
+        .map(|arg| redact_url_userinfo(arg.to_string_lossy()))
         .map(Either::Right);
 
     iter::once(program).chain(program_args).format(" ")

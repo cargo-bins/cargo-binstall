@@ -47,18 +47,24 @@ impl RequestBuilder {
     /// Unlike with [`RequestBuilder::header`], the value is left out of the
     /// `Debug` output of the request, so that it does not end up in logs.
     pub fn sensitive_header(self, key: impl AsRef<str>, value: &str) -> Self {
-        let inner = match header::HeaderValue::from_str(value) {
-            Ok(mut value) => {
-                value.set_sensitive(true);
-                self.inner.header(key.as_ref(), value)
+        fn inner(
+            inner: reqwest::RequestBuilder,
+            key: &str,
+            value: &str,
+        ) -> reqwest::RequestBuilder {
+            match header::HeaderValue::from_str(value) {
+                Ok(mut value) => {
+                    value.set_sensitive(true);
+                    inner.header(key, value)
+                }
+                // Let reqwest record the error, which does not hold the value.
+                Err(_) => inner.header(key, value),
             }
-            // Let reqwest record the error, which does not hold the value.
-            Err(_) => self.inner.header(key.as_ref(), value),
-        };
+        }
 
         Self {
             client: self.client,
-            inner,
+            inner: inner(self.inner, key.as_ref(), value),
         }
     }
 

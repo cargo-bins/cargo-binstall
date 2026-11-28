@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     fmt,
     ops::{Deref, DerefMut},
 };
@@ -54,16 +53,106 @@ pub type SecretString = Redacted<Zeroizing<String>>;
 /// A token is commonly passed as either of them, e.g.
 /// `https://<token>@github.com/owner/repo` or
 /// `sparse+https://user:<token>@registry.example.com/index/`.
-pub fn redact_url_userinfo(url: &str) -> Cow<'_, str> {
-    let Some((scheme, rest)) = url.split_once("://") else {
-        return Cow::Borrowed(url);
-    };
-    // The authority, which holds them, ends at the first `/`, `?` or `#`.
-    let authority_len = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+///
+/// Nothing is allocated: `url` is formatted twice, once to find the user
+/// name and password and once to write it without them.
+pub fn redact_url_userinfo<T: fmt::Display>(url: T) -> RedactUrlUserinfo<T> {
+    RedactUrlUserinfo(url)
+}
 
-    match rest[..authority_len].rfind('@') {
-        Some(at) => Cow::Owned(format!("{scheme}://<redacted>{}", &rest[at..])),
-        None => Cow::Borrowed(url),
+/// See [`redact_url_userinfo`].
+#[derive(Clone, Copy, Debug)]
+pub struct RedactUrlUserinfo<T>(T);
+
+impl<T: fmt::Display> fmt::Display for RedactUrlUserinfo<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut finder = UserinfoFinder::default();
+        // Never fails: `UserinfoFinder::write_str` always succeeds.
+        let _ = fmt::write(&mut finder, format_args!("{}", self.0));
+
+        match finder.userinfo() {
+            Some(userinfo) => fmt::write(
+                &mut SkipUserinfo {
+                    out: f,
+                    pos: 0,
+                    userinfo,
+                },
+                format_args!("{}", self.0),
+            ),
+            None => self.0.fmt(f),
+        }
+    }
+}
+
+/// Finds the user name and password in a URL: from after the first `://` to
+/// the last `@` before the authority ends at a `/`, `?` or `#`.
+#[derive(Default)]
+struct UserinfoFinder {
+    pos: usize,
+    /// How much of `://` was just seen, before the authority starts.
+    scheme_sep: usize,
+    authority_start: Option<usize>,
+    authority_ended: bool,
+    last_at: Option<usize>,
+}
+
+impl UserinfoFinder {
+    fn userinfo(&self) -> Option<std::ops::Range<usize>> {
+        Some(self.authority_start?..self.last_at?)
+    }
+}
+
+impl fmt::Write for UserinfoFinder {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for b in s.bytes() {
+            if self.authority_ended {
+                break;
+            }
+            if self.authority_start.is_none() {
+                self.scheme_sep = match (self.scheme_sep, b) {
+                    (_, b':') => 1,
+                    (1 | 2, b'/') => self.scheme_sep + 1,
+                    _ => 0,
+                };
+                if self.scheme_sep == 3 {
+                    self.authority_start = Some(self.pos + 1);
+                }
+            } else {
+                match b {
+                    b'@' => self.last_at = Some(self.pos),
+                    b'/' | b'?' | b'#' => self.authority_ended = true,
+                    _ => (),
+                }
+            }
+            self.pos += 1;
+        }
+        Ok(())
+    }
+}
+
+/// Writes to `out` with `userinfo` replaced.
+struct SkipUserinfo<'a, 'b> {
+    out: &'a mut fmt::Formatter<'b>,
+    pos: usize,
+    userinfo: std::ops::Range<usize>,
+}
+
+impl fmt::Write for SkipUserinfo<'_, '_> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let start = self.pos;
+        let end = start + s.len();
+        self.pos = end;
+
+        // Offsets in `s`; the userinfo starts after `://` and ends at `@`,
+        // both ASCII, so these are char boundaries.
+        let skip_start = self.userinfo.start.clamp(start, end) - start;
+        let skip_end = self.userinfo.end.clamp(start, end) - start;
+
+        self.out.write_str(&s[..skip_start])?;
+        if (start..end).contains(&self.userinfo.start) {
+            self.out.write_str("<redacted>")?;
+        }
+        self.out.write_str(&s[skip_end..])
     }
 }
 
@@ -88,10 +177,14 @@ mod test {
                 "--index=https://<redacted>@host/",
             ),
         ] {
-            assert_eq!(redact_url_userinfo(url), expected);
+            assert_eq!(redact_url_userinfo(url).to_string(), expected);
+            // Written in several pieces, as a `Display` impl may do.
+            let (a, b) = url.split_at(url.len() / 2);
+            let pieces = format_args!("{a}{b}");
+            assert_eq!(redact_url_userinfo(pieces).to_string(), expected);
         }
 
-        // Nothing to redact: returned as is, without allocating.
+        // Nothing to redact.
         for url in [
             "https://github.com/owner/repo",
             "https://example.com/a@b?c=d@e#f@g",
@@ -99,7 +192,7 @@ mod test {
             "cargo-binstall",
             "",
         ] {
-            assert!(matches!(redact_url_userinfo(url), Cow::Borrowed(s) if s == url));
+            assert_eq!(redact_url_userinfo(url).to_string(), url);
         }
     }
 }

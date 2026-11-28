@@ -113,7 +113,7 @@ impl SparseRegistry {
     #[instrument(
         skip(self, client, version_req),
         fields(
-            registry_url = format_args!("{}", redact_url_userinfo(self.url.as_str())),
+            registry_url = format_args!("{}", redact_url_userinfo(&self.url)),
             version_req = format_args!("{version_req}"),
         )
     )]
