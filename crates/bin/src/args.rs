@@ -84,6 +84,11 @@ pub struct Args {
     /// `x86_64-unknown-linux-musl` binary. However, on a musl system, the gnu version will not be
     /// considered.
     ///
+    /// On Linux, a binary found for a detected target is skipped if it can't run on this system:
+    /// if its dynamic loader is missing (e.g. a dynamically linked musl binary on a glibc system),
+    /// or it needs a newer glibc than the system has. Targets given with this option are not
+    /// checked.
+    ///
     /// This option takes a comma-separated list of target triples, which will be tried in order.
     /// They override the default list, which is detected automatically from the current platform.
     ///
@@ -93,6 +98,7 @@ pub struct Args {
         alias = "target",
         long,
         value_name = "TRIPLE",
+        value_delimiter = ',',
         env = "CARGO_BUILD_TARGET"
     )]
     pub(crate) targets: Option<Vec<String>>,
@@ -559,6 +565,8 @@ pub struct Args {
         help_heading = "Options",
         long,
         env = "GITHUB_TOKEN",
+        // Otherwise `--help` prints the token.
+        hide_env_values = true,
         value_name = "TOKEN"
     )]
     pub(crate) github_token: Option<GithubToken>,
@@ -658,6 +666,7 @@ pub struct Args {
     pub(crate) markdown_help: bool,
 }
 
+/// `Debug` does not print the token: `Zeroizing`'s does not since 1.9.1.
 #[derive(Debug, Clone)]
 pub(crate) struct GithubToken(pub(crate) Zeroizing<Box<str>>);
 
@@ -1016,6 +1025,19 @@ mod test {
     }
 
     #[test]
+    fn github_token_is_not_printed() {
+        let command = Args::command();
+        let arg = command
+            .get_arguments()
+            .find(|arg| arg.get_id() == "github_token")
+            .unwrap();
+        assert!(arg.is_hide_env_values_set());
+
+        let token = GithubToken::from("ghp_secret-token");
+        assert!(!format!("{token:?}").contains("secret-token"));
+    }
+
+    #[test]
     fn quickinstall_url_matches() {
         let long_help = Args::command()
             .get_opts()
@@ -1069,6 +1091,27 @@ mod test {
         assert_eq!(token(Some(""), None), None);
         assert_eq!(token(Some(a), Some("")).as_deref(), Some(a));
         assert_eq!(token(None, Some("")), None);
+    }
+
+    #[test]
+    fn targets_are_comma_separated() {
+        let args = Args::try_parse_from([
+            "cargo-binstall",
+            "--targets",
+            "x86_64-unknown-linux-gnu,x86_64-unknown-linux-musl",
+            "--target",
+            "aarch64-apple-darwin",
+            "ripgrep",
+        ])
+        .unwrap();
+        assert_eq!(
+            args.targets.unwrap(),
+            [
+                "x86_64-unknown-linux-gnu",
+                "x86_64-unknown-linux-musl",
+                "aarch64-apple-darwin"
+            ]
+        );
     }
 
     #[test]

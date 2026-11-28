@@ -139,7 +139,7 @@ impl DownloadContent {
     async fn into_bytes(self, resume: bool) -> Result<Bytes, RemoteError> {
         match self.into_response().await? {
             (Some((client, url)), response) if resume => {
-                collect_bytes(resumable_stream(client, url, response)).await
+                collect_bytes(pin!(resumable_stream(client, url, response))).await
             }
             (_, response) => response.bytes().await,
         }
@@ -151,11 +151,12 @@ impl DownloadContent {
 /// A body that arrived in a single chunk is returned as-is, and one that arrived
 /// in several is copied once into a buffer allocated to fit all of them, rather
 /// than into one that grows (and reallocates) as each chunk comes in.
+///
+/// `stream` is pinned by the caller, where it is created, since it is large:
+/// taken by value it would have to be moved here to be pinned.
 async fn collect_bytes(
-    stream: impl Stream<Item = Result<Bytes, RemoteError>>,
+    mut stream: Pin<&mut impl Stream<Item = Result<Bytes, RemoteError>>>,
 ) -> Result<Bytes, RemoteError> {
-    let mut stream = pin!(stream);
-
     let Some(first) = stream.next().await.transpose()? else {
         return Ok(Bytes::new());
     };

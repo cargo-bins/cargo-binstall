@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, path::PathBuf};
 
 use detect_targets::detect_targets;
 use tokio::runtime;
@@ -16,6 +16,11 @@ fn main() -> io::Result<()> {
 
     if std::env::args().any(|arg| arg == "--probe-all") {
         return probe_all(rt);
+    }
+
+    let mut args = std::env::args_os().skip(1);
+    if args.next().is_some_and(|arg| arg == "--check") {
+        return check(rt, args.map(PathBuf::from).collect());
     }
 
     let targets = rt.block_on(detect_targets());
@@ -52,6 +57,21 @@ fn probe_all(rt: runtime::Runtime) -> io::Result<()> {
                 fmt(probe.run().await),
                 fmt(probe.run_static().await),
             );
+        }
+    });
+
+    Ok(())
+}
+
+/// Check whether each given executable can run here, printing
+/// `path: ok` or `path: <reason>` for each.
+fn check(rt: runtime::Runtime, paths: Vec<PathBuf>) -> io::Result<()> {
+    rt.block_on(async {
+        for path in paths {
+            match detect_targets::compat::check(&path).await {
+                Ok(()) => println!("{}: ok", path.display()),
+                Err(err) => println!("{}: {err}", path.display()),
+            }
         }
     });
 

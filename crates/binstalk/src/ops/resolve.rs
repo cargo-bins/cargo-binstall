@@ -10,11 +10,11 @@ use leon::Template;
 use maybe_owned::MaybeOwned;
 use semver::{Comparator, Op as ComparatorOp, Version, VersionReq};
 use tokio::{task::spawn_blocking, time::timeout};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 use url::Url;
 
 use crate::{
-    bins,
+    DesiredTargets, bins,
     errors::{BinstallError, VersionParseError},
     fetchers::{BinInfo, Data, Fetcher, Found, TargetArchOverride, TargetData},
     helpers::{
@@ -39,19 +39,21 @@ pub use resolution::{Resolution, ResolutionFetch, ResolutionSource};
 
 /// * `pkg_url_hint` - the target and [`PkgUrlHint`] the installed version was
 ///   found with, if any, see [`Data::with_pkg_url_hint`].
-#[instrument(skip_all)]
-pub async fn resolve(
+pub fn resolve(
     opts: Arc<Options>,
     crate_name: CrateName,
     curr_version: Option<Version>,
     pkg_url_hint: Option<(CompactString, PkgUrlHint)>,
-) -> Result<Resolution, BinstallError> {
-    let crate_name_name = crate_name.name.clone();
-    let resolution = resolve_inner(opts, crate_name, curr_version, pkg_url_hint)
-        .await
-        .map_err(|err| err.crate_context(crate_name_name))?;
-
-    Ok(resolution)
+) -> impl Future<Output = Result<Resolution, BinstallError>> {
+    // Not `#[instrument]`: it awaits the future at two places, with and
+    // without the span, and `resolve_inner` got compiled once for each.
+    async move {
+        let crate_name_name = crate_name.name.clone();
+        resolve_inner(opts, crate_name, curr_version, pkg_url_hint)
+            .await
+            .map_err(|err| err.crate_context(crate_name_name))
+    }
+    .instrument(info_span!("resolve"))
 }
 
 async fn resolve_inner(
@@ -192,6 +194,7 @@ async fn resolve_inner(
             &opts.install_path,
             opts.no_symlinks,
             &opts.bins,
+            &opts.desired_targets,
         )
         .await;
 
@@ -266,6 +269,8 @@ async fn resolve_inner(
 }
 
 ///  * `found` - What a fetcher's `find()` returned.
+///  * `desired_targets` - checks that the binaries can run on this host, if
+///    the targets were detected from it.
 ///
 /// Can return empty Vec if all `BinFile` is optional and does not exist
 /// in the archive downloaded.
@@ -276,6 +281,7 @@ async fn download_extract_and_verify(
     install_path: &Path,
     no_symlinks: bool,
     bins: &Option<Vec<CompactString>>,
+    desired_targets: &DesiredTargets,
 ) -> Result<Vec<bins::BinFile>, BinstallError> {
     // Download and extract it, unless another crate did already: then it is
     // somewhere else than `bin_path`.
@@ -315,6 +321,16 @@ async fn download_extract_and_verify(
     }
 
     bins::check_aliases_unique(&bin_files)?;
+
+    for bin_file in &bin_files {
+        if let Err(reason) = desired_targets.check_binary(&bin_file.source).await {
+            return Err(BinstallError::IncompatibleBinary {
+                bin: bin_file.base_name.clone(),
+                target: found.target().into(),
+                reason,
+            });
+        }
+    }
 
     Ok(bin_files)
 }
@@ -554,14 +570,10 @@ impl PackageInfo {
 
                 (
                     ret,
-                    CrateSource {
-                        source_type: SourceType::Git,
-                        url: MaybeOwned::Owned(git_source_url(
-                            git_url,
-                            reference.as_borrowed(),
-                            commit_hash,
-                        )?),
-                    },
+                    CrateSource::new(
+                        SourceType::Git,
+                        git_source_url(git_url, reference.as_borrowed(), commit_hash)?,
+                    ),
                     None,
                 )
             }
@@ -719,7 +731,7 @@ fn git_source_url(
 ) -> Result<Url, BinstallError> {
     use crate::helpers::git::GitReference::*;
 
-    let mut url = Url::parse(&git_url.to_string())?;
+    let mut url = Url::parse(&git_url.unredacted().to_string())?;
     let query = match reference {
         Branch(branch) => Some(("branch", branch)),
         Tag(tag) => Some(("tag", tag)),

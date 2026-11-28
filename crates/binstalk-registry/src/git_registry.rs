@@ -422,7 +422,7 @@ impl GitRegistry {
     /// Clone the index to a temporary directory on first use, or read it in
     /// place for a `file://` index.
     pub fn new(url: GitUrl) -> Self {
-        let cargo_url = Url::parse(&url.to_compact_string()).ok();
+        let cargo_url = Url::parse(&url.unredacted().to_compact_string()).ok();
         Self::new_inner(url, cargo_url, None)
     }
 
@@ -572,6 +572,22 @@ impl GitRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// cargo names its index directory after the URL with its credentials,
+    /// while `GitUrl`'s `Display` hides them.
+    #[test]
+    fn cargo_url_keeps_credentials() {
+        let url: GitUrl = "https://token:secret@example.com/index.git"
+            .parse()
+            .unwrap();
+        assert_eq!(url.to_string(), "https://redacted@example.com/index.git");
+
+        let registry = GitRegistry::new(url);
+        assert_eq!(
+            registry.0.cargo_url.as_ref().unwrap().as_str(),
+            "https://token:secret@example.com/index.git"
+        );
+    }
 
     fn git(dir: &Path, args: &[&str]) {
         let status = Command::new("git")

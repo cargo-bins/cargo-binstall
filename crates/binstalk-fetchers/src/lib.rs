@@ -2,7 +2,10 @@
 
 use std::{borrow::Cow, path::Path, sync::Arc, time::Duration};
 
-use binstalk_downloader::{download::DownloadError, remote::Error as RemoteError};
+use binstalk_downloader::{
+    download::DownloadError,
+    remote::{Error as RemoteError, StatusCode},
+};
 use binstalk_git_repo_api::gh_api_client::{GhApiError, GhRepo, RepoInfo as GhRepoInfo};
 use binstalk_types::{
     cargo_toml_binstall::{SigningAlgorithm, Strategy},
@@ -217,6 +220,10 @@ struct RepoInfo {
     repository_host: RepositoryHost,
     subcrate: Option<CompactString>,
     is_private: bool,
+    /// github.com answered its page with 404 and there is no token to ask
+    /// further: a private repository or none at all, so its release assets
+    /// can't be checked or downloaded.
+    is_hidden: bool,
 }
 
 /// What to do about package signatures
@@ -418,6 +425,13 @@ impl RepoInfo {
             // signed in with a browser, so one whose page loads is public:
             // no need to spend the API on it.
             let has_public_page = redirected.is_ok();
+            // github.com answers HEAD like GET, see `trusts_head`.
+            let is_hidden = !client.has_gh_token()
+                && is_github_com(&repo)
+                && matches!(
+                    &redirected,
+                    Err(RemoteError::Http(err)) if err.status() == Some(StatusCode::NOT_FOUND)
+                );
             let mut repo = redirected.unwrap_or(repo);
             let repository_host = RepositoryHost::guess_git_hosting_services(&repo);
 
@@ -437,6 +451,7 @@ impl RepoInfo {
                                 repository_host,
                                 repo,
                                 is_private: gh_repo_info.is_private(),
+                                is_hidden: false,
                             });
                         }
                     }
@@ -447,6 +462,7 @@ impl RepoInfo {
                                 repository_host: RepositoryHost::guess_git_hosting_services(&repo),
                                 repo,
                                 is_private: false,
+                                is_hidden: false,
                             });
                         }
                     }
@@ -463,6 +479,7 @@ impl RepoInfo {
                 subcrate,
                 repo,
                 repository_host,
+                is_hidden,
             })
         }
 
@@ -785,8 +802,41 @@ mod test {
             assert_eq!(info.repo.as_str(), repo);
             assert_eq!(info.subcrate.as_deref(), subcrate);
             assert!(!info.is_private);
+            assert!(!info.is_hidden);
         }
         assert_eq!(context.repo_infos_len(), 1);
+    }
+
+    /// Without a token, a private repository's page is 404, like one that
+    /// doesn't exist.
+    #[tokio::test]
+    async fn test_private_repo_hidden_without_token() {
+        let gh_client = GhApiClient::new(
+            Client::new(
+                "user-agent",
+                None,
+                false,
+                Default::default(),
+                NonZeroU16::new(1000).unwrap(),
+                NonZeroU64::new(1000).unwrap(),
+                [],
+            )
+            .unwrap(),
+            None,
+        );
+        let data = Data::new(
+            Default::default(),
+            "cargo-binstall".into(),
+            "0.12.0".into(),
+            Some("https://github.com/cargo-bins/private-repo-for-testing.git".into()),
+        );
+        let info = data.get_repo_info(&gh_client).await.unwrap().unwrap();
+        assert!(info.is_hidden);
+        assert!(!info.is_private);
+        assert_eq!(
+            info.repo.as_str(),
+            "https://github.com/cargo-bins/private-repo-for-testing"
+        );
     }
 
     #[test]

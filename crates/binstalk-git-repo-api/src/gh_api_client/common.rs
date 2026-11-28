@@ -71,10 +71,10 @@ where
         request_builder = request_builder.bearer_auth(&auth_token);
     }
 
-    let future = request_builder.send(false);
-
+    // The request is sent from inside of the future: a future made here
+    // would be kept twice, once captured and once being awaited.
     async move {
-        let response = check_http_status_and_header(future.await?)?;
+        let response = check_http_status_and_header(request_builder.send(false).await?)?;
 
         Ok(response.json().await?)
     }
@@ -110,23 +110,23 @@ pub(super) fn issue_graphql_query<T>(
 where
     T: DeserializeOwned + Debug,
 {
-    let res = to_json_string(&GraphQLQuery { query })
+    let request_builder = to_json_string(&GraphQLQuery { query })
         .map_err(remote::Error::from)
         .map(|graphql_query| {
             let graphql_endpoint = get_graphql_endpoint();
 
             debug!("Sending graphql query to {graphql_endpoint}: '{graphql_query}'");
 
-            let request_builder = client
+            client
                 .post(graphql_endpoint, graphql_query)
                 .header("Accept", "application/vnd.github+json")
-                .bearer_auth(&auth_token);
-
-            request_builder.send(false)
+                .bearer_auth(&auth_token)
         });
 
+    // The request is sent from inside of the future: a future made here
+    // would be kept twice, once captured and once being awaited.
     async move {
-        let response = check_http_status_and_header(res?.await?)?;
+        let response = check_http_status_and_header(request_builder?.send(false).await?)?;
         let rate_limit_retry_after = remote::rate_limit_retry_after(response.headers());
 
         let mut response: GraphQLResponse<T> = response.json().await?;

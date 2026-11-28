@@ -1,6 +1,6 @@
-use crate::detect_targets;
+use crate::{compat, detect_targets};
 
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use tokio::sync::SetOnce;
 
@@ -46,6 +46,18 @@ impl DesiredTargets {
         match &self.0 {
             Initialized(targets) => Some(targets),
             AutoDetect(..) => None,
+        }
+    }
+
+    /// Check whether the executable at `path`, a binary for one of the
+    /// targets, can run on this host, see [`compat::check`].
+    ///
+    /// Targets given explicitly are not checked, as they may be meant for
+    /// another machine, e.g. when installing into a sysroot.
+    pub async fn check_binary(&self, path: &Path) -> Result<(), compat::Incompatible> {
+        match self.0 {
+            DesiredTargetsInner::Initialized(_) => Ok(()),
+            DesiredTargetsInner::AutoDetect(_) => compat::check(path).await,
         }
     }
 }

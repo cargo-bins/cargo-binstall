@@ -62,7 +62,7 @@ tracing = { version = "0.1.43", default-features = false }
 tracing-core = "0.1.32"
 tracing-log = { version = "0.2.0", default-features = false }
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "json", "ansi"], default-features = false }
-zeroize = "1.8.1"
+zeroize = "1.9.1"
 
 [build-dependencies]
 embed-resource = "3.0.9"

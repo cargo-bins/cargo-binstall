@@ -11,6 +11,7 @@ use binstalk_types::{
     cargo_toml_binstall::Meta,
     crate_info::{CrateSource, SourceType},
     maybe_owned::MaybeOwned,
+    redact_url_userinfo,
 };
 use cargo_toml_workspace::cargo_toml::{Error as CargoTomlError, Manifest};
 use compact_str::CompactString;
@@ -116,7 +117,10 @@ pub enum RegistryError {
     #[error("Failed to shallow clone git repository: {0}")]
     GitError(#[from] GitError),
 
-    #[error("registry requires authentication: {0}")]
+    #[error(
+        "registry requires authentication: {}",
+        redact_url_userinfo(.0.as_str())
+    )]
     #[diagnostic(help(
         "Configure Cargo credentials for this registry, for example with `cargo login` or `CARGO_REGISTRIES_<NAME>_TOKEN` when `cargo:token` is active."
     ))]
@@ -247,14 +251,13 @@ impl Registry {
 
     /// Find the latest version of `crate_name` matching `version_req`,
     /// without downloading the crate.
-    pub async fn find_crate_matched(
+    pub fn find_crate_matched(
         &self,
         client: Client,
         crate_name: &str,
         version_req: &VersionReq,
-    ) -> Result<MatchedCrate, RegistryError> {
+    ) -> impl Future<Output = Result<MatchedCrate, RegistryError>> {
         self.find_crate_matched_with_auth(client, None, crate_name, version_req, None)
-            .await
     }
 
     pub(crate) async fn find_crate_matched_with_auth(
@@ -285,7 +288,7 @@ impl Registry {
         match self {
             #[cfg(feature = "git")]
             Registry::Git(registry) => {
-                Url::parse(&registry.url().to_string()).map(MaybeOwned::Owned)
+                Url::parse(&registry.url().unredacted().to_string()).map(MaybeOwned::Owned)
             }
             Registry::Sparse(registry) => Ok(MaybeOwned::Borrowed(registry.url())),
         }
@@ -307,17 +310,14 @@ impl Registry {
             | ("https://github.com/rust-lang/crates.io-index", SourceType::Registry) => {
                 CrateSource::cratesio_registry()
             }
-            _ => CrateSource {
-                source_type,
-                url: MaybeOwned::Owned(registry.into_owned()),
-            },
+            _ => CrateSource::new(source_type, registry.into_owned()),
         })
     }
 
     pub fn cargo_install_index_arg(&self) -> String {
         match self {
             #[cfg(feature = "git")]
-            Registry::Git(registry) => registry.url().to_string(),
+            Registry::Git(registry) => registry.url().unredacted().to_string(),
             Registry::Sparse(registry) => format!("sparse+{}", registry.url()),
         }
     }
@@ -350,10 +350,33 @@ mod test {
 
     use toml_edit::ser::to_string;
 
+    use binstalk_types::SecretString;
+
     use super::*;
 
-    /// Mark this as an async fn so that you won't accidentally use it in
-    /// sync context.
+    /// The token must not show up in the `Debug` of the request, which is
+    /// what logs print.
+    #[test]
+    fn apply_auth_hides_token() {
+        let auth =
+            RegistryAuth::new(None, SecretString::from_string("fake-secret".into())).unwrap();
+        let request = apply_auth(
+            create_client().get(Url::parse("https://example.com/").unwrap()),
+            Some(&auth),
+        );
+        assert!(!format!("{request:?}").contains("fake-secret"));
+    }
+
+    #[test]
+    fn authentication_required_hides_credentials() {
+        let url = Url::parse("https://user:fake-secret@example.com/index/config.json").unwrap();
+        let err = RegistryError::AuthenticationRequired(Box::new(url));
+        assert_eq!(
+            err.to_string(),
+            "registry requires authentication: https://<redacted>@example.com/index/config.json"
+        );
+    }
+
     fn create_client() -> Client {
         Client::new(
             concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
@@ -506,6 +529,19 @@ mod test {
 
     #[cfg(feature = "git")]
     #[test]
+    fn test_git_registry_cargo_install_index_arg_keeps_password() {
+        for index in [
+            "https://user:secret@example.com/index.git",
+            "https://token@example.com/index.git",
+            "https://github.com/rust-lang/crates.io-index",
+        ] {
+            let registry: Registry = index.parse().unwrap();
+            assert_eq!(registry.cargo_install_index_arg(), index);
+        }
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
     fn test_git_registry_crate_source() {
         let registry: Registry = "file:///tmp/index".parse().unwrap();
         let source = registry.crate_source().unwrap();
@@ -527,5 +563,24 @@ mod test {
             source.url.as_str(),
             CrateSource::cratesio_registry().url.as_str()
         );
+
+        let registry: Registry = "https://ghp_token:secret@example.com/index.git"
+            .parse()
+            .unwrap();
+        let source = registry.crate_source().unwrap();
+        assert_eq!(source.url.as_str(), "https://example.com/index.git");
+    }
+
+    #[test]
+    fn test_sparse_registry_crate_source_has_no_credentials() {
+        let registry: Registry = "sparse+https://user:secret@example.com/index/"
+            .parse()
+            .unwrap();
+        let source = registry.crate_source().unwrap();
+        assert!(
+            matches!(source.source_type, SourceType::Sparse),
+            "{source:?}"
+        );
+        assert_eq!(source.url.as_str(), "https://example.com/index");
     }
 }
