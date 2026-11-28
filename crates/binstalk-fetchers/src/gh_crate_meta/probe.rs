@@ -210,29 +210,31 @@ impl Probe {
         let mut repos = Vec::<(Url, CandidateRepo)>::new();
         let mut kept = Vec::with_capacity(candidates.len());
         for mut candidate in mem::take(candidates) {
-            if let Some(release_tag) = &candidate.release_tag {
-                let repo = release_tag.repo.clone();
-                let info = match repos.iter().find(|(r, _)| *r == repo) {
-                    Some((_, info)) => info.clone(),
-                    None => {
-                        let info = match crate_repo {
-                            Some(info) if same_repo(&info.repo, &repo) => {
-                                CandidateRepo::new(&repo, Some(info))
-                            }
-                            _ => shared.other_repo_info(&repo).await,
-                        };
-                        repos.push((repo.clone(), info.clone()));
-                        info
-                    }
-                };
-                if info.is_hidden {
-                    continue;
+            let Some(release_tag) = &candidate.release_tag else {
+                kept.push(candidate);
+                continue;
+            };
+            let repo = release_tag.repo.clone();
+            let info = match repos.iter().find(|(r, _)| *r == repo) {
+                Some((_, info)) => info.clone(),
+                None => {
+                    let info = match crate_repo {
+                        Some(info) if same_repo(&info.repo, &repo) => {
+                            CandidateRepo::new(&repo, Some(info))
+                        }
+                        _ => shared.other_repo_info(&repo).await,
+                    };
+                    repos.push((repo.clone(), info.clone()));
+                    info
                 }
-                if let Some(to) = &info.moved_to {
-                    candidate.move_to(&repo, to);
-                }
-                candidate.is_private = info.is_private;
+            };
+            if info.is_hidden {
+                continue;
             }
+            if let Some(to) = &info.moved_to {
+                candidate.move_to(&repo, to);
+            }
+            candidate.is_private = info.is_private;
             kept.push(candidate);
         }
         *candidates = kept;
