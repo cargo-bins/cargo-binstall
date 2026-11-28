@@ -152,6 +152,8 @@ pub(super) struct DelayRequest {
     client: reqwest::Client,
     num_request: NonZeroU64,
     per: Duration,
+    /// Never shrinks: it is bounded by the hosts contacted, and removing an
+    /// entry would reset that host's back-off.
     hosts: Mutex<HashMap<CompactString, Arc<Host>>>,
     #[cfg(test)]
     attempts: std::sync::atomic::AtomicU64,
@@ -169,11 +171,11 @@ impl DelayRequest {
         }
     }
 
-    fn new_host(&self, delay_until: Option<Instant>) -> Arc<Host> {
+    fn new_host(&self) -> Arc<Host> {
         Arc::new(Host {
             limit: Mutex::new(HostLimit {
                 rate_limit: RateLimit::new(self.num_request, self.per),
-                delay_until,
+                delay_until: None,
             }),
             queue: Default::default(),
         })
@@ -188,32 +190,24 @@ impl DelayRequest {
         if let Some(entry) = hosts.get(host) {
             entry.clone()
         } else {
-            let entry = self.new_host(None);
+            let entry = self.new_host();
             hosts.insert(host.to_compact_string(), entry.clone());
             entry
         }
     }
 
     pub(super) fn add_urls_to_delay(&self, urls: &[&Url], delay_duration: Duration) {
-        let deadline = Instant::now() + delay_duration;
-
-        let mut hosts = self.hosts.lock().unwrap();
+        let deadline = Some(Instant::now() + delay_duration);
 
         urls.iter()
             .filter_map(|url| url.host_str())
             .dedup()
             .for_each(|host| {
-                if let Some(entry) = hosts.get(host) {
-                    let mut limit = entry.limit.lock().unwrap();
-                    limit.delay_until = Some(
-                        limit
-                            .delay_until
-                            .map_or(deadline, |old_dl| old_dl.max(deadline)),
-                    );
-                } else {
-                    // E.g. the host a request was redirected to.
-                    hosts.insert(host.to_compact_string(), self.new_host(Some(deadline)));
-                }
+                // Creates the entry if missing, e.g. for the host a request
+                // was redirected to.
+                let host = self.get_host(Some(host));
+                let mut limit = host.limit.lock().unwrap();
+                limit.delay_until = limit.delay_until.max(deadline);
             });
     }
 
@@ -228,36 +222,28 @@ impl DelayRequest {
     /// Wait until a request to `host` may be sent.
     async fn wait(&self, host: Option<&str>) {
         let host = self.get_host(host);
+        // Wait for our turn, then until we are ready to send the request.
+        let _turn = host.queue.lock().await;
         let mut counter = 0;
 
         loop {
-            let until = {
-                // Wait for our turn, then until we are ready to send the
-                // request (client-side rate-limit throttler).
-                let _turn = host.queue.lock().await;
+            match self.try_acquire(&host) {
+                Ok(()) => return,
+                // Client-side rate-limit throttler.
+                Err(Throttled::ClientSide(until)) => sleep_until(until).await,
+                // The host rate-limited us: back off, then wait until then
+                // and try again (server-side rate-limit throttler).
+                Err(Throttled::ServerSide(until)) => {
+                    host.limit.lock().unwrap().rate_limit.inc_rate_limit();
 
-                loop {
-                    match self.try_acquire(&host) {
-                        Ok(()) => return,
-                        // If the host rate-limit us, then wait until then
-                        // and try again (server-side rate-limit throttler).
-                        Err(Throttled::ServerSide(until)) => break until,
-                        Err(Throttled::ClientSide(until)) => sleep_until(until).await,
-                    }
+                    let additional_delay =
+                        Duration::from_millis(200) + Duration::from_millis(100) * 20.min(counter);
+                    counter += 1;
+
+                    debug!("server-side rate limit exceeded; sleeping.");
+                    sleep_until(until + additional_delay).await;
                 }
-            };
-
-            // Try increasing client-side rate-limit throttler to prevent
-            // rate-limit in the future.
-            host.limit.lock().unwrap().rate_limit.inc_rate_limit();
-
-            let additional_delay =
-                Duration::from_millis(200) + Duration::from_millis(100) * 20.min(counter);
-
-            counter += 1;
-
-            debug!("server-side rate limit exceeded; sleeping.");
-            sleep_until(until + additional_delay).await;
+            }
         }
     }
 
@@ -394,5 +380,28 @@ mod tests {
         };
         assert_eq!(num_request("example.com"), 2);
         assert_eq!(num_request("example.org"), 4);
+    }
+
+    /// Requests queued behind a server-side rate limit back off once, not
+    /// once per queued request.
+    #[tokio::test(start_paused = true)]
+    async fn test_inc_rate_limit_once_per_server_limit() {
+        let delay_request = Arc::new(delay_request(64));
+
+        let url = Url::parse("https://example.com/a").unwrap();
+        delay_request.add_urls_to_delay(&[&url], Duration::from_millis(1));
+
+        let handles: Vec<_> = (0..10)
+            .map(|_| {
+                let delay_request = delay_request.clone();
+                tokio::spawn(async move { delay_request.wait(Some("example.com")).await })
+            })
+            .collect();
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let host = delay_request.get_host(Some("example.com"));
+        assert_eq!(host.limit.lock().unwrap().rate_limit.num_request.get(), 32);
     }
 }
