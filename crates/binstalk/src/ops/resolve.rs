@@ -721,7 +721,7 @@ fn git_source_url(
 ) -> Result<Url, BinstallError> {
     use crate::helpers::git::GitReference::*;
 
-    let mut url = Url::parse(&git_url.to_string())?;
+    let mut url = Url::parse(&git_url.unredacted().to_string())?;
     let query = match reference {
         Branch(branch) => Some(("branch", branch)),
         Tag(tag) => Some(("tag", tag)),
