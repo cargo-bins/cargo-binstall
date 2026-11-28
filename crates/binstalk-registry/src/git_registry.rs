@@ -83,7 +83,7 @@ impl GitIndex {
                 Err(err) => {
                     warn!(
                         "Failed to use cargo's clone of git index {} in {}: {err}, cloning to a temporary directory instead",
-                        redacted(&url),
+                        redact_url_userinfo(&url),
                         cargo_home.display()
                     );
                     None
@@ -107,7 +107,10 @@ impl GitIndex {
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::NotFound,
-                        format!("config.json not found in repository `{}`", redacted(url)),
+                        format!(
+                            "config.json not found in repository `{}`",
+                            redact_url_userinfo(url)
+                        ),
                     )
                 })?;
 
@@ -158,14 +161,6 @@ fn open_local(url: &Url) -> Option<Repository> {
         .ok()
 }
 
-/// `url` for logs and error messages.
-///
-/// `GitUrl` redacts the password itself, but a token is often passed as the
-/// user name instead.
-fn redacted(url: &GitUrl) -> String {
-    redact_url_userinfo(&url.to_string()).into_owned()
-}
-
 /// WARNING: This is a blocking operation.
 fn clone_to_tempdir(
     url: &GitUrl,
@@ -199,7 +194,7 @@ fn open_cargo_clone(
     let Some(name) = cargo_url.and_then(|cargo_url| cargo_index_dir_name(cargo_url.clone())) else {
         debug!(
             "Cannot share cargo's clone of git index {}: not a URL cargo accepts",
-            redacted(url)
+            redact_url_userinfo(url)
         );
         return Ok(None);
     };
@@ -214,7 +209,7 @@ fn open_cargo_clone(
             // It is cargo's to repair, a full clone is too expensive for us.
             Err(err) => warn!(
                 "Failed to update cargo's clone of git index {} in {}: {err}",
-                redacted(url),
+                redact_url_userinfo(url),
                 full.display()
             ),
         }
@@ -232,7 +227,7 @@ fn open_cargo_clone(
                 Ok(repo) => return Ok(Some(repo)),
                 Err(err) => warn!(
                     "Failed to update shallow clone of git index {} in {}: {err}, cloning it again",
-                    redacted(url),
+                    redact_url_userinfo(url),
                     shallow.display()
                 ),
             }
