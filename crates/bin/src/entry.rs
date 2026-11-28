@@ -129,6 +129,19 @@ pub fn install_crates(
             .map_err(BinstallError::from)?;
     }
 
+    // As in Cargo: `--http-timeout`/`CARGO_HTTP_TIMEOUT`, then `http.timeout`,
+    // 30s by default. 0 turns it off.
+    let timeout = args
+        .http_timeout
+        .or(http.as_ref().and_then(|http| http.timeout))
+        .unwrap_or(30);
+    if timeout != 0 {
+        let timeout = Duration::from_secs(timeout);
+        client_builder = client_builder
+            .connect_timeout(timeout)
+            .read_timeout(timeout);
+    }
+
     let client = Client::from_builder(
         client_builder,
         rate_limit.duration,

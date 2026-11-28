@@ -243,6 +243,14 @@ authority, pass its certificate with `--root-certificates` (or
 To install from a private registry instead of crates.io, pass `--registry` or
 `--index`, as with `cargo install`.
 
+### What if a server stops answering?
+
+As with Cargo, a request is given up on when connecting, or waiting for more of
+the response, takes longer than the timeout. It is read from `--http-timeout`
+(or `CARGO_HTTP_TIMEOUT`), then Cargo's `http.timeout`, in seconds, and is 30
+seconds by default. `0` turns it off. A request that timed
+out is retried a few times, and a download is continued from where it stopped.
+
 ### What do the error codes mean?
 
 You can find a full description of errors including exit codes here:
