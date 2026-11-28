@@ -108,6 +108,14 @@ do
   grep -F "cargo-binstall 0.12.0 $(git_source "${reference#*:}#$RELEASE_HASH")" <"$CARGO_HOME/.crates.toml"
 done
 
+# Building from source builds what `--git` points to, not the crate with the
+# same name in the registry.
+output="$("$1" binstall --force --dry-run --strategies compile --git "file://$GIT" --tag v0.12.0 --no-confirm cargo-binstall 2>&1)"
+echo "$output"
+# The command may be another cargo, e.g. `cargo-zigbuild` in CI.
+grep -F ' install cargo-binstall --git file://' <<<"$output"
+grep -F -- '--tag v0.12.0' <<<"$output"
+
 # They need `--git` and conflict with each other.
 if "$1" binstall --tag v0.12.0 --no-confirm cargo-binstall; then
   echo "--tag without --git should fail"
